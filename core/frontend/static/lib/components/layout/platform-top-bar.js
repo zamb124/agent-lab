@@ -111,7 +111,7 @@ export class PlatformTopBar extends PlatformElement {
                 border-radius: var(--radius-lg);
                 color: var(--text-primary);
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
                 flex-shrink: 0;
             }
 

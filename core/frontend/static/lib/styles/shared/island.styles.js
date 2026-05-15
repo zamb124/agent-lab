@@ -275,7 +275,7 @@ export const panelStyles = css`
         border: 1px solid var(--glass-border-subtle);
         border-radius: var(--radius-md);
         cursor: pointer;
-        transition: all var(--duration-fast) ease;
+        transition: var(--motion-transition-interactive);
         color: var(--text-secondary);
         flex-shrink: 0;
     }
@@ -341,7 +341,7 @@ export const panelStyles = css`
         border: 1px solid var(--glass-border-subtle);
         border-radius: var(--radius-md);
         cursor: pointer;
-        transition: all var(--duration-fast) ease;
+        transition: var(--motion-transition-interactive);
         color: var(--text-secondary);
         margin: var(--space-2);
     }
@@ -510,7 +510,7 @@ export const floatingPanelStyles = css`
         border-radius: 8px;
         color: var(--text-tertiary);
         cursor: pointer;
-        transition: all var(--duration-fast) ease;
+        transition: var(--motion-transition-interactive);
     }
 
     .floating-panel-btn:hover {

@@ -39,17 +39,26 @@ class LLMResourceProvider(BaseResourceProvider):
         """
         resolved_config = self._resolve_variable_refs(definition.config, variables)
         config = LLMResourceConfig.model_validate(resolved_config)
+        provider, model = config.required_identity()
+        temperature = config.temperature if config.temperature is not None else 0.7
 
         logger.debug(
             f"LLM resource '{definition.resource_id}' loaded: "
-            f"provider={config.provider}, model={config.model}"
+            f"provider={provider}, model={model}"
         )
 
         return LLMResource(
-            provider=config.provider,
-            model=config.model,
-            temperature=config.temperature,
+            provider=provider,
+            model=model,
+            fallback_models=config.fallback_models,
+            temperature=temperature,
             max_tokens=config.max_tokens,
+            top_p=config.top_p,
+            top_k=config.top_k,
+            frequency_penalty=config.frequency_penalty,
+            presence_penalty=config.presence_penalty,
+            seed=config.seed,
+            reasoning_effort=config.reasoning_effort,
             api_key=config.api_key,
             base_url=config.base_url,
             folder_id=config.folder_id,

@@ -16,6 +16,7 @@ set_flow_settings(_idle_worker_flow_settings)
 
 import apps.idle_worker.tasks.calendar_sync_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.llm_models_tasks  # noqa: F401, E402
+import apps.idle_worker.tasks.openrouter_free_models_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.payment_sync_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.push_notification_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks  # noqa: F401, E402

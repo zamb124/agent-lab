@@ -160,7 +160,7 @@ export const modalStyles = css`
         background: var(--glass-tint-medium, rgba(255, 255, 255, 0.08));
         border: none;
         cursor: pointer;
-        transition: all var(--duration-fast, 0.2s) ease;
+        transition: var(--motion-transition-interactive);
         font-size: var(--text-xs, 12px);
         font-weight: var(--font-semibold, 600);
         backdrop-filter: blur(10px);

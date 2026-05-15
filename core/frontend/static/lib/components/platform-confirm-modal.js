@@ -174,6 +174,7 @@ export class PlatformConfirmModal extends PlatformModal {
      */
     async confirm(options = {}) {
         Object.assign(this, options);
+        this.closing = false;
         this.open = true;
         return new Promise((resolve) => {
             this._resolvePromise = resolve;
@@ -182,7 +183,10 @@ export class PlatformConfirmModal extends PlatformModal {
 
     /** Модалка без стека (`getOrCreatePlatformConfirmModal`): только `open`, без `UI_MODAL_CLOSE`. */
     _closeDetached() {
-        this.open = false;
+        void this.requestPlatformClose().then(() => {
+            this.closing = false;
+            this.requestUpdate();
+        });
     }
 
     _settle(value) {
@@ -289,7 +293,7 @@ export class PlatformConfirmModal extends PlatformModal {
             this.size,
             this._isFullscreen ? 'fullscreen' : '',
             this._isDragging ? 'dragging' : '',
-            this.open && this._panelEnterActive ? 'panel-enter-active' : '',
+            this.open && !this.closing && this._panelEnterActive ? 'panel-enter-active' : '',
         ]
             .filter(Boolean)
             .join(' ');

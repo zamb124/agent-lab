@@ -1,4 +1,4 @@
-"""Форматирование Markdown заметки: один вызов LitServe на весь текст, финальный WS."""
+"""Форматирование Markdown заметки: один вызов TextTransformService, финальный WS."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 
 
 @pytest.mark.asyncio
-async def test_note_markdown_format_single_litserve_call_full_body(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_note_markdown_format_single_text_transform_call_full_body(monkeypatch: pytest.MonkeyPatch) -> None:
     from apps.crm_worker.tasks import note_markdown_tasks as nmt
 
     async def _noop(*_a, **_k):
@@ -46,33 +46,23 @@ async def test_note_markdown_format_single_litserve_call_full_body(monkeypatch: 
     monkeypatch.setattr(nmt, "get_crm_container", lambda: container)
 
     settings_mock = MagicMock()
-    settings_mock.note_markdown_format_service_timeout_seconds = 120.0
-    settings_mock.provider_litserve.infra.markdown_default_api_model_id = "test-model"
     settings_mock.provider_litserve.infra.markdown_max_chunk_chars = 6000
     monkeypatch.setattr(nmt, "get_settings", lambda: settings_mock)
 
-    post_calls: list[dict[str, Any]] = []
+    format_calls: list[dict[str, Any]] = []
 
-    async def _post(
-        _service: str,
-        _path: str,
-        *,
-        json: dict[str, Any],
-        timeout: float,
-        headers: dict[str, str],
-    ) -> dict[str, Any]:
-        post_calls.append(dict(json))
-        return {
-            "markdown": "# ok\n",
-            "chunks_total": 5,
-            "chunks_processed": 5,
-            "model": "test-model",
-            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
-        }
+    class _TextTransformService:
+        async def format_markdown(
+            self,
+            text: str,
+            *,
+            max_chunk_chars: int | None = None,
+            **_kwargs: Any,
+        ) -> str:
+            format_calls.append({"text": text, "max_chunk_chars": max_chunk_chars})
+            return "# ok\n"
 
-    mock_client = MagicMock()
-    mock_client.post = AsyncMock(side_effect=_post)
-    monkeypatch.setattr(nmt, "ServiceClient", lambda: mock_client)
+    monkeypatch.setattr(nmt, "TextTransformService", _TextTransformService)
 
     broadcast_calls: list[dict[str, Any]] = []
 
@@ -93,13 +83,12 @@ async def test_note_markdown_format_single_litserve_call_full_body(monkeypatch: 
     )
 
     assert result["status"] == "completed"
-    assert len(post_calls) == 1
-    assert post_calls[0]["text"] == full_text.strip()
-    assert post_calls[0]["model"] == "test-model"
-    assert post_calls[0]["max_chunk_chars"] == 6000
+    assert len(format_calls) == 1
+    assert format_calls[0]["text"] == full_text.strip()
+    assert format_calls[0]["max_chunk_chars"] == 6000
     assert note_ent.description == "# ok"
     assert len(broadcast_calls) == 1
     assert broadcast_calls[0]["skip_notification_center"] is False
     assert broadcast_calls[0]["markdown_format"]["phase"] == "complete"
-    assert broadcast_calls[0]["markdown_format"]["chunks_done"] == 5
-    assert broadcast_calls[0]["markdown_format"]["chunks_total"] == 5
+    assert broadcast_calls[0]["markdown_format"]["chunks_done"] == 1
+    assert broadcast_calls[0]["markdown_format"]["chunks_total"] == 1

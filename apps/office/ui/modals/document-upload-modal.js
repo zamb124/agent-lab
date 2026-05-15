@@ -39,7 +39,7 @@ export class OfficeDocumentUploadModal extends PlatformFormModal {
                 background: var(--glass-solid-subtle);
                 text-align: center;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 display: flex; flex-direction: column;
                 align-items: center; gap: var(--space-2);
             }

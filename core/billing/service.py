@@ -186,16 +186,16 @@ class BillingService:
             )
             raise BillingBalanceBlockedError(detail)
 
-    async def company_may_incur_embedding_charge(self, company_id: str) -> bool:
+    async def company_may_incur_billable_operation_charge(self, company_id: str) -> bool:
         """
-        Тихая проверка для фоновых задач (reembed): можно ли запускать платный embedding.
+        Тихая проверка: можно ли запускать платный platform-billed вызов.
 
         Учитывает ``balance_enforcement_enabled`` и exempt-список. Не отправляет notify_user.
         При отсутствии компании в хранилище возвращает ``False``.
         """
         cid = (company_id or "").strip()
         if not cid:
-            raise ValueError("company_id обязателен для company_may_incur_embedding_charge")
+            raise ValueError("company_id обязателен для company_may_incur_billable_operation_charge")
         if not self._balance_enforcement_enabled:
             return True
         if cid in self._balance_enforcement_exempt_company_ids:
@@ -204,6 +204,10 @@ class BillingService:
         if company is None:
             return False
         return company.balance > 0
+
+    async def company_may_incur_embedding_charge(self, company_id: str) -> bool:
+        """Backward-compatible alias for background re-embedding checks."""
+        return await self.company_may_incur_billable_operation_charge(company_id)
 
     async def can_use_resource(
         self,
@@ -730,4 +734,3 @@ class BillingService:
 
         await self._company_repository.set(company)
         logger.info(f"Сброшен месячный биллинг для компании {company_id}")
-

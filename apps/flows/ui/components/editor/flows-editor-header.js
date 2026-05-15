@@ -64,7 +64,7 @@ export class FlowsEditorHeader extends PlatformElement {
                 background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .icon-btn:hover { background: var(--glass-solid-strong); color: var(--text-primary); }
             .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -123,7 +123,7 @@ export class FlowsEditorHeader extends PlatformElement {
                 background: transparent;
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .mode-btn:hover { background: var(--glass-solid-medium); color: var(--text-primary); }
             .mode-btn[active] {
@@ -152,7 +152,7 @@ export class FlowsEditorHeader extends PlatformElement {
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .header-btn:hover { background: var(--glass-solid-strong); color: var(--text-primary); }
             .header-btn.icon-only { padding: 6px; width: 34px; height: 34px; justify-content: center; }

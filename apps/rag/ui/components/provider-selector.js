@@ -64,7 +64,7 @@ export class ProviderSelector extends PlatformElement {
                 border-radius: var(--radius-md);
                 font-size: var(--text-xs);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .switch-btn:hover:not(:disabled) {
                 background: var(--accent-subtle);

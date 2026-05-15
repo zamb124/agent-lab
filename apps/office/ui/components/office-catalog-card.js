@@ -36,7 +36,7 @@ export class OfficeCatalogCard extends PlatformElement {
                 border-radius: var(--radius-xl);
                 display: flex; flex-direction: column;
                 gap: var(--space-3);
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 min-height: 160px;
             }
             .card:hover {
@@ -88,7 +88,7 @@ export class OfficeCatalogCard extends PlatformElement {
                 border-radius: var(--radius-md);
                 font-size: var(--text-xs);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .btn:hover {
                 color: var(--accent);

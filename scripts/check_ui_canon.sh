@@ -16,6 +16,13 @@ fi
 ERR=0
 fail() { echo "check_ui_canon: $1" >&2; ERR=1; }
 
+# 0. Motion canon: единый core motion layer вместо разрозненных transition: all.
+MOTION_GLOBS=( apps/*/ui core/frontend/static -g '*.js' -g '*.css' --glob '!**/*.min.js' )
+if rg -q 'transition:\s*all\b' "${MOTION_GLOBS[@]}"; then
+    fail "transition: all запрещён — используйте --motion-transition-interactive или явный список compositor-friendly свойств"
+    rg -n 'transition:\s*all\b' "${MOTION_GLOBS[@]}" >&2 || true
+fi
+
 # 1. Только PlatformElement / PlatformApp / PlatformPage наследование.
 if rg -q 'extends LitElement' apps -g '*.js'; then
     fail "запрещено extends LitElement в apps/**/*.js"

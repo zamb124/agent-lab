@@ -49,7 +49,7 @@ export class JoinPage extends PlatformPage {
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 border-radius: var(--radius-md);
                 font-size: var(--text-base); color: var(--text-primary);
-                cursor: pointer; transition: all 0.2s ease;
+                cursor: pointer; transition: var(--motion-transition-interactive);
             }
             .provider-button:hover { background: rgba(255, 255, 255, 0.1); transform: translateY(-1px); }
             .provider-button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }

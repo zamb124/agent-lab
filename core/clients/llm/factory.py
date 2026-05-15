@@ -12,6 +12,7 @@ import json
 import re
 import time
 import uuid
+from collections.abc import Sequence
 from contextlib import suppress
 from typing import (
     TYPE_CHECKING,
@@ -45,7 +46,13 @@ from a2a.types import (
 from a2a.utils.message import get_message_text, new_agent_text_message
 from pydantic import BaseModel
 
+from core.clients.llm.config import LLMCallConfig, ReasoningEffort
 from core.clients.llm.logging import log_llm_stream_response
+from core.clients.llm.openrouter_free_models import (
+    OPENROUTER_FREE_MODELS_CACHE_KEY,
+    OpenRouterFreeModelRecord,
+    parse_openrouter_free_models,
+)
 from core.config import get_settings
 from core.config.base import BaseSettings
 from core.config.llm_openai_compat import yandex_llm_openai_root_from_provider_cfg
@@ -69,6 +76,9 @@ from core.clients.llm.mock import (
 from core.clients.llm.model_routing import split_provider_prefixed_model
 
 logger = get_logger(__name__)
+
+_CANDIDATE_COOLDOWN_UNTIL: dict[str, float] = {}
+_openrouter_free_pool_redis: Any | None = None
 
 
 class LLMStreamUserCancelledError(Exception):
@@ -344,7 +354,7 @@ def _message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any
     return result
 
 
-def _messages_to_openai(messages: List[Message | Dict[str, Any] | str]) -> List[Dict[str, Any]]:
+def _messages_to_openai(messages: Sequence[Message | Dict[str, Any] | str]) -> List[Dict[str, Any]]:
     """Внутренняя функция - список A2A Message в формат OpenAI API.
 
     Поддерживает Message объекты, dict'ы и строки (включая строковые представления Message).
@@ -372,7 +382,7 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
     if isinstance(messages, str):
         return [
             Message(
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
                 role=Role.user,
                 parts=[Part(root=TextPart(text=messages))],
             )
@@ -384,9 +394,11 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
     if isinstance(messages, dict):
         role = Role.user if messages.get("role", "user") == "user" else Role.agent
         content = messages.get("content", "")
+        if not isinstance(content, str):
+            raise ValueError("message.content must be string")
         return [
             Message(
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
                 role=role,
                 parts=[Part(root=TextPart(text=content))],
             )
@@ -399,12 +411,14 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
         first = messages[0]
 
         if isinstance(first, str):
-            result = []
+            result: list[Message] = []
             for i, text in enumerate(messages):
+                if not isinstance(text, str):
+                    raise ValueError("messages list must contain only strings")
                 role = Role.user if i % 2 == 0 else Role.agent
                 result.append(
                     Message(
-                        messageId=str(uuid.uuid4()),
+                        message_id=str(uuid.uuid4()),
                         role=role,
                         parts=[Part(root=TextPart(text=text))],
                     )
@@ -412,16 +426,25 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
             return result
 
         if isinstance(first, Message):
-            return messages
+            result: list[Message] = []
+            for msg in messages:
+                if not isinstance(msg, Message):
+                    raise ValueError("messages list must contain only Message objects")
+                result.append(msg)
+            return result
 
         if isinstance(first, dict):
-            result = []
+            result: list[Message] = []
             for msg in messages:
+                if not isinstance(msg, dict):
+                    raise ValueError("messages list must contain only dict objects")
                 role = Role.user if msg.get("role", "user") == "user" else Role.agent
                 content = msg.get("content", "")
+                if not isinstance(content, str):
+                    raise ValueError("message.content must be string")
                 result.append(
                     Message(
-                        messageId=str(uuid.uuid4()),
+                        message_id=str(uuid.uuid4()),
                         role=role,
                         parts=[Part(root=TextPart(text=content))],
                     )
@@ -429,6 +452,43 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
             return result
 
     raise ValueError(f"Unsupported messages type: {type(messages)}")
+
+
+def _candidate_key(candidate: LLMCallConfig) -> str:
+    return f"{candidate.provider}:{candidate.base_url}:{candidate.model}"
+
+
+def _messages_have_non_text_parts(openai_messages: List[Dict[str, Any]]) -> bool:
+    for message in openai_messages:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if isinstance(part, dict) and part.get("type") != "text":
+                return True
+    return False
+
+
+def _candidate_supports_request(
+    candidate: LLMCallConfig,
+    *,
+    has_files: bool,
+    has_tools: bool,
+    has_response_format: bool,
+) -> bool:
+    # Empty metadata means "unknown"; preserve compatibility for explicit models.
+    if has_files and candidate.input_modalities and not (
+        "image" in candidate.input_modalities or "file" in candidate.input_modalities
+    ):
+        return False
+    if has_tools and candidate.supported_parameters and "tools" not in candidate.supported_parameters:
+        return False
+    if has_response_format and candidate.supported_parameters and not (
+        "response_format" in candidate.supported_parameters
+        or "structured_outputs" in candidate.supported_parameters
+    ):
+        return False
+    return True
 
 
 class LLMClient:
@@ -447,19 +507,364 @@ class LLMClient:
         default_headers: Optional[Dict[str, str]] = None,
         timeout: float = 120.0,
         llm_provider: Optional[str] = None,
+        candidates: Optional[List[LLMCallConfig]] = None,
+        candidate_resolver: Optional[Callable[[], Awaitable[List[LLMCallConfig]]]] = None,
+        first_token_timeout: Optional[float] = None,
+        candidate_cooldown_seconds: float = 0.0,
+        platform_default_free_pool: bool = False,
+        platform_paid_fallback_enabled: bool = True,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[ReasoningEffort] = None,
+        extra_request_body: Optional[Dict[str, Any]] = None,
+        extra_request_headers: Optional[Dict[str, str]] = None,
     ):
         self.model = model
         self.api_key = api_key
         self.base_url = base_url or "https://api.openai.com/v1"
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.top_p = top_p
+        self.top_k = top_k
+        self.frequency_penalty = frequency_penalty
+        self.presence_penalty = presence_penalty
+        self.seed = seed
+        self.reasoning_effort = reasoning_effort
+        self.extra_request_body = dict(extra_request_body) if extra_request_body else None
+        self.extra_request_headers = dict(extra_request_headers) if extra_request_headers else None
         self.default_headers = default_headers or {}
         self.timeout = timeout
         self.llm_provider = (
             llm_provider if llm_provider is not None else _detect_provider(self.base_url)
         )
+        base_candidate = LLMCallConfig(
+            provider=self.llm_provider or "unknown",
+            model=self.model,
+            api_key=self.api_key,
+            base_url=self.base_url,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            top_p=top_p,
+            top_k=top_k,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            reasoning_effort=reasoning_effort,
+            extra_request_body=dict(extra_request_body) if extra_request_body else None,
+            extra_request_headers=dict(extra_request_headers) if extra_request_headers else None,
+            default_headers=dict(self.default_headers),
+            source="explicit",
+        )
+        self._static_candidates = list(candidates) if candidates is not None else [base_candidate]
+        self._candidate_resolver = candidate_resolver
+        self.first_token_timeout = first_token_timeout or 20.0
+        self.candidate_cooldown_seconds = candidate_cooldown_seconds
+        self.platform_default_free_pool = platform_default_free_pool
+        self.platform_paid_fallback_enabled = platform_paid_fallback_enabled
+
+    def _client_for_candidate(self, candidate: LLMCallConfig) -> "LLMClient":
+        if not candidate.model or not candidate.api_key:
+            raise ValueError("resolved LLM config requires model and api_key")
+        return LLMClient(
+            model=str(candidate.model),
+            api_key=str(candidate.api_key),
+            base_url=candidate.base_url,
+            temperature=candidate.temperature if candidate.temperature is not None else self.temperature,
+            max_tokens=candidate.max_tokens if candidate.max_tokens is not None else self.max_tokens,
+            default_headers=dict(candidate.default_headers),
+            timeout=self.timeout,
+            llm_provider=candidate.provider,
+            candidates=[candidate],
+            first_token_timeout=self.first_token_timeout,
+            candidate_cooldown_seconds=self.candidate_cooldown_seconds,
+            platform_default_free_pool=self.platform_default_free_pool,
+            platform_paid_fallback_enabled=self.platform_paid_fallback_enabled,
+            top_p=candidate.top_p,
+            top_k=candidate.top_k,
+            frequency_penalty=candidate.frequency_penalty,
+            presence_penalty=candidate.presence_penalty,
+            seed=candidate.seed,
+            reasoning_effort=candidate.reasoning_effort,
+            extra_request_body=candidate.extra_request_body,
+            extra_request_headers=candidate.extra_request_headers,
+        )
+
+    def _candidate_with_client_defaults(self, candidate: LLMCallConfig) -> LLMCallConfig:
+        return candidate.model_copy(
+            update={
+                "temperature": (
+                    candidate.temperature
+                    if candidate.temperature is not None
+                    else self.temperature
+                ),
+                "max_tokens": (
+                    candidate.max_tokens
+                    if candidate.max_tokens is not None
+                    else self.max_tokens
+                ),
+                "top_p": candidate.top_p if candidate.top_p is not None else self.top_p,
+                "top_k": candidate.top_k if candidate.top_k is not None else self.top_k,
+                "frequency_penalty": (
+                    candidate.frequency_penalty
+                    if candidate.frequency_penalty is not None
+                    else self.frequency_penalty
+                ),
+                "presence_penalty": (
+                    candidate.presence_penalty
+                    if candidate.presence_penalty is not None
+                    else self.presence_penalty
+                ),
+                "seed": candidate.seed if candidate.seed is not None else self.seed,
+                "reasoning_effort": (
+                    candidate.reasoning_effort
+                    if candidate.reasoning_effort is not None
+                    else self.reasoning_effort
+                ),
+                "extra_request_body": (
+                    candidate.extra_request_body
+                    if candidate.extra_request_body is not None
+                    else self.extra_request_body
+                ),
+                "extra_request_headers": (
+                    candidate.extra_request_headers
+                    if candidate.extra_request_headers is not None
+                    else self.extra_request_headers
+                ),
+            }
+        )
+
+    async def _resolve_candidates(
+        self,
+        *,
+        openai_messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]],
+        response_format: Optional[Dict[str, Any]],
+    ) -> List[LLMCallConfig]:
+        candidates = list(self._static_candidates)
+        if self._candidate_resolver is not None:
+            try:
+                resolved = await self._candidate_resolver()
+                if resolved:
+                    candidates = [
+                        self._candidate_with_client_defaults(candidate)
+                        for candidate in resolved
+                    ]
+            except Exception as exc:
+                logger.warning(
+                    "llm.candidates_resolver_failed",
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+
+        has_files = _messages_have_non_text_parts(openai_messages)
+        has_tools = bool(tools)
+        has_response_format = bool(response_format)
+        now = time.monotonic()
+        filtered: list[LLMCallConfig] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            key = _candidate_key(candidate)
+            if key in seen:
+                continue
+            seen.add(key)
+            cooldown_until = _CANDIDATE_COOLDOWN_UNTIL.get(key, 0.0)
+            if cooldown_until > now:
+                logger.info(
+                    "llm.candidate_skipped_cooldown",
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    cooldown_left_seconds=round(cooldown_until - now, 1),
+                )
+                continue
+            if not _candidate_supports_request(
+                candidate,
+                has_files=has_files,
+                has_tools=has_tools,
+                has_response_format=has_response_format,
+            ):
+                logger.info(
+                    "llm.candidate_skipped_capability",
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    has_files=has_files,
+                    has_tools=has_tools,
+                    has_response_format=has_response_format,
+                )
+                continue
+            filtered.append(candidate)
+        if filtered:
+            return filtered
+        if (
+            not candidates
+            and self.platform_default_free_pool
+            and not self.platform_paid_fallback_enabled
+        ):
+            raise RuntimeError(
+                "LLM default free-pool: нет доступных бесплатных моделей в Redis; "
+                "платный fallback отключён из-за неположительного баланса компании"
+            )
+        return candidates[:1]
+
+    def _cooldown_candidate(self, candidate: LLMCallConfig) -> None:
+        if self.candidate_cooldown_seconds <= 0:
+            return
+        _CANDIDATE_COOLDOWN_UNTIL[_candidate_key(candidate)] = (
+            time.monotonic() + self.candidate_cooldown_seconds
+        )
+
+    @staticmethod
+    def _merge_optional_dicts(
+        base: Optional[Dict[str, Any]],
+        overlay: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not base and not overlay:
+            return None
+        merged: Dict[str, Any] = {}
+        if base:
+            merged.update(base)
+        if overlay:
+            merged.update(overlay)
+        return merged
 
     async def stream(
+        self,
+        messages: MessageInput,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        task_id: Optional[str] = None,
+        context_id: Optional[str] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
+        stream_cancel_poll: Optional[Callable[[], Awaitable[bool]]] = None,
+    ) -> AsyncGenerator[StreamEvent, None]:
+        """Stream-first LLM call with universal candidate fallback.
+
+        Fallback is only allowed before the first event is yielded to callers.
+        Once any chunk/status has been emitted, the response belongs to that
+        concrete model and failures propagate normally.
+        """
+        normalized_messages = _normalize_messages(messages)
+        openai_messages = _messages_to_openai(normalized_messages)
+        candidates = await self._resolve_candidates(
+            openai_messages=openai_messages,
+            tools=tools,
+            response_format=response_format,
+        )
+        last_error: BaseException | None = None
+        for idx, candidate in enumerate(candidates):
+            attempt = self._client_for_candidate(candidate)
+            merged_extra_body = self._merge_optional_dicts(
+                candidate.extra_request_body,
+                extra_body,
+            )
+            merged_extra_headers = self._merge_optional_dicts(
+                candidate.extra_request_headers,
+                extra_headers,
+            )
+            yielded_any = False
+            agen = attempt._stream_once(
+                normalized_messages,
+                tools=tools,
+                response_format=response_format,
+                task_id=task_id,
+                context_id=context_id,
+                temperature=temperature if temperature is not None else candidate.temperature,
+                top_p=top_p if top_p is not None else candidate.top_p,
+                top_k=top_k if top_k is not None else candidate.top_k,
+                max_tokens=max_tokens if max_tokens is not None else candidate.max_tokens,
+                frequency_penalty=(
+                    frequency_penalty
+                    if frequency_penalty is not None
+                    else candidate.frequency_penalty
+                ),
+                presence_penalty=(
+                    presence_penalty
+                    if presence_penalty is not None
+                    else candidate.presence_penalty
+                ),
+                seed=seed if seed is not None else candidate.seed,
+                reasoning_effort=(
+                    reasoning_effort
+                    if reasoning_effort is not None
+                    else candidate.reasoning_effort
+                ),
+                extra_body=merged_extra_body,
+                extra_headers=merged_extra_headers,
+                stream_cancel_poll=stream_cancel_poll,
+            )
+            try:
+                while True:
+                    if not yielded_any:
+                        event = await asyncio.wait_for(
+                            agen.__anext__(),
+                            timeout=self.first_token_timeout,
+                        )
+                        yielded_any = True
+                        if idx > 0:
+                            logger.info(
+                                "llm.candidate_fallback_succeeded",
+                                provider=candidate.provider,
+                                model=candidate.model,
+                                source=candidate.source,
+                                attempt=idx + 1,
+                            )
+                        yield event
+                    else:
+                        yield await agen.__anext__()
+            except StopAsyncIteration:
+                return
+            except asyncio.TimeoutError as exc:
+                last_error = exc
+                if yielded_any:
+                    raise
+                self._cooldown_candidate(candidate)
+                with suppress(Exception):
+                    await agen.aclose()
+                logger.warning(
+                    "llm.candidate_first_token_timeout",
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    source=candidate.source,
+                    timeout_seconds=self.first_token_timeout,
+                    attempt=idx + 1,
+                    remaining=len(candidates) - idx - 1,
+                )
+                continue
+            except (LLMStreamIdleTimeoutError, httpx.HTTPError, OSError, json.JSONDecodeError) as exc:
+                last_error = exc
+                if yielded_any:
+                    raise
+                self._cooldown_candidate(candidate)
+                with suppress(Exception):
+                    await agen.aclose()
+                logger.warning(
+                    "llm.candidate_failed_before_first_event",
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    source=candidate.source,
+                    attempt=idx + 1,
+                    remaining=len(candidates) - idx - 1,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                continue
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("LLM stream: нет доступных model candidates")
+
+    async def _stream_once(
         self,
         messages: List[Message],
         tools: Optional[List[Dict[str, Any]]] = None,
@@ -574,6 +979,8 @@ class LLMClient:
                 async with client.stream(
                     "POST", f"{self.base_url}/chat/completions", headers=headers, json=body
                 ) as response:
+                    if response is None:
+                        raise RuntimeError("LLM HTTP stream did not return a response")
                     if response.status_code != 200:
                         # Для stream response пытаемся прочитать тело ошибки
                         error_text = f"HTTP {response.status_code}"
@@ -637,7 +1044,12 @@ class LLMClient:
                                     return
                                 # 2. Проверяем idle timeout
                                 idle = time.monotonic() - _last_chunk_time
-                                if idle >= STREAM_IDLE_TIMEOUT_SECONDS:
+                                idle_limit = (
+                                    self.first_token_timeout
+                                    if _chunk_count == 0
+                                    else STREAM_IDLE_TIMEOUT_SECONDS
+                                )
+                                if idle >= idle_limit:
                                     logger.error(
                                         "LLM stream idle timeout: %.1fs without data, "
                                         "chunks_received=%d, model=%s",
@@ -703,10 +1115,10 @@ class LLMClient:
                                     ):
                                         full_content = mc
                                         yield TaskArtifactUpdateEvent(
-                                            contextId=context_id,
-                                            taskId=task_id,
+                                            context_id=context_id,
+                                            task_id=task_id,
                                             artifact=Artifact(
-                                                artifactId=str(uuid.uuid4()),
+                                                artifact_id=str(uuid.uuid4()),
                                                 parts=[Part(root=TextPart(text=mc))],
                                             ),
                                             append=True,
@@ -725,10 +1137,10 @@ class LLMClient:
                                     text = delta["content"]
                                     full_content += text
                                     yield TaskArtifactUpdateEvent(
-                                        contextId=context_id,
-                                        taskId=task_id,
+                                        context_id=context_id,
+                                        task_id=task_id,
                                         artifact=Artifact(
-                                            artifactId=str(uuid.uuid4()),
+                                            artifact_id=str(uuid.uuid4()),
                                             parts=[Part(root=TextPart(text=text))],
                                         ),
                                         append=True,
@@ -758,10 +1170,10 @@ class LLMClient:
                                         f"LLM reasoning chunk: {len(reasoning_text)} chars"
                                     )
                                     yield TaskArtifactUpdateEvent(
-                                        contextId=context_id,
-                                        taskId=task_id,
+                                        context_id=context_id,
+                                        task_id=task_id,
                                         artifact=Artifact(
-                                            artifactId=str(uuid.uuid4()),
+                                            artifact_id=str(uuid.uuid4()),
                                             name="reasoning",
                                             parts=[Part(root=TextPart(text=reasoning_text))],
                                         ),
@@ -809,7 +1221,11 @@ class LLMClient:
                                 except Exception:
                                     pass
                                 raise LLMStreamIdleTimeoutError(
-                                    idle_seconds=STREAM_IDLE_TIMEOUT_SECONDS,
+                                    idle_seconds=(
+                                        self.first_token_timeout
+                                        if _chunk_count == 0
+                                        else STREAM_IDLE_TIMEOUT_SECONDS
+                                    ),
                                     chunks_received=_chunk_count,
                                 ) from e
                             raise
@@ -846,23 +1262,32 @@ class LLMClient:
                 message_id=str(uuid.uuid4()),
                 role=Role.agent,
                 parts=[Part(root=TextPart(text=full_content))],
-                metadata={"tool_calls": parsed_tool_calls, "usage": usage_data},
+                metadata={
+                    "tool_calls": parsed_tool_calls,
+                    "usage": usage_data,
+                    "model": self.model,
+                    "provider": self.llm_provider,
+                },
             )
             yield TaskStatusUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
+                context_id=context_id,
+                task_id=task_id,
                 status=TaskStatus(state=TaskState.working, message=message),
                 final=False,
             )
 
         final_message = new_agent_text_message(full_content) if full_content else None
         if final_message:
-            final_message.metadata = {"usage": usage_data}
+            final_message.metadata = {
+                "usage": usage_data,
+                "model": self.model,
+                "provider": self.llm_provider,
+            }
         # final=False: это конец одного вызова LLM внутри задачи, не конец A2A-задачи.
         # completed+final=True рвёт EventSubscriber до node_complete и emit_complete канала.
         yield TaskStatusUpdateEvent(
-            contextId=context_id,
-            taskId=task_id,
+            context_id=context_id,
+            task_id=task_id,
             status=TaskStatus(
                 state=TaskState.completed if not tool_calls_buffer else TaskState.working,
                 message=final_message,
@@ -894,6 +1319,49 @@ class LLMClient:
         )
 
     async def invoke(
+        self,
+        messages: List[Message],
+        json_output: bool = False,
+        max_tokens: Optional[int] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
+    ) -> str | Dict[str, Any]:
+        openai_messages = _messages_to_openai(messages)
+        candidates = await self._resolve_candidates(
+            openai_messages=openai_messages,
+            tools=None,
+            response_format={"type": "json_object"} if json_output else None,
+        )
+        last_error: BaseException | None = None
+        for idx, candidate in enumerate(candidates):
+            attempt = self._client_for_candidate(candidate)
+            try:
+                return await attempt._invoke_once(
+                    messages,
+                    json_output=json_output,
+                    max_tokens=max_tokens,
+                    extra_body=extra_body,
+                    extra_headers=extra_headers,
+                )
+            except (httpx.HTTPError, OSError, json.JSONDecodeError) as exc:
+                last_error = exc
+                self._cooldown_candidate(candidate)
+                logger.warning(
+                    "llm.invoke_candidate_failed",
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    source=candidate.source,
+                    attempt=idx + 1,
+                    remaining=len(candidates) - idx - 1,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                continue
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("LLM invoke: нет доступных model candidates")
+
+    async def _invoke_once(
         self,
         messages: List[Message],
         json_output: bool = False,
@@ -1113,8 +1581,9 @@ class LLMClient:
             if isinstance(event, TaskArtifactUpdateEvent):
                 if event.artifact and event.artifact.name != "reasoning" and event.artifact.parts:
                     for part in event.artifact.parts:
-                        if hasattr(part, "root") and hasattr(part.root, "text"):
-                            content_parts.append(part.root.text)
+                        root = part.root
+                        if isinstance(root, TextPart):
+                            content_parts.append(root.text)
             if isinstance(event, TaskStatusUpdateEvent) and event.status:
                 if event.status.message:
                     txt = get_message_text(event.status.message)
@@ -1137,7 +1606,7 @@ class LLMClient:
             return response_model.model_validate(data)
 
         return Message(
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
             role=Role.agent,
             parts=[Part(root=TextPart(text=content))],
             metadata={"tool_calls": tool_calls} if tool_calls else None,
@@ -1158,6 +1627,21 @@ def _resolve_var(value: Optional[str], state: Optional["ExecutionState"]) -> Opt
     if not resolved:
         raise VariableResolutionError(f"Variable '{value}' resolved to empty string")
     return resolved
+
+
+def _resolve_headers_vars(
+    headers: Optional[Dict[str, str]],
+    state: Optional["ExecutionState"],
+) -> Optional[Dict[str, str]]:
+    if not headers:
+        return None
+    out: Dict[str, str] = {}
+    for key, val in headers.items():
+        resolved = _resolve_var(val, state)
+        if resolved is None:
+            continue
+        out[key] = resolved
+    return out
 
 
 def _detect_provider(base_url: Optional[str]) -> Optional[str]:
@@ -1181,6 +1665,302 @@ def _detect_provider(base_url: Optional[str]) -> Optional[str]:
     return None
 
 
+def _resolve_llm_call_config(
+    config: LLMCallConfig,
+    *,
+    settings: BaseSettings,
+    state: Optional["ExecutionState"] = None,
+    inherit_transport_from: Optional[LLMCallConfig] = None,
+    source: Optional[str] = None,
+) -> LLMCallConfig:
+    """Resolve one LLM config into a concrete runtime attempt.
+
+    The input and output are the same model. This function only fills runtime
+    transport fields from explicit config, inherited primary transport, or
+    platform provider settings.
+    """
+    if not isinstance(config, LLMCallConfig):
+        config = LLMCallConfig.model_validate(config)
+    if not config.model or not str(config.model).strip():
+        raise ValueError("LLM model обязателен")
+
+    explicit_api_key = _resolve_var(config.api_key, state)
+    explicit_base_url = _resolve_var(config.base_url, state)
+    explicit_folder_id = _resolve_var(config.folder_id, state)
+    inherit_transport = (
+        inherit_transport_from is not None
+        and config.provider is None
+        and config.api_key is None
+        and config.base_url is None
+        and config.folder_id is None
+    )
+    actual_provider = (
+        config.provider
+        or (inherit_transport_from.provider if inherit_transport and inherit_transport_from else None)
+        or _detect_provider(explicit_base_url)
+        or settings.llm.provider
+    )
+    if not actual_provider:
+        raise ValueError("LLM provider обязателен")
+
+    candidate_api_key = (
+        explicit_api_key
+        if config.api_key is not None
+        else (inherit_transport_from.api_key if inherit_transport and inherit_transport_from else None)
+    )
+    actual_base_url = (
+        explicit_base_url
+        if config.base_url is not None
+        else (
+            inherit_transport_from.base_url
+            if inherit_transport and inherit_transport_from
+            else _get_default_base_url(actual_provider, settings)
+        )
+    )
+    folder_id = (
+        explicit_folder_id
+        if config.folder_id is not None
+        else (inherit_transport_from.folder_id if inherit_transport and inherit_transport_from else None)
+    )
+    default_headers: Dict[str, str] = {}
+    candidate_model = str(config.model).strip()
+    resolved_source = source or config.source
+
+    if candidate_api_key:
+        if actual_provider == "custom_openai_compatible" and not actual_base_url:
+            raise ValueError(
+                "custom_openai_compatible: base_url обязателен (URL OpenAI-совместимого endpoint компании)"
+            )
+        if actual_provider == "openrouter" and settings.llm.openrouter:
+            default_headers = {
+                "HTTP-Referer": settings.llm.openrouter.site_url,
+                "X-Title": settings.llm.openrouter.site_name,
+            }
+        if actual_provider == "yandex":
+            yc = settings.llm.yandex
+            platform_fid = (
+                str(yc.folder_id).strip()
+                if yc and yc.folder_id and str(yc.folder_id).strip()
+                else ""
+            )
+            override_fid = str(folder_id).strip() if folder_id and str(folder_id).strip() else ""
+            folder_id = override_fid or platform_fid
+            if not folder_id:
+                raise ValueError(
+                    "Yandex LLM: задайте folder_id в переопределении ноды/ресурса "
+                    "или llm.yandex.folder_id"
+                )
+            default_headers = _yandex_auth_headers(
+                api_key=candidate_api_key,
+                folder_id=folder_id,
+            )
+            candidate_model = normalize_yandex_resource_model_uri(candidate_model, folder_id)
+            actual_base_url = normalize_openai_v1_base_url(str(actual_base_url).strip())
+        return config.model_copy(
+            update={
+                "provider": actual_provider,
+                "model": candidate_model,
+                "api_key": candidate_api_key,
+                "base_url": actual_base_url,
+                "folder_id": folder_id,
+                "default_headers": default_headers,
+                "source": resolved_source,
+                "extra_request_body": (
+                    dict(config.extra_request_body) if config.extra_request_body else None
+                ),
+                "extra_request_headers": _resolve_headers_vars(
+                    config.extra_request_headers,
+                    state,
+                ),
+            }
+        )
+
+    provider_cfg = None
+    if actual_provider == "openrouter":
+        provider_cfg = settings.llm.openrouter
+        if not provider_cfg or not provider_cfg.api_key:
+            raise ValueError("OpenRouter API key не настроен")
+        default_headers = {
+            "HTTP-Referer": provider_cfg.site_url,
+            "X-Title": provider_cfg.site_name,
+        }
+    elif actual_provider == "bothub":
+        provider_cfg = settings.llm.bothub
+        if not provider_cfg or not provider_cfg.api_key:
+            raise ValueError("Bothub API key не настроен")
+    elif actual_provider == "openai":
+        provider_cfg = settings.llm.openai
+        if not provider_cfg or not provider_cfg.api_key:
+            raise ValueError("OpenAI API key не настроен")
+    elif actual_provider == "yandex":
+        provider_cfg = settings.llm.yandex
+        if not provider_cfg or not provider_cfg.api_key:
+            raise ValueError("Yandex LLM API key не настроен")
+        if not provider_cfg.folder_id or not str(provider_cfg.folder_id).strip():
+            raise ValueError("Yandex LLM folder_id не настроен")
+        folder_id = str(provider_cfg.folder_id).strip()
+        candidate_model = normalize_yandex_resource_model_uri(candidate_model, folder_id)
+        default_headers = _yandex_auth_headers(api_key=str(provider_cfg.api_key), folder_id=folder_id)
+    elif actual_provider == "provider_litserve":
+        candidate_api_key = "litserve-local"
+    elif actual_provider == "custom_openai_compatible":
+        raise ValueError(
+            "custom_openai_compatible LLM требует явный api_key и base_url; "
+            "вызывайте через core.company_ai.resolve_llm_for_capability(...)"
+        )
+    else:
+        raise ValueError(f"Неизвестный LLM провайдер: {actual_provider}")
+
+    if provider_cfg is not None:
+        candidate_api_key = str(provider_cfg.api_key).strip()
+    return config.model_copy(
+        update={
+            "provider": actual_provider,
+            "model": candidate_model,
+            "api_key": candidate_api_key,
+            "base_url": actual_base_url,
+            "folder_id": folder_id,
+            "default_headers": default_headers,
+            "source": resolved_source,
+            "extra_request_body": (
+                dict(config.extra_request_body) if config.extra_request_body else None
+            ),
+            "extra_request_headers": _resolve_headers_vars(
+                config.extra_request_headers,
+                state,
+            ),
+        }
+    )
+
+
+def _resolved_llm_configs(
+    primary: LLMCallConfig,
+    fallback_models: Optional[List[LLMCallConfig]],
+    *,
+    settings: BaseSettings,
+    state: Optional["ExecutionState"],
+) -> list[LLMCallConfig]:
+    resolved_primary = _resolve_llm_call_config(
+        primary,
+        settings=settings,
+        state=state,
+        source=primary.source,
+    )
+    resolved = [resolved_primary]
+    for fallback in fallback_models or []:
+        resolved.append(
+            _resolve_llm_call_config(
+                fallback,
+                settings=settings,
+                state=state,
+                inherit_transport_from=resolved_primary,
+                source="fallback",
+            )
+        )
+    return resolved
+
+
+def _candidate_from_openrouter_free_record(
+    record: OpenRouterFreeModelRecord,
+    *,
+    settings: BaseSettings,
+) -> LLMCallConfig:
+    return _resolve_llm_call_config(
+        LLMCallConfig(
+            provider="openrouter",
+            model=record.id,
+            source="openrouter_free",
+            supported_parameters=frozenset(record.supported_parameters),
+            input_modalities=frozenset(record.input_modalities),
+            output_modalities=frozenset(record.output_modalities),
+            context_length=record.context_length,
+        ),
+        settings=settings,
+        source="openrouter_free",
+    )
+
+
+async def _read_openrouter_free_records() -> list[OpenRouterFreeModelRecord]:
+    global _openrouter_free_pool_redis
+    from core.clients.redis_client import RedisClient
+
+    if _openrouter_free_pool_redis is None:
+        settings = get_settings()
+        _openrouter_free_pool_redis = RedisClient(settings.database.redis_url)
+    raw = await _openrouter_free_pool_redis.get(OPENROUTER_FREE_MODELS_CACHE_KEY)
+    return parse_openrouter_free_models(raw)
+
+
+def _should_use_platform_default_pool(
+    *,
+    model_name: Optional[str],
+    provider: Optional[str],
+    api_key: Optional[str],
+    base_url: Optional[str],
+    folder_id: Optional[str],
+    settings: BaseSettings,
+) -> bool:
+    return (
+        model_name is None
+        and provider is None
+        and api_key is None
+        and base_url is None
+        and folder_id is None
+        and settings.llm.default_strategy == "openrouter_free_pool"
+        and settings.llm.openrouter_free_pool.enabled
+        and settings.llm.openrouter is not None
+        and bool(settings.llm.openrouter.api_key)
+    )
+
+
+def should_use_platform_default_free_pool(
+    *,
+    model_name: Optional[str],
+    provider: Optional[str],
+    api_key: Optional[str],
+    base_url: Optional[str],
+    folder_id: Optional[str],
+    settings: BaseSettings,
+) -> bool:
+    """Public predicate for callers that must decide billing before creating a client."""
+    return _should_use_platform_default_pool(
+        model_name=model_name,
+        provider=provider,
+        api_key=api_key,
+        base_url=base_url,
+        folder_id=folder_id,
+        settings=settings,
+    )
+
+
+def _make_platform_default_candidate_resolver(
+    settings: BaseSettings,
+    *,
+    include_paid_fallback: bool,
+) -> Callable[[], Awaitable[List[LLMCallConfig]]]:
+    async def _resolve() -> List[LLMCallConfig]:
+        candidates: list[LLMCallConfig] = []
+        records = await _read_openrouter_free_records()
+        for record in records:
+            candidates.append(_candidate_from_openrouter_free_record(record, settings=settings))
+        fallback_model = settings.llm.openrouter_free_pool.fallback_model.strip()
+        if include_paid_fallback and fallback_model:
+            candidates.append(
+                _resolve_llm_call_config(
+                    LLMCallConfig(
+                        provider="openrouter",
+                        model=fallback_model,
+                        source="platform_paid_fallback",
+                    ),
+                    settings=settings,
+                    source="platform_paid_fallback",
+                )
+            )
+        return candidates
+
+    return _resolve
+
+
 def get_llm(
     model_name: Optional[str] = None,
     temperature: Optional[float] = None,
@@ -1190,6 +1970,16 @@ def get_llm(
     folder_id: Optional[str] = None,
     max_tokens: Optional[int] = None,
     state: Optional["ExecutionState"] = None,
+    fallback_models: Optional[List[LLMCallConfig]] = None,
+    allow_platform_paid_fallback: bool = True,
+    top_p: Optional[float] = None,
+    top_k: Optional[int] = None,
+    frequency_penalty: Optional[float] = None,
+    presence_penalty: Optional[float] = None,
+    seed: Optional[int] = None,
+    reasoning_effort: Optional[ReasoningEffort] = None,
+    extra_request_body: Optional[Dict[str, Any]] = None,
+    extra_request_headers: Optional[Dict[str, str]] = None,
 ) -> LLMClient | MockLLM:
     """
     Создает LLM клиент.
@@ -1203,15 +1993,78 @@ def get_llm(
         folder_id: Каталог Yandex Cloud (yandex); иначе из llm.yandex.folder_id
         max_tokens: Лимит токенов ответа (если None — из настроек модели / глобальных)
         state: ExecutionState для резолюции @var:
+        fallback_models: Ordered list of full LLMCallConfig fallback attempts.
+        allow_platform_paid_fallback: Для платформенного default-route через free-pool
+            разрешает последний платный fallback. Рантайм flows выключает его при
+            неположительном балансе, чтобы бесплатные модели не блокировались pre-flight биллингом.
     """
     settings = get_settings()
+    _testing = _is_testing()
+
+    if _should_use_platform_default_pool(
+        model_name=model_name,
+        provider=provider,
+        api_key=api_key,
+        base_url=base_url,
+        folder_id=folder_id,
+        settings=settings,
+    ) and not _testing:
+        fallback_model = settings.llm.openrouter_free_pool.fallback_model.strip()
+        temp = temperature if temperature is not None else settings.llm.temperature
+        resolved_max_tokens = max_tokens if max_tokens is not None else settings.llm.max_tokens
+        primary = _resolve_llm_call_config(
+            LLMCallConfig(
+                provider="openrouter",
+                model=fallback_model or settings.llm.default_model,
+                temperature=temp,
+                max_tokens=resolved_max_tokens,
+                top_p=top_p,
+                top_k=top_k,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                seed=seed,
+                reasoning_effort=reasoning_effort,
+                extra_request_body=extra_request_body,
+                extra_request_headers=extra_request_headers,
+                source="platform_paid_fallback",
+            ),
+            settings=settings,
+            state=state,
+            source="platform_paid_fallback",
+        )
+        return LLMClient(
+            model=str(primary.model),
+            api_key=str(primary.api_key),
+            base_url=primary.base_url,
+            temperature=temp,
+            max_tokens=resolved_max_tokens,
+            timeout=settings.llm.timeout,
+            default_headers=dict(primary.default_headers),
+            llm_provider=primary.provider,
+            candidates=[primary] if allow_platform_paid_fallback else [],
+            candidate_resolver=_make_platform_default_candidate_resolver(
+                settings,
+                include_paid_fallback=allow_platform_paid_fallback,
+            ),
+            first_token_timeout=settings.llm.openrouter_free_pool.first_token_timeout_seconds,
+            candidate_cooldown_seconds=settings.llm.openrouter_free_pool.candidate_cooldown_seconds,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=allow_platform_paid_fallback,
+            top_p=top_p,
+            top_k=top_k,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            reasoning_effort=reasoning_effort,
+            extra_request_body=extra_request_body,
+            extra_request_headers=_resolve_headers_vars(extra_request_headers, state),
+        )
+
     model = model_name or settings.llm.default_model
     split_prov, split_model = split_provider_prefixed_model(provider, model)
     if split_prov is not None:
         provider = split_prov
     model = split_model if split_model is not None else model
-
-    _testing = _is_testing()
 
     if _testing and model and not model.startswith("mock-"):
         logger.warning(f"PYTEST detected: замена {model} на mock-gpt-4")
@@ -1221,11 +2074,6 @@ def get_llm(
         if model not in _global_mock_registry:
             _global_mock_registry[model] = MockLLM(model_name=model)
         return _global_mock_registry[model]
-
-    # Резолвим @var: если указаны
-    resolved_api_key = _resolve_var(api_key, state)
-    resolved_base_url = _resolve_var(base_url, state)
-    resolved_folder_id = _resolve_var(folder_id, state)
 
     model_config = settings.llm.models.get(model)
     temp = (
@@ -1240,179 +2088,82 @@ def get_llm(
     )
     timeout = settings.llm.timeout
 
-    # Если указан кастомный api_key - используем его
-    if resolved_api_key:
-        actual_provider = provider or _detect_provider(resolved_base_url) or settings.llm.provider
-        actual_base_url = resolved_base_url or _get_default_base_url(actual_provider, settings)
+    primary_config = LLMCallConfig(
+        provider=provider,
+        model=model,
+        temperature=temp,
+        max_tokens=resolved_max_tokens,
+        api_key=api_key,
+        folder_id=folder_id,
+        base_url=base_url,
+        top_p=top_p,
+        top_k=top_k,
+        frequency_penalty=frequency_penalty,
+        presence_penalty=presence_penalty,
+        seed=seed,
+        reasoning_effort=reasoning_effort,
+        extra_request_body=extra_request_body,
+        extra_request_headers=extra_request_headers,
+        source="explicit",
+    )
+    candidates = _resolved_llm_configs(
+        primary_config,
+        fallback_models,
+        settings=settings,
+        state=state,
+    )
+    primary = candidates[0]
 
-        default_headers: Dict[str, str] = {}
-        # custom_openai_compatible: никаких vendor-default headers (только Authorization Bearer
-        # в LLMClient.stream и опциональные extra_headers вызывающего кода).
-        if actual_provider == "custom_openai_compatible":
-            if not resolved_base_url:
-                raise ValueError(
-                    "custom_openai_compatible: base_url обязателен (URL OpenAI-совместимого endpoint компании)"
-                )
-        elif actual_provider == "openrouter" and settings.llm.openrouter:
-            default_headers = {
-                "HTTP-Referer": settings.llm.openrouter.site_url,
-                "X-Title": settings.llm.openrouter.site_name,
-            }
-        if actual_provider == "yandex":
-            yc = settings.llm.yandex
-            platform_fid = (
-                str(yc.folder_id).strip()
-                if yc and yc.folder_id and str(yc.folder_id).strip()
-                else ""
-            )
-            override_fid = (
-                str(resolved_folder_id).strip()
-                if resolved_folder_id and str(resolved_folder_id).strip()
-                else ""
-            )
-            effective_folder = override_fid or platform_fid
-            if not effective_folder:
-                raise ValueError(
-                    "Yandex LLM: задайте folder_id в переопределении ноды/ресурса "
-                    "или llm.yandex.folder_id"
-                )
-            default_headers = _yandex_auth_headers(
-                api_key=resolved_api_key,
-                folder_id=effective_folder,
-            )
-            model = normalize_yandex_resource_model_uri(model, effective_folder)
-
-        if actual_provider == "yandex":
-            actual_base_url = normalize_openai_v1_base_url(str(actual_base_url).strip())
-
+    if primary_config.api_key:
         logger.info(
-            f"[get_llm] Using custom api_key for provider={actual_provider}, base_url={actual_base_url}"
-        )
-        return LLMClient(
-            model=model,
-            api_key=resolved_api_key,
-            base_url=actual_base_url,
-            temperature=temp,
-            max_tokens=resolved_max_tokens,
-            timeout=timeout,
-            default_headers=default_headers,
-            llm_provider=actual_provider,
+            "[get_llm] Using custom api_key for provider=%s, base_url=%s",
+            primary.provider,
+            primary.base_url,
         )
 
-    # Иначе используем системный конфиг
-    actual_provider = provider or settings.llm.provider
-
-    if actual_provider == "openrouter":
-        cfg = settings.llm.openrouter
-        if not cfg or not cfg.api_key:
-            raise ValueError("OpenRouter API key не настроен")
-
-        return LLMClient(
-            model=model,
-            api_key=cfg.api_key,
-            base_url=cfg.base_url,
-            temperature=temp,
-            max_tokens=resolved_max_tokens,
-            timeout=timeout,
-            default_headers={
-                "HTTP-Referer": cfg.site_url,
-                "X-Title": cfg.site_name,
-            },
-            llm_provider=actual_provider,
-        )
-
-    if actual_provider == "bothub":
-        cfg = settings.llm.bothub
-        if not cfg or not cfg.api_key:
-            raise ValueError("Bothub API key не настроен")
-
-        return LLMClient(
-            model=model,
-            api_key=cfg.api_key,
-            base_url=cfg.base_url,
-            temperature=temp,
-            max_tokens=resolved_max_tokens,
-            timeout=timeout,
-            llm_provider=actual_provider,
-        )
-
-    if actual_provider == "openai":
-        cfg = settings.llm.openai
-        if not cfg or not cfg.api_key:
-            raise ValueError("OpenAI API key не настроен")
-
-        return LLMClient(
-            model=model,
-            api_key=cfg.api_key,
-            base_url=cfg.base_url,
-            temperature=temp,
-            max_tokens=resolved_max_tokens,
-            timeout=timeout,
-            llm_provider=actual_provider,
-        )
-
-    if actual_provider == "yandex":
-        cfg = settings.llm.yandex
-        if not cfg or not cfg.api_key:
-            raise ValueError("Yandex LLM API key не настроен")
-        if not cfg.folder_id or not str(cfg.folder_id).strip():
-            raise ValueError("Yandex LLM folder_id не настроен")
-        fid = str(cfg.folder_id).strip()
-        model = normalize_yandex_resource_model_uri(model, fid)
-        root = _yandex_openai_root(settings)
-        auth = _yandex_auth_headers(api_key=str(cfg.api_key), folder_id=fid)
-        return LLMClient(
-            model=model,
-            api_key=str(cfg.api_key).strip(),
-            base_url=root,
-            temperature=temp,
-            max_tokens=resolved_max_tokens,
-            timeout=timeout,
-            default_headers=auth,
-            llm_provider=actual_provider,
-        )
-
-    if actual_provider == "provider_litserve":
-        cfg = settings.provider_litserve
-        base_url = cfg.resolve_openai_v1_base_url()
-        return LLMClient(
-            model=model,
-            api_key="litserve-local",
-            base_url=base_url,
-            temperature=temp,
-            max_tokens=resolved_max_tokens,
-            timeout=timeout,
-            llm_provider=actual_provider,
-        )
-
-    if actual_provider == "custom_openai_compatible":
-        # Этот провайдер всегда требует кастомный api_key + base_url; обычно
-        # выбирается через ResolvedLLM из core.company_ai (custom:<id> в metadata).
-        # Без явного api_key/base_url использование запрещено.
-        raise ValueError(
-            "custom_openai_compatible LLM требует явный api_key и base_url; "
-            "вызывайте через core.company_ai.resolve_llm_for_capability(...)"
-        )
-
-    raise ValueError(f"Неизвестный LLM провайдер: {actual_provider}")
+    return LLMClient(
+        model=str(primary.model),
+        api_key=str(primary.api_key),
+        base_url=primary.base_url,
+        temperature=temp,
+        max_tokens=resolved_max_tokens,
+        timeout=timeout,
+        default_headers=dict(primary.default_headers),
+        llm_provider=primary.provider,
+        candidates=candidates,
+        first_token_timeout=settings.llm.openrouter_free_pool.first_token_timeout_seconds,
+        candidate_cooldown_seconds=settings.llm.openrouter_free_pool.candidate_cooldown_seconds,
+        top_p=top_p,
+        top_k=top_k,
+        frequency_penalty=frequency_penalty,
+        presence_penalty=presence_penalty,
+        seed=seed,
+        reasoning_effort=reasoning_effort,
+        extra_request_body=extra_request_body,
+        extra_request_headers=_resolve_headers_vars(extra_request_headers, state),
+    )
 
 
 def _get_default_base_url(provider: str, settings: BaseSettings) -> str:
     """Возвращает base_url по умолчанию для провайдера."""
     if provider == "openrouter":
         return (
-            settings.llm.openrouter.base_url
+            settings.llm.openrouter.base_url or "https://openrouter.ai/api/v1"
             if settings.llm.openrouter
             else "https://openrouter.ai/api/v1"
         )
     if provider == "bothub":
         return (
-            settings.llm.bothub.base_url
+            settings.llm.bothub.base_url or "https://bothub.chat/api/v2/openai/v1"
             if settings.llm.bothub
             else "https://bothub.chat/api/v2/openai/v1"
         )
     if provider == "openai":
-        return settings.llm.openai.base_url if settings.llm.openai else "https://api.openai.com/v1"
+        return (
+            settings.llm.openai.base_url or "https://api.openai.com/v1"
+            if settings.llm.openai
+            else "https://api.openai.com/v1"
+        )
     if provider == "yandex":
         return _yandex_openai_root(settings)
     if provider == "provider_litserve":
@@ -1429,6 +2180,16 @@ def get_llm_for_state(
     base_url: Optional[str] = None,
     folder_id: Optional[str] = None,
     max_tokens: Optional[int] = None,
+    fallback_models: Optional[List[LLMCallConfig]] = None,
+    allow_platform_paid_fallback: bool = True,
+    top_p: Optional[float] = None,
+    top_k: Optional[int] = None,
+    frequency_penalty: Optional[float] = None,
+    presence_penalty: Optional[float] = None,
+    seed: Optional[int] = None,
+    reasoning_effort: Optional[ReasoningEffort] = None,
+    extra_request_body: Optional[Dict[str, Any]] = None,
+    extra_request_headers: Optional[Dict[str, str]] = None,
 ) -> LLMClient | MockLLM:
     """
     Создает LLM клиент с учётом mock конфига из state.
@@ -1468,6 +2229,16 @@ def get_llm_for_state(
         base_url=base_url,
         folder_id=folder_id,
         max_tokens=max_tokens,
+        fallback_models=fallback_models,
+        allow_platform_paid_fallback=allow_platform_paid_fallback,
+        top_p=top_p,
+        top_k=top_k,
+        frequency_penalty=frequency_penalty,
+        presence_penalty=presence_penalty,
+        seed=seed,
+        reasoning_effort=reasoning_effort,
+        extra_request_body=extra_request_body,
+        extra_request_headers=extra_request_headers,
         state=state,
     )
 
@@ -1574,16 +2345,17 @@ def setup_mock_responses(
     model_name: str = "mock-gpt-4",
 ) -> MockLLM:
     """Настройка mock ответов для тестов (локальная очередь)."""
-    get_llm(model_name)
+    _ = get_llm(model_name)
     mock_llm = get_global_mock_llm(model_name)
+    if mock_llm is None:
+        raise RuntimeError(f"Mock LLM не зарегистрирован: {model_name}")
 
-    if mock_llm:
-        mock_llm.reset()
-        mock_llm.configure(
-            response_queue=response_queue,
-            tool_responses=tool_responses,
-            responses=responses,
-            default_response=default_response,
-        )
+    mock_llm.reset()
+    mock_llm.configure(
+        response_queue=response_queue,
+        tool_responses=tool_responses,
+        responses=responses,
+        default_response=default_response,
+    )
 
     return mock_llm

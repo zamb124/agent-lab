@@ -25,7 +25,7 @@ export class BranchItem extends PlatformElement {
                 padding: var(--space-2) var(--space-3);
                 background: var(--glass-solid-medium);
                 border-radius: var(--radius-md);
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
 
             .branch-item:hover {
@@ -72,7 +72,7 @@ export class BranchItem extends PlatformElement {
                 background: var(--glass-solid-subtle);
                 border: none;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
 
             .action-btn platform-icon {

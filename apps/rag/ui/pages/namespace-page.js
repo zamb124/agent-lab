@@ -43,7 +43,7 @@ export class NamespacePage extends PlatformPage {
             .document-card {
                 padding: var(--space-4); background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle); border-radius: var(--radius-lg);
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .document-card:hover { background: var(--glass-solid-medium); border-color: var(--glass-border-medium); }
             .document-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-2); }
@@ -61,7 +61,7 @@ export class NamespacePage extends PlatformPage {
                 border: 2px dashed var(--glass-border-medium);
                 border-radius: var(--radius-xl);
                 background: var(--glass-solid-subtle);
-                text-align: center; transition: all var(--duration-fast); cursor: pointer;
+                text-align: center; transition: var(--motion-transition-interactive); cursor: pointer;
             }
             .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: var(--glass-solid-medium); }
             .drop-zone-content { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }

@@ -28,6 +28,14 @@ if TYPE_CHECKING:
 StreamEvent = Union[TaskStatusUpdateEvent, TaskArtifactUpdateEvent]
 
 
+def _text_part(text: str) -> Part:
+    return Part(root=TextPart(text=text))
+
+
+def _data_part(data: Dict[str, Any]) -> Part:
+    return Part(root=DataPart(data=data))
+
+
 class BaseEmitter(ABC):
     """
     Базовый класс для публикации событий.
@@ -46,9 +54,9 @@ class BaseEmitter(ABC):
     ) -> Message:
         """Создаёт A2A Message объект."""
         return Message(
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
             role=Role.agent,
-            parts=[Part(root=TextPart(text=text))],
+            parts=[_text_part(text)],
             metadata=metadata,
         )
 
@@ -64,7 +72,7 @@ class BaseEmitter(ABC):
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=artifact_name,
-            parts=[TextPart(text=text)],
+            parts=[_text_part(text)],
         )
 
         event = TaskArtifactUpdateEvent(
@@ -92,7 +100,7 @@ class BaseEmitter(ABC):
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=f"tool_call_{tool_call_id}",
-            parts=[DataPart(data={
+            parts=[_data_part({
                 "tool": tool_name,
                 "args": tool_args,
                 "tool_call_id": tool_call_id,
@@ -117,7 +125,7 @@ class BaseEmitter(ABC):
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=f"tool_result_{tool_call_id}",
-            parts=[DataPart(data={
+            parts=[_data_part({
                 "tool": tool_name,
                 "result": result,
                 "tool_call_id": tool_call_id,
@@ -223,7 +231,7 @@ class BaseEmitter(ABC):
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=f"node_start_{node_id}",
-            parts=[DataPart(data={
+            parts=[_data_part({
                 "event": "node_start",
                 "node_id": node_id,
                 "node_type": node_type,
@@ -247,7 +255,7 @@ class BaseEmitter(ABC):
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=f"node_complete_{node_id}",
-            parts=[DataPart(data={
+            parts=[_data_part({
                 "event": "node_complete",
                 "node_id": node_id,
                 "result_preview": result_preview[:200],
@@ -271,7 +279,7 @@ class BaseEmitter(ABC):
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=f"node_error_{node_id}",
-            parts=[DataPart(data={
+            parts=[_data_part({
                 "event": "node_error",
                 "node_id": node_id,
                 "error": error[:500],
@@ -296,7 +304,7 @@ class BaseEmitter(ABC):
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=f"edge_executed_{edge_index}_{from_node}_{to_node}",
-            parts=[DataPart(data={
+            parts=[_data_part({
                 "event": "edge_executed",
                 "edge_index": edge_index,
                 "from_node": from_node,
@@ -324,7 +332,7 @@ class BaseEmitter(ABC):
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=f"edge_error_{edge_index}_{from_node}_{to_node}",
-            parts=[DataPart(data={
+            parts=[_data_part({
                 "event": "edge_error",
                 "edge_index": edge_index,
                 "from_node": from_node,
@@ -351,7 +359,7 @@ class BaseEmitter(ABC):
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=artifact_name,
-            parts=[DataPart(data={"file_ids": file_ids})],
+            parts=[_data_part({"file_ids": file_ids})],
         )
         event = TaskArtifactUpdateEvent(
             task_id=self.state.task_id,
@@ -371,7 +379,7 @@ class BaseEmitter(ABC):
         artifact = Artifact(
             artifact_id=str(uuid.uuid4()),
             name=name,
-            parts=[DataPart(data={"content": data})],
+            parts=[_data_part({"content": data})],
         )
 
         event = TaskArtifactUpdateEvent(
@@ -399,17 +407,15 @@ class BaseEmitter(ABC):
             artifact_id=str(uuid.uuid4()),
             name="ui_event",
             parts=[
-                DataPart(
-                    data={
-                        "id": normalized_event_id,
-                        "type": event_type,
-                        "payload": payload,
-                        "version": version,
-                        "timestamp": timestamp,
-                        "source": source,
-                        "correlation_id": correlation_id,
-                    }
-                )
+                _data_part({
+                    "id": normalized_event_id,
+                    "type": event_type,
+                    "payload": payload,
+                    "version": version,
+                    "timestamp": timestamp,
+                    "source": source,
+                    "correlation_id": correlation_id,
+                })
             ],
         )
         event = TaskArtifactUpdateEvent(
@@ -466,13 +472,13 @@ class BaseSubscriber(ABC):
     """
 
     @abstractmethod
-    async def subscribe(
+    def subscribe(
         self,
         task_id: str,
         timeout: float = 300.0,
     ) -> AsyncIterator[StreamEvent]:
         """Подписывается на события задачи."""
-        pass
+        raise NotImplementedError
 
     async def collect(
         self,
@@ -487,4 +493,3 @@ class BaseSubscriber(ABC):
 
 
 __all__ = ["BaseEmitter", "BaseSubscriber", "StreamEvent"]
-

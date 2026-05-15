@@ -4,9 +4,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from apps.flows.src.models.node_config import NodeLLMOverride
+from core.clients.llm.config import LLMCallConfig
 from core.variables import VariableResolutionError, VarResolver
 
 if TYPE_CHECKING:
@@ -23,10 +24,11 @@ def split_llm_override_for_client(
     Optional[str],
     Optional[int],
     Optional[str],
+    Optional[List[LLMCallConfig]],
 ]:
     """Поля для get_llm / get_llm_for_state."""
     if not override:
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None
     return (
         override.model,
         override.temperature,
@@ -35,6 +37,7 @@ def split_llm_override_for_client(
         override.base_url,
         override.max_tokens,
         override.folder_id,
+        override.fallback_models,
     )
 
 
@@ -61,6 +64,37 @@ def stream_kwargs_from_override(override: Optional[NodeLLMOverride]) -> Dict[str
         out["reasoning_effort"] = override.reasoning_effort
     if override.extra_request_body:
         out["extra_body"] = dict(override.extra_request_body)
+    return out
+
+
+def client_kwargs_from_override(
+    override: Optional[NodeLLMOverride],
+    state: Optional["ExecutionState"],
+) -> Dict[str, Any]:
+    """Arguments for get_llm/get_llm_for_state from the full LLM config."""
+    if not override:
+        return {}
+    out: Dict[str, Any] = {
+        "model_name": override.model,
+        "temperature": override.temperature,
+        "provider": override.provider,
+        "api_key": override.api_key,
+        "base_url": override.base_url,
+        "folder_id": override.folder_id,
+        "max_tokens": override.max_tokens,
+        "fallback_models": override.fallback_models,
+        "top_p": override.top_p,
+        "top_k": override.top_k,
+        "frequency_penalty": override.frequency_penalty,
+        "presence_penalty": override.presence_penalty,
+        "seed": override.seed,
+        "reasoning_effort": override.reasoning_effort,
+        "extra_request_body": override.extra_request_body,
+    }
+    if override.extra_request_headers:
+        out["extra_request_headers"] = {
+            k: _resolve_str_var(v, state) for k, v in override.extra_request_headers.items()
+        }
     return out
 
 

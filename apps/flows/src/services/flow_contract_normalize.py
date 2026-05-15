@@ -36,7 +36,7 @@ def _inline_function_path(node: MutableMapping[str, Any], context: str) -> None:
 def normalize_tool_entry(entry: Any) -> Any:
     if not isinstance(entry, dict):
         return entry
-    out = copy.deepcopy(entry)
+    out: dict[str, Any] = copy.deepcopy(entry)
     if "tool_type" in out:
         legacy = out.pop("tool_type")
         if legacy == "tool":
@@ -102,7 +102,7 @@ def _migrate_external_api_legacy_parameters(node: MutableMapping[str, Any]) -> N
 
 
 def normalize_node_config(node: Mapping[str, Any]) -> Dict[str, Any]:
-    out = copy.deepcopy(node)
+    out: dict[str, Any] = dict(copy.deepcopy(node))
     nid = str(out.get("node_id", "?"))
     nt = out.get("type")
     if nt in ("tool", "function"):
@@ -180,7 +180,7 @@ def _migrate_legacy_skills_to_branches(out: MutableMapping[str, Any]) -> None:
 
 
 def normalize_flow_config_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
-    out = copy.deepcopy(data)
+    out: dict[str, Any] = dict(copy.deepcopy(data))
     nodes = out.get("nodes")
     if isinstance(nodes, dict):
         out["nodes"] = {k: normalize_node_config(v) for k, v in nodes.items()}
@@ -194,7 +194,7 @@ def normalize_flow_config_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 def normalize_tool_library_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
-    out = copy.deepcopy(data)
+    out: dict[str, Any] = dict(copy.deepcopy(data))
     if "tool_type" in out:
         legacy = out.pop("tool_type")
         if legacy == "tool":

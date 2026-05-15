@@ -9,20 +9,17 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    import asyncpg
-
-try:
-    import asyncpg
-except ImportError:
-    asyncpg = None
+    from asyncpg import Connection
 
 from apps.flows.src.models import SessionConfig, SessionStatus
-from core.db import BaseRepository, Storage
+from core.context import get_context
+from core.db import Storage
 from core.logging import get_logger
 from core.state import ExecutionState
 
@@ -84,7 +81,7 @@ class BaseStateRepository(ABC):
         pass
 
     async def get_for_update(
-        self, session_id: str, conn: Any = None
+        self, session_id: str, conn: Any
     ) -> Optional["ExecutionState"]:
         """Получает состояние с блокировкой."""
         return await self.get(session_id)
@@ -93,13 +90,13 @@ class BaseStateRepository(ABC):
         self,
         session_id: str,
         state: Union["ExecutionState", Dict[str, Any]],
-        conn: Any = None,
+        conn: Any,
     ) -> bool:
         """Сохраняет состояние в рамках транзакции."""
         return await self.set(session_id, state)
 
 
-class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
+class DatabaseStateRepository(BaseStateRepository):
     """
     Репозиторий для хранения состояния агентов в БД.
     States изолированы по компаниям.
@@ -109,7 +106,7 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
     owner_service = "flows"
 
     def __init__(self, storage: Storage):
-        super().__init__(storage, StateData)
+        self._storage = storage
 
     def _get_key(self, entity_id: str) -> str:
         return f"state:{entity_id}"
@@ -126,6 +123,27 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
     def _extract_entity_id(self, entity: StateData) -> str:
         return entity.session_id
 
+    def _build_final_key(self, key: str) -> str:
+        if self.is_global:
+            return key
+        context = get_context()
+        if not context or not context.active_company:
+            raise ValueError(
+                f"Репозиторий {self.__class__.__name__} требует активную компанию в контексте "
+                f"(is_global=False)"
+            )
+        company_identifier = context.active_company.subdomain or context.active_company.company_id
+        return f"company:{company_identifier}:{key}"
+
+    def _build_final_prefix(self) -> Optional[str]:
+        if self.is_global:
+            return None
+        context = get_context()
+        if not context or not context.active_company:
+            return None
+        company_identifier = context.active_company.subdomain or context.active_company.company_id
+        return f"company:{company_identifier}:{self._get_prefix()}"
+
     async def get(self, session_id: str) -> Optional["ExecutionState"]:
         """
         Получает состояние сессии.
@@ -136,9 +154,11 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
         Returns:
             ExecutionState или None
         """
-        entity = await super().get(session_id)
-        if entity is None:
+        final_key = self._build_final_key(self._get_key(session_id))
+        data = await self._storage._get_with_session_and_table(final_key, self._get_table())
+        if data is None:
             return None
+        entity = StateData.model_validate_json(data)
         raw = entity.data.model_dump(mode="json", exclude_none=False)
         return _execution_state_from_storage_dict(raw)
 
@@ -157,14 +177,20 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
         """
         to_store = _execution_state_for_storage(state)
         entity = StateData(session_id=session_id, data=to_store)
-        return await super().set(entity)
+        final_key = self._build_final_key(self._get_key(session_id))
+        return await self._storage._set_with_table(
+            final_key,
+            entity.model_dump_json(),
+            self._get_table(),
+        )
 
     async def delete(self, session_id: str) -> bool:
         """Удаляет состояние сессии."""
-        return await super().delete(session_id)
+        final_key = self._build_final_key(self._get_key(session_id))
+        return await self._storage._delete_with_table(final_key, self._get_table())
 
     async def get_for_update(
-        self, session_id: str, conn: "asyncpg.Connection"
+        self, session_id: str, conn: "Connection"
     ) -> Optional["ExecutionState"]:
         """
         Получает состояние с блокировкой строки (FOR UPDATE).
@@ -176,10 +202,15 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
         Returns:
             ExecutionState или None
         """
-        final_key = self._build_final_key(session_id)
-        data = await self._storage.get_for_update(self._get_table(), final_key, conn)
-        if data is None:
+        final_key = self._build_final_key(self._get_key(session_id))
+        row = await conn.fetchrow(
+            f"SELECT value FROM {self._get_table()} WHERE key = $1 FOR UPDATE",
+            final_key,
+        )
+        if row is None:
             return None
+        value = row["value"]
+        data = value if isinstance(value, str) else json.dumps(value)
         entity = StateData.model_validate_json(data)
         raw = entity.data.model_dump(mode="json", exclude_none=False)
         return _execution_state_from_storage_dict(raw)
@@ -188,7 +219,7 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
         self,
         session_id: str,
         state: Union["ExecutionState", Dict[str, Any]],
-        conn: "asyncpg.Connection",
+        conn: "Connection",
     ) -> bool:
         """
         Сохраняет состояние в рамках транзакции.
@@ -201,11 +232,22 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
         Returns:
             True если успешно
         """
-        final_key = self._build_final_key(session_id)
+        final_key = self._build_final_key(self._get_key(session_id))
         to_store = _execution_state_for_storage(state)
         entity = StateData(session_id=session_id, data=to_store)
         data = entity.model_dump_json()
-        return await self._storage.set_in_transaction(self._get_table(), final_key, data, conn)
+        await conn.execute(
+            f"""
+            INSERT INTO {self._get_table()} (key, value, created_at, updated_at)
+            VALUES ($1, $2::jsonb, NOW(), NOW())
+            ON CONFLICT (key) DO UPDATE SET
+                value = EXCLUDED.value,
+                updated_at = NOW()
+            """,
+            final_key,
+            data,
+        )
+        return True
 
     async def resolve_session_id_by_flow_and_identifier(
         self, flow_id: str, lookup_id: str
@@ -406,7 +448,7 @@ class DatabaseStateRepository(BaseRepository[StateData], BaseStateRepository):
             else:
                 msg_role = getattr(msg, "role", "")
 
-            if hasattr(msg_role, "value"):
+            if isinstance(msg_role, Enum):
                 msg_role = msg_role.value
             msg_role = str(msg_role).lower()
 

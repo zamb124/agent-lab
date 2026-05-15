@@ -92,7 +92,7 @@ export class OfficeDocumentsListPage extends PlatformPage {
                 font-size: 12px;
                 font-weight: 600;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 max-width: 11rem;
                 overflow: hidden;
                 text-overflow: ellipsis;

@@ -31,7 +31,7 @@ def test_split_provider_prefixed_model_for_text_tools(
 
 
 def test_should_use_litserve_http_default_and_explicit() -> None:
-    assert should_use_litserve_format_markdown_http(None) is True
+    assert should_use_litserve_format_markdown_http(None) is False
     assert should_use_litserve_format_markdown_http("provider_litserve") is True
     assert should_use_litserve_format_markdown_http("openrouter") is False
 

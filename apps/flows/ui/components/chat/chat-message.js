@@ -208,7 +208,7 @@ export class ChatMessage extends PlatformElement {
                 border-radius: var(--radius-sm);
                 color: var(--text-tertiary);
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
             
             .tracing-btn:hover {

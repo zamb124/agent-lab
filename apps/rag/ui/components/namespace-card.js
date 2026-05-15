@@ -28,7 +28,7 @@ export class NamespaceCard extends PlatformElement {
                 border-radius: var(--radius-xl);
                 padding: var(--space-6);
                 cursor: pointer;
-                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                transition: var(--motion-transition-interactive);
                 position: relative; overflow: hidden;
             }
             .card::before {

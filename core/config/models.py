@@ -1516,6 +1516,44 @@ class ModelConfig(BaseModel):
     max_tokens: Optional[int] = Field(default=None)
 
 
+class OpenRouterFreePoolConfig(BaseModel):
+    """Платформенный default-route через бесплатные модели OpenRouter."""
+
+    enabled: bool = Field(default=True)
+    cache_ttl_seconds: int = Field(
+        default=3540,
+        ge=60,
+        description="TTL Redis-кэша free-моделей OpenRouter (3540 с = 59 минут).",
+    )
+    refresh_interval_seconds: int = Field(
+        default=3300,
+        ge=60,
+        description="Интервал scheduler-задачи обновления free-моделей (3300 с = 55 минут).",
+    )
+    first_token_timeout_seconds: float = Field(
+        default=20.0,
+        ge=1.0,
+        description="Сколько ждать первый полезный stream event до перехода к следующему кандидату.",
+    )
+    candidate_cooldown_seconds: float = Field(
+        default=60.0,
+        ge=0.0,
+        description="Per-process cooldown модели после отказа до первого чанка.",
+    )
+    fallback_model: str = Field(default="qwen/qwen-2.5-7b-instruct")
+    max_candidates: int = Field(default=20, ge=1, le=100)
+    include_router_as_last_free_fallback: bool = Field(default=True)
+
+    @model_validator(mode="after")
+    def _ttl_covers_refresh_interval(self) -> Self:
+        if self.cache_ttl_seconds <= self.refresh_interval_seconds:
+            raise ValueError(
+                "llm.openrouter_free_pool.cache_ttl_seconds должен быть больше "
+                "refresh_interval_seconds"
+            )
+        return self
+
+
 class LLMConfig(BaseModel):
     """Конфигурация LLM с поддержкой нескольких провайдеров"""
 
@@ -1535,6 +1573,15 @@ class LLMConfig(BaseModel):
     bothub: Optional[BothubProviderConfig] = Field(default=None)
     yandex: Optional[YandexLLMProviderConfig] = Field(default=None)
     models: Dict[str, ModelConfig] = Field(default_factory=dict)
+    default_strategy: Literal["configured", "openrouter_free_pool"] = Field(
+        default="openrouter_free_pool",
+        description=(
+            "Как выбирать модель при get_llm() без model/provider: configured — старый "
+            "settings.llm.default_model; openrouter_free_pool — Redis-кэш бесплатных "
+            "OpenRouter моделей + fallback_model."
+        ),
+    )
+    openrouter_free_pool: OpenRouterFreePoolConfig = Field(default_factory=OpenRouterFreePoolConfig)
 
 
 class S3BucketConfig(BaseModel):

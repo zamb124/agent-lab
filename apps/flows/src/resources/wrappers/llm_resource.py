@@ -6,8 +6,11 @@ LLMResource - wrapper для llm ресурса.
 
 from typing import Any, Dict, List, Optional
 
+from a2a.utils.message import get_message_text
+
 from apps.flows.src.runtime.llm_byok import is_llm_byok_resource
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
+from core.clients.llm.config import LLMCallConfig, ReasoningEffort
 from core.context import get_context
 from core.logging import get_logger
 from core.models.billing_models import UsageType
@@ -48,8 +51,15 @@ class LLMResource:
         self,
         provider: str,
         model: str,
+        fallback_models: Optional[List[LLMCallConfig]] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+        seed: Optional[int] = None,
+        reasoning_effort: Optional[ReasoningEffort] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         folder_id: Optional[str] = None,
@@ -58,8 +68,15 @@ class LLMResource:
     ):
         self.provider = provider
         self.model = model
+        self.fallback_models = list(fallback_models or [])
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.top_p = top_p
+        self.top_k = top_k
+        self.frequency_penalty = frequency_penalty
+        self.presence_penalty = presence_penalty
+        self.seed = seed
+        self.reasoning_effort: ReasoningEffort | None = reasoning_effort
         self.api_key = api_key
         self.base_url = base_url
         self.folder_id = folder_id
@@ -82,6 +99,15 @@ class LLMResource:
                 api_key=self.api_key,
                 base_url=self.base_url,
                 folder_id=self.folder_id,
+                fallback_models=self.fallback_models or None,
+                top_p=self.top_p,
+                top_k=self.top_k,
+                frequency_penalty=self.frequency_penalty,
+                presence_penalty=self.presence_penalty,
+                seed=self.seed,
+                reasoning_effort=self.reasoning_effort,
+                extra_request_body=self._extra_body,
+                extra_request_headers=self._extra_headers,
             )
         return self._client
 
@@ -126,10 +152,6 @@ class LLMResource:
                 chat_kw["temperature"] = temperature
             if max_tokens is not None:
                 chat_kw["max_tokens"] = max_tokens
-            if self._extra_body is not None:
-                chat_kw["extra_body"] = self._extra_body
-            if self._extra_headers is not None:
-                chat_kw["extra_headers"] = self._extra_headers
             response = await client.chat(prompt, **chat_kw)
             return self._extract_text(response)
 
@@ -169,10 +191,6 @@ class LLMResource:
                 chat_kw["temperature"] = temperature
             if max_tokens is not None:
                 chat_kw["max_tokens"] = max_tokens
-            if self._extra_body is not None:
-                chat_kw["extra_body"] = self._extra_body
-            if self._extra_headers is not None:
-                chat_kw["extra_headers"] = self._extra_headers
             response = await client.chat(messages, **chat_kw)
             return self._extract_text(response)
 
@@ -215,12 +233,11 @@ class LLMResource:
             billing_quantity=1,
             billing_pending_settlement=True,
         ):
-            client_with_tools = client.bind_tools(tools)
-            response = await client_with_tools.ainvoke(messages)
+            response = await client.chat(messages, tools=tools)
 
             return {
-                "content": response.content if hasattr(response, "content") else "",
-                "tool_calls": response.tool_calls if hasattr(response, "tool_calls") else [],
+                "content": get_message_text(response),
+                "tool_calls": response.metadata.get("tool_calls", []) if response.metadata else [],
             }
 
     def __repr__(self) -> str:

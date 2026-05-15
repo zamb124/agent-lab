@@ -3,7 +3,8 @@
  *
  * Подписан на state.modals.stack. Для каждого элемента стека создаёт компонент
  * по реестру kind -> tagName, проставляет _modalId, _modalKind, props и open=true.
- * При удалении элемента из стека снимает соответствующий узел из DOM.
+ * Закрытие двухфазное: reducer помечает item как closing, компонент доигрывает
+ * CSS exit-motion, затем stack диспатчит UI_MODAL_CLOSED и только тогда снимает DOM.
  *
  * Light DOM (createRenderRoot=this), чтобы внутренние модалки могли портироваться
  * в document.body своими _attachPortalToBody() (см. glass-modal.js).
@@ -12,6 +13,8 @@
 import { html } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { getModalTag } from '../utils/modal-registry.js';
+import { CoreEvents } from '../events/contract.js';
+import { waitForPlatformMotion } from '../utils/motion.js';
 
 export class PlatformModalStack extends PlatformElement {
     constructor() {
@@ -19,6 +22,8 @@ export class PlatformModalStack extends PlatformElement {
         this._stackSel = this.select((s) => s.modals.stack);
         /** @type {Map<string, HTMLElement>} */
         this._mounted = new Map();
+        /** @type {Set<string>} */
+        this._closing = new Set();
     }
 
     createRenderRoot() {
@@ -39,6 +44,9 @@ export class PlatformModalStack extends PlatformElement {
             const existing = this._mounted.get(item.id);
             if (existing) {
                 this._applyProps(existing, item);
+                if (item.closing === true) {
+                    this._scheduleClosed(item.id, existing);
+                }
                 continue;
             }
             const tag = getModalTag(item.kind);
@@ -46,12 +54,22 @@ export class PlatformModalStack extends PlatformElement {
             this._applyProps(el, item);
             this.appendChild(el);
             this._mounted.set(item.id, el);
+            if (item.closing === true) {
+                this._scheduleClosed(item.id, el);
+            }
         }
     }
 
     _applyProps(el, item) {
         el._modalId = item.id;
         el._modalKind = item.kind;
+        el.closing = item.closing === true;
+        if (item.closing === true) {
+            if (el.open) {
+                el.open = false;
+            }
+            return;
+        }
         const props = item.props || {};
         for (const key of Object.keys(props)) {
             el[key] = props[key];
@@ -59,6 +77,28 @@ export class PlatformModalStack extends PlatformElement {
         if (!el.open) {
             el.open = true;
         }
+    }
+
+    _scheduleClosed(id, el) {
+        if (this._closing.has(id)) return;
+        this._closing.add(id);
+        const finish = async () => {
+            try {
+                if (typeof el.requestPlatformClose === 'function') {
+                    await el.requestPlatformClose();
+                } else {
+                    el.open = false;
+                    await waitForPlatformMotion(el, { fallbackMs: 180 });
+                }
+            } finally {
+                this._closing.delete(id);
+            }
+            const stack = this._stackSel ? this._stackSel.value || [] : [];
+            const item = stack.find((m) => m.id === id);
+            if (!item || item.closing !== true) return;
+            this.dispatch(CoreEvents.UI_MODAL_CLOSED, { id });
+        };
+        void finish();
     }
 
     render() {

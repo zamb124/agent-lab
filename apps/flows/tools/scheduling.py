@@ -12,19 +12,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from apps.flows.src.eval.platform_services import get_schedule_service
 from apps.flows.src.tools import tool
 from core.scheduler.models import ContentType
+from core.state import ExecutionState
 
 
-def _extract_ids_from_state(state: Optional[dict]) -> Tuple[str, str, str]:
+def _extract_ids_from_state(state: ExecutionState) -> Tuple[str, str, str]:
     """
     Извлекает flow_id, session_id, user_id из state.
 
     session_id ОБЯЗАТЕЛЕН и ВСЕГДА в формате 'flow_id:context_id'.
     Валидация формата происходит в ExecutionState.
     """
-    if not state:
-        raise ValueError("state is required for scheduling tools")
-
-    session_id = state.get("session_id")
+    session_id = state.session_id
     if not session_id:
         raise ValueError("session_id is required in state for scheduling tools")
 
@@ -34,7 +32,7 @@ def _extract_ids_from_state(state: Optional[dict]) -> Tuple[str, str, str]:
         )
 
     flow_id = session_id.split(":")[0]
-    user_id = state.get("user_id") or ""
+    user_id = state.user_id or ""
 
     return flow_id, session_id, user_id
 
@@ -113,9 +111,10 @@ async def schedule_cron_task(
     cron: str,
     content_type: str,
     content: str,
-    tool_args: Optional[dict] = None,
+    tool_args: Optional[Dict[str, Any]] = None,
     description: Optional[str] = None,
-    state: Optional[dict] = None,
+    *,
+    state: ExecutionState,
 ) -> str:
     """
     Создает периодическую задачу по cron.
@@ -144,10 +143,7 @@ async def schedule_cron_task(
         description=description,
     )
 
-    if state:
-        scheduled_tasks = state.get("scheduled_tasks", [])
-        scheduled_tasks.append(task.model_dump())
-        state["scheduled_tasks"] = scheduled_tasks
+    state.scheduled_tasks.append(task.model_dump())
 
     return f"Периодическая задача создана (ID: {task.id}). Расписание: {cron}"
 
@@ -162,9 +158,10 @@ async def schedule_interval_task(
     interval_minutes: int,
     content_type: str,
     content: str,
-    tool_args: Optional[dict] = None,
+    tool_args: Optional[Dict[str, Any]] = None,
     description: Optional[str] = None,
-    state: Optional[dict] = None,
+    *,
+    state: ExecutionState,
 ) -> str:
     """
     Создает периодическую задачу с интервалом.
@@ -193,10 +190,7 @@ async def schedule_interval_task(
         description=description,
     )
 
-    if state:
-        scheduled_tasks = state.get("scheduled_tasks", [])
-        scheduled_tasks.append(task.model_dump())
-        state["scheduled_tasks"] = scheduled_tasks
+    state.scheduled_tasks.append(task.model_dump())
 
     return f"Периодическая задача создана (ID: {task.id}). Интервал: каждые {interval_minutes} минут"
 
@@ -211,9 +205,10 @@ async def schedule_one_time_task(
     run_at: str,
     content_type: str,
     content: str,
-    tool_args: Optional[dict] = None,
+    tool_args: Optional[Dict[str, Any]] = None,
     description: Optional[str] = None,
-    state: Optional[dict] = None,
+    *,
+    state: ExecutionState,
 ) -> str:
     """
     Создает одноразовую задачу.
@@ -243,10 +238,7 @@ async def schedule_one_time_task(
         description=description,
     )
 
-    if state:
-        scheduled_tasks = state.get("scheduled_tasks", [])
-        scheduled_tasks.append(task.model_dump())
-        state["scheduled_tasks"] = scheduled_tasks
+    state.scheduled_tasks.append(task.model_dump())
 
     return f"Одноразовая задача создана (ID: {task.id}). Запуск: {run_at}"
 
@@ -258,7 +250,8 @@ async def schedule_one_time_task(
     args_schema=ListScheduledTasksArgs,
 )
 async def list_scheduled_tasks(
-    state: Optional[dict] = None,
+    *,
+    state: ExecutionState,
 ) -> str:
     """
     Получает список scheduled tasks.
@@ -305,7 +298,8 @@ async def list_scheduled_tasks(
 )
 async def cancel_scheduled_task(
     task_id: str,
-    state: Optional[dict] = None,
+    *,
+    state: ExecutionState,
 ) -> str:
     """
     Отменяет задачу.
@@ -319,9 +313,7 @@ async def cancel_scheduled_task(
     success = await service.cancel_task(task_id)
 
     if success:
-        if state:
-            scheduled_tasks = state.get("scheduled_tasks", [])
-            state["scheduled_tasks"] = [t for t in scheduled_tasks if t.get("id") != task_id]
+        state.scheduled_tasks = [t for t in state.scheduled_tasks if t.get("id") != task_id]
         return f"Задача {task_id} отменена"
     else:
         return f"Не удалось отменить задачу {task_id}. Возможно она уже выполнена или не существует."

@@ -30,7 +30,7 @@ export const glassStyles = css`
     }
     
     .glass-interactive {
-        transition: all var(--duration-normal) var(--easing-default);
+        transition: var(--motion-transition-interactive);
     }
     
     .glass-interactive:hover {
@@ -39,5 +39,4 @@ export const glassStyles = css`
         transform: translateY(-1px);
     }
 `;
-
 

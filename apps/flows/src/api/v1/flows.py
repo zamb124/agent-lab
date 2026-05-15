@@ -348,7 +348,7 @@ async def _inline_single_tool(
 
 async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> Dict[str, Any]:
     """Конвертирует NodeConfig в inline tool."""
-    result = {
+    result: dict[str, Any] = {
         "tool_id": node.node_id,
         "type": node.type.value if hasattr(node.type, "value") else node.type,
         "name": node.name,
@@ -475,11 +475,11 @@ def _branch_request_to_config(
     edges = None
     if branch_req.edges:
         edges = [
-            Edge(
-                from_node=e.get("from") or e.get("from_node"),
-                to_node=e.get("to") or e.get("to_node"),
-                condition=e.get("condition"),
-            )
+            Edge.model_validate({
+                "from": e.get("from") or e.get("from_node"),
+                "to": e.get("to") or e.get("to_node"),
+                "condition": e.get("condition"),
+            })
             for e in branch_req.edges
         ]
 
@@ -712,7 +712,7 @@ async def list_flows(
     flows_root = Path(__file__).resolve().parents[3]
     bundle_update_flags = await _get_bundle_update_flags(flows, container, flows_root)
 
-    result = []
+    result: list[FlowResponse] = []
     for f in flows:
         branches_response = {
             branch_id: _branch_config_to_response(branch_cfg)
@@ -723,7 +723,7 @@ async def list_flows(
             evaluation_dict = {k: v.model_dump() if hasattr(v, 'model_dump') else v for k, v in f.evaluation.items()}
         hidden = getattr(f, 'hidden', False)
 
-        response_data = {
+        response_data: dict[str, Any] = {
             "flow_id": f.flow_id,
             "version": f.version,
             "name": f.name,
@@ -902,11 +902,11 @@ async def create_flow(
         )
 
     edges = [
-        Edge(
-            from_node=e.get("from") or e.get("from_node"),
-            to_node=e.get("to") or e.get("to_node"),
-            condition=e.get("condition"),
-        )
+        Edge.model_validate({
+            "from": e.get("from") or e.get("from_node"),
+            "to": e.get("to") or e.get("to_node"),
+            "condition": e.get("condition"),
+        })
         for e in request.edges
     ]
 
@@ -918,7 +918,7 @@ async def create_flow(
     flow_config = FlowConfig(
         flow_id=request.flow_id,
         name=request.name,
-        description=request.description,
+        description=request.description or "",
         entry=request.entry,
         nodes=nodes,  # Инлайненные nodes
         edges=edges,
@@ -1284,11 +1284,11 @@ async def update_flow(
             nodes = repair_node_map_with_canonical_top_level(nodes, b_nodes)
 
     edges = [
-        Edge(
-            from_node=e.get("from") or e.get("from_node"),
-            to_node=e.get("to") or e.get("to_node"),
-            condition=e.get("condition"),
-        )
+        Edge.model_validate({
+            "from": e.get("from") or e.get("from_node"),
+            "to": e.get("to") or e.get("to_node"),
+            "condition": e.get("condition"),
+        })
         for e in request.edges
     ]
 
@@ -1304,7 +1304,7 @@ async def update_flow(
     flow_config = FlowConfig(
         flow_id=flow_id,
         name=request.name,
-        description=request.description,
+        description=request.description or "",
         entry=request.entry,
         nodes=nodes,  # Инлайненные nodes
         edges=edges,
@@ -1503,7 +1503,7 @@ async def update_flow_metadata(
 @router.delete("/{flow_id}")
 async def delete_flow(
     flow_id: str, container: ContainerDep
-) -> dict:
+) -> dict[str, Any]:
     """Удаляет flow."""
     deleted = await container.flow_repository.delete(flow_id)
     if not deleted:

@@ -81,7 +81,11 @@ class FlowContainer(BaseContainer):
     @lazy
     def operator_handoff_service(self):
         from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
-        return OperatorHandoffService(repository=self.operator_repository)
+        return OperatorHandoffService(
+            repository=self.operator_repository,
+            file_repository=self.file_repository,
+            redis_client=self.redis_client,
+        )
 
     @lazy
     def resource_resolver(self):
@@ -101,7 +105,14 @@ class FlowContainer(BaseContainer):
     @lazy
     def evaluation_service(self):
         from apps.flows.src.evaluation.service import EvaluationService
-        return EvaluationService(evaluation_repository=self.evaluation_repository)
+        return EvaluationService(
+            evaluation_repository=self.evaluation_repository,
+            flow_repository=self.flow_repository,
+            flow_factory=self.flow_factory,
+            node_registry=self.node_registry,
+            node_repository=self.node_repository,
+            tool_registry=self.tool_registry,
+        )
 
     # push сервис перенесен в core/push/service.py и инициализируется в factory.py
 
@@ -143,7 +154,7 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def flow_discovery(self):
-        from apps.flows.src.services import FlowDiscoveryService
+        from apps.flows.src.services.flow_discovery import FlowDiscoveryService
         return FlowDiscoveryService(
             repository=self.flow_repository,
             a2a_client=self.a2a_client,
@@ -192,7 +203,11 @@ class FlowContainer(BaseContainer):
         from apps.flows.src.runners.python import PythonCodeRunner
         return PythonCodeRunner()
 
-    def get_code_runner(self, language: str = "python", resources: dict = None):
+    def get_code_runner(
+        self,
+        language: str = "python",
+        resources: dict[str, object] | None = None,
+    ):
         """Возвращает runner для указанного языка."""
         from core.context import get_context
         context = get_context()
@@ -228,7 +243,7 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def llm_models_service(self):
-        from apps.flows.src.services import LLMModelsService
+        from apps.flows.src.services.llm_models_service import LLMModelsService
         return LLMModelsService(
             repository=self.llm_model_repository,
             scheduler_client=self.scheduler_client,
@@ -248,7 +263,7 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def flow_factory(self):
-        from apps.flows.src.services import FlowFactory
+        from apps.flows.src.services.flow_factory import FlowFactory
         return FlowFactory(
             flow_repository=self.flow_repository,
             variables_service=self.variables_service,

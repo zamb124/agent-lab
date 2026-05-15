@@ -48,7 +48,7 @@ export class FlowsBranchesTabs extends PlatformElement {
                 overflow: hidden;
                 border: 1px solid transparent;
                 background: transparent;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 flex-shrink: 0;
                 white-space: nowrap;
             }
@@ -95,7 +95,7 @@ export class FlowsBranchesTabs extends PlatformElement {
                 font-size: var(--text-sm);
                 font-family: inherit;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 margin-left: var(--space-2);
                 flex-shrink: 0;
                 white-space: nowrap;

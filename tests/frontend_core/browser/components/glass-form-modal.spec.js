@@ -3,7 +3,7 @@
  */
 
 import { html as litHtml } from 'lit';
-import { fixture, html, expect, elementUpdated } from '../helpers/render.js';
+import { fixture, html, expect, elementUpdated, waitUntil } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
@@ -30,7 +30,10 @@ describe('PlatformFormModal', () => {
         const id = modal._modalId;
         modal.close();
         await elementUpdated(stack);
-        expect(getPlatformBus().getState().modals.stack.find((m) => m.id === id)).to.be.undefined;
+        await waitUntil(
+            () => getPlatformBus().getState().modals.stack.find((m) => m.id === id) === undefined,
+            'form modal removed after exit motion',
+        );
     });
 
     it('closeAfterSave обнуляет isDirty и закрывает', async () => {
@@ -43,7 +46,10 @@ describe('PlatformFormModal', () => {
         modal.closeAfterSave();
         await elementUpdated(stack);
         expect(modal.isDirty).to.be.false;
-        expect(getPlatformBus().getState().modals.stack.find((m) => m.id === id)).to.be.undefined;
+        await waitUntil(
+            () => getPlatformBus().getState().modals.stack.find((m) => m.id === id) === undefined,
+            'form modal removed after save close motion',
+        );
     });
 
     it('close() при isDirty: platform-confirm, подтверждение снимает модалку со стека', async () => {
@@ -66,7 +72,10 @@ describe('PlatformFormModal', () => {
         confirmBtn.click();
         await closePromise;
         await elementUpdated(stack);
-        expect(getPlatformBus().getState().modals.stack.find((m) => m.id === id)).to.be.undefined;
+        await waitUntil(
+            () => getPlatformBus().getState().modals.stack.find((m) => m.id === id) === undefined,
+            'dirty form modal removed after discard motion',
+        );
     });
 
     it('close() при isDirty: отмена в platform-confirm оставляет модалку на стеке', async () => {

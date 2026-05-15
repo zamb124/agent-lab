@@ -219,7 +219,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
                 font-size: var(--text-sm);
                 text-align: left;
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
 
             .link-btn:hover {
@@ -250,7 +250,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
                 font: inherit;
                 font-size: var(--text-sm);
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
 
             .theme-pill.active {
@@ -279,7 +279,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
                 font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
 
             .logout-btn:hover {

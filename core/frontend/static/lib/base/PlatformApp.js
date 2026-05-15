@@ -26,6 +26,8 @@
  *     Default false — сервисы, у которых страницы уже рендерят `<page-header>` со sticky-mobile,
  *     могут адоптировать постепенно. Включи `true` при отказе от per-page sticky-header.
  *   - static topBarHideOnRoutes = []  — список routeKeys, на которых top-bar скрыт.
+ *   - static routeMotionEnabled = true — route changes используют View Transition API,
+ *     если браузер поддерживает document.startViewTransition и не включён reduced motion.
  */
 
 import { html, css } from 'lit';
@@ -40,6 +42,7 @@ import { serviceIdFromBaseUrl, setLastVisitedService } from '../utils/last-visit
 import { registerFactory } from '../events/factory-registry.js';
 import { collectFactories } from '../events/factories/register.js';
 import { setDefaultI18nNamespace } from '../utils/i18n-namespace.js';
+import { prefersReducedMotion } from '../utils/motion.js';
 
 import '../components/pwa-install-banner.js';
 import '../components/glass-toast.js';
@@ -154,6 +157,8 @@ export class PlatformApp extends PlatformElement {
         this._routeNotFound = false;
         this._notFoundHomeHref = '/';
         this._renderedToastIds = new Set();
+        this._routeMotionSubscribed = false;
+        this._activeRouteTransition = null;
 
         this._toastsSelect = this.select((s) => s.notify.toasts);
         this._authSelect = this.select((s) => ({
@@ -183,6 +188,7 @@ export class PlatformApp extends PlatformElement {
 
     async connectedCallback() {
         super.connectedCallback();
+        this._ensureRouteMotionSubscription();
         if (this._userLoadDispatched) return;
         this._userLoadDispatched = true;
         if (this.shouldRequestUserLoadOnConnect()) {
@@ -191,6 +197,38 @@ export class PlatformApp extends PlatformElement {
             this.dispatch(CoreEvents.AUTH_ASSUMED_ANONYMOUS, null);
         }
         completeBootstrap();
+    }
+
+    _ensureRouteMotionSubscription() {
+        if (this._routeMotionSubscribed) return;
+        this._routeMotionSubscribed = true;
+        this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => {
+            this._startRouteMotion();
+        });
+    }
+
+    _startRouteMotion() {
+        if (this.constructor.routeMotionEnabled === false) return;
+        if (prefersReducedMotion()) return;
+        if (typeof document === 'undefined') return;
+        if (typeof document.startViewTransition !== 'function') return;
+        if (this._activeRouteTransition) return;
+
+        const transition = document.startViewTransition(async () => {
+            await this.updateComplete;
+        });
+        this._activeRouteTransition = transition;
+        transition.finished.finally(() => {
+            if (this._activeRouteTransition === transition) {
+                this._activeRouteTransition = null;
+            }
+        });
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        this._routeMotionSubscribed = false;
+        this._activeRouteTransition = null;
     }
 
     updated(changed) {

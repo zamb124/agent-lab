@@ -45,7 +45,7 @@ export class SearchPage extends PlatformPage {
             .result-card {
                 padding: var(--space-4); background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle); border-radius: var(--radius-lg);
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .result-card:hover { background: var(--glass-solid-medium); border-color: var(--glass-border-medium); }
             .result-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--space-3); }

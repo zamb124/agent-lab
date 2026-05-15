@@ -127,7 +127,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-md);
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
                 text-align: center;
             }
             .mode-tab:hover { color: var(--text-primary); border-color: var(--border-medium); }

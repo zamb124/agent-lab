@@ -181,7 +181,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-2);

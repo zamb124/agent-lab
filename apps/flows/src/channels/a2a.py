@@ -35,7 +35,6 @@ from a2a.utils.message import get_message_text, new_agent_text_message
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.channels.base import BaseChannel
 from apps.flows.src.channels.types import PreparedTaskParams
-from apps.flows.src.container import get_container
 from apps.flows.src.files import (
     extract_incoming_a2a_files,
     format_a2a_files_content,
@@ -60,7 +59,20 @@ from core.state import ExecutionState
 logger = get_logger(__name__)
 
 
-def _branch_id_from_message_metadata(metadata: Optional[Dict]) -> str:
+def _text_part(text: str) -> Part:
+    return Part(root=TextPart(text=text))
+
+
+def _data_part(data: dict[str, Any]) -> Part:
+    return Part(root=DataPart(data=data))
+
+
+def _part_text(part: Part) -> str | None:
+    root = part.root
+    return root.text if isinstance(root, TextPart) else None
+
+
+def _branch_id_from_message_metadata(metadata: Optional[Dict[str, Any]]) -> str:
     if not metadata:
         return "default"
     b = metadata.get("branch")
@@ -71,11 +83,12 @@ def _branch_id_from_message_metadata(metadata: Optional[Dict]) -> str:
     return "default"
 
 
-def _get_evaluation_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
+def _get_evaluation_metadata(metadata: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Извлекает параметры evaluation из metadata."""
     if not metadata:
         return None
-    return metadata.get("evaluation")
+    evaluation = metadata.get("evaluation")
+    return evaluation if isinstance(evaluation, dict) else None
 
 
 async def _build_task_from_events(
@@ -102,35 +115,37 @@ async def _build_task_from_events(
             if event.artifact:
                 artifact_name = event.artifact.name or "response"
                 for part in event.artifact.parts:
-                    if hasattr(part.root, "text"):
+                    text = _part_text(part)
+                    if text is not None:
                         if artifact_name == "reasoning":
                             if event.append:
-                                reasoning_parts.append(part.root.text)
+                                reasoning_parts.append(text)
                             else:
-                                reasoning_parts = [part.root.text]
+                                reasoning_parts = [text]
                         elif artifact_name == "response":
                             if event.append:
-                                response_parts.append(part.root.text)
+                                response_parts.append(text)
                             else:
-                                response_parts = [part.root.text]
+                                response_parts = [text]
         elif isinstance(event, TaskStatusUpdateEvent):
             if event.final:
                 final_status = event.status
 
     response_text = "".join(response_parts)
     if not response_text and final_status and final_status.message and final_status.message.parts:
-        response_text = "".join(
-            part.root.text
-            for part in final_status.message.parts
-            if hasattr(part.root, "text")
-        )
+        status_message_parts: list[str] = []
+        for part in final_status.message.parts:
+            text = _part_text(part)
+            if text is not None:
+                status_message_parts.append(text)
+        response_text = "".join(status_message_parts)
 
     if reasoning_parts:
         reasoning_text = "".join(reasoning_parts)
         artifacts_dict["reasoning"] = Artifact(
-            artifactId=str(uuid.uuid4()),
+            artifact_id=str(uuid.uuid4()),
             name="reasoning",
-            parts=[Part(root=TextPart(text=reasoning_text))],
+            parts=[_text_part(reasoning_text)],
         )
 
     # Проверяем есть ли JSON в ответе
@@ -141,15 +156,15 @@ async def _build_task_from_events(
     # 2. Для текстовых ответов - только если есть reasoning (чтобы разделить reasoning и response)
     if json_data is not None:
         artifacts_dict["response"] = Artifact(
-            artifactId=str(uuid.uuid4()),
+            artifact_id=str(uuid.uuid4()),
             name="response",
-            parts=[Part(root=DataPart(data={"res": json.dumps(json_data, ensure_ascii=False)}))],
+            parts=[_data_part({"res": json.dumps(json_data, ensure_ascii=False)})],
         )
     elif response_text and reasoning_parts:
         artifacts_dict["response"] = Artifact(
-            artifactId=str(uuid.uuid4()),
+            artifact_id=str(uuid.uuid4()),
             name="response",
-            parts=[Part(root=TextPart(text=response_text))],
+            parts=[_text_part(response_text)],
         )
 
     artifacts = list(artifacts_dict.values())
@@ -162,6 +177,8 @@ async def _build_task_from_events(
         )
 
     # Загружаем существующую историю из state для multi-turn сценариев
+    from apps.flows.src.container import get_container
+
     container = get_container()
     session_id = f"{flow_id}:{context_id}"
     state = await container.state_manager.get_state(session_id)
@@ -208,7 +225,7 @@ async def _build_task_from_events(
 
     return Task(
         id=task_id,
-        contextId=context_id,
+        context_id=context_id,
         status=final_status,
         artifacts=artifacts if artifacts else None,
         history=history,
@@ -239,6 +256,8 @@ class A2AChannel(BaseChannel):
             logger.warning("Cannot send_to_user: no context available")
             return
 
+        from apps.flows.src.container import get_container
+
         container = get_container()
         task_id = self.context.metadata.get("task_id", "")
         context_id = self.context.metadata.get("context_id", "")
@@ -252,19 +271,23 @@ class A2AChannel(BaseChannel):
             user_groups=self._get_user_groups_from_context(self.context)
         )
         emitter = Emitter(container.redis_client, exec_state)
-        await emitter.emit_text_chunk(content, append=False, last_chunk=True)
+        await emitter.emit_text(content, append=False, last_chunk=True)
 
     async def _handle_takeover_user_reply(
         self,
         prepared: PreparedTaskParams,
-    ) -> AsyncGenerator[Union[TaskStatusUpdateEvent], None]:
+    ) -> AsyncGenerator[TaskStatusUpdateEvent, None]:
         """A2A Section 3.4.3: follow-up при input-required с operator takeover.
 
         Маршрутизирует текст пользователя в dialog_log без запуска flow.
         Возвращает status-update input-required (задача остаётся в ожидании оператора).
         """
+        from apps.flows.src.container import get_container
+
         container = get_container()
         svc = container.operator_handoff_service
+        if self.context is None or self.context.active_company is None:
+            raise ValueError("A2A takeover reply requires active_company in context")
 
         file_ids: list[str] = []
         if prepared.files_data:
@@ -296,8 +319,8 @@ class A2AChannel(BaseChannel):
             prepared.takeover_operator_task_id,
         )
         yield TaskStatusUpdateEvent(
-            taskId=prepared.task_id,
-            contextId=prepared.context_id,
+            task_id=prepared.task_id,
+            context_id=prepared.context_id,
             status=TaskStatus(
                 state=TaskState.input_required,
                 message=new_agent_text_message(prepared.content),
@@ -319,6 +342,8 @@ class A2AChannel(BaseChannel):
         company_id = self.context.active_company.company_id
         user_id = self.context.user.user_id if self.context.user else None
         prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
+        from apps.flows.src.container import get_container
+
         container = get_container()
         files_data: List[Dict[str, Any]] = []
 
@@ -363,6 +388,8 @@ class A2AChannel(BaseChannel):
             raise ValueError(
                 "Авто-STT входящих audio-вложений требует active_company в контексте запроса"
             )
+        from apps.flows.src.container import get_container
+
         return await transcribe_incoming_audio_files(
             container=get_container(),
             files_data=files_data,
@@ -436,14 +463,20 @@ class A2AChannel(BaseChannel):
 
         # A2A Section 3.4.3: follow-up при активном operator takeover
         if prepared.is_takeover_user_reply:
-            events = [event async for event in self._handle_takeover_user_reply(prepared)]
+            events: List[StreamEvent] = [
+                event async for event in self._handle_takeover_user_reply(prepared)
+            ]
+            if prepared.message is None:
+                raise ValueError("A2A prepared params must include original message")
             return await _build_task_from_events(
                 events=events,
                 task_id=prepared.task_id,
                 context_id=prepared.context_id,
-                input_message=params.message,
+                input_message=prepared.message,
                 flow_id=self.flow_id,
             )
+
+        from apps.flows.src.container import get_container
 
         container = get_container()
 
@@ -467,6 +500,8 @@ class A2AChannel(BaseChannel):
         events = await collect_task
 
         logger.debug(f"[A2A] Collected {len(events)} events for task {prepared.task_id}")
+        if prepared.message is None:
+            raise ValueError("A2A prepared params must include original message")
 
         return await _build_task_from_events(
             events=events,
@@ -479,7 +514,7 @@ class A2AChannel(BaseChannel):
     async def _run_evaluation(
         self,
         params: MessageSendParams,
-        eval_metadata: Dict,
+        eval_metadata: Dict[str, Any],
         task_id: str,
     ) -> AsyncGenerator[Union[TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
         """
@@ -488,6 +523,8 @@ class A2AChannel(BaseChannel):
         A2A канал только конвертирует события сервиса в A2A формат.
         Вся логика тестирования в EvaluationService.
         """
+        from apps.flows.src.container import get_container
+
         container = get_container()
         test_case_id = eval_metadata["test_case_id"]
 
@@ -507,45 +544,43 @@ class A2AChannel(BaseChannel):
 
                 elif event_type == "start":
                     yield TaskArtifactUpdateEvent(
-                        taskId=task_id,
-                        contextId=context_id,
+                        task_id=task_id,
+                        context_id=context_id,
                         artifact=Artifact(
-                            artifactId=str(uuid.uuid4()),
+                            artifact_id=str(uuid.uuid4()),
                             name="response",
-                            parts=[
-                                Part(root=TextPart(text=f"🧪 Запуск теста: {test_case_id}\n\n"))
-                            ],
+                            parts=[_text_part(f"🧪 Запуск теста: {test_case_id}\n\n")],
                         ),
                         append=False,
-                        lastChunk=False,
+                        last_chunk=False,
                     )
 
                 elif event_type == "user":
                     text = f"👤 **USER**: {event['content']}\n"
                     yield TaskArtifactUpdateEvent(
-                        taskId=task_id,
-                        contextId=context_id,
+                        task_id=task_id,
+                        context_id=context_id,
                         artifact=Artifact(
-                            artifactId=str(uuid.uuid4()),
+                            artifact_id=str(uuid.uuid4()),
                             name="response",
-                            parts=[Part(root=TextPart(text=text))],
+                            parts=[_text_part(text)],
                         ),
                         append=True,
-                        lastChunk=False,
+                        last_chunk=False,
                     )
 
                 elif event_type == "assistant":
                     text = f"🤖 **ASSISTANT**: {event['content']}\n\n"
                     yield TaskArtifactUpdateEvent(
-                        taskId=task_id,
-                        contextId=context_id,
+                        task_id=task_id,
+                        context_id=context_id,
                         artifact=Artifact(
-                            artifactId=str(uuid.uuid4()),
+                            artifact_id=str(uuid.uuid4()),
                             name="response",
-                            parts=[Part(root=TextPart(text=text))],
+                            parts=[_text_part(text)],
                         ),
                         append=True,
-                        lastChunk=False,
+                        last_chunk=False,
                     )
 
                 elif event_type == "result":
@@ -563,21 +598,21 @@ class A2AChannel(BaseChannel):
                         result_text += f"\nTask ID: {eval_task_id}"
 
                     yield TaskArtifactUpdateEvent(
-                        taskId=task_id,
-                        contextId=context_id,
+                        task_id=task_id,
+                        context_id=context_id,
                         artifact=Artifact(
-                            artifactId=str(uuid.uuid4()),
+                            artifact_id=str(uuid.uuid4()),
                             name="response",
-                            parts=[Part(root=TextPart(text=result_text))],
+                            parts=[_text_part(result_text)],
                         ),
                         append=True,
-                        lastChunk=True,
+                        last_chunk=True,
                     )
 
                     # Для evaluation тестов всегда completed - passed/failed это результат теста, а не ошибка
                     yield TaskStatusUpdateEvent(
-                        taskId=task_id,
-                        contextId=context_id,
+                        task_id=task_id,
+                        context_id=context_id,
                         status=TaskStatus(state=TaskState.completed),
                         final=True,
                     )
@@ -586,19 +621,19 @@ class A2AChannel(BaseChannel):
             logger.exception(f"Error running evaluation test {test_case_id}")
 
             yield TaskArtifactUpdateEvent(
-                taskId=task_id,
-                contextId=context_id,
+                task_id=task_id,
+                context_id=context_id,
                 artifact=Artifact(
-                    artifactId=str(uuid.uuid4()),
+                    artifact_id=str(uuid.uuid4()),
                     name="response",
-                    parts=[Part(root=TextPart(text=f"❌ Ошибка теста: {str(e)}"))],
+                    parts=[_text_part(f"❌ Ошибка теста: {str(e)}")],
                 ),
                 append=True,
-                lastChunk=True,
+                last_chunk=True,
             )
             yield TaskStatusUpdateEvent(
-                taskId=task_id,
-                contextId=context_id,
+                task_id=task_id,
+                context_id=context_id,
                 status=TaskStatus(state=TaskState.failed),
                 final=True,
             )
@@ -645,10 +680,12 @@ class A2AChannel(BaseChannel):
             return
 
         logger.info(f"[on_message_stream] Prepared task_id={prepared.task_id}, subscribing to Redis...")
+        from apps.flows.src.container import get_container
+
         container = get_container()
 
         subscriber = EventSubscriber(container.redis_client)
-        event_queue: asyncio.Queue = asyncio.Queue()
+        event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         ready_event = asyncio.Event()
 
         async def collect_events():
@@ -684,6 +721,8 @@ class A2AChannel(BaseChannel):
     async def on_cancel_task(self, params: TaskIdParams, context: Any = None) -> Optional[Task]:
         """Отмена задачи. Ставит Redis-ключ для остановки воркера на следующем такте."""
         logger.info(f"Cancel task: {params.id}")
+
+        from apps.flows.src.container import get_container
 
         container = get_container()
         await container.redis_client.set(f"cancel:{params.id}", "1", ttl=CANCEL_KEY_TTL)

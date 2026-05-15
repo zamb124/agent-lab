@@ -85,7 +85,7 @@ export class ChatInput extends PlatformElement {
                 background: transparent;
                 border: none;
                 border-radius: var(--radius-lg);
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
             
             .attach-button:hover {
@@ -104,7 +104,7 @@ export class ChatInput extends PlatformElement {
                 background: transparent;
                 border: none;
                 border-radius: var(--radius-lg);
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
 
             .voice-button:hover:not(:disabled) {
@@ -164,7 +164,7 @@ export class ChatInput extends PlatformElement {
                 color: white;
                 border-radius: var(--radius-xl);
                 box-shadow: 0 4px 12px rgba(153, 166, 249, 0.3);
-                transition: all var(--duration-normal) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
             
             .send-button:hover:not(:disabled) {
@@ -250,7 +250,7 @@ export class ChatInput extends PlatformElement {
                 background: transparent;
                 border: none;
                 border-radius: var(--radius-sm);
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
                 cursor: pointer;
             }
             

@@ -102,7 +102,7 @@ export class FlowsCatalogList extends PlatformElement {
                 border: none;
                 cursor: pointer;
                 box-shadow: 0 2px 6px rgba(153, 166, 249, 0.2);
-                transition: all var(--duration-normal) var(--easing-default);
+                transition: var(--motion-transition-interactive);
                 flex-shrink: 0;
             }
             .create-btn:hover {

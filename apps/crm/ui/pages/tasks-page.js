@@ -154,7 +154,7 @@ export class CRMTasksPage extends CRMNamespacePage {
                 background: var(--crm-surface-muted);
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 flex-shrink: 0;
                 padding: 0;
             }
@@ -201,7 +201,7 @@ export class CRMTasksPage extends CRMNamespacePage {
                 font-size: 13px;
                 font-weight: 500;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 white-space: nowrap;
             }
 
@@ -302,7 +302,7 @@ export class CRMTasksPage extends CRMNamespacePage {
                 cursor: pointer;
                 padding: 0;
                 flex-shrink: 0;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
 
             .column-collapse-btn:hover {
@@ -490,7 +490,7 @@ export class CRMTasksPage extends CRMNamespacePage {
                 font-size: 12px;
                 font-weight: 500;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
 
             .task-move-btn:hover {

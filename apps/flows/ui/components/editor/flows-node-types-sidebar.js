@@ -89,7 +89,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .add-btn:hover { background: var(--accent-subtle); color: var(--accent); border-color: var(--accent); }
             .triggers-empty {
@@ -155,7 +155,7 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                 background: var(--glass-solid-subtle);
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .trigger-row-actions .icon-btn:hover {
                 background: var(--glass-solid-strong);

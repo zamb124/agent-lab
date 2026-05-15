@@ -20,7 +20,7 @@ from core.config import get_settings
 _PLATFORM_FALLBACK_MODEL_BY_CAPABILITY: dict[AICapability, str | None] = {
     AICapability.LLM_CHAT: None,  # из settings.llm.default_model
     AICapability.LLM_SUMMARIZE: "qwen/qwen3.5-397b-a17b",
-    AICapability.LLM_FORMAT_MARKDOWN: None,  # резолвится через provider_litserve.infra.markdown_default_api_model_id
+    AICapability.LLM_FORMAT_MARKDOWN: None,  # default-route через get_llm(); explicit provider_litserve — LitServe HTTP
     AICapability.LLM_CODEGEN: None,  # из settings.llm.default_model
     AICapability.LLM_VISION: "google/gemini-2.5-flash-preview",
     AICapability.IMAGE_GEN: "google/nano-banana",
@@ -35,6 +35,9 @@ _PROVIDER_MODEL_BY_CAPABILITY: dict[AICapability, dict[str, str]] = {
         "provider_litserve": "Qwen/Qwen2.5-1.5B-Instruct",
         "bothub": "openai/gpt-4o-mini",
         "yandex": "yandexgpt/latest",
+    },
+    AICapability.LLM_FORMAT_MARKDOWN: {
+        "provider_litserve": "Qwen/Qwen2.5-1.5B-Instruct",
     },
     AICapability.LLM_VISION: {
         "openrouter": "google/gemini-2.5-flash-preview",
@@ -67,6 +70,11 @@ def platform_default_model(capability: AICapability, provider: str | None = None
         return str(m).strip() if m else None
     if capability == AICapability.LLM_FORMAT_MARKDOWN:
         s = get_settings()
+        if provider == "openrouter":
+            pool_fallback = (s.llm.openrouter_free_pool.fallback_model or "").strip()
+            if pool_fallback:
+                return pool_fallback
+            return (s.llm.default_model or "").strip() or None
         infra_model = (s.provider_litserve.infra.markdown_default_api_model_id or "").strip()
         if infra_model:
             return infra_model
@@ -77,13 +85,10 @@ def platform_default_model(capability: AICapability, provider: str | None = None
 def platform_default_provider_for_capability(capability: AICapability) -> str:
     """Платформенный провайдер по умолчанию для capability (без company override).
 
-    Внимание: capability могут иметь собственный платформенный путь,
-    отличный от ``settings.llm.provider``. Например ``LLM_FORMAT_MARKDOWN``
-    по умолчанию идёт через LitServe ``POST /v1/text/format_markdown``
-    (см. ``core.text_transforms.routing.should_use_litserve_format_markdown_http``
-    и ``apps/crm_worker/tasks/note_markdown_tasks.py``), поэтому платформенный
-    провайдер для этой capability — ``provider_litserve``, а не общий
-    ``settings.llm.provider``.
+    Внимание: некоторые capability имеют собственный платформенный путь,
+    отличный от ``settings.llm.provider``. ``LLM_FORMAT_MARKDOWN`` теперь по
+    умолчанию идёт через общий ``get_llm()`` default-route; LitServe выбирается
+    только явным ``provider_litserve``.
     """
     s = get_settings()
     if capability == AICapability.EMBEDDING:
@@ -96,8 +101,6 @@ def platform_default_provider_for_capability(capability: AICapability) -> str:
         return s.voice.tts.provider
     if capability == AICapability.VOICE_VAD:
         return s.voice.vad.provider
-    if capability == AICapability.LLM_FORMAT_MARKDOWN:
-        return "provider_litserve"
     return s.llm.provider
 
 

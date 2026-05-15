@@ -11,6 +11,7 @@ import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { CoreEvents } from '../events/contract.js';
+import { prefersReducedMotion, waitForPlatformMotion } from '../utils/motion.js';
 import './platform-icon.js';
 import './platform-button.js';
 
@@ -18,6 +19,7 @@ export class GlassModal extends PlatformElement {
     static properties = {
         ...PlatformElement.properties,
         open: { type: Boolean, reflect: true },
+        closing: { type: Boolean, reflect: true },
         size: { type: String },
         heading: { type: String },
         title: { type: String },
@@ -27,6 +29,8 @@ export class GlassModal extends PlatformElement {
         _isDragging: { type: Boolean, state: true },
         _position: { type: Object, state: true },
         _panelEnterActive: { type: Boolean, state: true },
+        _fullscreenMotionActive: { type: Boolean, state: true },
+        _fullscreenMotionRun: { type: Boolean, state: true },
         hideHeaderClose: { type: Boolean },
         headerSavePrimary: { type: Boolean },
     };
@@ -58,12 +62,33 @@ export class GlassModal extends PlatformElement {
                 }
             }
 
+            @keyframes glassModalBackdropOut {
+                from {
+                    opacity: 1;
+                }
+                to {
+                    opacity: 0;
+                }
+            }
+
+            @keyframes glassModalPanelOut {
+                from {
+                    opacity: 1;
+                    transform: translate(-50%, -50%) scale(1);
+                }
+                to {
+                    opacity: 0;
+                    transform: translate(-50%, calc(-50% + 8px)) scale(0.98);
+                }
+            }
+
             :host {
                 display: none;
                 box-sizing: border-box;
             }
 
-            :host([open]) {
+            :host([open]),
+            :host([closing]) {
                 display: block;
                 position: fixed;
                 inset: 0;
@@ -96,9 +121,18 @@ export class GlassModal extends PlatformElement {
                 visibility: hidden;
             }
 
-            :host([open]) .modal-overlay {
+            :host([open]) .modal-overlay,
+            :host([closing]) .modal-overlay {
                 visibility: visible;
+            }
+
+            :host([open]:not([closing])) .modal-overlay {
                 animation: glassModalBackdropIn var(--modal-overlay-duration, var(--duration-normal)) var(--modal-enter-easing, var(--easing-smooth)) both;
+            }
+
+            :host([closing]) .modal-overlay {
+                animation: glassModalBackdropOut var(--modal-overlay-exit-duration, var(--motion-duration-exit, var(--duration-fast))) var(--modal-exit-easing, var(--motion-ease-accelerate, ease-in)) both;
+                pointer-events: none;
             }
 
             .modal-scrim {
@@ -145,24 +179,44 @@ export class GlassModal extends PlatformElement {
 
                 transform: translate(-50%, calc(-50% + 12px)) scale(0.97);
                 opacity: 0;
-                transition: width var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
-                    max-width var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
-                    height var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
-                    max-height var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
-                    border-radius var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth));
+                contain: layout paint style;
+                transition:
+                    border-radius var(--motion-duration-layout, var(--duration-normal, 0.3s)) var(--motion-ease-standard, var(--easing-default));
             }
 
             /*
              * Вход только пока висит .panel-enter-active; после animationend класс снимаем,
              * иначе при снятии .dragging анимация снова запускается с начала.
              */
-            :host([open]) .modal.panel-enter-active {
+            :host([open]:not([closing])) .modal.panel-enter-active {
                 animation: glassModalPanelIn var(--modal-panel-duration, var(--duration-slow)) var(--modal-enter-easing, var(--modal-panel-easing, var(--easing-smooth))) both;
             }
 
-            :host([open]) .modal:not(.panel-enter-active) {
+            :host([open]:not([closing])) .modal:not(.panel-enter-active) {
                 opacity: 1;
                 transform: translate(-50%, -50%) scale(1);
+            }
+
+            :host([closing]) .modal {
+                animation: glassModalPanelOut var(--modal-panel-exit-duration, var(--motion-duration-exit, var(--duration-fast))) var(--modal-exit-easing, var(--motion-ease-accelerate, ease-in)) both;
+                pointer-events: none;
+            }
+
+            .modal.fullscreen-morph {
+                animation: none !important;
+                transform-origin: center center;
+                transform:
+                    translate(-50%, -50%)
+                    translate3d(var(--modal-flip-x, 0px), var(--modal-flip-y, 0px), 0)
+                    scale(var(--modal-flip-scale-x, 1), var(--modal-flip-scale-y, 1));
+                transition:
+                    transform var(--modal-fullscreen-motion-duration, var(--motion-duration-layout, var(--duration-normal))) var(--motion-ease-emphasized, var(--easing-default)),
+                    border-radius var(--modal-fullscreen-motion-duration, var(--motion-duration-layout, var(--duration-normal))) var(--motion-ease-emphasized, var(--easing-default));
+                will-change: transform;
+            }
+
+            .modal.fullscreen-morph.fullscreen-morph-run {
+                transform: translate(-50%, -50%) translate3d(0, 0, 0) scale(1);
             }
 
             :host([open]) .modal.dragging {
@@ -171,11 +225,8 @@ export class GlassModal extends PlatformElement {
             }
 
             .modal.dragging {
-                transition: width var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
-                    max-width var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
-                    height var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
-                    max-height var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth)),
-                    border-radius var(--duration-normal, 0.3s) var(--modal-enter-easing, var(--easing-smooth));
+                transition:
+                    border-radius var(--motion-duration-layout, var(--duration-normal, 0.3s)) var(--motion-ease-standard, var(--easing-default));
                 user-select: none;
             }
 
@@ -280,7 +331,7 @@ export class GlassModal extends PlatformElement {
                 color: var(--text-secondary, rgba(255, 255, 255, 0.65));
                 font-size: var(--text-sm, 14px);
                 cursor: pointer;
-                transition: all var(--duration-fast, 0.2s) ease;
+                transition: var(--motion-transition-interactive);
                 flex-shrink: 0;
             }
 
@@ -326,6 +377,27 @@ export class GlassModal extends PlatformElement {
                 border-radius: var(--modal-content-radius);
                 contain: paint style;
                 isolation: isolate;
+            }
+
+            .modal.sm .modal-content {
+                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-sm-body-min-block-size, 0px));
+            }
+
+            .modal.md .modal-content {
+                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-md-body-min-block-size, 6rem));
+            }
+
+            .modal.lg .modal-content {
+                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-lg-body-min-block-size, 12rem));
+            }
+
+            .modal.xl .modal-content {
+                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-xl-body-min-block-size, 16rem));
+            }
+
+            .modal.full .modal-content,
+            .modal.fullscreen .modal-content {
+                min-block-size: var(--modal-body-min-block-size, var(--platform-modal-full-body-min-block-size, 0px));
             }
 
             .modal.fullscreen .modal-content,
@@ -599,8 +671,12 @@ export class GlassModal extends PlatformElement {
                     animation-duration: 1ms !important;
                 }
 
-                :host([open]) .modal.panel-enter-active {
+                :host([open]) .modal.panel-enter-active,
+                :host([closing]) .modal,
+                :host([closing]) .modal-overlay,
+                .modal.fullscreen-morph {
                     animation-duration: 1ms !important;
+                    transition-duration: 1ms !important;
                 }
 
                 .modal {
@@ -622,6 +698,7 @@ export class GlassModal extends PlatformElement {
     constructor() {
         super();
         this.open = false;
+        this.closing = false;
         this.size = 'md';
         this.heading = '';
         this.title = '';
@@ -630,6 +707,8 @@ export class GlassModal extends PlatformElement {
         this._isFullscreen = false;
         this._isDragging = false;
         this._panelEnterActive = false;
+        this._fullscreenMotionActive = false;
+        this._fullscreenMotionRun = false;
         this._position = { x: null, y: null };
         this._dragStart = { x: 0, y: 0 };
         this._boundMouseMove = this._handleMouseMove.bind(this);
@@ -643,11 +722,16 @@ export class GlassModal extends PlatformElement {
         this._portalTransitionCleanup = null;
         /** @type {ReturnType<typeof setTimeout> | null} */
         this._portalRestoreFallbackTimer = null;
+        /** @type {Promise<void> | null} */
+        this._closeMotionPromise = null;
+        /** @type {Promise<void> | null} */
+        this._fullscreenMotionPromise = null;
     }
 
     /**
      * Закрытие = dispatch UI_MODAL_CLOSE с _modalId. Reducer снимет элемент со стека,
-     * platform-modal-stack удалит DOM-узел. Любая прямая мутация this.open=false
+     * platform-modal-stack переведёт узел в closing, дождётся CSS exit-motion и
+     * затем dispatch'ит UI_MODAL_CLOSED. Любая прямая мутация this.open=false
      * запрещена: source of truth — state.modals.stack.
      */
     close() {
@@ -659,11 +743,114 @@ export class GlassModal extends PlatformElement {
         this.dispatch(CoreEvents.UI_MODAL_CLOSE, { id: this._modalId });
     }
 
+    async requestPlatformClose() {
+        if (this._closeMotionPromise) {
+            return this._closeMotionPromise;
+        }
+        this.closing = true;
+        this.open = false;
+        this._panelEnterActive = false;
+        this._isDragging = false;
+        this.requestUpdate();
+        this._closeMotionPromise = (async () => {
+            await this.updateComplete;
+            const overlay = this.shadowRoot?.querySelector('.modal-overlay');
+            const modal = this.shadowRoot?.querySelector('.modal');
+            await waitForPlatformMotion([modal, overlay], { fallbackMs: 180 });
+        })();
+        try {
+            await this._closeMotionPromise;
+        } finally {
+            this._closeMotionPromise = null;
+        }
+    }
+
     toggleFullscreen() {
+        if (this._fullscreenMotionPromise) {
+            return this._fullscreenMotionPromise;
+        }
+        this._fullscreenMotionPromise = this._toggleFullscreenWithMotion().finally(() => {
+            this._fullscreenMotionPromise = null;
+        });
+        return this._fullscreenMotionPromise;
+    }
+
+    async _toggleFullscreenWithMotion() {
+        const modal = this.shadowRoot?.querySelector('.modal');
+        const shouldAnimate = Boolean(
+            modal
+            && this.open
+            && !this.closing
+            && !this._isDragging
+            && !prefersReducedMotion(),
+        );
+
+        if (!shouldAnimate) {
+            this._isFullscreen = !this._isFullscreen;
+            if (this._isFullscreen) {
+                this._position = { x: null, y: null };
+            }
+            return;
+        }
+
+        const first = modal.getBoundingClientRect();
         this._isFullscreen = !this._isFullscreen;
         if (this._isFullscreen) {
             this._position = { x: null, y: null };
         }
+        this._fullscreenMotionActive = false;
+        this._fullscreenMotionRun = false;
+        this.requestUpdate();
+        await this.updateComplete;
+
+        const nextModal = this.shadowRoot?.querySelector('.modal');
+        if (!nextModal) {
+            return;
+        }
+        const last = nextModal.getBoundingClientRect();
+        if (first.width <= 0 || first.height <= 0 || last.width <= 0 || last.height <= 0) {
+            return;
+        }
+
+        const firstCenterX = first.left + first.width / 2;
+        const firstCenterY = first.top + first.height / 2;
+        const lastCenterX = last.left + last.width / 2;
+        const lastCenterY = last.top + last.height / 2;
+        const dx = firstCenterX - lastCenterX;
+        const dy = firstCenterY - lastCenterY;
+        const scaleX = first.width / last.width;
+        const scaleY = first.height / last.height;
+        const nearIdentity =
+            Math.abs(dx) < 0.5
+            && Math.abs(dy) < 0.5
+            && Math.abs(scaleX - 1) < 0.002
+            && Math.abs(scaleY - 1) < 0.002;
+        if (nearIdentity) {
+            return;
+        }
+
+        this.style.setProperty('--modal-flip-x', `${dx}px`);
+        this.style.setProperty('--modal-flip-y', `${dy}px`);
+        this.style.setProperty('--modal-flip-scale-x', String(scaleX));
+        this.style.setProperty('--modal-flip-scale-y', String(scaleY));
+        this._fullscreenMotionActive = true;
+        this._fullscreenMotionRun = false;
+        this.requestUpdate();
+        await this.updateComplete;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        this._fullscreenMotionRun = true;
+        this.requestUpdate();
+        await this.updateComplete;
+        await waitForPlatformMotion(nextModal, { fallbackMs: 260 });
+
+        this._fullscreenMotionActive = false;
+        this._fullscreenMotionRun = false;
+        this.style.removeProperty('--modal-flip-x');
+        this.style.removeProperty('--modal-flip-y');
+        this.style.removeProperty('--modal-flip-scale-x');
+        this.style.removeProperty('--modal-flip-scale-y');
+        this.requestUpdate();
     }
 
     _handleEscape(e) {
@@ -752,14 +939,14 @@ export class GlassModal extends PlatformElement {
 
     willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
-        if (changedProperties.has('open')) {
-            if (this.open) {
+        if (changedProperties.has('open') || changedProperties.has('closing')) {
+            if (this.open && !this.closing) {
                 this._panelEnterActive = true;
             } else {
                 this._panelEnterActive = false;
             }
         }
-        if (changedProperties.has('open') && this.open) {
+        if ((changedProperties.has('open') || changedProperties.has('closing')) && (this.open || this.closing)) {
             this._clearPortalCloseHooks();
             const z = this.style.getPropertyValue('--platform-modal-layer-z').trim();
             if (!z) {
@@ -774,7 +961,7 @@ export class GlassModal extends PlatformElement {
 
     async getUpdateComplete() {
         const complete = await super.getUpdateComplete();
-        if (this.open) {
+        if (this.open || this.closing) {
             this._attachPortalToBody();
         } else if (this.parentNode === document.body) {
             this._schedulePortalRestoreAfterCloseAnimation();
@@ -794,7 +981,7 @@ export class GlassModal extends PlatformElement {
     }
 
     _attachPortalToBody() {
-        if (!this.open || this.parentNode === document.body) {
+        if ((!this.open && !this.closing) || this.parentNode === document.body) {
             if (this.parentNode === document.body) {
                 this.setAttribute('data-portal', '');
             }
@@ -809,7 +996,7 @@ export class GlassModal extends PlatformElement {
     _schedulePortalRestoreAfterCloseAnimation() {
         this._clearPortalCloseHooks();
         const restore = () => {
-            if (!this.open && this.parentNode === document.body) {
+            if (!this.open && !this.closing && this.parentNode === document.body) {
                 this._restorePortalToOriginalParent();
             }
         };
@@ -823,7 +1010,7 @@ export class GlassModal extends PlatformElement {
     }
 
     _restorePortalToOriginalParent() {
-        if (this.open) {
+        if (this.open || this.closing) {
             return;
         }
         if (this.parentNode !== document.body) {
@@ -908,7 +1095,7 @@ export class GlassModal extends PlatformElement {
 
     _getModalStyle() {
         if (this._position.x !== null && this._position.y !== null && !this._isFullscreen) {
-            return `position: fixed; left: ${this._position.x}px; top: ${this._position.y}px; z-index: 2; transform: translate(-50%, -50%) ${this.open ? 'scale(1)' : 'scale(0.95)'};`;
+            return `position: fixed; left: ${this._position.x}px; top: ${this._position.y}px; z-index: 2; transform: translate(-50%, -50%) ${this.open || this.closing ? 'scale(1)' : 'scale(0.95)'};`;
         }
         return '';
     }
@@ -919,7 +1106,9 @@ export class GlassModal extends PlatformElement {
             this.size,
             this._isFullscreen ? 'fullscreen' : '',
             this._isDragging ? 'dragging' : '',
-            this.open && this._panelEnterActive ? 'panel-enter-active' : '',
+            this.open && !this.closing && this._panelEnterActive ? 'panel-enter-active' : '',
+            this._fullscreenMotionActive ? 'fullscreen-morph' : '',
+            this._fullscreenMotionActive && this._fullscreenMotionRun ? 'fullscreen-morph-run' : '',
         ].filter(Boolean).join(' ');
 
         const tm = (key) => (this.t(key) || key);

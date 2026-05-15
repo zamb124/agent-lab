@@ -199,7 +199,7 @@ export const sidebarStyles = css`
         align-items: center;
         justify-content: center;
         border-radius: var(--radius-lg);
-        transition: all var(--duration-fast);
+        transition: var(--motion-transition-interactive);
     }
 
     .sidebar-logo-icon.clickable {
@@ -295,7 +295,7 @@ export const sidebarStyles = css`
         background: transparent;
         border: 1px solid transparent;
         cursor: pointer;
-        transition: all var(--duration-normal) var(--easing-default);
+        transition: var(--motion-transition-interactive);
     }
 
     .collapse-btn:hover {
@@ -319,7 +319,7 @@ export const sidebarNavItemStyles = css`
         font-size: var(--text-sm);
         font-weight: var(--font-medium);
         text-decoration: none;
-        transition: all var(--duration-normal) var(--easing-default);
+        transition: var(--motion-transition-interactive);
         width: 100%;
         text-align: left;
     }
@@ -501,7 +501,7 @@ export const sidebarSectionStyles = css`
         background: var(--glass-solid-subtle);
         border: none;
         cursor: pointer;
-        transition: all var(--duration-fast);
+        transition: var(--motion-transition-interactive);
     }
 
     .section-action-btn:hover {

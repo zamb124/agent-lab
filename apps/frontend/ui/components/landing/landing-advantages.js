@@ -79,7 +79,7 @@ export class LandingAdvantages extends PlatformElement {
                 backdrop-filter: blur(20px);
                 text-align: center;
                 animation: floatBadge 4s ease-in-out infinite;
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
                 max-width: 320px;
             }
             

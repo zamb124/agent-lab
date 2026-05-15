@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
 
 from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.models import NodeConfig, ReactLoopMode
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.runtime.a2a_messages import build_user_message
+from apps.flows.src.streaming.base import BaseEmitter, StreamEvent
 from core.logging import get_logger
 
 if TYPE_CHECKING:
@@ -87,7 +88,12 @@ class BaseLlmNodeRunner(ABC):
         return getattr(tool, "name", None) if tool else None
 
     @abstractmethod
-    async def run(self, input_data: Dict[str, Any], state: "ExecutionState") -> Dict[str, Any]:
+    def run(
+        self,
+        input_data: Dict[str, Any],
+        state: "ExecutionState",
+        emitter: Optional[BaseEmitter] = None,
+    ) -> AsyncGenerator[StreamEvent, None]:
         """
         Выполняет LlmNode.
 
@@ -98,7 +104,7 @@ class BaseLlmNodeRunner(ABC):
         Returns:
             Результат выполнения
         """
-        pass
+        raise NotImplementedError
 
     def get_variables(self, state: "ExecutionState") -> Dict[str, Any]:
         """Получает переменные из state."""
@@ -137,11 +143,11 @@ class BaseLlmNodeRunner(ABC):
         if tool_calls:
             meta["tool_calls"] = tool_calls
         message = Message(
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
             role=Role.agent,
             parts=[Part(root=TextPart(text=content))],
             metadata=meta,
-            taskId=state.task_id,
+            task_id=state.task_id,
         )
         self.add_message(state, message)
 
@@ -150,13 +156,13 @@ class BaseLlmNodeRunner(ABC):
         if not self.node_config:
             raise ValueError("add_tool_message: node_config required")
         message = Message(
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
             role=Role.agent,
             parts=[Part(root=TextPart(text=content))],
             metadata={
                 "tool_call_id": tool_call_id,
                 "node_id": self.node_config.node_id,
             },
-            taskId=state.task_id,
+            task_id=state.task_id,
         )
         self.add_message(state, message)

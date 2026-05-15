@@ -37,6 +37,8 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-palette-color-picker.js';
 import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/platform-cron-field.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
@@ -46,6 +48,11 @@ import {
     normalizeDefaultNoteVoiceMode,
     parseNoteVoiceDefaultsFromCrmSettings,
 } from '../utils/namespace-crm-note-defaults.js';
+import {
+    DEFAULT_SUGGESTS_CRON,
+    buildSuggestsSettingsPayload,
+    parseSuggestsSettingsFromCrmSettings,
+} from '../utils/namespace-crm-suggests.js';
 import {
     buildDefaultSidebarNav,
     sidebarNavTreeToApiPayload,
@@ -105,6 +112,10 @@ export class CRMSpaceDetailPage extends PlatformPage {
         _savingType: { state: true },
         _creatingType: { state: true },
         _sidebarMenuBusy: { state: true },
+        _suggestsEnabled: { state: true },
+        _suggestsCron: { state: true },
+        _suggestsScheduleTaskId: { state: true },
+        _suggestsSaveBusy: { state: true },
         _taskBoardDraft: { state: true },
         _taskBoardSaveBusy: { state: true },
     };
@@ -404,6 +415,16 @@ export class CRMSpaceDetailPage extends PlatformPage {
             .stage-color-picker {
                 min-width: 0;
             }
+            .switch-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+            .switch-row platform-switch {
+                flex: 1;
+                min-width: 0;
+            }
         `,
     ];
 
@@ -423,6 +444,10 @@ export class CRMSpaceDetailPage extends PlatformPage {
         this._savingType = false;
         this._creatingType = false;
         this._sidebarMenuBusy = false;
+        this._suggestsEnabled = false;
+        this._suggestsCron = DEFAULT_SUGGESTS_CRON;
+        this._suggestsScheduleTaskId = '';
+        this._suggestsSaveBusy = false;
         this._taskBoardDraft = null;
         this._taskBoardSaveBusy = false;
         this._lastRequestedId = '';
@@ -503,6 +528,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
             this._savingMeta = false;
             this._savingAllowed = false;
             this._sidebarMenuBusy = false;
+            this._suggestsSaveBusy = false;
             this._taskBoardSaveBusy = false;
             const result = event && event.payload && event.payload.result;
             if (result && result.name === this.itemId) {
@@ -517,6 +543,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
             this._savingMeta = false;
             this._savingAllowed = false;
             this._sidebarMenuBusy = false;
+            this._suggestsSaveBusy = false;
             this._taskBoardSaveBusy = false;
         });
         this.useEvent(this._entityTypeUpdateOp.op.events.SUCCEEDED, () => {
@@ -601,6 +628,10 @@ export class CRMSpaceDetailPage extends PlatformPage {
         if (this._lastRequestedId === this.itemId) return;
         this._lastRequestedId = this.itemId;
         this._allowedTypeIds = [];
+        this._suggestsEnabled = false;
+        this._suggestsCron = DEFAULT_SUGGESTS_CRON;
+        this._suggestsScheduleTaskId = '';
+        this._suggestsSaveBusy = false;
         this._taskBoardDraft = null;
         this._namespaces.get(this.itemId);
         this._editabilityOp.run({ name: this.itemId });
@@ -623,6 +654,10 @@ export class CRMSpaceDetailPage extends PlatformPage {
         const parsed = parseNoteVoiceDefaultsFromCrmSettings(cs);
         this._defaultNoteVoiceMode = parsed.defaultNoteVoiceMode;
         this._showNoteVoiceUi = parsed.showNoteVoiceUi;
+        const suggests = parseSuggestsSettingsFromCrmSettings(cs);
+        this._suggestsEnabled = suggests.enabled;
+        this._suggestsCron = suggests.cron;
+        this._suggestsScheduleTaskId = suggests.scheduleTaskId;
     }
 
     _loadTaskBoardEditorState() {
@@ -803,6 +838,42 @@ export class CRMSpaceDetailPage extends PlatformPage {
         this._namespaceUpdateOp.run({
             name: this.itemId,
             body: { crm_settings: { sidebar_navigation: payload } },
+        });
+    }
+
+    _onSuggestsSwitch(e) {
+        const d = e && e.detail;
+        if (!d || typeof d.value !== 'boolean') {
+            throw new Error('suggests switch: expected detail.value (boolean)');
+        }
+        this._suggestsEnabled = d.value;
+    }
+
+    _onSuggestsCronInput(e) {
+        const d = e && e.detail;
+        if (!d || typeof d.value !== 'string') {
+            throw new Error('suggests cron: expected detail.value (string)');
+        }
+        this._suggestsCron = d.value;
+    }
+
+    _onSaveSuggests() {
+        const cronRaw = typeof this._suggestsCron === 'string' ? this._suggestsCron.trim() : '';
+        if (this._suggestsEnabled && cronRaw.length === 0) {
+            this.toast('space_detail_page.suggests_cron_required', { type: 'error' });
+            return;
+        }
+        this._suggestsSaveBusy = true;
+        this._namespaceUpdateOp.run({
+            name: this.itemId,
+            body: {
+                crm_settings: {
+                    suggests: buildSuggestsSettingsPayload({
+                        enabled: this._suggestsEnabled,
+                        cron: this._suggestsCron,
+                    }),
+                },
+            },
         });
     }
 
@@ -1018,6 +1089,7 @@ export class CRMSpaceDetailPage extends PlatformPage {
                         <div class="space-detail-left-col">
                             ${this._renderLeftPanel(ns)}
                             ${this._renderSidebarMenuPanel(ns)}
+                            ${this._renderSuggestsPanel()}
                         </div>
                         ${this._renderRightPanel()}
                     </div>
@@ -1160,6 +1232,66 @@ export class CRMSpaceDetailPage extends PlatformPage {
                         @click=${this._onSidebarNavReset}
                     >
                         ${this.t('space_detail_page.sidebar_menu_reset')}
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    _renderSuggestsPanel() {
+        const disabled = this._suggestsSaveBusy
+            || this._savingMeta
+            || this._savingAllowed
+            || this._sidebarMenuBusy
+            || this._taskBoardSaveBusy;
+        return html`
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title panel-title-row-hint">
+                        <platform-icon name="sparkle" size="18"></platform-icon>
+                        <span>${this.t('space_detail_page.suggests_section')}</span>
+                        <platform-help-hint
+                            .text=${this.t('space_detail_page.suggests_section_hint')}
+                            label=${this.t('templates_page.field_hint_button_aria')}
+                        ></platform-help-hint>
+                    </span>
+                </div>
+                <p class="hint">${this.t('space_detail_page.suggests_hint')}</p>
+                <div class="switch-row">
+                    <platform-switch
+                        size="sm"
+                        label=${this.t('space_detail_page.suggests_toggle')}
+                        .checked=${this._suggestsEnabled}
+                        ?disabled=${disabled}
+                        @change=${this._onSuggestsSwitch}
+                    ></platform-switch>
+                </div>
+                <div class="field">
+                    <label class="field-label">${this.t('space_detail_page.suggests_cron_label')}</label>
+                    <platform-cron-field
+                        .value=${this._suggestsCron}
+                        placeholder=${this.t('space_detail_page.suggests_cron_placeholder')}
+                        ?disabled=${disabled}
+                        @input=${this._onSuggestsCronInput}
+                        @change=${this._onSuggestsCronInput}
+                    ></platform-cron-field>
+                    <p class="hint">${this.t('space_detail_page.suggests_cron_help')}</p>
+                </div>
+                <p class="hint mono">
+                    ${this._suggestsScheduleTaskId.length > 0
+                        ? this.t('space_detail_page.suggests_schedule_id', { id: this._suggestsScheduleTaskId })
+                        : this.t('space_detail_page.suggests_schedule_empty')}
+                </p>
+                <div class="actions-row">
+                    <button
+                        class="btn btn-primary"
+                        type="button"
+                        ?disabled=${disabled}
+                        @click=${this._onSaveSuggests}
+                    >
+                        ${this._suggestsSaveBusy
+                            ? this.t('space_detail_page.suggests_saving')
+                            : this.t('space_detail_page.suggests_save')}
                     </button>
                 </div>
             </div>

@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from core.state import ExecutionState
 
 logger = get_logger(__name__)
+Permission = str | List[str] | None
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -41,12 +42,12 @@ class FunctionTool(BaseTool):
 
     def __init__(
         self,
-        func: Callable,
+        func: Callable[..., Any],
         name: str,
         description: str,
         tags: List[str],
         mock_response: Any = None,
-        permission: Optional[str] = None,
+        permission: Permission = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
         cost: float = 0.0,
         billing_name: Optional[str] = None,
@@ -69,7 +70,7 @@ class FunctionTool(BaseTool):
         self.free_for_plans = free_for_plans or []
         self.tariff_limits = tariff_limits or {}
 
-    def _extract_parameters(self, func: Callable) -> Dict[str, CallParameter]:
+    def _extract_parameters(self, func: Callable[..., Any]) -> Dict[str, CallParameter]:
         """Извлекает параметры из type hints функции."""
         try:
             hints = get_type_hints(func)
@@ -190,7 +191,7 @@ def tool(
     description: str,
     tags: List[str],
     mock_response: Any = None,
-    permission: Optional[str] = None,
+    permission: Permission = None,
     react_role: ReactToolRole = ReactToolRole.STANDARD,
     cost: float = 0.0,
     billing_name: Optional[str] = None,
@@ -255,4 +256,3 @@ def tool(
             args_schema=args_schema,
         )
     return decorator
-

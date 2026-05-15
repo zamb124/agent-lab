@@ -114,6 +114,15 @@ body::after {
     animation: float 25s ease-in-out infinite reverse;
 }
 
+@media (max-width: 767px), (display-mode: standalone) {
+    body.platform-shell::before,
+    body.platform-shell::after {
+        display: none;
+        animation: none;
+        filter: none;
+    }
+}
+
 @keyframes float {
     0%, 100% { transform: translate(0, 0) scale(1); }
     25% { transform: translate(30px, -30px) scale(1.05); }

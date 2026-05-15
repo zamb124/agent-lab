@@ -82,7 +82,7 @@ export class OfficeSidebar extends PlatformElement {
                 font-size: var(--text-base);
                 font-weight: 500;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 width: 100%;
                 text-align: left;
             }

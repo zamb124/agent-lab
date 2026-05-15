@@ -8,6 +8,7 @@ BaseChannel - абстрактный базовый класс для канал
 from __future__ import annotations
 
 import json
+import importlib
 import uuid
 from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
@@ -48,7 +49,6 @@ from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.utils import extract_json_from_response
-from apps.idle_worker.tasks.push_notification_tasks import send_task_update
 from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
 from core.billing.exceptions import BillingBalanceBlockedError
@@ -306,8 +306,8 @@ class BaseChannel(ABC):
         context_id: Optional[str] = None,
         task_id: Optional[str] = None,
         message: Optional[Message] = None,
-        metadata: Optional[Dict] = None,
-        files_data: Optional[List[Dict]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        files_data: Optional[List[Dict[str, Any]]] = None,
         user_id: Optional[str] = None,
     ) -> PreparedTaskParams:
         """
@@ -414,10 +414,11 @@ class BaseChannel(ABC):
             )
             trace_context_data = trace_ctx.to_dict()
 
-        from apps.flows.src.tasks.flow_tasks import process_flow_task
         from core.config import get_settings
 
         broker_url = get_settings().tasks.broker_url
+        flow_tasks_module = importlib.import_module("apps.flows.src.tasks.flow_tasks")
+        process_flow_task = getattr(flow_tasks_module, "process_flow_task")
         logger.info("flow.create_task.broker", broker_url=broker_url)
         logger.debug(f"[create_task] Kicking task_id={params.task_id} for flow_id={self.flow_id}")
         await process_flow_task.kiq(
@@ -496,18 +497,22 @@ class BaseChannel(ABC):
         Returns:
             Результат выполнения
         """
+        if self.context is None:
+            raise ValueError("BaseChannel.process_task requires Context")
+        ctx = self.context
+
         container = get_container()
 
         # Context должен быть установлен в middleware и передан через context_data
         # Обновляем только специфичные для задачи поля
-        self.context.session_id = params.session_id
-        self.context.channel = self.name
-        self.context.flow_id = self.flow_id
+        ctx.session_id = params.session_id
+        ctx.channel = self.name
+        ctx.flow_id = self.flow_id
         if params.metadata:
-            self.context.metadata = {**self.context.metadata, **params.metadata}
+            ctx.metadata = {**ctx.metadata, **params.metadata}
 
         # Устанавливаем в ContextVar для доступа из других компонентов
-        set_context(self.context)
+        set_context(ctx)
         bind_log_context(**{LOG_SESSION_AGENT: params.session_id})
 
         # Загружаем state для определения task_id, resume и закреплённой версии flow
@@ -570,12 +575,12 @@ class BaseChannel(ABC):
 
                 runtime_flow.variables = {**runtime_flow.variables, **override_vars}
 
-            identity_vars = flow_variables_from_request_context(self.context)
+            identity_vars = flow_variables_from_request_context(ctx)
             if identity_vars:
                 runtime_flow.variables = {**runtime_flow.variables, **identity_vars}
 
-            user_id = self.context.user.user_id if self.context.user else params.user_id
-            user_groups = self.context.metadata.get("grps", []) or []
+            user_id = ctx.user.user_id if ctx.user else params.user_id
+            user_groups = ctx.metadata.get("grps", []) or []
 
             state = saved_state
 
@@ -645,7 +650,7 @@ class BaseChannel(ABC):
                     attach_flow_speech_layers_to_context,
                 )
 
-                attach_flow_speech_layers_to_context(self.context, flow_config, params.branch_id)
+                attach_flow_speech_layers_to_context(ctx, flow_config, params.branch_id)
 
             branch_mock = None
             if flow_config and flow_config.branches and params.branch_id in flow_config.branches:
@@ -795,6 +800,8 @@ class BaseChannel(ABC):
         self, task_id: str, context_id: str, state: str, message: str
     ) -> None:
         """Отправляет push notification через TaskIQ."""
+        push_tasks_module = importlib.import_module("apps.idle_worker.tasks.push_notification_tasks")
+        send_task_update = getattr(push_tasks_module, "send_task_update")
         await send_task_update.kiq(task_id, context_id, state, message, True)
 
     # === Общая реализация on_get_task ===
@@ -835,7 +842,7 @@ class BaseChannel(ABC):
 
         return Task(
             id=task_id,
-            contextId=state.context_id,
+            context_id=state.context_id,
             status=TaskStatus(state=task_state, message=new_agent_text_message(response)),
             history=messages if messages else None,
         )
@@ -857,7 +864,7 @@ class BaseChannel(ABC):
 
         return Task(
             id=state.task_id,
-            contextId=state.context_id,
+            context_id=state.context_id,
             status=TaskStatus(
                 state=TaskState.canceled,
                 message=new_agent_text_message("Task cancelled"),
@@ -878,7 +885,7 @@ class BaseChannel(ABC):
         pass
 
     @abstractmethod
-    async def on_message_stream(
+    def on_message_stream(
         self, params: MessageSendParams, context: Any = None
     ) -> AsyncGenerator[Union[Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
         """
@@ -886,7 +893,7 @@ class BaseChannel(ABC):
 
         Yield'ит события по мере генерации.
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def on_get_task(self, params: TaskQueryParams, context: Any = None) -> Optional[Task]:
@@ -899,11 +906,11 @@ class BaseChannel(ABC):
         pass
 
     @abstractmethod
-    async def on_resubscribe_to_task(
+    def on_resubscribe_to_task(
         self, params: TaskIdParams, context: Any = None
     ) -> AsyncGenerator[Union[Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
         """Переподписка на события задачи."""
-        pass
+        raise NotImplementedError
 
     # === Опциональные методы (push notifications) ===
 
@@ -1032,11 +1039,11 @@ class BaseChannel(ABC):
             for edge in branch_body["edges"]:
                 if isinstance(edge, dict):
                     edges.append(
-                        Edge(
-                            from_node=edge.get("from") or edge.get("from_node"),
-                            to_node=edge.get("to") or edge.get("to_node"),
-                            condition=edge.get("condition"),
-                        )
+                        Edge.model_validate({
+                            "from": edge.get("from") or edge.get("from_node"),
+                            "to": edge.get("to") or edge.get("to_node"),
+                            "condition": edge.get("condition"),
+                        })
                     )
                 else:
                     edges.append(edge)
@@ -1137,11 +1144,11 @@ class BaseChannel(ABC):
             for edge in branch_body["edges"]:
                 if isinstance(edge, dict):
                     edges.append(
-                        Edge(
-                            from_node=edge.get("from") or edge.get("from_node"),
-                            to_node=edge.get("to") or edge.get("to_node"),
-                            condition=edge.get("condition"),
-                        )
+                        Edge.model_validate({
+                            "from": edge.get("from") or edge.get("from_node"),
+                            "to": edge.get("to") or edge.get("to_node"),
+                            "condition": edge.get("condition"),
+                        })
                     )
                 else:
                     edges.append(edge)
@@ -1292,15 +1299,10 @@ class BaseChannel(ABC):
                         tool_id = tool_ref.get("tool_id", f"inline_{node_id}")
                         inline_tools[tool_id] = tool_ref
                     else:
-                        tool_id = (
-                            tool_ref.tool_id
-                            if hasattr(tool_ref, "tool_id")
-                            else (
-                                tool_ref.get("tool_id")
-                                if isinstance(tool_ref, dict)
-                                else str(tool_ref)
-                            )
-                        )
+                        if isinstance(tool_ref, dict):
+                            tool_id = str(tool_ref.get("tool_id", tool_ref))
+                        else:
+                            tool_id = str(getattr(tool_ref, "tool_id", tool_ref))
                         tools_set.add(tool_id)
 
                 if node_config.get("node_id"):
@@ -1311,22 +1313,17 @@ class BaseChannel(ABC):
                                 tool_id = tool_ref.get("tool_id", f"inline_{node_id}")
                                 inline_tools[tool_id] = tool_ref
                             else:
-                                tool_id = (
-                                    tool_ref.tool_id
-                                    if hasattr(tool_ref, "tool_id")
-                                    else (
-                                        tool_ref.get("tool_id")
-                                        if isinstance(tool_ref, dict)
-                                        else str(tool_ref)
-                                    )
-                                )
+                                if isinstance(tool_ref, dict):
+                                    tool_id = str(tool_ref.get("tool_id", tool_ref))
+                                else:
+                                    tool_id = str(getattr(tool_ref, "tool_id", tool_ref))
                                 tools_set.add(tool_id)
 
         tools_info = []
 
         # Добавляем inline tools
         for tool_id, tool_config in inline_tools.items():
-            inline_attrs: dict = {
+            inline_attrs: dict[str, Any] = {
                 "description": tool_config.get("description", ""),
                 "code": tool_config.get("code", ""),
                 "args_schema": tool_config.get("args_schema", {}),
@@ -1349,7 +1346,7 @@ class BaseChannel(ABC):
             if tool_ref:
                 info = tool_ref.to_registry_format()
                 ref_attrs = info.get("attributes", {})
-                ref_payload: dict = {
+                ref_payload: dict[str, Any] = {
                     "description": ref_attrs.get("description", ""),
                     "source": "reference",
                     "args_schema": ref_attrs.get("args_schema", {}),
@@ -1485,8 +1482,8 @@ class BaseChannel(ABC):
                     name=branch_cfg.name,
                     description=branch_cfg.description,
                     tags=branch_cfg.tags or [],
-                    inputModes=["text/plain"],
-                    outputModes=["text/plain"],
+                    input_modes=["text/plain"],
+                    output_modes=["text/plain"],
                 )
             )
 
@@ -1497,8 +1494,8 @@ class BaseChannel(ABC):
                     name=config.name,
                     description=config.description,
                     tags=config.tags or [],
-                    inputModes=["text/plain"],
-                    outputModes=["text/plain"],
+                    input_modes=["text/plain"],
+                    output_modes=["text/plain"],
                 )
             )
 
@@ -1509,12 +1506,14 @@ class BaseChannel(ABC):
             version="1.0.0",
             url=f"{base_url}/{svc}/api/v1/{config.flow_id}",
             capabilities=AgentCapabilities(
-                streaming=True, pushNotifications=False, stateTransitionHistory=True
+                streaming=True,
+                push_notifications=False,
+                state_transition_history=True,
             ),
             skills=card_branch_entries,
-            defaultInputModes=["text/plain"],
-            defaultOutputModes=["text/plain"],
-            supportsAuthenticatedExtendedCard=False,
+            default_input_modes=["text/plain"],
+            default_output_modes=["text/plain"],
+            supports_authenticated_extended_card=False,
         )
 
         card_dict = card.model_dump(by_alias=True, exclude_none=True)

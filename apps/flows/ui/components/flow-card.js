@@ -28,7 +28,7 @@ export class FlowCard extends PlatformElement {
                 border-radius: var(--radius-xl);
                 background: transparent;
                 border: 1px solid transparent;
-                transition: all var(--duration-normal) var(--easing-default);
+                transition: var(--motion-transition-interactive);
                 overflow: hidden;
             }
 
@@ -81,7 +81,7 @@ export class FlowCard extends PlatformElement {
                 color: white;
                 text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
                 flex-shrink: 0;
-                transition: all var(--duration-normal) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
 
             .flow-card:hover .flow-avatar {
@@ -157,7 +157,7 @@ export class FlowCard extends PlatformElement {
                 background: var(--glass-solid-subtle);
                 border: none;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
 
             .action-btn platform-icon {
@@ -244,7 +244,7 @@ export class FlowCard extends PlatformElement {
                 background: var(--glass-solid-subtle);
                 border: none;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
 
             .branch-add-btn platform-icon {

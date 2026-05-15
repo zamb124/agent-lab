@@ -7,22 +7,13 @@ import json
 from typing import Any, Dict, List, Optional
 
 from a2a.types import (
-    CancelTaskRequest,
     DeleteTaskPushNotificationConfigParams,
-    DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigParams,
-    GetTaskPushNotificationConfigRequest,
-    GetTaskRequest,
     ListTaskPushNotificationConfigParams,
-    ListTaskPushNotificationConfigRequest,
     MessageSendParams,
-    SendMessageRequest,
-    SendStreamingMessageRequest,
-    SetTaskPushNotificationConfigRequest,
     TaskIdParams,
     TaskPushNotificationConfig,
     TaskQueryParams,
-    TaskResubscriptionRequest,
 )
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -43,6 +34,8 @@ from core.ui_events import publish_ui_event_to_user
 from core.utils.tokens import TokenData, TokenType
 
 logger = get_logger(__name__)
+JsonDict = dict[str, Any]
+JsonRpcId = str | int
 
 
 def _embed_session_branch_from_token_metadata(metadata: Dict[str, Any]) -> str | None:
@@ -63,6 +56,29 @@ def _metadata_effective_branch(metadata: Dict[str, Any] | None) -> str | None:
     return None
 
 
+def _strict_json_rpc_id(raw_id: Any) -> JsonRpcId | None:
+    if raw_id is None:
+        return None
+    if isinstance(raw_id, bool):
+        return None
+    if isinstance(raw_id, (str, int)):
+        return raw_id
+    return None
+
+
+def _require_json_rpc_id(raw_id: Any) -> JsonRpcId:
+    rpc_id = _strict_json_rpc_id(raw_id)
+    if rpc_id is None:
+        raise ValueError("Invalid Request: id must be string or integer")
+    return rpc_id
+
+
+def _string_list(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, str)]
+
+
 def _get_user_groups(request: Request) -> list[str]:
     """Извлекает группы пользователя из request.state.user."""
     if not hasattr(request.state, "user") or request.state.user is None:
@@ -70,9 +86,15 @@ def _get_user_groups(request: Request) -> list[str]:
 
     user = request.state.user
     if isinstance(user, dict):
-        return user.get("grps", []) or user.get("groups", []) or []
+        groups = user.get("grps")
+        if groups is None:
+            groups = user.get("groups")
+        return _string_list(groups)
 
-    return getattr(user, "grps", []) or getattr(user, "groups", []) or []
+    groups = getattr(user, "grps", None)
+    if groups is None:
+        groups = getattr(user, "groups", None)
+    return _string_list(groups)
 
 router = APIRouter(tags=["public", "a2a"])
 
@@ -249,7 +271,7 @@ def _validate_embed_session_request(
     return None
 
 
-def _sse_error_response(rpc_id: str | None, code: int, message: str) -> StreamingResponse:
+def _sse_error_response(rpc_id: JsonRpcId | None, code: int, message: str) -> StreamingResponse:
     """JSON-RPC ошибка в виде SSE, чтобы клиент мог её распарсить."""
     error_payload = json.dumps(
         {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": code, "message": message}},
@@ -360,8 +382,8 @@ async def get_agent_card(
 async def _handle_streaming(
     handler: A2AChannel,
     params: MessageSendParams,
-    rpc_id: str,
-    context: dict | None = None,
+    rpc_id: JsonRpcId,
+    context: JsonDict | None = None,
 ):
     try:
         async for event in handler.on_message_stream(params, context=context):
@@ -378,7 +400,7 @@ async def _handle_streaming(
 
 
 async def _handle_resubscribe_streaming(
-    handler: A2AChannel, params: TaskIdParams, rpc_id: str
+    handler: A2AChannel, params: TaskIdParams, rpc_id: JsonRpcId
 ):
     async for event in handler.on_resubscribe_to_task(params):
         event_data = event.model_dump(by_alias=True, exclude_none=True)
@@ -421,10 +443,37 @@ async def _json_rpc_handler_internal(
             }
         )
 
-    rpc_id = body.get("id")
-    method = body.get("method")
+    raw_rpc_id = body.get("id")
+    response_id = _strict_json_rpc_id(raw_rpc_id)
+    try:
+        rpc_id = _require_json_rpc_id(raw_rpc_id)
+    except ValueError as exc:
+        return {
+            "jsonrpc": "2.0",
+            "id": response_id,
+            "error": {"code": -32600, "message": str(exc)},
+        }
+
+    method_raw = body.get("method")
+    if not isinstance(method_raw, str) or not method_raw.strip():
+        return {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "error": {"code": -32600, "message": "Invalid Request: missing 'method' field"},
+        }
+    method = method_raw.strip()
+
     _raw_params = body.get("params")
-    params_dict: Dict[str, Any] = _raw_params if isinstance(_raw_params, dict) else {}
+    if _raw_params is None:
+        params_dict: Dict[str, Any] = {}
+    elif isinstance(_raw_params, dict):
+        params_dict = dict(_raw_params)
+    else:
+        return {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "error": {"code": -32602, "message": "Invalid params: expected object"},
+        }
 
     token_data = getattr(request.state, "token_data", None)
     if _is_embed_session_token(token_data):
@@ -479,8 +528,25 @@ async def _json_rpc_handler_internal(
             return {"jsonrpc": "2.0", "id": rpc_id, "error": lim_err}
 
     # Версия: приоритет query param > metadata.version
-    metadata = params_dict.get("metadata") or {}
-    version = v or metadata.get("version")
+    metadata_raw = params_dict.get("metadata")
+    if metadata_raw is None:
+        metadata: JsonDict = {}
+    elif isinstance(metadata_raw, dict):
+        metadata = metadata_raw
+    else:
+        return {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "error": {"code": -32602, "message": "Invalid params: metadata must be object"},
+        }
+    version_raw = metadata.get("version")
+    if version_raw is not None and not isinstance(version_raw, str):
+        return {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "error": {"code": -32602, "message": "Invalid params: metadata.version must be string"},
+        }
+    version = v or version_raw
 
     config = await _get_flow_config(flow_id, container, version=version)
     if not config:
@@ -492,13 +558,6 @@ async def _json_rpc_handler_internal(
                 "error": {"code": -32000, "message": f"Flow not found: {flow_id}{version_info}"},
             }
         )
-
-    if not method:
-        return {
-            "jsonrpc": "2.0",
-            "id": rpc_id,
-            "error": {"code": -32600, "message": "Invalid Request: missing 'method' field"},
-        }
 
     if method not in A2A_METHODS:
         return {
@@ -515,21 +574,27 @@ async def _json_rpc_handler_internal(
     # Группы пользователя для проверки permissions
     # 1. Из metadata (для тестов и internal calls)
     # 2. Из request.state.user (из JWT через middleware)
-    metadata = params_dict.get("metadata") or {}
-    user_groups = metadata.get("__user_groups__") or _get_user_groups(request)
-    channel_context = {"user_groups": user_groups}
+    user_groups_raw = metadata.get("__user_groups__")
+    if user_groups_raw is None:
+        user_groups = _get_user_groups(request)
+    elif isinstance(user_groups_raw, list) and all(isinstance(item, str) for item in user_groups_raw):
+        user_groups = user_groups_raw
+    else:
+        return {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "error": {"code": -32602, "message": "Invalid params: metadata.__user_groups__ must be string array"},
+        }
+    channel_context: JsonDict = {"user_groups": user_groups}
 
     # Добавляем groups в metadata для передачи в worker (для проверки permissions на tools)
-    if params_dict.get("metadata") is None:
-        params_dict["metadata"] = {}
-    params_dict["metadata"]["__user_groups__"] = user_groups
+    params_dict["metadata"] = metadata
+    metadata["__user_groups__"] = user_groups
 
     try:
         if method == "message/send":
-            req = SendMessageRequest(
-                id=rpc_id, method="message/send", params=MessageSendParams(**params_dict)
-            )
-            result = await handler.on_message_send(req.params, context=channel_context)
+            params = MessageSendParams(**params_dict)
+            result = await handler.on_message_send(params, context=channel_context)
             return {
                 "jsonrpc": "2.0",
                 "id": rpc_id,
@@ -537,19 +602,15 @@ async def _json_rpc_handler_internal(
             }
 
         elif method == "message/stream":
-            req = SendStreamingMessageRequest(
-                id=rpc_id, method="message/stream", params=MessageSendParams(**params_dict)
-            )
+            params = MessageSendParams(**params_dict)
             return StreamingResponse(
-                _handle_streaming(handler, req.params, rpc_id, channel_context),
+                _handle_streaming(handler, params, rpc_id, channel_context),
                 media_type="text/event-stream",
             )
 
         elif method == "tasks/get":
-            req = GetTaskRequest(
-                id=rpc_id, method="tasks/get", params=TaskQueryParams(**params_dict)
-            )
-            result = await handler.on_get_task(req.params)
+            params = TaskQueryParams(**params_dict)
+            result = await handler.on_get_task(params)
             return {
                 "jsonrpc": "2.0",
                 "id": rpc_id,
@@ -557,10 +618,8 @@ async def _json_rpc_handler_internal(
             }
 
         elif method == "tasks/cancel":
-            req = CancelTaskRequest(
-                id=rpc_id, method="tasks/cancel", params=TaskIdParams(**params_dict)
-            )
-            result = await handler.on_cancel_task(req.params)
+            params = TaskIdParams(**params_dict)
+            result = await handler.on_cancel_task(params)
             if result is None:
                 return {
                     "jsonrpc": "2.0",
@@ -574,21 +633,15 @@ async def _json_rpc_handler_internal(
             }
 
         elif method == "tasks/resubscribe":
-            req = TaskResubscriptionRequest(
-                id=rpc_id, method="tasks/resubscribe", params=TaskIdParams(**params_dict)
-            )
+            params = TaskIdParams(**params_dict)
             return StreamingResponse(
-                _handle_resubscribe_streaming(handler, req.params, rpc_id),
+                _handle_resubscribe_streaming(handler, params, rpc_id),
                 media_type="text/event-stream",
             )
 
         elif method == "tasks/pushNotificationConfig/get":
-            req = GetTaskPushNotificationConfigRequest(
-                id=rpc_id,
-                method="tasks/pushNotificationConfig/get",
-                params=GetTaskPushNotificationConfigParams(**params_dict),
-            )
-            result = await handler.on_get_task_push_notification_config(req.params)
+            params = GetTaskPushNotificationConfigParams(**params_dict)
+            result = await handler.on_get_task_push_notification_config(params)
             return {
                 "jsonrpc": "2.0",
                 "id": rpc_id,
@@ -596,12 +649,8 @@ async def _json_rpc_handler_internal(
             }
 
         elif method == "tasks/pushNotificationConfig/set":
-            req = SetTaskPushNotificationConfigRequest(
-                id=rpc_id,
-                method="tasks/pushNotificationConfig/set",
-                params=TaskPushNotificationConfig(**params_dict),
-            )
-            result = await handler.on_set_task_push_notification_config(req.params)
+            params = TaskPushNotificationConfig(**params_dict)
+            result = await handler.on_set_task_push_notification_config(params)
             return {
                 "jsonrpc": "2.0",
                 "id": rpc_id,
@@ -609,21 +658,13 @@ async def _json_rpc_handler_internal(
             }
 
         elif method == "tasks/pushNotificationConfig/delete":
-            req = DeleteTaskPushNotificationConfigRequest(
-                id=rpc_id,
-                method="tasks/pushNotificationConfig/delete",
-                params=DeleteTaskPushNotificationConfigParams(**params_dict),
-            )
-            await handler.on_delete_task_push_notification_config(req.params)
+            params = DeleteTaskPushNotificationConfigParams(**params_dict)
+            await handler.on_delete_task_push_notification_config(params)
             return {"jsonrpc": "2.0", "id": rpc_id, "result": None}
 
         elif method == "tasks/pushNotificationConfig/list":
-            req = ListTaskPushNotificationConfigRequest(
-                id=rpc_id,
-                method="tasks/pushNotificationConfig/list",
-                params=ListTaskPushNotificationConfigParams(**params_dict),
-            )
-            result = await handler.on_list_task_push_notification_config(req.params)
+            params = ListTaskPushNotificationConfigParams(**params_dict)
+            result = await handler.on_list_task_push_notification_config(params)
             return {
                 "jsonrpc": "2.0",
                 "id": rpc_id,
@@ -766,7 +807,7 @@ async def get_branch_schema(flow_id: str, container: ContainerDep) -> Dict[str, 
 
 
 @router.post("/{flow_id}/branches")
-async def create_branch(flow_id: str, request: Request, container: ContainerDep) -> Dict[str, Any]:
+async def create_branch(flow_id: str, request: Request, container: ContainerDep) -> JSONResponse:
     """Создать новую ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context)

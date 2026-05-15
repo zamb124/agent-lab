@@ -28,7 +28,7 @@ export class PlatformButton extends PlatformElement {
             border-radius: var(--btn-radius, 22px);
             border: none;
             cursor: pointer;
-            transition: all var(--duration-fast, 0.15s) var(--easing-default, ease);
+            transition: var(--motion-transition-interactive);
             white-space: nowrap;
             box-sizing: border-box;
         }

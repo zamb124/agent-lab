@@ -43,7 +43,7 @@ export class LandingPlans extends PlatformElement {
                 border-radius: 24px;
                 padding: 40px;
                 backdrop-filter: blur(10px);
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
             }
             
             .plan-card:hover {
@@ -152,7 +152,7 @@ export class LandingPlans extends PlatformElement {
                 font-weight: 500;
                 font-size: 18px;
                 cursor: pointer;
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
                 border: none;
             }
             

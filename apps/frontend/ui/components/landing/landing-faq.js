@@ -41,7 +41,7 @@ export class LandingFaq extends PlatformElement {
                 border-bottom: 1px solid rgba(255, 255, 255, 0.1);
                 padding: 24px 0;
                 cursor: pointer;
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
             }
             
             .faq-item:hover {

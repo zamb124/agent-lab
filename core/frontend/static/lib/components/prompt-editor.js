@@ -56,7 +56,7 @@ export class PromptEditor extends PlatformElement {
                 border: 1px solid var(--border-subtle);
                 border-radius: var(--radius-sm);
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
             
             .editor-btn:hover {
@@ -355,7 +355,7 @@ export class PromptEditor extends PlatformElement {
                 background: var(--glass-tint-subtle);
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
             
             .icon-btn:hover {
@@ -1161,4 +1161,3 @@ export class PromptEditor extends PlatformElement {
 }
 
 customElements.define('prompt-editor', PromptEditor);
-

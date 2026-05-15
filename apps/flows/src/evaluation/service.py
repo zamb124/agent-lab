@@ -6,9 +6,8 @@
 """
 
 from datetime import date, datetime, timezone
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
-from apps.flows.src.container import get_container
 from apps.flows.src.db import EvaluationRepository
 from apps.flows.src.models import TestCaseConfig
 from apps.flows.src.models.enums import TestTargetType
@@ -25,8 +24,22 @@ logger = get_logger(__name__)
 class EvaluationService:
     """Сервис для запуска и управления оценкой агентов/нод."""
 
-    def __init__(self, evaluation_repository: EvaluationRepository):
+    def __init__(
+        self,
+        evaluation_repository: EvaluationRepository,
+        *,
+        flow_repository: Any,
+        flow_factory: Any,
+        node_registry: Any,
+        node_repository: Any,
+        tool_registry: Any,
+    ):
         self._repository = evaluation_repository
+        self._flow_repository = flow_repository
+        self._flow_factory = flow_factory
+        self._node_registry = node_registry
+        self._node_repository = node_repository
+        self._tool_registry = tool_registry
 
     async def get_test_cases(
         self,
@@ -45,8 +58,7 @@ class EvaluationService:
         Returns:
             Словарь {test_case_id: config}
         """
-        container = get_container()
-        flow_config = await container.flow_repository.get(flow_id)
+        flow_config = await self._flow_repository.get(flow_id)
 
         if not flow_config or not flow_config.evaluation:
             return {}
@@ -462,14 +474,22 @@ class EvaluationService:
         target_callable, target_id = await self._create_target_callable(
             test_case, flow_id, branch_id
         )
-        return TestRunner(target_id, target_callable, run_date, iteration)
+        return TestRunner(
+            target_id,
+            target_callable,
+            run_date,
+            iteration,
+            flow_factory=self._flow_factory,
+            node_repository=self._node_repository,
+            tool_registry=self._tool_registry,
+        )
 
     async def _create_target_callable(
         self,
         test_case: TestCaseConfig,
         flow_id: str,
         branch_id: str,
-    ) -> tuple[Callable, str]:
+    ) -> tuple[Callable[[ExecutionState], Awaitable[ExecutionState]], str]:
         """
         Создает callable и target_id на основе target конфигурации.
 
@@ -498,10 +518,9 @@ class EvaluationService:
 
     async def _create_flow_callable(
         self, flow_id: str, branch_id: str
-    ) -> Callable[[ExecutionState], ExecutionState]:
+    ) -> Callable[[ExecutionState], Awaitable[ExecutionState]]:
         """Callable `run` для собранного flow (FlowFactory)."""
-        container = get_container()
-        runtime_flow = await container.flow_factory.get_flow(flow_id, branch_id)
+        runtime_flow = await self._flow_factory.get_flow(flow_id, branch_id)
 
         if not runtime_flow:
             raise ValueError(f"Flow not found: {flow_id}")
@@ -510,12 +529,10 @@ class EvaluationService:
 
     def _create_node_callable(
         self, target: TestTarget
-    ) -> Callable[[ExecutionState], ExecutionState]:
+    ) -> Callable[[ExecutionState], Awaitable[ExecutionState]]:
         """Создает callable для ноды из inline конфига."""
         if not target.node_config:
             raise ValueError("node_config is required for NODE target type")
-
-        container = get_container()
 
         node_type = target.node_config.get("type")
         if not node_type:
@@ -524,7 +541,7 @@ class EvaluationService:
         from apps.flows.src.models.enums import NodeType
         node_type_enum = NodeType(node_type)
 
-        node_class = container.node_registry.get(node_type_enum)
+        node_class = self._node_registry.get(node_type_enum)
         node_id = target.node_config.get("node_id", "test_node")
         node = node_class.from_config(node_id, target.node_config)
 

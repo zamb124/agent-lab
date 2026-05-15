@@ -108,7 +108,7 @@ const formAuxStyles = css`
         border: 1px solid var(--border-subtle);
         border-radius: var(--radius-md);
         cursor: pointer;
-        transition: all var(--duration-fast) ease;
+        transition: var(--motion-transition-interactive);
     }
 
     .form-item:hover {
@@ -129,7 +129,7 @@ const formAuxStyles = css`
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all var(--duration-fast) ease;
+        transition: var(--motion-transition-interactive);
         flex-shrink: 0;
         font-size: 11px;
         color: white;

@@ -4,12 +4,12 @@
 
 from __future__ import annotations
 
+import importlib
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
-from apps.flows.src.container import get_container
 from apps.flows.src.db.models import OperatorTasks
 from apps.flows.src.db.operator_repository import OperatorRepository
 from apps.flows.src.models.operator_schemas import OperatorTaskStatus
@@ -37,8 +37,16 @@ def parse_handoff_mode(task: "OperatorTasks") -> HandoffMode:
 class OperatorHandoffService:
     """Регистрация handoff в БД и действия оператора по задаче."""
 
-    def __init__(self, repository: OperatorRepository) -> None:
+    def __init__(
+        self,
+        repository: OperatorRepository,
+        *,
+        file_repository: Any,
+        redis_client: Any,
+    ) -> None:
         self._repo = repository
+        self._file_repo = file_repository
+        self._redis_client = redis_client
 
     async def register_handoff(
         self,
@@ -68,7 +76,7 @@ class OperatorHandoffService:
             return cid, existing.id
 
         snap_ctx = ctx.model_dump(mode="json")
-        interrupt_snapshot: dict = {
+        interrupt_snapshot: dict[str, Any] = {
             "question": question,
             "task_title": task_title,
             "assignee_queue": slug,
@@ -151,7 +159,7 @@ class OperatorHandoffService:
 
         validated_file_ids = await self._validate_file_ids(file_ids) if file_ids else []
 
-        log_entry: dict = {
+        log_entry: dict[str, Any] = {
             "role": "operator",
             "text": text.strip(),
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -168,8 +176,7 @@ class OperatorHandoffService:
             session_id=task.session_id,
             branch_id=task.branch_id,
         )
-        container = get_container()
-        emitter = Emitter(container.redis_client, exec_state)
+        emitter = Emitter(self._redis_client, exec_state)
         await emitter.emit_text(
             text.strip(), append=True, last_chunk=False, artifact_name="operator_reply"
         )
@@ -184,21 +191,19 @@ class OperatorHandoffService:
 
     async def _validate_file_ids(self, file_ids: list[str]) -> list[str]:
         """Проверяет существование файлов и возвращает валидный список."""
-        container = get_container()
-        file_repo = container.file_repository
         validated: list[str] = []
         for fid in file_ids:
             fid = fid.strip()
             if not fid:
                 continue
-            record = await file_repo.get(fid)
+            record = await self._file_repo.get(fid)
             if record is None:
                 raise ValueError(f"Файл {fid!r} не найден")
             validated.append(fid)
         return validated
 
     @staticmethod
-    def _format_dialog_log_for_tool_result(dialog_log: list[dict]) -> str:
+    def _format_dialog_log_for_tool_result(dialog_log: list[dict[str, Any]]) -> str:
         """Форматирует реплики takeover-диалога для включения в tool_result.
 
         Вставка dialog_log напрямую в state.messages невозможна: это ломает
@@ -247,10 +252,9 @@ class OperatorHandoffService:
         validated_file_ids = await self._validate_file_ids(file_ids) if file_ids else []
         mode = self._task_handoff_mode(task)
         content_for_resume = resolution.strip()
-        container = get_container()
 
         if mode == HandoffMode.TAKEOVER:
-            log_entry: dict = {
+            log_entry: dict[str, Any] = {
                 "role": "operator",
                 "text": resolution.strip(),
                 "ts": datetime.now(timezone.utc).isoformat(),
@@ -272,7 +276,7 @@ class OperatorHandoffService:
                     session_id=task.session_id,
                     branch_id=task.branch_id,
                 )
-                emitter = Emitter(container.redis_client, exec_state)
+                emitter = Emitter(self._redis_client, exec_state)
                 await emitter.emit_text(
                     resolution.strip(),
                     append=True,
@@ -290,7 +294,7 @@ class OperatorHandoffService:
                     f"Итог оператора: {resolution.strip()}"
                 )
 
-        resolution_payload: dict = {"text": resolution.strip()}
+        resolution_payload: dict[str, Any] = {"text": resolution.strip()}
         if validated_file_ids:
             resolution_payload["file_ids"] = validated_file_ids
         await self._repo.update_task_fields(
@@ -301,7 +305,8 @@ class OperatorHandoffService:
         )
         await publish_operator_tasks_refresh(self._repo, task.queue_id)
 
-        from apps.flows.src.tasks.flow_tasks import process_flow_task
+        flow_tasks_module = importlib.import_module("apps.flows.src.tasks.flow_tasks")
+        process_flow_task = getattr(flow_tasks_module, "process_flow_task")
 
         tid = task.a2a_task_id if task.a2a_task_id else ""
         cid = task.context_id if task.context_id else task.session_id.split(":", 1)[-1]
@@ -347,7 +352,7 @@ class OperatorHandoffService:
                 f"Задача в статусе {task.status!r}, ответ пользователя недоступен"
             )
 
-        log_entry: dict = {
+        log_entry: dict[str, Any] = {
             "role": "user",
             "text": text.strip(),
             "ts": datetime.now(timezone.utc).isoformat(),

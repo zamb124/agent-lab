@@ -4,7 +4,7 @@
  */
 
 import { html as litHtml } from 'lit';
-import { fixture, html, expect, elementUpdated } from '../helpers/render.js';
+import { fixture, html, expect, elementUpdated, nextFrame, waitUntil } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { GlassModal, PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
@@ -43,7 +43,7 @@ describe('GlassModal/PlatformModal', () => {
         expect(modal._modalId).to.match(/^modal_/);
     });
 
-    it('close() диспатчит UI_MODAL_CLOSE с правильным id и убирает из стека', async () => {
+    it('close() диспатчит UI_MODAL_CLOSE, затем stack убирает модалку после exit-motion', async () => {
         const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
         getPlatformBus().dispatch(CoreEvents.UI_MODAL_OPEN, { kind: 'platform.glass_test', props: {} });
         await elementUpdated(stack);
@@ -51,7 +51,29 @@ describe('GlassModal/PlatformModal', () => {
         expect(modal, 'modal mounted after dispatch').to.exist;
         const id = modal._modalId;
         modal.close();
+        await waitUntil(
+            () => getPlatformBus().getState().modals.stack.find((m) => m.id === id) === undefined,
+            'modal removed after exit motion',
+        );
+    });
+
+    it('toggleFullscreen делает compositor FLIP motion и оставляет fullscreen state', async () => {
+        const stack = await fixture(html`<platform-modal-stack></platform-modal-stack>`);
+        getPlatformBus().dispatch(CoreEvents.UI_MODAL_OPEN, { kind: 'platform.glass_test', props: {} });
         await elementUpdated(stack);
-        expect(getPlatformBus().getState().modals.stack.find((m) => m.id === id)).to.be.undefined;
+        const modal = document.querySelector('frontend-core-glass-modal');
+        expect(modal, 'modal mounted after dispatch').to.exist;
+        modal.style.setProperty('--modal-fullscreen-motion-duration', '1ms');
+
+        const promise = modal.toggleFullscreen();
+        await elementUpdated(modal);
+        await nextFrame();
+        expect(modal._fullscreenMotionActive).to.be.true;
+        await promise;
+        await elementUpdated(modal);
+
+        expect(modal._isFullscreen).to.be.true;
+        expect(modal._fullscreenMotionActive).to.be.false;
+        expect(modal.shadowRoot.querySelector('.modal').classList.contains('fullscreen')).to.be.true;
     });
 });

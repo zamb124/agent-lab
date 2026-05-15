@@ -56,7 +56,7 @@ export class LandingAbout extends PlatformElement {
                 border-radius: 20px;
                 padding: 30px;
                 backdrop-filter: blur(10px);
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
             }
             
             .stat-card:hover {
@@ -113,7 +113,7 @@ export class LandingAbout extends PlatformElement {
                 color: var(--landing-secondary);
                 text-decoration: none;
                 backdrop-filter: blur(10px);
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
                 animation: float 4s ease-in-out infinite;
             }
             

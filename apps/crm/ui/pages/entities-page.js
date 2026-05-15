@@ -230,7 +230,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 font-size: 13px;
                 font-weight: 500;
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 white-space: nowrap;
             }
             .filter-chip:hover { background: var(--crm-surface); color: var(--text-primary); }
@@ -383,7 +383,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 background: transparent;
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 white-space: nowrap;
             }
             .search-mode-btn:not(:last-child) { border-right: 1px solid var(--glass-border-subtle); }

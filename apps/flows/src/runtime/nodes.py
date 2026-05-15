@@ -22,7 +22,7 @@ import inspect
 import json
 import uuid
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -31,6 +31,7 @@ from apps.flows.src.container import get_container
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.mock import get_mock_for_node
 from apps.flows.src.models import NodeConfig, NodeLLMOverride, ReactConfig
+from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.external_api import ExternalAPIConfig
 from apps.flows.src.models.operator_schemas import OperatorTaskStatus
@@ -95,7 +96,10 @@ class NodeRunMethod:
         )
         result = await task.wait_result()
         if result.is_err:
-            raise result.error
+            error = result.error
+            if error is None:
+                raise RuntimeError("Node worker returned an error result without an exception")
+            raise error
         return ExecutionState.model_validate(result.return_value)
 
 
@@ -357,7 +361,7 @@ class BaseNode(ABC):
             setattr(state, "result", result)
 
     def _get_message_content(
-        self, state: ExecutionState, state_before: Optional[Dict], result: Any
+        self, state: ExecutionState, state_before: Optional[Dict[str, Any]], result: Any
     ) -> Optional[str]:
         """
         Определяет что записать в messages.
@@ -559,6 +563,13 @@ class LlmNode(BaseNode):
         """LLM конфигурация."""
         return self.llm_config_dict
 
+    def _get_typed_llm_override(self) -> NodeLLMOverride | None:
+        if self._node_config and self._node_config.llm_override:
+            return self._node_config.llm_override
+        if not self.llm_config_dict:
+            return None
+        return NodeLLMOverride.model_validate(self.llm_config_dict)
+
     @property
     def llm_node_name(self) -> str:
         """Название ноды"""
@@ -669,33 +680,44 @@ class LlmNode(BaseNode):
         поверх дефолтов из bundle. Это позволяет компании переключить ВСЕ flows
         на свой ключ/endpoint без правки JSON-бандлов.
         """
-        model = None
-        temp = None
-        provider = None
-        api_key = None
-        base_url = None
-        folder_id = None
+        model: str | None = None
+        temp: float | None = None
+        provider: str | None = None
+        api_key: str | None = None
+        base_url: str | None = None
+        folder_id: str | None = None
+        fallback_models = None
         extra_request_headers: Optional[Dict[str, str]] = None
+        extra_request_body: Dict[str, Any] | None = None
+        top_p: float | None = None
+        top_k: int | None = None
+        frequency_penalty: float | None = None
+        presence_penalty: float | None = None
+        seed: int | None = None
+        reasoning_effort = None
+        max_tok: int | None = None
 
-        if self._node_config and self._node_config.llm_override:
-            override = self._node_config.llm_override
+        override = self._get_typed_llm_override()
+        if override:
             model = override.model
+            fallback_models = override.fallback_models
             temp = override.temperature
             provider = override.provider
             api_key = override.api_key
             base_url = override.base_url
             folder_id = override.folder_id
             extra_request_headers = override.extra_request_headers
-        elif self.llm_config_dict:
-            model = self.llm_config_dict.get("model")
-            temp = self.llm_config_dict.get("temperature")
-            provider = self.llm_config_dict.get("provider")
-            api_key = self.llm_config_dict.get("api_key")
-            base_url = self.llm_config_dict.get("base_url")
-            folder_id = self.llm_config_dict.get("folder_id")
+            extra_request_body = override.extra_request_body
+            top_p = override.top_p
+            top_k = override.top_k
+            frequency_penalty = override.frequency_penalty
+            presence_penalty = override.presence_penalty
+            seed = override.seed
+            reasoning_effort = override.reasoning_effort
+            max_tok = override.max_tokens
 
         node_has_byok = bool(
-            (api_key and str(api_key).strip()) or (base_url and str(base_url).strip())
+            (api_key and api_key.strip()) or (base_url and base_url.strip())
         )
         if not node_has_byok:
             from core.company_ai import AICapability, resolve_llm_for_capability
@@ -731,10 +753,6 @@ class LlmNode(BaseNode):
                     extra_request_headers = merged
 
         logger.info(f"[_get_llm] node_id={self.node_id}, model={model}, temp={temp}, provider={provider}")
-        max_tok = None
-        if self._node_config and self._node_config.llm_override:
-            max_tok = self._node_config.llm_override.max_tokens
-
         return get_llm(
             model_name=model,
             temperature=temp,
@@ -744,6 +762,15 @@ class LlmNode(BaseNode):
             folder_id=folder_id,
             max_tokens=max_tok,
             state=state,
+            top_p=top_p,
+            top_k=top_k,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            reasoning_effort=reasoning_effort,
+            extra_request_body=extra_request_body,
+            extra_request_headers=extra_request_headers,
+            fallback_models=fallback_models,
         )
 
     async def _resolve_effective_node_config(
@@ -811,13 +838,15 @@ class LlmNode(BaseNode):
         messages_filter = self.config.get("messages_filter", "all") if self.config else "all"
 
         exc_response = False
-        exc_allow: list = []
+        exc_allow: list[ExceptionAbsorbAllowName] = []
         if self.config:
             if "exception_as_response" in self.config:
                 exc_response = bool(self.config["exception_as_response"])
             raw_allow = self.config.get("exception_allow_types")
             if raw_allow is not None:
-                exc_allow = raw_allow
+                if not isinstance(raw_allow, list):
+                    raise ValueError("exception_allow_types: ожидается list[str]")
+                exc_allow = [ExceptionAbsorbAllowName(str(item)) for item in raw_allow]
 
         return NodeConfig(
             node_id=self.node_id,
@@ -825,7 +854,7 @@ class LlmNode(BaseNode):
             name=self.node_id,
             description=self.description or "",
             prompt=self.prompt_template or self.prompt or "",
-            llm_override=llm_override,
+            llm=llm_override,
             react=react_config,
             structured_output=structured_output,
             output_schema=output_schema,
@@ -939,7 +968,7 @@ class CodeNode(BaseNode):
     def _get_runner(self, resources: Optional[Dict[str, Any]] = None):
         """Возвращает runner для текущего языка с ресурсами."""
         container = get_container()
-        return container.get_code_runner(self.language, resources=resources)
+        return container.get_code_runner(self.language, resources=resources or {})
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """
@@ -1108,11 +1137,14 @@ class ExternalAPINode(BaseNode):
 
     def _build_api_config(self) -> ExternalAPIConfig:
         """Строит конфиг API."""
+        raw_url = self.api_config.get("url")
+        if not isinstance(raw_url, str) or not raw_url.strip():
+            raise ValueError(f"ExternalAPINode {self.node_id}: url обязателен")
         return ExternalAPIConfig(
             api_id=self.node_id,
             name=self.api_config.get("name", self.node_id),
             description=self.api_config.get("description"),
-            url=self.api_config.get("url"),
+            url=raw_url,
             method=self.api_config.get("method", "POST"),
             headers=self.api_config.get("headers", {}),
             timeout=self.api_config.get("timeout", 30.0),
@@ -1331,6 +1363,7 @@ class HitlNode(BaseNode):
         qid_cfg = self.config.get("operator_queue_id")
 
         slug_effective: Optional[str] = None
+        slug_effective: str
         if isinstance(slug_in, str) and slug_in.strip():
             slug_effective = slug_in.strip()
         elif isinstance(slug_cfg, str) and slug_cfg.strip():
@@ -1342,6 +1375,10 @@ class HitlNode(BaseNode):
             if row is None:
                 raise ValueError(
                     f"hitl_node {self.node_id}: очередь {qid_cfg!r} не найдена"
+                )
+            if row.slug is None or not row.slug.strip():
+                raise ValueError(
+                    f"hitl_node {self.node_id}: у очереди {qid_cfg!r} не задан slug"
                 )
             slug_effective = row.slug
         else:

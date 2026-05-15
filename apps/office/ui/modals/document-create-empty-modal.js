@@ -53,7 +53,7 @@ export class OfficeDocumentCreateEmptyModal extends PlatformFormModal {
                 border: 1px solid var(--glass-border-medium);
                 border-radius: var(--radius-lg);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .type-card:hover { border-color: var(--accent); transform: translateY(-1px); }
             .type-card.active { border-color: var(--accent); background: var(--accent-subtle); color: var(--accent); }

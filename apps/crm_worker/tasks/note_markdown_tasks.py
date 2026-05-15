@@ -1,4 +1,4 @@
-"""TaskIQ: форматирование description заметки через provider_litserve /v1/text/format_markdown."""
+"""TaskIQ: форматирование description заметки через общий TextTransformService."""
 
 from __future__ import annotations
 
@@ -11,11 +11,10 @@ from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm_worker.broker import broker
 from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
-from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
 from core.logging import get_logger
-from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
-from core.text_transforms.format_markdown_response import validate_format_markdown_response
+from core.text_transforms import TextTransformService
+from core.text_transforms.chunking import split_text_into_markdown_chunks
 from core.text_transforms.strip_outer_markdown_fence import strip_outer_markdown_code_fence
 
 logger = get_logger(__name__)
@@ -80,9 +79,9 @@ async def format_note_description_markdown_task(
     task_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
-    Один HTTP POST на весь текст: разбиение на чанки и батчевый ``generate`` выполняет LitServe
-    ([``MarkdownFormatEngine``](apps/provider_litserve/markdown_format/engines.py)); повторять это
-    циклом CRM-воркером нельзя — время растёт как число чанков подряд без общего батча на GPU.
+    Форматирует заметку через общий TextTransformService. По умолчанию это платформенный
+    ``get_llm()`` default-route с candidate/fallback логикой; явный LitServe остаётся
+    доступен на уровне TextTransformService/provider override.
     """
     await _set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
     container = get_crm_container()
@@ -189,37 +188,16 @@ async def format_note_description_markdown_task(
         )
         return {"status": "skipped_empty_description", "note_id": note_id}
 
-    settings = get_settings()
-    infra = settings.provider_litserve.infra
-    timeout = float(settings.note_markdown_format_service_timeout_seconds)
-    model_id = str(infra.markdown_default_api_model_id).strip()
-    if not model_id:
-        msg = "note_markdown_format: markdown_default_api_model_id пуст"
-        await _journal_terminal_markdown(
-            container=container,
-            task_id=task_id,
-            company_id=company_id,
-            snapshot_user_id=snapshot_user_id,
-            status="failed",
-            stage="failed",
-            progress_pct=100,
-            error_message=msg,
-        )
-        raise ValueError(msg)
-    chunk_lim = int(infra.markdown_max_chunk_chars)
-
-    client = ServiceClient()
+    chunk_lim = int(get_settings().provider_litserve.infra.markdown_max_chunk_chars)
+    chunks_total = len(split_text_into_markdown_chunks(str(desc).strip(), chunk_lim)) or 1
     try:
-        raw = await client.post(
-            "provider_litserve",
-            "/v1/text/format_markdown",
-            json={"text": str(desc).strip(), "model": model_id, "max_chunk_chars": chunk_lim},
-            timeout=timeout,
-            headers={"Authorization": f"Bearer {PROVIDER_LITSERVE_PLACEHOLDER_BEARER}"},
+        markdown_raw = await TextTransformService().format_markdown(
+            str(desc).strip(),
+            max_chunk_chars=chunk_lim,
         )
-    except ServiceClientError as exc:
+    except Exception as exc:
         logger.warning(
-            "note_markdown_format_litserve_http_failed",
+            "note_markdown_format_failed",
             note_id=note_id,
             error=str(exc),
         )
@@ -235,23 +213,9 @@ async def format_note_description_markdown_task(
         )
         raise
 
-    if not isinstance(raw, dict):
-        msg = "provider_litserve format_markdown: ответ не JSON-object"
-        await _journal_terminal_markdown(
-            container=container,
-            task_id=task_id,
-            company_id=company_id,
-            snapshot_user_id=snapshot_user_id,
-            status="failed",
-            stage="failed",
-            progress_pct=100,
-            error_message=msg,
-        )
-        raise ValueError(msg)
-    validated = validate_format_markdown_response(raw)
-    markdown = strip_outer_markdown_code_fence(validated.markdown.strip())
+    markdown = strip_outer_markdown_code_fence(markdown_raw.strip())
     if not markdown:
-        msg = "provider_litserve format_markdown: пустой markdown"
+        msg = "note_markdown_format: пустой markdown"
         await _journal_terminal_markdown(
             container=container,
             task_id=task_id,
@@ -264,8 +228,7 @@ async def format_note_description_markdown_task(
         )
         raise ValueError(msg)
 
-    chunks_total = int(validated.chunks_total)
-    chunks_processed = int(validated.chunks_processed)
+    chunks_processed = chunks_total
 
     entity.description = markdown
     entity.updated_at = datetime.now(timezone.utc)

@@ -39,15 +39,10 @@ from apps.flows.src.tasks.company_init_tasks import init_company_resources  # no
 from core.app import create_service_app  # noqa: E402
 from core.config.testing import is_testing  # noqa: E402
 from core.context import clear_context, set_context  # noqa: E402
-from core.identity.system_bootstrap import (  # noqa: E402
-    SYSTEM_ADMIN_EMAIL,
-    ensure_system_admin_membership,
-)
 from core.logging import get_logger  # noqa: E402
 from core.models.context_models import Context, Language  # noqa: E402
 from core.models.identity_models import Company, User  # noqa: E402
 from core.utils.background import run_with_log_context  # noqa: E402
-from core.utils.tokens import get_token_service  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -57,35 +52,6 @@ _FLOWS_DEV_CORS_ORIGIN_REGEX = (
     r"|"
     r"^https?://([a-z0-9-]+\.)*lvh\.me(:\d+)?$"
 )
-
-
-async def _build_scheduler_auth_context(
-    container: object, trace_id: str, session_id: str
-) -> Context:
-    company, user = await ensure_system_admin_membership(container)
-    if user is None:
-        raise ValueError(
-            f"Нет пользователя с email {SYSTEM_ADMIN_EMAIL}: контекст для фоновых задач не собрать"
-        )
-    roles = user.companies.get(company.company_id, [])
-    auth_token = get_token_service().create_token(
-        user_id=user.user_id,
-        company_id=company.company_id,
-        roles=roles,
-    )
-    return Context(
-        user=User(user_id=user.user_id, name=user.name or user.user_id, groups=user.groups),
-        host="system",
-        session_id=session_id,
-        channel="system",
-        language=Language.RU,
-        active_company=Company(
-            company_id=company.company_id, name=company.name, subdomain=company.subdomain
-        ),
-        user_companies=[],
-        trace_id=trace_id,
-        auth_token=auth_token,
-    )
 
 
 async def on_startup(app: FastAPI, container, settings: FlowSettings):
@@ -242,43 +208,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
         )
         logger.info("flows.tools_and_company_init_scheduled")
 
-    # Синхронизация LLM у провайдеров: не блокирует lifespan — иначе HTTP (в т.ч. /health)
-    # недоступен, пока не отработают все внешние запросы (несколько провайдеров × ретраи).
-    if not is_testing():
-
-        async def _llm_models_startup_background() -> None:
-            try:
-                scheduler_context = await _build_scheduler_auth_context(
-                    container=container,
-                    trace_id="system:scheduler-sync",
-                    session_id="system-scheduler-sync",
-                )
-                set_context(scheduler_context)
-                try:
-                    synced_counts = await container.llm_models_service.sync_all_providers()
-                    total_synced = sum(synced_counts.values())
-                    logger.info(
-                        "Синхронизировано LLM моделей: %s (%s)",
-                        total_synced,
-                        synced_counts,
-                    )
-                    await container.llm_models_service.start_background_sync(interval=60)
-                finally:
-                    clear_context()
-            except Exception as e:
-                logger.error(
-                    "Ошибка при синхронизации LLM моделей: %s",
-                    e,
-                    exc_info=True,
-                )
-
-        run_with_log_context(
-            _llm_models_startup_background(),
-            name="flows.llm_models_startup_background",
-            background_kind="startup",
-        )
-        logger.info("flows.llm_models_sync_scheduled")
-    else:
+    if is_testing():
         logger.info("Пропускаем синхронизацию LLM моделей (TESTING)")
         from core.clients.llm.factory import get_llm
         from core.clients.llm.mock import configure_mock_llm_redis
@@ -305,19 +235,6 @@ async def on_shutdown(app: FastAPI, container):
         await stop_dev_polling()
     except Exception as e:
         logger.warning(f"Error stopping dev polling: {e}")
-
-    # Остановка фоновой синхронизации моделей
-    if not is_testing():
-        try:
-            scheduler_context = await _build_scheduler_auth_context(
-                container=container,
-                trace_id="system:scheduler-stop",
-                session_id="system-scheduler-stop",
-            )
-            set_context(scheduler_context)
-            await container.llm_models_service.stop_background_sync()
-        finally:
-            clear_context()
 
     # Закрываем Redis с error handling
     try:

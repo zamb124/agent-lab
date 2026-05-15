@@ -43,6 +43,20 @@ alwaysApply: false
 
 CSS variables из `core/frontend/static/assets/css/tokens.css`: `--space-*`, `--text-*`, `--font-*`, `--glass-solid-*`, `--glass-border-*`, `--accent`, `--text-primary`, `--bg-gradient`, группа **`--field-pill-*`** (плашка поля, лейбл, инпут внутри пилюли), … Тема — `[data-theme="dark|light"]`.
 
+### Motion canon
+
+Единый motion-слой платформы — `core/frontend/static/lib/styles/shared/motion.styles.js`, подключён через `PlatformElement.styles`. Любой core/app компонент получает motion-переменные и классы централизованно.
+
+Правила:
+
+- Дефолтные интерактивные transitions — только через `--motion-transition-interactive` или классы `.motion-*`.
+- `transition: all` запрещён в `core/frontend/static/**` и `apps/<svc>/ui/**`.
+- По умолчанию анимируются compositor-friendly свойства: `opacity`, `transform`, `background-color`, `border-color`, `color`, `box-shadow`. Layout-свойства (`width`, `height`, `max-height`, `padding`, `top`, …) допустимы только как явный локальный override с понятной причиной.
+- Модалки и bottom sheets закрываются двухфазно: `*_CLOSE(_REQUESTED)` ставит `closing`, компонент доигрывает CSS exit-motion, stack диспатчит `*_CLOSED` и только потом удаляет DOM.
+- Смена route в `PlatformApp` централизованно использует View Transition API при feature-detect; сервис отключает только явным `static routeMotionEnabled = false`.
+- JS не делает frame-by-frame animation. Допустим только lifecycle coordination через `requestPlatformClose()` / `waitForPlatformMotion()`.
+- Async-контент в модалках не должен открывать «маленький spinner, потом большой экран»: базовый `glass-modal` задаёт стабильные `--platform-modal-*-body-min-block-size`; сервисы переопределяют через `--modal-body-min-block-size`, если нужен другой размер.
+
 ## Field pill canon (формы и поля ввода)
 
 - **Каноничный компонент:** [`<platform-field>`](core/frontend/static/lib/components/fields/platform-field.js) — единственный канон для **любого** поля формы во всех сервисах (имя/email/url/password/query/description, типизированные атрибуты CRM). Полный API — `data-types.mdc`.

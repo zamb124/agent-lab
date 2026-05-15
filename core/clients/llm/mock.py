@@ -351,7 +351,7 @@ class MockLLM:
 
     async def stream(
         self,
-        messages: List[Message],
+        messages: MessageInput,
         tools: Optional[List[Dict[str, Any]]] = None,
         response_format: Optional[Dict[str, Any]] = None,
         task_id: Optional[str] = None,
@@ -372,14 +372,16 @@ class MockLLM:
         context_id = context_id or task_id
         artifact_id = str(uuid.uuid4())
 
+        normalized = _normalize_messages(messages)
+
         await self._capture_call_to_redis(
-            messages=messages,
+            messages=normalized,
             tools=tools,
             response_format=response_format,
         )
 
         # Используем async метод для поддержки Redis
-        response = await self._get_response_async(messages)
+        response = await self._get_response_async(normalized)
         content = response.get("content", "")
         reasoning = response.get("reasoning", "")
         tool_calls = response.get("tool_calls")
@@ -829,4 +831,3 @@ async def read_mock_llm_capture(redis_client, scope: str) -> List[Dict[str, Any]
             item = item.decode("utf-8")
         out.append(json.loads(item))
     return out
-

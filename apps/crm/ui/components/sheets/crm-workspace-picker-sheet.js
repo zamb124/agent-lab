@@ -47,7 +47,7 @@ export class CrmWorkspacePickerSheet extends PlatformBottomSheet {
                 font-size: var(--text-sm);
                 text-align: left;
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
 
             .ws-item:hover {

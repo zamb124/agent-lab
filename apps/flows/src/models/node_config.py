@@ -9,15 +9,15 @@ Zero-Guess Architecture:
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import ClassVar, Literal, cast
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, JsonValue, field_validator, model_validator
 
 from apps.flows.src.constants.execution_limits import (
     get_graph_max_iterations,
     get_node_execution_wall_time_cap_seconds,
 )
-from core.clients.llm.model_routing import split_provider_prefixed_model
+from core.clients.llm.config import LLMCallConfig, validate_fallback_model_configs
 from core.models import StrictBaseModel
 from core.urn import extract_id
 
@@ -27,11 +27,39 @@ from .resource import ResourceReference
 from .tool_reference import ToolReference
 
 
+def _parse_config_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name}: ожидается целое число, получено bool")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError(f"{field_name}: ожидается целое число, получена пустая строка")
+        try:
+            return int(stripped, 10)
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name}: ожидается целое число, получено {value!r}"
+            ) from exc
+    raise ValueError(f"{field_name}: ожидается целое число, получено {type(value).__name__}")
+
+
 class ReactLoopMode(str, Enum):
     """Режим выхода из ReAct цикла"""
 
     AUTO = "auto"  # Текст без tool_calls = финальный ответ (по умолчанию)
     EXPLICIT = "explicit"  # Выход только через exit_tool
+
+
+type LLMCapability = Literal[
+    "llm_chat",
+    "llm_summarize",
+    "llm_format_markdown",
+    "llm_codegen",
+    "llm_vision",
+    "image_gen",
+]
 
 
 class ReactConfig(StrictBaseModel):
@@ -53,88 +81,36 @@ class ReactConfig(StrictBaseModel):
         default=True,
         description="Строгий режим: True = reminder при тексте без exit_tool, False = текст автозавершает"
     )
-    reminder_message: Optional[str] = Field(
+    reminder_message: str | None = Field(
         default=None,
         description="Кастомный reminder. По умолчанию: 'Ты не вызвал tool X для завершения...'"
     )
 
 
-class NodeLLMOverride(StrictBaseModel):
+class NodeLLMOverride(LLMCallConfig):
     """Переопределение LLM настроек для конкретной ноды."""
 
-    model: Optional[str] = Field(default=None, description="Модель (если None - из global LLMConfig)")
-    temperature: Optional[float] = Field(default=None, description="Температура генерации")
-    max_tokens: Optional[int] = Field(default=None, description="Максимум токенов в ответе")
-    provider: Optional[str] = Field(default=None, description="Провайдер: openai, openrouter, bothub, provider_litserve, yandex")
-    api_key: Optional[str] = Field(default=None, description="API ключ (напрямую или @var:my_key)")
-    folder_id: Optional[str] = Field(
-        default=None,
-        description="Yandex Cloud folder id (каталог); для провайдера yandex с собственным api_key обязателен, если не задан llm.yandex.folder_id",
-    )
-    base_url: Optional[str] = Field(default=None, description="Base URL провайдера (напрямую или @var:my_url)")
-    top_p: Optional[float] = Field(default=None, description="Nucleus sampling top_p")
-    top_k: Optional[int] = Field(default=None, description="Top-K семплирование")
-    frequency_penalty: Optional[float] = Field(default=None, description="Штраф за частоту токенов")
-    presence_penalty: Optional[float] = Field(default=None, description="Штраф за присутствие токенов")
-    seed: Optional[int] = Field(default=None, description="Seed для детерминизма")
-    reasoning_effort: Optional[
-        Literal["none", "minimal", "low", "medium", "high", "xhigh"]
-    ] = Field(default=None, description="Усилие reasoning (OpenAI-совместимые модели)")
-    extra_request_body: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Доп. поля тела POST /chat/completions; мерж последним, перекрывает поля рантайма",
-    )
-    extra_request_headers: Optional[Dict[str, str]] = Field(
+    model: str | None = Field(default=None, description="Модель (если None - из global LLMConfig)")
+    fallback_models: list[LLMCallConfig] | None = Field(
         default=None,
         description=(
-            "Доп. HTTP заголовки; мерж последним, перекрывает в т.ч. Authorization и default_headers провайдера"
+            "Ordered список полноценных LLM-конфигов fallback-попыток. Каждый элемент имеет "
+            "тот же контракт, что основная модель: provider/model/api_key/base_url/temperature/"
+            "headers/body и параметры sampling."
         ),
     )
-    llm_resource_key: Optional[str] = Field(
+    llm_resource_key: str | None = Field(
         default=None,
         description="Ключ LLM-ресурса в flow/skill/node resources; база конфига, поля override не-None перекрывают",
     )
 
-    @field_validator("extra_request_body", mode="before")
+    @field_validator("fallback_models")
     @classmethod
-    def _extra_must_be_object(cls, v: Any) -> Any:
-        if v is None:
-            return None
-        if isinstance(v, dict):
-            return v
-        raise ValueError("extra_request_body должен быть объектом JSON, не массивом и не скаляром")
-
-    @field_validator("extra_request_headers", mode="before")
-    @classmethod
-    def _extra_headers_must_be_object(cls, v: Any) -> Any:
-        if v is None:
-            return None
-        if not isinstance(v, dict):
-            raise ValueError("extra_request_headers должен быть объектом JSON, не массивом и не скаляром")
-        for key, val in v.items():
-            if not isinstance(key, str) or not key.strip():
-                raise ValueError("extra_request_headers: ключи — непустые строки")
-            if not isinstance(val, str):
-                raise ValueError("extra_request_headers: значения должны быть строками")
-        return v
-
-    @model_validator(mode="before")
-    @classmethod
-    def _split_provider_prefixed_model(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        prov_raw = data.get("provider")
-        prov_set = prov_raw is not None and isinstance(prov_raw, str) and prov_raw.strip() != ""
-        if prov_set:
-            return data
-        model_raw = data.get("model")
-        split_prov, split_model = split_provider_prefixed_model(None, model_raw if isinstance(model_raw, str) else None)
-        if split_prov is None:
-            return data
-        out = dict(data)
-        out["provider"] = split_prov
-        out["model"] = split_model
-        return out
+    def _fallback_models_require_model(
+        cls,
+        v: list[LLMCallConfig] | None,
+    ) -> list[LLMCallConfig] | None:
+        return validate_fallback_model_configs(v)
 
 
 class NodeConfig(StrictBaseModel):
@@ -157,7 +133,10 @@ class NodeConfig(StrictBaseModel):
     - NodeType.RESOURCE: нода-ресурс на графе (привязка resources; рантайм pass-through)
     """
 
-    model_config = ConfigDict(json_schema_extra={"storage_prefix": "node"}, populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        json_schema_extra={"storage_prefix": "node"},
+        populate_by_name=True,
+    )
 
     # ОБЯЗАТЕЛЬНЫЕ ПОЛЯ
     node_id: str = Field(..., description="Уникальный идентификатор ноды")
@@ -167,43 +146,45 @@ class NodeConfig(StrictBaseModel):
 
     @field_validator("node_id", mode="before")
     @classmethod
-    def validate_node_id(cls, v: str) -> str:
+    def validate_node_id(cls, v: object) -> str:
         """Принимает URN или plain ID, извлекает ID."""
+        if not isinstance(v, str):
+            raise ValueError(f"node_id: ожидается строка, получено {type(v).__name__}")
         return extract_id(v)
 
     description: str = Field(default="", description="Описание ноды")
 
     @field_validator("description", mode="before")
     @classmethod
-    def validate_description(cls, v: Optional[str]) -> str:
+    def validate_description(cls, v: str | None) -> str:
         """Конвертирует None в пустую строку."""
         return v if v is not None else ""
 
-    # Data Flow контракт (опциональн, но рекомендуется)
-    input_schema: Optional[Dict[str, Any]] = Field(default=None, description="JSON Schema входных данных")
-    output_schema: Optional[Dict[str, Any]] = Field(default=None, description="JSON Schema выходных данных")
-    tags: List[str] = Field(default_factory=list, description="Группы/категории")
+    # Data Flow контракт (опционален, но рекомендуется)
+    input_schema: dict[str, JsonValue] | None = Field(
+        default=None,
+        description="JSON Schema входных данных",
+    )
+    output_schema: dict[str, JsonValue] | None = Field(
+        default=None,
+        description=(
+            "JSON Schema выходных данных ноды. Для llm_node в режиме structured_output "
+            "этот же контракт передается в response_format."
+        ),
+    )
+    tags: list[str] = Field(default_factory=list, description="Группы/категории")
 
     # Для llm_node
-    prompt: Optional[str] = Field(default=None, description="Системный промпт")
-    tools: List[ToolReference] = Field(
+    prompt: str | None = Field(default=None, description="Системный промпт")
+    tools: list[ToolReference] = Field(
         default_factory=list, description="Список инструментов"
     )
-    llm_override: Optional[NodeLLMOverride] = Field(
+    llm_override: NodeLLMOverride | None = Field(
         default=None,
         description="Переопределение LLM настроек (если None - из global config)",
         alias="llm"
     )
-    llm_capability: Optional[
-        Literal[
-            "llm_chat",
-            "llm_summarize",
-            "llm_format_markdown",
-            "llm_codegen",
-            "llm_vision",
-            "image_gen",
-        ]
-    ] = Field(
+    llm_capability: LLMCapability | None = Field(
         default=None,
         description=(
             "Декларативная capability ноды для company AI overlay. "
@@ -212,10 +193,10 @@ class NodeConfig(StrictBaseModel):
             "перед вызовом LLM. См. core/company_ai/resolver.py."
         ),
     )
-    react: Optional[ReactConfig] = Field(
+    react: ReactConfig | None = Field(
         default=None, description="Конфигурация ReAct цикла (loop_mode, exit_tool)"
     )
-    messages_filter: Union[Literal["all", "own"], List[str]] = Field(
+    messages_filter: Literal["all", "own"] | list[str] = Field(
         default="all",
         description=(
             "Срез истории для запросов к LLM (полный лог всегда в state.messages): "
@@ -233,7 +214,7 @@ class NodeConfig(StrictBaseModel):
 
     @field_validator("incoming_policy", mode="before")
     @classmethod
-    def validate_incoming_policy(cls, v: Any) -> str:
+    def validate_incoming_policy(cls, v: object) -> Literal["any", "all"]:
         if v is None:
             return "any"
         if v not in ("any", "all"):
@@ -242,7 +223,7 @@ class NodeConfig(StrictBaseModel):
 
     @field_validator("messages_filter", mode="before")
     @classmethod
-    def validate_messages_filter(cls, v: Any) -> Union[str, List[str]]:
+    def validate_messages_filter(cls, v: object) -> Literal["all", "own"] | list[str]:
         if v is None:
             return "all"
         if isinstance(v, str):
@@ -252,10 +233,11 @@ class NodeConfig(StrictBaseModel):
                 )
             return v
         if isinstance(v, list):
-            if not v:
+            raw_items = cast(list[object], v)
+            if not raw_items:
                 raise ValueError("messages_filter: список node_id не может быть пустым")
-            out: List[str] = []
-            for i, item in enumerate(v):
+            out: list[str] = []
+            for i, item in enumerate(raw_items):
                 if not isinstance(item, str) or not item.strip():
                     raise ValueError(
                         f"messages_filter: элемент #{i} должен быть непустой строкой (node_id)"
@@ -266,30 +248,26 @@ class NodeConfig(StrictBaseModel):
             f"messages_filter: ожидается 'all', 'own' или список строк, получено {type(v).__name__}"
         )
 
-    # Structured Output (взаимоисключающе с tools)
+    # Structured Output (взаимоисключающе с tools; использует output_schema как контракт ответа)
     structured_output: bool = Field(
         default=False,
         description="Режим structured output вместо tools (response_format json_schema)"
     )
-    output_schema: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="JSON Schema для structured output (передается в response_format)"
-    )
-    output_mapping: Optional[Dict[str, str]] = Field(
+    output_mapping: dict[str, str] | None = Field(
         default=None,
         description="Маппинг полей JSON -> state fields. Если None - поля записываются напрямую"
     )
 
     # Для code-ноды (inline)
-    code: Optional[str] = Field(default=None, description="Inline Python код")
+    code: str | None = Field(default=None, description="Inline Python код")
 
     # Ресурсы ноды
-    resources: Dict[str, ResourceReference] = Field(
+    resources: dict[str, ResourceReference] = Field(
         default_factory=dict,
         description="Ресурсы ноды (переопределяют flow-level)"
     )
 
-    files: List[Dict[str, Any]] = Field(
+    files: list[dict[str, JsonValue]] = Field(
         default_factory=list,
         description=(
             "Закреплённые файлы ноды (как элементы state.files: name, path; опционально "
@@ -297,38 +275,38 @@ class NodeConfig(StrictBaseModel):
         ),
     )
 
-    operator_queue_slug: Optional[str] = Field(
+    operator_queue_slug: str | None = Field(
         default=None,
         description="Slug очереди оператора (взаимоисключающе с operator_queue_id)",
     )
-    operator_queue_id: Optional[str] = Field(
+    operator_queue_id: str | None = Field(
         default=None,
         description="UUID очереди оператора (взаимоисключающе с operator_queue_slug)",
     )
-    operator_handoff_mode: Optional[Literal["single_reply", "takeover"]] = Field(
+    operator_handoff_mode: Literal["single_reply", "takeover"] | None = Field(
         default=None,
         description="Режим оператора: single_reply — один ответ; takeover — перехват диалога",
     )
-    operator_task_title: Optional[str] = Field(
+    operator_task_title: str | None = Field(
         default=None,
         description="Заголовок задачи; можно переопределить input_mapping.task_title",
     )
-    operator_user_message: Optional[str] = Field(
+    operator_user_message: str | None = Field(
         default=None,
         description="Текст для пользователя; можно переопределить input_mapping.user_facing_message",
     )
 
     # Общее
-    local_variables: Dict[str, Any] = Field(
+    local_variables: dict[str, JsonValue] = Field(
         default_factory=dict, description="Локальные переменные"
     )
-    store: Dict[str, Any] = Field(default_factory=dict, description="Начальные данные store")
+    store: dict[str, JsonValue] = Field(default_factory=dict, description="Начальные данные store")
     source: str = Field(default="manual", description="Источник создания")
-    created_at: Optional[datetime] = Field(default=None, description="Дата создания")
-    updated_at: Optional[datetime] = Field(default=None, description="Дата обновления")
+    created_at: datetime | None = Field(default=None, description="Дата создания")
+    updated_at: datetime | None = Field(default=None, description="Дата обновления")
 
     # Контроль доступа для UI
-    public_fields: Optional[List[str]] = Field(
+    public_fields: list[str] | None = Field(
         default=None,
         description="Поля доступные для редактирования в UI. None = все поля доступны"
     )
@@ -340,21 +318,21 @@ class NodeConfig(StrictBaseModel):
             "и не рвать граф; для llm_node ошибка tool попадает ещё в messages как результат вызова"
         ),
     )
-    exception_allow_types: List[ExceptionAbsorbAllowName] = Field(
+    exception_allow_types: list[ExceptionAbsorbAllowName] = Field(
         default_factory=list,
         description=(
             "Whitelist имён классов исключений (ExceptionAbsorbAllowName). Пустой список при "
             "exception_as_response=True означает любое исключение; иначе только перечисленные типы"
         ),
     )
-    node_timeout_seconds: Optional[int] = Field(
+    node_timeout_seconds: int | None = Field(
         default=None,
         description=(
             "Wall-clock лимит ноды (сек), верх — node_execution_wall_time_cap_seconds; "
             "None = только лимит flow"
         ),
     )
-    max_visits_per_run: Optional[int] = Field(
+    max_visits_per_run: int | None = Field(
         default=None,
         description=(
             "Максимум заходов в эту ноду за один Flow.run; None — для code действует дефолт платформы, "
@@ -364,10 +342,10 @@ class NodeConfig(StrictBaseModel):
 
     @field_validator("node_timeout_seconds", mode="before")
     @classmethod
-    def validate_node_timeout_seconds(cls, v: Any) -> Optional[int]:
+    def validate_node_timeout_seconds(cls, v: object) -> int | None:
         if v is None:
             return None
-        iv = int(v)
+        iv = _parse_config_int(v, "node_timeout_seconds")
         if iv < 1:
             raise ValueError(f"node_timeout_seconds: ожидается >= 1, получено {iv}")
         cap = get_node_execution_wall_time_cap_seconds()
@@ -379,10 +357,10 @@ class NodeConfig(StrictBaseModel):
 
     @field_validator("max_visits_per_run", mode="before")
     @classmethod
-    def validate_max_visits_per_run(cls, v: Any) -> Optional[int]:
+    def validate_max_visits_per_run(cls, v: object) -> int | None:
         if v is None:
             return None
-        iv = int(v)
+        iv = _parse_config_int(v, "max_visits_per_run")
         if iv < 1:
             raise ValueError(f"max_visits_per_run: ожидается >= 1, получено {iv}")
         cap = get_graph_max_iterations()

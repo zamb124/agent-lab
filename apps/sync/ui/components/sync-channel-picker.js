@@ -66,7 +66,7 @@ export class SyncChannelPicker extends PlatformElement {
             font-size: var(--text-sm);
             font-weight: var(--font-medium);
             user-select: none;
-            transition: all var(--duration-fast) var(--easing-default);
+            transition: var(--motion-transition-interactive);
         }
         .filter:hover {
             background: var(--glass-tint-medium, rgba(255, 255, 255, 0.08));

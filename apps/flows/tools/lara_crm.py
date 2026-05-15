@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 from urllib.parse import quote
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -17,6 +17,11 @@ from apps.flows.src.tools import tool
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.context import get_context
 
+if TYPE_CHECKING:
+    from core.state import ExecutionState
+
+JsonDict = dict[str, Any]
+
 
 def _require_context_namespace() -> str:
     ctx = get_context()
@@ -25,7 +30,7 @@ def _require_context_namespace() -> str:
     return ctx.active_namespace or "default"
 
 
-def _analyze_mock(args: dict, state: Any = None) -> str:
+def _analyze_mock(args: JsonDict, state: Any = None) -> str:
     return json.dumps(
         {
             "success": True,
@@ -370,7 +375,8 @@ async def crm_search_entities(
     entity_subtype: Optional[str] = None,
     namespace: Optional[str] = None,
     limit: int = 100,
-    state: Optional[dict] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
     q = (query or "").strip() if query else ""
     if not q and search:
@@ -459,11 +465,9 @@ async def crm_create_note(
     mode: Literal["propose", "apply"] = "propose",
     pending_action_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
-    state: Optional[dict] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
-    if state is None:
-        raise ValueError("state is required")
-
     ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
     facade = get_lara_facade()
     clean_note_date = str(note_date).strip() if note_date and str(note_date).strip() else None
@@ -591,7 +595,8 @@ async def crm_create_note_and_analyze(
     extract_entity_types: Optional[List[str]] = None,
     mentioned_entity_ids: Optional[List[str]] = None,
     namespace: Optional[str] = None,
-    state: Optional[dict] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
     ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
     create_payload: Dict[str, Any] = {
@@ -663,7 +668,8 @@ async def crm_analyze_note_text(
     note_id: str,
     extract_entity_types: Optional[List[str]] = None,
     mentioned_entity_ids: Optional[List[str]] = None,
-    state: Optional[dict] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
     nid = str(note_id).strip()
     body: Dict[str, Any] = {
@@ -847,7 +853,7 @@ async def crm_analyze_note_text(
     args_schema=PushEmbedBlocksArgs,
     mock_response=lambda args, state=None: args.get("blocks_json", "[]"),
 )
-async def push_embed_blocks(blocks_json: str, state: Optional[dict] = None) -> str:
+async def push_embed_blocks(blocks_json: str, *, state: "ExecutionState") -> str:
     parsed = json.loads(blocks_json)
     if not isinstance(parsed, list):
         raise ValueError("blocks_json must be a JSON array")
@@ -877,7 +883,8 @@ async def flows_read_context(
     flow_id: str,
     branch_id: Optional[str] = None,
     node_id: Optional[str] = None,
-    state: Optional[dict] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
     def normalize_branch_id(raw_branch_id: Optional[str]) -> str:
         if raw_branch_id is None:
@@ -973,11 +980,9 @@ async def flows_patch_node(
     mode: Literal["propose", "apply"] = "propose",
     pending_action_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
-    state: Optional[dict] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
-    if state is None:
-        raise ValueError("state is required")
-
     def normalize_branch_id(raw_branch_id: Optional[str]) -> str:
         if raw_branch_id is None:
             return "base"
@@ -1009,7 +1014,7 @@ async def flows_patch_node(
             raise ValueError("Invalid action preview payload")
         node_before = preview_data.get("node_before")
         node_after = preview_data.get("node_after")
-        preview_payload = {
+        preview_payload: JsonDict = {
             "action": action,
             "patch_kind": "node",
             "flow_id": flow_id,
@@ -1093,7 +1098,7 @@ async def flows_patch_node(
         patch_restored = action_payload["patch"]
     else:
         patch_restored = {}
-    event_payload = {
+    event_payload: JsonDict = {
         "action": action,
         "patch_kind": "node",
         "flow_id": flow_resolved,
@@ -1147,11 +1152,9 @@ async def flows_patch_flow(
     mode: Literal["propose", "apply"] = "propose",
     pending_action_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
-    state: Optional[dict] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
-    if state is None:
-        raise ValueError("state is required")
-
     facade = get_lara_facade()
 
     if mode == "propose":
@@ -1180,7 +1183,7 @@ async def flows_patch_flow(
             raise ValueError("Invalid action preview payload")
         flow_before = preview_data.get("flow_before")
         flow_after = preview_data.get("flow_after")
-        preview_payload = {
+        preview_payload: JsonDict = {
             "action": action,
             "patch_kind": "flow",
             "flow_id": flow_id,
@@ -1248,7 +1251,7 @@ async def flows_patch_flow(
     else:
         patch_restored = {}
 
-    apply_payload = {
+    apply_payload: JsonDict = {
         "action": action,
         "patch_kind": "flow",
         "flow_id": flow_resolved,
@@ -1333,9 +1336,7 @@ class CrmDailySummaryArgs(BaseModel):
         ensure_ascii=False,
     ),
 )
-async def crm_get_entity(entity_id: str, state: Optional[dict] = None) -> str:
-    if state is None:
-        raise ValueError("state is required")
+async def crm_get_entity(entity_id: str, *, state: "ExecutionState") -> str:
     cid = entity_id.strip()
     if not cid:
         raise ValueError("entity_id is required")
@@ -1377,10 +1378,9 @@ async def crm_create_entity(
     description: Optional[str] = None,
     attributes: Optional[Dict[str, Any]] = None,
     tags: Optional[List[str]] = None,
-    state: Optional[dict] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
-    if state is None:
-        raise ValueError("state is required")
     ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
     body: Dict[str, Any] = {
         "entity_type": entity_type.strip(),
@@ -1425,10 +1425,9 @@ async def crm_create_relationship(
     namespace: Optional[str] = None,
     weight: float = 1.0,
     confidence: float = 1.0,
-    state: Optional[dict] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
-    if state is None:
-        raise ValueError("state is required")
     ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
     payload_obj = {
         "source_entity_id": source_entity_id.strip(),
@@ -1464,9 +1463,11 @@ async def crm_create_relationship(
         ensure_ascii=False,
     ),
 )
-async def crm_list_entity_types(namespace: Optional[str] = None, state: Optional[dict] = None) -> str:
-    if state is None:
-        raise ValueError("state is required")
+async def crm_list_entity_types(
+    namespace: Optional[str] = None,
+    *,
+    state: "ExecutionState",
+) -> str:
     ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
     client = ServiceClient()
     qp = quote(ns, safe="")
@@ -1520,10 +1521,9 @@ async def crm_daily_summary(
     date: str,
     namespace: Optional[str] = None,
     force_rebuild: bool = False,
-    state: Optional[dict] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
-    if state is None:
-        raise ValueError("state is required")
     d_raw = date.strip()
     if not d_raw:
         raise ValueError("date is required")

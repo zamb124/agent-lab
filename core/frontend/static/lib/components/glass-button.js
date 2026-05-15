@@ -24,7 +24,7 @@ export class GlassButton extends PlatformElement {
                 border-radius: var(--radius-md);
                 border: 1px solid transparent;
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
                 white-space: nowrap;
                 text-decoration: none;
                 user-select: none;
@@ -164,4 +164,3 @@ export class GlassButton extends PlatformElement {
 }
 
 customElements.define('glass-button', GlassButton);
-

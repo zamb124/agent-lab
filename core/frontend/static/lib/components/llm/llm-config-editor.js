@@ -87,6 +87,18 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         return typeof value === 'string' && value.startsWith(_CUSTOM_REF_PREFIX);
     }
 
+    _supportsModelOverride() {
+        return (
+            typeof this.capability === 'string'
+            && (
+                this.capability.startsWith('llm_')
+                || this.capability === 'image_gen'
+                || this.capability === 'voice_stt'
+                || this.capability === 'voice_tts'
+            )
+        );
+    }
+
     _emitChange(patch) {
         const next = { ...(this.config || {}), ...patch };
         this.config = next;
@@ -144,6 +156,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         const provider = (this.config && this.config.provider) || '';
         const isCustom = this._isCustomProvider(provider);
         const showByok = !isCustom && this.mode === 'company_capability';
+        const showModelOverride = this._supportsModelOverride();
         const costOriginBadge = this.costOrigin
             ? html`<span class="badge" data-kind=${this.costOrigin}>${
                   this.costOrigin === 'company'
@@ -187,6 +200,19 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                           <small class="help">${this.t('settings_page.ai_providers.platform_model_help')}</small>
                       `
                     : ''}
+                ${showModelOverride
+                    ? html`
+                          <platform-field
+                              type="string"
+                              mode="edit"
+                              label=${this.t('settings_page.ai_providers.model_override_label')}
+                              .value=${(this.config && this.config.model) || ''}
+                              ?disabled=${this.readOnly}
+                              @change=${this._onModelChange}
+                          ></platform-field>
+                          <small class="help">${this.t('settings_page.ai_providers.model_override_help')}</small>
+                      `
+                    : ''}
                 ${showByok
                     ? html`
                           <platform-field
@@ -209,7 +235,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                           ></platform-field>
                       `
                     : ''}
-                ${!this.platformModel
+                ${!showModelOverride && !this.platformModel
                     ? html`
                           <platform-field
                               type="string"

@@ -36,7 +36,7 @@ export class OfficeDocumentRow extends PlatformElement {
                 background: var(--glass-solid-subtle);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-lg);
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .row:hover {
                 background: var(--glass-solid-medium);
@@ -68,7 +68,7 @@ export class OfficeDocumentRow extends PlatformElement {
                 border-radius: var(--radius-md);
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
             .btn-icon:hover { background: var(--glass-solid-medium); color: var(--text-primary); }
             .btn-icon.danger:hover { color: var(--danger); }

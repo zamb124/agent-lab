@@ -41,6 +41,7 @@ import { baseStyles } from './styles.js';
 import { glassStyles } from '../styles/shared/glass.styles.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles, iconButtonStyles } from '../styles/shared/button.styles.js';
+import { motionStyles } from '../styles/shared/motion.styles.js';
 import { getPlatformBus } from '../events/bus-singleton.js';
 import { SelectController } from '../events/select-controller.js';
 // Не использовать ../events/index.js: barrel подтягивает модули с bare import `lit` (ложится на автономный embed).
@@ -79,7 +80,7 @@ function preventKeyboardZoom(event) {
 const _ALLOWED_TOAST_TYPES = new Set(['success', 'error', 'warning', 'info']);
 
 export class PlatformElement extends LitElement {
-    static styles = [baseStyles, glassStyles, formStyles, buttonStyles, iconButtonStyles];
+    static styles = [baseStyles, glassStyles, formStyles, buttonStyles, iconButtonStyles, motionStyles];
     static _standaloneNoZoomGuardRegistered = false;
 
     constructor() {

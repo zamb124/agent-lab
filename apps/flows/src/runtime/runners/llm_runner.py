@@ -16,6 +16,7 @@ from a2a.types import (
     Message,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
+    TextPart,
 )
 
 from apps.flows.src.container import get_container
@@ -37,7 +38,7 @@ from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.llm_byok import is_llm_byok_override
 from apps.flows.src.runtime.llm_override_params import (
-    resolve_override_stream_kwargs,
+    client_kwargs_from_override,
     split_llm_override_for_client,
 )
 from apps.flows.src.state.cancellation import (
@@ -59,6 +60,7 @@ from core.clients.llm import (
     MockLLM,
     StreamEvent,
     get_llm_for_state,
+    should_use_platform_default_free_pool,
 )
 from core.config import get_settings
 from core.context import get_context
@@ -368,14 +370,18 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         llm_node_label: str,
         context_id: str,
         task_id: str,
-        emitter: Emitter,
+        emitter: BaseEmitter,
     ) -> AsyncGenerator[StreamEvent, None]:
         """ReAct цикл со стримингом событий."""
         sid = self._source_node_id()
         system_prompt = await self._render_prompt(state)
         trace_ctx = _get_trace_ctx_from_state()
         tracer = get_tracer()
-        model = self.node_config.llm_override.model if self.node_config and self.node_config.llm_override else "unknown"
+        model = (
+            self.node_config.llm_override.model
+            if self.node_config and self.node_config.llm_override and self.node_config.llm_override.model
+            else "unknown"
+        )
 
         actx = get_context()
         if actx is None or actx.active_company is None:
@@ -384,13 +390,46 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             raise ValueError("Контекст с user обязателен для LLM-ноды (биллинг и уведомления)")
         container = get_container()
         override = self.node_config.llm_override if self.node_config else None
-        if not is_llm_byok_override(override):
-            await container.billing_service.require_balance_for_billable_operation(
-                actx.active_company.company_id,
-                str(actx.user.user_id).strip(),
-                operation_code=BALANCE_BLOCK_OPERATION_LLM,
-                notification_service="flows",
-            )
+        allow_platform_paid_fallback = True
+        byok_override = is_llm_byok_override(override)
+        (
+            billing_model,
+            _billing_temp,
+            billing_provider,
+            billing_api_key,
+            billing_base_url,
+            _billing_max_tok,
+            billing_folder_id,
+            _billing_fallback_models,
+        ) = split_llm_override_for_client(override)
+        uses_platform_free_pool = should_use_platform_default_free_pool(
+            model_name=billing_model,
+            provider=billing_provider,
+            api_key=billing_api_key,
+            base_url=billing_base_url,
+            folder_id=billing_folder_id,
+            settings=get_settings(),
+        )
+        if not byok_override:
+            if uses_platform_free_pool:
+                allow_platform_paid_fallback = (
+                    await container.billing_service.company_may_incur_billable_operation_charge(
+                        actx.active_company.company_id
+                    )
+                )
+                if not allow_platform_paid_fallback:
+                    logger.info(
+                        "llm.default_free_pool_paid_fallback_disabled",
+                        company_id=actx.active_company.company_id,
+                        node_id=self.node_config.node_id if self.node_config else None,
+                    )
+            else:
+                await container.billing_service.require_balance_for_billable_operation(
+                    actx.active_company.company_id,
+                    str(actx.user.user_id).strip(),
+                    operation_code=BALANCE_BLOCK_OPERATION_LLM,
+                    notification_service="flows",
+                )
 
         # Определяем режим: structured_output или tools
         structured_output = self.node_config.structured_output if self.node_config else False
@@ -406,7 +445,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     "schema": output_schema
                 }
             }
-            logger.info(f"[llm_node:{llm_node_label}] Structured Output режим, schema keys: {list(output_schema.get('properties', {}).keys())}")
+            schema_properties = output_schema.get("properties")
+            schema_keys = list(schema_properties.keys()) if isinstance(schema_properties, dict) else []
+            logger.info(
+                f"[llm_node:{llm_node_label}] Structured Output режим, schema keys: {schema_keys}"
+            )
         else:
             tools_schema = self._build_tools_schema()
             response_format = None
@@ -448,7 +491,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         provider_upstream_inference_cost: Optional[float] = None
                         settlement_quantity_rub: Optional[int] = None
 
-                        llm, stream_kw, max_tok = self._resolve_llm_client(state)
+                        llm, stream_kw, max_tok = self._resolve_llm_client(
+                            state,
+                            allow_platform_paid_fallback=allow_platform_paid_fallback,
+                        )
                         llm_provider = getattr(llm, "llm_provider", None)
                         byok = is_llm_byok_override(
                             self.node_config.llm_override if self.node_config else None
@@ -483,7 +529,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         artifact_name = event.artifact.name or "response"
                                         if artifact_name != "reasoning":
                                             for part in event.artifact.parts:
-                                                if hasattr(part.root, "text"):
+                                                if isinstance(part.root, TextPart):
                                                     content += part.root.text
                                             if loop_mode == ReactLoopMode.EXPLICIT:
                                                 should_yield = False
@@ -646,10 +692,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     )
                                     await self._emit_pending_ui_events(emitter, state)
 
-                                pending_reasoning = getattr(state, "_pending_reasoning", None)
+                                pending_reasoning = state.pending_reasoning
                                 if pending_reasoning:
-                                    await emitter.emit_reasoning(pending_reasoning)
-                                    delattr(state, "_pending_reasoning")
+                                    await emitter.emit_reasoning(
+                                        json.dumps(pending_reasoning, ensure_ascii=False)
+                                    )
+                                    state.pending_reasoning = None
 
                                 await self._emit_pending_ui_events(emitter, state)
 
@@ -767,24 +815,20 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     tracer.record_state_snapshot(llm_node_span, state)
 
     def _resolve_llm_client(
-        self, state: ExecutionState
+        self,
+        state: ExecutionState,
+        *,
+        allow_platform_paid_fallback: bool = True,
     ) -> tuple[LLMClient | MockLLM, Dict[str, Any], Optional[int]]:
         override = self.node_config.llm_override if self.node_config else None
-        model, temp, provider, api_key, base_url, max_tok, folder_id = split_llm_override_for_client(
-            override
-        )
+        max_tok = override.max_tokens if override is not None else None
+        client_kwargs = client_kwargs_from_override(override, state)
         llm = get_llm_for_state(
             state,
-            model_name=model,
-            temperature=temp,
-            provider=provider,
-            api_key=api_key,
-            base_url=base_url,
-            folder_id=folder_id,
-            max_tokens=max_tok,
+            **client_kwargs,
+            allow_platform_paid_fallback=allow_platform_paid_fallback,
         )
-        stream_kw = resolve_override_stream_kwargs(override, state)
-        return llm, stream_kw, max_tok
+        return llm, {}, max_tok
 
     async def _call_llm(
         self,
@@ -887,7 +931,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             tool_name = tc["name"]
             tool_call_id = tc.get("id", tool_name)
 
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
+                if not isinstance(result, Exception):
+                    raise result
                 if isinstance(result, FlowInterrupt):
                     raise result
                 if isinstance(result, ToolExecutionError):

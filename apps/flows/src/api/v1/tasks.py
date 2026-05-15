@@ -16,7 +16,7 @@ from a2a.types import (
 )
 from a2a.utils.message import new_agent_text_message
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
@@ -36,7 +36,7 @@ class TaskSubmitRequest(BaseModel):
     branch_id: str = "default"
     user_id: Optional[str] = None
     session_id: Optional[str] = None
-    metadata: Dict[str, Any] = {}
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 @router.post("/submit")
@@ -127,23 +127,23 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Di
 
     a2a_task = Task(
         id=task_id,
-        contextId=session_id,
+        context_id=session_id,
         status=TaskStatus(state=task_state, message=new_agent_text_message(response_text)),
         history=[
             Message(
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
                 role=Role.user,
                 parts=[Part(root=TextPart(text=request.content))],
-                taskId=task_id,
-                contextId=session_id,
+                task_id=task_id,
+                context_id=session_id,
                 metadata={"node_id": MESSAGE_SOURCE_TASK},
             ),
             Message(
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
                 role=Role.agent,
                 parts=[Part(root=TextPart(text=response_text))],
-                taskId=task_id,
-                contextId=session_id,
+                task_id=task_id,
+                context_id=session_id,
                 metadata={"node_id": MESSAGE_SOURCE_TASK},
             ),
         ],

@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from core.state import ExecutionState
 
 logger = get_logger(__name__)
+JsonDict = dict[str, Any]
 
 
 # ── описания ─────────────────────────────────────────────────────
@@ -166,7 +167,7 @@ class GDocsShareArgs(BaseModel):
 # ── mock ответы ──────────────────────────────────────────────────
 
 
-def _create_mock(args: dict, state: Any = None) -> dict:
+def _create_mock(args: JsonDict, state: Any = None) -> JsonDict:
     return {
         "success": True,
         "document_id": "mock_doc_id_123",
@@ -175,7 +176,7 @@ def _create_mock(args: dict, state: Any = None) -> dict:
     }
 
 
-def _read_mock(args: dict, state: Any = None) -> dict:
+def _read_mock(args: JsonDict, state: Any = None) -> JsonDict:
     return {
         "success": True,
         "document_id": args.get("document_id", "mock_doc_id"),
@@ -183,15 +184,15 @@ def _read_mock(args: dict, state: Any = None) -> dict:
     }
 
 
-def _append_mock(args: dict, state: Any = None) -> dict:
+def _append_mock(args: JsonDict, state: Any = None) -> JsonDict:
     return {"success": True, "document_id": args.get("document_id", "mock_doc_id")}
 
 
-def _insert_mock(args: dict, state: Any = None) -> dict:
+def _insert_mock(args: JsonDict, state: Any = None) -> JsonDict:
     return {"success": True, "document_id": args.get("document_id", "mock_doc_id")}
 
 
-def _find_replace_mock(args: dict, state: Any = None) -> dict:
+def _find_replace_mock(args: JsonDict, state: Any = None) -> JsonDict:
     return {
         "success": True,
         "document_id": args.get("document_id", "mock_doc_id"),
@@ -199,12 +200,34 @@ def _find_replace_mock(args: dict, state: Any = None) -> dict:
     }
 
 
-def _delete_range_mock(args: dict, state: Any = None) -> dict:
+def _delete_range_mock(args: JsonDict, state: Any = None) -> JsonDict:
     return {"success": True, "document_id": args.get("document_id", "mock_doc_id")}
 
 
-def _share_mock(args: dict, state: Any = None) -> dict:
+def _share_mock(args: JsonDict, state: Any = None) -> JsonDict:
     return {"success": True, "document_id": args.get("document_id", "mock_doc_id")}
+
+
+def _require_state(state: Optional["ExecutionState"]) -> "ExecutionState":
+    if state is None:
+        raise ValueError("Google Docs tools require ExecutionState")
+    return state
+
+
+async def _get_docs_client(state: Optional["ExecutionState"]) -> GoogleDocsClient:
+    execution_state = _require_state(state)
+    credentials_json = execution_state.variables.get("google_service_account")
+    access_token = execution_state.variables.get("google_access_token")
+    subject = execution_state.variables.get("google_impersonate_email")
+
+    if not credentials_json and not access_token:
+        access_token = await get_google_oauth_token(execution_state, service="docs")
+
+    return GoogleDocsClient(
+        credentials_json=credentials_json,
+        access_token=access_token,
+        subject=subject,
+    )
 
 
 # ── тулы ─────────────────────────────────────────────────────────
@@ -221,19 +244,8 @@ async def gdocs_create_document(
     title: str,
     file_id: Optional[str] = None,
     state: Optional["ExecutionState"] = None,
-) -> dict:
-    credentials_json = state.variables.get("google_service_account")
-    access_token = state.variables.get("google_access_token")
-    subject = state.variables.get("google_impersonate_email")
-
-    if not credentials_json and not access_token:
-        access_token = await get_google_oauth_token(state, service="docs")
-
-    client = GoogleDocsClient(
-        credentials_json=credentials_json,
-        access_token=access_token,
-        subject=subject,
-    )
+) -> JsonDict:
+    client = await _get_docs_client(state)
 
     if file_id:
         docx_bytes = await get_file_bytes(file_id)
@@ -265,19 +277,8 @@ async def gdocs_create_document(
 async def gdocs_read_document(
     document_id: str,
     state: Optional["ExecutionState"] = None,
-) -> dict:
-    credentials_json = state.variables.get("google_service_account")
-    access_token = state.variables.get("google_access_token")
-    subject = state.variables.get("google_impersonate_email")
-
-    if not credentials_json and not access_token:
-        access_token = await get_google_oauth_token(state, service="docs")
-
-    client = GoogleDocsClient(
-        credentials_json=credentials_json,
-        access_token=access_token,
-        subject=subject,
-    )
+) -> JsonDict:
+    client = await _get_docs_client(state)
 
     text = await client.read_as_text(document_id)
     return {"success": True, "document_id": document_id, "text": text}
@@ -294,19 +295,8 @@ async def gdocs_append_text(
     document_id: str,
     text: str,
     state: Optional["ExecutionState"] = None,
-) -> dict:
-    credentials_json = state.variables.get("google_service_account")
-    access_token = state.variables.get("google_access_token")
-    subject = state.variables.get("google_impersonate_email")
-
-    if not credentials_json and not access_token:
-        access_token = await get_google_oauth_token(state, service="docs")
-
-    client = GoogleDocsClient(
-        credentials_json=credentials_json,
-        access_token=access_token,
-        subject=subject,
-    )
+) -> JsonDict:
+    client = await _get_docs_client(state)
 
     await client.append_text(document_id, text)
     return {"success": True, "document_id": document_id}
@@ -324,19 +314,8 @@ async def gdocs_insert_text(
     text: str,
     index: int,
     state: Optional["ExecutionState"] = None,
-) -> dict:
-    credentials_json = state.variables.get("google_service_account")
-    access_token = state.variables.get("google_access_token")
-    subject = state.variables.get("google_impersonate_email")
-
-    if not credentials_json and not access_token:
-        access_token = await get_google_oauth_token(state, service="docs")
-
-    client = GoogleDocsClient(
-        credentials_json=credentials_json,
-        access_token=access_token,
-        subject=subject,
-    )
+) -> JsonDict:
+    client = await _get_docs_client(state)
 
     await client.insert_text(document_id, text, index)
     return {"success": True, "document_id": document_id}
@@ -355,19 +334,8 @@ async def gdocs_find_replace(
     replace: str,
     match_case: bool = True,
     state: Optional["ExecutionState"] = None,
-) -> dict:
-    credentials_json = state.variables.get("google_service_account")
-    access_token = state.variables.get("google_access_token")
-    subject = state.variables.get("google_impersonate_email")
-
-    if not credentials_json and not access_token:
-        access_token = await get_google_oauth_token(state, service="docs")
-
-    client = GoogleDocsClient(
-        credentials_json=credentials_json,
-        access_token=access_token,
-        subject=subject,
-    )
+) -> JsonDict:
+    client = await _get_docs_client(state)
 
     result = await client.find_and_replace(
         document_id, find, replace, match_case=match_case
@@ -395,19 +363,8 @@ async def gdocs_delete_range(
     start_index: int,
     end_index: int,
     state: Optional["ExecutionState"] = None,
-) -> dict:
-    credentials_json = state.variables.get("google_service_account")
-    access_token = state.variables.get("google_access_token")
-    subject = state.variables.get("google_impersonate_email")
-
-    if not credentials_json and not access_token:
-        access_token = await get_google_oauth_token(state, service="docs")
-
-    client = GoogleDocsClient(
-        credentials_json=credentials_json,
-        access_token=access_token,
-        subject=subject,
-    )
+) -> JsonDict:
+    client = await _get_docs_client(state)
 
     await client.delete_range(document_id, start_index, end_index)
     return {"success": True, "document_id": document_id}
@@ -426,19 +383,8 @@ async def gdocs_share_document(
     role: str = "reader",
     anyone: bool = False,
     state: Optional["ExecutionState"] = None,
-) -> dict:
-    credentials_json = state.variables.get("google_service_account")
-    access_token = state.variables.get("google_access_token")
-    subject = state.variables.get("google_impersonate_email")
-
-    if not credentials_json and not access_token:
-        access_token = await get_google_oauth_token(state, service="docs")
-
-    client = GoogleDocsClient(
-        credentials_json=credentials_json,
-        access_token=access_token,
-        subject=subject,
-    )
+) -> JsonDict:
+    client = await _get_docs_client(state)
 
     if anyone:
         await client.share_document_anyone(document_id, role=role)

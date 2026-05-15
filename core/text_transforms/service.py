@@ -40,13 +40,13 @@ class TextTransformService:
     Суммаризация через ``get_llm`` (включая ``provider_litserve`` как OpenAI-compatible chat).
 
     Форматирование в Markdown:
-    - по умолчанию и при ``provider_litserve`` — ``POST /v1/text/format_markdown`` (LitServe);
+    - по умолчанию — ``get_llm()`` с платформенной candidate/fallback стратегией;
+    - при явном ``provider_litserve`` — ``POST /v1/text/format_markdown`` (LitServe);
     - при явном ``openrouter`` / ``openai`` / ``bothub`` / ``yandex`` — чанкованный вызов ``get_llm``.
 
     Префикс в поле model: ``openrouter:vendor/model`` разбирается в ``(openrouter, vendor/model)``.
-    Если ``provider`` и ``model`` не заданы, суммаризация использует ``settings.llm.default_model`` и
-    ``settings.llm.provider``; Markdown HTTP — ``provider_litserve.infra.markdown_default_api_model_id``,
-    а если он пуст — ``provider_litserve.infra.llm_model_id`` (та же основная локальная LLM, что для чата).
+    Если ``provider`` и ``model`` не заданы, суммаризация и Markdown используют платформенный
+    default-route ``get_llm()``. Явный ``provider_litserve`` сохраняет старый HTTP-путь Markdown.
     """
 
     async def summarize(
@@ -113,14 +113,10 @@ class TextTransformService:
             )
 
         await self._require_llm_balance()
-        llm_provider = rp
-        llm_model = rm
-        if not llm_provider or not str(llm_provider).strip():
-            raise ValueError("format_markdown: провайдер обязателен для LLM-пути")
-        if llm_model is None or not str(llm_model).strip():
-            raise ValueError("format_markdown: model обязателен для LLM-пути")
-
-        llm = get_llm(provider=llm_provider, model_name=str(llm_model).strip())
+        llm = get_llm(
+            provider=rp,
+            model_name=str(rm).strip() if rm is not None and str(rm).strip() else None,
+        )
         chunks = split_text_into_markdown_chunks(stripped, int(chunk_lim))
         if not chunks:
             raise ValueError("format_markdown: нет чанков после разбиения")

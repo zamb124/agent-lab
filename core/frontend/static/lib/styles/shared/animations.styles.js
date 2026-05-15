@@ -5,19 +5,31 @@ import { css } from 'lit';
 
 export const animationStyles = css`
     .transition-fast {
-        transition: all var(--duration-fast) var(--easing-default);
+        transition: var(--motion-transition-interactive);
     }
     
     .transition-normal {
-        transition: all var(--duration-normal) var(--easing-default);
+        transition: var(--motion-transition-interactive);
     }
     
     .transition-slow {
-        transition: all var(--duration-slow) var(--easing-default);
+        transition:
+            background-color var(--duration-slow) var(--easing-default),
+            border-color var(--duration-slow) var(--easing-default),
+            color var(--duration-slow) var(--easing-default),
+            box-shadow var(--duration-slow) var(--easing-default),
+            opacity var(--duration-slow) var(--easing-default),
+            transform var(--duration-slow) var(--easing-default);
     }
     
     .transition-spring {
-        transition: all var(--duration-normal) var(--easing-spring);
+        transition:
+            background-color var(--duration-normal) var(--easing-spring),
+            border-color var(--duration-normal) var(--easing-spring),
+            color var(--duration-normal) var(--easing-spring),
+            box-shadow var(--duration-normal) var(--easing-spring),
+            opacity var(--duration-normal) var(--easing-spring),
+            transform var(--duration-normal) var(--easing-spring);
     }
     
     @keyframes fadeIn {
@@ -72,5 +84,4 @@ export const animationStyles = css`
         animation: slideInDown var(--duration-normal) var(--easing-spring);
     }
 `;
-
 

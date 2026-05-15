@@ -18,7 +18,7 @@ export class GlassCard extends PlatformElement {
                 border-radius: var(--radius-lg);
                 padding: var(--space-6);
                 box-shadow: var(--glass-shadow-medium), var(--glass-inner-glow-medium);
-                transition: all var(--duration-normal) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
             
             :host([interactive]:hover) {
@@ -50,4 +50,3 @@ export class GlassCard extends PlatformElement {
 }
 
 customElements.define('glass-card', GlassCard);
-

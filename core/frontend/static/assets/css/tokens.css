@@ -254,12 +254,46 @@
     --duration-slow: 400ms;
     --duration-slower: 600ms;
 
+    /* Core motion 2026: browser-composited defaults (opacity/transform first). */
+    --motion-duration-micro: 120ms;
+    --motion-duration-enter: 180ms;
+    --motion-duration-exit: 160ms;
+    --motion-duration-layout: 250ms;
+    --motion-duration-loading: 1200ms;
+    --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --motion-ease-decelerate: cubic-bezier(0.22, 1, 0.36, 1);
+    --motion-ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
+    --motion-ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+    --motion-enter-offset-y: 8px;
+    --motion-exit-offset-y: 8px;
+    --motion-contain-intrinsic-block-size: 480px;
+    --motion-transition-interactive:
+        background-color var(--motion-duration-micro) var(--motion-ease-standard),
+        border-color var(--motion-duration-micro) var(--motion-ease-standard),
+        color var(--motion-duration-micro) var(--motion-ease-standard),
+        box-shadow var(--motion-duration-micro) var(--motion-ease-standard),
+        opacity var(--motion-duration-micro) var(--motion-ease-standard),
+        transform var(--motion-duration-micro) var(--motion-ease-standard);
+    --motion-transition-surface:
+        opacity var(--motion-duration-enter) var(--motion-ease-decelerate),
+        transform var(--motion-duration-enter) var(--motion-ease-decelerate);
+
+    /* Stable modal body defaults. Services may override --modal-body-min-block-size. */
+    --platform-modal-sm-body-min-block-size: 0px;
+    --platform-modal-md-body-min-block-size: 6rem;
+    --platform-modal-lg-body-min-block-size: 12rem;
+    --platform-modal-xl-body-min-block-size: 16rem;
+    --platform-modal-full-body-min-block-size: 0px;
+
     /* Модальные окна: overlay + панель (glass-modal, modal.styles, кастомные .backdrop/.modal) */
-    --modal-overlay-duration: 400ms;
-    --modal-panel-duration: 560ms;
-    --modal-panel-easing: var(--easing-smooth);
+    --modal-overlay-duration: var(--motion-duration-enter);
+    --modal-overlay-exit-duration: var(--motion-duration-exit);
+    --modal-panel-duration: var(--motion-duration-enter);
+    --modal-panel-exit-duration: var(--motion-duration-exit);
+    --modal-panel-easing: var(--motion-ease-decelerate);
     /* Появление панели: мягкое замедление в конце */
-    --modal-enter-easing: cubic-bezier(0.22, 1, 0.36, 1);
+    --modal-enter-easing: var(--motion-ease-decelerate);
+    --modal-exit-easing: var(--motion-ease-accelerate);
     --modal-popover-duration: 180ms;
     
     --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
@@ -927,7 +961,10 @@
 
 /* Hover эффект для glass элементов */
 .glass-interactive {
-    transition: all var(--duration-normal) var(--easing-default);
+    transition:
+        border-color var(--motion-duration-micro, var(--duration-fast)) var(--motion-ease-standard, var(--easing-default)),
+        box-shadow var(--motion-duration-micro, var(--duration-fast)) var(--motion-ease-standard, var(--easing-default)),
+        transform var(--motion-duration-micro, var(--duration-fast)) var(--motion-ease-standard, var(--easing-default));
 }
 
 .glass-interactive:hover {

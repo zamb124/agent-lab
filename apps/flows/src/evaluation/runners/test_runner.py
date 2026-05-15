@@ -15,9 +15,8 @@ import re
 import time
 import uuid
 from datetime import date
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
-from apps.flows.src.container import get_container
 from apps.flows.src.eval import compile_function
 from apps.flows.src.models import NodeConfig, TestCaseConfig
 from apps.flows.src.models.flow_config import (
@@ -53,14 +52,21 @@ class TestRunner:
     def __init__(
         self,
         target_id: str,
-        target_callable: Callable,
+        target_callable: Callable[[ExecutionState], Awaitable[ExecutionState]],
         run_date: date,
         iteration: int,
+        *,
+        flow_factory: Any,
+        node_repository: Any,
+        tool_registry: Any,
     ):
         self.target_id = target_id
         self.target_callable = target_callable
         self.run_date = run_date
         self.iteration = iteration
+        self._flow_factory = flow_factory
+        self._node_repository = node_repository
+        self._tool_registry = tool_registry
 
     async def run(
         self,
@@ -469,7 +475,7 @@ class TestRunner:
                 return None
         return value
 
-    def _import_function(self, function_path: str) -> Callable:
+    def _import_function(self, function_path: str) -> Callable[..., Any]:
         """Импортирует функцию по полному пути модуля."""
         module_path, func_name = function_path.rsplit(".", 1)
         module = importlib.import_module(module_path)
@@ -484,8 +490,7 @@ class TestRunner:
 
         node_id = input_config.value
         if node_id and execution_state:
-            container = get_container()
-            nodes_map = await container.flow_factory.get_effective_nodes_map(
+            nodes_map = await self._flow_factory.get_effective_nodes_map(
                 execution_state.session_flow_id,
                 execution_state.branch_id,
                 execution_state.flow_config_version,
@@ -497,8 +502,7 @@ class TestRunner:
                 return NodeConfig(**config)
 
         if node_id:
-            container = get_container()
-            node_config = await container.node_repository.get(node_id)
+            node_config = await self._node_repository.get(node_id)
             if node_config is not None:
                 return node_config
 
@@ -523,8 +527,7 @@ class TestRunner:
 
         tools_for_llm = None
         if node_config.tools:
-            container = get_container()
-            tools = await container.tool_registry.create_tools(node_config.tools)
+            tools = await self._tool_registry.create_tools(node_config.tools)
             tools_for_llm = [tool.to_llm_format() for tool in tools]
 
         request_ctx = get_context()
@@ -621,8 +624,7 @@ class TestRunner:
 
         node_id = check_config.value
         if node_id and execution_state:
-            container = get_container()
-            nodes_map = await container.flow_factory.get_effective_nodes_map(
+            nodes_map = await self._flow_factory.get_effective_nodes_map(
                 execution_state.session_flow_id,
                 execution_state.branch_id,
                 execution_state.flow_config_version,
@@ -634,8 +636,7 @@ class TestRunner:
                 return NodeConfig(**config)
 
         if node_id:
-            container = get_container()
-            node_config = await container.node_repository.get(node_id)
+            node_config = await self._node_repository.get(node_id)
             if node_config is not None:
                 return node_config
 

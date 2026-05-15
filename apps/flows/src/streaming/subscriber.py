@@ -49,7 +49,9 @@ def is_final_event(event: StreamEvent) -> bool:
         if not event.final:
             return False
         state = event.status.state if event.status else None
-        state_str = state.value if hasattr(state, 'value') else str(state) if state else None
+        if state is None:
+            return False
+        state_str = state.value if hasattr(state, "value") else str(state)
         if state_str in TERMINAL_STATES:
             md = event.metadata or {}
             if state_str == "input-required" and md.get("platform_handoff_continue") is True:
@@ -107,6 +109,17 @@ class EventSubscriber(BaseSubscriber):
                 continue
 
         logger.debug(f"[Subscriber] Subscription ended on {channel}, received {event_count} events")
+
+    async def collect(
+        self,
+        task_id: str,
+        timeout: float = 300.0,
+        ready_event: Optional[asyncio.Event] = None,
+    ) -> List[StreamEvent]:
+        events: List[StreamEvent] = []
+        async for event in self.subscribe(task_id, timeout=timeout, ready_event=ready_event):
+            events.append(event)
+        return events
 
     async def collect(
         self,

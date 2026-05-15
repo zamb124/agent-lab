@@ -18,8 +18,8 @@ class FormatTextMarkdownArgs(BaseModel):
     provider: Optional[str] = Field(
         None,
         description=(
-            "Для LitServe HTTP: `provider_litserve` или None (дефолт). "
-            "Иначе — провайдер для чанкованного вызова `get_llm` (openrouter, openai, …)."
+            "None — платформенный `get_llm()` default-route. "
+            "`provider_litserve` — старый LitServe HTTP. Иначе — явный LLM-провайдер."
         ),
     )
     model: Optional[str] = Field(
@@ -38,8 +38,8 @@ class FormatTextMarkdownArgs(BaseModel):
     name="format_text_markdown",
     description=(
         "Превращает произвольный текст в аккуратный Markdown. "
-        "По умолчанию вызывает локальный LitServe `POST /v1/text/format_markdown`; "
-        "для других провайдеров — пошагово через LLM."
+        "По умолчанию вызывает платформенный `get_llm()`; "
+        "`provider_litserve` оставляет HTTP-путь LitServe."
     ),
     tags=["text", "markdown"],
     args_schema=FormatTextMarkdownArgs,

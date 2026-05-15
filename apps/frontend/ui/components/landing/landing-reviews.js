@@ -116,7 +116,7 @@ export class LandingReviews extends PlatformElement {
                 border-radius: 50%;
                 background: rgba(255, 255, 255, 0.2);
                 cursor: pointer;
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
             }
             
             .dot.active {

@@ -229,6 +229,17 @@
     },
     "default_model": "x-ai/grok-code-fast-1",
     "default_summarization_model": "x-ai/grok-4-fast",
+    "default_strategy": "openrouter_free_pool",
+    "openrouter_free_pool": {
+      "enabled": true,
+      "cache_ttl_seconds": 3540,
+      "refresh_interval_seconds": 3300,
+      "first_token_timeout_seconds": 20,
+      "candidate_cooldown_seconds": 60,
+      "fallback_model": "qwen/qwen-2.5-7b-instruct",
+      "max_candidates": 20,
+      "include_router_as_last_free_fallback": true
+    },
     "timeout": 300
   },
   "s3": {
@@ -392,6 +403,17 @@
         "provider": "openrouter",
         "default_model": "anthropic/claude-sonnet-4.5",
         "vision_model": "google/gemini-2.5-pro",
+        "default_strategy": "openrouter_free_pool",
+        "openrouter_free_pool": {
+          "enabled": true,
+          "cache_ttl_seconds": 3540,
+          "refresh_interval_seconds": 3300,
+          "first_token_timeout_seconds": 20,
+          "candidate_cooldown_seconds": 60,
+          "fallback_model": "qwen/qwen-2.5-7b-instruct",
+          "max_candidates": 20,
+          "include_router_as_last_free_fallback": true
+        },
         "temperature": 0.2,
         "timeout": 300,
         "openrouter": {

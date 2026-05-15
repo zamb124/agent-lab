@@ -22,6 +22,7 @@ import apps.flows.src.tasks.scheduled_tasks  # noqa: F401, E402
 import apps.flows.src.tasks.tool_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.calendar_sync_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.llm_models_tasks  # noqa: F401, E402
+import apps.idle_worker.tasks.openrouter_free_models_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.push_notification_tasks  # noqa: F401, E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks  # noqa: F401, E402
 import apps.rag_worker.tasks.maintenance_tasks  # noqa: F401, E402
@@ -57,6 +58,7 @@ _IDLE_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "send_task_failed",
     "send_task_input_required",
     "sync_llm_models_task",
+    "refresh_openrouter_free_models_task",
     "calendar_sync_tick",
     "calendar_sync_meeting_reminder_tick",
     "span_billing_settlement_tick",

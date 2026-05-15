@@ -21,6 +21,18 @@ logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
+def _coerce_timeout_seconds(timeout: Any) -> float:
+    if timeout is None:
+        return float(HttpxModule._default_timeout)
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise SafeEvalError("timeout must be a number of seconds")
+    return float(timeout)
+
+
+def _coerce_url(url: Union[str, httpx.URL]) -> str:
+    return str(url)
+
+
 def _normalize_tools_for_llm(tools: Optional[List[Any]]) -> Optional[List[Dict[str, Any]]]:
     """
     Приводит элементы tools к OpenAI-словарям для HTTP-тела.
@@ -37,7 +49,10 @@ def _normalize_tools_for_llm(tools: Optional[List[Any]]) -> Optional[List[Dict[s
             continue
         to_schema = getattr(item, "to_openai_schema", None)
         if callable(to_schema):
-            out.append(to_schema())
+            schema = to_schema()
+            if not isinstance(schema, dict):
+                raise SafeEvalError(f"tools[{i}].to_openai_schema() must return dict")
+            out.append(schema)
             continue
         raise SafeEvalError(
             f"tools[{i}]: ожидается dict (OpenAI tool) или объект с to_openai_schema() "
@@ -316,11 +331,7 @@ class HttpxModule:
                 raise SafeEvalError(
                     f"В sandbox httpx.AsyncClient доступен только timeout=...; лишние аргументы: {unknown}",
                 )
-            timeout = (
-                float(timeout_raw)
-                if timeout_raw is not None
-                else float(HttpxModule._default_timeout)
-            )
+            timeout = _coerce_timeout_seconds(timeout_raw)
             return _SandboxAsyncClientContext(timeout=timeout)
 
     @staticmethod
@@ -332,14 +343,14 @@ class HttpxModule:
         cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
         auth: Optional[httpx.Auth] = None,
         follow_redirects: bool = False,
-        timeout: Optional[Union[float, httpx.Timeout]] = None,
+        timeout: Optional[float] = None,
         **kwargs,
     ) -> httpx.Response:
         """GET с strategy=SMART (прямой канал, при блокировках — egress + learn в Redis)."""
-        timeout = timeout or HttpxModule._default_timeout
+        timeout = _coerce_timeout_seconds(timeout)
         async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.get(
-                url,
+                _coerce_url(url),
                 params=params,
                 headers=headers,
                 cookies=cookies,
@@ -361,14 +372,14 @@ class HttpxModule:
         cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
         auth: Optional[httpx.Auth] = None,
         follow_redirects: bool = False,
-        timeout: Optional[Union[float, httpx.Timeout]] = None,
+        timeout: Optional[float] = None,
         **kwargs,
     ) -> httpx.Response:
         """POST с strategy=SMART."""
-        timeout = timeout or HttpxModule._default_timeout
+        timeout = _coerce_timeout_seconds(timeout)
         async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.post(
-                url,
+                _coerce_url(url),
                 content=content,
                 data=data,
                 files=files,
@@ -394,14 +405,14 @@ class HttpxModule:
         cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
         auth: Optional[httpx.Auth] = None,
         follow_redirects: bool = False,
-        timeout: Optional[Union[float, httpx.Timeout]] = None,
+        timeout: Optional[float] = None,
         **kwargs,
     ) -> httpx.Response:
         """PUT с strategy=SMART."""
-        timeout = timeout or HttpxModule._default_timeout
+        timeout = _coerce_timeout_seconds(timeout)
         async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.put(
-                url,
+                _coerce_url(url),
                 content=content,
                 data=data,
                 files=files,
@@ -427,14 +438,14 @@ class HttpxModule:
         cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
         auth: Optional[httpx.Auth] = None,
         follow_redirects: bool = False,
-        timeout: Optional[Union[float, httpx.Timeout]] = None,
+        timeout: Optional[float] = None,
         **kwargs,
     ) -> httpx.Response:
         """PATCH с strategy=SMART."""
-        timeout = timeout or HttpxModule._default_timeout
+        timeout = _coerce_timeout_seconds(timeout)
         async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.patch(
-                url,
+                _coerce_url(url),
                 content=content,
                 data=data,
                 files=files,
@@ -456,14 +467,14 @@ class HttpxModule:
         cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
         auth: Optional[httpx.Auth] = None,
         follow_redirects: bool = False,
-        timeout: Optional[Union[float, httpx.Timeout]] = None,
+        timeout: Optional[float] = None,
         **kwargs,
     ) -> httpx.Response:
         """DELETE с strategy=SMART."""
-        timeout = timeout or HttpxModule._default_timeout
+        timeout = _coerce_timeout_seconds(timeout)
         async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.delete(
-                url,
+                _coerce_url(url),
                 params=params,
                 headers=headers,
                 cookies=cookies,
@@ -486,15 +497,15 @@ class HttpxModule:
         cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
         auth: Optional[httpx.Auth] = None,
         follow_redirects: bool = False,
-        timeout: Optional[Union[float, httpx.Timeout]] = None,
+        timeout: Optional[float] = None,
         **kwargs,
     ) -> httpx.Response:
         """request() с strategy=SMART."""
-        timeout = timeout or HttpxModule._default_timeout
+        timeout = _coerce_timeout_seconds(timeout)
         async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.SMART) as client:
             return await client.request(
                 method,
-                url,
+                _coerce_url(url),
                 content=content,
                 data=data,
                 files=files,

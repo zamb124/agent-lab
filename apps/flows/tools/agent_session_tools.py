@@ -119,19 +119,17 @@ async def reason(
     analysis: str,
     plan: str,
     next_action: str,
-    state: Optional[Dict[str, Any]] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
-    if state is not None:
-        reasoning_entry = {
-            "observation": observation,
-            "analysis": analysis,
-            "plan": plan,
-            "next_action": next_action,
-        }
-        if "reasoning_history" not in state:
-            state["reasoning_history"] = []
-        state["reasoning_history"].append(reasoning_entry)
-        state["pending_reasoning"] = reasoning_entry
+    reasoning_entry: Dict[str, Any] = {
+        "observation": observation,
+        "analysis": analysis,
+        "plan": plan,
+        "next_action": next_action,
+    }
+    state.reasoning_history.append(reasoning_entry)
+    state.pending_reasoning = reasoning_entry
 
     return f"Рассуждения записаны. Выполняй: {next_action}"
 
@@ -143,7 +141,7 @@ async def reason(
     args_schema=AskUserArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
-async def ask_user(question: str, state: Optional[dict] = None) -> str:
+async def ask_user(question: str, *, state: "ExecutionState") -> str:
     raise FlowInterrupt(question=question)
 
 
@@ -158,11 +156,9 @@ async def hitl_operator_task(
     task_title: str,
     assignee_queue: str,
     handoff_mode: str = "single_reply",
-    state: Optional["ExecutionState"] = None,
+    *,
+    state: "ExecutionState",
 ) -> str:
-    if state is None:
-        raise ValueError("hitl_operator_task: параметр state обязателен")
-
     mode = HandoffMode(handoff_mode)
     handoff = get_operator_handoff_service()
     cid, op_task_id = await handoff.register_handoff(
@@ -194,10 +190,11 @@ async def self_check(
     hypothesis: str,
     supporting_facts: List[str],
     verification_result: str,
-    contradicting_facts: List[str] = None,
-    notes: str = None,
-    state: Optional[dict] = None,
-) -> dict:
+    contradicting_facts: Optional[List[str]] = None,
+    notes: Optional[str] = None,
+    *,
+    state: "ExecutionState",
+) -> Dict[str, Any]:
     return {
         "hypothesis": hypothesis,
         "supporting_facts": supporting_facts,
@@ -219,9 +216,10 @@ async def final_answer(
     answer: str,
     justification: str,
     confidence: float,
-    sources: List[str] = None,
-    state: Optional[dict] = None,
-) -> dict:
+    sources: Optional[List[str]] = None,
+    *,
+    state: "ExecutionState",
+) -> Dict[str, Any]:
     return {
         "answer": answer,
         "justification": justification,
@@ -237,5 +235,5 @@ async def final_answer(
     react_role=ReactToolRole.EXIT,
     args_schema=FinishArgs,
 )
-async def finish(answer: str, state: Optional[dict] = None) -> str:
+async def finish(answer: str, *, state: "ExecutionState") -> str:
     return answer

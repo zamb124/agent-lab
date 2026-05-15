@@ -145,7 +145,7 @@ export class FlowsVariablesModal extends PlatformModal {
                 color: var(--platform-btn-primary-text, #ffffff);
                 background: var(--platform-btn-primary-bg, #99a6f9);
                 box-shadow: var(--platform-btn-primary-shadow, none);
-                transition: all var(--duration-fast, 0.15s) var(--easing-default, ease);
+                transition: var(--motion-transition-interactive);
             }
             .flows-header-action-create platform-icon {
                 display: flex;

@@ -3,7 +3,7 @@ FlowFactory - создание flow из БД.
 """
 
 import copy
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict
 
 from apps.flows.src.container import get_container
 from apps.flows.src.db import FlowRepository
@@ -19,6 +19,13 @@ from core.logging import get_logger
 from core.variables import VarResolver
 
 logger = get_logger(__name__)
+
+
+class EffectiveFlowConfig(TypedDict):
+    entry: str | None
+    nodes: Dict[str, Dict[str, Any]]
+    edges: List[Edge]
+    variables: Dict[str, Any]
 
 
 class FlowFactory:
@@ -174,12 +181,9 @@ class FlowFactory:
         effective = self._apply_branch(config, branch_id)
         source = getattr(config, "source", None) or "manual"
         if source == "file":
-            effective = {
-                **effective,
-                "nodes": repair_effective_nodes_from_bundle(
-                    config.flow_id, source, effective["nodes"]
-                ),
-            }
+            effective["nodes"] = repair_effective_nodes_from_bundle(
+                config.flow_id, source, effective["nodes"]
+            )
 
         # Валидация графа через GraphCompiler
         self.compiler.compile(config, branch_config=None, variables=effective["variables"])
@@ -205,7 +209,7 @@ class FlowFactory:
 
         return await Flow.from_config(config_dict)
 
-    def _apply_branch(self, config: FlowConfig, branch_id: str) -> Dict[str, Any]:
+    def _apply_branch(self, config: FlowConfig, branch_id: str) -> EffectiveFlowConfig:
         """
         Применяет ветку (branch) к конфигу flow.
 
@@ -217,16 +221,16 @@ class FlowFactory:
             Dict с effective конфигом (entry, nodes, edges, variables)
         """
         # Извлекаем значения из FlowVariableConfig объектов
-        variables_dict = {}
+        variables_dict: Dict[str, Any] = {}
         for key, value in config.variables.items():
             if isinstance(value, FlowVariableConfig):
                 variables_dict[key] = value.value
             else:
                 variables_dict[key] = value
 
-        result = {
+        result: EffectiveFlowConfig = {
             "entry": config.entry,
-            "nodes": copy.deepcopy(config.nodes),
+            "nodes": copy.deepcopy(config.nodes or {}),
             "edges": list(config.edges),
             "variables": variables_dict,
         }
@@ -392,8 +396,11 @@ class FlowFactory:
         }
 
     async def _get_flow_structure(
-        self, tools_list: list, max_depth: int = 3, visited: set = None
-    ) -> tuple[list, list]:
+        self,
+        tools_list: list[Any],
+        max_depth: int = 3,
+        visited: set[str] | None = None,
+    ) -> tuple[list[Any], list[Any]]:
         """
         Рекурсивно получает структуру flow: tools и вложенные flow (как tools).
 
@@ -417,11 +424,13 @@ class FlowFactory:
         subflows = []
 
         for t in tools_list:
-            tool_id = (
-                t.tool_id
-                if hasattr(t, "tool_id")
-                else (t.get("tool_id") if isinstance(t, dict) else str(t))
-            )
+            if isinstance(t, dict):
+                raw_tool_id = t.get("tool_id")
+            else:
+                raw_tool_id = getattr(t, "tool_id", t)
+            if raw_tool_id is None:
+                continue
+            tool_id = str(raw_tool_id)
 
             # Защита от циклов
             if tool_id in visited:
@@ -478,7 +487,7 @@ class FlowFactory:
             edges = []
             for e in effective["edges"]:
                 if isinstance(e, Edge):
-                    edge_dict = {"from": e.from_node, "to": e.to_node}
+                    edge_dict: dict[str, Any] = {"from": e.from_node, "to": e.to_node}
                     if e.condition:
                         edge_dict["condition"] = e.condition
                 else:

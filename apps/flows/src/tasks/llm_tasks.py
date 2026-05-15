@@ -6,6 +6,8 @@ TaskIQ tasks для LLM вызовов.
 
 from typing import Any, Dict, List, Optional
 
+from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
+
 from apps.flows_worker.broker import broker
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
@@ -87,18 +89,18 @@ async def invoke_llm(
                 task_id=task_id,
                 context_id=context_id,
             ):
-                if hasattr(event, "artifact") and event.artifact:
+                if isinstance(event, TaskArtifactUpdateEvent):
                     artifact_name = event.artifact.name
                     if event.artifact.parts:
                         for part in event.artifact.parts:
-                            if hasattr(part, "root") and hasattr(part.root, "text"):
+                            if isinstance(part.root, TextPart):
                                 text = part.root.text
                                 if artifact_name == "reasoning":
                                     reasoning_parts.append(text)
                                 else:
                                     content_parts.append(text)
 
-                if hasattr(event, "status") and event.status:
+                if isinstance(event, TaskStatusUpdateEvent):
                     if event.status.message and event.status.message.metadata:
                         tc = event.status.message.metadata.get("tool_calls")
                         if tc:
@@ -125,4 +127,3 @@ async def invoke_llm(
                 set_context(previous_context)
             else:
                 clear_context()
-

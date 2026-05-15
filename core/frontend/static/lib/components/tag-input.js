@@ -58,7 +58,7 @@ export class TagInput extends PlatformElement {
                 border: none;
                 border-radius: 50%;
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition: var(--motion-transition-interactive);
             }
 
             .tag-remove:hover {

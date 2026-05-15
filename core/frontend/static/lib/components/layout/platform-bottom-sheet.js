@@ -22,6 +22,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import { CoreEvents } from '../../events/contract.js';
+import { waitForPlatformMotion } from '../../utils/motion.js';
 import '../platform-icon.js';
 
 const SNAP_HALF = 'half';
@@ -32,6 +33,7 @@ export class PlatformBottomSheet extends PlatformElement {
     static properties = {
         ...PlatformElement.properties,
         open: { type: Boolean, reflect: true },
+        closing: { type: Boolean, reflect: true },
         snap: { type: String, reflect: true },
         heading: { type: String },
         dismissible: { type: Boolean },
@@ -49,16 +51,27 @@ export class PlatformBottomSheet extends PlatformElement {
                 to { transform: translateY(0); }
             }
 
+            @keyframes platformBottomSheetOut {
+                from { transform: translateY(0); }
+                to { transform: translateY(100%); }
+            }
+
             @keyframes platformBottomSheetScrimIn {
                 from { opacity: 0; }
                 to { opacity: 1; }
+            }
+
+            @keyframes platformBottomSheetScrimOut {
+                from { opacity: 1; }
+                to { opacity: 0; }
             }
 
             :host {
                 display: none;
             }
 
-            :host([open]) {
+            :host([open]),
+            :host([closing]) {
                 display: block;
                 position: fixed;
                 inset: 0;
@@ -69,7 +82,15 @@ export class PlatformBottomSheet extends PlatformElement {
                 position: absolute;
                 inset: 0;
                 background: var(--platform-bottom-sheet-scrim);
-                animation: platformBottomSheetScrimIn var(--duration-normal) var(--easing-smooth) both;
+            }
+
+            :host([open]:not([closing])) .scrim {
+                animation: platformBottomSheetScrimIn var(--motion-duration-enter, var(--duration-normal)) var(--motion-ease-decelerate, var(--easing-smooth)) both;
+            }
+
+            :host([closing]) .scrim {
+                animation: platformBottomSheetScrimOut var(--motion-duration-exit, var(--duration-fast)) var(--motion-ease-accelerate, ease-in) both;
+                pointer-events: none;
             }
 
             .panel {
@@ -87,7 +108,17 @@ export class PlatformBottomSheet extends PlatformElement {
                 border-radius: var(--platform-bottom-sheet-radius) var(--platform-bottom-sheet-radius) 0 0;
                 box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow-medium);
                 padding-bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px));
-                animation: platformBottomSheetIn var(--duration-normal) var(--easing-smooth) both;
+                contain: layout paint style;
+            }
+
+            :host([open]:not([closing])) .panel {
+                animation: platformBottomSheetIn var(--motion-duration-enter, var(--duration-normal)) var(--motion-ease-decelerate, var(--easing-smooth)) both;
+                will-change: transform;
+            }
+
+            :host([closing]) .panel {
+                animation: platformBottomSheetOut var(--motion-duration-exit, var(--duration-fast)) var(--motion-ease-accelerate, ease-in) both;
+                pointer-events: none;
                 will-change: transform;
             }
 
@@ -151,7 +182,10 @@ export class PlatformBottomSheet extends PlatformElement {
                 border-radius: var(--radius-full);
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all var(--duration-fast) var(--easing-default);
+                transition:
+                    background-color var(--motion-duration-micro, var(--duration-fast)) var(--motion-ease-standard, var(--easing-default)),
+                    color var(--motion-duration-micro, var(--duration-fast)) var(--motion-ease-standard, var(--easing-default)),
+                    transform var(--motion-duration-micro, var(--duration-fast)) var(--motion-ease-standard, var(--easing-default));
                 flex-shrink: 0;
             }
 
@@ -167,12 +201,21 @@ export class PlatformBottomSheet extends PlatformElement {
                 -webkit-overflow-scrolling: touch;
                 padding: 0 var(--space-5) var(--space-4);
             }
+
+            @media (prefers-reduced-motion: reduce) {
+                .scrim,
+                .panel {
+                    animation-duration: 1ms !important;
+                    transition-duration: 1ms !important;
+                }
+            }
         `,
     ];
 
     constructor() {
         super();
         this.open = false;
+        this.closing = false;
         this.snap = SNAP_HALF;
         this.heading = '';
         this.dismissible = true;
@@ -186,6 +229,7 @@ export class PlatformBottomSheet extends PlatformElement {
         this._portalAttached = false;
         this._origParent = null;
         this._origNextSibling = null;
+        this._closeMotionPromise = null;
     }
 
     connectedCallback() {
@@ -208,7 +252,7 @@ export class PlatformBottomSheet extends PlatformElement {
 
     updated(changed) {
         super.updated && super.updated(changed);
-        if (changed.has('open') && this.open) {
+        if ((changed.has('open') || changed.has('closing')) && (this.open || this.closing)) {
             this._attachPortalToBody();
         }
         if (this.shadowRoot) {
@@ -249,7 +293,33 @@ export class PlatformBottomSheet extends PlatformElement {
         const payload = {};
         if (this._sheetId) payload.id = this._sheetId;
         else if (this._sheetKind) payload.kind = this._sheetKind;
-        this.dispatch(CoreEvents.UI_BOTTOM_SHEET_CLOSED, payload);
+        this.dispatch(CoreEvents.UI_BOTTOM_SHEET_CLOSE_REQUESTED, payload);
+    }
+
+    async requestPlatformClose() {
+        if (this._closeMotionPromise) {
+            return this._closeMotionPromise;
+        }
+        this.closing = true;
+        this.open = false;
+        this._dragging = false;
+        this._dragOffset = 0;
+        if (this._panelEl) {
+            this._panelEl.style.transition = '';
+            this._panelEl.style.transform = '';
+        }
+        this.requestUpdate();
+        this._closeMotionPromise = (async () => {
+            await this.updateComplete;
+            const scrim = this.shadowRoot?.querySelector('.scrim');
+            const panel = this.shadowRoot?.querySelector('.panel');
+            await waitForPlatformMotion([panel, scrim], { fallbackMs: 180 });
+        })();
+        try {
+            await this._closeMotionPromise;
+        } finally {
+            this._closeMotionPromise = null;
+        }
     }
 
     _onHandlePointerDown(e) {

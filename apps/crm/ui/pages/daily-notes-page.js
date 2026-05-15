@@ -249,7 +249,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 flex-shrink: 0;
             }
             .voice-btn.recording {

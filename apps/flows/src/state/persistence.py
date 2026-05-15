@@ -59,7 +59,7 @@ class StateManager:
         return await self._repository.get(session_id)
 
     async def get_state_for_update(
-        self, session_id: str, conn: Any = None
+        self, session_id: str, conn: Any
     ) -> Optional[ExecutionState]:
         """Получает state с блокировкой."""
         return await self._repository.get_for_update(session_id, conn)
@@ -75,7 +75,7 @@ class StateManager:
         self,
         session_id: str,
         state: Union[ExecutionState, Dict[str, Any]],
-        conn: Any = None,
+        conn: Any,
     ) -> bool:
         """Сохраняет state в рамках транзакции."""
         st = ExecutionState.model_validate(state) if isinstance(state, dict) else state
@@ -104,10 +104,10 @@ class StateManager:
     def add_user_message(self, state: ExecutionState, content: str) -> None:
         """Добавляет сообщение пользователя в ExecutionState."""
         message = Message(
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
             role=Role.user,
             parts=[Part(root=TextPart(text=content))],
-            taskId=state.task_id,
+            task_id=state.task_id,
             metadata={"node_id": MESSAGE_SOURCE_CHANNEL},
         )
         self.add_message(state, message)
@@ -115,11 +115,10 @@ class StateManager:
     def add_agent_message(self, state: ExecutionState, content: str) -> None:
         """Добавляет сообщение агента в ExecutionState."""
         message = Message(
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
             role=Role.agent,
             parts=[Part(root=TextPart(text=content))],
-            taskId=state.task_id,
+            task_id=state.task_id,
             metadata={"node_id": MESSAGE_SOURCE_CHANNEL},
         )
         self.add_message(state, message)
-

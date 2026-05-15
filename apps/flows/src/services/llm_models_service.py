@@ -25,6 +25,8 @@ _LLM_SYNC_TASK_NAME = "sync_llm_models_task"
 _LLM_SYNC_TARGET_SERVICE = "flows"
 _LLM_SYNC_QUEUE_NAME = "idle"
 _LLM_SYNC_PAYLOAD_MARKER = "llm_models_background_sync"
+_OPENROUTER_FREE_MODELS_TASK_NAME = "refresh_openrouter_free_models_task"
+_OPENROUTER_FREE_MODELS_PAYLOAD_MARKER = "openrouter_free_models_background_sync"
 
 
 class LLMModelsService:
@@ -34,6 +36,7 @@ class LLMModelsService:
         self._repository = repository
         self._scheduler_client = scheduler_client
         self._sync_schedule_id: Optional[str] = None
+        self._openrouter_free_schedule_id: Optional[str] = None
         self._sync_interval_seconds: int = 60
 
     async def _fetch_bothub_models(self) -> List[str]:
@@ -321,6 +324,18 @@ class LLMModelsService:
             return False
         return True
 
+    @staticmethod
+    def _is_compatible_openrouter_free_schedule(task: PlatformScheduledTask, interval: int) -> bool:
+        if task.target_service != _LLM_SYNC_TARGET_SERVICE:
+            return False
+        if task.task_name != _OPENROUTER_FREE_MODELS_TASK_NAME:
+            return False
+        if task.schedule_type != PlatformScheduleType.INTERVAL:
+            return False
+        if task.interval_seconds != interval:
+            return False
+        return True
+
     async def _list_background_schedules(self, interval: int) -> list[PlatformScheduledTask]:
         schedules = await self._scheduler_client.list_schedules(
             PlatformScheduleFilter(
@@ -337,6 +352,27 @@ class LLMModelsService:
         else:
             raise TypeError(f"Unexpected scheduler response type: {type(schedules)!r}")
         return [task for task in schedule_items if self._is_compatible_background_schedule(task, interval)]
+
+    async def _list_openrouter_free_schedules(self, interval: int) -> list[PlatformScheduledTask]:
+        schedules = await self._scheduler_client.list_schedules(
+            PlatformScheduleFilter(
+                target_service=_LLM_SYNC_TARGET_SERVICE,
+                task_name=_OPENROUTER_FREE_MODELS_TASK_NAME,
+                limit=500,
+                offset=0,
+            )
+        )
+        if isinstance(schedules, list):
+            schedule_items = schedules
+        elif hasattr(schedules, "items"):
+            schedule_items = list(schedules.items)
+        else:
+            raise TypeError(f"Unexpected scheduler response type: {type(schedules)!r}")
+        return [
+            task
+            for task in schedule_items
+            if self._is_compatible_openrouter_free_schedule(task, interval)
+        ]
 
     @staticmethod
     def _pick_single_or_raise(tasks: list[PlatformScheduledTask], status: ScheduledTaskStatus) -> PlatformScheduledTask | None:
@@ -379,6 +415,36 @@ class LLMModelsService:
         self._sync_schedule_id = schedule.id
         logger.info("Фоновая синхронизация моделей запланирована в scheduler (task_id=%s)", schedule.id)
 
+    async def start_openrouter_free_models_sync(self, interval: int) -> None:
+        """Создает recurring schedule обновления Redis free-pool OpenRouter."""
+        if interval <= 0:
+            raise ValueError("interval must be positive")
+        schedules = await self._list_openrouter_free_schedules(interval=interval)
+        pending = self._pick_single_or_raise(schedules, ScheduledTaskStatus.PENDING)
+        if pending is not None:
+            self._openrouter_free_schedule_id = pending.id
+            logger.info("OpenRouter free-pool sync уже запланирован (task_id=%s)", pending.id)
+            return
+        paused = self._pick_single_or_raise(schedules, ScheduledTaskStatus.PAUSED)
+        if paused is not None:
+            resumed = await self._scheduler_client.resume_schedule(paused.id)
+            self._openrouter_free_schedule_id = resumed.id
+            logger.info("OpenRouter free-pool sync возобновлен (task_id=%s)", resumed.id)
+            return
+        request = PlatformScheduleCreateRequest(
+            target_service=_LLM_SYNC_TARGET_SERVICE,
+            task_name=_OPENROUTER_FREE_MODELS_TASK_NAME,
+            queue_name=_LLM_SYNC_QUEUE_NAME,
+            schedule_type=PlatformScheduleType.INTERVAL,
+            interval_seconds=interval,
+            payload={"system_task": _OPENROUTER_FREE_MODELS_PAYLOAD_MARKER},
+            timezone="UTC",
+            run_at=datetime.now(timezone.utc),
+        )
+        schedule = await self._scheduler_client.create_schedule(request)
+        self._openrouter_free_schedule_id = schedule.id
+        logger.info("OpenRouter free-pool sync запланирован (task_id=%s)", schedule.id)
+
     async def stop_background_sync(self) -> None:
         """Отменяет recurring schedule синхронизации моделей."""
         if not self._sync_schedule_id:
@@ -387,3 +453,13 @@ class LLMModelsService:
         logger.info("Фоновая синхронизация моделей остановлена (task_id=%s)", self._sync_schedule_id)
         self._sync_schedule_id = None
 
+    async def stop_openrouter_free_models_sync(self) -> None:
+        """Отменяет recurring schedule обновления Redis free-pool OpenRouter."""
+        if not self._openrouter_free_schedule_id:
+            return
+        await self._scheduler_client.cancel_schedule(self._openrouter_free_schedule_id)
+        logger.info(
+            "OpenRouter free-pool sync остановлен (task_id=%s)",
+            self._openrouter_free_schedule_id,
+        )
+        self._openrouter_free_schedule_id = None

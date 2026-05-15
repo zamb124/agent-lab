@@ -1,24 +1,41 @@
-"""
-ChannelFactory - создание каналов по имени.
-"""
+"""ChannelFactory - создание каналов по имени."""
 
-from typing import Dict, Type
+from __future__ import annotations
 
-from apps.flows.src.channels.a2a import A2AChannel
-from apps.flows.src.channels.base import BaseChannel
-from apps.flows.src.channels.trigger_telegram_channel import TelegramInboundChannel
-from apps.flows.src.channels.websocket import WebSocketChannel
+import importlib
+from typing import Any, Protocol, TypeVar, cast
 
-_CHANNEL_REGISTRY: Dict[str, Type[BaseChannel]] = {}
+ChannelT = TypeVar("ChannelT", bound="ChannelClass")
 
 
-def register_channel(channel_class: Type[BaseChannel]) -> Type[BaseChannel]:
+class ChannelClass(Protocol):
+    name: str
+
+    def __call__(self, flow_id: str, context: Any = None) -> Any: ...
+
+_CHANNEL_REGISTRY: dict[str, str] = {
+    "a2a": "apps.flows.src.channels.a2a:A2AChannel",
+    "telegram": "apps.flows.src.channels.trigger_telegram_channel:TelegramInboundChannel",
+    "websocket": "apps.flows.src.channels.websocket:WebSocketChannel",
+}
+
+
+def _load_channel_class(path: str) -> ChannelClass:
+    module_path, class_name = path.split(":", 1)
+    module = importlib.import_module(module_path)
+    cls = getattr(module, class_name)
+    return cast(ChannelClass, cls)
+
+
+def register_channel(channel_class: type[ChannelT]) -> type[ChannelT]:
     """Декоратор для регистрации канала."""
-    _CHANNEL_REGISTRY[channel_class.name] = channel_class
+    _CHANNEL_REGISTRY[channel_class.name] = (
+        f"{channel_class.__module__}:{channel_class.__qualname__}"
+    )
     return channel_class
 
 
-def get_channel(name: str, flow_id: str, context=None) -> BaseChannel:
+def get_channel(name: str, flow_id: str, context: Any = None) -> Any:
     """
     Получить канал по имени.
 
@@ -36,16 +53,5 @@ def get_channel(name: str, flow_id: str, context=None) -> BaseChannel:
     if name not in _CHANNEL_REGISTRY:
         raise ValueError(f"Unknown channel: {name}. Available: {list(_CHANNEL_REGISTRY.keys())}")
 
-    channel_class = _CHANNEL_REGISTRY[name]
+    channel_class = _load_channel_class(_CHANNEL_REGISTRY[name])
     return channel_class(flow_id, context=context)
-
-
-def _register_builtin_channels():
-    """Регистрация встроенных каналов."""
-    register_channel(A2AChannel)
-    register_channel(TelegramInboundChannel)
-    register_channel(WebSocketChannel)
-
-
-_register_builtin_channels()
-

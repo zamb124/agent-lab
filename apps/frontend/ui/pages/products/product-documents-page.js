@@ -119,7 +119,7 @@ export class ProductDocumentsPage extends PlatformElement {
                 font-size: 18px;
                 font-weight: 500;
                 cursor: pointer;
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
                 text-decoration: none;
             }
             
@@ -145,7 +145,7 @@ export class ProductDocumentsPage extends PlatformElement {
                 border: 1px solid rgba(255, 255, 255, 0.08);
                 border-radius: 20px;
                 padding: 32px;
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
             }
             
             .feature-card::before {

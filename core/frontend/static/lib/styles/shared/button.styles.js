@@ -19,7 +19,7 @@ export const buttonStyles = css`
         border-radius: var(--btn-radius, 22px);
         border: none;
         cursor: pointer;
-        transition: all var(--duration-fast, 0.15s) ease;
+        transition: var(--motion-transition-interactive);
         text-decoration: none;
         user-select: none;
         white-space: nowrap;
@@ -237,7 +237,7 @@ export const iconButtonStyles = css`
         color: var(--text-secondary, rgba(255, 255, 255, 0.65));
         background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.03));
         cursor: pointer;
-        transition: all var(--duration-fast, 0.15s) ease;
+        transition: var(--motion-transition-interactive);
     }
     
     .btn-icon:hover:not(:disabled) {

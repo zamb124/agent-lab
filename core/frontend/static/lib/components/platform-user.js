@@ -553,7 +553,7 @@ export class PlatformUser extends PlatformElement {
                 box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
                 cursor: pointer;
                 color: var(--text-primary);
-                transition: all var(--duration-fast);
+                transition: var(--motion-transition-interactive);
                 text-align: left;
             }
             .user-button:hover {

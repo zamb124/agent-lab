@@ -39,7 +39,7 @@ export class LitserveSidebar extends PlatformElement {
                 color: var(--text-secondary);
                 font-size: var(--text-sm);
                 font-weight: var(--font-medium);
-                transition: all var(--duration-normal) var(--easing-default);
+                transition: var(--motion-transition-interactive);
                 margin-bottom: var(--space-2);
                 width: 100%;
                 text-align: left;

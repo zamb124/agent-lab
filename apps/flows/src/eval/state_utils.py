@@ -9,7 +9,7 @@ import copy
 import pathlib
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, overload
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -23,9 +23,10 @@ if TYPE_CHECKING:
     from core.state import ExecutionState
 
 UI_EVENTS_KEY = "ui_events_pending"
+JsonDict = dict[str, Any]
 
 
-def deep_copy_state(state: 'ExecutionState | dict') -> 'ExecutionState | dict':
+def deep_copy_state(state: 'ExecutionState | JsonDict') -> 'ExecutionState | JsonDict':
     """
     Глубокое копирование state.
 
@@ -45,7 +46,7 @@ def deep_copy_state(state: 'ExecutionState | dict') -> 'ExecutionState | dict':
         raise SafeEvalError("state must be ExecutionState or dict")
 
 
-def merge_state(base: 'ExecutionState | dict', updates: dict) -> 'ExecutionState | dict':
+def merge_state(base: 'ExecutionState | JsonDict', updates: JsonDict) -> 'ExecutionState | JsonDict':
     """
     Безопасный merge двух state.
 
@@ -83,7 +84,7 @@ def merge_state(base: 'ExecutionState | dict', updates: dict) -> 'ExecutionState
     return result
 
 
-def get_nested(data: 'ExecutionState | dict', path: str, default: Any = None) -> Any:
+def get_nested(data: 'ExecutionState | JsonDict', path: str, default: Any = None) -> Any:
     """
     Получение вложенного значения по пути.
 
@@ -114,7 +115,7 @@ def get_nested(data: 'ExecutionState | dict', path: str, default: Any = None) ->
     return result
 
 
-def set_nested(data: 'ExecutionState | dict', path: str, value: Any) -> 'ExecutionState | dict':
+def set_nested(data: 'ExecutionState | JsonDict', path: str, value: Any) -> 'ExecutionState | JsonDict':
     """
     Установка вложенного значения по пути.
 
@@ -159,7 +160,7 @@ def set_nested(data: 'ExecutionState | dict', path: str, value: Any) -> 'Executi
         raise SafeEvalError("data must be ExecutionState or dict")
 
 
-def get_files(state: 'ExecutionState | dict') -> List[Dict[str, Any]]:
+def get_files(state: 'ExecutionState | JsonDict') -> List[Dict[str, Any]]:
     """
     Возвращает список файлов из state.
 
@@ -207,7 +208,15 @@ def find_file(files: List[Dict[str, Any]], name: Optional[str] = None) -> Option
     return None
 
 
-def read_path_bytes(file_path: str, mode: str = "rb") -> bytes:
+@overload
+def read_path_bytes(file_path: str, mode: Literal["rb"] = "rb") -> bytes: ...
+
+
+@overload
+def read_path_bytes(file_path: str, mode: str) -> bytes | str: ...
+
+
+def read_path_bytes(file_path: str, mode: str = "rb") -> bytes | str:
     """
     Читает сырые байты или текст с диска по пути (без семантики документа).
 
@@ -302,12 +311,13 @@ def add_user_message(state: Dict[str, Any], content: str) -> Dict[str, Any]:
     if "messages" not in state:
         state["messages"] = []
 
-    task_id = state.get("task_id")
+    raw_task_id = state.get("task_id")
+    task_id = str(raw_task_id) if raw_task_id is not None else None
     message = Message(
-        messageId=str(uuid.uuid4()),
+        message_id=str(uuid.uuid4()),
         role=Role.user,
         parts=[Part(root=TextPart(text=content))],
-        taskId=task_id,
+        task_id=task_id,
         metadata={"node_id": MESSAGE_SOURCE_EVAL},
     )
     state["messages"].append(message)
@@ -328,12 +338,13 @@ def add_agent_message(state: Dict[str, Any], content: str) -> Dict[str, Any]:
     if "messages" not in state:
         state["messages"] = []
 
-    task_id = state.get("task_id")
+    raw_task_id = state.get("task_id")
+    task_id = str(raw_task_id) if raw_task_id is not None else None
     message = Message(
-        messageId=str(uuid.uuid4()),
+        message_id=str(uuid.uuid4()),
         role=Role.agent,
         parts=[Part(root=TextPart(text=content))],
-        taskId=task_id,
+        task_id=task_id,
         metadata={"node_id": MESSAGE_SOURCE_EVAL},
     )
     state["messages"].append(message)
@@ -371,15 +382,15 @@ def extract_json(text: str) -> Any:
 
 
 def push_ui_event(
-    state: "ExecutionState | dict | None",
+    state: "ExecutionState | JsonDict | None",
     event_type: str,
-    payload: Dict[str, Any],
+    payload: JsonDict,
     *,
     event_id: Optional[str] = None,
     version: str = "1.0.0",
     source: str = "assistant",
     correlation_id: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> JsonDict:
     """Добавляет UI событие в очередь state для последующей публикации в stream."""
     if state is None:
         raise SafeEvalError("state is required")
@@ -412,7 +423,7 @@ def push_ui_event(
 
 
 def push_ui_events(
-    state: "ExecutionState | dict | None",
+    state: "ExecutionState | JsonDict | None",
     events: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """Добавляет пачку UI событий в очередь state."""
@@ -428,6 +439,8 @@ def push_ui_events(
         version = item.get("version", "1.0.0")
         source = item.get("source", "assistant")
         correlation_id = item.get("correlation_id")
+        if not isinstance(event_type, str):
+            raise SafeEvalError("event type must be a string")
         if not isinstance(payload, dict):
             raise SafeEvalError("event payload must be a dict")
         queued.append(
@@ -444,7 +457,7 @@ def push_ui_events(
     return queued
 
 
-def pop_ui_events(state: "ExecutionState | dict | None") -> List[Dict[str, Any]]:
+def pop_ui_events(state: "ExecutionState | JsonDict | None") -> List[Dict[str, Any]]:
     """Извлекает и очищает очередь UI событий из state."""
     if state is None:
         raise SafeEvalError("state is required")

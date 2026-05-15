@@ -84,9 +84,9 @@ def test_merge_llm_patch_merges_extra_request_headers() -> None:
     assert out.extra_request_headers == {"X-A": "1", "X-B": "new", "X-C": "3"}
 
 
-def test_llm_resource_patch_rejects_unknown_field() -> None:
-    with pytest.raises(ValidationError):
-        LLMResourcePatch.model_validate({"top_p": 0.9})
+def test_llm_resource_patch_accepts_sampling_fields() -> None:
+    patch = LLMResourcePatch.model_validate({"top_p": 0.9})
+    assert patch.top_p == 0.9
 
 
 def test_merge_shared_llm_rejects_unknown_patch_field() -> None:
@@ -99,7 +99,7 @@ def test_merge_shared_llm_rejects_unknown_patch_field() -> None:
         merge_shared_definition_config_with_patch(
             ResourceType.LLM,
             base,
-            {"top_p": 0.5},
+            {"unknown_sampling_field": 0.5},
         )
 
 

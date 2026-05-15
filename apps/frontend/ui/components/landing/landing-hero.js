@@ -116,7 +116,7 @@ export class LandingHero extends PlatformElement {
                 font-size: 20px;
                 line-height: 24px;
                 cursor: pointer;
-                transition: all 0.3s ease;
+                transition: var(--motion-transition-interactive);
                 white-space: nowrap;
                 z-index: 11;
                 box-shadow: none;

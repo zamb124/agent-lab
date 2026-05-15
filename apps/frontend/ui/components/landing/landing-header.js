@@ -172,7 +172,7 @@ export class LandingHeader extends PlatformElement {
                 color: var(--landing-secondary, #E8E8E8);
                 text-decoration: none;
                 border-radius: 8px;
-                transition: all 0.2s;
+                transition: var(--motion-transition-interactive);
             }
             
             .nav-dropdown-item:hover {
@@ -278,7 +278,7 @@ export class LandingHeader extends PlatformElement {
                 font-size: 14px;
                 font-weight: 500;
                 cursor: pointer;
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
                 white-space: nowrap;
                 text-decoration: none;
             }
@@ -302,7 +302,7 @@ export class LandingHeader extends PlatformElement {
                 width: 24px;
                 height: 2px;
                 background: var(--landing-secondary);
-                transition: all 0.3s;
+                transition: var(--motion-transition-interactive);
             }
             
             .burger.active .burger-line:nth-child(1) {
