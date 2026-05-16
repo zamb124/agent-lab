@@ -7,12 +7,12 @@ BaseChannel - абстрактный базовый класс для канал
 
 from __future__ import annotations
 
-import json
 import importlib
+import json
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any
 from collections.abc import AsyncGenerator
+from typing import Any
 from uuid import UUID
 
 from a2a.types import (
@@ -35,10 +35,13 @@ from a2a.utils.message import new_agent_text_message
 from apps.flows.config import get_settings
 from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
 from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.mock import check_mock_permission, resolve_mock_config
 from apps.flows.src.models.enums import MergeMode, NodeType
 from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
+from apps.flows.src.models.operator_schemas import OperatorTaskStatus
 from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
+from apps.flows.src.services.flow_speech_resolve import attach_flow_speech_layers_to_context
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
 from apps.flows.src.state.cancellation import (
@@ -49,6 +52,8 @@ from apps.flows.src.state.cancellation import (
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
+from apps.flows.src.triggers.output_actions import OutputActionExecutor
+from apps.flows.src.triggers.trigger_type_contract import effective_output_actions_for_trigger
 from apps.flows.src.utils import extract_json_from_response
 from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
@@ -287,8 +292,6 @@ class BaseChannel(ABC):
 
         Возвращает operator_task_id или None (задача уже завершена / не найдена).
         """
-        from apps.flows.src.models.operator_schemas import OperatorTaskStatus
-
         container = self.container
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
@@ -420,8 +423,6 @@ class BaseChannel(ABC):
             )
             trace_context_data = trace_ctx.to_dict()
 
-        from core.config import get_settings
-
         broker_url = get_settings().tasks.broker_url
         flow_tasks_module = importlib.import_module("apps.flows.src.tasks.flow_tasks")
         process_flow_task = getattr(flow_tasks_module, "process_flow_task")
@@ -465,11 +466,6 @@ class BaseChannel(ABC):
         trigger = cfg.triggers.get(trigger_id)
         if trigger is None:
             return
-        from apps.flows.src.triggers.output_actions import OutputActionExecutor
-        from apps.flows.src.triggers.trigger_type_contract import (
-            effective_output_actions_for_trigger,
-        )
-
         actions = effective_output_actions_for_trigger(trigger)
         if not actions:
             return
@@ -652,10 +648,6 @@ class BaseChannel(ABC):
             root_flow_mock = flow_config.mock if flow_config else None
 
             if flow_config is not None:
-                from apps.flows.src.services.flow_speech_resolve import (
-                    attach_flow_speech_layers_to_context,
-                )
-
                 attach_flow_speech_layers_to_context(ctx, flow_config, params.branch_id)
 
             branch_mock = None
@@ -1693,6 +1685,5 @@ class BaseChannelHandler(ABC):
         """Резолвит @var: значения."""
         if not isinstance(value, str):
             return value
-        from apps.flows.src.mapping import MappingResolver
 
         return MappingResolver.resolve_vars_in_string(value, variables)

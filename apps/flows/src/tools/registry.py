@@ -16,11 +16,25 @@ from apps.flows.src.models import ToolReference
 from apps.flows.src.models.enums import CodeMode, NodeType, ReactToolRole
 from apps.flows.src.models.mcp import MCPServerConfig
 from apps.flows.src.models.tool_reference import CallParameter
-from apps.flows.src.tools.base import BaseTool, CodeTool
+from apps.flows.src.tools.base import BaseTool
+from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
 from apps.flows.src.tools.mcp_wrapper import MCPTool
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.logging import get_logger
+
+try:
+    from apps.browser.api.mcp import (
+        ToolCloseSessionArgs,
+        ToolCreateSessionArgs,
+        ToolNavigateArgs,
+        ToolObserveArgs,
+    )
+except ImportError:
+    ToolCloseSessionArgs = None
+    ToolCreateSessionArgs = None
+    ToolNavigateArgs = None
+    ToolObserveArgs = None
 
 logger = get_logger(__name__)
 
@@ -40,14 +54,12 @@ def _browser_runtime_mcp_tool_parameters_schema(
     """
     if "/browser/" not in (server_config.url or ""):
         return None
-    try:
-        from apps.browser.api.mcp import (
-            ToolCloseSessionArgs,
-            ToolCreateSessionArgs,
-            ToolNavigateArgs,
-            ToolObserveArgs,
-        )
-    except ImportError:
+    if (
+        ToolCloseSessionArgs is None
+        or ToolCreateSessionArgs is None
+        or ToolNavigateArgs is None
+        or ToolObserveArgs is None
+    ):
         return None
 
     model_by_name: dict[str, Any] = {
@@ -82,10 +94,16 @@ class ToolRegistry:
     - Получения tools по имени
     """
 
-    def __init__(self, *, container: FlowRuntimeContainer | None = None):
+    def __init__(
+        self,
+        *,
+        container: FlowRuntimeContainer | None = None,
+        node_tool_wrapper_cls: Any | None = None,
+    ):
         self._tools: dict[str, BaseTool] = {}
         self._initialized = False
         self.container = container
+        self._node_tool_wrapper_cls = node_tool_wrapper_cls
 
     def register(self, tool: BaseTool) -> None:
         """Регистрирует tool в процессном реестре (builtin, MCPTool и т.д.)."""
@@ -426,10 +444,10 @@ class ToolRegistry:
         Returns:
             NodeAsToolWrapper
         """
-        # Lazy import to avoid circular dependency
-        from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
+        if self._node_tool_wrapper_cls is None:
+            raise RuntimeError("ToolRegistry requires node_tool_wrapper_cls for node-as-tool configs")
 
-        return NodeAsToolWrapper(
+        return self._node_tool_wrapper_cls(
             node_config=config,
             tool_registry=self,
             container=self.container,

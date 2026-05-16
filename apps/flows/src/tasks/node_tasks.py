@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from apps.flows.src.container import get_container
+from apps.flows.src.runtime.nodes import create_node
 from apps.flows_worker.broker import broker
 from core.logging import get_logger
+from core.state import ExecutionState
 
 logger = get_logger(__name__)
 
@@ -31,10 +34,6 @@ async def execute_node(
     Returns:
         Сериализованный ExecutionState
     """
-    from apps.flows.src.container import get_container
-    from apps.flows.src.runtime.nodes import create_node
-    from core.state import ExecutionState
-
     container = get_container()
     state = ExecutionState.model_validate(state_dict)
     node = await create_node(node_id, node_config, container=container)

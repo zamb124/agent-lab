@@ -1180,7 +1180,7 @@ class TestExplicitModeStreaming:
         from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, ReactConfig
         from apps.flows.src.models.tool_reference import CallParameter
         from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-        from apps.flows.src.tools.base import CodeTool
+        from apps.flows.src.tools.code_tool import CodeTool
 
         flow_id = f"explicit_streaming_{unique_id}"
         get_container()

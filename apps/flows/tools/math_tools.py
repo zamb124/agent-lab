@@ -2,12 +2,12 @@
 
 import ast
 import math
-from typing import Any
 from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.tools import tool
+from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 
 type Number = int | float

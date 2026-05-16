@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
-from collections.abc import Sequence
 
 from sqlalchemy import delete, func, select, update
 

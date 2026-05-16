@@ -13,6 +13,7 @@ from typing import Any
 from apps.flows.config import get_settings as flows_get_settings
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
+from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
 from apps.flows.src.triggers.executor import TriggerExecutor
 from apps.flows.src.triggers.handlers.base import (
     BaseTriggerHandler,
@@ -23,6 +24,7 @@ from apps.flows.src.triggers.verify_draft import normalize_telegram_bot_token_fo
 from core.config import get_settings
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
+from core.variables.resolver import VariableResolutionError
 
 logger = get_logger(__name__)
 
@@ -193,7 +195,6 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             )
             return
 
-        from core.config import get_settings
         api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/deleteWebhook"
 
         try:
@@ -396,9 +397,6 @@ class TelegramTriggerHandler(BaseTriggerHandler):
 
     async def _resolve_variable(self, var_ref: str, flow_id: str, branch_id: str) -> str:
         """Резолвит @var:key через тот же словарь, что у runtime flow (см. FlowFactory)."""
-        from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
-        from core.variables.resolver import VariableResolutionError
-
         try:
             return await resolve_at_var_for_flow(
                 self.container,

@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from apps.flows.src.container import get_container
-from apps.flows.src.services.flows_loader import FlowsLoader
+from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from apps.flows.src.services.mcp_sync import (
     ensure_default_mcp_servers_for_company,
     sync_auto_mcp_servers_for_company,
 )
+from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
 from apps.flows_worker.broker import broker
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
@@ -82,8 +83,6 @@ async def init_company_resources(
         bundles_dir = Path(__file__).parent.parent.parent / "bundles"
 
         # Загружаем tools (для ВСЕХ компаний, включая system)
-        from apps.flows.src.services.flows_loader import load_tools_to_db
-
         loaded_tools = await load_tools_to_db(container.tool_repository)
         logger.info(f"Загружено {len(loaded_tools)} tools для {company_id}")
 
@@ -119,8 +118,6 @@ async def init_company_resources(
             filter_public=(company_id != "system")
         )
 
-        from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
-
         await ensure_example_hitl_queue(container.operator_repository, company_id)
 
         # Обновляем статистику tools
@@ -145,4 +142,3 @@ async def init_company_resources(
         raise
     finally:
         clear_context()
-

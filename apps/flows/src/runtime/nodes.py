@@ -22,20 +22,23 @@ import inspect
 import json
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, overload
 from collections.abc import Mapping
+from typing import Any, overload
 
 from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
+from apps.flows.src.clients.mcp_client import MCPHttpClient
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.mock import get_mock_for_node
 from apps.flows.src.models import NodeConfig, NodeLLMOverride, ReactConfig
+from apps.flows.src.models.enums import ChannelType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
-from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.external_api import ExternalAPIConfig
 from apps.flows.src.models.operator_schemas import OperatorTaskStatus
+from apps.flows.src.runners.javascript import JavaScriptCodeRunner
+from apps.flows.src.runners.python import PythonCodeRunner
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
 from apps.flows.src.runtime.llm_resource_override import (
@@ -44,7 +47,10 @@ from apps.flows.src.runtime.llm_resource_override import (
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
 from apps.flows.src.state.interrupt_manager import InterruptManager
+from apps.flows.src.tools.registry import ToolRegistry
+from apps.flows.src.variables import VariableResolver, VarResolver
 from core.clients.llm import get_llm
+from core.company_ai import AICapability, resolve_llm_for_capability
 from core.context import get_context as get_request_context
 from core.errors import NodeWallClockTimeoutError
 from core.logging import get_logger
@@ -713,8 +719,6 @@ class LlmNode(BaseNode):
             (api_key and api_key.strip()) or (base_url and base_url.strip())
         )
         if not node_has_byok:
-            from core.company_ai import AICapability, resolve_llm_for_capability
-
             cap_value = (
                 self._node_config.llm_capability
                 if self._node_config and self._node_config.llm_capability
@@ -868,8 +872,6 @@ class LlmNode(BaseNode):
         """
         container = self.container
         if container is None:
-            from apps.flows.src.tools.registry import ToolRegistry
-
             registry = ToolRegistry()
             return await registry.create_tools(self.tool_refs)
 
@@ -981,12 +983,8 @@ class CodeNode(BaseNode):
             if resolved_resources:
                 raise RuntimeError(f"Code node '{self.node_id}' requires FlowContainer to create code runner")
             if self.language == "python":
-                from apps.flows.src.runners.python import PythonCodeRunner
-
                 return PythonCodeRunner()
             if self.language == "javascript":
-                from apps.flows.src.runners.javascript import JavaScriptCodeRunner
-
                 return JavaScriptCodeRunner()
             raise ValueError(f"Unsupported language: {self.language}")
         return container.get_code_runner(self.language, resources=resolved_resources)
@@ -1278,8 +1276,6 @@ class MCPNode(BaseNode):
 
         variables = state.variables
 
-        from apps.flows.src.clients.mcp_client import MCPHttpClient
-
         client = MCPHttpClient(server, variables)
         result = await client.call_tool(self.tool_name, inputs)
 
@@ -1335,8 +1331,6 @@ class ChannelNode(BaseNode):
         super().__init__(node_id, config, container=container)
         cfg = self.config
 
-        from apps.flows.src.models.enums import ChannelType
-
         channel_value = cfg.get("channel", "telegram")
         self.channel = ChannelType(channel_value) if isinstance(channel_value, str) else channel_value
         self.action = cfg.get("action", "send_message")
@@ -1344,8 +1338,6 @@ class ChannelNode(BaseNode):
 
     async def _run_impl(self, state: ExecutionState, inputs: dict[str, Any]) -> Any:
         """Отправляет сообщение через channel handler."""
-        from apps.flows.src.variables import VariableResolver, VarResolver
-
         container = self.container
         if container is None:
             raise RuntimeError(f"Channel node '{self.node_id}' requires FlowContainer to load channel registry")

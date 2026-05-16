@@ -17,7 +17,9 @@ from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.tools.base import BaseTool
-from apps.flows.tools import calculator, final_answer, finish, reason
+from apps.flows.tools.agent_session_tools import final_answer, reason
+from apps.flows.tools.finish_tool import finish
+from apps.flows.tools.math_tools import calculator
 from core.state import ExecutionState
 
 
@@ -559,4 +561,3 @@ class TestReminderWithToolNames:
                             found_my_think_in_reminder = True
 
         assert found_my_think_in_reminder or state.get("response") == "Done"
-

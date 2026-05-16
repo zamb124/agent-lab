@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.flows.src.eval.web_snapshot import BrowserSnapshotDescribe, DuckDuckGoBrowserSearch
-from apps.flows.src.tools import tool
+from apps.flows.src.tools.decorator import tool
 
 if TYPE_CHECKING:
     from core.state import ExecutionState

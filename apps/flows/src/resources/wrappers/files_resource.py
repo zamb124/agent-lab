@@ -6,6 +6,9 @@ FilesResource - wrapper для files ресурса.
 
 from typing import Any
 
+from botocore.exceptions import ClientError
+
+from core.files import S3Client, get_default_s3_client
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -53,8 +56,6 @@ class FilesResource:
         if self._s3_client is not None:
             return self._s3_client
 
-        from core.files import S3Client
-
         # Если есть явные credentials - используем их
         if self.access_key_id and self.secret_access_key:
             self._s3_client = S3Client(
@@ -68,7 +69,6 @@ class FilesResource:
             return self._s3_client
 
         # Иначе пробуем дефолтный клиент из settings
-        from core.files import get_default_s3_client
         client = await get_default_s3_client()
         if client is None:
             raise RuntimeError(
@@ -163,8 +163,6 @@ class FilesResource:
         Returns:
             True если файл существует
         """
-        from botocore.exceptions import ClientError
-
         s3 = await self.get_s3_client()
         full_path = self._get_full_path(path)
 

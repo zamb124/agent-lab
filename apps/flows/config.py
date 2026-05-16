@@ -9,9 +9,10 @@ from typing import Any, Self
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import BaseSettings
+from core.config import get_settings as core_get_settings
+from core.config import set_settings as core_set_settings
 from core.config.loader import load_merged_config
-from core.config.models import LLMConfig, S3Config
-from core.config.models import PushConfig
+from core.config.models import LLMConfig, PushConfig, S3Config
 
 FLOWS_PUBLIC_API_PREFIX = "/flows/api/v1"
 
@@ -180,8 +181,6 @@ def get_settings() -> FlowSettings:
     global _settings
     if _settings is not None:
         return _settings
-    from core.config import get_settings as core_get_settings
-    from core.config import set_settings as core_set_settings
 
     core_candidate = core_get_settings()
     if isinstance(core_candidate, FlowSettings):
@@ -199,7 +198,6 @@ def set_settings(new_settings: FlowSettings) -> None:
     """Устанавливает глобальный settings instance"""
     global _settings
     _settings = new_settings
-    from core.config import set_settings as core_set_settings
     core_set_settings(new_settings)
 
 
@@ -220,4 +218,3 @@ class _SettingsProxy:
 
 
 settings = _SettingsProxy()
-

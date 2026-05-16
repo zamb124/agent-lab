@@ -41,8 +41,6 @@ class FlowInterrupt(Exception):
 
     @property
     def question(self) -> str:
-        from core.state.interrupt import interrupt_body_public_question
-
         return interrupt_body_public_question(self.body)
 
 

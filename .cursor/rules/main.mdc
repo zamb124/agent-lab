@@ -7,7 +7,7 @@ alwaysApply: true
 ## Язык
 
 Отвечай на русском. Без эмодзи в коде, комментариях, логах.
-
+ТЫ ВСЕГДА ПРОГОНЯЕШЬ basedpyright и ruff после измненений ВСЕГДВ ВСЕГДА ВСЕГДА!!!
 ## Стек
 
 Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нативный EventBus + фабрики (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`).

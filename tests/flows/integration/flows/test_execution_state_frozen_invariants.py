@@ -16,7 +16,7 @@ from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
 from apps.flows.src.runtime.nodes import CodeNode, LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-from apps.flows.src.tools.base import CodeTool
+from apps.flows.src.tools.code_tool import CodeTool
 from core.errors import FrozenStateFieldError, ToolExecutionError
 from core.state import ExecutionState
 from core.state.mutation_policy import FROZEN_STATE_FIELDS

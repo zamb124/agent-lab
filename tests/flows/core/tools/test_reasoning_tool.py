@@ -6,7 +6,7 @@
 
 import pytest
 
-from apps.flows.tools import reason
+from apps.flows.tools.agent_session_tools import reason
 from core.state import ExecutionState
 
 

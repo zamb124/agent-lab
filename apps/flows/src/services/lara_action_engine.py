@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
-from collections.abc import Awaitable, Callable
 from uuid import uuid4
 
 from core.logging import get_logger

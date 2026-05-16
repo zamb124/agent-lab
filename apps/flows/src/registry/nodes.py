@@ -8,7 +8,7 @@ Zero-Guess: все типы нод регистрируются явно при 
 from typing import Any
 
 from apps.flows.src.models.enums import NodeType
-from apps.flows.src.runtime.nodes import BaseNode, RUNTIME_NODE_CLASSES
+from apps.flows.src.runtime.nodes import RUNTIME_NODE_CLASSES, BaseNode
 from core.registry.base import ResourceRegistry
 
 

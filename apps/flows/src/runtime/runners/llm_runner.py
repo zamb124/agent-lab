@@ -9,9 +9,9 @@ import asyncio
 import hashlib
 import json
 import time
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from typing import Any
-from collections.abc import AsyncGenerator
 
 from a2a.types import (
     Message,
@@ -48,7 +48,7 @@ from apps.flows.src.state.cancellation import (
     get_cancellation_token,
 )
 from apps.flows.src.state.interrupt_manager import InterruptManager
-from apps.flows.src.streaming import BaseEmitter, Emitter
+from apps.flows.src.streaming import BaseEmitter, Emitter, InMemoryEmitter
 from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from apps.flows.src.tools.base import sanitize_tool_name
 from apps.flows.src.variables import VariableResolver
@@ -201,8 +201,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             if container is not None:
                 emitter = Emitter(container.redis_client, state)
             else:
-                from apps.flows.src.streaming.memory import InMemoryEmitter
-
                 emitter = InMemoryEmitter(state)
 
         user_content = input_data.get("content", "")

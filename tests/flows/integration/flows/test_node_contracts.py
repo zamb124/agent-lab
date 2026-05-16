@@ -18,7 +18,7 @@ from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import (
     CodeNode,
 )
-from apps.flows.src.tools.base import CodeTool
+from apps.flows.src.tools.code_tool import CodeTool
 from core.state import ExecutionState
 
 

@@ -9,7 +9,7 @@ import copy
 import pathlib
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import Any, Literal, overload
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -17,10 +17,8 @@ from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_EVAL
 from apps.flows.src.utils import extract_json_from_response
 from core.errors import SafeEvalError
+from core.state import ExecutionState
 from core.state.mutation_policy import forbid_frozen_update_key
-
-if TYPE_CHECKING:
-    from core.state import ExecutionState
 
 UI_EVENTS_KEY = "ui_events_pending"
 JsonDict = dict[str, Any]
@@ -36,8 +34,6 @@ def deep_copy_state(state: 'ExecutionState | JsonDict') -> 'ExecutionState | Jso
     Returns:
         Копия state
     """
-    from core.state import ExecutionState
-
     if isinstance(state, ExecutionState):
         return ExecutionState.model_validate(state.model_dump(exclude_none=False))
     elif isinstance(state, dict):
@@ -57,8 +53,6 @@ def merge_state(base: 'ExecutionState | JsonDict', updates: JsonDict) -> 'Execut
     Returns:
         Объединенный state
     """
-    from core.state import ExecutionState
-
     if isinstance(base, ExecutionState):
         if not isinstance(updates, dict):
             raise SafeEvalError("updates must be a dict")
@@ -96,8 +90,6 @@ def get_nested(data: 'ExecutionState | JsonDict', path: str, default: Any = None
     Returns:
         Значение по пути или default
     """
-    from core.state import ExecutionState
-
     keys = path.split(".")
     result = data
 
@@ -127,8 +119,6 @@ def set_nested(data: 'ExecutionState | JsonDict', path: str, value: Any) -> 'Exe
     Returns:
         Модифицированный data
     """
-    from core.state import ExecutionState
-
     keys = path.split(".")
 
     if isinstance(data, ExecutionState):
@@ -170,8 +160,6 @@ def get_files(state: 'ExecutionState | JsonDict') -> list[dict[str, Any]]:
     Returns:
         Список файлов [{name, path, mime_type, size}, ...]
     """
-    from core.state import ExecutionState
-
     if isinstance(state, ExecutionState):
         return state.files or []
     elif isinstance(state, dict):

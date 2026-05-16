@@ -6,8 +6,8 @@ TriggerExecutor - запуск агента при срабатывании тр
 
 """
 
-import uuid
 import importlib
+import uuid
 from typing import Any
 
 from apps.flows.src.models import TriggerConfig

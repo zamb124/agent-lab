@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.tools import tool
+from apps.flows.src.tools.decorator import tool
 from core.files import DocxTemplater
 from core.files.models import FileResponse
 from core.state import ExecutionState

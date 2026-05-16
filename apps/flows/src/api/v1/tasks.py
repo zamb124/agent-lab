@@ -23,7 +23,7 @@ from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from core.context import get_context
 from core.logging import get_logger
-from core.state import ExecutionState
+from core.state import ExecutionState, InterruptData
 
 logger = get_logger(__name__)
 
@@ -116,8 +116,6 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> di
         response_text = f"Breakpoint at node '{breakpoint_hit}'"
         task_state = TaskState.input_required
     elif interrupt_data:
-        from core.state import InterruptData
-
         ir = InterruptData.model_validate(interrupt_data)
         response_text = ir.question
         task_state = TaskState.input_required

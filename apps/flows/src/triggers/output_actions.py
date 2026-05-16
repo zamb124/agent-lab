@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models.channel_config import OutputAction
 from apps.flows.src.triggers.input_mapper import InputMapper
 from apps.flows.src.triggers.output_condition import evaluate_output_action_condition
@@ -75,8 +76,6 @@ class OutputActionExecutor:
         state: dict[str, Any],
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        from apps.flows.src.mapping import MappingResolver
-
         result = {}
 
         for param_name, expr in mapping.items():

@@ -6,16 +6,10 @@ import asyncio
 
 import pytest
 
-from apps.flows.src.eval import (
-    SafeContext,
-    SafeEvalError,
-    compile_function,
-    deep_copy_state,
-    get_nested,
-    merge_state,
-    safe_eval,
-    set_nested,
-)
+from apps.flows.src.eval.safe_eval import compile_function, safe_eval
+from apps.flows.src.eval.state_utils import deep_copy_state, get_nested, merge_state, set_nested
+from apps.flows.src.eval.wrappers import SafeContext
+from core.errors import SafeEvalError
 from core.context import Context, User
 from core.state import ExecutionState
 
@@ -1081,4 +1075,3 @@ async def run(state):
 """
     with pytest.raises(SafeEvalError, match="нельзя подключать внутренние модули платформы"):
         compile_function(code, strip_platform_imports=False)
-

@@ -13,6 +13,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
+from sqlalchemy import text
 
 if TYPE_CHECKING:
     from asyncpg import Connection
@@ -263,8 +264,6 @@ class DatabaseStateRepository(BaseStateRepository):
 
         table = self._get_table()
         async with self._storage.get_session() as session:
-            from sqlalchemy import text
-
             query = text(f"""
                 SELECT key FROM {table}
                 WHERE key LIKE :tenant_prefix
@@ -372,8 +371,6 @@ class DatabaseStateRepository(BaseStateRepository):
         table = self._get_table()
 
         async with self._storage.get_session() as session:
-            from sqlalchemy import text
-
             count_query = text(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")
             count_result = await session.execute(count_query, params)
             total = count_result.scalar()

@@ -20,10 +20,16 @@ from apps.flows.src.models.channel_config import (
 from apps.flows.src.triggers import TriggerValidationError
 from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+from apps.flows.src.triggers.input_mapper import InputMapper
+from apps.flows.src.triggers.registry import (
+    TriggerReregisterDisabledError,
+    TriggerReregisterUnsupportedError,
+)
 from apps.flows.src.triggers.trigger_type_contract import (
     default_post_flow_output_enabled,
     effective_output_actions_for_trigger,
 )
+from apps.flows.src.triggers.verify_draft import verify_trigger_draft as run_verify
 from apps.flows.src.triggers.webhook_inbound import check_webhook_rate_limit, client_ip_allowed
 from core.context import get_context, set_context
 from core.logging import get_logger
@@ -214,8 +220,6 @@ async def verify_trigger_draft(
     """
     Проверяет черновик конфига: Telegram getMe, валидность cron, подсказки для webhook.
     """
-    from apps.flows.src.triggers.verify_draft import verify_trigger_draft as run_verify
-
     flow_config = await container.flow_repository.get(flow_id)
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
@@ -426,11 +430,6 @@ async def reregister_flow_trigger(
     """
     Снимает триггер с внешней стороны и регистрирует заново (для Telegram — deleteWebhook + setWebhook).
     """
-    from apps.flows.src.triggers.registry import (
-        TriggerReregisterDisabledError,
-        TriggerReregisterUnsupportedError,
-    )
-
     old_config = await container.flow_repository.get(flow_id)
     if not old_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
@@ -718,8 +717,6 @@ async def test_trigger(
 
     if not trigger:
         raise HTTPException(status_code=404, detail=f"Trigger not found: {trigger_id}")
-
-    from apps.flows.src.triggers.input_mapper import InputMapper
 
     mapper = InputMapper()
     mapping = {**dict(trigger.input_mapping), **dict(trigger.output_mapping)}

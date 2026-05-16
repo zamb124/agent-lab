@@ -7,9 +7,30 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING, Any, cast
 
-from core.clients.speech_override import SpeechProviderName, SpeechResponseFormat
+from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
+from apps.flows.src.clients.mcp_client import get_mcp_client as build_mcp_client
+from apps.flows.src.container import get_container
+from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.services.flow_speech_resolve import (
+    load_flow_speech_layers_from_context_metadata,
+    merge_explicit_over_flow_speech_layer,
+)
+from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
+from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
+from core.clients.voice_resolver import get_stt_client, get_tts_client
+from core.context import get_context
+from core.files import S3ClientFactory
+from core.files.audio_probe import probe_audio_duration_seconds_from_upload
+from core.integrations.models import IntegrationProvider
+from core.logging import get_logger
+from core.state.interrupt import OAuthInterrupt
+from core.text_transforms import TextTransformService
+from core.tracing.context import get_current_trace_context
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from apps.flows.src.clients.mcp_client import MCPClient
@@ -17,32 +38,22 @@ if TYPE_CHECKING:
     from apps.flows.src.models.mcp import MCPCallResult
     from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
     from apps.flows.src.services.schedule_service import ScheduleService
-    from core.integrations.oauth_service import OAuthService
     from core.state import ExecutionState
-    from core.text_transforms import TextTransformService
 
 
 def get_operator_handoff_service() -> "OperatorHandoffService":
-    from apps.flows.src.container import get_container
-
     return get_container().operator_handoff_service
 
 
 def get_schedule_service() -> "ScheduleService":
-    from apps.flows.src.container import get_container
-
     return get_container().schedule_service
 
 
-def get_oauth_service() -> "OAuthService":
-    from apps.flows.src.container import get_container
-
+def get_oauth_service() -> Any:
     return get_container().oauth_service
 
 
 def get_lara_facade() -> "LaraFacade":
-    from apps.flows.src.container import get_container
-
     return get_container().lara_facade
 
 
@@ -72,8 +83,6 @@ def get_code_runner(
     variables: dict[str, Any] | None = None,
 ) -> Any:
     """PythonCodeRunner (или runner для `language`) без доступа к `FlowContainer` из namespace."""
-    from apps.flows.src.container import get_container
-
     return get_container().get_code_runner(
         language=language,
         resources=resources,
@@ -88,8 +97,6 @@ def get_text_transform_service() -> "TextTransformService":
     """Суммаризация и Markdown без доступа к FlowContainer из namespace."""
     global _text_transform_service
     if _text_transform_service is None:
-        from core.text_transforms import TextTransformService
-
         _text_transform_service = TextTransformService()
     return _text_transform_service
 
@@ -101,9 +108,6 @@ async def get_mcp_client(
     timeout: float = 60.0,
 ) -> "MCPClient":
     """Вернуть MCP-клиент по `server_id` для inline-кода (без доступа к контейнеру)."""
-    from apps.flows.src.clients.mcp_client import get_mcp_client as build_mcp_client
-    from apps.flows.src.container import get_container
-
     if not isinstance(server_id, str) or server_id.strip() == "":
         raise ValueError("server_id обязателен")
     config = await get_container().mcp_server_repository.get(server_id.strip())
@@ -136,9 +140,6 @@ async def call_mcp_tool(
 
 async def get_file_bytes(file_id: str) -> bytes:
     """Скачивает содержимое файла по ID из хранилища платформы (FileRepository + S3)."""
-    from apps.flows.src.container import get_container
-    from core.files import S3ClientFactory
-
     container = get_container()
     record = await container.file_repository.get(file_id)
     if record is None:
@@ -174,15 +175,6 @@ async def transcribe_audio(
     Returns:
         Распознанный текст.
     """
-    from apps.flows.src.container import get_container
-    from core.clients.speech_override import SpeechOverride
-    from core.clients.voice_resolver import get_stt_client
-    from core.context import get_context
-    from core.files.audio_probe import probe_audio_duration_seconds_from_upload
-    from core.logging import get_logger
-
-    _log = get_logger(__name__)
-
     if not isinstance(file_id, str) or file_id.strip() == "":
         raise ValueError("transcribe_audio: file_id обязателен.")
 
@@ -198,11 +190,6 @@ async def transcribe_audio(
 
     s3 = await container.file_processor.get_s3_client()
     audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
-
-    from apps.flows.src.services.flow_speech_resolve import (
-        load_flow_speech_layers_from_context_metadata,
-        merge_explicit_over_flow_speech_layer,
-    )
 
     override = SpeechOverride(
         provider=_speech_provider(provider),
@@ -222,14 +209,12 @@ async def transcribe_audio(
     )
 
     if ctx.user is not None:
-        from apps.voice.services.voice_usage import record_stt_usage
-
         try:
             audio_seconds = await probe_audio_duration_seconds_from_upload(
                 data=audio_bytes, file_name=record.original_name
             )
         except ValueError as exc:
-            _log.warning(
+                logger.warning(
                 "eval.transcribe_audio.stt_usage_skipped",
                 reason=str(exc),
                 company_id=company_id,
@@ -280,14 +265,6 @@ async def synthesize_speech(
     Returns:
         `file_id` сохранённого аудио в `FileRepository`.
     """
-    import uuid
-
-    from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
-    from apps.flows.src.container import get_container
-    from core.clients.speech_override import SpeechOverride
-    from core.clients.voice_resolver import get_tts_client
-    from core.context import get_context
-
     if not isinstance(text, str) or text.strip() == "":
         raise ValueError("synthesize_speech: text обязателен.")
 
@@ -296,11 +273,6 @@ async def synthesize_speech(
         raise ValueError("synthesize_speech: нужен Context с active_company.")
     company_id = ctx.active_company.company_id
     user_id = ctx.user.user_id if ctx.user else None
-
-    from apps.flows.src.services.flow_speech_resolve import (
-        load_flow_speech_layers_from_context_metadata,
-        merge_explicit_over_flow_speech_layer,
-    )
 
     override = SpeechOverride(
         provider=_speech_provider(provider),
@@ -331,8 +303,6 @@ async def synthesize_speech(
     )
 
     if ctx.user is not None:
-        from apps.voice.services.voice_usage import record_tts_usage
-
         await record_tts_usage(
             user=ctx.user,
             company=ctx.active_company,
@@ -359,15 +329,6 @@ async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
     Returns:
         access_token (строка)
     """
-    from apps.flows.src.runtime.exceptions import FlowInterrupt
-    from core.context import get_context
-    from core.integrations.models import IntegrationProvider
-    from core.logging import get_logger
-    from core.state.interrupt import OAuthInterrupt
-    from core.tracing.context import get_current_trace_context
-
-    logger = get_logger(__name__)
-
     scopes = [
         "https://www.googleapis.com/auth/documents",
         "https://www.googleapis.com/auth/drive",

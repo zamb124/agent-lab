@@ -8,7 +8,12 @@ from apps.flows.config import get_settings
 from apps.flows.src.db import LLMModelRepository
 from apps.flows.src.models import LLMModel
 from core.clients import SchedulerClient
+from core.config.llm_openai_compat import (
+    yandex_llm_openai_root_from_provider_cfg,
+    yandex_provider_http_headers,
+)
 from core.http import ProxyStrategy, get_httpx_client
+from core.http.client import request_with_strategy
 from core.logging import get_logger
 from core.scheduler.models import (
     PlatformScheduleCreateRequest,
@@ -56,9 +61,6 @@ class LLMModelsService:
             "Authorization": f"Bearer {cfg.api_key}",
         }
 
-        # Используем программируемый API с стратегией direct_first
-        from core.http.client import ProxyStrategy, request_with_strategy
-
         response = await request_with_strategy(
             "GET",
             url,
@@ -94,9 +96,6 @@ class LLMModelsService:
             "X-Title": cfg.site_name,
         }
 
-        # Используем программируемый API с стратегией direct_first
-        from core.http.client import ProxyStrategy, request_with_strategy
-
         response = await request_with_strategy(
             "GET",
             url,
@@ -124,9 +123,6 @@ class LLMModelsService:
         url = f"{base_url}/models"
         headers = {"Authorization": f"Bearer {cfg.api_key}"}
 
-        # Используем программируемый API с стратегией direct_first
-        from core.http.client import ProxyStrategy, request_with_strategy
-
         response = await request_with_strategy(
             "GET",
             url,
@@ -153,19 +149,12 @@ class LLMModelsService:
             logger.warning("Yandex LLM folder_id не настроен")
             return []
 
-        from core.config.llm_openai_compat import (
-            yandex_llm_openai_root_from_provider_cfg,
-            yandex_provider_http_headers,
-        )
-
         base = yandex_llm_openai_root_from_provider_cfg(cfg)
         url = f"{base}/models"
         headers = {
             **yandex_provider_http_headers(cfg),
             "Content-Type": "application/json",
         }
-
-        from core.http.client import ProxyStrategy, request_with_strategy
 
         response = await request_with_strategy(
             "GET",

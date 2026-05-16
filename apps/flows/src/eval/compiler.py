@@ -6,13 +6,14 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import Any
 from collections.abc import Callable
+from typing import Any
 
 from apps.flows.src.eval.import_policy import (
     filtered_namespace_import_roots,
     validate_import_nodes,
 )
+from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
 from core.errors import SafeEvalError
 from core.inline_python_eval_policy import FORBIDDEN_INLINE_DUNDER_ATTRIBUTES
@@ -38,7 +39,6 @@ def _normalize_inline_source(
 ) -> str:
     if not strip_platform_imports:
         return code
-    from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 
     return strip_forbidden_platform_import_lines(code)
 

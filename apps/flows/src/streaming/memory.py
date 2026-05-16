@@ -4,8 +4,8 @@ In-memory реализации Emitter и Subscriber.
 Используются для внешних агентов, которые не требуют Redis.
 """
 
-from typing import Any
 from collections.abc import AsyncIterator
+from typing import Any
 
 from core.state import ExecutionState
 

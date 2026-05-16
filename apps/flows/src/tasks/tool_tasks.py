@@ -16,6 +16,7 @@ from apps.flows_worker.broker import broker
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
+from core.state import ExecutionState
 from core.state.interrupt import interrupt_to_response_dict
 
 logger = get_logger(__name__)
@@ -55,7 +56,6 @@ async def execute_tool(
         tool = await container.tool_registry.create_tool(tool_id_or_config)
     logger.debug(f"Executing tool: {tool_id}")
 
-    from core.state import ExecutionState
     tool_state = ExecutionState.model_validate(state_dict)
 
     try:

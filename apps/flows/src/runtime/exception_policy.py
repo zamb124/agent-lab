@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 from collections.abc import Mapping
+from typing import Any
 
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt

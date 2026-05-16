@@ -16,6 +16,7 @@ from typing import Any
 from uuid import UUID
 
 from apps.flows.src.runtime.a2a_messages import build_user_message
+from apps.flows.src.state.execution_state import NestedStateData
 from core.logging import get_logger
 from core.state import ExecutionState, InterruptData, InterruptPathItem
 from core.state.interrupt import InterruptBody, InterruptSystemContext
@@ -45,8 +46,6 @@ class InterruptManager:
             nested_id: ID вложенного вызова (flow_id, node_id, etc)
             nested_state: State вложенного вызова
         """
-        from apps.flows.src.state.execution_state import NestedStateData
-
         saved = NestedStateData(
             messages=list(nested_state.messages),
             interrupt_path=list(nested_state.interrupt_path),
@@ -70,8 +69,6 @@ class InterruptManager:
         Returns:
             ExecutionState вложенного вызова
         """
-        from apps.flows.src.state.execution_state import NestedStateData
-
         saved = parent_state.nested_states.get(nested_id)
 
         if saved is None:

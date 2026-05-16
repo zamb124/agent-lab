@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
 from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -17,6 +17,7 @@ from apps.flows.src.models import NodeConfig, ReactLoopMode
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.runtime.a2a_messages import build_user_message
 from apps.flows.src.streaming.base import BaseEmitter, StreamEvent
+from apps.flows.tools.finish_tool import finish
 from core.logging import get_logger
 
 if TYPE_CHECKING:
@@ -64,7 +65,6 @@ class BaseLlmNodeRunner(ABC):
             return
 
         if exit_tool_name == "finish":
-            from apps.flows.tools.finish_tool import finish
             self.tools.append(finish)
             self.auto_exit_tool_added = True
             logger.info(f"[node:{self.node_config.name}] finish tool auto-injected for explicit mode")

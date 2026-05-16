@@ -8,9 +8,9 @@ A2AChannel - реализация A2A протокола.
 import asyncio
 import json
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from typing import Any
-from collections.abc import AsyncGenerator
 
 from a2a.types import (
     Artifact,
@@ -54,6 +54,7 @@ from apps.idle_worker.tasks.push_notification_tasks import (
     send_task_update,
     set_config,
 )
+from core.config.testing import is_testing
 from core.context import set_current_channel
 from core.logging import get_logger
 from core.state import ExecutionState
@@ -470,7 +471,6 @@ class A2AChannel(BaseChannel):
             )
 
         # Таймаут короче для тестов
-        from core.config.testing import is_testing
         timeout = 30.0 if is_testing() else 300.0
 
         subscriber = EventSubscriber(self.container.redis_client)

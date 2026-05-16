@@ -40,6 +40,7 @@ from apps.flows.src.services.flow_speech_resolve import (
 from apps.flows.src.services.flow_validator import FlowValidator
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from core.clients.voice_resolver import resolve_effective_tts_voice_for_ws
+from core.config import get_settings
 from core.context import get_context
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
 from core.logging import get_logger
@@ -56,8 +57,6 @@ _FLOW_PREVIEW_SHARE_TTL_SECONDS = 86400
 
 def _preview_share_base_urls(request: Request) -> tuple[str, str]:
     """Возвращает (flows_base_url, platform_ui_origin) для сценария встраивания."""
-    from core.config import get_settings
-
     settings = get_settings()
     if settings.server.env == "production":
         base = require_platform_public_base_url().rstrip("/")
@@ -248,7 +247,6 @@ def _generate_flow_url(flow_id: str, flow_kind: FlowType | None = None, external
     if flow_kind == FlowType.EXTERNAL and external_url:
         return external_url
 
-    from core.config import get_settings
     settings = get_settings()
     return f"https://{settings.server.host}:{settings.server.port}/flows/{flow_id}"
 

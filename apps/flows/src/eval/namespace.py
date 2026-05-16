@@ -11,8 +11,8 @@ import importlib
 import math
 import operator
 import typing as typing_module
-from typing import Any, Literal
 from collections.abc import Callable
+from typing import Any, Literal
 from urllib.parse import quote
 
 from a2a.types import (
@@ -57,6 +57,7 @@ from apps.flows.src.eval.wrappers import (
     SafeContext,
 )
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from apps.flows.tools.scheduling_ids import extract_ids_from_state
@@ -134,8 +135,6 @@ class PythonNamespaceBuilder:
         self.variables = variables or {}
         self.resources = resources or {}
         if base_tool_class is None:
-            from apps.flows.src.tools.base import BaseTool
-
             base_tool_class = BaseTool
         self.base_tool_class = base_tool_class
 

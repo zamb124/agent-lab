@@ -21,7 +21,17 @@ from apps.flows.src.mock import get_mock_for_flow
 from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.runtime.nodes import create_node
+from apps.flows.src.runtime.nodes import (
+    ChannelNode,
+    CodeNode,
+    ExternalAPINode,
+    FlowNode,
+    LlmNode,
+    MCPNode,
+    RemoteFlowNode,
+    ResourceNode,
+    create_node,
+)
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.base import BaseTool, sanitize_tool_name
 from core.logging import get_logger
@@ -38,16 +48,6 @@ def _infer_node_type_for_tool(node: BaseNode) -> str:
     raw = node.config.get("type") if node.config else None
     if raw:
         return raw if isinstance(raw, str) else str(raw)
-    from apps.flows.src.runtime.nodes import (
-        ChannelNode,
-        CodeNode,
-        ExternalAPINode,
-        FlowNode,
-        LlmNode,
-        MCPNode,
-        RemoteFlowNode,
-        ResourceNode,
-    )
 
     if isinstance(node, LlmNode):
         return NodeType.LLM_NODE.value

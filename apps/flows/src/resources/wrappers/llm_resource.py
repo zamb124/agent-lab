@@ -11,6 +11,7 @@ from a2a.utils.message import get_message_text
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.runtime.llm_byok import is_llm_byok_resource
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
+from core.clients.llm import get_llm
 from core.clients.llm.config import LLMCallConfig, ReasoningEffort
 from core.context import get_context
 from core.logging import get_logger
@@ -93,7 +94,6 @@ class LLMResource:
     def _get_client(self):
         """Возвращает LLM клиент."""
         if self._client is None:
-            from core.clients.llm import get_llm
             self._client = get_llm(
                 model_name=self.model,
                 temperature=self.temperature,
@@ -199,7 +199,6 @@ class LLMResource:
     def _extract_text(self, response: Any) -> str:
         """Извлекает текст из ответа LLM."""
         if hasattr(response, "parts") and response.parts:
-            from a2a.utils.message import get_message_text
             return get_message_text(response)
         if hasattr(response, "content"):
             return response.content

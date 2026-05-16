@@ -22,7 +22,7 @@ from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.models.tool_reference import CallParameter, ToolReference
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-from apps.flows.src.tools.base import CodeTool
+from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.json_schema_parameters import (
     call_parameters_to_parameters_schema,
     pydantic_model_to_parameters_schema,

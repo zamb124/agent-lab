@@ -22,6 +22,7 @@ from typing import Any
 
 from apps.flows.src.constants.execution_limits import get_graph_max_iterations
 from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.eval.safe_eval import compile_function
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.runtime.exceptions import (
     BreakpointInterrupt,
@@ -37,6 +38,7 @@ from core.errors import (
     FlowInfiniteLoopError,
     FlowPrematureCompletionError,
     NodeCallLimitError,
+    SafeEvalError,
 )
 from core.logging import get_logger
 from core.state import ExecutionState
@@ -730,9 +732,6 @@ class Flow:
         Вычисляет Python условие через SafeEval.
         Код должен содержать функцию check(state) -> bool.
         """
-        from apps.flows.src.eval.safe_eval import compile_function
-        from core.errors import SafeEvalError
-
         if not code or "def check" not in code:
             raise ValueError(
                 "Python-условие ребра: требуется непустой код с функцией check(state)"

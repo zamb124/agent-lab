@@ -14,7 +14,8 @@ from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-from apps.flows.tools import calculator, reason
+from apps.flows.tools.agent_session_tools import reason
+from apps.flows.tools.math_tools import calculator
 from core.state import ExecutionState
 
 

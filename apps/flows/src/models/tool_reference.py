@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
+
 from .enums import CodeMode, ReactToolRole
 
 # Тип для permission: строка или список строк
@@ -101,8 +103,6 @@ class ToolReference(BaseModel):
 
     def effective_parameters_schema(self) -> dict[str, Any]:
         """Схема параметров для LLM: parameters_schema или сборка из args_schema."""
-        from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
-
         return resolve_tool_parameters_schema(
             parameters_schema=self.parameters_schema,
             args_schema=self.args_schema,

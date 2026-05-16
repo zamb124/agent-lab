@@ -10,16 +10,23 @@ Permissions:
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, create_model
 
+from apps.flows.config import get_settings
+from apps.flows.src.clients.external_api_client import ExternalAPIClient
+from apps.flows.src.mock import get_mock_for_tool
 from apps.flows.src.models.enums import ReactToolRole
-from apps.flows.src.tools.json_schema_parameters import validate_tool_args_against_parameters_schema
+from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
+from apps.flows.src.runtime.exceptions import FlowInterrupt
+from core.auth import permission_checker
+from core.config.testing import is_testing
+from core.logging import get_logger
+from core.state import parse_interrupt_body_from_external_dict
 
 
 def sanitize_tool_name(name: str) -> str:
@@ -41,14 +48,6 @@ def sanitize_tool_name(name: str) -> str:
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-from apps.flows.config import get_settings  # noqa: E402
-from apps.flows.src.clients.external_api_client import ExternalAPIClient  # noqa: E402
-from apps.flows.src.container_contracts import FlowRuntimeContainer  # noqa: E402
-from apps.flows.src.mock import get_mock_for_tool  # noqa: E402
-from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod  # noqa: E402
-from core.auth import permission_checker  # noqa: E402
-from core.logging import get_logger  # noqa: E402
-
 logger = get_logger(__name__)
 
 # Тип для permission: строка или список строк
@@ -57,8 +56,6 @@ Permission = str | list[str] | None
 
 def _external_api_flat_args_schema_to_model(schema: dict[str, Any]) -> type[BaseModel]:
     """Плоский {name: {type, description, default?}} -> Pydantic-модель для BaseTool.parameters."""
-    from pydantic import Field, create_model
-
     fields = {}
     for name, meta in schema.items():
         if not isinstance(meta, dict):
@@ -88,8 +85,6 @@ def _external_api_flat_args_schema_to_model(schema: dict[str, Any]) -> type[Base
 
 def is_test_mode() -> bool:
     """Проверяет запущены ли тесты."""
-    from core.config.testing import is_testing
-
     return is_testing()
 
 
@@ -283,158 +278,6 @@ class BaseTool(ABC):
         return f"{self.__class__.__name__}(name={self.name})"
 
 
-class CodeTool(BaseTool):
-    """
-    Тул из Python-кода в конфиге (поле code).
-    Выполнение через SafeEval.execute_tool.
-
-    Не кладётся в процессный ToolRegistry.register и не показывается в platform tools документации:
-    экземпляры живут только в списке tools конкретной llm_node (materialize).
-    """
-
-    listed_in_platform_tool_docs: ClassVar[bool] = False
-
-    def __init__(
-        self,
-        tool_id: str,
-        code: str,
-        title: str | None = None,
-        description: str | None = None,
-        parameters: dict[str, Any] | None = None,
-        parameters_schema: dict[str, Any] | None = None,
-        permission: Permission = None,
-        tags: list[str] | None = None,
-        react_role: ReactToolRole = ReactToolRole.STANDARD,
-        resources: dict[str, Any] | None = None,
-        container: FlowRuntimeContainer | None = None,
-    ):
-        self.name = tool_id
-        self.description = description or f"Code tool: {tool_id}"
-        self.permission = permission
-        self.tags = tags or ["misc"]
-        self.react_role = react_role
-        self._code = code
-        self._resources_config = resources or {}
-        self.container = container
-
-        if parameters_schema is not None:
-            if not isinstance(parameters_schema, dict):
-                raise ValueError(f"CodeTool '{tool_id}': parameters_schema must be a dict")
-            if parameters_schema.get("type") != "object":
-                raise ValueError(f"CodeTool '{tool_id}': parameters_schema must have type: object")
-            props = parameters_schema.get("properties")
-            if not isinstance(props, dict):
-                raise ValueError(
-                    f"CodeTool '{tool_id}': parameters_schema must contain object properties"
-                )
-            self._parameters = copy.deepcopy(parameters_schema)
-        elif parameters:
-            props = {}
-            required = []
-            for param_name, param_info in parameters.items():
-                props[param_name] = {
-                    "type": param_info.type
-                    if hasattr(param_info, "type")
-                    else param_info.get("type", "string"),
-                    "description": param_info.description
-                    if hasattr(param_info, "description")
-                    else param_info.get("description", ""),
-                }
-                is_req = (
-                    param_info.required
-                    if hasattr(param_info, "required")
-                    else param_info.get("required", True)
-                )
-                if is_req:
-                    required.append(param_name)
-            self._parameters = {"type": "object", "properties": props, "required": required}
-        else:
-            self._parameters = None
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        """Возвращает параметры."""
-        if self._parameters:
-            return self._parameters
-        return {"type": "object", "properties": {}, "required": []}
-
-    async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
-        """Выполняет inline код через SafeEval."""
-        full_args = self._apply_defaults(args)
-        schema = self._parameters
-        if isinstance(schema, dict) and schema.get("type") == "object":
-            validate_tool_args_against_parameters_schema(schema=schema, arguments=dict(full_args))
-
-        variables = state.variables
-
-        # Резолвим resources из конфига tool
-        resources = await self._resolve_resources(state)
-
-        container = self.container
-        if container is None:
-            if resources:
-                raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to execute inline code")
-            from apps.flows.src.runners.python import PythonCodeRunner
-
-            runner = PythonCodeRunner(variables=variables)
-        else:
-            runner = container.get_code_runner(
-                language="python",
-                resources=resources,
-                variables=variables,
-            )
-        result = await runner.execute_tool(self._code, full_args, state)
-
-        return result
-
-    def _apply_defaults(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Применяет default значения из args_schema к args."""
-        if not self._parameters:
-            return args
-
-        result = dict(args)
-        properties = self._parameters.get("properties", {})
-        if not isinstance(properties, dict):
-            return result
-
-        for prop_name, prop_schema in properties.items():
-            if not isinstance(prop_schema, dict):
-                continue
-            if prop_name not in result and "default" in prop_schema:
-                result[prop_name] = prop_schema["default"]
-
-        return result
-
-    async def _resolve_resources(self, state: "ExecutionState") -> dict[str, Any]:
-        """
-        Резолвит resources для tool.
-
-        Единообразно с нодами — иерархия flow > skill > tool.
-        """
-        tool_resources = self._resources_config
-        container = self.container
-        if container is None:
-            if tool_resources:
-                raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to resolve resources")
-            return {}
-
-        flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
-            state.session_flow_id,
-            state.branch_id,
-            state.flow_config_version,
-        )
-
-        if not flow_resources and not skill_resources and not tool_resources:
-            return {}
-
-        return await container.resource_resolver.resolve_for_node(
-            flow_resources=flow_resources,
-            skill_resources=skill_resources,
-            node_resources=tool_resources,
-            variables=state.variables,
-        )
-
-
 class ExternalAPITool(BaseTool):
     """
     Инструмент для вызова внешнего HTTP API.
@@ -495,9 +338,6 @@ class ExternalAPITool(BaseTool):
         result = await client.call(api_config, args, variables, state)
 
         if result.get("status") == "waiting_input" and result.get("interrupt"):
-            from apps.flows.src.runtime.exceptions import FlowInterrupt
-            from core.state import parse_interrupt_body_from_external_dict
-
             raw = result["interrupt"]
             if not isinstance(raw, dict):
                 raise ValueError(

@@ -11,7 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.tools import tool
+from apps.flows.src.tools.decorator import tool
 from core.clients.pravo import (
     PravoClient,
     PravoClientError,

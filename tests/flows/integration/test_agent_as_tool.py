@@ -14,8 +14,8 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.flow import Flow
-from apps.flows.src.tools import BaseTool
-from apps.flows.src.tools.base import CodeTool
+from apps.flows.src.tools.base import BaseTool
+from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from core.clients.llm import setup_mock_responses
 from core.state import ExecutionState

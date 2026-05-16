@@ -10,7 +10,9 @@ import pytest
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools.base import BaseTool, is_test_mode
-from apps.flows.tools import ask_user, calculator, finish
+from apps.flows.tools.agent_session_tools import ask_user
+from apps.flows.tools.finish_tool import finish
+from apps.flows.tools.math_tools import calculator
 from core.state import ExecutionState
 
 
@@ -180,7 +182,7 @@ class TestAskUserTool:
         """Если tool_id не зарегистрирован как builtin, подтягивается шаблон из tool_repository → CodeTool."""
         from apps.flows.src.container import get_container
         from apps.flows.src.models import ToolReference
-        from apps.flows.src.tools.base import CodeTool
+        from apps.flows.src.tools.code_tool import CodeTool
 
         container = get_container()
         tid = f"repo_only_{unique_id}"
@@ -199,7 +201,7 @@ class TestToolRegistryPolicy:
     """Инварианты процессного ToolRegistry."""
 
     def test_register_rejects_code_tool(self):
-        from apps.flows.src.tools.base import CodeTool
+        from apps.flows.src.tools.code_tool import CodeTool
         from apps.flows.src.tools.registry import ToolRegistry
 
         reg = ToolRegistry()

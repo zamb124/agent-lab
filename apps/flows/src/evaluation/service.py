@@ -5,13 +5,13 @@
 Поддерживает тестирование агентов и отдельных нод через TestTarget.
 """
 
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import date, datetime, timezone
 from typing import Any
-from collections.abc import AsyncIterator, Awaitable, Callable
 
 from apps.flows.src.db import EvaluationRepository
 from apps.flows.src.models import TestCaseConfig
-from apps.flows.src.models.enums import TestTargetType
+from apps.flows.src.models.enums import NodeType, TestTargetType
 from apps.flows.src.models.evaluation_result import EvaluationResult, EvaluationRunSummary
 from apps.flows.src.models.flow_config import TestTarget
 from core.logging import get_logger
@@ -539,7 +539,6 @@ class EvaluationService:
         if not node_type:
             raise ValueError("node_config must contain 'type' field")
 
-        from apps.flows.src.models.enums import NodeType
         node_type_enum = NodeType(node_type)
 
         node_class = self._node_registry.get(node_type_enum)

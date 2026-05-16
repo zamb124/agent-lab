@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import ast
-from typing import Any
+import builtins as b
 from collections.abc import Mapping
+from typing import Any
 
 from apps.flows.src.eval.shim_registry import strict_shim_import_roots
 from core.errors import SafeEvalError
@@ -120,6 +121,5 @@ def safe_inline_import(
         return g[root]
 
     assert_module_import_allowed(name, namespace_keys=ns_keys)
-    import builtins as b
 
     return b.__import__(name, g, local_mapping, fromlist, level)

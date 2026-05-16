@@ -12,8 +12,13 @@ from typing import Any
 import httpx
 
 from apps.flows.config import get_settings
+from apps.flows.src.container import get_container
+from apps.flows.src.triggers.handlers.base import TriggerRegistrationError
+from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
+from core.context import clear_context, set_context
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
+from core.models import Company, Context, User
 
 logger = get_logger(__name__)
 
@@ -143,10 +148,6 @@ class TelegramDevPolling:
 
     async def _get_telegram_triggers(self) -> list[dict[str, Any]]:
         """Собирает все Telegram триггеры из агентов всех компаний."""
-        from apps.flows.src.container import get_container
-        from core.context import clear_context, set_context
-        from core.models import Company, Context, User
-
         triggers = []
         container = get_container()
 
@@ -270,8 +271,6 @@ class TelegramDevPolling:
         Пробрасывает Update в тот же POST /flows/api/v1/triggers/telegram/.../...,
         что обрабатывает внешний Telegram в production (AuthMiddleware, хендлер, executor).
         """
-        from apps.flows.src.container import get_container
-
         _ = subdomain
 
         settings = get_settings()
@@ -311,9 +310,6 @@ class TelegramDevPolling:
 
     async def _sync_bots(self):
         """Синхронизирует polling боты с текущими триггерами."""
-        from apps.flows.src.triggers.handlers.base import TriggerRegistrationError
-        from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
-
         triggers = await self._get_telegram_triggers()
 
         current_keys: set[str] = set()

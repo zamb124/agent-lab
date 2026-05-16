@@ -12,6 +12,7 @@ import traceback
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from apps.flows.src.services.runtime_namespace_doc import build_runtime_namespace_global_variables
 from core.docs import DocumentationQuery
 from core.docs.service import get_documentation_service
 from core.errors import SafeEvalError
@@ -81,8 +82,6 @@ def syntax_retry_hint(code: str, detail: str) -> str:
 
 
 async def build_sandbox_docs_markdown() -> str:
-    from apps.flows.src.services.runtime_namespace_doc import build_runtime_namespace_global_variables
-
     runtime_extras = build_runtime_namespace_global_variables()
     query = DocumentationQuery(
         language="python",

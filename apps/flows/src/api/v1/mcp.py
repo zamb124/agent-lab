@@ -181,7 +181,6 @@ async def update_server(
 
     # Конвертируем transport_type строку в enum
     if "transport_type" in update_data and update_data["transport_type"]:
-        from apps.flows.src.models.mcp import MCPTransportType
         update_data["transport_type"] = MCPTransportType(update_data["transport_type"])
 
     for field, value in update_data.items():

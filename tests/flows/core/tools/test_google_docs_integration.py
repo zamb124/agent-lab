@@ -26,7 +26,7 @@ import pytest
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
-from apps.flows.tools import (
+from apps.flows.tools.google_docs import (
     gdocs_append_text,
     gdocs_create_document,
     gdocs_delete_range,

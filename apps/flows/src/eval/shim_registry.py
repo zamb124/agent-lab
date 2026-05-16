@@ -7,9 +7,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Callable
+
+from apps.flows.src.eval.wrappers import HttpxModule, SafeLLMClient
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,14 +27,10 @@ class InlineShimSpec:
 
 
 def _httpx_factory(_builder: Any) -> Any:
-    from apps.flows.src.eval.wrappers import HttpxModule
-
     return HttpxModule()
 
 
 def _llm_factory(_builder: Any) -> Any:
-    from apps.flows.src.eval.wrappers import SafeLLMClient
-
     return SafeLLMClient()
 
 

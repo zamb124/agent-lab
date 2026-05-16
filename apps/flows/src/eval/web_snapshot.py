@@ -10,8 +10,8 @@ import asyncio
 import json
 import re
 from abc import ABC, abstractmethod
-from typing import Any
 from collections.abc import Awaitable
+from typing import Any
 from urllib.parse import urlparse
 
 from core.files.reader import FileReader

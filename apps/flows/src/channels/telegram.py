@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from apps.flows.src.models.enums import ChannelType
+from core.config import get_settings
 from core.http.client import ProxyStrategy, request_with_strategy
 from core.logging import get_logger
 
@@ -59,7 +60,6 @@ def get_telegram_api_base(config: dict[str, Any] | None = None) -> str:
     """
     if config and config.get("api_base"):
         return config["api_base"]
-    from core.config import get_settings
     return get_settings().telegram.api_base
 
 

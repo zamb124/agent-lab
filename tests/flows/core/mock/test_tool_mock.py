@@ -8,7 +8,8 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-from apps.flows.src.tools.base import BaseTool, CodeTool
+from apps.flows.src.tools.base import BaseTool
+from apps.flows.src.tools.code_tool import CodeTool
 from core.state import ExecutionState
 
 

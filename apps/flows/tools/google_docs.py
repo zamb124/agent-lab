@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.eval.platform_services import get_file_bytes, get_google_oauth_token
-from apps.flows.src.tools import tool
+from apps.flows.src.tools.decorator import tool
 from core.clients.google_docs_client import GoogleDocsClient
 from core.logging import get_logger
 

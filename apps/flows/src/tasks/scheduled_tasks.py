@@ -13,9 +13,11 @@ from apps.flows_worker.broker import broker
 from apps.scheduler.container import get_scheduler_container
 from core.context import Context, set_context
 from core.logging import get_logger
+from core.models.identity_models import Company, User
 from core.scheduler import get_schedule_source
 from core.scheduler.models import ScheduledTaskStatus
 from core.state import ExecutionState
+from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
 
@@ -71,8 +73,6 @@ async def execute_scheduled_task(
     effective_company_id = company_id or "system"
 
     scheduler_repo = get_scheduler_container().scheduler_task_repository
-
-    from core.models.identity_models import Company, User
 
     context = Context(
         user=User(user_id=user_id, name="Scheduler"),
@@ -191,8 +191,6 @@ async def _execute_message_task(
 
     # Отправляем уведомление о завершении задачи (WebSocket + Web Push)
     if result.get("status") == "completed":
-        from core.websocket.publisher import Notification, NotificationType, notify_user
-
         final_response = result.get("response", "")
         preview = final_response[:100] + ("..." if len(final_response) > 100 else "")
 
@@ -241,4 +239,3 @@ async def _execute_tool_call_task(
         "args": tool_args,
         "result": result,
     }
-

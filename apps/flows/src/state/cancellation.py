@@ -14,6 +14,7 @@ import time
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
+from apps.flows.config import get_settings
 from core.clients import RedisClient
 from core.errors import FlowWallClockTimeoutError
 from core.logging import get_logger
@@ -101,8 +102,6 @@ async def check_cancellation(state: ExecutionState | None = None) -> None:
         if time.monotonic() >= state.flow_deadline_monotonic:
             ts = state.flow_timeout_effective_seconds
             if ts is None:
-                from apps.flows.config import get_settings
-
                 ts = get_settings().default_flow_timeout_seconds
             raise FlowWallClockTimeoutError(
                 flow_id=state.session_flow_id,

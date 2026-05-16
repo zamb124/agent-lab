@@ -4,9 +4,10 @@
 
 from __future__ import annotations
 
-import types
 import importlib
+import types
 
+from core.docs.data.python.globals import GLOBALS as STATIC_GLOBALS
 from core.docs.models import GlobalVariable
 
 
@@ -19,8 +20,6 @@ def _type_label(obj: object) -> str:
 
 
 def build_runtime_namespace_global_variables() -> list[GlobalVariable]:
-    from core.docs.data.python.globals import GLOBALS as STATIC_GLOBALS
-
     namespace_module = importlib.import_module("apps.flows.src.eval.namespace")
     PythonNamespaceBuilder = getattr(namespace_module, "PythonNamespaceBuilder")
     documented = {g["name"] for g in STATIC_GLOBALS}

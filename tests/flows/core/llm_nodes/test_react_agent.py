@@ -10,7 +10,7 @@ import pytest
 
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-from apps.flows.tools import calculator
+from apps.flows.tools.math_tools import calculator
 from core.state import ExecutionState
 
 

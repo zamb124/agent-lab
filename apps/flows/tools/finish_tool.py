@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.models.enums import ReactToolRole
-from apps.flows.src.tools import tool
+from apps.flows.src.tools.decorator import tool
 
 if TYPE_CHECKING:
     from core.state import ExecutionState

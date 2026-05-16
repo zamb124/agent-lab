@@ -30,15 +30,29 @@ from apps.flows.src.api import (  # noqa: E402
 from apps.flows.src.api.v1 import api_v1_router  # noqa: E402
 from apps.flows.src.container import get_container  # noqa: E402
 from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware  # noqa: E402
-from apps.flows.src.services.flows_loader import load_tools_to_db  # noqa: E402
+from apps.flows.src.realtime import register_flows_ws_commands  # noqa: E402
+from apps.flows.src.services.flows_loader import (
+    load_flows_to_db,  # noqa: E402
+    load_tools_to_db,  # noqa: E402
+)
+from apps.flows.src.services.landing_bundle_dev_sync import (  # noqa: E402
+    sync_landing_public_demo_flows_from_bundles,
+)
 from apps.flows.src.services.mcp_sync import (  # noqa: E402
     ensure_default_mcp_servers_for_company,
     sync_auto_mcp_servers_for_company,
 )
+from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue  # noqa: E402
 from apps.flows.src.tasks.company_init_tasks import init_company_resources  # noqa: E402
+from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
+from apps.flows.src.triggers.dev_polling import start_dev_polling, stop_dev_polling  # noqa: E402
+from core.api.integrations import set_flow_resume_handler  # noqa: E402
 from core.app import create_service_app  # noqa: E402
+from core.clients.llm.factory import get_llm  # noqa: E402
+from core.clients.llm.mock import configure_mock_llm_redis  # noqa: E402
 from core.config.testing import is_testing  # noqa: E402
 from core.context import clear_context, set_context  # noqa: E402
+from core.files.writer import FileWriter  # noqa: E402
 from core.logging import get_logger  # noqa: E402
 from core.models.context_models import Context, Language  # noqa: E402
 from core.models.identity_models import Company, User  # noqa: E402
@@ -56,19 +70,12 @@ _FLOWS_DEV_CORS_ORIGIN_REGEX = (
 
 async def on_startup(app: FastAPI, container, settings: FlowSettings):
     """Логика при старте сервиса flows."""
-    from apps.flows.src.realtime import register_flows_ws_commands
-
     register_flows_ws_commands()
-
-    from apps.flows.src.tasks.flow_tasks import process_flow_task
-    from core.api.integrations import set_flow_resume_handler
 
     async def _flow_resume_via_taskiq(**kwargs):
         await process_flow_task.kiq(**kwargs)
 
     set_flow_resume_handler(_flow_resume_via_taskiq)
-
-    from core.files.writer import FileWriter
 
     FileWriter.configure_process_upload(
         file_processor=container.file_processor,
@@ -95,10 +102,6 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
                 raise
 
     if settings.server.env == "development" and not is_testing():
-        from apps.flows.src.services.landing_bundle_dev_sync import (
-            sync_landing_public_demo_flows_from_bundles,
-        )
-
         await sync_landing_public_demo_flows_from_bundles(container, settings)
 
     # Загрузка tools + постановка init_company в worker не должны блокировать lifespan:
@@ -124,8 +127,6 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
             logger.info(f"Загружено tools: {loaded_tools}")
 
             logger.info("Загрузка flows из bundles синхронно (TESTING=true)...")
-            from apps.flows.src.services.flows_loader import load_flows_to_db
-
             loaded_flow_ids = await load_flows_to_db(
                 container.flow_repository,
                 container.node_repository,
@@ -147,8 +148,6 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
                     mcp_err,
                     exc_info=True,
                 )
-            from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
-
             await ensure_example_hitl_queue(container.operator_repository, "system")
         except Exception as e:
             logger.error(f"Ошибка запуска миграции в system: {e}", exc_info=True)
@@ -210,8 +209,6 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
 
     if is_testing():
         logger.info("Пропускаем синхронизацию LLM моделей (TESTING)")
-        from core.clients.llm.factory import get_llm
-        from core.clients.llm.mock import configure_mock_llm_redis
 
         get_llm("mock-gpt-4")
         configure_mock_llm_redis(container.redis_client)
@@ -219,8 +216,6 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
 
     # Telegram Dev Polling (только в development)
     if settings.server.env == "development" and not is_testing():
-        from apps.flows.src.triggers.dev_polling import start_dev_polling
-
         await start_dev_polling()
         logger.info("Telegram dev polling запущен")
 
@@ -230,8 +225,6 @@ async def on_shutdown(app: FastAPI, container):
 
     # Остановка Telegram dev polling
     try:
-        from apps.flows.src.triggers.dev_polling import stop_dev_polling
-
         await stop_dev_polling()
     except Exception as e:
         logger.warning(f"Error stopping dev polling: {e}")

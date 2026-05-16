@@ -7,12 +7,17 @@ LLM resource island: нода type=resource с единственной прив
 from __future__ import annotations
 
 import copy
-from typing import Any
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from apps.flows.src.models.flow_config import Edge
 from apps.flows.src.models.node_config import NodeLLMOverride
-from apps.flows.src.models.resource import LLMResourceConfig, LLMResourcePatch, ResourceReference, ResourceType
+from apps.flows.src.models.resource import (
+    LLMResourceConfig,
+    LLMResourcePatch,
+    ResourceReference,
+    ResourceType,
+)
 from apps.flows.src.resources.merge_llm import (
     merge_llm_resource_config_with_patch,
     merge_llm_resource_patch_dicts,

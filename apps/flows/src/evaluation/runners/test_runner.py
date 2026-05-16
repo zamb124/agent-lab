@@ -14,9 +14,9 @@ import json
 import re
 import time
 import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import date
 from typing import Any
-from collections.abc import AsyncIterator, Awaitable, Callable
 
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
 
@@ -28,6 +28,7 @@ from apps.flows.src.models.flow_config import (
     InputType,
     TestTurn,
 )
+from apps.flows.src.runners.python import PythonCodeRunner
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import get_llm
@@ -79,7 +80,6 @@ class TestRunner:
         if self._flow_factory is not None:
             container = self._flow_factory.container
             return container.get_code_runner(language="python")
-        from apps.flows.src.runners.python import PythonCodeRunner
 
         return PythonCodeRunner()
 

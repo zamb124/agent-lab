@@ -4,9 +4,11 @@ API endpoints для работы с кодом.
 Эндпоинты для валидации и выполнения inline кода.
 """
 
+import ast
 import copy
 import importlib
 import inspect
+import re
 import time
 import uuid
 from typing import Any
@@ -445,8 +447,6 @@ def _parse_function_signature(code: str, func_name: str | None = None) -> dict[s
     """
     Парсит сигнатуру функции из Python кода.
     """
-    import ast
-
     tree = ast.parse(code)
     target_names = [func_name] if func_name else ["execute", "run"]
 
@@ -680,7 +680,6 @@ async def validate_code(container: ContainerDep, request: ValidateRequest) -> Va
         return ValidateResponse(valid=False, error=error)
 
     # Проверяем что код содержит хотя бы одну функцию
-    import re
     if not re.search(r"(?:async\s+)?def\s+\w+\s*\(", code):
         return ValidateResponse(valid=False, error="Функция не найдена в коде")
 

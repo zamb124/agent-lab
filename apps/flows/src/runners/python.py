@@ -5,20 +5,18 @@ PythonCodeRunner - выполнение Python кода.
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from apps.flows.src.eval.compiler import PythonCompiler
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
 from apps.flows.src.runners.base import BaseCodeRunner
 from core.errors import SafeEvalError
+from core.state import ExecutionState
 from core.state.mutation_policy import (
     assert_frozen_fields_unchanged,
     snapshot_frozen_fields,
     user_code_state_mutation_guard,
 )
-
-if TYPE_CHECKING:
-    from core.state import ExecutionState
 
 
 class PythonCodeRunner(BaseCodeRunner):
@@ -47,18 +45,14 @@ class PythonCodeRunner(BaseCodeRunner):
         self.compiler = PythonCompiler(namespace_builder=self.namespace_builder)
 
     def _snapshot_frozen_if_state(self, state: ExecutionState | None) -> dict[str, Any] | None:
-        from core.state import ExecutionState as ES
-
-        if state is None or not isinstance(state, ES):
+        if state is None or not isinstance(state, ExecutionState):
             return None
         return snapshot_frozen_fields(state)
 
     def _assert_frozen_if_needed(
         self, state: ExecutionState | None, snap: dict[str, Any] | None
     ) -> None:
-        from core.state import ExecutionState as ES
-
-        if snap is None or state is None or not isinstance(state, ES):
+        if snap is None or state is None or not isinstance(state, ExecutionState):
             return
         assert_frozen_fields_unchanged(state, snap)
 

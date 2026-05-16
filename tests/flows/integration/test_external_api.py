@@ -19,7 +19,7 @@ from apps.flows.src.models.external_api import (
     HTTPMethod,
 )
 from apps.flows.src.runtime.nodes import ExternalAPINode, create_node
-from apps.flows.src.tools import ExternalAPITool
+from apps.flows.src.tools.base import ExternalAPITool
 from core.state import ExecutionState
 from tests.flows.fixtures.external_api.main import external_api_app
 

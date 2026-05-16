@@ -10,11 +10,12 @@ FlowValidator - валидация структуры и ссылок во flow.
 """
 
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
-from collections.abc import Awaitable, Callable
 
+from apps.flows.src.state.node_files import validate_node_files_list
 from core.logging import get_logger
 from core.urn import extract_id
 
@@ -584,8 +585,6 @@ class FlowValidator:
         result: FlowValidationResult,
     ) -> None:
         """Поле files: список объектов с непустыми строками name и path."""
-        from apps.flows.src.state.node_files import validate_node_files_list
-
         for node_id, cfg in nodes.items():
             if not isinstance(cfg, dict):
                 continue

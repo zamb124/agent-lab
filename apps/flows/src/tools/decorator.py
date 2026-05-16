@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import inspect
 import re
-from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints
 
 from pydantic import BaseModel
 
@@ -17,6 +17,7 @@ from apps.flows.src.mock import get_mock_for_tool
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.tools.base import BaseTool
+from core.config.testing import is_testing
 from core.logging import get_logger
 
 if TYPE_CHECKING:
@@ -30,7 +31,6 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 def is_test_mode() -> bool:
     """Проверяет запущены ли тесты."""
-    from core.config.testing import is_testing
     return is_testing()
 
 

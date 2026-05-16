@@ -8,9 +8,10 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.eval.platform_services import get_operator_handoff_service
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.tools import tool
+from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
 
@@ -152,8 +153,6 @@ async def hitl_operator_task(
     *,
     state: "ExecutionState",
 ) -> str:
-    from apps.flows.src.eval.platform_services import get_operator_handoff_service
-
     mode = HandoffMode(handoff_mode)
     handoff = get_operator_handoff_service()
     cid, op_task_id = await handoff.register_handoff(

@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-
 from pydantic import Field
 
 from core.clients.speech_override import SpeechProviderName, SpeechResponseFormat, VADProviderName

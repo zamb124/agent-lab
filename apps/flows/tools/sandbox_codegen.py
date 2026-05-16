@@ -23,7 +23,7 @@ from apps.flows.src.eval.codegen_utils import (
     syntax_retry_hint,
 )
 from apps.flows.src.eval.platform_services import get_code_runner
-from apps.flows.src.tools import tool
+from apps.flows.src.tools.decorator import tool
 from core.clients.llm import get_llm
 from core.config import get_settings
 
