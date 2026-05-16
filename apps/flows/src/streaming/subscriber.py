@@ -4,7 +4,7 @@ EventSubscriber - подписка на A2A события из Redis Pub/Sub.
 
 import asyncio
 import json
-from typing import AsyncIterator, List, Optional
+from collections.abc import AsyncIterator
 
 from a2a.types import (
     TaskArtifactUpdateEvent,
@@ -75,7 +75,7 @@ class EventSubscriber(BaseSubscriber):
         self,
         task_id: str,
         timeout: float = 300.0,
-        ready_event: Optional[asyncio.Event] = None,
+        ready_event: asyncio.Event | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """
         Подписывается на события задачи.
@@ -114,9 +114,9 @@ class EventSubscriber(BaseSubscriber):
         self,
         task_id: str,
         timeout: float = 300.0,
-        ready_event: Optional[asyncio.Event] = None,
-    ) -> List[StreamEvent]:
-        events: List[StreamEvent] = []
+        ready_event: asyncio.Event | None = None,
+    ) -> list[StreamEvent]:
+        events: list[StreamEvent] = []
         async for event in self.subscribe(task_id, timeout=timeout, ready_event=ready_event):
             events.append(event)
         return events
@@ -125,8 +125,8 @@ class EventSubscriber(BaseSubscriber):
         self,
         task_id: str,
         timeout: float = 300.0,
-        ready_event: Optional[asyncio.Event] = None,
-    ) -> List[StreamEvent]:
+        ready_event: asyncio.Event | None = None,
+    ) -> list[StreamEvent]:
         """
         Собирает все события до финального.
 
@@ -138,7 +138,7 @@ class EventSubscriber(BaseSubscriber):
         Returns:
             Список всех событий
         """
-        events: List[StreamEvent] = []
+        events: list[StreamEvent] = []
         async for event in self.subscribe(task_id, timeout, ready_event=ready_event):
             events.append(event)
         return events

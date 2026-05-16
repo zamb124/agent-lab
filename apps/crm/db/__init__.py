@@ -10,13 +10,13 @@ CRM Database - модели и репозитории.
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase, get_crm_db
 from apps.crm.db.models import (
     AccessRequest,
-    Base,
     CompanyMapping,
     CRMSuggest,
     EntityType,
     Relationship,
     RelationshipType,
 )
+from core.db.models.base import Base
 
 __all__ = [
     # Models

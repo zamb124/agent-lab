@@ -109,7 +109,7 @@ class VariablesService:
         if not text:
             return text
 
-        variables_map = await self._get_company_variables_map()
+        variables_map = await self.get_company_variables_map()
         if context_vars:
             variables_map = {**variables_map, **context_vars}
         return VarResolver.resolve_text(text, variables_map)
@@ -143,10 +143,10 @@ class VariablesService:
         Returns:
             Резолвнутое значение
         """
-        variables_map = await self._get_company_variables_map()
+        variables_map = await self.get_company_variables_map()
         return VarResolver.resolve_deep(value, variables_map)
 
-    async def _get_company_variables_map(self) -> Dict[str, Any]:
+    async def get_company_variables_map(self) -> Dict[str, Any]:
         """Возвращает словарь переменных компании в формате key -> value."""
         all_variables = await self._variable_repository.get_variables()
         return {key: variable.value for key, variable in all_variables.items()}

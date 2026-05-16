@@ -4,7 +4,8 @@ In-memory реализации Emitter и Subscriber.
 Используются для внешних агентов, которые не требуют Redis.
 """
 
-from typing import Any, AsyncIterator, List
+from typing import Any
+from collections.abc import AsyncIterator
 
 from core.state import ExecutionState
 
@@ -26,10 +27,10 @@ class InMemoryEmitter(BaseEmitter):
 
     def __init__(self, state: ExecutionState):
         super().__init__(state)
-        self._events: List[Any] = []
+        self._events: list[Any] = []
 
     @property
-    def events(self) -> List[Any]:
+    def events(self) -> list[Any]:
         """Возвращает все опубликованные события."""
         return self._events
 

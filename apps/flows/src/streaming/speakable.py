@@ -64,7 +64,7 @@ JS-эквивалент констант и функции ``is_speakable_artifa
 
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 from a2a.types import Artifact, TaskArtifactUpdateEvent, TextPart
 
@@ -127,7 +127,7 @@ def iter_speakable_text_parts(artifact: Artifact) -> Iterable[str]:
                 yield text
 
 
-def extract_speakable_text(event: TaskArtifactUpdateEvent) -> Optional[str]:
+def extract_speakable_text(event: TaskArtifactUpdateEvent) -> str | None:
     """Собрать весь speakable-текст из ``TaskArtifactUpdateEvent``.
 
     Возвращает:

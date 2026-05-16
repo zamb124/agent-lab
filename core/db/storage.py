@@ -92,7 +92,7 @@ class Storage:
         self._table_cache = {}
         self._metadata = MetaData()
 
-    def _get_session(self):
+    def get_session(self):
         """Возвращает асинхронный контекстный менеджер для сессии БД"""
         return _SessionContextManager(self)
 
@@ -199,7 +199,7 @@ class Storage:
         if db_session:
             return await self._get_with_session(final_key, table_name, db_session)
 
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             return await self._get_with_session(final_key, table_name, session)
 
     async def _get_with_session(self, key: str, table_name: str, session) -> Optional[str]:
@@ -250,7 +250,7 @@ class Storage:
         if db_session:
             return await self._set_with_session(final_key, value, ttl, table_name, db_session)
 
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             result = await self._set_with_session(final_key, value, ttl, table_name, session)
             await session.commit()
             await session.flush()  # Убеждаемся что изменения видны
@@ -339,7 +339,7 @@ class Storage:
         if db_session:
             return await self._delete_with_session(final_key, table_name, db_session)
 
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             result = await self._delete_with_session(final_key, table_name, session)
             await session.commit()
             await session.flush()  # Убеждаемся что изменения видны
@@ -377,7 +377,7 @@ class Storage:
         final_prefix, company_id = self._get_company_key(prefix, force_global)
         table_name = self._get_table_name(prefix, company_id)
 
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             model = self._get_table_model(table_name)
 
             if model in TABLE_MODELS.values():
@@ -410,7 +410,7 @@ class Storage:
         final_prefix, company_id = self._get_company_key(prefix, force_global)
         table_name = self._get_table_name(prefix, company_id)
 
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             model = self._get_table_model(table_name)
 
             if model in TABLE_MODELS.values():
@@ -464,7 +464,7 @@ class Storage:
 
         table_name = self._get_table_name(keys[0], None)
 
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             model = self._get_table_model(table_name)
 
             if model in TABLE_MODELS.values():
@@ -493,7 +493,7 @@ class Storage:
 
             return data
 
-    async def _get_with_session_and_table(self, key: str, table_name: str) -> Optional[str]:
+    async def get_with_session_and_table(self, key: str, table_name: str) -> Optional[str]:
         """
         Низкоуровневый метод для получения значения из конкретной таблицы.
         Используется BaseRepository.
@@ -505,10 +505,10 @@ class Storage:
         Returns:
             JSON строка или None
         """
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             return await self._get_with_session(key, table_name, session)
 
-    async def _set_with_table(
+    async def set_with_table(
         self, key: str, value: str, table_name: str, ttl: Optional[int] = None
     ) -> bool:
         """
@@ -524,13 +524,13 @@ class Storage:
         Returns:
             True если сохранение успешно
         """
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             result = await self._set_with_session(key, value, ttl, table_name, session)
             await session.commit()
             await session.flush()
             return result
 
-    async def _delete_with_table(self, key: str, table_name: str) -> bool:
+    async def delete_with_table(self, key: str, table_name: str) -> bool:
         """
         Низкоуровневый метод для удаления значения из конкретной таблицы.
         Используется BaseRepository.
@@ -542,13 +542,13 @@ class Storage:
         Returns:
             True если удаление успешно
         """
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             result = await self._delete_with_session(key, table_name, session)
             await session.commit()
             await session.flush()
             return result
 
-    async def _get_all_by_prefix_and_table(
+    async def get_all_by_prefix_and_table(
         self, prefix: str, table_name: str, limit: int = 1000, offset: int = 0
     ) -> dict[str, str]:
         """
@@ -566,7 +566,7 @@ class Storage:
         """
         if offset < 0:
             raise ValueError("offset должен быть >= 0")
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             model = self._get_table_model(table_name)
 
             if model in TABLE_MODELS.values():
@@ -602,7 +602,7 @@ class Storage:
 
     async def _count_by_prefix_and_table(self, prefix: str, table_name: str) -> int:
         """Считает количество записей по префиксу в таблице. Используется BaseRepository."""
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             model = self._get_table_model(table_name)
             if model in TABLE_MODELS.values():
                 from sqlalchemy import func as sa_func
@@ -617,7 +617,7 @@ class Storage:
                 )
             return result.scalar() or 0
 
-    async def _get_many_with_table(self, keys: List[str], table_name: str) -> dict[str, str]:
+    async def get_many_with_table(self, keys: List[str], table_name: str) -> dict[str, str]:
         """
         Низкоуровневый метод для получения нескольких значений из конкретной таблицы.
         Используется BaseRepository.
@@ -632,7 +632,7 @@ class Storage:
         if not keys:
             return {}
 
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             model = self._get_table_model(table_name)
 
             if model in TABLE_MODELS.values():
@@ -674,7 +674,7 @@ class Storage:
         Returns:
             Список ключей
         """
-        async with self._get_session() as session:
+        async with self.get_session() as session:
             model = self._get_table_model(table_name)
 
             if model in TABLE_MODELS.values():

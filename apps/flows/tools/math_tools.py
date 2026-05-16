@@ -2,7 +2,8 @@
 
 import ast
 import math
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,7 +34,7 @@ class CalculatorArgs(BaseModel):
     args_schema=CalculatorArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
-async def calculator(expression: str, state: Optional[dict[str, Any]] = None) -> str:
+async def calculator(expression: str, state: dict[str, Any] | None = None) -> str:
     funcs: dict[str, Callable[..., Any]] = {
         "sin": math.sin,
         "cos": math.cos,

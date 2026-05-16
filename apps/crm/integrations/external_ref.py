@@ -6,32 +6,49 @@
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
-from typing import Any
+from datetime import UTC, datetime
+from typing import ClassVar
+from typing import cast as type_cast
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from apps.crm.types import JsonObject
+
+
+def _as_json_object(value: object, context: str) -> JsonObject:
+    if not isinstance(value, dict):
+        raise ValueError(f"{context} must be JSON object")
+    result: JsonObject = {}
+    for key, item in type_cast(dict[object, object], value).items():
+        if not isinstance(key, str):
+            raise ValueError(f"{context} contains non-string key")
+        result[key] = item
+    return result
 
 
 class ExternalRef(BaseModel):
     """Один источник: стабильный record_id у провайдера и публичные метаданные."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     record_id: str = Field(min_length=1)
     account_key: str | None = None
     last_seen_at: datetime | None = None
     raw_version: str | None = None
 
-    def to_json_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", exclude_none=True)
+    def to_json_dict(self) -> JsonObject:
+        return _as_json_object(
+            type_cast(object, self.model_dump(mode="json", exclude_none=True)),
+            "ExternalRef JSON",
+        )
 
 
 def merge_external_refs(
-    attributes: dict[str, Any],
+    attributes: JsonObject,
     *,
     source_id: str,
     ref: ExternalRef,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Возвращает копию attributes с обновлённым external_refs[source_id] без затирания других источников.
     """
@@ -39,11 +56,11 @@ def merge_external_refs(
         raise ValueError("source_id обязателен")
     raw_refs = attributes.get("external_refs")
     if raw_refs is None:
-        refs: dict[str, Any] = {}
+        refs: JsonObject = {}
     elif not isinstance(raw_refs, dict):
         raise ValueError("attributes.external_refs должен быть объектом")
     else:
-        refs = dict(raw_refs)
+        refs = _as_json_object(type_cast(object, raw_refs), "attributes.external_refs")
     refs[source_id] = ref.to_json_dict()
     out = dict(attributes)
     out["external_refs"] = refs

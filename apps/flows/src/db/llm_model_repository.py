@@ -2,7 +2,6 @@
 Репозиторий для LLMModel.
 """
 
-from typing import List
 
 from apps.flows.src.models import LLMModel
 from core.db import BaseRepository, Storage
@@ -27,7 +26,7 @@ class LLMModelRepository(BaseRepository[LLMModel]):
         """Формирует ID как provider:model_id для уникальности."""
         return f"{entity.provider}:{entity.model_id}"
 
-    async def list_by_provider(self, provider: str) -> List[LLMModel]:
+    async def list_by_provider(self, provider: str) -> list[LLMModel]:
         """Возвращает все модели указанного провайдера."""
         # Получаем все модели и фильтруем по провайдеру
         all_models = await self.list(limit=10000)

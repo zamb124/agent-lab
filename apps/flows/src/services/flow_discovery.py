@@ -3,7 +3,7 @@ FlowDiscoveryService — регистрация и health-check внешних f
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from apps.flows.config import ExternalFlowConfig
@@ -28,7 +28,7 @@ class FlowDiscoveryService:
         self._repository = repository
         self._a2a_client = a2a_client
 
-    async def init_from_config(self, external_flows_config: List[ExternalFlowConfig]) -> int:
+    async def init_from_config(self, external_flows_config: list[ExternalFlowConfig]) -> int:
         """Регистрирует flows из конфигурации приложения."""
         registered = 0
 
@@ -50,8 +50,8 @@ class FlowDiscoveryService:
     async def register_agent(
         self,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
-        name: Optional[str] = None,
+        headers: dict[str, str] | None = None,
+        name: str | None = None,
     ) -> FlowConfig:
         """
         Регистрирует внешний flow по A2A base URL.
@@ -100,14 +100,14 @@ class FlowDiscoveryService:
             logger.info(f"Unregistered external flow: {flow_id}")
         return result
 
-    async def get_flow(self, flow_id: str) -> Optional[FlowConfig]:
+    async def get_flow(self, flow_id: str) -> FlowConfig | None:
         """Внешний flow (EXTERNAL) по flow_id."""
         flow_cfg = await self._repository.get(flow_id)
         if flow_cfg and flow_cfg.type == FlowType.EXTERNAL:
             return flow_cfg
         return None
 
-    async def get_flow_by_url(self, url: str) -> Optional[FlowConfig]:
+    async def get_flow_by_url(self, url: str) -> FlowConfig | None:
         """Внешний flow по нормализованному base URL."""
         url = url.rstrip("/")
         stored_flows = await self._repository.list(limit=10000)
@@ -116,7 +116,7 @@ class FlowDiscoveryService:
                 return row
         return None
 
-    async def list_agents(self, only_active: bool = True) -> List[FlowConfig]:
+    async def list_agents(self, only_active: bool = True) -> list[FlowConfig]:
         """Список EXTERNAL flows (имя метода историческое; сущность — flow)."""
         stored_flows = await self._repository.list(limit=10000)
         external = [row for row in stored_flows if row.type == FlowType.EXTERNAL]
@@ -125,10 +125,10 @@ class FlowDiscoveryService:
             return [row for row in external if row.status == ExternalAgentStatus.ACTIVE]
         return external
 
-    async def health_check_all(self) -> Dict[str, bool]:
+    async def health_check_all(self) -> dict[str, bool]:
         """Health-check по всем записям в репозитории."""
         rows = await self._repository.list(limit=10000)
-        results: Dict[str, bool] = {}
+        results: dict[str, bool] = {}
 
         for row in rows:
             is_healthy = await self.health_check_agent(row.flow_id)
@@ -169,8 +169,8 @@ class FlowDiscoveryService:
     async def _fetch_agent_card(
         self,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """HTTP: A2A agent-card (спека A2A)."""
         return await self._a2a_client.get_agent_card(url, headers)
 

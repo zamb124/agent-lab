@@ -5,7 +5,7 @@ JavaScriptCodeRunner - выполнение JavaScript кода.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 from apps.flows.src.runners.base import BaseCodeRunner
 
@@ -24,7 +24,7 @@ class JavaScriptCodeRunner(BaseCodeRunner):
     async def execute(
         self,
         code: str,
-        state: 'ExecutionState',
+        state: ExecutionState,
         func_name: str = "run"
     ) -> Any:
         """
@@ -39,7 +39,7 @@ class JavaScriptCodeRunner(BaseCodeRunner):
         self,
         code: str,
         args: dict[str, Any],
-        state: Optional['ExecutionState'] = None,
+        state: ExecutionState | None = None,
     ) -> Any:
         """
         Выполняет JavaScript tool.
@@ -49,7 +49,7 @@ class JavaScriptCodeRunner(BaseCodeRunner):
         """
         raise NotImplementedError("JavaScript runner not implemented yet")
 
-    def validate(self, code: str) -> Tuple[bool, Optional[str]]:
+    def validate(self, code: str) -> tuple[bool, str | None]:
         """
         Валидирует JavaScript код.
 

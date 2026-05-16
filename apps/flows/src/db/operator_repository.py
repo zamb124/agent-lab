@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any
+from collections.abc import Sequence
 
 from sqlalchemy import delete, func, select, update
 
@@ -25,7 +26,7 @@ class OperatorRepository:
         company_id: str,
         name: str,
         slug: str,
-        description: Optional[str] = None,
+        description: str | None = None,
     ) -> str:
         if await self.get_queue_by_slug(company_id, slug) is not None:
             raise ValueError(f"Очередь со slug {slug!r} уже существует для компании")
@@ -37,13 +38,13 @@ class OperatorRepository:
             slug=slug,
             description=description,
         )
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             session.add(row)
             await session.commit()
         return qid
 
-    async def get_queue_by_id(self, company_id: str, queue_id: str) -> Optional[OperatorQueues]:
-        async with self._storage._get_session() as session:
+    async def get_queue_by_id(self, company_id: str, queue_id: str) -> OperatorQueues | None:
+        async with self._storage.get_session() as session:
             return await session.scalar(
                 select(OperatorQueues).where(
                     OperatorQueues.id == queue_id,
@@ -51,8 +52,8 @@ class OperatorRepository:
                 )
             )
 
-    async def get_queue_by_slug(self, company_id: str, slug: str) -> Optional[OperatorQueues]:
-        async with self._storage._get_session() as session:
+    async def get_queue_by_slug(self, company_id: str, slug: str) -> OperatorQueues | None:
+        async with self._storage.get_session() as session:
             return await session.scalar(
                 select(OperatorQueues).where(
                     OperatorQueues.company_id == company_id,
@@ -61,7 +62,7 @@ class OperatorRepository:
             )
 
     async def list_queues(self, company_id: str) -> Sequence[OperatorQueues]:
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             result = await session.execute(
                 select(OperatorQueues)
                 .where(OperatorQueues.company_id == company_id)
@@ -74,8 +75,8 @@ class OperatorRepository:
         company_id: str,
         queue_id: str,
         *,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
+        name: str | None = None,
+        description: str | None = None,
     ) -> None:
         values: dict[str, Any] = {}
         if name is not None:
@@ -84,7 +85,7 @@ class OperatorRepository:
             values["description"] = description
         if not values:
             return
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             await session.execute(
                 update(OperatorQueues)
                 .where(
@@ -101,7 +102,7 @@ class OperatorRepository:
         user_id: str,
         role: str = "agent",
     ) -> str:
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             existing = await session.scalar(
                 select(OperatorQueueMembers).where(
                     OperatorQueueMembers.queue_id == queue_id,
@@ -119,7 +120,7 @@ class OperatorRepository:
             return mid
 
     async def remove_member(self, queue_id: str, user_id: str) -> None:
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             await session.execute(
                 delete(OperatorQueueMembers).where(
                     OperatorQueueMembers.queue_id == queue_id,
@@ -129,7 +130,7 @@ class OperatorRepository:
             await session.commit()
 
     async def count_members(self, queue_id: str) -> int:
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             n = await session.scalar(
                 select(func.count())
                 .select_from(OperatorQueueMembers)
@@ -138,7 +139,7 @@ class OperatorRepository:
             return int(n or 0)
 
     async def is_user_member_of_queue(self, queue_id: str, user_id: str) -> bool:
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             row = await session.scalar(
                 select(OperatorQueueMembers.id).where(
                     OperatorQueueMembers.queue_id == queue_id,
@@ -147,8 +148,8 @@ class OperatorRepository:
             )
             return row is not None
 
-    async def list_user_ids_for_queue(self, queue_id: str) -> List[str]:
-        async with self._storage._get_session() as session:
+    async def list_user_ids_for_queue(self, queue_id: str) -> list[str]:
+        async with self._storage.get_session() as session:
             result = await session.execute(
                 select(OperatorQueueMembers.user_id).where(
                     OperatorQueueMembers.queue_id == queue_id,
@@ -156,8 +157,8 @@ class OperatorRepository:
             )
             return list(result.scalars().all())
 
-    async def list_queue_ids_for_user(self, company_id: str, user_id: str) -> List[str]:
-        async with self._storage._get_session() as session:
+    async def list_queue_ids_for_user(self, company_id: str, user_id: str) -> list[str]:
+        async with self._storage.get_session() as session:
             result = await session.execute(
                 select(OperatorQueueMembers.queue_id)
                 .join(OperatorQueues, OperatorQueues.id == OperatorQueueMembers.queue_id)
@@ -172,8 +173,8 @@ class OperatorRepository:
         self,
         company_id: str,
         task_id: str,
-    ) -> Optional[OperatorTasks]:
-        async with self._storage._get_session() as session:
+    ) -> OperatorTasks | None:
+        async with self._storage.get_session() as session:
             return await session.scalar(
                 select(OperatorTasks).where(
                     OperatorTasks.id == task_id,
@@ -185,8 +186,8 @@ class OperatorRepository:
         self,
         company_id: str,
         correlation_id: str,
-    ) -> Optional[OperatorTasks]:
-        async with self._storage._get_session() as session:
+    ) -> OperatorTasks | None:
+        async with self._storage.get_session() as session:
             return await session.scalar(
                 select(OperatorTasks).where(
                     OperatorTasks.company_id == company_id,
@@ -195,7 +196,7 @@ class OperatorRepository:
             )
 
     async def insert_task(self, row: OperatorTasks) -> None:
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             session.add(row)
             await session.commit()
 
@@ -203,13 +204,13 @@ class OperatorRepository:
         self,
         company_id: str,
         *,
-        queue_id: Optional[str] = None,
-        queue_ids: Optional[Sequence[str]] = None,
-        status: Optional[str] = None,
+        queue_id: str | None = None,
+        queue_ids: Sequence[str] | None = None,
+        status: str | None = None,
         limit: int = 200,
         offset: int = 0,
-    ) -> Tuple[List[OperatorTasks], int]:
-        async with self._storage._get_session() as session:
+    ) -> tuple[list[OperatorTasks], int]:
+        async with self._storage.get_session() as session:
             q = select(OperatorTasks).where(OperatorTasks.company_id == company_id)
             if queue_id is not None:
                 q = q.where(OperatorTasks.queue_id == queue_id)
@@ -240,9 +241,9 @@ class OperatorRepository:
         company_id: str,
         task_id: str,
         *,
-        status: Optional[str] = None,
+        status: str | None = None,
         claimed_by_user_id: Any = ...,
-        resolution_payload: Optional[dict[str, Any]] = None,
+        resolution_payload: dict[str, Any] | None = None,
     ) -> None:
         values: dict[str, Any] = {}
         if status is not None:
@@ -254,7 +255,7 @@ class OperatorRepository:
         if not values:
             return
         values["updated_at"] = datetime.now(timezone.utc)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             await session.execute(
                 update(OperatorTasks)
                 .where(
@@ -272,7 +273,7 @@ class OperatorRepository:
         entry: dict[str, Any],
     ) -> None:
         """Атомарно добавляет реплику в dialog_log (JSONB append)."""
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             task = await session.scalar(
                 select(OperatorTasks).where(
                     OperatorTasks.id == task_id,

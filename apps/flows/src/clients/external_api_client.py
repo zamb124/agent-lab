@@ -8,7 +8,7 @@ ExternalAPIClient - HTTP клиент для вызова внешних API.
 - Умная логика прокси: сначала без, при 401/403 - с прокси
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -43,10 +43,10 @@ class ExternalAPIClient:
     async def call(
         self,
         config: ExternalAPIConfig,
-        args: Dict[str, Any],
-        variables: Optional[Dict[str, Any]] = None,
-        state: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        args: dict[str, Any],
+        variables: dict[str, Any] | None = None,
+        state: Any | None = None,
+    ) -> dict[str, Any]:
         """
         Выполняет вызов внешнего API.
 
@@ -77,7 +77,7 @@ class ExternalAPIClient:
         url = self._resolve_url(config.url, args, variables, state)
         headers = self._build_headers(config, variables, state)
 
-        request_kwargs: Dict[str, Any] = {
+        request_kwargs: dict[str, Any] = {
             "method": config.method.value,
             "url": url,
             "headers": headers,
@@ -111,7 +111,7 @@ class ExternalAPIClient:
     async def _request_with_proxy_fallback(
         self,
         timeout: float,
-        request_kwargs: Dict[str, Any],
+        request_kwargs: dict[str, Any],
     ) -> httpx.Response:
         """
         Выполняет запрос: сначала без прокси, при 401/403 - с прокси.
@@ -137,8 +137,8 @@ class ExternalAPIClient:
     def _resolve_url(
         self,
         url: str,
-        args: Dict[str, Any],
-        variables: Dict[str, Any],
+        args: dict[str, Any],
+        variables: dict[str, Any],
         state: Any,
     ) -> str:
         """Резолвит URL с path параметрами и шаблонами в строке."""
@@ -152,11 +152,11 @@ class ExternalAPIClient:
     def _build_headers(
         self,
         config: ExternalAPIConfig,
-        variables: Dict[str, Any],
+        variables: dict[str, Any],
         state: Any,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Собирает headers с резолвингом @state: / @var:."""
-        headers: Dict[str, str] = {}
+        headers: dict[str, str] = {}
 
         for key, value in config.headers.items():
             headers[key] = MappingResolver.resolve_http_header_value(value, state, variables)
@@ -170,9 +170,9 @@ class ExternalAPIClient:
         self,
         config: ExternalAPIConfig,
         state: Any,
-        variables: Dict[str, Any],
-        args: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        variables: dict[str, Any],
+        args: dict[str, Any],
+    ) -> dict[str, Any]:
         merged = MappingResolver.parse_and_resolve_body_template(
             config.body_template, state, variables
         )
@@ -186,7 +186,7 @@ class ExternalAPIClient:
         self,
         config: ExternalAPIConfig,
         response: httpx.Response,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Парсит ответ согласно response_schema."""
         schema = config.response_schema
         raw = None

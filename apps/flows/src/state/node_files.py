@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, List
+from typing import Any
 
 
 def validate_node_files_list(
@@ -37,7 +37,7 @@ def validate_node_files_list(
             )
 
 
-def collect_flow_node_files(nodes: Dict[str, Any]) -> List[Dict[str, Any]]:
+def collect_flow_node_files(nodes: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Объединяет поля files всех нод эффективного графа (порядок: обход по ключам словаря
     nodes в стабильном для JSON порядке — как в объекте; в Python 3.7+ dict сохраняет вставку).
@@ -46,7 +46,7 @@ def collect_flow_node_files(nodes: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     if not nodes:
         return []
-    merged: List[Dict[str, Any]] = []
+    merged: list[dict[str, Any]] = []
     for node_id, cfg in nodes.items():
         if not isinstance(cfg, dict):
             continue

@@ -5,7 +5,7 @@
 """
 
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.src.runtime.nodes import LlmNode
 from core.logging import get_logger
@@ -28,14 +28,14 @@ class CustomFlowWithLogging(LlmNode):
     description = "Нода с расширенным логированием и метриками"
 
     async def _run_impl(
-        self, state: ExecutionState, inputs: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, state: ExecutionState, inputs: dict[str, Any]
+    ) -> dict[str, Any]:
         """Выполняет ноду с логированием до и после."""
         start_time = datetime.now()
         logger.info(f"[{self.node_id}] Начало выполнения: {start_time.isoformat()}")
 
         metadata_raw = state.variables.get("__custom_metadata__")
-        metadata: Dict[str, Any] = metadata_raw if isinstance(metadata_raw, dict) else {}
+        metadata: dict[str, Any] = metadata_raw if isinstance(metadata_raw, dict) else {}
         state.variables["__custom_metadata__"] = metadata
 
         metadata["start_time"] = start_time.isoformat()
@@ -67,8 +67,8 @@ class CustomFlowWithPreprocessing(LlmNode):
     description = "Нода с предобработкой входных данных"
 
     async def _run_impl(
-        self, state: ExecutionState, inputs: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, state: ExecutionState, inputs: dict[str, Any]
+    ) -> dict[str, Any]:
         """Выполняет ноду с предобработкой."""
         original_content = str(inputs.get("content", ""))
         processed_content = self._preprocess(original_content)

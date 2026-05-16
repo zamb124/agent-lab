@@ -1,9 +1,9 @@
 """Функции для example_graph flow."""
 
-from typing import Any, Dict
+from typing import Any
 
 
-def format_response(state: Dict[str, Any]) -> Dict[str, Any]:
+def format_response(state: dict[str, Any]) -> dict[str, Any]:
     """Форматирует финальный ответ.
 
     Добавляет метаданные о маршруте обработки.

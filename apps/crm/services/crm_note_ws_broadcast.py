@@ -19,12 +19,13 @@ notification-center, второй — про обновление доменно
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
     resolve_user_ids_for_namespace_broadcast,
 )
+from apps.crm.types import JsonObject
 from core.logging import get_logger
 from core.ui_events import publish_ui_event_to_user
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -72,7 +73,7 @@ async def broadcast_crm_note_event(
         company_repository=company_repository,
         access_grant_repository=access_grant_repository,
     )
-    notification_data = {
+    notification_data: JsonObject = {
         "event": "crm.note.updated",
         "company_id": company_id,
         "namespace": normalized_namespace,
@@ -89,7 +90,7 @@ async def broadcast_crm_note_event(
     else:
         title = "Заметка удалена"
         message = "Заметка удалена"
-    ui_event_payload: dict[str, Any] = {
+    ui_event_payload: JsonObject = {
         "company_id": company_id,
         "namespace": normalized_namespace,
         "note_id": note_id,

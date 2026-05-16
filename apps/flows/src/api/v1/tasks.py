@@ -3,7 +3,7 @@ API endpoints для задач через A2A типы.
 """
 
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any
 
 from a2a.types import (
     Message,
@@ -34,13 +34,13 @@ class TaskSubmitRequest(BaseModel):
     flow_id: str
     content: str
     branch_id: str = "default"
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    user_id: str | None = None
+    session_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 @router.post("/submit")
-async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Dict[str, Any]:
+async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> dict[str, Any]:
     """Отправляет задачу на выполнение. Возвращает A2A Task."""
     task_id = str(uuid.uuid4())
     user_id = request.user_id or task_id
@@ -154,16 +154,16 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Di
 
 class StateUpdateRequest(BaseModel):
     """Запрос на обновление state"""
-    state: Dict[str, Any]
+    state: dict[str, Any]
 
 
 @router.get("/state")
 async def get_state(
     container: ContainerDep,
-    session_id: Optional[str] = None,
-    context_id: Optional[str] = None,
-    flow_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    session_id: str | None = None,
+    context_id: str | None = None,
+    flow_id: str | None = None,
+) -> dict[str, Any]:
     """
     Получает state по session_id или context_id+flow_id.
 
@@ -198,10 +198,10 @@ async def get_state(
 async def update_state(
     request: StateUpdateRequest,
     container: ContainerDep,
-    session_id: Optional[str] = None,
-    context_id: Optional[str] = None,
-    flow_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    session_id: str | None = None,
+    context_id: str | None = None,
+    flow_id: str | None = None,
+) -> dict[str, Any]:
     """
     Сохраняет изменения state.
 

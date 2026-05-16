@@ -4,7 +4,7 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.config import get_settings
 from apps.flows.src.channels.types import PreparedTaskParams
@@ -27,10 +27,10 @@ async def execute_scheduled_task(
     session_id: str,
     user_id: str,
     task_type: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     scheduler_task_id: str | None = None,
     company_id: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Выполняет scheduled task.
 
@@ -168,7 +168,7 @@ async def _execute_message_task(
     user_id: str,
     content: str,
     context: Context,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Выполняет message task - отправляет сообщение агенту."""
     channel_instance = container.get_channel("a2a", flow_id)
 
@@ -221,9 +221,9 @@ async def _execute_tool_call_task(
     session_id: str,
     user_id: str,
     tool_name: str,
-    tool_args: Dict[str, Any],
+    tool_args: dict[str, Any],
     context: Context,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Выполняет tool_call task — только инлайн-тулы из tool_repository."""
     tool = await container.tool_registry.create_tool({"tool_id": tool_name})
 

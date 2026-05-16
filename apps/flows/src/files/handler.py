@@ -9,7 +9,7 @@ import base64
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from a2a.types import FilePart, FileWithBytes, FileWithUri, Message
 
@@ -18,9 +18,9 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
-def get_file_parts(message: Message) -> List[FilePart]:
+def get_file_parts(message: Message) -> list[FilePart]:
     """Извлекает все FilePart из Message."""
-    file_parts: List[FilePart] = []
+    file_parts: list[FilePart] = []
     for part in message.parts:
         if isinstance(part.root, FilePart):
             file_parts.append(part.root)
@@ -34,10 +34,10 @@ class IncomingA2aFile:
     """Вложение из A2A: либо байты (FileWithBytes), либо URI (FileWithUri)."""
 
     name: str
-    mime_type: Optional[str]
+    mime_type: str | None
     size: int
-    data: Optional[bytes] = None
-    uri: Optional[str] = None
+    data: bytes | None = None
+    uri: str | None = None
 
 
 def _payload_from_bytes(file_data: FileWithBytes) -> IncomingA2aFile:
@@ -61,7 +61,7 @@ def _payload_from_uri(file_data: FileWithUri) -> IncomingA2aFile:
     )
 
 
-def extract_incoming_a2a_files(message: Message) -> List[IncomingA2aFile]:
+def extract_incoming_a2a_files(message: Message) -> list[IncomingA2aFile]:
     """
     Извлекает вложения из Message. Байты остаются в памяти, URI не скачиваются.
     """
@@ -69,7 +69,7 @@ def extract_incoming_a2a_files(message: Message) -> List[IncomingA2aFile]:
     if not file_parts:
         return []
 
-    result: List[IncomingA2aFile] = []
+    result: list[IncomingA2aFile] = []
     for file_part in file_parts:
         file_data = file_part.file
         if isinstance(file_data, FileWithBytes):
@@ -82,7 +82,7 @@ def extract_incoming_a2a_files(message: Message) -> List[IncomingA2aFile]:
     return result
 
 
-def format_a2a_files_content(files_data: List[Dict[str, Any]]) -> str:
+def format_a2a_files_content(files_data: list[dict[str, Any]]) -> str:
     """
     Добавляет в текст сообщения блоки [FILE]...[/FILE] по записям для state.files.
 
@@ -91,7 +91,7 @@ def format_a2a_files_content(files_data: List[Dict[str, Any]]) -> str:
     if not files_data:
         return ""
 
-    parts: List[str] = []
+    parts: list[str] = []
     for fd in files_data:
         name = fd.get("name", "")
         path = fd.get("path", "")

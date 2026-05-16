@@ -22,8 +22,8 @@ async def revoke_grant(
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        await container.access_grant_service.revoke_grant(grant_id, ctx.user.user_id)
-        return {"success": True}
+        success = await container.access_grant_service.revoke_grant(grant_id, ctx.user.user_id)
+        return {"success": success}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:

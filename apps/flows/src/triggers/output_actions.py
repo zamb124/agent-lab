@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.channel_config import OutputAction
@@ -24,11 +24,11 @@ class OutputActionExecutor:
 
     async def execute(
         self,
-        output_actions: List[OutputAction],
-        state: Dict[str, Any],
-        trigger_config: Dict[str, Any],
-        original_payload: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
+        output_actions: list[OutputAction],
+        state: dict[str, Any],
+        trigger_config: dict[str, Any],
+        original_payload: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         if not output_actions:
             return []
 
@@ -71,10 +71,10 @@ class OutputActionExecutor:
 
     def _resolve_mapping(
         self,
-        mapping: Dict[str, str],
-        state: Dict[str, Any],
-        payload: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        mapping: dict[str, str],
+        state: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
         from apps.flows.src.mapping import MappingResolver
 
         result = {}

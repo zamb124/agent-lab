@@ -14,7 +14,8 @@ RPC: вызывают сервис, возвращают результат ка
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from typing import Any
+from collections.abc import Awaitable, Callable
 
 from apps.flows.src.container import get_container
 from core.context import get_context, set_context

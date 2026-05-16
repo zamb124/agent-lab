@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-
 NOTE_ATTACHMENT_TEXT_MAX_CHARS = 100_000
 
 # Локальный chat (Qwen2.5-1.5B-Instruct): окно порядка 32k токенов; промпт + structured output + ответ
@@ -53,7 +52,7 @@ def merge_attachment_extracted_into_description(
     display_name: str,
     extracted: str,
 ) -> str | None:
-    safe_name = display_name.strip() if isinstance(display_name, str) else ""
+    safe_name = display_name.strip()
     if not safe_name:
         safe_name = "file"
     body = truncate_attachment_text_for_note(extracted)

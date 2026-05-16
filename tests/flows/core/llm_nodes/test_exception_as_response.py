@@ -96,7 +96,7 @@ async def test_base_node_absorbs_run_impl_error_when_enabled() -> None:
         {"exception_as_response": True, "exception_allow_types": []},
     )
     state = _minimal_state()
-    await node._run_internal(state)
+    await node.execute(state)
     assert len(state.execution_exceptions) == 1
     assert state.execution_exceptions[0].source == "node_run"
     assert state.execution_exceptions[0].exception_type == "ValueError"
@@ -112,4 +112,4 @@ async def test_base_node_raises_when_whitelist_mismatch() -> None:
     )
     state = _minimal_state()
     with pytest.raises(ValueError, match="node failed"):
-        await node._run_internal(state)
+        await node.execute(state)

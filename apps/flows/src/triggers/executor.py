@@ -8,7 +8,7 @@ TriggerExecutor - запуск агента при срабатывании тр
 
 import uuid
 import importlib
-from typing import Any, Dict, Optional
+from typing import Any
 
 from apps.flows.src.models import TriggerConfig
 from apps.flows.src.triggers.input_mapper import InputMapper
@@ -36,10 +36,10 @@ class TriggerExecutor:
         self,
         flow_id: str,
         trigger: TriggerConfig,
-        payload: Dict[str, Any],
-        user_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        payload: dict[str, Any],
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Запускает агента с данными из триггера.
 
@@ -138,7 +138,7 @@ class TriggerExecutor:
         }
 
 
-    def _extract_user_id(self, trigger_type: str, payload: Dict[str, Any]) -> str:
+    def _extract_user_id(self, trigger_type: str, payload: dict[str, Any]) -> str:
         """Извлекает user_id из payload в зависимости от типа триггера."""
         if trigger_type == "telegram":
             cq = payload.get("callback_query")

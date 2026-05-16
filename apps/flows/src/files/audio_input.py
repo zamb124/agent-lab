@@ -23,7 +23,7 @@ Zero-Guess: при отсутствии активной компании в req
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from apps.flows.src.services.flow_speech_resolve import (
     load_flow_speech_layers_from_context_metadata,
@@ -38,7 +38,7 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _is_audio_item(item: Dict[str, Any]) -> bool:
+def _is_audio_item(item: dict[str, Any]) -> bool:
     """Определяет категорию AUDIO по mime_type, иначе по расширению `name`."""
     mime = item.get("mime_type")
     if isinstance(mime, str) and mime.strip():
@@ -68,7 +68,7 @@ async def _read_persisted_audio_bytes(
         raise ValueError(
             f"audio_input: persisted-файл {file_id!r} не найден в FileRepository"
         )
-    s3 = await container.file_processor._get_s3_client()
+    s3 = await container.file_processor.get_s3_client()
     audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
     return audio_bytes, record.original_name, record.content_type
 
@@ -76,9 +76,9 @@ async def _read_persisted_audio_bytes(
 async def transcribe_incoming_audio_files(
     *,
     container: Any,
-    files_data: List[Dict[str, Any]],
+    files_data: list[dict[str, Any]],
     company_id: str,
-    language: Optional[str] = None,
+    language: str | None = None,
 ) -> str:
     """
     Возвращает блок текста для конкатенации с content сообщения.
@@ -90,7 +90,7 @@ async def transcribe_incoming_audio_files(
     if company_id == "":
         raise ValueError("transcribe_incoming_audio_files: company_id обязателен.")
 
-    audio_items: List[Dict[str, Any]] = [
+    audio_items: list[dict[str, Any]] = [
         item for item in files_data if _is_audio_item(item)
     ]
     if not audio_items:
@@ -109,7 +109,7 @@ async def transcribe_incoming_audio_files(
             merged = merged.model_copy(update={"language": lv})
     stt = await get_stt_client(company_id=company_id, override=merged)
 
-    parts: List[str] = []
+    parts: list[str] = []
     for item in audio_items:
         file_id = item.get("file_id")
         if not isinstance(file_id, str) or not file_id.strip():

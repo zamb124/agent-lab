@@ -6,7 +6,7 @@ WebSocket A2A endpoints.
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 from a2a.types import (
     DeleteTaskPushNotificationConfigParams,
@@ -75,7 +75,7 @@ def _string_list(raw: Any) -> list[str]:
     return [item for item in raw if isinstance(item, str)]
 
 
-async def _get_flow_config(flow_id: str, container: FlowContainer) -> Optional[FlowConfig]:
+async def _get_flow_config(flow_id: str, container: FlowContainer) -> FlowConfig | None:
     return await container.flow_repository.get(flow_id)
 
 
@@ -104,7 +104,7 @@ def _extract_bearer_token(websocket: WebSocket) -> str | None:
     return None
 
 
-async def _send_json(websocket: WebSocket, payload: Dict[str, Any]) -> None:
+async def _send_json(websocket: WebSocket, payload: dict[str, Any]) -> None:
     await websocket.send_text(json.dumps(payload, ensure_ascii=False))
 
 

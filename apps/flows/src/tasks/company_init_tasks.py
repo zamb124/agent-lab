@@ -3,7 +3,7 @@ TaskIQ задачи для инициализации компаний и system
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.src.container import get_container
 from apps.flows.src.services.flows_loader import FlowsLoader
@@ -30,7 +30,7 @@ async def init_company_resources(
     company_id: str,
     company_name: str = "",
     subdomain: str = ""
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Универсальная задача инициализации ресурсов для компании.
 

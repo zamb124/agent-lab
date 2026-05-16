@@ -7,7 +7,7 @@ from core.models.identity_models import Company
 
 
 class _FakeStorage:
-    async def _get_all_by_prefix_and_table(self, prefix: str, table_name: str, limit: int, offset: int):
+    async def get_all_by_prefix_and_table(self, prefix: str, table_name: str, limit: int, offset: int):
         assert prefix == "company:"
         assert table_name == "storage"
         return {

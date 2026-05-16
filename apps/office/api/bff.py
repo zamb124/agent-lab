@@ -1105,7 +1105,7 @@ async def onlyoffice_callback(
             r = await client.get(url)
             r.raise_for_status()
             new_bytes = r.content
-        s3 = await container.file_processor._get_s3_client()
+        s3 = await container.file_processor.get_s3_client()
         await s3.upload_bytes(
             data=new_bytes,
             key=meta.s3_key,

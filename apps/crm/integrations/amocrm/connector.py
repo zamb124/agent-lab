@@ -4,14 +4,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+from typing import cast as type_cast
 from urllib.parse import quote
 
-from apps.crm.integrations.amocrm.service import AmoCRMIntegrationService
+from apps.crm.integrations.amocrm.service import AmoCRMIntegrationService, AmoProgressFn
 from apps.crm.integrations.amocrm.type_extensions import (
     AMO_OPTIONAL_FIELDS_BY_TYPE_ID,
     amo_canonical_type_ids,
 )
+from apps.crm.types import JsonObject
 from core.integrations.guided_integration_error import (
     GuidedIntegrationError,
     GuidedIntegrationLink,
@@ -33,8 +35,8 @@ if TYPE_CHECKING:
 
 
 class AmoCRMConnector:
-    provider_id = "amocrm"
-    integration_provider = IntegrationProvider.AMOCRM
+    provider_id: str = "amocrm"
+    integration_provider: IntegrationProvider = IntegrationProvider.AMOCRM
 
     def worker_short_label(self) -> str:
         return "AmoCRM"
@@ -58,11 +60,11 @@ class AmoCRMConnector:
         integration_external_author: IntegrationExternalAuthorService,
         namespace_template_service: NamespaceTemplateService,
     ) -> None:
-        self._oauth_service = oauth_service
-        self._entity_type_repository = entity_type_repository
-        self._namespace_repository = namespace_repository
-        self._namespace_template_service = namespace_template_service
-        self._service = AmoCRMIntegrationService(
+        self._oauth_service: OAuthService = oauth_service
+        self._entity_type_repository: EntityTypeRepository = entity_type_repository
+        self._namespace_repository: NamespaceRepository = namespace_repository
+        self._namespace_template_service: NamespaceTemplateService = namespace_template_service
+        self._service: AmoCRMIntegrationService = AmoCRMIntegrationService(
             oauth_service=oauth_service,
             entity_repository=entity_repository,
             entity_type_repository=entity_type_repository,
@@ -97,11 +99,35 @@ class AmoCRMConnector:
             oauth_ui_locale=oauth_ui_locale,
         )
 
-    async def sync_entities(self, namespace_name: str, **kwargs: Any) -> dict[str, int]:
-        return await self._service.sync_entities(namespace_name, **kwargs)
+    @staticmethod
+    def _as_json_object(value: object) -> JsonObject | None:
+        if not isinstance(value, dict):
+            return None
+        result: JsonObject = {}
+        for key, item in type_cast(dict[object, object], value).items():
+            if not isinstance(key, str):
+                return None
+            result[key] = item
+        return result
 
-    async def sync_custom_field_catalog(self, namespace_name: str, **kwargs: Any) -> dict[str, int]:
-        return await self._service.sync_custom_field_catalog(namespace_name, **kwargs)
+    async def sync_entities(
+        self,
+        namespace_name: str,
+        *,
+        on_progress: AmoProgressFn | None = None,
+    ) -> dict[str, int]:
+        return await self._service.sync_entities(namespace_name, on_progress=on_progress)
+
+    async def sync_custom_field_catalog(
+        self,
+        namespace_name: str,
+        *,
+        on_progress: AmoProgressFn | None = None,
+    ) -> dict[str, int]:
+        return await self._service.sync_custom_field_catalog(
+            namespace_name,
+            on_progress=on_progress,
+        )
 
     async def ensure_namespace_ready(
         self,
@@ -115,11 +141,15 @@ class AmoCRMConnector:
             raise ValueError("namespace_name обязателен")
         for type_id in sorted(amo_canonical_type_ids()):
             existing_type = await repo.get_by_type_id(
-                type_id, namespace=ns, company_id=company_id,
+                type_id,
+                namespace=ns,
+                company_id=company_id,
             )
             if existing_type is None:
                 src_default = await repo.get_by_type_id(
-                    type_id, namespace="default", company_id=company_id,
+                    type_id,
+                    namespace="default",
+                    company_id=company_id,
                 )
                 if src_default is None:
                     raise GuidedIntegrationError(
@@ -164,7 +194,7 @@ class AmoCRMConnector:
                             ),
                         ),
                     )
-                await repo.clone_entity_type_between_namespaces(
+                _ = await repo.clone_entity_type_between_namespaces(
                     type_id,
                     source_namespace="default",
                     target_namespace=ns,
@@ -201,7 +231,11 @@ class AmoCRMConnector:
         )
         prev = existing.crm_settings
         integ_prev = dict(prev.integrations) if prev is not None else {}
-        amo_prev = dict(integ_prev.get("amocrm") or {}) if isinstance(integ_prev.get("amocrm"), dict) else {}
+        amo_prev = (
+            dict(integ_prev.get("amocrm") or {})
+            if isinstance(integ_prev.get("amocrm"), dict)
+            else {}
+        )
         if amo_prev.get("subdomain") == sub:
             return
         base = prev if prev is not None else NamespaceCRMSettings()
@@ -210,7 +244,7 @@ class AmoCRMConnector:
         amo["subdomain"] = sub
         integ["amocrm"] = amo
         existing.crm_settings = base.model_copy(update={"integrations": integ})
-        await self._namespace_repository.set(existing)
+        _ = await self._namespace_repository.set(existing)
 
     async def manifest_item(
         self,
@@ -219,11 +253,11 @@ class AmoCRMConnector:
         company_id: str,
         user_id: str,
         crm_settings: NamespaceCRMSettings | None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         display: str | None = None
         if crm_settings is not None:
-            block = crm_settings.integrations.get("amocrm")
-            if isinstance(block, dict):
+            block = self._as_json_object(type_cast(object, crm_settings.integrations.get("amocrm")))
+            if block is not None:
                 raw = block.get("subdomain")
                 if isinstance(raw, str) and raw.strip():
                     display = raw.strip()
@@ -234,14 +268,14 @@ class AmoCRMConnector:
             service=f"amocrm:{namespace_name}",
         )
         connected = cred is not None
-        out: dict[str, Any] = {
+        out: JsonObject = {
             "provider_id": self.provider_id,
             "connected": connected,
             "display": display,
         }
         if crm_settings is not None:
-            block = crm_settings.integrations.get("amocrm")
-            if isinstance(block, dict):
+            block = self._as_json_object(type_cast(object, crm_settings.integrations.get("amocrm")))
+            if block is not None:
                 if "auto_sync_enabled" in block:
                     out["auto_sync_enabled"] = bool(block.get("auto_sync_enabled"))
                 ac = block.get("auto_sync_cron")

@@ -52,7 +52,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
         table_name = self._get_table_name()
 
         data = entity.model_dump_json()
-        return await self._storage._set_with_table(final_key, data, table_name)
+        return await self._storage.set_with_table(final_key, data, table_name)
 
     async def list_by_company(self, *, limit: int = 10000, offset: int = 0) -> list[UsageRecord]:
         """Записи использования для текущей компании."""
@@ -94,7 +94,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
         stmt = stmt.where(Usage.value["timestamp"].astext.isnot(None))
         stmt = stmt.order_by(ts_expr.desc()).offset(offset).limit(limit)
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             result = await session.execute(stmt)
             rows = result.scalars().all()
 
@@ -118,7 +118,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         col = Usage.value["usage_type"].astext
         frag = _facet_query_fragment(q)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(col).where(col.isnot(None)).where(col != "")
             if frag is not None:
                 stmt = stmt.where(_admin_ilike(col, frag))
@@ -138,7 +138,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         col = Usage.value["resource_name"].astext
         frag = _facet_query_fragment(q)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(col).where(col.isnot(None)).where(col != "")
             if frag is not None:
                 stmt = stmt.where(_admin_ilike(col, frag))

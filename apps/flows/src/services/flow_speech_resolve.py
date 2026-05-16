@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.flow_speech_settings import (
@@ -17,28 +17,28 @@ from core.context import Context
 PLATFORM_FLOW_SPEECH_LAYERS_KEY = "platform_flow_speech_layers"
 
 
-def _merge_optional_str(base: Optional[str], overlay: Optional[str]) -> Optional[str]:
+def _merge_optional_str(base: str | None, overlay: str | None) -> str | None:
     if overlay is not None and overlay != "":
         return overlay
     return base
 
 
-def _merge_optional_float(base: Optional[float], overlay: Optional[float]) -> Optional[float]:
+def _merge_optional_float(base: float | None, overlay: float | None) -> float | None:
     if overlay is not None:
         return overlay
     return base
 
 
-def _merge_optional_int(base: Optional[int], overlay: Optional[int]) -> Optional[int]:
+def _merge_optional_int(base: int | None, overlay: int | None) -> int | None:
     if overlay is not None:
         return overlay
     return base
 
 
 def _merge_stt_block(
-    base: Optional[FlowSpeechSttBlock],
-    overlay: Optional[FlowSpeechSttBlock],
-) -> Optional[FlowSpeechSttBlock]:
+    base: FlowSpeechSttBlock | None,
+    overlay: FlowSpeechSttBlock | None,
+) -> FlowSpeechSttBlock | None:
     if overlay is None:
         return base
     if base is None:
@@ -51,9 +51,9 @@ def _merge_stt_block(
 
 
 def _merge_tts_block(
-    base: Optional[FlowSpeechTtsBlock],
-    overlay: Optional[FlowSpeechTtsBlock],
-) -> Optional[FlowSpeechTtsBlock]:
+    base: FlowSpeechTtsBlock | None,
+    overlay: FlowSpeechTtsBlock | None,
+) -> FlowSpeechTtsBlock | None:
     if overlay is None:
         return base
     if base is None:
@@ -69,9 +69,9 @@ def _merge_tts_block(
 
 
 def _merge_vad_block(
-    base: Optional[FlowSpeechVadBlock],
-    overlay: Optional[FlowSpeechVadBlock],
-) -> Optional[FlowSpeechVadBlock]:
+    base: FlowSpeechVadBlock | None,
+    overlay: FlowSpeechVadBlock | None,
+) -> FlowSpeechVadBlock | None:
     if overlay is None:
         return base
     if base is None:
@@ -84,9 +84,9 @@ def _merge_vad_block(
 
 
 def merge_flow_speech_settings(
-    flow_level: Optional[FlowSpeechSettings],
-    branch_level: Optional[FlowSpeechSettings],
-) -> Optional[FlowSpeechSettings]:
+    flow_level: FlowSpeechSettings | None,
+    branch_level: FlowSpeechSettings | None,
+) -> FlowSpeechSettings | None:
     """Мерж ветки поверх flow; None на уровне ветки — наследование."""
     if flow_level is None and branch_level is None:
         return None
@@ -104,7 +104,7 @@ def merge_flow_speech_settings(
 def effective_flow_speech_settings(
     flow_config: FlowConfig,
     branch_id: str,
-) -> Optional[FlowSpeechSettings]:
+) -> FlowSpeechSettings | None:
     branch_cfg = None
     if branch_id and branch_id.strip() and flow_config.branches:
         branch_cfg = flow_config.branches.get(branch_id.strip())
@@ -113,8 +113,8 @@ def effective_flow_speech_settings(
 
 
 def flow_speech_to_triple_override(
-    settings: Optional[FlowSpeechSettings],
-) -> Tuple[SpeechOverride, SpeechOverride, SpeechOverride]:
+    settings: FlowSpeechSettings | None,
+) -> tuple[SpeechOverride, SpeechOverride, SpeechOverride]:
     """Три SpeechOverride для STT / TTS / VAD."""
     if settings is None:
         empty = SpeechOverride()
@@ -148,7 +148,7 @@ def merge_explicit_over_flow_speech_layer(
     flow_layer: SpeechOverride,
 ) -> SpeechOverride:
     """Явный override побеждает по каждому полю; flow_layer заполняет пробелы."""
-    merged: Dict[str, Any] = {}
+    merged: dict[str, Any] = {}
     for name in SpeechOverride.model_fields:
         ev = getattr(explicit, name)
         fv = getattr(flow_layer, name)
@@ -163,9 +163,9 @@ def triple_to_voice_ws_query_dict(
     stt: SpeechOverride,
     tts: SpeechOverride,
     vad: SpeechOverride,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Ключи query для ``apps/voice/api/session.py`` (только непустые)."""
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     if stt.provider is not None and stt.provider != "":
         out["stt_provider_name"] = str(stt.provider)
     if stt.model is not None and stt.model != "":
@@ -212,8 +212,8 @@ def attach_flow_speech_layers_to_context(
 
 
 def load_flow_speech_layers_from_context_metadata(
-    metadata: Optional[Dict[str, Any]],
-) -> Tuple[SpeechOverride, SpeechOverride, SpeechOverride]:
+    metadata: dict[str, Any] | None,
+) -> tuple[SpeechOverride, SpeechOverride, SpeechOverride]:
     if not metadata:
         empty = SpeechOverride()
         return empty, empty, empty

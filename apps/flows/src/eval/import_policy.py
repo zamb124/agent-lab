@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import ast
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 from apps.flows.src.eval.shim_registry import strict_shim_import_roots
 from core.errors import SafeEvalError

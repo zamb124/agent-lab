@@ -9,7 +9,8 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+from typing import Any
+from collections.abc import AsyncGenerator
 
 from a2a.types import (
     Artifact,
@@ -73,7 +74,7 @@ def _part_text(part: Part) -> str | None:
     return root.text if isinstance(root, TextPart) else None
 
 
-def _branch_id_from_message_metadata(metadata: Optional[Dict[str, Any]]) -> str:
+def _branch_id_from_message_metadata(metadata: dict[str, Any] | None) -> str:
     if not metadata:
         return "default"
     b = metadata.get("branch")
@@ -84,7 +85,7 @@ def _branch_id_from_message_metadata(metadata: Optional[Dict[str, Any]]) -> str:
     return "default"
 
 
-def _get_evaluation_metadata(metadata: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _get_evaluation_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
     """Извлекает параметры evaluation из metadata."""
     if not metadata:
         return None
@@ -93,12 +94,12 @@ def _get_evaluation_metadata(metadata: Optional[Dict[str, Any]]) -> Optional[Dic
 
 
 async def _build_task_from_events(
-    events: List[StreamEvent],
+    events: list[StreamEvent],
     task_id: str,
     context_id: str,
     input_message: Message,
     flow_id: str,
-    container: FlowRuntimeContainer,
+    container: FlowRuntimeContainer | None = None,
 ) -> Task:
     """
     Строит Task из накопленных событий.
@@ -107,10 +108,10 @@ async def _build_task_from_events(
     Разделяет артефакты по именам (response vs reasoning).
     Загружает существующую историю из state для multi-turn сценариев.
     """
-    artifacts_dict: Dict[str, Artifact] = {}
-    final_status: Optional[TaskStatus] = None
-    response_parts: List[str] = []
-    reasoning_parts: List[str] = []
+    artifacts_dict: dict[str, Artifact] = {}
+    final_status: TaskStatus | None = None
+    response_parts: list[str] = []
+    reasoning_parts: list[str] = []
 
     for event in events:
         if isinstance(event, TaskArtifactUpdateEvent):
@@ -180,8 +181,10 @@ async def _build_task_from_events(
 
     # Загружаем существующую историю из state для multi-turn сценариев
     session_id = f"{flow_id}:{context_id}"
-    state = await container.state_manager.get_state(session_id)
-    existing_history = state.get("messages", []) if state else []
+    existing_history: list[Any] = []
+    if container is not None:
+        state = await container.state_manager.get_state(session_id)
+        existing_history = state.get("messages", []) if state else []
 
     # Устанавливаем task_id в input_message для истории
     history_message = input_message.model_copy(update={"task_id": task_id})
@@ -243,8 +246,8 @@ class A2AChannel(BaseChannel):
     async def send_to_user(
         self,
         content: str,
-        buttons: Optional[List[str]] = None,
-        attachments: Optional[List[Any]] = None,
+        buttons: list[str] | None = None,
+        attachments: list[Any] | None = None,
     ) -> None:
         """
         Отправляет сообщение пользователю через A2A.
@@ -321,7 +324,7 @@ class A2AChannel(BaseChannel):
             final=True,
         )
 
-    async def _persist_incoming_a2a_files(self, message: Message) -> tuple[List[Dict[str, Any]], str]:
+    async def _persist_incoming_a2a_files(self, message: Message) -> tuple[list[dict[str, Any]], str]:
         """Байты FileWithBytes -> S3 + FileRecord; FileWithUri -> только path в state."""
         incoming = extract_incoming_a2a_files(message)
         if not incoming:
@@ -335,7 +338,7 @@ class A2AChannel(BaseChannel):
         company_id = self.context.active_company.company_id
         user_id = self.context.user.user_id if self.context.user else None
         prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
-        files_data: List[Dict[str, Any]] = []
+        files_data: list[dict[str, Any]] = []
 
         for inc in incoming:
             if inc.data is not None:
@@ -364,7 +367,7 @@ class A2AChannel(BaseChannel):
         return files_data, format_a2a_files_content(files_data)
 
     async def _transcribe_incoming_audio(
-        self, files_data: List[Dict[str, Any]]
+        self, files_data: list[dict[str, Any]]
     ) -> str:
         """
         Авто-STT для входящих audio-вложений (`audio/*` по mime/расширению).
@@ -410,7 +413,7 @@ class A2AChannel(BaseChannel):
 
     async def on_message_send(
         self, params: MessageSendParams, context: Any = None
-    ) -> Union[Task, Message]:
+    ) -> Task | Message:
         """
         Синхронное выполнение - кикает task и собирает события через collect().
 
@@ -452,7 +455,7 @@ class A2AChannel(BaseChannel):
 
         # A2A Section 3.4.3: follow-up при активном operator takeover
         if prepared.is_takeover_user_reply:
-            events: List[StreamEvent] = [
+            events: list[StreamEvent] = [
                 event async for event in self._handle_takeover_user_reply(prepared)
             ]
             if prepared.message is None:
@@ -501,9 +504,9 @@ class A2AChannel(BaseChannel):
     async def _run_evaluation(
         self,
         params: MessageSendParams,
-        eval_metadata: Dict[str, Any],
+        eval_metadata: dict[str, Any],
         task_id: str,
-    ) -> AsyncGenerator[Union[TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
+    ) -> AsyncGenerator[TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """
         Запускает evaluation тест через EvaluationService и yield'ит A2A события.
 
@@ -624,7 +627,7 @@ class A2AChannel(BaseChannel):
 
     async def on_message_stream(
         self, params: MessageSendParams, context: Any = None
-    ) -> AsyncGenerator[Union[Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
+    ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """
         Streaming выполнение - yield'ит события по мере генерации через Redis Pub/Sub.
 
@@ -689,7 +692,7 @@ class A2AChannel(BaseChannel):
 
         await collect_task
 
-    async def on_get_task(self, params: TaskQueryParams, context: Any = None) -> Optional[Task]:
+    async def on_get_task(self, params: TaskQueryParams, context: Any = None) -> Task | None:
         """Получение задачи по ID."""
         task = await self._get_task_from_state(params.id)
 
@@ -698,7 +701,7 @@ class A2AChannel(BaseChannel):
 
         return task
 
-    async def on_cancel_task(self, params: TaskIdParams, context: Any = None) -> Optional[Task]:
+    async def on_cancel_task(self, params: TaskIdParams, context: Any = None) -> Task | None:
         """Отмена задачи. Ставит Redis-ключ для остановки воркера на следующем такте."""
         logger.info(f"Cancel task: {params.id}")
 
@@ -719,7 +722,7 @@ class A2AChannel(BaseChannel):
 
     async def on_resubscribe_to_task(
         self, params: TaskIdParams, context: Any = None
-    ) -> AsyncGenerator[Union[Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
+    ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """Переподписка на события задачи."""
         task = await self.on_get_task(TaskQueryParams(id=params.id))
         if task:
@@ -735,7 +738,7 @@ class A2AChannel(BaseChannel):
 
     async def on_get_task_push_notification_config(
         self, params: GetTaskPushNotificationConfigParams, context: Any = None
-    ) -> Optional[TaskPushNotificationConfig]:
+    ) -> TaskPushNotificationConfig | None:
         """Получение конфигурации push notification."""
         data = await get_config(params)
         logger.info(f"Get push notification config for task: {params.id}")
@@ -743,7 +746,7 @@ class A2AChannel(BaseChannel):
 
     async def on_list_task_push_notification_config(
         self, params: ListTaskPushNotificationConfigParams, context: Any = None
-    ) -> List[TaskPushNotificationConfig]:
+    ) -> list[TaskPushNotificationConfig]:
         """Список конфигураций push notification."""
         configs = await list_configs(params)
         logger.info(f"List push notification configs for task: {params.id}, found: {len(configs)}")

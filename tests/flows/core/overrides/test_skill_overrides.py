@@ -36,7 +36,7 @@ class TestSkillVariablesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert result["variables"]["company_name"] == "BaseCompany"
         assert result["variables"]["max_length"] == 500
@@ -63,7 +63,7 @@ class TestSkillVariablesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert result["variables"]["max_length"] == 200
         assert result["variables"]["mode"] == "custom"
@@ -89,7 +89,7 @@ class TestSkillVariablesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert "base_var1" not in result["variables"]
         assert "base_var2" not in result["variables"]
@@ -124,7 +124,7 @@ class TestSkillVariablesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         # После apply_skill переменные извлекаются как простые значения
         assert result["variables"]["company_name"] == "CustomCompany"
@@ -156,7 +156,7 @@ class TestSkillNodesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert "main" not in result["nodes"]
         assert "helper" not in result["nodes"]
@@ -183,7 +183,7 @@ class TestSkillNodesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert "main" in result["nodes"]
         assert "new_node" in result["nodes"]
@@ -217,7 +217,7 @@ class TestSkillNodesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         node = result["nodes"]["main"]
         assert node["type"] == "llm_node"  # Сохранен
@@ -251,7 +251,7 @@ class TestSkillNodesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert result["nodes"]["main"]["tools"] == ["only_one"]
 
@@ -282,7 +282,7 @@ class TestSkillEdgesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert len(result["edges"]) == 1
         assert result["edges"][0].from_node == "main"
@@ -312,7 +312,7 @@ class TestSkillEdgesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert len(result["edges"]) == 3
         from_nodes = [e.from_node for e in result["edges"]]
@@ -352,7 +352,7 @@ class TestSkillEdgesOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert len(result["edges"]) == 4
 
@@ -391,7 +391,7 @@ class TestSkillEntryOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert result["entry"] == "skill_start"
 
@@ -413,7 +413,7 @@ class TestSkillEntryOverride:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "custom")
+        result = container.flow_factory.apply_branch(config, "custom")
 
         assert result["entry"] == "default_start"
 
@@ -556,7 +556,7 @@ class TestSkillCombinedOverrides:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "full")
+        result = container.flow_factory.apply_branch(config, "full")
 
         # Entry
         assert result["entry"] == "custom_entry"
@@ -610,7 +610,7 @@ class TestSkillCombinedOverrides:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "concise")
+        result = container.flow_factory.apply_branch(config, "concise")
 
         # max_response_length переопределен
         assert result["variables"]["max_response_length"] == "200"
@@ -661,7 +661,7 @@ class TestSkillCombinedOverrides:
             }
         )
 
-        result = container.flow_factory._apply_branch(config, "orders_only")
+        result = container.flow_factory.apply_branch(config, "orders_only")
 
         # classifier переопределен
         assert "order" in result["nodes"]["classifier"]["code"]

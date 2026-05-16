@@ -5,7 +5,7 @@ PythonCodeRunner - выполнение Python кода.
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 from apps.flows.src.eval.compiler import PythonCompiler
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
@@ -30,10 +30,10 @@ class PythonCodeRunner(BaseCodeRunner):
 
     def __init__(
         self,
-        context: Optional[Any] = None,
-        variables: Optional[Dict[str, Any]] = None,
-        resources: Optional[Dict[str, Any]] = None,
-        base_tool_class: Optional[type] = None,
+        context: Any | None = None,
+        variables: dict[str, Any] | None = None,
+        resources: dict[str, Any] | None = None,
+        base_tool_class: type | None = None,
     ):
         self.context = context
         self.variables = variables or {}
@@ -46,7 +46,7 @@ class PythonCodeRunner(BaseCodeRunner):
         )
         self.compiler = PythonCompiler(namespace_builder=self.namespace_builder)
 
-    def _snapshot_frozen_if_state(self, state: Optional["ExecutionState"]) -> Optional[dict[str, Any]]:
+    def _snapshot_frozen_if_state(self, state: ExecutionState | None) -> dict[str, Any] | None:
         from core.state import ExecutionState as ES
 
         if state is None or not isinstance(state, ES):
@@ -54,7 +54,7 @@ class PythonCodeRunner(BaseCodeRunner):
         return snapshot_frozen_fields(state)
 
     def _assert_frozen_if_needed(
-        self, state: Optional["ExecutionState"], snap: Optional[dict[str, Any]]
+        self, state: ExecutionState | None, snap: dict[str, Any] | None
     ) -> None:
         from core.state import ExecutionState as ES
 
@@ -65,7 +65,7 @@ class PythonCodeRunner(BaseCodeRunner):
     async def execute(
         self,
         code: str,
-        state: 'ExecutionState',
+        state: ExecutionState,
         func_name: str = "run"
     ) -> Any:
         """
@@ -93,7 +93,7 @@ class PythonCodeRunner(BaseCodeRunner):
         self,
         code: str,
         args: dict[str, Any],
-        state: Optional['ExecutionState'] = None,
+        state: ExecutionState | None = None,
     ) -> Any:
         """
         Выполняет код tool.
@@ -127,7 +127,7 @@ class PythonCodeRunner(BaseCodeRunner):
                 params = list(sig.parameters.keys())
 
                 if params and params[0] == "args":
-                    call_kwargs: Dict[str, Any] = {"args": args}
+                    call_kwargs: dict[str, Any] = {"args": args}
                     if "state" in params:
                         call_kwargs["state"] = state
                     if inspect.iscoroutinefunction(func):
@@ -146,7 +146,7 @@ class PythonCodeRunner(BaseCodeRunner):
         self._assert_frozen_if_needed(state, snap)
         return result
 
-    def validate(self, code: str) -> Tuple[bool, Optional[str]]:
+    def validate(self, code: str) -> tuple[bool, str | None]:
         """
         Валидирует Python код.
 

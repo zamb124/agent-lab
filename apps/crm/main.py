@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from apps.crm.api.router import router as api_router
 from apps.crm.config import CRMSettings
-from apps.crm.container import get_crm_container
+from apps.crm.container import CRMContainer, get_crm_container
 from core.app import create_service_app
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
@@ -22,19 +22,26 @@ from core.models.context_models import Context
 from core.models.identity_models import Company, User
 
 logger = get_logger(__name__)
-async def on_startup(app: FastAPI, container, settings):
+
+
+async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSettings) -> None:
     """Кастомная логика при старте"""
     from core.integrations.models import IntegrationCredential
     from core.integrations.oauth_service import set_oauth_credential_saved_hook
 
-    set_context(Context(
-        user=User(user_id="system", name="System"),
-        active_company=Company(company_id="system", name="System"),
-        channel="lifespan",
-    ))
+    set_context(
+        Context(
+            user=User(user_id="system", name="System"),
+            active_company=Company(company_id="system", name="System"),
+            channel="lifespan",
+        )
+    )
     try:
-        await container.company_init_service.initialize_company("system")
-        logger.info("Системные типы entities инициализированы для компании 'system'")
+        init_result = await container.company_init_service.initialize_company("system")
+        logger.info(
+            "Системные типы entities инициализированы для компании 'system'",
+            result=init_result,
+        )
     finally:
         clear_context()
 
@@ -68,6 +75,7 @@ async def on_startup(app: FastAPI, container, settings):
             reconciled=reconciled,
         )
 
+
 def create_app() -> FastAPI:
     """Создает FastAPI приложение"""
     return create_service_app(
@@ -82,6 +90,7 @@ def create_app() -> FastAPI:
         include_crud_routers=False,
     )
 
+
 app = create_app()
 
 core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
@@ -94,7 +103,9 @@ if crm_ui_path.exists():
     app.mount("/crm/ui/static", StaticFiles(directory=crm_ui_path, html=True), name="crm_ui")
     logger.info(f"CRM UI смонтирован: {crm_ui_path}")
 
-vendor_3d_force_graph_path = Path(__file__).parent.parent.parent / "node_modules" / "3d-force-graph" / "dist"
+vendor_3d_force_graph_path = (
+    Path(__file__).parent.parent.parent / "node_modules" / "3d-force-graph" / "dist"
+)
 if vendor_3d_force_graph_path.exists():
     app.mount(
         "/crm/ui/vendor/3d-force-graph",
@@ -112,22 +123,20 @@ if vendor_three_path.exists():
     )
     logger.info(f"three vendor смонтирован: {vendor_three_path}")
 
+
 @app.get("/crm")
 @app.get("/crm/")
 @app.get("/crm/{path:path}")
 async def serve_crm_ui(path: str = ""):
     """Отдает главную страницу CRM UI для всех /crm/* путей (SPA fallback)"""
-    if (
-        path.startswith("api/")
-        or path.startswith("ui/static/")
-        or path.startswith("ui/vendor/")
-    ):
+    if path.startswith("api/") or path.startswith("ui/static/") or path.startswith("ui/vendor/"):
         raise HTTPException(status_code=404, detail="Not found")
 
     ui_file = Path(__file__).parent / "ui" / "index.html"
     if not ui_file.exists():
         raise HTTPException(status_code=404, detail="CRM UI not found")
     return FileResponse(ui_file)
+
 
 if __name__ == "__main__":
     import uvicorn

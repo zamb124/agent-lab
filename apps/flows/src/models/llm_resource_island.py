@@ -7,7 +7,8 @@ LLM resource island: нода type=resource с единственной прив
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any
+from collections.abc import Mapping, Sequence
 
 from apps.flows.src.models.flow_config import Edge
 from apps.flows.src.models.node_config import NodeLLMOverride
@@ -18,7 +19,7 @@ from apps.flows.src.resources.merge_llm import (
 )
 
 
-def _type_str(value: Any) -> Optional[str]:
+def _type_str(value: Any) -> str | None:
     if value is None:
         return None
     if isinstance(value, ResourceType):
@@ -37,7 +38,7 @@ def is_llm_resource_island_dict(
     if not isinstance(nr, dict) or len(nr) != 1:
         return False
     (bind_key, ref_raw), = nr.items()
-    ref: Dict[str, Any] = ref_raw if isinstance(ref_raw, dict) else {}
+    ref: dict[str, Any] = ref_raw if isinstance(ref_raw, dict) else {}
     inline_t = ref.get("type")
     if inline_t is not None:
         return _type_str(inline_t) == ResourceType.LLM.value
@@ -65,9 +66,9 @@ def resource_node_has_non_empty_llm(node: Mapping[str, Any]) -> bool:
 
 
 def llm_resource_island_node_ids(
-    nodes: Optional[Mapping[str, Mapping[str, Any]]],
+    nodes: Mapping[str, Mapping[str, Any]] | None,
     merged_resources: Mapping[str, Any],
-) -> Set[str]:
+) -> set[str]:
     if not nodes:
         return set()
     return {
@@ -77,7 +78,7 @@ def llm_resource_island_node_ids(
     }
 
 
-def _edge_pair(edge: Any) -> Tuple[str, Optional[str]]:
+def _edge_pair(edge: Any) -> tuple[str, str | None]:
     if isinstance(edge, Edge):
         return edge.from_node, edge.to_node
     if isinstance(edge, dict):
@@ -93,16 +94,16 @@ def _edge_pair(edge: Any) -> Tuple[str, Optional[str]]:
 
 def validate_llm_resource_islands_in_graph(
     *,
-    nodes: Optional[Dict[str, Dict[str, Any]]],
-    edges: Optional[Sequence[Any]],
+    nodes: dict[str, dict[str, Any]] | None,
+    edges: Sequence[Any] | None,
     flow_resources: Mapping[str, Any],
-    skill_resources: Optional[Mapping[str, Any]],
-    entry: Optional[str],
+    skill_resources: Mapping[str, Any] | None,
+    entry: str | None,
 ) -> None:
     """Вызывать после сборки maps ресурсов для ветки (flow ∪ skill по ключам)."""
     if not nodes:
         return
-    merged: Dict[str, Any] = dict(flow_resources or {})
+    merged: dict[str, Any] = dict(flow_resources or {})
     if skill_resources:
         merged.update(dict(skill_resources))
     island_ids = llm_resource_island_node_ids(nodes, merged)
@@ -141,7 +142,7 @@ def _resource_ref_plain(ref_raw: Any) -> ResourceReference:
 
 
 def _patch_llm_dict_into_bucket(
-    bucket: Dict[str, Any],
+    bucket: dict[str, Any],
     bind_key: str,
     llm_raw: Any,
 ) -> None:
@@ -182,14 +183,14 @@ def _patch_llm_dict_into_bucket(
 
 
 def overlay_llm_resource_islands_on_resource_maps(
-    flow_resources: Dict[str, Any],
-    skill_resources: Optional[Dict[str, Any]],
-    effective_nodes: Dict[str, Dict[str, Any]],
-) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    flow_resources: dict[str, Any],
+    skill_resources: dict[str, Any] | None,
+    effective_nodes: dict[str, dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Копии карт ресурсов с подмешиванием node.llm островов в LLM resource config."""
     fr = copy.deepcopy(flow_resources)
     sr = copy.deepcopy(skill_resources) if skill_resources else None
-    merged_lookup: Dict[str, Any] = {**fr, **(sr or {})}
+    merged_lookup: dict[str, Any] = {**fr, **(sr or {})}
     for _nid, n in effective_nodes.items():
         if not isinstance(n, dict):
             continue

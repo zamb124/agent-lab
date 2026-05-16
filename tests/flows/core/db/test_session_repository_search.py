@@ -228,7 +228,7 @@ class TestStateRepositorySearchSessions:
         key_in_range = repo._build_final_key(repo._get_key(session_in_range_id))
         key_new = repo._build_final_key(repo._get_key(session_new_id))
 
-        async with repo._storage._get_session() as session:
+        async with repo._storage.get_session() as session:
             await session.execute(
                 update(States)
                 .where(States.key == key_old)
@@ -403,7 +403,7 @@ class TestStateRepositorySearchSessions:
         key2 = repo._build_final_key(repo._get_key(session2_id))
         key3 = repo._build_final_key(repo._get_key(session3_id))
 
-        async with repo._storage._get_session() as session:
+        async with repo._storage.get_session() as session:
             date1 = (now - timedelta(hours=2)).replace(tzinfo=None)
             date2 = (now - timedelta(hours=1)).replace(tzinfo=None)
             date3 = now.replace(tzinfo=None)

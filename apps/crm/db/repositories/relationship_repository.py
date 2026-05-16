@@ -7,12 +7,16 @@
 
 import base64
 import json as _json
+from datetime import UTC, datetime
+from typing import cast as type_cast
+from typing import override
 
-from sqlalchemy import delete, or_, select, tuple_, update
+from sqlalchemy import delete, literal, or_, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
 
 from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import Relationship
+from apps.crm.types import JsonObject
 from core.db.utils import get_rowcount
 from core.logging import get_logger
 
@@ -23,12 +27,25 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
     """Репозиторий для relationships в PostgreSQL"""
 
     @property
+    @override
     def model_class(self) -> type[Relationship]:
         return Relationship
 
     @property
+    @override
     def id_field(self) -> str:
         return "relationship_id"
+
+    @staticmethod
+    def _as_json_object(value: object, context: str) -> JsonObject:
+        if not isinstance(value, dict):
+            raise ValueError(f"{context} must be JSON object")
+        result: JsonObject = {}
+        for key, item in type_cast(dict[object, object], value).items():
+            if not isinstance(key, str):
+                raise ValueError(f"{context} contains non-string key")
+            result[key] = item
+        return result
 
     async def get_by_entity(self, entity_id: str) -> list[Relationship]:
         """Получает все связи сущности (source и target)"""
@@ -259,10 +276,21 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             stmt = select(Relationship).where(Relationship.company_id == company_id)
 
             if cursor is not None:
-                payload = _json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+                raw_payload = type_cast(
+                    object,
+                    _json.loads(base64.urlsafe_b64decode(cursor.encode()).decode()),
+                )
+                payload = self._as_json_object(raw_payload, "relationship graph cursor")
+                raw_ts = payload.get("ts")
+                raw_id = payload.get("id")
+                if not isinstance(raw_ts, str) or not isinstance(raw_id, str):
+                    raise ValueError("relationship graph cursor has invalid shape")
+                cursor_ts = datetime.fromisoformat(raw_ts)
+                if cursor_ts.tzinfo is None:
+                    cursor_ts = cursor_ts.replace(tzinfo=UTC)
                 stmt = stmt.where(
                     tuple_(Relationship.created_at, Relationship.relationship_id)
-                    > tuple_(payload["ts"], payload["id"])
+                    > tuple_(literal(cursor_ts), literal(raw_id))
                 )
 
             stmt = stmt.order_by(
@@ -318,8 +346,11 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             n_src = get_rowcount(res_src)
             n_tgt = get_rowcount(res_tgt)
             logger.info(
-                f"Rewrote entity_id {old_entity_id} -> {new_entity_id}: "
-                f"source_rows={n_src} target_rows={n_tgt}"
+                "Rewrote entity_id %s -> %s: source_rows=%s target_rows=%s",
+                old_entity_id,
+                new_entity_id,
+                n_src,
+                n_tgt,
             )
             return n_src + n_tgt
 
@@ -339,11 +370,12 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
         Удаляет петли source==target и дубликаты по ключу
         (namespace, source, target, relationship_type), оставляя запись с минимальным relationship_id.
         """
-        self._get_company_id()
         rels = await self.get_by_entity(entity_id)
         loops = [r for r in rels if r.source_entity_id == r.target_entity_id]
+        deleted_count = 0
         for r in loops:
-            await self.delete_by_relationship_id(r.relationship_id)
+            if await self.delete_by_relationship_id(r.relationship_id):
+                deleted_count += 1
 
         rels = await self.get_by_entity(entity_id)
         groups: dict[tuple[str, str, str, str], list[Relationship]] = {}
@@ -361,4 +393,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             keeper = min(group, key=lambda x: x.relationship_id)
             for r in group:
                 if r.relationship_id != keeper.relationship_id:
-                    await self.delete_by_relationship_id(r.relationship_id)
+                    if await self.delete_by_relationship_id(r.relationship_id):
+                        deleted_count += 1
+        if deleted_count > 0:
+            logger.info("Deduplicated %s relationships for entity:%s", deleted_count, entity_id)

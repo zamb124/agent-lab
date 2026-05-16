@@ -4,7 +4,7 @@ TaskIQ tasks для LLM вызовов.
 Обеспечивает единообразное выполнение LLM через worker.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
 
@@ -24,12 +24,12 @@ logger = get_logger(__name__)
 
 @broker.task(task_name="invoke_llm", queue_name="flows_worker")
 async def invoke_llm(
-    messages: List[Dict[str, str]],
-    tools: Optional[List[Dict[str, Any]]] = None,
-    task_id: Optional[str] = None,
-    context_id: Optional[str] = None,
-    context_data: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    messages: list[dict[str, str]],
+    tools: list[dict[str, Any]] | None = None,
+    task_id: str | None = None,
+    context_id: str | None = None,
+    context_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Вызывает LLM и возвращает результат.
 

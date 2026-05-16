@@ -7,7 +7,7 @@ Traces API — OTEL-трейсы flows.
 Ответ совместим с platform-trace-viewer: { spans: [...] } где spans — дерево.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -27,8 +27,8 @@ _ATTR_TASK_ID = "platform.task_id"
 @router.get("/search")
 async def search_traces(
     container: ContainerDep,
-    flow_id: Optional[str] = Query(default=None),
-    task_id: Optional[str] = Query(default=None),
+    flow_id: str | None = Query(default=None),
+    task_id: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:

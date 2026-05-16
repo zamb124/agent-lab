@@ -8,7 +8,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Tuple
+from typing import Any
+from collections.abc import Callable
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +36,7 @@ def _llm_factory(_builder: Any) -> Any:
     return SafeLLMClient()
 
 
-INLINE_SHIMS: Tuple[InlineShimSpec, ...] = (
+INLINE_SHIMS: tuple[InlineShimSpec, ...] = (
     InlineShimSpec("httpx", True, _httpx_factory),
     InlineShimSpec("llm", True, _llm_factory),
 )

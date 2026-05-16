@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncGenerator
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -30,7 +31,7 @@ class BaseLlmNodeRunner(ABC):
     Runner отвечает за логику выполнения ReAct цикла.
     """
 
-    def __init__(self, node_config: NodeConfig, tools: List[Any], llm, prompt: str, llm_node=None):
+    def __init__(self, node_config: NodeConfig, tools: list[Any], llm, prompt: str, llm_node=None):
         self.node_config = node_config
         self.tools = list(tools) if tools else []
         self.llm = llm
@@ -90,9 +91,9 @@ class BaseLlmNodeRunner(ABC):
     @abstractmethod
     def run(
         self,
-        input_data: Dict[str, Any],
+        input_data: dict[str, Any],
         state: "ExecutionState",
-        emitter: Optional[BaseEmitter] = None,
+        emitter: BaseEmitter | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Выполняет LlmNode.
@@ -106,11 +107,11 @@ class BaseLlmNodeRunner(ABC):
         """
         raise NotImplementedError
 
-    def get_variables(self, state: "ExecutionState") -> Dict[str, Any]:
+    def get_variables(self, state: "ExecutionState") -> dict[str, Any]:
         """Получает переменные из state."""
         return dict(state.variables or {})
 
-    def get_messages(self, state: "ExecutionState") -> List[Message]:
+    def get_messages(self, state: "ExecutionState") -> list[Message]:
         """Получает историю сообщений."""
         return list(state.messages)
 
@@ -134,12 +135,12 @@ class BaseLlmNodeRunner(ABC):
         self,
         state: "ExecutionState",
         content: str,
-        tool_calls: List[Dict[str, Any]] | None = None,
+        tool_calls: list[dict[str, Any]] | None = None,
     ) -> None:
         """Добавляет сообщение LlmNode."""
         if not self.node_config:
             raise ValueError("add_llm_node_message: node_config required")
-        meta: Dict[str, Any] = {"node_id": self.node_config.node_id}
+        meta: dict[str, Any] = {"node_id": self.node_config.node_id}
         if tool_calls:
             meta["tool_calls"] = tool_calls
         message = Message(

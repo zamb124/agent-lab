@@ -2,12 +2,13 @@
 Сервис проверки доступа через AccessGrants.
 """
 
-from datetime import datetime, UTC
-from typing import Any
+from datetime import UTC, date, datetime
+from typing import cast as type_cast
 
 from apps.crm.db.models import AccessGrant, CRMEntity
 from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
+from apps.crm.types import JsonObject
 from core.context import get_context
 from core.logging import get_logger
 
@@ -20,16 +21,16 @@ class AccessControlService:
     def __init__(
         self,
         grant_repo: AccessGrantRepository,
-        entity_type_repo: EntityTypeRepository
-    ):
-        self._grant_repo = grant_repo
-        self._entity_type_repo = entity_type_repo
+        entity_type_repo: EntityTypeRepository,
+    ) -> None:
+        self._grant_repo: AccessGrantRepository = grant_repo
+        self._entity_type_repo: EntityTypeRepository = entity_type_repo
 
     async def can_read_entity(
         self,
         entity: CRMEntity,
         user_id: str | None,
-        company_id: str | None
+        company_id: str | None,
     ) -> bool:
         """Проверка доступа к entity"""
 
@@ -58,7 +59,7 @@ class AccessControlService:
         namespace_grants = await self._grant_repo.find_by_resource(
             "namespace",
             entity.namespace,
-            entity.company_id
+            entity.company_id,
         )
 
         for grant in namespace_grants:
@@ -73,7 +74,7 @@ class AccessControlService:
         self,
         entity: CRMEntity,
         user_id: str,
-        company_id: str
+        company_id: str,
     ) -> bool:
         """Проверка прав на редактирование"""
 
@@ -88,8 +89,12 @@ class AccessControlService:
                 return True
 
         # Grants с ролью editor/admin
-        grants = await self._grant_repo.find_by_resource("entity", entity.entity_id, entity.company_id)
-        grants += await self._grant_repo.find_by_resource("namespace", entity.namespace, entity.company_id)
+        grants = await self._grant_repo.find_by_resource(
+            "entity", entity.entity_id, entity.company_id
+        )
+        grants += await self._grant_repo.find_by_resource(
+            "namespace", entity.namespace, entity.company_id
+        )
 
         for grant in grants:
             if grant.role in ["editor", "admin"]:
@@ -102,8 +107,8 @@ class AccessControlService:
         self,
         entity: CRMEntity,
         user_id: str | None,
-        company_id: str | None
-    ) -> CRMEntity | dict[str, Any]:
+        company_id: str | None,
+    ) -> CRMEntity | JsonObject:
         """Возвращает полную entity при полном доступе или dict с публичными полями."""
 
         # Проверяем ПОЛНЫЙ доступ (owner, same company+namespace, grants с ролью)
@@ -112,8 +117,12 @@ class AccessControlService:
             return entity
 
         # Проверяем публичные гранты
-        entity_grants = await self._grant_repo.find_by_resource("entity", entity.entity_id, entity.company_id)
-        namespace_grants = await self._grant_repo.find_by_resource("namespace", entity.namespace, entity.company_id)
+        entity_grants = await self._grant_repo.find_by_resource(
+            "entity", entity.entity_id, entity.company_id
+        )
+        namespace_grants = await self._grant_repo.find_by_resource(
+            "namespace", entity.namespace, entity.company_id
+        )
 
         # Если есть хоть один public grant
         for grant in entity_grants + namespace_grants:
@@ -127,8 +136,8 @@ class AccessControlService:
 
     async def _filter_public_fields(
         self,
-        entity: CRMEntity
-    ) -> dict[str, Any]:
+        entity: CRMEntity,
+    ) -> JsonObject:
         """Фильтрация по EntityType.public_fields"""
 
         entity_type = await self._entity_type_repo.get_by_type_id(
@@ -138,7 +147,7 @@ class AccessControlService:
         )
 
         # Возвращаем ТОЛЬКО публичные поля
-        result = {
+        result: JsonObject = {
             "entity_id": entity.entity_id,
             "entity_type": entity.entity_type,
         }
@@ -156,7 +165,7 @@ class AccessControlService:
         self,
         entity: CRMEntity,
         user_id: str | None,
-        company_id: str | None
+        company_id: str | None,
     ) -> bool:
         """Проверка ПОЛНОГО доступа (без учета публичных грантов)"""
 
@@ -170,8 +179,12 @@ class AccessControlService:
                 return True
 
         # Гранты с ролью (НЕ публичные)
-        grants = await self._grant_repo.find_by_resource("entity", entity.entity_id, entity.company_id)
-        grants += await self._grant_repo.find_by_resource("namespace", entity.namespace, entity.company_id)
+        grants = await self._grant_repo.find_by_resource(
+            "entity", entity.entity_id, entity.company_id
+        )
+        grants += await self._grant_repo.find_by_resource(
+            "namespace", entity.namespace, entity.company_id
+        )
 
         for grant in grants:
             # Пропускаем публичные гранты - они дают ограниченный доступ
@@ -189,7 +202,7 @@ class AccessControlService:
         self,
         grant: AccessGrant,
         user_id: str | None,
-        company_id: str | None
+        company_id: str | None,
     ) -> bool:
         """Проверить конкретный grant"""
 
@@ -211,26 +224,97 @@ class AccessControlService:
 
         return False
 
-    def _get_nested_value(self, obj: Any, path: str) -> Any:
-        """Получить значение по пути (attributes.position)"""
-        keys = path.split(".")
-        value = obj
+    def _get_nested_value(self, entity: CRMEntity, path: str) -> object | None:
+        """Получить публично разрешенное значение по пути (например, attributes.position)."""
+        keys = [key for key in path.split(".") if key]
+        if not keys:
+            return None
+        if keys[0] == "attributes":
+            if len(keys) == 1:
+                return entity.attributes
+            return self._get_json_path_value(entity.attributes, keys[1:])
+        if len(keys) > 1:
+            return None
+        return self._get_entity_public_field(entity, keys[0])
+
+    @staticmethod
+    def _get_entity_public_field(entity: CRMEntity, field_name: str) -> object | None:
+        if field_name == "entity_id":
+            return entity.entity_id
+        if field_name == "company_id":
+            return entity.company_id
+        if field_name == "namespace":
+            return entity.namespace
+        if field_name == "entity_type":
+            return entity.entity_type
+        if field_name == "entity_subtype":
+            return entity.entity_subtype
+        if field_name == "name":
+            return entity.name
+        if field_name == "description":
+            return entity.description
+        if field_name == "status":
+            return entity.status
+        if field_name == "tags":
+            return entity.tags
+        if field_name == "priority":
+            return entity.priority
+        if field_name == "due_date":
+            return entity.due_date
+        if field_name == "note_date":
+            return entity.note_date
+        if field_name == "assignees":
+            return entity.assignees
+        if field_name == "attachment_ids":
+            return entity.attachment_ids
+        if field_name == "user_id":
+            return entity.user_id
+        if field_name == "source_entity_id":
+            return entity.source_entity_id
+        if field_name == "source_company_id":
+            return entity.source_company_id
+        if field_name == "relevance":
+            return entity.relevance
+        if field_name == "created_at":
+            return entity.created_at
+        if field_name == "updated_at":
+            return entity.updated_at
+        return None
+
+    @staticmethod
+    def _get_json_path_value(obj: JsonObject, keys: list[str]) -> object | None:
+        value: object = obj
         for key in keys:
-            if isinstance(value, dict):
-                value = value.get(key)
-            elif hasattr(value, key):
-                value = getattr(value, key)
-            else:
+            nested = AccessControlService._as_nested_json_object(value)
+            if nested is None:
                 return None
+            value = nested.get(key)
         return value
 
-    def _set_nested_value(self, obj: dict[str, Any], path: str, value: Any):
+    @staticmethod
+    def _as_nested_json_object(value: object) -> JsonObject | None:
+        if not isinstance(value, dict):
+            return None
+        result: JsonObject = {}
+        for key, item in type_cast(dict[object, object], value).items():
+            if not isinstance(key, str):
+                return None
+            result[key] = item
+        return result
+
+    def _set_nested_value(self, obj: JsonObject, path: str, value: object) -> None:
         """Установить значение по пути"""
-        keys = path.split(".")
+        keys = [key for key in path.split(".") if key]
+        if not keys:
+            return
+        if isinstance(value, date | datetime):
+            value = value.isoformat()
         for key in keys[:-1]:
-            if key not in obj:
-                obj[key] = {}
-            obj = obj[key]
+            nested = self._as_nested_json_object(obj.get(key))
+            if nested is None:
+                nested = {}
+                obj[key] = nested
+            obj = nested
         obj[keys[-1]] = value
 
     async def batch_filter_readable(
@@ -299,7 +383,11 @@ class AccessControlService:
             namespace_grants = grants_map.get(("namespace", entity.namespace), [])
 
             access_level = self._resolve_access_level(
-                entity_grants, namespace_grants, user_id, company_id, now,
+                entity_grants,
+                namespace_grants,
+                user_id,
+                company_id,
+                now,
             )
             if access_level:
                 entity.access_level = access_level

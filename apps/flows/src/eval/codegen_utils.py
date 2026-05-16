@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 import traceback
 from dataclasses import dataclass
-from typing import Any, List, Literal, Union
+from typing import Any, Literal
 
 from core.docs import DocumentationQuery
 from core.docs.service import get_documentation_service
@@ -56,7 +56,7 @@ def syntax_retry_hint(code: str, detail: str) -> str:
     d = (detail or "").lower()
     if "syntax" not in d and "invalid syntax" not in d:
         return ""
-    chunks: List[str] = []
+    chunks: list[str] = []
     non_empty_lines = [ln for ln in code.split("\n") if ln.strip()]
     if len(non_empty_lines) <= 1 and len(code) > 120:
         chunks.append(
@@ -118,7 +118,7 @@ class CodegenStagesFailure:
     traceback: str
 
 
-CodegenStagesResult = Union[CodegenStagesSuccess, CodegenStagesFailure]
+CodegenStagesResult = CodegenStagesSuccess | CodegenStagesFailure
 
 
 async def run_codegen_stages(

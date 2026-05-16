@@ -6,14 +6,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from apps.crm.integrations.amocrm.mapping import (
     AMO_USERS_ENTITY_TYPE_ID,
     ENTITY_TYPE_BY_AMO_COLLECTION,
 )
+from apps.crm.types import JsonObject
 
-AMO_OPTIONAL_FIELD_EXTERNAL_REFS: dict[str, Any] = {
+AMO_OPTIONAL_FIELD_EXTERNAL_REFS: JsonObject = {
     "type": "external_refs",
     "label": "Внешние ссылки",
     "description": (
@@ -21,7 +20,7 @@ AMO_OPTIONAL_FIELD_EXTERNAL_REFS: dict[str, Any] = {
     ),
 }
 
-LEAD_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
+LEAD_AMO_OPTIONAL_FIELDS: JsonObject = {
     "source": {"type": "string", "label": "Источник"},
     "stage": {"type": "string", "label": "Стадия"},
     "budget": {"type": "number", "label": "Бюджет"},
@@ -31,14 +30,14 @@ LEAD_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
     "external_refs": dict(AMO_OPTIONAL_FIELD_EXTERNAL_REFS),
 }
 
-ORGANIZATION_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
+ORGANIZATION_AMO_OPTIONAL_FIELDS: JsonObject = {
     "name": {"type": "string", "label": "Название"},
     "industry": {"type": "string", "label": "Отрасль"},
     "legal_name": {"type": "string", "label": "Юридическое название"},
     "external_refs": dict(AMO_OPTIONAL_FIELD_EXTERNAL_REFS),
 }
 
-CONTACT_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
+CONTACT_AMO_OPTIONAL_FIELDS: JsonObject = {
     "display_name": {"type": "string", "label": "Имя"},
     "role": {"type": "string", "label": "Роль"},
     "aliases": {"type": "array", "label": "Псевдонимы"},
@@ -47,14 +46,14 @@ CONTACT_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
     "external_refs": dict(AMO_OPTIONAL_FIELD_EXTERNAL_REFS),
 }
 
-MEMBER_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
+MEMBER_AMO_OPTIONAL_FIELDS: JsonObject = {
     "aliases": {"type": "array", "label": "Псевдонимы"},
     "email": {"type": "string", "label": "Email"},
     "is_active": {"type": "boolean", "label": "Активен"},
     "external_refs": dict(AMO_OPTIONAL_FIELD_EXTERNAL_REFS),
 }
 
-TASK_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
+TASK_AMO_OPTIONAL_FIELDS: JsonObject = {
     "title": {"type": "string", "label": "Название задачи"},
     "due_date": {"type": "date", "label": "Срок"},
     "priority": {"type": "enum", "values": ["low", "medium", "high", "urgent"]},
@@ -70,7 +69,7 @@ TASK_AMO_OPTIONAL_FIELDS: dict[str, Any] = {
     "external_refs": dict(AMO_OPTIONAL_FIELD_EXTERNAL_REFS),
 }
 
-AMO_OPTIONAL_FIELDS_BY_TYPE_ID: dict[str, dict[str, Any]] = {
+AMO_OPTIONAL_FIELDS_BY_TYPE_ID: dict[str, JsonObject] = {
     "lead": LEAD_AMO_OPTIONAL_FIELDS,
     "contact": CONTACT_AMO_OPTIONAL_FIELDS,
     "organization": ORGANIZATION_AMO_OPTIONAL_FIELDS,
@@ -80,6 +79,4 @@ AMO_OPTIONAL_FIELDS_BY_TYPE_ID: dict[str, dict[str, Any]] = {
 
 
 def amo_canonical_type_ids() -> frozenset[str]:
-    return frozenset(
-        {*ENTITY_TYPE_BY_AMO_COLLECTION.values(), AMO_USERS_ENTITY_TYPE_ID, "task"}
-    )
+    return frozenset({*ENTITY_TYPE_BY_AMO_COLLECTION.values(), AMO_USERS_ENTITY_TYPE_ID, "task"})

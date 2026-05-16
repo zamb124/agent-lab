@@ -4,6 +4,8 @@
 ВСЕ типы с company_id (ОБЯЗАТЕЛЬНО)!
 """
 
+from typing import override
+
 from sqlalchemy import and_, func, select
 
 from apps.crm.db.base import BaseCRMRepository
@@ -17,10 +19,12 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
     """Репозиторий для типов связей"""
 
     @property
+    @override
     def model_class(self) -> type[RelationshipType]:
         return RelationshipType
 
     @property
+    @override
     def id_field(self) -> str:
         return "type_id"
 

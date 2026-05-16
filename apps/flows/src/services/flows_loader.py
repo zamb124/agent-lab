@@ -15,7 +15,7 @@ import inspect
 import json
 import mimetypes
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any
 from urllib.parse import urlparse
 
 import yaml
@@ -41,7 +41,7 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _call_parameters_from_pydantic_model(model: Type[BaseModel]) -> Dict[str, CallParameter]:
+def _call_parameters_from_pydantic_model(model: type[BaseModel]) -> dict[str, CallParameter]:
     """Собирает CallParameter из JSON Schema Pydantic-модели (для tool_repository при load_tools_to_db)."""
 
     schema = model.model_json_schema()
@@ -73,7 +73,7 @@ def _call_parameters_from_pydantic_model(model: Type[BaseModel]) -> Dict[str, Ca
                     return prop_type(br)
         return "string"
 
-    out: Dict[str, CallParameter] = {}
+    out: dict[str, CallParameter] = {}
     for name, raw in properties.items():
         if not isinstance(raw, dict):
             continue
@@ -104,11 +104,11 @@ class FlowsLoader:
         self.node_repository = node_repository
         self.tool_repository = tool_repository
         self.registry_path = registry_path or (bundles_dir / "registry.yaml")
-        self._registry: Dict[str, Any] = {}
-        self._defaults: Dict[str, Any] = {}
-        self._loaded_nodes: List[str] = []
-        self._tools_cache: Dict[str, ToolReference] = {}  # Кеш tools для инлайнинга
-        self._nodes_cache: Dict[str, NodeConfig] = {}  # Кеш nodes для инлайнинга
+        self._registry: dict[str, Any] = {}
+        self._defaults: dict[str, Any] = {}
+        self._loaded_nodes: list[str] = []
+        self._tools_cache: dict[str, ToolReference] = {}  # Кеш tools для инлайнинга
+        self._nodes_cache: dict[str, NodeConfig] = {}  # Кеш nodes для инлайнинга
         self._target_company_id: str | None = None
 
     def load_registry_yaml(self) -> None:
@@ -122,7 +122,7 @@ class FlowsLoader:
             self._registry = yaml.safe_load(f) or {}
         self._defaults = self._registry.get("defaults", {})
 
-    async def load_all(self) -> tuple[List[str], List[str]]:
+    async def load_all(self) -> tuple[list[str], list[str]]:
         """
         Загружает flows из ``registry.yaml`` (секция ``flows``) и связанные nodes в БД.
 
@@ -131,8 +131,8 @@ class FlowsLoader:
         """
         self._target_company_id = "system"
         # Загружаем кеши для инлайнинга
-        await self._load_tools_cache()
-        await self._load_nodes_cache()
+        await self.load_tools_cache()
+        await self.load_nodes_cache()
 
         if not self.registry_path.exists():
             logger.warning(f"Registry не найден: {self.registry_path}")
@@ -153,7 +153,7 @@ class FlowsLoader:
 
         # Фаза 1: все nodes.json в кеш (для кросс-ссылок при инлайне tools)
         for bundle_id in bundle_ids:
-            await self._preload_nodes_to_cache(bundle_id)
+            await self.preload_nodes_to_cache(bundle_id)
 
         # Фаза 2: загрузка flow с инлайнингом
         loaded_flow_ids: list[str] = []
@@ -175,7 +175,7 @@ class FlowsLoader:
         logger.info(f"Загружено {len(self._loaded_nodes)} nodes в БД")
         return loaded_flow_ids, self._loaded_nodes
 
-    async def _preload_nodes_to_cache(self, bundle_id: str) -> None:
+    async def preload_nodes_to_cache(self, bundle_id: str) -> None:
         """Предзагрузка nodes из каталога bundle в кеш (без сохранения flow в БД)."""
         bundle_dir = self.bundles_dir / bundle_id
 
@@ -188,7 +188,7 @@ class FlowsLoader:
 
         await self._load_nodes(bundle_dir, nodes_path)
 
-    async def _load_tools_cache(self) -> None:
+    async def load_tools_cache(self) -> None:
         """Загружает inline tools из БД в кеш. MCP-тулы пропускаются — они проксируются через MCP-сервер."""
         tools = await self.tool_repository.list(limit=10000)
         for tool in tools:
@@ -203,7 +203,7 @@ class FlowsLoader:
 
         logger.info(f"Загружен кеш из {len(self._tools_cache)} inline tools")
 
-    async def _load_nodes_cache(self) -> None:
+    async def load_nodes_cache(self) -> None:
         """Загружает все nodes из БД в кеш для инлайнинга."""
         nodes = await self.node_repository.list(limit=10000)
         for node in nodes:
@@ -211,7 +211,7 @@ class FlowsLoader:
         logger.info(f"Загружен кеш из {len(self._nodes_cache)} nodes")
 
     async def _load_flow_bundle(self, bundle_id: str) -> str | None:
-        """Один каталог bundle -> FlowConfig в БД. Nodes предзагружены в _preload_nodes_to_cache."""
+        """Один каталог bundle -> FlowConfig в БД. Nodes предзагружены в preload_nodes_to_cache."""
         flow_config = await self.build_flow_bundle_config(bundle_id)
         if flow_config is None:
             return None
@@ -245,7 +245,7 @@ class FlowsLoader:
         if evaluation:
             evaluation = {k: v for k, v in evaluation.items() if not k.startswith("_")}
 
-        triggers: Dict[str, TriggerConfig] = {}
+        triggers: dict[str, TriggerConfig] = {}
         raw_triggers = raw_config.get("triggers")
         if raw_triggers is not None:
             if not isinstance(raw_triggers, dict):
@@ -280,7 +280,7 @@ class FlowsLoader:
 
     async def _resolve_store_card_image_url(
         self,
-        raw_config: Dict[str, Any],
+        raw_config: dict[str, Any],
         bundle_dir: Path,
     ) -> str | None:
         """
@@ -409,7 +409,7 @@ class FlowsLoader:
 
     def _resolve_file_source(
         self,
-        entry: Dict[str, Any],
+        entry: dict[str, Any],
         bundle_dir: Path,
         node_id: str,
         index: int,
@@ -439,10 +439,10 @@ class FlowsLoader:
 
     async def _materialize_node_files(
         self,
-        node: Dict[str, Any],
+        node: dict[str, Any],
         bundle_dir: Path,
         node_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         files = node.get("files")
         if not files:
             return node
@@ -463,7 +463,7 @@ class FlowsLoader:
                 raise ValueError(f"Node '{node_id}': files[{index}].name должен быть непустой строкой")
 
             source = self._resolve_file_source(entry, bundle_dir, node_id, index)
-            raw_bytes, resolved_name = await reader._resolve_source(source, name, ReadOptions())
+            raw_bytes, resolved_name = await reader.resolve_source(source, name, ReadOptions())
             original_name = name.strip() if name.strip() else resolved_name
             item = await processor.persist_uploaded_file_as_state_files_item(
                 data=raw_bytes,
@@ -479,7 +479,7 @@ class FlowsLoader:
         node["files"] = materialized
         return node
 
-    def _convert_tools(self, tools_list: List[Any]) -> List[ToolReference]:
+    def _convert_tools(self, tools_list: list[Any]) -> list[ToolReference]:
         """Конвертирует список tools в List[ToolReference]."""
         result = []
         for tool in tools_list:
@@ -501,8 +501,8 @@ class FlowsLoader:
         return result
 
     async def _load_nodes_with_prompts(
-        self, bundle_dir: Path, config: Dict[str, Any]
-    ) -> Dict[str, Dict[str, Any]]:
+        self, bundle_dir: Path, config: dict[str, Any]
+    ) -> dict[str, dict[str, Any]]:
         """
         Загружает ноды и встраивает промпты из файлов.
 
@@ -535,8 +535,8 @@ class FlowsLoader:
         return nodes
 
     def _inline_prompt_from_file(
-        self, node: Dict[str, Any], bundle_dir: Path
-    ) -> Dict[str, Any]:
+        self, node: dict[str, Any], bundle_dir: Path
+    ) -> dict[str, Any]:
         """
         Инлайнит промпт из файла.
 
@@ -569,8 +569,8 @@ class FlowsLoader:
         return node
 
     def _inline_output_schema_file(
-        self, node: Dict[str, Any], bundle_dir: Path
-    ) -> Dict[str, Any]:
+        self, node: dict[str, Any], bundle_dir: Path
+    ) -> dict[str, Any]:
         """
         Подставляет output_schema из JSON рядом с flow (как промпт из .md).
         Поле output_schema_file удаляется после загрузки.
@@ -590,8 +590,8 @@ class FlowsLoader:
         return node
 
     def _merge_node_with_cache(
-        self, node_config: Dict[str, Any], ref_node_id: str, bundle_dir: Path
-    ) -> Dict[str, Any]:
+        self, node_config: dict[str, Any], ref_node_id: str, bundle_dir: Path
+    ) -> dict[str, Any]:
         """
         Мержит ноду из flow.json (inline в bundle) с данными из nodes.json (через _nodes_cache).
 
@@ -602,7 +602,7 @@ class FlowsLoader:
             raise ValueError(f"Node '{ref_node_id}' not found in nodes.json")
 
         # Базовые данные из nodes.json
-        merged: Dict[str, Any] = {
+        merged: dict[str, Any] = {
             "type": cached_node.type,
             "name": cached_node.name,
             "description": cached_node.description,
@@ -632,7 +632,7 @@ class FlowsLoader:
         merged = self._inline_prompt_from_file(merged, bundle_dir)
         return self._inline_output_schema_file(merged, bundle_dir)
 
-    def _inline_function_to_code(self, node: Dict[str, Any], node_id: str) -> None:
+    def _inline_function_to_code(self, node: dict[str, Any], node_id: str) -> None:
         """
         Если нода имеет 'function' (путь к функции), загружает исходный код.
         Записывает в 'code' и удаляет 'function'.
@@ -657,8 +657,8 @@ class FlowsLoader:
             logger.error(f"Node '{node_id}': не удалось загрузить код из {function_path}: {e}")
 
     async def _load_branches_with_prompts(
-        self, bundle_dir: Path, config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, bundle_dir: Path, config: dict[str, Any]
+    ) -> dict[str, Any]:
         """Загружает ветки (branches) и встраивает промпты для нод в каждой ветке."""
         raw_branches = config.get("branches")
         if raw_branches is None:
@@ -668,7 +668,7 @@ class FlowsLoader:
         if not isinstance(raw_branches, dict):
             raise ValueError("flow.json: поле branches должно быть объектом")
 
-        branches: Dict[str, Any] = {}
+        branches: dict[str, Any] = {}
         for branch_id, branch_payload in raw_branches.items():
             branch_cfg = dict(branch_payload)
 
@@ -695,7 +695,7 @@ class FlowsLoader:
 
         return branches
 
-    def _apply_defaults(self, nodes: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def _apply_defaults(self, nodes: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
         """
         Применяет defaults из registry к нодам.
         Не применяет дефолтные llm если нода ссылается на node_id - там llm уже определен в nodes.json.
@@ -713,7 +713,7 @@ class FlowsLoader:
 
         return nodes
 
-    def _inline_tools_in_nodes(self, nodes: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    def _inline_tools_in_nodes(self, nodes: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
         """
         Рекурсивно инлайнит tools в nodes агента.
 
@@ -764,8 +764,8 @@ class FlowsLoader:
         return nodes
 
     def _inline_tools_recursive(
-        self, tools: List[Any], context: str, depth: int = 0
-    ) -> List[Dict[str, Any]]:
+        self, tools: list[Any], context: str, depth: int = 0
+    ) -> list[dict[str, Any]]:
         """
         Рекурсивно инлайнит список tools.
 
@@ -787,7 +787,7 @@ class FlowsLoader:
 
     def _inline_single_tool(
         self, tool: Any, context: str, depth: int
-    ) -> Dict[str, Any] | None:
+    ) -> dict[str, Any] | None:
         """
         Инлайнит один tool рекурсивно.
 
@@ -859,8 +859,8 @@ class FlowsLoader:
         raise ValueError(f"{context}: неизвестный формат tool: {type(tool)}")
 
     def _inline_llm_node_tool(
-        self, node_config: Dict[str, Any], context: str, depth: int
-    ) -> Dict[str, Any]:
+        self, node_config: dict[str, Any], context: str, depth: int
+    ) -> dict[str, Any]:
         """
         Инлайнит llm_node который используется как tool.
         Рекурсивно инлайнит все его tools и валидирует уникальность reason/exit.
@@ -885,11 +885,11 @@ class FlowsLoader:
 
     def _inline_node_as_tool(
         self, node_config: NodeConfig, context: str, depth: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Конвертирует NodeConfig в inline tool и рекурсивно инлайнит его tools.
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "tool_id": node_config.node_id,
             "type": node_config.type,
             "name": node_config.name,
@@ -904,7 +904,7 @@ class FlowsLoader:
             result["code"] = node_config.code
 
         # Собираем tools для инлайнинга
-        tools_list: List[Dict[str, Any]] = []
+        tools_list: list[dict[str, Any]] = []
         if node_config.tools:
             tools_list = [t.model_dump(exclude_none=True) for t in node_config.tools]
 
@@ -928,7 +928,7 @@ class FlowsLoader:
         """Получает node из кеша загруженных nodes."""
         return self._nodes_cache.get(node_id)
 
-    def _validate_llm_node_tools(self, node_id: str, tools: List[Dict[str, Any]]) -> None:
+    def _validate_llm_node_tools(self, node_id: str, tools: list[dict[str, Any]]) -> None:
         """
         Валидирует что в llm_node только 1 reasoning и только 1 exit tool.
 
@@ -956,7 +956,7 @@ class FlowsLoader:
                 f"найдено {len(exit_tools)}: {names}"
             )
 
-    def _inline_tools_in_branches(self, branches: Dict[str, Any]) -> Dict[str, Any]:
+    def _inline_tools_in_branches(self, branches: dict[str, Any]) -> dict[str, Any]:
         """Рекурсивно инлайнит tools в nodes внутри каждой ветки."""
         for _branch_id, branch_cfg in branches.items():
             branch_nodes = branch_cfg.get("nodes", {})
@@ -968,7 +968,7 @@ class FlowsLoader:
         self,
         company_id: str,
         filter_public: bool = True
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
         Универсальный метод загрузки для любой компании.
 
@@ -988,8 +988,8 @@ class FlowsLoader:
         """
         self._target_company_id = company_id
         # Загружаем кеши для инлайнинга
-        await self._load_tools_cache()
-        await self._load_nodes_cache()
+        await self.load_tools_cache()
+        await self.load_nodes_cache()
 
         if not self.registry_path.exists():
             logger.warning(f"Registry не найден: {self.registry_path}")
@@ -1022,7 +1022,7 @@ class FlowsLoader:
         )
 
         for bundle_id in bundles_to_load:
-            await self._preload_nodes_to_cache(bundle_id)
+            await self.preload_nodes_to_cache(bundle_id)
 
         loaded_flow_ids: list[str] = []
         failed_bundle_ids: list[str] = []
@@ -1060,8 +1060,8 @@ class FlowsLoader:
         if not context or not context.active_company or not context.active_company.company_id:
             raise ValueError("reload_flow_bundle требует active_company в контексте")
         self._target_company_id = context.active_company.company_id
-        await self._load_tools_cache()
-        await self._load_nodes_cache()
+        await self.load_tools_cache()
+        await self.load_nodes_cache()
 
         if not self.registry_path.exists():
             raise ValueError(f"Registry не найден: {self.registry_path}")
@@ -1075,7 +1075,7 @@ class FlowsLoader:
                 f"Каталог bundle '{bundle_id}' не найден или в нём нет flow.json: {bundle_dir}"
             )
 
-        await self._preload_nodes_to_cache(bundle_id)
+        await self.preload_nodes_to_cache(bundle_id)
         loaded_flow_id = await self._load_flow_bundle(bundle_id)
         if not loaded_flow_id:
             raise ValueError(f"Не удалось загрузить bundle '{bundle_id}' в БД")
@@ -1087,7 +1087,7 @@ async def load_flows_to_db(
     node_repository: NodeRepository,
     tool_repository: ToolRepository,
     bundles_dir: Path | None = None,
-) -> tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """
     Загружает flows и nodes в БД из каталога с bundle-подпапками и registry.yaml.
 
@@ -1120,8 +1120,8 @@ async def load_flows_to_db(
 
 async def load_tools_to_db(
     tool_repository: ToolRepository,
-    modules: List[str] | None = None,
-) -> List[str]:
+    modules: list[str] | None = None,
+) -> list[str]:
     """
     Загружает tools из Python модулей в БД.
 
@@ -1153,7 +1153,7 @@ async def load_tools_to_db(
                 tool_id = tool_instance.name
 
                 # Извлекаем код функции БЕЗ декоратора
-                full_source = inspect.getsource(tool_instance._func)
+                full_source = tool_instance.get_source_code()
                 # Убираем декоратор @tool(...) - ищем начало функции
                 lines = full_source.split("\n")
                 func_start = 0
@@ -1170,7 +1170,7 @@ async def load_tools_to_db(
                         tool_instance.args_schema
                     )
                 else:
-                    args_schema_dict = dict(tool_instance._parameters)
+                    args_schema_dict = tool_instance.call_parameters
                     parameters_schema_full = (
                         call_parameters_to_parameters_schema(args_schema_dict)
                         if args_schema_dict
@@ -1179,11 +1179,11 @@ async def load_tools_to_db(
 
                 # mock_response
                 mock_map = None
-                if tool_instance._mock_response is not None:
-                    if callable(tool_instance._mock_response):
+                if tool_instance.mock_response is not None:
+                    if callable(tool_instance.mock_response):
                         mock_map = {"default_response": "callable_mock"}
                     else:
-                        mock_map = {"default_response": tool_instance._mock_response}
+                        mock_map = {"default_response": tool_instance.mock_response}
 
                 tool_ref = ToolReference(
                     tool_id=tool_id,
@@ -1210,7 +1210,7 @@ async def load_tools_to_db(
                 # Извлекаем исходный код класса
                 source_code = inspect.getsource(tool_class)
 
-                args_schema_dict: Dict[str, CallParameter] = {}
+                args_schema_dict: dict[str, CallParameter] = {}
                 parameters_schema_full = None
                 if tool_class.args_schema:
                     args_schema_dict = _call_parameters_from_pydantic_model(tool_class.args_schema)
@@ -1245,7 +1245,7 @@ async def load_tools_to_db(
     return loaded
 
 
-async def get_all_flows(flow_repository: FlowRepository) -> Dict[str, FlowConfig]:
+async def get_all_flows(flow_repository: FlowRepository) -> dict[str, FlowConfig]:
     """
     Все flow из БД.
 

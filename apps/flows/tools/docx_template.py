@@ -4,7 +4,7 @@ Tool: заполнение DOCX-шаблона через DocxTemplater (пои�
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -73,7 +73,7 @@ class FillDocxTemplateArgs(BaseModel):
         },
     )
 
-    variables: Dict[str, Any] = Field(
+    variables: dict[str, Any] = Field(
         ...,
         description=(
             "Данные для Jinja2 в шаблоне: строки, числа, bool, null, вложенные объекты и массивы; "
@@ -89,7 +89,7 @@ class FillDocxTemplateArgs(BaseModel):
             "(snake_case, без пробелов)."
         ),
     )
-    file_name: Optional[str] = Field(
+    file_name: str | None = Field(
         None,
         description="Имя шаблона в state.files; не указано — последний .docx из вложений.",
     )
@@ -107,14 +107,14 @@ class FillDocxTemplateArgs(BaseModel):
     args_schema=FillDocxTemplateArgs,
 )
 async def fill_docx_template(
-    variables: Dict[str, Any],
+    variables: dict[str, Any],
     output_original_name: str,
-    file_name: Optional[str] = None,
+    file_name: str | None = None,
     strict: bool = False,
     *,
     state: ExecutionState,
 ) -> JsonDict:
-    def _normalize_file_name(value: Optional[str]) -> Optional[str]:
+    def _normalize_file_name(value: str | None) -> str | None:
         if value is None:
             return None
         normalized = value.strip()
@@ -122,7 +122,7 @@ async def fill_docx_template(
             return None
         return normalized.strip("`'\"")
 
-    def _pick_file(entries: list[JsonDict], name: Optional[str]) -> Optional[JsonDict]:
+    def _pick_file(entries: list[JsonDict], name: str | None) -> JsonDict | None:
         if not entries:
             return None
         normalized_name = _normalize_file_name(name)

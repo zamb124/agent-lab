@@ -3,7 +3,7 @@ BaseResourceProvider - базовый класс провайдера ресур
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.src.models import ResourceDefinition
 from core.variables import VarResolver
@@ -20,7 +20,7 @@ class BaseResourceProvider(ABC):
     async def resolve(
         self,
         definition: ResourceDefinition,
-        variables: Dict[str, Any],
+        variables: dict[str, Any],
     ) -> Any:
         """
         Резолвит ресурс и создаёт wrapper.
@@ -36,9 +36,9 @@ class BaseResourceProvider(ABC):
 
     def _resolve_variable_refs(
         self,
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        config: dict[str, Any],
+        variables: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Резолвит @var: ссылки в конфиге.
 

@@ -23,7 +23,7 @@
 
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Tuple, Type
+from typing import Any, Awaitable, Callable, Tuple, Type, TypeVar
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,10 +69,14 @@ from core.websocket.router import router as ws_router
 
 logger = get_logger(__name__)
 
+SettingsT = TypeVar("SettingsT", bound=PydanticBaseSettings)
+ContainerT = TypeVar("ContainerT")
+ServiceStartupHook = Callable[[FastAPI, ContainerT, SettingsT], Awaitable[None]]
+ServiceShutdownHook = Callable[[FastAPI, ContainerT], Awaitable[None]]
+
 
 def load_service_settings(
-    service_name: str,
-    settings_class: Type[PydanticBaseSettings]
+    service_name: str, settings_class: Type[PydanticBaseSettings]
 ) -> Tuple[Any, Path]:
     """
     Загружает настройки сервиса (merge без логов до setup_logging).
@@ -94,20 +98,20 @@ def load_service_settings(
 
 def create_service_app(
     service_name: str,
-    settings_class: Type[PydanticBaseSettings],
-    get_container: Callable,
-    routers: List[APIRouter] = None,
-    pages_routers: List[APIRouter] = None,
-    repository_names: List[str] = None,
-    on_startup: Optional[Callable] = None,
-    on_shutdown: Optional[Callable] = None,
-    cors_origins: List[str] = None,
-    cors_allow_origin_regex: Optional[str] = None,
-    extra_middlewares: List[Tuple[type, dict]] = None,
-    static_mounts: List[Tuple[str, str, str]] = None,
-    extra_state: dict = None,
-    title: str = None,
-    description: str = None,
+    settings_class: type[SettingsT],
+    get_container: Callable[[], ContainerT],
+    routers: list[APIRouter] | None = None,
+    pages_routers: list[APIRouter] | None = None,
+    repository_names: list[str] | None = None,
+    on_startup: ServiceStartupHook[ContainerT, SettingsT] | None = None,
+    on_shutdown: ServiceShutdownHook[ContainerT] | None = None,
+    cors_origins: list[str] | None = None,
+    cors_allow_origin_regex: str | None = None,
+    extra_middlewares: list[tuple[type[object], dict[str, object]]] | None = None,
+    static_mounts: list[tuple[str, str, str]] | None = None,
+    extra_state: dict[str, object] | None = None,
+    title: str | None = None,
+    description: str | None = None,
     version: str = "1.0.0",
     api_version: str = "v1",  # None - без /api/, "v1" - /api/v1
     docs_url: str = "/docs",
@@ -116,9 +120,9 @@ def create_service_app(
     include_auth_middleware: bool = True,
     include_crud_routers: bool = True,
     mount_repo_documentation: bool = True,
-    documentation_gateway_prefix: Optional[str] = None,
-    include_platform_pwa: Optional[bool] = None,
-    services_spa_index: Optional[Path] = None,
+    documentation_gateway_prefix: str | None = None,
+    include_platform_pwa: bool | None = None,
+    services_spa_index: Path | None = None,
 ) -> FastAPI:
     """
     Создает FastAPI приложение для сервиса.
@@ -190,6 +194,7 @@ def create_service_app(
 
         # Инициализация глобального BillingService
         from core.billing import set_billing_service
+
         set_billing_service(container.billing_service)
         logger.info("BillingService инициализирован")
 
@@ -219,7 +224,9 @@ def create_service_app(
 
         if hasattr(container, "file_repository"):
             initialize_default_processors(container.file_repository)
-            logger.info("initialize_default_processors: FileReader может грузить файлы по file_id / S3")
+            logger.info(
+                "initialize_default_processors: FileReader может грузить файлы по file_id / S3"
+            )
 
         # Инициализация WebPushService
         if settings.push.enabled:
@@ -338,10 +345,7 @@ def create_service_app(
         _cors_kw["allow_origin_regex"] = str(cors_allow_origin_regex).strip()
 
     # Proxy headers
-    app.add_middleware(
-        ProxyHeadersMiddleware,
-        trusted_hosts=["*"]
-    )
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
     # Auth middleware (внутренний слой: bind user/company/session, set_context)
     if include_auth_middleware:
@@ -401,6 +405,7 @@ def create_service_app(
     # Даже когда S3 выключен, upload должен отвечать 503, а не 404.
     files_api_prefix = f"/{url_route_segment}/api/{api_version or 'v1'}"
     from core.files.api import build_file_api_router
+
     _file_router = build_file_api_router(
         get_file_repo=lambda: container.file_repository,
         service_api_prefix=files_api_prefix,
@@ -451,7 +456,7 @@ def create_service_app(
         for router in pages_routers:
             tags = router.tags or [f"{service_name}-pages"]
             # Добавляем только префикс публичного пути (public_segment), FastAPI сам добавит его к prefix роутера
-            if hasattr(router, 'prefix') and router.prefix:
+            if hasattr(router, "prefix") and router.prefix:
                 app.include_router(router, prefix=f"/{public_segment}", tags=tags)
             else:
                 # Роутер без префикса подключается как есть
@@ -510,14 +515,11 @@ def create_service_app(
 
     @app.get("/")
     async def root():
-        return {
-            "service": service_name,
-            "version": version,
-            "status": "running"
-        }
+        return {"service": service_name, "version": version, "status": "running"}
 
     # Testing endpoint (ТОЛЬКО в TESTING режиме)
     if is_testing():
+
         @app.get(f"/{service_name}/test", response_class=HTMLResponse)
         async def test_page():
             """

@@ -3,7 +3,7 @@ API endpoints для nodes.
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -25,9 +25,9 @@ JsonDict = dict[str, Any]
 class NodeLLMOverrideRequest(BaseModel):
     """Request для переопределения LLM настроек ноды."""
 
-    model: Optional[str] = None
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
+    model: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
 
 
 class NodeCreateRequest(BaseModel):
@@ -36,12 +36,12 @@ class NodeCreateRequest(BaseModel):
     node_id: str
     type: str  # llm_node, code, flow, remote_flow, external_api, mcp, channel
     name: str
-    description: Optional[str] = None
-    prompt: Optional[str] = None
-    tools: List[Any] = Field(default_factory=list)  # str для обычных tools, dict для inline tools
-    llm: Optional[NodeLLMOverrideRequest] = None
-    variables: Dict[str, Any] = Field(default_factory=dict)
-    tags: List[str] = Field(default_factory=list)
+    description: str | None = None
+    prompt: str | None = None
+    tools: list[Any] = Field(default_factory=list)  # str для обычных tools, dict для inline tools
+    llm: NodeLLMOverrideRequest | None = None
+    variables: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
 
 
 class NodeResponse(BaseModel):
@@ -50,12 +50,12 @@ class NodeResponse(BaseModel):
     node_id: str
     type: str
     name: str
-    description: Optional[str]
-    prompt: Optional[str]
-    tools: List[Any]  # str для обычных tools, dict для inline tools
-    llm: Optional[Dict[str, Any]]
-    variables: Dict[str, Any] = Field(default_factory=dict)
-    tags: List[str] = Field(default_factory=list)
+    description: str | None
+    prompt: str | None
+    tools: list[Any]  # str для обычных tools, dict для inline tools
+    llm: dict[str, Any] | None
+    variables: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
     source: str = "manual"
 
 
@@ -78,7 +78,7 @@ def _tool_ref_to_response(tool_ref: ToolReference) -> Any:
     return tool_ref.tool_id
 
 
-def _convert_inline_tool(tool_data: Dict[str, Any]) -> ToolReference:
+def _convert_inline_tool(tool_data: dict[str, Any]) -> ToolReference:
     """Конвертирует inline tool dict в ToolReference."""
     args_schema: dict[str, CallParameter] = {}
     if "args_schema" in tool_data:

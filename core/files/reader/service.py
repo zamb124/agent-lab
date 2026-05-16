@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import importlib
 import mimetypes
 import shutil
 import subprocess
 import tempfile
 import uuid
 from collections import defaultdict
+from collections.abc import Callable, Iterable, Mapping
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Union
-
-from botocore.exceptions import ClientError
+from typing import Protocol, TypeIs, cast
 
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_VISION
@@ -35,19 +35,169 @@ from core.files.reader.models import (
 )
 from core.files.types import FileCategory, extensions_for
 
-SourceInput = Union[Path, str, bytes]
+SourceInput = Path | str | bytes
 
 
-def _is_file_ref_source(source: object) -> bool:
+class _BytesReader(Protocol):
+    def read(self, size: int = -1, /) -> bytes: ...
+
+
+class _OleFileObject(Protocol):
+    def exists(self, filename: str) -> bool: ...
+    def openstream(self, filename: str) -> _BytesReader: ...
+    def close(self) -> None: ...
+
+
+class _OleFileModule(Protocol):
+    def isOleFile(self, filename: object) -> bool: ...
+    def OleFileIO(self, filename: object) -> _OleFileObject: ...
+
+
+class _PdfPixmap(Protocol):
+    width: int
+    height: int
+
+    def tobytes(self, output: str) -> bytes: ...
+
+
+class _PdfPage(Protocol):
+    def get_text(self) -> object: ...
+    def get_pixmap(self, *, matrix: object) -> _PdfPixmap: ...
+
+
+class _PdfDocument(Protocol):
+    page_count: int
+
+    def __getitem__(self, index: int) -> _PdfPage: ...
+    def close(self) -> None: ...
+
+
+class _FitzModule(Protocol):
+    def open(self, *, stream: bytes, filetype: str) -> _PdfDocument: ...
+    def Matrix(self, zoom_x: int, zoom_y: int) -> object: ...
+
+
+class _UnstructuredMetadata(Protocol):
+    page_number: object | None
+
+
+class _UnstructuredElement(Protocol):
+    metadata: _UnstructuredMetadata | None
+
+
+class _UnstructuredPartition(Protocol):
+    def __call__(
+        self,
+        *,
+        file: object,
+        metadata_filename: str,
+        languages: list[str],
+    ) -> Iterable[_UnstructuredElement]: ...
+
+
+class _PptxRun(Protocol):
+    text: str
+
+
+class _PptxParagraph(Protocol):
+    runs: Iterable[_PptxRun]
+
+
+class _PptxTextFrame(Protocol):
+    paragraphs: Iterable[_PptxParagraph]
+
+
+class _PptxCell(Protocol):
+    text: str
+
+
+class _PptxRow(Protocol):
+    cells: Iterable[_PptxCell]
+
+
+class _PptxTable(Protocol):
+    rows: Iterable[_PptxRow]
+
+
+class _PptxShape(Protocol):
+    has_text_frame: bool
+    text_frame: _PptxTextFrame
+    has_table: bool
+    table: _PptxTable
+
+
+class _PptxSlide(Protocol):
+    shapes: Iterable[_PptxShape]
+
+
+class _PptxPresentation(Protocol):
+    slides: Iterable[_PptxSlide]
+
+
+class _PptxPresentationFactory(Protocol):
+    def __call__(self, file: object) -> _PptxPresentation: ...
+
+
+class _OdfDocument(Protocol):
+    def getElementsByType(self, elt: object) -> Iterable[object]: ...
+
+
+class _OdfOpenDocumentModule(Protocol):
+    def load(self, odffile: object) -> _OdfDocument: ...
+
+
+class _OdfTextModule(Protocol):
+    P: object
+    H: object
+
+
+class _OdfTeletypeModule(Protocol):
+    def extractText(self, odfElement: object) -> str: ...
+
+
+class _EpubItem(Protocol):
+    def get_content(self) -> bytes: ...
+
+
+class _EpubBook(Protocol):
+    def get_items_of_type(self, item_type: object) -> Iterable[_EpubItem]: ...
+
+
+class _EpubModule(Protocol):
+    def read_epub(self, name: str, options: object | None = None) -> _EpubBook: ...
+
+
+class _EbooklibModule(Protocol):
+    ITEM_DOCUMENT: object
+
+
+class _MsgFile(Protocol):
+    subject: object | None
+    sender: object | None
+    to: object | None
+    cc: object | None
+    date: object | None
+    body: object | None
+
+    def close(self) -> None: ...
+
+
+class _ExtractMsgModule(Protocol):
+    def openMsg(self, path: str) -> _MsgFile: ...
+
+
+def _is_file_ref_source(source: SourceInput | FileRef) -> TypeIs[FileRef]:
     if isinstance(source, (FileRecord, FileResponse)):
         return True
     if isinstance(source, Mapping) and not isinstance(source, (str, bytes, bytearray)):
         path_v = source.get("path")
         fid_v = source.get("file_id")
         url_v = source.get("url")
-        if (isinstance(path_v, str) and path_v.strip()) or (
-            isinstance(fid_v, str) and fid_v.strip()
-        ) or (isinstance(url_v, str) and url_v.strip()):
+        if (
+            (isinstance(path_v, str) and path_v.strip())
+            or (isinstance(fid_v, str) and fid_v.strip())
+            or (isinstance(url_v, str) and url_v.strip())
+        ):
             return True
         raise TypeError(
             "Если source — словарь, укажите непустой path, file_id или url (запись вложения)."
@@ -67,8 +217,21 @@ async def _read_http_bytes(url: str) -> bytes:
 
     async with get_httpx_client(timeout=120.0) as client:
         response = await client.get(url)
-    response.raise_for_status()
+    _ = response.raise_for_status()
     return response.content
+
+
+def _s3_error_code(exc: Exception) -> str | None:
+    response = cast(object, getattr(exc, "response", None))
+    if not isinstance(response, Mapping):
+        return None
+    response_map = cast(Mapping[str, object], response)
+    error = response_map.get("Error")
+    if not isinstance(error, Mapping):
+        return None
+    error_map = cast(Mapping[str, object], error)
+    code = error_map.get("Code")
+    return code if isinstance(code, str) else None
 
 
 async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
@@ -86,13 +249,15 @@ async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
         try:
             try:
                 raw = await s3_client.download_bytes(s3_key)
-            except ClientError as exc:
-                err = exc.response.get("Error", {}) if exc.response else {}
-                code = err.get("Code", "") if isinstance(err, dict) else ""
+            except Exception as exc:
+                code = _s3_error_code(exc)
+                if code is None:
+                    raise
                 if code in ("NoSuchKey", "404", "NotFound"):
                     raise FileReadError(
                         "Файл не найден в хранилище: метаданные есть, объект отсутствует "
-                        f"(очистка бакета, смена окружения или устаревший идентификатор). file_id={file_id}"
+                        + "очистка бакета, смена окружения или устаревший идентификатор. "
+                        + f"file_id={file_id}"
                     ) from exc
                 raise FileReadError(
                     f"Ошибка объектного хранилища при чтении файла (код {code}): {file_id}"
@@ -107,10 +272,18 @@ async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
     raise FileReadError(f"Источник файла не настроен: {file_id}")
 
 
+async def read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
+    """Read a stored file by id and return raw bytes with the original file name."""
+    return await _read_stored_file_by_id(file_id)
+
+
 _TEXT_EXTENSIONS = extensions_for(FileCategory.TEXT)
 _SPREADSHEET_EXTENSIONS = extensions_for(FileCategory.SPREADSHEET)
 _OFFICE_EXTENSIONS = extensions_for(
-    FileCategory.OFFICE_DOC, FileCategory.PRESENTATION, FileCategory.EMAIL, FileCategory.EBOOK,
+    FileCategory.OFFICE_DOC,
+    FileCategory.PRESENTATION,
+    FileCategory.EMAIL,
+    FileCategory.EBOOK,
 )
 _IMAGE_EXTENSIONS = extensions_for(FileCategory.IMAGE)
 _AUDIO_EXTENSIONS = extensions_for(FileCategory.AUDIO)
@@ -120,15 +293,42 @@ _DEFAULT_IMAGE_VISION_PROMPT = (
     "Извлеки весь видимый текст с изображения. "
     "Если текста нет, кратко опиши содержимое одним абзацем."
 )
+_TRANSCRIPTION_COMPANY_ID_REQUIRED = (
+    "Транскрипция audio/video требует ReadOptions.transcription_company_id "
+    + "или активной компании в контексте платформы."
+)
 
 
 def _normalize_extension(file_name: str) -> str:
     return Path(file_name).suffix.lower()
 
 
-def _guess_mime(file_name: str) -> Optional[str]:
+def _guess_mime(file_name: str) -> str | None:
     mime, _ = mimetypes.guess_type(file_name)
     return mime
+
+
+def _payload_to_text(payload: object) -> str:
+    if isinstance(payload, bytes):
+        return payload.decode("utf-8", errors="replace")
+    if isinstance(payload, str):
+        return payload
+    return ""
+
+
+def _text_or_none(value: object | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
+def _mapping_text(mapping: Mapping[str, object], *keys: str) -> str | None:
+    for key in keys:
+        text = _text_or_none(mapping.get(key))
+        if text is not None:
+            return text
+    return None
 
 
 def _sniff_pdf(raw: bytes) -> bool:
@@ -140,7 +340,10 @@ _OLE_COMPOUND_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 def _is_msword_ole_compound(raw: bytes) -> bool:
     """Бинарный Word 97–2003 (Compound File), ожидаемый antiword."""
-    return len(raw) >= len(_OLE_COMPOUND_MAGIC) and raw[: len(_OLE_COMPOUND_MAGIC)] == _OLE_COMPOUND_MAGIC
+    return (
+        len(raw) >= len(_OLE_COMPOUND_MAGIC)
+        and raw[: len(_OLE_COMPOUND_MAGIC)] == _OLE_COMPOUND_MAGIC
+    )
 
 
 def _is_zip_local_header_magic(raw: bytes) -> bool:
@@ -148,13 +351,13 @@ def _is_zip_local_header_magic(raw: bytes) -> bool:
     return len(raw) >= 4 and raw[:4] == b"PK\x03\x04"
 
 
-def _try_antiword(raw: bytes) -> Optional[str]:
+def _try_antiword(raw: bytes) -> str | None:
     """Запускает antiword; возвращает текст или None при сбое."""
     antiword = shutil.which("antiword")
     if antiword is None:
         return None
     with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as tmp:
-        tmp.write(raw)
+        _ = tmp.write(raw)
         tmp_path = tmp.name
     try:
         proc = subprocess.run([antiword, tmp_path], capture_output=True, timeout=60)
@@ -166,7 +369,7 @@ def _try_antiword(raw: bytes) -> Optional[str]:
     return text or None
 
 
-def _extract_text_from_ole_word_stream(raw: bytes) -> Optional[str]:
+def _extract_text_from_ole_word_stream(raw: bytes) -> str | None:
     """
     Fallback извлечения текста из WordDocument stream OLE compound .doc.
 
@@ -176,7 +379,7 @@ def _extract_text_from_ole_word_stream(raw: bytes) -> Optional[str]:
     """
     import re
 
-    import olefile
+    olefile = cast(_OleFileModule, cast(object, importlib.import_module("olefile")))
 
     if not olefile.isOleFile(BytesIO(raw)):
         return None
@@ -190,7 +393,7 @@ def _extract_text_from_ole_word_stream(raw: bytes) -> Optional[str]:
         stream = ole.openstream("WordDocument").read()
     finally:
         ole.close()
-    chunks: List[str] = []
+    chunks: list[str] = []
     # ASCII-строки длиной >= 4 печатаемых символов
     for match in re.finditer(rb"[\x20-\x7e\r\n\t]{4,}", stream):
         chunks.append(match.group().decode("ascii", errors="replace"))
@@ -228,7 +431,7 @@ def _kind_from_extension(ext: str) -> FileReadKind:
 class FileReader:
     """Чтение файлов в каноническую структуру FileReadResult."""
 
-    def recognize_file_type(self, *, file_name: str, head: Optional[bytes] = None) -> FileTypeInfo:
+    def recognize_file_type(self, *, file_name: str, head: bytes | None = None) -> FileTypeInfo:
         ext = _normalize_extension(file_name)
         mime = _guess_mime(file_name)
         kind = _kind_from_extension(ext)
@@ -251,10 +454,10 @@ class FileReader:
                 kind = FileReadKind.TEXT
         return FileTypeInfo(detected_kind=kind, mime_type=mime, extension=ext)
 
-    async def _resolve_source(
+    async def resolve_source(
         self,
         source: SourceInput,
-        file_name: Optional[str],
+        file_name: str | None,
         opts: ReadOptions,
     ) -> tuple[bytes, str]:
         if isinstance(source, bytes):
@@ -276,7 +479,7 @@ class FileReader:
             name = file_name if file_name else (guessed or "file")
             return data, name
 
-        fid: Optional[str] = None
+        fid: str | None = None
         if isinstance(opts.source_file_id, str) and opts.source_file_id.strip():
             fid = opts.source_file_id.strip()
         if not fid:
@@ -329,9 +532,13 @@ class FileReader:
         elif info.detected_kind == FileReadKind.OFFICE and info.extension == ".eml":
             result = await asyncio.to_thread(_read_eml_sync, raw, name, mime, opts)
         elif info.detected_kind in (FileReadKind.OFFICE, FileReadKind.SPREADSHEET):
-            result = await asyncio.to_thread(_read_unstructured_sync, raw, name, mime, info.detected_kind, opts)
+            result = await asyncio.to_thread(
+                _read_unstructured_sync, raw, name, mime, info.detected_kind, opts
+            )
         elif info.detected_kind == FileReadKind.UNKNOWN:
-            result = await asyncio.to_thread(_read_unstructured_sync, raw, name, mime, FileReadKind.UNKNOWN, opts)
+            result = await asyncio.to_thread(
+                _read_unstructured_sync, raw, name, mime, FileReadKind.UNKNOWN, opts
+            )
         else:
             raise FileReadError(f"Неподдерживаемый тип: {info.detected_kind}")
 
@@ -347,38 +554,38 @@ class FileReader:
 
     async def _raw_from_file_ref(
         self,
-        finfo: dict[str, Any],
+        finfo: Mapping[str, object],
         opts: ReadOptions,
     ) -> tuple[bytes, str]:
-        display_name = (finfo.get("name") or finfo.get("original_name") or "").strip() or None
+        display_name = _mapping_text(finfo, "name", "original_name")
 
-        path_str = finfo.get("path")
-        if isinstance(path_str, str) and path_str.strip():
-            p = Path(path_str.strip())
+        path_str = _mapping_text(finfo, "path")
+        if path_str is not None:
+            p = Path(path_str)
             if p.is_file():
-                return await self._resolve_source(p, display_name, opts)
+                return await self.resolve_source(p, display_name, opts)
 
-        url_val = finfo.get("url")
-        if isinstance(url_val, str) and url_val.strip().startswith(("http://", "https://")):
-            return await self._resolve_source(url_val.strip(), display_name, opts)
+        url_val = _mapping_text(finfo, "url")
+        if url_val is not None and url_val.startswith(("http://", "https://")):
+            return await self.resolve_source(url_val, display_name, opts)
 
         source: SourceInput = ""
-        if isinstance(url_val, str) and url_val.strip():
-            source = url_val.strip()
+        if url_val is not None:
+            source = url_val
 
-        return await self._resolve_source(source, display_name, opts)
+        return await self.resolve_source(source, display_name, opts)
 
     async def read(
         self,
-        source: Union[SourceInput, FileRef],
+        source: SourceInput | FileRef,
         *,
-        file_name: Optional[str] = None,
+        file_name: str | None = None,
         include_asset_bytes: bool = False,
-        source_file_id: Optional[str] = None,
-        source_checksum: Optional[str] = None,
+        source_file_id: str | None = None,
+        source_checksum: str | None = None,
         vision_model: str = "google/gemini-2.5-flash-preview",
-        vision_prompt: Optional[str] = None,
-        transcription_company_id: Optional[str] = None,
+        vision_prompt: str | None = None,
+        transcription_company_id: str | None = None,
     ) -> FileReadResult:
         opts = ReadOptions(
             include_asset_bytes=include_asset_bytes,
@@ -392,9 +599,11 @@ class FileReader:
             finfo = normalize_file_ref(source)
             opts = merge_file_ref_read_options(finfo, opts)
             raw, resolved_name = await self._raw_from_file_ref(finfo, opts)
-            name = (file_name.strip() if isinstance(file_name, str) and file_name.strip() else None) or resolved_name
+            name = (
+                file_name.strip() if isinstance(file_name, str) and file_name.strip() else None
+            ) or resolved_name
         else:
-            raw, name = await self._resolve_source(source, file_name, opts)
+            raw, name = await self.resolve_source(source, file_name, opts)
         return await self._read_resolved(raw, name, opts)
 
 
@@ -438,8 +647,10 @@ async def _read_image_impl(
     actx = get_context()
     if actx is None or actx.active_company is None:
         raise ValueError("Контекст с active_company обязателен для vision-чтения изображения")
-    if actx.user is None or not str(actx.user.user_id).strip():
-        raise ValueError("Контекст с user обязателен для vision-чтения изображения (биллинг и уведомления)")
+    if not str(actx.user.user_id).strip():
+        raise ValueError(
+            "Контекст с user обязателен для vision-чтения изображения (биллинг и уведомления)"
+        )
     await get_billing_service().require_balance_for_billable_operation(
         actx.active_company.company_id,
         str(actx.user.user_id).strip(),
@@ -456,7 +667,7 @@ async def _read_image_impl(
         billing_pending_settlement=True,
     ):
         vision_result = await llm.invoke([message], json_output=False)
-    text = str(vision_result) if vision_result is not None else ""
+    text = str(vision_result)
     page = ReadPage(index=0, text=text, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
@@ -471,7 +682,7 @@ async def _read_image_impl(
 def _read_html_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     """HTML: trafilatura для контентных страниц + BeautifulSoup fallback для простой/частичной разметки."""
@@ -538,7 +749,7 @@ def _decode_text_bytes(raw: bytes, file_name: str) -> str:
 def _read_plain_text_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     del opts
@@ -557,31 +768,37 @@ def _read_plain_text_sync(
 def _read_xls_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     del opts
     import xlrd
 
     book = xlrd.open_workbook(file_contents=raw)
-    pages: List[ReadPage] = []
+    pages: list[ReadPage] = []
     for sheet_idx in range(book.nsheets):
         sheet = book.sheet_by_index(sheet_idx)
-        rows: List[str] = []
+        rows: list[str] = []
         for row_idx in range(sheet.nrows):
-            cells = []
+            cells: list[str] = []
             for col_idx in range(sheet.ncols):
                 cell = sheet.cell(row_idx, col_idx)
                 value = cell.value
                 if cell.ctype == xlrd.XL_CELL_EMPTY:
                     cells.append("")
                 else:
-                    cells.append(str(value).rstrip("0").rstrip(".") if isinstance(value, float) and value == int(value) else str(value))
+                    cells.append(
+                        str(value).rstrip("0").rstrip(".")
+                        if isinstance(value, float) and value.is_integer()
+                        else str(value)
+                    )
             row_text = "\t".join(cells).rstrip()
             if row_text:
                 rows.append(row_text)
         if rows:
-            pages.append(ReadPage(index=sheet_idx, text="\n".join(rows), assets=[], label=sheet.name))
+            pages.append(
+                ReadPage(index=sheet_idx, text="\n".join(rows), assets=[], label=sheet.name)
+            )
     if not pages:
         raise FileReadError(f"xlrd не извлёк данные: {file_name}")
     return FileReadResult(
@@ -597,7 +814,7 @@ def _read_xls_sync(
 def _read_doc_choosing_backend_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     """
@@ -618,10 +835,11 @@ def _read_doc_choosing_backend_sync(
 def _read_doc_ole_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     """OLE compound .doc: antiword первым, затем olefile-fallback извлечения plain текста."""
+    del opts
     text = _try_antiword(raw)
     if not text:
         text = _extract_text_from_ole_word_stream(raw)
@@ -641,22 +859,24 @@ def _read_doc_ole_sync(
 def _read_pdf_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
-    import fitz
+    fitz = cast(_FitzModule, cast(object, importlib.import_module("fitz")))
 
-    warnings: List[str] = []
+    warnings: list[str] = []
     doc = fitz.open(stream=raw, filetype="pdf")
-    pages: List[ReadPage] = []
+    pages: list[ReadPage] = []
     encrypt_pdf_warning = False
     try:
         n = doc.page_count
         for i in range(n):
             skip_raster = False
+            page = None
             try:
                 page = doc[i]
-                text = page.get_text() or ""
+                raw_text = page.get_text() or ""
+                text = raw_text if isinstance(raw_text, str) else str(raw_text)
             except (ValueError, RuntimeError) as exc:
                 msg = str(exc).lower()
                 if "encrypt" in msg or "password" in msg:
@@ -667,13 +887,15 @@ def _read_pdf_sync(
                     skip_raster = True
                 else:
                     raise
-            assets: List[ReadAsset] = []
+            assets: list[ReadAsset] = []
             if opts.include_asset_bytes and not skip_raster:
+                if page is None:
+                    raise FileReadError(f"Не удалось получить страницу PDF: {file_name}#{i + 1}")
                 mat = fitz.Matrix(2, 2)
                 pix = page.get_pixmap(matrix=mat)
                 img_bytes = pix.tobytes("png")
                 ch = compute_content_checksum_sha256(img_bytes)
-                b64_val: Optional[str] = None
+                b64_val: str | None = None
                 if opts.include_asset_bytes:
                     b64_val = base64.b64encode(img_bytes).decode("utf-8")
                 assets.append(
@@ -704,34 +926,42 @@ def _read_pdf_sync(
 def _read_unstructured_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     kind: FileReadKind,
     opts: ReadOptions,
 ) -> FileReadResult:
     del opts
-    from unstructured.partition.auto import partition
+    from unstructured.partition.auto import partition as raw_partition
 
-    warnings: List[str] = []
+    partition = cast(_UnstructuredPartition, raw_partition)
+
+    warnings: list[str] = []
     file_obj = BytesIO(raw)
     try:
         elements = partition(file=file_obj, metadata_filename=file_name, languages=["rus", "eng"])
     except Exception as exc:
         raise FileReadError(f"Не удалось разобрать файл через Unstructured: {file_name}") from exc
-    by_page: Dict[int, List[str]] = defaultdict(list)
+    by_page: dict[int, list[str]] = defaultdict(list)
     no_page_meta = False
     for el in elements:
         t = str(el).strip()
         if not t:
             continue
-        md = getattr(el, "metadata", None)
-        pn: Optional[int] = None
+        md = el.metadata
+        pn: int | None = None
         if md is not None:
-            pn = getattr(md, "page_number", None)
+            page_number = md.page_number
+            if isinstance(page_number, int):
+                pn = page_number
+            elif isinstance(page_number, float) and page_number.is_integer():
+                pn = int(page_number)
+            elif isinstance(page_number, str) and page_number.strip():
+                pn = int(page_number.strip())
         if pn is None:
             no_page_meta = True
             pn = 0
         else:
-            pn = int(pn) - 1
+            pn = pn - 1
             if pn < 0:
                 pn = 0
         by_page[pn].append(t)
@@ -740,7 +970,7 @@ def _read_unstructured_sync(
     if no_page_meta and len(by_page) == 1:
         warnings.append("Парсер не вернул номера страниц; весь текст на одной логической странице")
     sorted_keys = sorted(by_page.keys())
-    pages: List[ReadPage] = []
+    pages: list[ReadPage] = []
     for seq, key in enumerate(sorted_keys):
         body = "\n\n".join(by_page[key])
         label = None if len(sorted_keys) == 1 else f"page_{key + 1}"
@@ -761,37 +991,43 @@ def _read_unstructured_sync(
 def _read_pptx_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     """PowerPoint .pptx через python-pptx; одна страница на слайд."""
     del opts
-    from pptx import Presentation
+    from pptx import Presentation as raw_presentation
 
+    presentation = cast(_PptxPresentationFactory, raw_presentation)
     try:
-        prs = Presentation(BytesIO(raw))
+        prs = presentation(BytesIO(raw))
     except Exception as exc:
         raise FileReadError(f"Не удалось открыть PPTX: {file_name}") from exc
-    pages: List[ReadPage] = []
+    pages: list[ReadPage] = []
     for slide_idx, slide in enumerate(prs.slides):
-        chunks: List[str] = []
+        chunks: list[str] = []
         for shape in slide.shapes:
             if shape.has_text_frame:
-                for paragraph in shape.text_frame.paragraphs:
+                text_frame = shape.text_frame
+                for paragraph in text_frame.paragraphs:
                     for run in paragraph.runs:
                         if run.text:
                             chunks.append(run.text)
             if shape.has_table:
-                for row in shape.table.rows:
+                table = shape.table
+                for row in table.rows:
                     cells = [cell.text.strip() for cell in row.cells]
                     chunks.append("\t".join(cells))
         body = "\n".join(c for c in chunks if c)
-        pages.append(ReadPage(index=slide_idx, text=body, assets=[], label=f"slide_{slide_idx + 1}"))
+        pages.append(
+            ReadPage(index=slide_idx, text=body, assets=[], label=f"slide_{slide_idx + 1}")
+        )
     if not pages:
         raise FileReadError(f"PPTX не содержит слайдов: {file_name}")
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        mime_type=mime
+        or "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         detected_kind=FileReadKind.OFFICE,
         page_count=len(pages),
         pages=pages,
@@ -802,28 +1038,34 @@ def _read_pptx_sync(
 def _read_ppt_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     """PowerPoint legacy .ppt: ZIP-сигнатура → переименовать как .pptx, иначе сообщить."""
     del opts
     if _is_zip_local_header_magic(raw):
-        return _read_pptx_sync(raw, file_name[:-4] + ".pptx" if file_name.lower().endswith(".ppt") else file_name, mime, ReadOptions())
+        return _read_pptx_sync(
+            raw,
+            file_name[:-4] + ".pptx" if file_name.lower().endswith(".ppt") else file_name,
+            mime,
+            ReadOptions(),
+        )
     raise FileReadError(
         f"Legacy .ppt (PowerPoint 97-2003) не поддерживается без libreoffice: {file_name}. "
-        "Конвертируйте в .pptx."
+        + "Конвертируйте в .pptx."
     )
 
 
 def _read_rtf_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     """RTF через striprtf (чисто Python, без зависимостей)."""
     del opts
-    from striprtf.striprtf import rtf_to_text
+    rtf_module = importlib.import_module("striprtf.striprtf")
+    rtf_to_text = cast(Callable[..., str], getattr(rtf_module, "rtf_to_text"))
 
     try:
         rtf_text = raw.decode("utf-8", errors="replace")
@@ -845,20 +1087,23 @@ def _read_rtf_sync(
 def _read_odt_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     """OpenDocument Text .odt через odfpy (ZIP+XML)."""
     del opts
-    from odf import teletype
-    from odf import text as odf_text
-    from odf.opendocument import load
+    teletype = cast(_OdfTeletypeModule, cast(object, importlib.import_module("odf.teletype")))
+    odf_text = cast(_OdfTextModule, cast(object, importlib.import_module("odf.text")))
+    opendocument = cast(
+        _OdfOpenDocumentModule,
+        cast(object, importlib.import_module("odf.opendocument")),
+    )
 
     try:
-        doc = load(BytesIO(raw))
+        doc = opendocument.load(BytesIO(raw))
     except Exception as exc:
         raise FileReadError(f"Не удалось открыть ODT: {file_name}") from exc
-    parts: List[str] = []
+    parts: list[str] = []
     for elem in doc.getElementsByType(odf_text.P):
         s = teletype.extractText(elem)
         if s.strip():
@@ -883,7 +1128,7 @@ def _read_odt_sync(
 def _read_epub_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     """EPUB через EbookLib + BeautifulSoup; одна страница на главу."""
@@ -891,28 +1136,31 @@ def _read_epub_sync(
     import tempfile
 
     from bs4 import BeautifulSoup
-    from ebooklib import ITEM_DOCUMENT, epub
+    ebooklib = cast(_EbooklibModule, cast(object, importlib.import_module("ebooklib")))
+    epub = cast(_EpubModule, cast(object, importlib.import_module("ebooklib.epub")))
 
     # ebooklib читает только с диска, поэтому пишем во временный файл
     with tempfile.NamedTemporaryFile(suffix=".epub", delete=False) as tmp:
-        tmp.write(raw)
+        _ = tmp.write(raw)
         tmp_path = tmp.name
     try:
         try:
             book = epub.read_epub(tmp_path)
         except Exception as exc:
             raise FileReadError(f"Не удалось открыть EPUB: {file_name}") from exc
-        pages: List[ReadPage] = []
-        for idx, item in enumerate(book.get_items_of_type(ITEM_DOCUMENT)):
+        pages: list[ReadPage] = []
+        for idx, item in enumerate(book.get_items_of_type(ebooklib.ITEM_DOCUMENT)):
             soup = BeautifulSoup(item.get_content(), "html.parser")
             text = soup.get_text(separator="\n", strip=True)
             if text:
-                pages.append(ReadPage(
-                    index=len(pages),
-                    text=text,
-                    assets=[],
-                    label=f"chapter_{idx + 1}",
-                ))
+                pages.append(
+                    ReadPage(
+                        index=len(pages),
+                        text=text,
+                        assets=[],
+                        label=f"chapter_{idx + 1}",
+                    )
+                )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
     if not pages:
@@ -930,17 +1178,17 @@ def _read_epub_sync(
 def _read_msg_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     """Outlook .msg через extract-msg (чисто Python)."""
     del opts
     import tempfile
 
-    import extract_msg
+    extract_msg = cast(_ExtractMsgModule, cast(object, importlib.import_module("extract_msg")))
 
     with tempfile.NamedTemporaryFile(suffix=".msg", delete=False) as tmp:
-        tmp.write(raw)
+        _ = tmp.write(raw)
         tmp_path = tmp.name
     try:
         try:
@@ -948,20 +1196,26 @@ def _read_msg_sync(
         except Exception as exc:
             raise FileReadError(f"Не удалось открыть MSG: {file_name}") from exc
         try:
-            parts: List[str] = []
-            if msg.subject:
-                parts.append(f"Subject: {msg.subject}")
-            if msg.sender:
-                parts.append(f"From: {msg.sender}")
-            if msg.to:
-                parts.append(f"To: {msg.to}")
-            if msg.cc:
-                parts.append(f"Cc: {msg.cc}")
-            if msg.date:
-                parts.append(f"Date: {msg.date}")
-            if msg.body:
+            parts: list[str] = []
+            subject = _text_or_none(msg.subject)
+            sender = _text_or_none(msg.sender)
+            to = _text_or_none(msg.to)
+            cc = _text_or_none(msg.cc)
+            date = _text_or_none(msg.date)
+            body = _text_or_none(msg.body)
+            if subject:
+                parts.append(f"Subject: {subject}")
+            if sender:
+                parts.append(f"From: {sender}")
+            if to:
+                parts.append(f"To: {to}")
+            if cc:
+                parts.append(f"Cc: {cc}")
+            if date:
+                parts.append(f"Date: {date}")
+            if body:
                 parts.append("")
-                parts.append(msg.body)
+                parts.append(body)
             text = "\n".join(parts)
         finally:
             msg.close()
@@ -982,7 +1236,7 @@ def _read_msg_sync(
 def _read_eml_sync(
     raw: bytes,
     file_name: str,
-    mime: Optional[str],
+    mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
     """RFC 822 .eml через встроенный stdlib email модуль."""
@@ -994,22 +1248,21 @@ def _read_eml_sync(
         msg = BytesParser(policy=policy.default).parsebytes(raw)
     except Exception as exc:
         raise FileReadError(f"Не удалось разобрать EML: {file_name}") from exc
-    parts: List[str] = []
+    parts: list[str] = []
     for header in ("Subject", "From", "To", "Cc", "Date"):
         v = msg.get(header)
         if v:
             parts.append(f"{header}: {v}")
     parts.append("")
-    body: Optional[str] = None
+    body: str | None = None
     if msg.is_multipart():
         for part in msg.walk():
             ctype = part.get_content_type()
             if ctype == "text/plain" and part.get("Content-Disposition") is None:
                 try:
-                    body = part.get_content()
+                    body = _payload_to_text(cast(object, part.get_content()))
                 except (LookupError, UnicodeDecodeError):
-                    payload = part.get_payload(decode=True) or b""
-                    body = payload.decode("utf-8", errors="replace")
+                    body = _payload_to_text(part.get_payload(decode=True))
                 break
         if body is None:
             for part in msg.walk():
@@ -1018,19 +1271,22 @@ def _read_eml_sync(
                     try:
                         from bs4 import BeautifulSoup
 
-                        html = part.get_content() if hasattr(part, "get_content") else (
-                            part.get_payload(decode=True) or b""
-                        ).decode("utf-8", errors="replace")
-                        body = BeautifulSoup(html, "html.parser").get_text(separator="\n", strip=True)
+                        html = (
+                            _payload_to_text(cast(object, part.get_content()))
+                            if hasattr(part, "get_content")
+                            else _payload_to_text(part.get_payload(decode=True))
+                        )
+                        body = BeautifulSoup(html, "html.parser").get_text(
+                            separator="\n", strip=True
+                        )
                     except Exception:
                         continue
                     break
     else:
         try:
-            body = msg.get_content()
+            body = _payload_to_text(cast(object, msg.get_content()))
         except (LookupError, UnicodeDecodeError):
-            payload = msg.get_payload(decode=True) or b""
-            body = payload.decode("utf-8", errors="replace")
+            body = _payload_to_text(msg.get_payload(decode=True))
     if body:
         parts.append(body)
     text = "\n".join(parts)
@@ -1050,12 +1306,11 @@ def _resolve_transcription_company_id(opts: ReadOptions) -> str:
     if opts.transcription_company_id is not None and opts.transcription_company_id.strip() != "":
         return opts.transcription_company_id.strip()
     ctx = get_context()
+    if ctx is None or ctx.active_company is None:
+        raise ValueError(_TRANSCRIPTION_COMPANY_ID_REQUIRED)
     company_id = ctx.active_company.company_id
     if company_id == "":
-        raise ValueError(
-            "Транскрипция audio/video требует ReadOptions.transcription_company_id "
-            "или активной компании в контексте платформы."
-        )
+        raise ValueError(_TRANSCRIPTION_COMPANY_ID_REQUIRED)
     return company_id
 
 

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 _CANVAS_PLACEMENT_KEYS = frozenset({"pos_x", "pos_y"})
 
@@ -35,11 +35,11 @@ def _node_has_non_canvas_fields(prev: Any) -> bool:
 
 
 def merge_incoming_node_dict_for_persist(
-    incoming_map: Dict[str, Any],
-    previous_map: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
+    incoming_map: dict[str, Any],
+    previous_map: dict[str, Any] | None,
+) -> dict[str, Any]:
     base = previous_map or {}
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     for node_id, inc in incoming_map.items():
         if not _is_canvas_placement_only(inc):
             out[node_id] = inc

@@ -13,7 +13,8 @@ from __future__ import annotations
 import copy
 import importlib
 import inspect
-from typing import Any, Dict, Mapping, MutableMapping
+from typing import Any
+from collections.abc import Mapping, MutableMapping
 
 from apps.flows.src.models.enums import ReactToolRole
 from core.logging import get_logger
@@ -87,7 +88,7 @@ def _migrate_external_api_legacy_parameters(node: MutableMapping[str, Any]) -> N
     base = node.get("headers")
     if not isinstance(base, dict):
         base = {}
-    migration: Dict[str, str] = {}
+    migration: dict[str, str] = {}
     for entry in raw:
         if not isinstance(entry, dict):
             continue
@@ -101,7 +102,7 @@ def _migrate_external_api_legacy_parameters(node: MutableMapping[str, Any]) -> N
     node.pop("parameters", None)
 
 
-def normalize_node_config(node: Mapping[str, Any]) -> Dict[str, Any]:
+def normalize_node_config(node: Mapping[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = dict(copy.deepcopy(node))
     nid = str(out.get("node_id", "?"))
     nt = out.get("type")
@@ -179,7 +180,7 @@ def _migrate_legacy_skills_to_branches(out: MutableMapping[str, Any]) -> None:
     out["branches"] = legacy
 
 
-def normalize_flow_config_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
+def normalize_flow_config_dict(data: Mapping[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = dict(copy.deepcopy(data))
     nodes = out.get("nodes")
     if isinstance(nodes, dict):
@@ -193,7 +194,7 @@ def normalize_flow_config_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def normalize_tool_library_dict(data: Mapping[str, Any]) -> Dict[str, Any]:
+def normalize_tool_library_dict(data: Mapping[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = dict(copy.deepcopy(data))
     if "tool_type" in out:
         legacy = out.pop("tool_type")

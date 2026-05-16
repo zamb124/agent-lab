@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import operator
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 from apps.flows.src.constants.execution_limits import get_graph_max_iterations
 from apps.flows.src.container_contracts import FlowRuntimeContainer
@@ -71,12 +71,12 @@ class Flow:
         flow_id: str,
         name: str,
         entry: str,
-        nodes: Dict[str, BaseNode],
-        edges: List[Union[Dict[str, Any], Any]],
+        nodes: dict[str, BaseNode],
+        edges: list[dict[str, Any] | Any],
         description: str = "",
-        tags: Optional[List[str]] = None,
-        variables: Optional[Dict[str, Any]] = None,
-        config: Optional[Dict[str, Any]] = None,
+        tags: list[str] | None = None,
+        variables: dict[str, Any] | None = None,
+        config: dict[str, Any] | None = None,
         container: FlowRuntimeContainer | None = None,
     ):
         self.flow_id = flow_id
@@ -97,7 +97,7 @@ class Flow:
         self.edges = self._normalize_edges(edges)
 
         # Индекс edges по from_node
-        self._edges_by_from: Dict[str, List[Dict[str, Any]]] = {}
+        self._edges_by_from: dict[str, list[dict[str, Any]]] = {}
         for edge in self.edges:
             from_node = edge["from"]
             if from_node not in self._edges_by_from:
@@ -119,7 +119,7 @@ class Flow:
             str(ece.original),
         )
 
-    def _normalize_edges(self, edges: List[Any]) -> List[Dict[str, Any]]:
+    def _normalize_edges(self, edges: list[Any]) -> list[dict[str, Any]]:
         """Нормализует edges в list of dicts."""
         result = []
         for edge in edges:
@@ -146,9 +146,9 @@ class Flow:
                 )
         return result
 
-    def _build_join_required_predecessors(self) -> Dict[str, frozenset[str]]:
+    def _build_join_required_predecessors(self) -> dict[str, frozenset[str]]:
         """Для incoming_policy=all: множество предков по рёбрам с contributes_to_join=True."""
-        acc: Dict[str, Set[str]] = {}
+        acc: dict[str, set[str]] = {}
         for edge in self.edges:
             to_n = edge.get("to")
             from_n = edge.get("from")
@@ -160,7 +160,7 @@ class Flow:
         return {k: frozenset(v) for k, v in acc.items()}
 
     @staticmethod
-    def _edge_contributes_to_join(edge: Dict[str, Any]) -> bool:
+    def _edge_contributes_to_join(edge: dict[str, Any]) -> bool:
         return bool(edge.get("contributes_to_join", True))
 
     def _incoming_policy(self, node_id: str) -> str:
@@ -174,7 +174,7 @@ class Flow:
             )
         return policy
 
-    def _edge_index(self, edge: Dict[str, Any]) -> int:
+    def _edge_index(self, edge: dict[str, Any]) -> int:
         """Индекс ребра в `self.edges` (тот же порядок, что в конфиге flow/skill)."""
         for i, e in enumerate(self.edges):
             if e is edge:
@@ -193,10 +193,10 @@ class Flow:
 
     def _iter_active_transitions_detailed(
         self, from_node: str, state: ExecutionState
-    ) -> List[Tuple[str, bool, int]]:
+    ) -> list[tuple[str, bool, int]]:
         """Исходящие активные переходы: (to_node, contributes_to_join, edge_index)."""
         edges = self._edges_by_from.get(from_node, [])
-        out: List[Tuple[str, bool, int]] = []
+        out: list[tuple[str, bool, int]] = []
         for edge in edges:
             to_node = edge.get("to")
             if to_node is None:
@@ -223,7 +223,7 @@ class Flow:
 
     def _iter_active_transitions(
         self, from_node: str, state: ExecutionState
-    ) -> List[Tuple[str, bool]]:
+    ) -> list[tuple[str, bool]]:
         """Исходящие переходы, для которых условие ребра выполнено: (to_node, contributes_to_join)."""
         return [(a[0], a[1]) for a in self._iter_active_transitions_detailed(from_node, state)]
 
@@ -332,7 +332,7 @@ class Flow:
                     async with tracer.node_span(node_id, node_type, trace_ctx):
                         await emitter.emit_node_start(node_id, node_type)
                         try:
-                            result_state = await self.nodes[node_id]._run_internal(run_state)
+                            result_state = await self.nodes[node_id].execute(run_state)
                         except (FlowInterrupt, BreakpointInterrupt):
                             raise
                         except Exception as exc:
@@ -348,7 +348,7 @@ class Flow:
                         return result_state
 
                 try:
-                    run_states: Dict[str, ExecutionState] = {}
+                    run_states: dict[str, ExecutionState] = {}
                     if len(current_nodes) > 1:
                         for nid in current_nodes:
                             run_states[nid] = ExecutionState.model_validate(
@@ -411,7 +411,7 @@ class Flow:
     def _merge_results(
         self,
         original_state: ExecutionState,
-        results: List[ExecutionState]
+        results: list[ExecutionState]
     ) -> ExecutionState:
         """Мержит результаты нод. messages - extend, остальное - кто последний."""
         merged = original_state.model_copy(deep=True)
@@ -459,28 +459,28 @@ class Flow:
         return merged
 
     def _merge_join_arrived_preds(
-        self, merged: ExecutionState, results: List[ExecutionState]
+        self, merged: ExecutionState, results: list[ExecutionState]
     ) -> None:
-        acc: Dict[str, Set[str]] = {}
+        acc: dict[str, set[str]] = {}
         for result in results:
             for target, preds in (result.join_arrived_preds or {}).items():
                 acc.setdefault(target, set()).update(preds)
         merged.join_arrived_preds = {k: sorted(v) for k, v in acc.items()}
 
     def _collect_next_wave_targets(
-        self, completed_ids: List[str], state: ExecutionState
-    ) -> Tuple[Set[str], List[Tuple[int, str, str]]]:
+        self, completed_ids: list[str], state: ExecutionState
+    ) -> tuple[set[str], list[tuple[int, str, str]]]:
         """
         Следующая волна нод: incoming_policy=all ждёт всех предков
         (рёбра с contributes_to_join); иначе — как раньше (первый пришедший).
 
         Второй элемент — (edge_index, from_node, to_node) для UI (подсветка рёбер).
         """
-        pending: Dict[str, Set[str]] = {
+        pending: dict[str, set[str]] = {
             t: set(preds) for t, preds in (state.join_arrived_preds or {}).items()
         }
-        immediate: Set[str] = set()
-        activations: List[Tuple[int, str, str]] = []
+        immediate: set[str] = set()
+        activations: list[tuple[int, str, str]] = []
 
         for pred_id in completed_ids:
             for target, contributes, edge_idx in self._iter_active_transitions_detailed(
@@ -523,7 +523,7 @@ class Flow:
 
     def _all_structural_outgoing_edges_are_conditional(self, node_id: str) -> bool:
         """Все переходы к нодам (to не null) с условием; иначе есть безусловный выход на ноду."""
-        structural: List[Dict[str, Any]] = [
+        structural: list[dict[str, Any]] = [
             e
             for e in self._edges_by_from.get(node_id, [])
             if e.get("to") is not None
@@ -534,7 +534,7 @@ class Flow:
 
     def _raise_if_premature_completion(
         self,
-        completed_ids: List[str],
+        completed_ids: list[str],
         state: ExecutionState,
     ) -> None:
         """
@@ -543,7 +543,7 @@ class Flow:
         """
         pending = state.join_arrived_preds or {}
         if pending:
-            details: List[Dict[str, Any]] = []
+            details: list[dict[str, Any]] = []
             for target in sorted(pending.keys()):
                 arrived = set(pending.get(target) or [])
                 required = set(self._join_required.get(target, frozenset()))
@@ -654,7 +654,7 @@ class Flow:
             }
         )
 
-    def _find_next_nodes(self, from_node: str, state: ExecutionState) -> List[str]:
+    def _find_next_nodes(self, from_node: str, state: ExecutionState) -> list[str]:
         """
         Находит следующие ноды по edges.
 
@@ -662,8 +662,8 @@ class Flow:
         Edge без condition - безусловный переход.
         Если несколько нод - параллельное выполнение.
         """
-        seen: Set[str] = set()
-        ordered: List[str] = []
+        seen: set[str] = set()
+        ordered: list[str] = []
         for to_node, _ in self._iter_active_transitions(from_node, state):
             if to_node not in seen:
                 seen.add(to_node)
@@ -684,7 +684,7 @@ class Flow:
 
         return self._evaluate_condition_string(str(condition), state)
 
-    def _evaluate_condition_object(self, condition: Dict[str, Any], state: ExecutionState) -> bool:
+    def _evaluate_condition_object(self, condition: dict[str, Any], state: ExecutionState) -> bool:
         """Вычисляет условие в новом объектном формате."""
         condition_type = condition.get("type")
 
@@ -697,7 +697,7 @@ class Flow:
             f"Неизвестный type условия ребра: {condition_type!r}, ожидаются 'simple' или 'python'"
         )
 
-    def _evaluate_simple_condition(self, condition: Dict[str, Any], state: ExecutionState) -> bool:
+    def _evaluate_simple_condition(self, condition: dict[str, Any], state: ExecutionState) -> bool:
         """Вычисляет простое условие: variable operator value."""
         variable = condition.get("variable", "")
         op_str = condition.get("operator", "==")
@@ -730,7 +730,7 @@ class Flow:
         Вычисляет Python условие через SafeEval.
         Код должен содержать функцию check(state) -> bool.
         """
-        from apps.flows.src.eval.safe_eval import SafeEval
+        from apps.flows.src.eval.safe_eval import compile_function
         from core.errors import SafeEvalError
 
         if not code or "def check" not in code:
@@ -741,8 +741,12 @@ class Flow:
         state_dict = state.model_dump(exclude_none=False)
 
         try:
-            evaluator = SafeEval(variables=state.variables)
-            check_fn = evaluator._compile(code, "check", auto_find=False)
+            check_fn = compile_function(
+                code,
+                "check",
+                variables=state.variables,
+                auto_find=False,
+            )
             result = check_fn(state_dict)
             return bool(result)
         except SafeEvalError as e:
@@ -812,8 +816,8 @@ class Flow:
     @classmethod
     async def from_config(
         cls,
-        config: Dict[str, Any],
-        variables: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any],
+        variables: dict[str, Any] | None = None,
         *,
         container: FlowRuntimeContainer | None = None,
     ) -> "Flow":

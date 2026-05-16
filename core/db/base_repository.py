@@ -180,7 +180,7 @@ class BaseRepository(ABC, Generic[T]):
         final_key = self._build_final_key(base_key)
         table_name = self._get_table_name()
 
-        data = await self._storage._get_with_session_and_table(final_key, table_name)
+        data = await self._storage.get_with_session_and_table(final_key, table_name)
         if data is None:
             return None
 
@@ -202,7 +202,7 @@ class BaseRepository(ABC, Generic[T]):
         table_name = self._get_table_name()
 
         data = entity.model_dump_json()
-        return await self._storage._set_with_table(final_key, data, table_name)
+        return await self._storage.set_with_table(final_key, data, table_name)
 
     async def delete(self, entity_id: str) -> bool:
         """
@@ -217,7 +217,7 @@ class BaseRepository(ABC, Generic[T]):
         base_key = self._get_key(entity_id)
         final_key = self._build_final_key(base_key)
         table_name = self._get_table_name()
-        return await self._storage._delete_with_table(final_key, table_name)
+        return await self._storage.delete_with_table(final_key, table_name)
 
     async def list(self, *, limit: int, offset: int = 0) -> list[T]:
         """
@@ -231,7 +231,7 @@ class BaseRepository(ABC, Generic[T]):
         final_prefix = self._build_final_key(base_prefix)
         table_name = self._get_table_name()
 
-        all_data = await self._storage._get_all_by_prefix_and_table(
+        all_data = await self._storage.get_all_by_prefix_and_table(
             final_prefix, table_name, limit, offset
         )
 
@@ -269,7 +269,7 @@ class BaseRepository(ABC, Generic[T]):
         table_name = self._get_table_name()
         final_keys = [self._build_final_key(self._get_key(eid)) for eid in entity_ids]
 
-        all_data = await self._storage._get_many_with_table(final_keys, table_name)
+        all_data = await self._storage.get_many_with_table(final_keys, table_name)
 
         result = {}
         for i, entity_id in enumerate(entity_ids):

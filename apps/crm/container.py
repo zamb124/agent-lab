@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """
 CRMContainer - DI контейнер для CRM сервиса.
 
 Наследуется от BaseContainer для получения user_repository, company_repository и других базовых сервисов.
 Добавляет CRM-специфичные репозитории и сервисы.
 """
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
@@ -64,7 +64,7 @@ class CRMContainer(BaseContainer):
 
     def __init__(self, db_url: str, shared_db_url: str | None = None):
         super().__init__(db_url=db_url, shared_db_url=shared_db_url)
-        self._crm_db_url = db_url
+        self._crm_db_url: str = db_url
 
     # === CRM Database ===
 

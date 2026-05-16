@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from core.variables.resolver import VariableResolutionError, VarResolver
 
@@ -16,7 +16,7 @@ async def resolve_at_var_for_flow(
     raw: str,
     *,
     branch_id: str = "default",
-    config_version: Optional[str] = None,
+    config_version: str | None = None,
 ) -> str:
     if not raw:
         return ""

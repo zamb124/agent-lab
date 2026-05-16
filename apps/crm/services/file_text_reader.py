@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-from core.files.reader.service import FileReader, _read_stored_file_by_id
 from core.files.reader.models import ReadPage
+from core.files.reader.service import FileReader, read_stored_file_by_id
 
 
 def _join_pages(pages: list[ReadPage]) -> str:
@@ -26,7 +26,7 @@ async def load_text_from_stored_file_id(file_id: str) -> str:
     fid = str(file_id).strip()
     if not fid:
         raise ValueError("file_id пуст")
-    raw, name = await _read_stored_file_by_id(fid)
+    raw, name = await read_stored_file_by_id(fid)
     reader = FileReader()
     result = await reader.read(raw, file_name=name)
     return _join_pages(result.pages)
@@ -37,7 +37,7 @@ async def load_text_and_name_from_stored_file_id(file_id: str) -> tuple[str, str
     fid = str(file_id).strip()
     if not fid:
         raise ValueError("file_id пуст")
-    raw, name = await _read_stored_file_by_id(fid)
+    raw, name = await read_stored_file_by_id(fid)
     reader = FileReader()
     result = await reader.read(raw, file_name=name)
     return _join_pages(result.pages), name
@@ -45,8 +45,6 @@ async def load_text_and_name_from_stored_file_id(file_id: str) -> tuple[str, str
 
 async def load_text_from_bytes(raw: bytes, file_name: str) -> str:
     """Извлечь текст из байтов файла (без чтения из storage)."""
-    if not isinstance(raw, (bytes, bytearray)):
-        raise ValueError("raw must be bytes")
     data = bytes(raw)
     if len(data) == 0:
         raise ValueError("raw file bytes empty")

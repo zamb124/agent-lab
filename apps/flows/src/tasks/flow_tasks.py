@@ -3,7 +3,7 @@
 STREAM-FIRST: все события публикуются в Redis Pub/Sub.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
@@ -23,13 +23,13 @@ async def process_flow_task(
     content: str,
     branch_id: str = "default",
     channel: str = "a2a",
-    task_id: Optional[str] = None,
-    context_id: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    task_id: str | None = None,
+    context_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
     is_resume: bool = False,
-    files: Optional[List[Dict[str, Any]]] = None,
-    context_data: Optional[Dict[str, Any]] = None,
-    trace_context: Optional[Dict[str, Any]] = None,
+    files: list[dict[str, Any]] | None = None,
+    context_data: dict[str, Any] | None = None,
+    trace_context: dict[str, Any] | None = None,
 ):
     """
     Обрабатывает запрос через агента.

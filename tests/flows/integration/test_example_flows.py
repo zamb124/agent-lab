@@ -125,7 +125,7 @@ class TestExampleReactAgent:
         assert skill.variables_mode == "merge"
 
         # Применяем skill
-        effective = container.flow_factory._apply_branch(flow_config, "concise")
+        effective = container.flow_factory.apply_branch(flow_config, "concise")
         assert effective["variables"]["max_response_length"] == "200"
         # Остальные variables сохраняются (merge mode)
         assert effective["variables"]["company_name"] == "@var:company_name"
@@ -141,7 +141,7 @@ class TestExampleReactAgent:
         assert isinstance(var, FlowVariableConfig)
         assert var.value == "2000"
 
-        effective = container.flow_factory._apply_branch(flow_config, "detailed")
+        effective = container.flow_factory.apply_branch(flow_config, "detailed")
         assert effective["variables"]["max_response_length"] == "2000"
 
     @pytest.mark.asyncio
@@ -151,7 +151,7 @@ class TestExampleReactAgent:
         assert skill.name == "Без вложенного subflow"
         assert skill.nodes_mode == "replace"
 
-        effective = container.flow_factory._apply_branch(flow_config, "no_subflow")
+        effective = container.flow_factory.apply_branch(flow_config, "no_subflow")
         # Должен быть только один node из skill
         assert "main" in effective["nodes"]
         # tools без субагента
@@ -164,7 +164,7 @@ class TestExampleReactAgent:
         assert skill.name == "Прямой вход в subflow"
         assert skill.entry == "direct_subflow"
 
-        effective = container.flow_factory._apply_branch(flow_config, "direct_mode")
+        effective = container.flow_factory.apply_branch(flow_config, "direct_mode")
         assert effective["entry"] == "direct_subflow"
 
     @pytest.mark.asyncio
@@ -377,7 +377,7 @@ class TestExampleGraphAgent:
         assert skill.name == "Быстрая обработка"
         assert skill.edges_mode == "replace"
 
-        effective = container.flow_factory._apply_branch(flow_config, "fast_track")
+        effective = container.flow_factory.apply_branch(flow_config, "fast_track")
 
         # LLM-процессоры ведут в null (пропуск formatter)
         for processor in ["order_processor", "complaint_processor", "general_processor"]:
@@ -402,7 +402,7 @@ class TestExampleGraphAgent:
         assert skill.name == "Только заказы"
         assert skill.nodes_mode == "merge"
 
-        effective = container.flow_factory._apply_branch(flow_config, "orders_only")
+        effective = container.flow_factory.apply_branch(flow_config, "orders_only")
 
         # Classifier заменен на упрощенный
         classifier_code = effective["nodes"]["classifier"]["code"]

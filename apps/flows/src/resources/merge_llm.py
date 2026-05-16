@@ -4,16 +4,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.models.resource import LLMResourceConfig, LLMResourcePatch
 
 
 def deep_merge_optional_dicts(
-    base: Dict[str, Any] | None,
-    override: Dict[str, Any] | None,
-) -> Dict[str, Any] | None:
+    base: dict[str, Any] | None,
+    override: dict[str, Any] | None,
+) -> dict[str, Any] | None:
     if override is None:
         return base
     if base is None:
@@ -32,9 +32,9 @@ def deep_merge_optional_dicts(
 
 
 def merge_llm_resource_patch_dicts(
-    base_patch: Dict[str, Any] | None,
-    overlay_raw: Dict[str, Any] | None,
-) -> Dict[str, Any]:
+    base_patch: dict[str, Any] | None,
+    overlay_raw: dict[str, Any] | None,
+) -> dict[str, Any]:
     """
     Два частичных слоя patch (например ref.config + оверлей острова LLM).
     Те же правила, что merge_llm_resource_config_with_patch для dict-уровня.
@@ -70,7 +70,7 @@ def merge_llm_resource_patch_dicts(
 
 def merge_llm_resource_config_with_patch(
     base: LLMResourceConfig,
-    patch_raw: Dict[str, Any] | None,
+    patch_raw: dict[str, Any] | None,
 ) -> LLMResourceConfig:
     if not patch_raw:
         return base

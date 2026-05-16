@@ -1,6 +1,5 @@
 """DI контейнер."""
 
-from typing import Optional
 
 from core.config.testing import is_testing
 from core.container import BaseContainer, lazy
@@ -297,7 +296,7 @@ class FlowContainer(BaseContainer):
         return get_channel(name, flow_id, container=self)
 
 
-_container: Optional[FlowContainer] = None
+_container: FlowContainer | None = None
 
 
 def get_container() -> FlowContainer:

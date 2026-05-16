@@ -4,7 +4,8 @@
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncIterator
 
 from a2a.types import (
     Artifact,
@@ -25,14 +26,14 @@ from core.state.interrupt import InterruptKind
 if TYPE_CHECKING:
     from core.state import InterruptData
 
-StreamEvent = Union[TaskStatusUpdateEvent, TaskArtifactUpdateEvent]
+StreamEvent = TaskStatusUpdateEvent | TaskArtifactUpdateEvent
 
 
 def _text_part(text: str) -> Part:
     return Part(root=TextPart(text=text))
 
 
-def _data_part(data: Dict[str, Any]) -> Part:
+def _data_part(data: dict[str, Any]) -> Part:
     return Part(root=DataPart(data=data))
 
 
@@ -50,7 +51,7 @@ class BaseEmitter(ABC):
         self._span_context = None
 
     def _create_message(
-        self, text: str, metadata: Optional[Dict[str, Any]] = None
+        self, text: str, metadata: dict[str, Any] | None = None
     ) -> Message:
         """Создаёт A2A Message объект."""
         return Message(
@@ -92,7 +93,7 @@ class BaseEmitter(ABC):
     async def emit_tool_call(
         self,
         tool_name: str,
-        tool_args: Dict[str, Any],
+        tool_args: dict[str, Any],
         tool_call_id: str,
         react_role: str = "standard",
     ) -> None:
@@ -143,7 +144,7 @@ class BaseEmitter(ABC):
     async def emit_complete(
         self,
         response: str,
-        message_id: Optional[str] = None,
+        message_id: str | None = None,
         has_artifact: bool = False,
     ) -> None:
         """Публикует событие завершения выполнения."""
@@ -162,11 +163,11 @@ class BaseEmitter(ABC):
     async def emit_interrupt(
         self,
         interrupt: "InterruptData",
-        message_id: Optional[str] = None,
+        message_id: str | None = None,
     ) -> None:
         """Публикует input_required с полным объектом interrupt в metadata."""
         dump = interrupt.model_dump(mode="json")
-        meta: Dict[str, Any] = {"platform_interrupt": dump}
+        meta: dict[str, Any] = {"platform_interrupt": dump}
         is_operator = interrupt.body.kind == InterruptKind.OPERATOR_TASK
         is_oauth = interrupt.body.kind == InterruptKind.OAUTH_REQUIRED
         keep_stream_open = is_operator or is_oauth
@@ -203,7 +204,7 @@ class BaseEmitter(ABC):
     async def emit_error(
         self,
         error: str,
-        message_id: Optional[str] = None,
+        message_id: str | None = None,
     ) -> None:
         """Публикует событие ошибки."""
         event = TaskStatusUpdateEvent(
@@ -351,7 +352,7 @@ class BaseEmitter(ABC):
 
     async def emit_file_artifact(
         self,
-        file_ids: List[str],
+        file_ids: list[str],
         *,
         artifact_name: str = "operator_files",
     ) -> None:
@@ -393,13 +394,13 @@ class BaseEmitter(ABC):
     async def emit_ui_event(
         self,
         event_type: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         *,
-        event_id: Optional[str] = None,
+        event_id: str | None = None,
         version: str = "1.0.0",
         timestamp: str,
         source: str = "assistant",
-        correlation_id: Optional[str] = None,
+        correlation_id: str | None = None,
     ) -> None:
         """Публикует UI событие в A2A stream как artifact 'ui_event'."""
         normalized_event_id = event_id or str(uuid.uuid4())
@@ -431,7 +432,7 @@ class BaseEmitter(ABC):
         self,
         node_id: str,
         node_type: str,
-        state_snapshot: Dict[str, Any],
+        state_snapshot: dict[str, Any],
     ) -> None:
         """
         Публикует событие срабатывания breakpoint.
@@ -484,9 +485,9 @@ class BaseSubscriber(ABC):
         self,
         task_id: str,
         timeout: float = 300.0,
-    ) -> List[StreamEvent]:
+    ) -> list[StreamEvent]:
         """Собирает все события до финального."""
-        events: List[StreamEvent] = []
+        events: list[StreamEvent] = []
         async for event in self.subscribe(task_id, timeout):
             events.append(event)
         return events

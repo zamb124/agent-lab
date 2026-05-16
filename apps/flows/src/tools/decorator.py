@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import inspect
 import re
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, TypeVar, get_type_hints
+from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints
+from collections.abc import Callable
 
 from pydantic import BaseModel
 
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from core.state import ExecutionState
 
 logger = get_logger(__name__)
-Permission = str | List[str] | None
+Permission = str | list[str] | None
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -45,15 +46,15 @@ class FunctionTool(BaseTool):
         func: Callable[..., Any],
         name: str,
         description: str,
-        tags: List[str],
+        tags: list[str],
         mock_response: Any = None,
         permission: Permission = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
         cost: float = 0.0,
-        billing_name: Optional[str] = None,
-        free_for_plans: Optional[List[str]] = None,
-        tariff_limits: Optional[Dict[str, int]] = None,
-        args_schema: Optional[Type[BaseModel]] = None,
+        billing_name: str | None = None,
+        free_for_plans: list[str] | None = None,
+        tariff_limits: dict[str, int] | None = None,
+        args_schema: type[BaseModel] | None = None,
     ):
         self._func = func
         self.name = name
@@ -70,7 +71,7 @@ class FunctionTool(BaseTool):
         self.free_for_plans = free_for_plans or []
         self.tariff_limits = tariff_limits or {}
 
-    def _extract_parameters(self, func: Callable[..., Any]) -> Dict[str, CallParameter]:
+    def _extract_parameters(self, func: Callable[..., Any]) -> dict[str, CallParameter]:
         """Извлекает параметры из type hints функции."""
         try:
             hints = get_type_hints(func)
@@ -112,7 +113,7 @@ class FunctionTool(BaseTool):
         return params
 
     @property
-    def parameters(self) -> Dict[str, Any]:
+    def parameters(self) -> dict[str, Any]:
         """JSON схема параметров для LLM."""
         if self.args_schema is not None:
             schema = self.args_schema.model_json_schema()
@@ -132,7 +133,7 @@ class FunctionTool(BaseTool):
 
         return {"type": "object", "properties": properties, "required": required}
 
-    async def run(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def run(self, args: dict[str, Any], state: "ExecutionState") -> Any:
         """
         Единственная точка входа для выполнения tool.
 
@@ -161,7 +162,7 @@ class FunctionTool(BaseTool):
         logger.debug(f"Tool {self.name}: real mode")
         return await self._run_impl(args, state)
 
-    async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
         """Выполняет функцию. State передается как ExecutionState."""
         sig = inspect.signature(self._func)
         if self.args_schema is not None:
@@ -185,19 +186,29 @@ class FunctionTool(BaseTool):
         """Возвращает исходный код функции."""
         return inspect.getsource(self._func)
 
+    @property
+    def call_parameters(self) -> dict[str, CallParameter]:
+        """Параметры вызова, извлечённые из сигнатуры функции."""
+        return dict(self._parameters)
+
+    @property
+    def mock_response(self) -> Any:
+        """Mock-ответ, заданный в декораторе tool."""
+        return self._mock_response
+
 
 def tool(
     name: str,
     description: str,
-    tags: List[str],
+    tags: list[str],
     mock_response: Any = None,
     permission: Permission = None,
     react_role: ReactToolRole = ReactToolRole.STANDARD,
     cost: float = 0.0,
-    billing_name: Optional[str] = None,
-    free_for_plans: Optional[List[str]] = None,
-    tariff_limits: Optional[Dict[str, int]] = None,
-    args_schema: Optional[Type[BaseModel]] = None,
+    billing_name: str | None = None,
+    free_for_plans: list[str] | None = None,
+    tariff_limits: dict[str, int] | None = None,
+    args_schema: type[BaseModel] | None = None,
     listed_in_platform_tool_docs: bool = True,
 ) -> Callable[[F], FunctionTool]:
     """

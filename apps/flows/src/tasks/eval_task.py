@@ -6,7 +6,7 @@ TaskIQ task для выполнения inline кода.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 from apps.flows.src.eval import safe_eval
 from apps.flows_worker.broker import broker
@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 
 
 @broker.task(queue_name="flows_worker")
-async def execute_inline_code(code: str, state_dict: Dict[str, Any]) -> Dict[str, Any]:
+async def execute_inline_code(code: str, state_dict: dict[str, Any]) -> dict[str, Any]:
     """
     Выполняет inline код через safe_eval.
 

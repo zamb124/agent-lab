@@ -3,7 +3,7 @@ API endpoints для tools.
 """
 
 import asyncio
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -25,31 +25,31 @@ class ToolCreateRequest(BaseModel):
     """Запрос на создание tool"""
 
     tool_id: str
-    title: Optional[str] = None
-    description: Optional[str] = None
-    code: Optional[str] = None
-    args_schema: Optional[JsonDict] = None
-    parameters_schema: Optional[JsonDict] = None
-    tags: Optional[List[str]] = None
-    react_role: Optional[str] = None
+    title: str | None = None
+    description: str | None = None
+    code: str | None = None
+    args_schema: JsonDict | None = None
+    parameters_schema: JsonDict | None = None
+    tags: list[str] | None = None
+    react_role: str | None = None
 
 
 class ToolResponse(BaseModel):
     """Ответ с данными tool"""
 
     tool_id: str
-    title: Optional[str]
-    description: Optional[str]
-    code: Optional[str] = None
-    args_schema: Optional[JsonDict] = None
-    parameters_schema: Optional[JsonDict] = None
-    tags: List[str] = Field(default_factory=list)
-    permission: Optional[str | List[str]] = None
+    title: str | None
+    description: str | None
+    code: str | None = None
+    args_schema: JsonDict | None = None
+    parameters_schema: JsonDict | None = None
+    tags: list[str] = Field(default_factory=list)
+    permission: str | list[str] | None = None
     item_type: str = "tool"  # tool или flow (запись из репозитория flows)
-    react_role: Optional[str] = None
-    code_mode: Optional[str] = None  # inline_code или mcp_tool
-    mcp_server_id: Optional[str] = None  # ID MCP сервера
-    mcp_tool_name: Optional[str] = None  # имя tool на MCP (если id не mcp:…)
+    react_role: str | None = None
+    code_mode: str | None = None  # inline_code или mcp_tool
+    mcp_server_id: str | None = None  # ID MCP сервера
+    mcp_tool_name: str | None = None  # имя tool на MCP (если id не mcp:…)
 
 
 _TOOLS_MAX_LIMIT = 2000

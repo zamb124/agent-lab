@@ -5,14 +5,14 @@
 """
 
 import copy
-from typing import Any, Dict, Optional, Set
+from typing import Any
 
 
 def deep_merge(
-    base: Dict[str, Any],
-    override: Dict[str, Any],
-    exclude: Optional[Set[str]] = None,
-) -> Dict[str, Any]:
+    base: dict[str, Any],
+    override: dict[str, Any],
+    exclude: set[str] | None = None,
+) -> dict[str, Any]:
     """
     Deep merge override в base.
 

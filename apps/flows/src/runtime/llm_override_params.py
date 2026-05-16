@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 from apps.flows.src.models.node_config import NodeLLMOverride
 from core.clients.llm.config import LLMCallConfig
@@ -15,16 +15,16 @@ if TYPE_CHECKING:
 
 
 def split_llm_override_for_client(
-    override: Optional[NodeLLMOverride],
-) -> Tuple[
-    Optional[str],
-    Optional[float],
-    Optional[str],
-    Optional[str],
-    Optional[str],
-    Optional[int],
-    Optional[str],
-    Optional[List[LLMCallConfig]],
+    override: NodeLLMOverride | None,
+) -> tuple[
+    str | None,
+    float | None,
+    str | None,
+    str | None,
+    str | None,
+    int | None,
+    str | None,
+    list[LLMCallConfig] | None,
 ]:
     """Поля для get_llm / get_llm_for_state."""
     if not override:
@@ -41,7 +41,7 @@ def split_llm_override_for_client(
     )
 
 
-def stream_kwargs_from_override(override: Optional[NodeLLMOverride]) -> Dict[str, Any]:
+def stream_kwargs_from_override(override: NodeLLMOverride | None) -> dict[str, Any]:
     """
     Именованные аргументы для LLMClient.stream (и MockLLM.stream игнорирует лишнее).
 
@@ -49,7 +49,7 @@ def stream_kwargs_from_override(override: Optional[NodeLLMOverride]) -> Dict[str
     """
     if not override:
         return {}
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     if override.top_p is not None:
         out["top_p"] = override.top_p
     if override.top_k is not None:
@@ -68,13 +68,13 @@ def stream_kwargs_from_override(override: Optional[NodeLLMOverride]) -> Dict[str
 
 
 def client_kwargs_from_override(
-    override: Optional[NodeLLMOverride],
-    state: Optional["ExecutionState"],
-) -> Dict[str, Any]:
+    override: NodeLLMOverride | None,
+    state: ExecutionState | None,
+) -> dict[str, Any]:
     """Arguments for get_llm/get_llm_for_state from the full LLM config."""
     if not override:
         return {}
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "model_name": override.model,
         "temperature": override.temperature,
         "provider": override.provider,
@@ -98,7 +98,7 @@ def client_kwargs_from_override(
     return out
 
 
-def _resolve_str_var(value: str, state: Optional["ExecutionState"]) -> str:
+def _resolve_str_var(value: str, state: ExecutionState | None) -> str:
     if not value.startswith("@var:"):
         return value
     if state is None:
@@ -116,9 +116,9 @@ def _resolve_str_var(value: str, state: Optional["ExecutionState"]) -> str:
 
 
 def resolve_override_stream_kwargs(
-    override: Optional[NodeLLMOverride],
-    state: Optional["ExecutionState"],
-) -> Dict[str, Any]:
+    override: NodeLLMOverride | None,
+    state: ExecutionState | None,
+) -> dict[str, Any]:
     """
     stream_kwargs_from_override + резолв @var: в extra_request_headers.
     extra_headers мержится в LLMClient последним (перекрывает Authorization и default_headers).
@@ -126,7 +126,7 @@ def resolve_override_stream_kwargs(
     kw = stream_kwargs_from_override(override)
     if not override or not override.extra_request_headers:
         return kw
-    hdrs: Dict[str, str] = {}
+    hdrs: dict[str, str] = {}
     for k, v in override.extra_request_headers.items():
         hdrs[k] = _resolve_str_var(v, state)
     out = dict(kw)

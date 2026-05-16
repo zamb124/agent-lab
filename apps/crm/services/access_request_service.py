@@ -3,12 +3,13 @@
 """
 
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 from apps.crm.db.models import AccessRequest, CRMEntity, Relationship
 from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+from apps.crm.types import JsonObject
 from core.logging import get_logger
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -22,11 +23,11 @@ class AccessRequestService:
         self,
         access_request_repo: AccessRequestRepository,
         entity_repo: EntityRepository,
-        relationship_repo: RelationshipRepository
-    ):
-        self._request_repo = access_request_repo
-        self._entity_repo = entity_repo
-        self._relationship_repo = relationship_repo
+        relationship_repo: RelationshipRepository,
+    ) -> None:
+        self._request_repo: AccessRequestRepository = access_request_repo
+        self._entity_repo: EntityRepository = entity_repo
+        self._relationship_repo: RelationshipRepository = relationship_repo
 
     async def create_request(
         self,
@@ -35,7 +36,7 @@ class AccessRequestService:
         requester_company_id: str,
         message: str | None = None,
         include_dependencies: bool = False,
-        max_depth: int = 1
+        max_depth: int = 1,
     ) -> AccessRequest:
         """Запрос доступа к entity (внутри компании или cross-company)"""
 
@@ -58,10 +59,10 @@ class AccessRequestService:
             include_dependencies=include_dependencies,
             max_depth=max_depth,
             created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC)
+            updated_at=datetime.now(UTC),
         )
 
-        await self._request_repo.create(request)
+        request = await self._request_repo.create(request)
         logger.info(f"Access request created: {request.request_id} for entity {entity_id}")
 
         # Отправить уведомление владельцу entity
@@ -89,8 +90,8 @@ class AccessRequestService:
     async def approve_request(
         self,
         request_id: str,
-        owner_user_id: str
-    ) -> CRMEntity:
+        owner_user_id: str,
+    ) -> AccessRequest:
         """Одобрить = скопировать entity в компанию запросившего"""
 
         request = await self._request_repo.get(request_id)
@@ -116,21 +117,21 @@ class AccessRequestService:
                 original=original,
                 target_company_id=request.requester_company_id,
                 target_user_id=request.requester_id,
-                max_depth=request.max_depth
+                max_depth=request.max_depth,
             )
         else:
             # Shallow copy с metadata
             copy = await self._copy_shallow(
                 original=original,
                 target_company_id=request.requester_company_id,
-                target_user_id=request.requester_id
+                target_user_id=request.requester_id,
             )
 
         # Обновляем запрос
         request.status = "approved"
         request.created_entity_id = copy.entity_id
         request.updated_at = datetime.now(UTC)
-        await self._request_repo.update(request)
+        request = await self._request_repo.update(request)
 
         logger.info(f"Access request {request_id} approved, created entity {copy.entity_id}")
 
@@ -153,13 +154,13 @@ class AccessRequestService:
             ),
         )
 
-        return copy
+        return request
 
     async def _copy_shallow(
         self,
         original: CRMEntity,
         target_company_id: str,
-        target_user_id: str
+        target_user_id: str,
     ) -> CRMEntity:
         """Shallow copy - entity + metadata relationships"""
 
@@ -167,17 +168,23 @@ class AccessRequestService:
         relationships = await self._relationship_repo.get_by_entity(original.entity_id)
 
         # Преобразуем в metadata (без ID, только имена)
-        external_rels = []
+        external_rels: list[JsonObject] = []
         for rel in relationships:
             target_entity = await self._entity_repo.get(rel.target_entity_id)
             if target_entity:
-                external_rels.append({
-                    "type": rel.relationship_type,
-                    "direction": "outgoing",
-                    "target_name": target_entity.name,
-                    "target_type": target_entity.entity_type,
-                    # НЕТ target_entity_id - это другая компания!
-                })
+                external_rels.append(
+                    {
+                        "type": rel.relationship_type,
+                        "direction": "outgoing",
+                        "target_name": target_entity.name,
+                        "target_type": target_entity.entity_type,
+                        # НЕТ target_entity_id - это другая компания!
+                    }
+                )
+
+        copy_attributes = dict(original.attributes) if original.attributes else {}
+        if external_rels:
+            copy_attributes["external_relationships"] = external_rels
 
         copy = CRMEntity(
             entity_id=str(uuid.uuid4()),
@@ -189,7 +196,7 @@ class AccessRequestService:
             description=original.description,
             status=original.status,
             tags=list(original.tags) if original.tags else [],
-            attributes=dict(original.attributes) if original.attributes else {},
+            attributes=copy_attributes,
             priority=original.priority,
             due_date=original.due_date,
             note_date=original.note_date,
@@ -201,7 +208,7 @@ class AccessRequestService:
             relevance=original.relevance,
         )
 
-        await self._entity_repo.create(copy)
+        copy = await self._entity_repo.create(copy)
         logger.info(f"Shallow copy created: {copy.entity_id} from {original.entity_id}")
 
         return copy
@@ -213,7 +220,7 @@ class AccessRequestService:
         target_user_id: str,
         max_depth: int,
         _current_depth: int = 0,
-        _copied_map: dict[str, str] | None = None
+        _copied_map: dict[str, str] | None = None,
     ) -> CRMEntity:
         """Deep copy - рекурсивное копирование с relationships"""
 
@@ -246,7 +253,7 @@ class AccessRequestService:
             relevance=original.relevance,
         )
 
-        await self._entity_repo.create(copy)
+        copy = await self._entity_repo.create(copy)
         _copied_map[original.entity_id] = copy.entity_id
 
         # Получаем relationships
@@ -269,7 +276,7 @@ class AccessRequestService:
                     target_user_id=target_user_id,
                     max_depth=max_depth,
                     _current_depth=_current_depth + 1,
-                    _copied_map=_copied_map
+                    _copied_map=_copied_map,
                 )
                 target_copy_id = target_copy.entity_id
 
@@ -284,11 +291,13 @@ class AccessRequestService:
                 relationship_type=rel.relationship_type,
                 weight=rel.weight,
                 confidence=rel.confidence,
-                attributes=rel.attributes
+                attributes=rel.attributes,
             )
-            await self._relationship_repo.create(new_rel)
+            new_rel = await self._relationship_repo.create(new_rel)
 
-        logger.info(f"Deep copy created: {copy.entity_id} from {original.entity_id} (depth={_current_depth})")
+        logger.info(
+            f"Deep copy created: {copy.entity_id} from {original.entity_id} (depth={_current_depth})"
+        )
 
         return copy
 
@@ -296,8 +305,8 @@ class AccessRequestService:
         self,
         request_id: str,
         owner_user_id: str,
-        reason: str | None = None
-    ) -> bool:
+        reason: str | None = None,
+    ) -> AccessRequest:
         """Отклонить запрос"""
 
         request = await self._request_repo.get(request_id)
@@ -309,7 +318,7 @@ class AccessRequestService:
 
         request.status = "rejected"
         request.updated_at = datetime.now(UTC)
-        await self._request_repo.update(request)
+        request = await self._request_repo.update(request)
 
         logger.info(f"Access request {request_id} rejected by {owner_user_id}")
 
@@ -334,7 +343,7 @@ class AccessRequestService:
             ),
         )
 
-        return True
+        return request
 
     async def get(self, request_id: str) -> AccessRequest | None:
         """Получить запрос по ID"""
@@ -352,7 +361,9 @@ class AccessRequestService:
         offset: int = 0,
     ) -> list[AccessRequest]:
         if status:
-            return await self._request_repo.list_by_company_and_status(company_id, status, limit=limit, offset=offset)
+            return await self._request_repo.list_by_company_and_status(
+                company_id, status, limit=limit, offset=offset
+            )
         return await self._request_repo.list_by_company(company_id, limit=limit, offset=offset)
 
     async def count_requests(
@@ -361,4 +372,3 @@ class AccessRequestService:
         status: str | None = None,
     ) -> int:
         return await self._request_repo.count_by_company(company_id, status=status)
-

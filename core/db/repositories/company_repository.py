@@ -44,7 +44,7 @@ class CompanyRepository(BaseRepository[Company]):
         """
         prefix = self._get_prefix()
         table_name = self._get_table_name()
-        all_data = await self._storage._get_all_by_prefix_and_table(prefix, table_name, limit, offset)
+        all_data = await self._storage.get_all_by_prefix_and_table(prefix, table_name, limit, offset)
 
         entities: List[Company] = []
         for key, data in all_data.items():

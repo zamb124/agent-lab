@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.src.eval.codegen_utils import (
     CodegenStagesFailure,
@@ -21,7 +21,7 @@ from apps.flows.src.eval.codegen_utils import (
 from core.clients.llm import get_llm
 
 
-def register_sandbox_codegen_namespace(namespace: Dict[str, Any]) -> None:
+def register_sandbox_codegen_namespace(namespace: dict[str, Any]) -> None:
     platform_services = importlib.import_module("apps.flows.src.eval.platform_services")
     sandbox_codegen = importlib.import_module("apps.flows.tools.sandbox_codegen")
 

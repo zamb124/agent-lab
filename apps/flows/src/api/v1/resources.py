@@ -3,7 +3,7 @@ API endpoints для resources.
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -23,21 +23,21 @@ class ResourceCreateRequest(BaseModel):
 
     resource_id: str = Field(..., description="Уникальный ID ресурса")
     type: ResourceType = Field(..., description="Тип ресурса")
-    name: Optional[str] = Field(default=None, description="Название")
-    description: Optional[str] = Field(default=None, description="Описание")
-    config: Dict[str, Any] = Field(..., description="Конфигурация ресурса")
-    tags: List[str] = Field(default_factory=list)
-    permission: List[str] = Field(default_factory=list)
+    name: str | None = Field(default=None, description="Название")
+    description: str | None = Field(default=None, description="Описание")
+    config: dict[str, Any] = Field(..., description="Конфигурация ресурса")
+    tags: list[str] = Field(default_factory=list)
+    permission: list[str] = Field(default_factory=list)
 
 
 class ResourceUpdateRequest(BaseModel):
     """Запрос на обновление ресурса"""
 
-    name: Optional[str] = None
-    description: Optional[str] = None
-    config: Optional[Dict[str, Any]] = None
-    tags: Optional[List[str]] = None
-    permission: Optional[List[str]] = None
+    name: str | None = None
+    description: str | None = None
+    config: dict[str, Any] | None = None
+    tags: list[str] | None = None
+    permission: list[str] | None = None
 
 
 class ResourceResponse(BaseModel):
@@ -45,18 +45,18 @@ class ResourceResponse(BaseModel):
 
     resource_id: str
     type: ResourceType
-    name: Optional[str] = None
-    description: Optional[str] = None
-    config: Dict[str, Any]
-    tags: List[str] = []
-    permission: List[str] = []
+    name: str | None = None
+    description: str | None = None
+    config: dict[str, Any]
+    tags: list[str] = []
+    permission: list[str] = []
 
 
 @router.get("", response_model=OffsetPage[ResourceResponse])
 @router.get("/", response_model=OffsetPage[ResourceResponse])
 async def list_resources(
     container: ContainerDep,
-    type: Optional[ResourceType] = None,
+    type: ResourceType | None = None,
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[ResourceResponse]:

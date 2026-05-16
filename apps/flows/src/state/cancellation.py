@@ -8,9 +8,11 @@ CancellationToken проверяет Redis-ключ cancel:{task_id}.
 Токен доступен через ContextVar — не нужно менять сигнатуры.
 """
 
+from __future__ import annotations
+
 import time
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from core.clients import RedisClient
 from core.errors import FlowWallClockTimeoutError
@@ -74,20 +76,20 @@ class CancellationToken:
         await self.redis.delete(f"cancel:{self.task_id}")
 
 
-_cancellation_token_var: ContextVar[Optional[CancellationToken]] = ContextVar(
+_cancellation_token_var: ContextVar[CancellationToken | None] = ContextVar(
     "cancellation_token", default=None
 )
 
 
-def set_cancellation_token(token: Optional[CancellationToken]) -> None:
+def set_cancellation_token(token: CancellationToken | None) -> None:
     _cancellation_token_var.set(token)
 
 
-def get_cancellation_token() -> Optional[CancellationToken]:
+def get_cancellation_token() -> CancellationToken | None:
     return _cancellation_token_var.get()
 
 
-async def check_cancellation(state: Optional["ExecutionState"] = None) -> None:
+async def check_cancellation(state: ExecutionState | None = None) -> None:
     """
     Проверяет: wall-clock дедлайн run flow, затем отмена по Redis.
 

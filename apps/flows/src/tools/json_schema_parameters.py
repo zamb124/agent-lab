@@ -8,7 +8,8 @@ legacy Dict[str, CallParameter] или готовый dict в ToolReference.para
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, Mapping, Optional, Protocol, Type
+from typing import Any, Protocol
+from collections.abc import Mapping
 
 from pydantic import BaseModel
 
@@ -21,8 +22,8 @@ class CallParameterLike(Protocol):
 
 def validate_tool_args_against_parameters_schema(
     *,
-    schema: Dict[str, Any],
-    arguments: Dict[str, Any],
+    schema: dict[str, Any],
+    arguments: dict[str, Any],
 ) -> None:
     """
     Строгая проверка аргументов CodeTool против JSON Schema (как у LLM-провайдера).
@@ -47,7 +48,7 @@ def validate_tool_args_against_parameters_schema(
         raise ValueError(f"Tool arguments failed JSON Schema validation ({msg})") from exc
 
 
-def sanitize_parameters_schema_for_llm(schema: Dict[str, Any]) -> Dict[str, Any]:
+def sanitize_parameters_schema_for_llm(schema: dict[str, Any]) -> dict[str, Any]:
     """Убирает служебные title из корня и свойств — меньше шума для провайдера."""
     out = copy.deepcopy(schema)
     out.pop("title", None)
@@ -59,7 +60,7 @@ def sanitize_parameters_schema_for_llm(schema: Dict[str, Any]) -> Dict[str, Any]
     return out
 
 
-def pydantic_model_to_parameters_schema(model: Type[BaseModel]) -> Dict[str, Any]:
+def pydantic_model_to_parameters_schema(model: type[BaseModel]) -> dict[str, Any]:
     """Полная JSON Schema объекта аргументов из Pydantic BaseModel (как у OpenAI parameters)."""
     raw = model.model_json_schema()
     return sanitize_parameters_schema_for_llm(raw)
@@ -67,12 +68,12 @@ def pydantic_model_to_parameters_schema(model: Type[BaseModel]) -> Dict[str, Any
 
 def call_parameters_to_parameters_schema(
     args_schema: Mapping[str, CallParameterLike],
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Собирает JSON Schema из legacy CallParameter (только type, description, required)."""
-    properties: Dict[str, Any] = {}
+    properties: dict[str, Any] = {}
     required: list[str] = []
     for name, p in args_schema.items():
-        entry: Dict[str, Any] = {
+        entry: dict[str, Any] = {
             "type": p.type,
             "description": p.description,
         }
@@ -84,9 +85,9 @@ def call_parameters_to_parameters_schema(
 
 def resolve_tool_parameters_schema(
     *,
-    parameters_schema: Optional[Dict[str, Any]],
-    args_schema: Optional[Mapping[str, CallParameterLike]],
-) -> Dict[str, Any]:
+    parameters_schema: dict[str, Any] | None,
+    args_schema: Mapping[str, CallParameterLike] | None,
+) -> dict[str, Any]:
     """
     Итоговая схема для LLM: приоритет у parameters_schema, иначе сборка из args_schema.
     """

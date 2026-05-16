@@ -9,12 +9,12 @@ import importlib
 import inspect
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
-from apps.flows.src.api.v1.flows import _inline_tools_list
+from apps.flows.src.api.v1.flows import inline_tools_list
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.runtime.nodes import create_node
@@ -40,14 +40,14 @@ logger = get_logger(__name__)
 
 class CodeCompletionsResponse(BaseModel):
     """Данные для autocomplete в редакторе кода"""
-    modules: List[str]
-    globals: List[GlobalVariable]
-    builtins: List[str]
-    module_methods: Dict[str, List[Dict[str, Any]]]
-    state_fields: List[StateField] = []
-    templates: List[CodeTemplate] = []
-    platform_tools: List[PlatformToolDoc] = []
-    runtime_namespace_extras: Optional[List[GlobalVariable]] = None
+    modules: list[str]
+    globals: list[GlobalVariable]
+    builtins: list[str]
+    module_methods: dict[str, list[dict[str, Any]]]
+    state_fields: list[StateField] = []
+    templates: list[CodeTemplate] = []
+    platform_tools: list[PlatformToolDoc] = []
+    runtime_namespace_extras: list[GlobalVariable] | None = None
 
 
 @router.get("/completions", response_model=CodeCompletionsResponse)
@@ -137,16 +137,16 @@ async def get_code_documentation(
 
 class TemplatesResponse(BaseModel):
     """Список шаблонов кода"""
-    templates: List[CodeTemplate]
+    templates: list[CodeTemplate]
 
 
 @router.get("/templates", response_model=TemplatesResponse)
 async def get_code_templates(
     container: ContainerDep,
     language: str = "python",
-    category: Optional[str] = None,
-    node_type: Optional[str] = None,
-    tags: Optional[str] = None,
+    category: str | None = None,
+    node_type: str | None = None,
+    tags: str | None = None,
 ) -> TemplatesResponse:
     """
     Возвращает список шаблонов кода с фильтрацией.
@@ -183,7 +183,7 @@ async def get_editor_state(
     container: ContainerDep,
     flow_id: str,
     branch_id: str = "default",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Стартовый ExecutionState как при реальном запуске flow: резолвнутые variables,
     flow_config_version и формат session_id. Для редактора нод и TestPanel.
@@ -225,8 +225,8 @@ async def get_editor_state(
 class SourceResponse(BaseModel):
     """Исходный код"""
     path: str
-    source: Optional[str]
-    error: Optional[str] = None
+    source: str | None
+    error: str | None = None
 
 
 @router.get("/source")
@@ -247,14 +247,14 @@ class FlowFunctionInfo(BaseModel):
     """Функция из модуля ``bundles.<flow_id>.functions``."""
     name: str
     path: str
-    doc: Optional[str] = None
+    doc: str | None = None
 
 
 class FlowFunctionsResponse(BaseModel):
     """Список функций из bundle flow (``functions.py``)."""
     flow_id: str
-    functions: List[FlowFunctionInfo]
-    error: Optional[str] = None
+    functions: list[FlowFunctionInfo]
+    error: str | None = None
 
 
 @router.get("/flow-functions")
@@ -390,37 +390,37 @@ def _get_source_by_path(path: str) -> SourceResponse:
 class ValidateRequest(BaseModel):
     """Запрос на валидацию кода"""
     code: str
-    node_type: Optional[str] = "code"
+    node_type: str | None = "code"
 
 
 class ValidateResponse(BaseModel):
     """Результат валидации"""
     valid: bool
-    error: Optional[str] = None
-    warnings: List[str] = []
+    error: str | None = None
+    warnings: list[str] = []
 
 
 class ParseSignatureRequest(BaseModel):
     """Запрос на парсинг сигнатуры функции"""
     code: str
-    func_name: Optional[str] = None
+    func_name: str | None = None
 
 
 class ParameterInfo(BaseModel):
     """Информация о параметре функции"""
     type: str
     description: str = ""
-    default: Optional[Any] = None
+    default: Any | None = None
     required: bool = True
 
 
 class ParseSignatureResponse(BaseModel):
     """Результат парсинга сигнатуры"""
     success: bool
-    func_name: Optional[str] = None
-    parameters: Dict[str, ParameterInfo] = {}
-    args_schema: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
+    func_name: str | None = None
+    parameters: dict[str, ParameterInfo] = {}
+    args_schema: dict[str, Any] | None = None
+    error: str | None = None
 
 
 def _python_type_to_json_type(type_str: str) -> str:
@@ -441,7 +441,7 @@ def _python_type_to_json_type(type_str: str) -> str:
     return type_mapping.get(base_type, "string")
 
 
-def _parse_function_signature(code: str, func_name: Optional[str] = None) -> Dict[str, Any]:
+def _parse_function_signature(code: str, func_name: str | None = None) -> dict[str, Any]:
     """
     Парсит сигнатуру функции из Python кода.
     """
@@ -558,10 +558,10 @@ def _require_execute_node_type(node_type: str) -> str:
 class ExecuteRequest(BaseModel):
     """Запрос на выполнение ноды."""
     node_type: str = "code"
-    node_config: Dict[str, Any] = {}
-    state: Dict[str, Any]
-    flow_id: Optional[str] = None
-    branch_id: Optional[str] = None
+    node_config: dict[str, Any] = {}
+    state: dict[str, Any]
+    flow_id: str | None = None
+    branch_id: str | None = None
 
 
 class DiffItem(BaseModel):
@@ -575,14 +575,14 @@ class DiffItem(BaseModel):
 class ExecuteResponse(BaseModel):
     """Результат выполнения"""
     success: bool
-    input_state: Optional[Dict[str, Any]] = None
-    output_state: Optional[Dict[str, Any]] = None
-    diff: List[DiffItem] = []
-    error: Optional[str] = None
+    input_state: dict[str, Any] | None = None
+    output_state: dict[str, Any] | None = None
+    diff: list[DiffItem] = []
+    error: str | None = None
     duration_ms: int = 0
 
 
-def _compute_diff(old: Dict[str, Any], new: Dict[str, Any], path: str = "") -> List[DiffItem]:
+def _compute_diff(old: dict[str, Any], new: dict[str, Any], path: str = "") -> list[DiffItem]:
     """Вычисляет diff между двумя state."""
     diff_items = []
     SKIP_KEYS = {
@@ -633,7 +633,7 @@ def _compute_diff(old: Dict[str, Any], new: Dict[str, Any], path: str = "") -> L
 
 
 async def _merge_execute_state_with_flow(
-    input_state: Dict[str, Any],
+    input_state: dict[str, Any],
     *,
     flow_id: str,
     branch_id: str,
@@ -780,7 +780,7 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
         )
 
 
-def _validate_node_config(config: Dict[str, Any]) -> None:
+def _validate_node_config(config: dict[str, Any]) -> None:
     """Валидация обязательных полей для каждого типа ноды."""
     node_type = config.get("type")
 
@@ -811,7 +811,7 @@ def _validate_node_config(config: Dict[str, Any]) -> None:
             raise ValueError("tool_name обязателен для mcp")
 
 
-async def _build_node_config(request: ExecuteRequest) -> Dict[str, Any]:
+async def _build_node_config(request: ExecuteRequest) -> dict[str, Any]:
     """Строит node_config из ExecuteRequest."""
     config = request.node_config.copy()
     config["type"] = _require_execute_node_type(str(request.node_type))
@@ -831,11 +831,11 @@ async def _build_node_config(request: ExecuteRequest) -> Dict[str, Any]:
 
 
 async def _execute_node(
-    node_config: Dict[str, Any],
-    input_state: Dict[str, Any],
+    node_config: dict[str, Any],
+    input_state: dict[str, Any],
     container: FlowContainer,
     flow_id: str = "test-flow",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Выполняет ноду используя унифицированную фабрику."""
     state_data = copy.deepcopy(input_state)
     state_data.setdefault("task_id", str(uuid.uuid4()))
@@ -848,9 +848,9 @@ async def _execute_node(
     if node_config.get("type") == "llm_node" and "tools" in node_config:
         tools = node_config["tools"]
         if tools:
-            node_config = {**node_config, "tools": await _inline_tools_list(tools, container)}
+            node_config = {**node_config, "tools": await inline_tools_list(tools, container)}
 
     node = await create_node("test_node", node_config, container=container)
     state = ExecutionState.model_validate(state_data)
-    result_state = await node._run_internal(state)
+    result_state = await node.run(state)
     return result_state.model_dump(exclude_none=False)

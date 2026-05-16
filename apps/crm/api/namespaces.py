@@ -1,7 +1,7 @@
 """API для управления namespaces и их шаблонами в CRM."""
 
 import asyncio
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -52,14 +52,11 @@ async def _namespace_integration_badges(
     user_id: str,
     crm_settings: NamespaceCRMSettings | None,
 ) -> list[NamespaceIntegrationBadge]:
-    manifest = cast(
-        list[dict[str, object]],
-        await container.integration_registry.build_manifest(
-            namespace_name=namespace_name,
-            company_id=company_id,
-            user_id=user_id,
-            crm_settings=crm_settings,
-        ),
+    manifest = await container.integration_registry.build_manifest(
+        namespace_name=namespace_name,
+        company_id=company_id,
+        user_id=user_id,
+        crm_settings=crm_settings,
     )
     return [
         NamespaceIntegrationBadge(

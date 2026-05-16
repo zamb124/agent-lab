@@ -3,7 +3,7 @@ Registry API - совместимость с platformweb.
 Предоставляет endpoints для получения списка flows и tools.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -46,7 +46,7 @@ def get_base_url(request: Request) -> str:
     return f"{scheme}://{host}"
 
 
-def build_branch_info(branch_id: str, branch: BranchConfig) -> Dict[str, Any]:
+def build_branch_info(branch_id: str, branch: BranchConfig) -> dict[str, Any]:
     """Конвертирует BranchConfig в элемент списка branches карточки агента (A2A)."""
     return {
         "id": branch_id,
@@ -61,8 +61,8 @@ def build_branch_info(branch_id: str, branch: BranchConfig) -> Dict[str, Any]:
 
 
 def build_flow_card(
-    config: FlowConfig, base_url: str = "", branches: Optional[Dict[str, BranchConfig]] = None
-) -> Dict[str, Any]:
+    config: FlowConfig, base_url: str = "", branches: dict[str, BranchConfig] | None = None
+) -> dict[str, Any]:
     """
     Собирает AgentCard из FlowConfig.
     Формат совместим с A2A протоколом и platformweb.
@@ -149,14 +149,14 @@ def build_flow_card(
 
 
 @router.get("/flows")
-async def list_registry_flows(request: Request, container: ContainerDep) -> List[Dict[str, Any]]:
+async def list_registry_flows(request: Request, container: ContainerDep) -> list[dict[str, Any]]:
     """
     Список flows как AgentCard[] (A2A формат).
     """
     base_url = get_base_url(request)
     configs = await get_all_flows(container.flow_repository)
 
-    cards: List[Dict[str, Any]] = []
+    cards: list[dict[str, Any]] = []
     for config in configs.values():
         card = build_flow_card(config, base_url)
         cards.append(card)
@@ -165,7 +165,7 @@ async def list_registry_flows(request: Request, container: ContainerDep) -> List
 
 
 @router.get("/tools")
-async def get_tools(container: ContainerDep) -> List[Dict[str, Any]]:
+async def get_tools(container: ContainerDep) -> list[dict[str, Any]]:
     """
     Список tools в формате совместимом с platformweb.
     Совместимость с platformweb OrchestratorService.getTools()
@@ -175,7 +175,7 @@ async def get_tools(container: ContainerDep) -> List[Dict[str, Any]]:
 
 
 @router.get("/providers/values")
-async def get_providers_values(container: ContainerDep) -> List[str]:
+async def get_providers_values(container: ContainerDep) -> list[str]:
     """
     Список настроенных LLM-провайдеров платформы (читается из conf.json).
     """
@@ -183,7 +183,7 @@ async def get_providers_values(container: ContainerDep) -> List[str]:
 
 
 @router.get("/models/values")
-async def get_models_values(container: ContainerDep, provider: Optional[str] = None) -> List[str]:
+async def get_models_values(container: ContainerDep, provider: str | None = None) -> list[str]:
     """
     Список доступных моделей.
 
@@ -201,7 +201,7 @@ async def get_models_values(container: ContainerDep, provider: Optional[str] = N
 
 
 @router.post("/models/sync")
-async def sync_models(container: ContainerDep, provider: Optional[str] = None) -> Dict[str, Any]:
+async def sync_models(container: ContainerDep, provider: str | None = None) -> dict[str, Any]:
     """
     Синхронизация моделей от провайдеров.
 
@@ -221,7 +221,7 @@ async def sync_models(container: ContainerDep, provider: Optional[str] = None) -
 def _add_subflows_recursive(
     lines: list[str],
     parent_id: str,
-    subflows: list[Dict[str, Any]],
+    subflows: list[dict[str, Any]],
     depth: int = 0,
 ) -> None:
     """Рекурсивно добавляет вложенные flow (как tools) и их tools в Mermaid."""
@@ -246,7 +246,7 @@ def _add_subflows_recursive(
             _add_subflows_recursive(lines, sub_safe_id, nested, depth + 1)
 
 
-def _generate_mermaid(branch_schema: Dict[str, Any]) -> str:
+def _generate_mermaid(branch_schema: dict[str, Any]) -> str:
     """Генерирует Mermaid код для схемы ветки (branch)."""
     lines = ["flowchart TD"]
 
@@ -338,7 +338,7 @@ def _generate_mermaid(branch_schema: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _generate_html(schema: Dict[str, Any]) -> str:
+def _generate_html(schema: dict[str, Any]) -> str:
     """Генерирует HTML страницу с Mermaid диаграммами."""
     flow_id = schema["flow_id"]
     flow_title = schema["name"]

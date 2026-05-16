@@ -34,7 +34,7 @@ class VarResolver:
     - Отсутствующий ключ или путь всегда приводит к VariableResolutionError
     """
 
-    _VAR_REF_PATTERN = re.compile(r"^@var:([a-zA-Z_][a-zA-Z0-9_.]*)$")
+    VAR_REF_PATTERN = re.compile(r"^@var:([a-zA-Z_][a-zA-Z0-9_.]*)$")
     _VAR_TOKEN_PATTERN = re.compile(r"@var:([a-zA-Z_][a-zA-Z0-9_.]*)")
 
     @classmethod
@@ -49,7 +49,7 @@ class VarResolver:
             raise VariableResolutionError(
                 f"@var reference must be string, got {type(value).__name__}"
             )
-        match = cls._VAR_REF_PATTERN.match(value)
+        match = cls.VAR_REF_PATTERN.match(value)
         if match is None:
             raise VariableResolutionError(
                 f"Invalid @var reference format: '{value}'"
@@ -113,7 +113,7 @@ class VarResolver:
         if isinstance(value, list):
             return [cls.resolve_deep(item, variables, _visited) for item in value]
         if isinstance(value, str):
-            if cls._VAR_REF_PATTERN.match(value):
+            if cls.VAR_REF_PATTERN.match(value):
                 return cls.resolve_ref(value, variables, _visited)
             if "@var:" in value:
                 return cls.resolve_text(value, variables, _visited)
@@ -162,7 +162,7 @@ class VarResolver:
             if root_key not in company_variables:
                 return None
         try:
-            if cls._VAR_REF_PATTERN.match(value):
+            if cls.VAR_REF_PATTERN.match(value):
                 return cls.resolve_ref(value, company_variables)
             return cls.resolve_text(value, company_variables)
         except VariableResolutionError:

@@ -2,14 +2,14 @@
 Модель ToolReference - инструмент с inline кодом или MCP.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .enums import CodeMode, ReactToolRole
 
 # Тип для permission: строка или список строк
-Permission = Optional[Union[str, List[str]]]
+Permission = str | list[str] | None
 
 
 class CallParameter(BaseModel):
@@ -26,29 +26,29 @@ class ToolReference(BaseModel):
     model_config = ConfigDict(json_schema_extra={"storage_prefix": "tool"})
 
     tool_id: str = Field(..., description="ID инструмента")
-    name: Optional[str] = Field(
+    name: str | None = Field(
         default=None,
         description="Подпись в UI (flows editor, модалки). Если не задана — title или tool_id.",
     )
-    title: Optional[str] = Field(default=None, description="Название для отображения")
-    description: Optional[str] = Field(default=None, description="Описание инструмента")
-    parameters_schema: Optional[Dict[str, Any]] = Field(
+    title: str | None = Field(default=None, description="Название для отображения")
+    description: str | None = Field(default=None, description="Описание инструмента")
+    parameters_schema: dict[str, Any] | None = Field(
         default=None,
         description=(
             "Полная JSON Schema объекта параметров для LLM (type: object, properties, required, "
             "minLength, default, items и т.д.). Имеет приоритет над args_schema при сборке схемы для модели."
         ),
     )
-    args_schema: Dict[str, CallParameter] = Field(
+    args_schema: dict[str, CallParameter] = Field(
         default_factory=dict,
         description="Legacy: плоская схема {param_name: CallParameter}; если parameters_schema нет — строится LLM-схема отсюда",
     )
-    mock_map: Optional[Dict[str, Any]] = Field(
+    mock_map: dict[str, Any] | None = Field(
         default=None, description="Mock данные для api_call tools"
     )
-    params: Dict[str, Any] = Field(default_factory=dict, description="Параметры инструмента")
-    code: Optional[str] = Field(default=None, description="Python код инструмента")
-    permission: List[str] = Field(
+    params: dict[str, Any] = Field(default_factory=dict, description="Параметры инструмента")
+    code: str | None = Field(default=None, description="Python код инструмента")
+    permission: list[str] = Field(
         default_factory=list,
         description="Группы с доступом к tool. Пустой список = доступ для всех",
     )
@@ -72,7 +72,7 @@ class ToolReference(BaseModel):
         object.__setattr__(self, "name", label)
         return self
 
-    tags: List[str] = Field(
+    tags: list[str] = Field(
         default_factory=list,
         description="Группы/категории тула: misc, math, docs, api, validation",
     )
@@ -80,7 +80,7 @@ class ToolReference(BaseModel):
         default=ReactToolRole.STANDARD,
         description="Роль в ReAct: standard, reason, exit",
     )
-    public_fields: Optional[List[str]] = Field(
+    public_fields: list[str] | None = Field(
         default=None,
         description="Поля доступные для редактирования в UI. None = все поля доступны"
     )
@@ -90,16 +90,16 @@ class ToolReference(BaseModel):
         default=CodeMode.INLINE_CODE,
         description="Режим кода: inline_code или mcp_tool"
     )
-    mcp_server_id: Optional[str] = Field(
+    mcp_server_id: str | None = Field(
         default=None,
         description="ID MCP сервера (для MCP тулов)"
     )
-    mcp_tool_name: Optional[str] = Field(
+    mcp_tool_name: str | None = Field(
         default=None,
         description="Имя tool на MCP сервере"
     )
 
-    def effective_parameters_schema(self) -> Dict[str, Any]:
+    def effective_parameters_schema(self) -> dict[str, Any]:
         """Схема параметров для LLM: parameters_schema или сборка из args_schema."""
         from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
 
@@ -108,9 +108,9 @@ class ToolReference(BaseModel):
             args_schema=self.args_schema,
         )
 
-    def to_registry_format(self) -> Dict[str, Any]:
+    def to_registry_format(self) -> dict[str, Any]:
         """Преобразует в формат для registry API (совместимость с platformweb)"""
-        attrs: Dict[str, Any] = {
+        attrs: dict[str, Any] = {
             "description": self.description or "",
             "args_schema": {
                 k: {"type": v.type, "description": v.description}

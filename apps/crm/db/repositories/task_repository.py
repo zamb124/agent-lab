@@ -4,13 +4,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
-from typing import Any
+from datetime import UTC, datetime
+from typing import cast as type_cast
+from typing import override
 
 from sqlalchemy import func, select, update
+from sqlalchemy.sql import ColumnElement
 
 from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import CRMTask
+from apps.crm.types import JsonObject
 from core.context import get_context
 
 CRM_TASK_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "rolled_back"})
@@ -18,19 +21,27 @@ CRM_TASK_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "rol
 
 class TaskRepository(BaseCRMRepository[CRMTask]):
     @property
+    @override
     def model_class(self) -> type[CRMTask]:
         return CRMTask
 
     @property
+    @override
     def id_field(self) -> str:
         return "task_id"
 
+    @override
     def _get_company_id(self) -> str:
         context = get_context()
         if not context or not context.active_company:
             raise ValueError("Нет активной компании в контексте")
         return context.active_company.company_id
 
+    @staticmethod
+    def _data_text_path_expression(key: str) -> ColumnElement[str]:
+        return type_cast(ColumnElement[str], func.jsonb_extract_path_text(CRMTask.data, key))
+
+    @override
     async def create(self, entity: CRMTask) -> CRMTask:
         async with self._db.session() as session:
             session.add(entity)
@@ -38,6 +49,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
             await session.refresh(entity)
         return entity
 
+    @override
     async def get(self, entity_id: str, *, company_id: str | None = None) -> CRMTask | None:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -66,13 +78,13 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         stage: str | None = None,
         progress_pct: int | None = None,
         error_message: str | None = None,
-        data_patch: dict[str, Any] | None = None,
+        data_patch: JsonObject | None = None,
         cancel_requested: bool | None = None,
         taskiq_task_id: str | None = None,
         started_at: datetime | None = None,
         completed_at: datetime | None = None,
     ) -> None:
-        values: dict[str, Any] = {"updated_at": datetime.now(UTC)}
+        values: dict[str, object] = {"updated_at": datetime.now(UTC)}
         if status is not None:
             values["status"] = status
         if stage is not None:
@@ -94,27 +106,23 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
             base_where = [CRMTask.task_id == task_id, CRMTask.company_id == company_id]
             # Переход в "running" не должен перезаписывать уже терминальные статусы
             # (race condition: kiq() с sync_tools выполняется in-process до возврата)
-            if values.get("status") == "running":
+            if status == "running":
                 base_where.append(
                     CRMTask.status.not_in(("completed", "failed", "cancelled", "rolled_back"))
                 )
             # Завершение из воркера не перетирает уже финализированную запись
             # (пользователь успел отменить через API, пока воркер дописывал результат)
             _worker_terminal = ("completed", "failed", "cancelled")
-            if values.get("status") in _worker_terminal:
+            if status in _worker_terminal:
                 base_where.append(CRMTask.status.in_(("pending", "running")))
             if data_patch:
-                await session.execute(
+                _ = await session.execute(
                     update(CRMTask)
                     .where(*base_where)
                     .values(data=CRMTask.data.op("||")(data_patch), **values)
                 )
             else:
-                await session.execute(
-                    update(CRMTask)
-                    .where(*base_where)
-                    .values(**values)
-                )
+                _ = await session.execute(update(CRMTask).where(*base_where).values(**values))
             await session.commit()
 
     async def reconcile_cancel_requested_active_tasks(self) -> list[CRMTask]:
@@ -198,7 +206,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
             if task_type is not None:
                 stmt = stmt.where(CRMTask.task_type == task_type)
             if note_id is not None:
-                stmt = stmt.where(CRMTask.data["note_id"].as_string() == note_id)
+                stmt = stmt.where(self._data_text_path_expression("note_id") == note_id)
             stmt = stmt.order_by(CRMTask.created_at.desc()).offset(offset).limit(limit)
             result = await session.execute(stmt)
             return list(result.scalars().all())
@@ -219,7 +227,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
             if task_type is not None:
                 stmt = stmt.where(CRMTask.task_type == task_type)
             if note_id is not None:
-                stmt = stmt.where(CRMTask.data["note_id"].as_string() == note_id)
+                stmt = stmt.where(self._data_text_path_expression("note_id") == note_id)
             result = await session.execute(stmt)
             return result.scalar() or 0
 
@@ -239,7 +247,7 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
                 CRMTask.status.in_(("pending", "running")),
             )
             for key, value in data_key_values.items():
-                stmt = stmt.where(CRMTask.data[key].as_string() == value)
+                stmt = stmt.where(self._data_text_path_expression(key) == value)
             stmt = stmt.order_by(CRMTask.created_at.desc()).limit(1)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
@@ -253,10 +261,14 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
     ) -> int:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(func.count()).select_from(CRMTask).where(
-                CRMTask.company_id == cid,
-                CRMTask.namespace == namespace,
-                CRMTask.status.in_(("pending", "running")),
+            stmt = (
+                select(func.count())
+                .select_from(CRMTask)
+                .where(
+                    CRMTask.company_id == cid,
+                    CRMTask.namespace == namespace,
+                    CRMTask.status.in_(("pending", "running")),
+                )
             )
             if task_type is not None:
                 stmt = stmt.where(CRMTask.task_type == task_type)
@@ -279,12 +291,16 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         """
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(func.count()).select_from(CRMTask).where(
-                CRMTask.company_id == cid,
-                CRMTask.namespace == namespace,
-                CRMTask.task_type == "knowledge_import",
-                CRMTask.status.in_(("completed", "failed", "cancelled")),
-                CRMTask.data["review_completed_at"].as_string().is_(None),
+            stmt = (
+                select(func.count())
+                .select_from(CRMTask)
+                .where(
+                    CRMTask.company_id == cid,
+                    CRMTask.namespace == namespace,
+                    CRMTask.task_type == "knowledge_import",
+                    CRMTask.status.in_(("completed", "failed", "cancelled")),
+                    self._data_text_path_expression("review_completed_at").is_(None),
+                )
             )
             result = await session.execute(stmt)
             value = result.scalar()

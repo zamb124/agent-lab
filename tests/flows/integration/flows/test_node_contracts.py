@@ -14,7 +14,7 @@
 import pytest
 
 from apps.flows.src.models import Edge
-from apps.flows.src.runtime import Flow
+from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import (
     CodeNode,
 )

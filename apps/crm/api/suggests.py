@@ -1,9 +1,10 @@
-from typing import Any
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from apps.crm.dependencies import ContainerDep
+from apps.crm.types import JsonObject
 from core.context import get_context
 from core.pagination import OffsetPage
 
@@ -15,16 +16,16 @@ class SuggestResponse(BaseModel):
     suggest_type: str
     status: str
     target_entity_ids: list[str]
-    payload: dict[str, Any]
+    payload: JsonObject
 
 
 @router.get("", response_model=OffsetPage[SuggestResponse])
 async def list_suggests(
     namespace: str,
     container: ContainerDep,
-    status: str | None = Query("pending"),
-    limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    status: Annotated[str | None, Query()] = "pending",
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ):
     ctx = get_context()
     if not ctx or not ctx.user:

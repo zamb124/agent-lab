@@ -9,7 +9,7 @@ import base64
 import json
 from collections.abc import Set as AbstractSet
 from datetime import UTC, date, datetime
-from typing import Any, ClassVar, override
+from typing import ClassVar, override
 from typing import cast as type_cast
 
 from sqlalchemy import (
@@ -26,12 +26,16 @@ from sqlalchemy import (
     or_,
     select,
     tuple_,
+    type_coerce,
     update,
 )
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.sql import ColumnElement
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import SemanticTextIndexStatus
+from apps.crm.types import JsonObject
 from core.config import get_settings
 from core.context import get_context
 from core.db.utils import get_rowcount
@@ -46,6 +50,8 @@ from core.tracing.operation_span import traced_operation
 logger = get_logger(__name__)
 
 _CRM_HYBRID_RRF_K = 60
+
+type _FilterScalar = str | int | float | bool | date | datetime | None
 
 
 class EntityRepository(BaseCRMRepository[CRMEntity]):
@@ -133,6 +139,24 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             "ttl_seconds": 0,
         }
 
+    @staticmethod
+    def _attribute_text_path_expression(*path: str) -> ColumnElement[str]:
+        if not path:
+            raise ValueError("JSONB attribute path must not be empty")
+        return type_cast(
+            ColumnElement[str],
+            func.jsonb_extract_path_text(CRMEntity.attributes, *path),
+        )
+
+    @staticmethod
+    def _attribute_json_path_expression(*path: str) -> ColumnElement[object]:
+        if not path:
+            raise ValueError("JSONB attribute path must not be empty")
+        return type_cast(
+            ColumnElement[object],
+            type_coerce(func.jsonb_extract_path(CRMEntity.attributes, *path), JSONB),
+        )
+
     async def batch_semantic_text_index_status(
         self,
         entities: list[CRMEntity],
@@ -185,7 +209,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             stmt = select(CRMEntity).where(
                 CRMEntity.company_id == cid,
                 CRMEntity.entity_type == entity_type,
-                CRMEntity.attributes[attribute_key].astext == attribute_value,
+                self._attribute_text_path_expression(attribute_key) == attribute_value,
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
@@ -208,13 +232,12 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             return []
         if not sid.strip():
             return []
-        record_path = CRMEntity.attributes["external_refs"][sid]["record_id"]
         async with self._db.session() as session:
             stmt = select(CRMEntity).where(
                 CRMEntity.company_id == cid,
                 CRMEntity.namespace == ns,
                 CRMEntity.entity_type == entity_type,
-                record_path.astext == rid,
+                self._attribute_text_path_expression("external_refs", sid, "record_id") == rid,
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
@@ -359,18 +382,28 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
     @staticmethod
     def decode_cursor(cursor: str) -> tuple[datetime, str]:
-        payload = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
-        ts = datetime.fromisoformat(payload["ts"])
+        raw_payload = type_cast(
+            object,
+            json.loads(base64.urlsafe_b64decode(cursor.encode()).decode()),
+        )
+        if not isinstance(raw_payload, dict):
+            raise ValueError("Cursor payload must be an object")
+        payload = type_cast(JsonObject, raw_payload)
+        raw_ts = payload.get("ts")
+        raw_id = payload.get("id")
+        if not isinstance(raw_ts, str) or not isinstance(raw_id, str):
+            raise ValueError("Cursor payload has invalid shape")
+        ts = datetime.fromisoformat(raw_ts)
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=UTC)
-        return ts, payload["id"]
+        return ts, raw_id
 
     async def list_by_cursor(
         self,
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: JsonObject | None = None,
         filter_field_types: dict[str, str] | None = None,
         limit: int = 100,
         company_id: str | None = None,
@@ -409,7 +442,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 stmt = stmt.where(CRMEntity.namespace == namespace)
 
             if filters:
-                stmt = self._apply_filter_tree(stmt, filters, filter_field_types)
+                stmt = stmt.where(self._build_filter_expression(filters, filter_field_types))
 
             if cursor:
                 cursor_ts, cursor_id = self.decode_cursor(cursor)
@@ -441,7 +474,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: JsonObject | None = None,
         filter_field_types: dict[str, str] | None = None,
         company_id: str | None = None,
     ) -> int:
@@ -459,7 +492,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 stmt = stmt.where(CRMEntity.namespace == namespace)
 
             if filters:
-                stmt = self._apply_filter_tree(stmt, filters, filter_field_types)
+                stmt = stmt.where(self._build_filter_expression(filters, filter_field_types))
 
             result = await session.execute(stmt)
             value = result.scalar()
@@ -518,7 +551,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_subtype: str | None = None,
         namespace: str | None = None,
         company_id: str | None = None,
-    ) -> tuple[Any | None, Any | None, int]:
+    ) -> tuple[datetime | None, datetime | None, int]:
         """Возвращает min/max created_at и количество сущностей."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -534,91 +567,123 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             if namespace:
                 stmt = stmt.where(CRMEntity.namespace == namespace)
             result = await session.execute(stmt)
-            min_created_at, max_created_at, total_entities = result.one()
-            return min_created_at, max_created_at, int(total_entities or 0)
+            row = type_cast(
+                tuple[object | None, object | None, object],
+                type_cast(object, result.one()),
+            )
+            min_created_at, max_created_at, total_entities = row
+            if min_created_at is not None and not isinstance(min_created_at, datetime):
+                raise ValueError("min(created_at) returned invalid value")
+            if max_created_at is not None and not isinstance(max_created_at, datetime):
+                raise ValueError("max(created_at) returned invalid value")
+            if not isinstance(total_entities, int):
+                raise ValueError("count(entity_id) returned invalid value")
+            return min_created_at, max_created_at, total_entities
 
     @staticmethod
-    def _parse_date_filter_value(value: Any) -> date:
+    def _parse_date_filter_value(value: object) -> date:
         if isinstance(value, date):
             return value
         if isinstance(value, str):
             return date.fromisoformat(value)
         raise ValueError("Unsupported date filter value type")
 
-    def _apply_filter_tree(
-        self,
-        stmt,
-        filters: dict[str, Any],
-        field_types: dict[str, str] | None,
-    ):
+    def _build_filter_expression(
+        self, node: JsonObject, field_types: dict[str, str] | None
+    ) -> ColumnElement[bool]:
         if not field_types:
             raise ValueError("field_types are required when filters are provided")
-        expression = self._build_filter_expression(filters, field_types)
-        return stmt.where(expression)
-
-    def _build_filter_expression(self, node: dict[str, Any], field_types: dict[str, str]):
         if "$and" in node:
-            and_nodes = node["$and"]
+            and_nodes = self._filter_node_list(node["$and"], "$and")
             return and_(*[self._build_filter_expression(item, field_types) for item in and_nodes])
         if "$or" in node:
-            or_nodes = node["$or"]
+            or_nodes = self._filter_node_list(node["$or"], "$or")
             return or_(*[self._build_filter_expression(item, field_types) for item in or_nodes])
 
-        field_name = node["field"]
-        operator = node["op"]
+        field_name = self._required_filter_string(node, "field")
+        operator = self._required_filter_string(node, "op")
+        if "value" not in node:
+            raise ValueError("Filter leaf requires value")
         value = node["value"]
+        if field_name not in field_types:
+            raise ValueError(f"Unknown filter field: {field_name}")
         field_type = field_types[field_name]
         column_expr = self._resolve_field_expression(field_name, field_type)
         return self._build_leaf_expression(column_expr, field_name, field_type, operator, value)
 
-    def _resolve_field_expression(self, field_name: str, field_type: str):
+    @staticmethod
+    def _filter_node_list(value: object, operator: str) -> list[JsonObject]:
+        if not isinstance(value, list):
+            raise ValueError(f"{operator} requires non-empty list")
+        raw_nodes = type_cast(list[object], value)
+        if not raw_nodes:
+            raise ValueError(f"{operator} requires non-empty list")
+        nodes: list[JsonObject] = []
+        for item in raw_nodes:
+            if not isinstance(item, dict):
+                raise ValueError(f"{operator} items must be filter objects")
+            nodes.append(type_cast(JsonObject, item))
+        return nodes
+
+    @staticmethod
+    def _required_filter_string(node: JsonObject, key: str) -> str:
+        raw_value = node.get(key)
+        if not isinstance(raw_value, str) or raw_value.strip() == "":
+            raise ValueError(f"Filter field {key!r} must be a non-empty string")
+        return raw_value
+
+    def _resolve_field_expression(self, field_name: str, field_type: str) -> ColumnElement[object]:
         if field_name.startswith("attributes."):
             attr_name = field_name.split(".", 1)[1]
+            attr_text = self._attribute_text_path_expression(attr_name)
             if field_type == "integer":
-                return cast(CRMEntity.attributes[attr_name].astext, Integer)
+                return type_cast(ColumnElement[object], cast(attr_text, Integer))
             if field_type == "number":
-                return cast(CRMEntity.attributes[attr_name].astext, Float)
+                return type_cast(ColumnElement[object], cast(attr_text, Float))
             if field_type == "boolean":
-                return cast(CRMEntity.attributes[attr_name].astext, Boolean)
+                return type_cast(ColumnElement[object], cast(attr_text, Boolean))
             if field_type == "date":
-                return cast(CRMEntity.attributes[attr_name].astext, Date)
+                return type_cast(ColumnElement[object], cast(attr_text, Date))
             if field_type == "datetime":
-                return cast(CRMEntity.attributes[attr_name].astext, DateTime(timezone=True))
+                return type_cast(
+                    ColumnElement[object],
+                    cast(attr_text, DateTime(timezone=True)),
+                )
             if field_type == "array":
-                return CRMEntity.attributes[attr_name]
-            return CRMEntity.attributes[attr_name].astext
+                return self._attribute_json_path_expression(attr_name)
+            return type_cast(ColumnElement[object], attr_text)
 
         if field_name == "entity_type":
-            return CRMEntity.entity_type
+            return self._column_expression(CRMEntity.entity_type)
         if field_name == "entity_subtype":
-            return CRMEntity.entity_subtype
+            return self._column_expression(CRMEntity.entity_subtype)
         if field_name == "namespace":
-            return CRMEntity.namespace
+            return self._column_expression(CRMEntity.namespace)
         if field_name == "status":
-            return CRMEntity.status
+            return self._column_expression(CRMEntity.status)
         if field_name == "priority":
-            return CRMEntity.priority
+            return self._column_expression(CRMEntity.priority)
         if field_name == "user_id":
-            return CRMEntity.user_id
+            return self._column_expression(CRMEntity.user_id)
         if field_name == "name":
-            return CRMEntity.name
+            return self._column_expression(CRMEntity.name)
         if field_name == "description":
-            return CRMEntity.description
+            return self._column_expression(CRMEntity.description)
         if field_name == "note_date":
-            return CRMEntity.note_date
+            return self._column_expression(CRMEntity.note_date)
         if field_name == "due_date":
-            return CRMEntity.due_date
+            return self._column_expression(CRMEntity.due_date)
         if field_name == "created_at":
-            return CRMEntity.created_at
+            return self._column_expression(CRMEntity.created_at)
         if field_name == "tags":
-            return CRMEntity.tags
+            return self._column_expression(CRMEntity.tags)
         raise ValueError(f"Unsupported filter field: {field_name}")
 
-    def _coerce_scalar_value(self, field_type: str, value: Any):
+    def _coerce_scalar_value(self, field_type: str, value: object) -> _FilterScalar:
         if field_type == "integer":
-            return int(value)
+            return self._coerce_int_filter_value(value)
         if field_type == "number":
-            return float(value)
+            return self._coerce_float_filter_value(value)
         if field_type == "boolean":
             if isinstance(value, bool):
                 return value
@@ -627,45 +692,97 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             return self._parse_date_filter_value(value)
         if field_type == "datetime":
             return self._parse_datetime_filter_value(value)
-        return value
+        if value is None or isinstance(value, str | int | float | bool):
+            return value
+        raise ValueError("Scalar filter value must be string, number, boolean, or null")
+
+    @staticmethod
+    def _coerce_int_filter_value(value: object) -> int:
+        if isinstance(value, bool):
+            raise ValueError("Integer filter value must not be bool")
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.strip() != "":
+            return int(value)
+        raise ValueError("Integer filter value must be int or numeric string")
+
+    @staticmethod
+    def _coerce_float_filter_value(value: object) -> float:
+        if isinstance(value, bool):
+            raise ValueError("Number filter value must not be bool")
+        if isinstance(value, int | float):
+            return float(value)
+        if isinstance(value, str) and value.strip() != "":
+            return float(value)
+        raise ValueError("Number filter value must be number or numeric string")
+
+    @staticmethod
+    def _sql_bool_expression(expression: ColumnElement[bool]) -> ColumnElement[bool]:
+        return expression
+
+    @staticmethod
+    def _string_expression(column_expr: ColumnElement[object]) -> ColumnElement[str]:
+        return type_cast(ColumnElement[str], column_expr)
+
+    @staticmethod
+    def _column_expression(expression: object) -> ColumnElement[object]:
+        return type_cast(ColumnElement[object], expression)
+
+    @staticmethod
+    def _object_list(value: object, operator: str) -> list[object]:
+        if not isinstance(value, list):
+            raise ValueError(f"{operator} requires non-empty list value")
+        values = type_cast(list[object], value)
+        if not values:
+            raise ValueError(f"{operator} requires non-empty list value")
+        return values
+
+    @staticmethod
+    def _rank_to_float(value: object) -> float:
+        if isinstance(value, bool):
+            raise ValueError("FTS rank returned invalid bool value")
+        if isinstance(value, int | float):
+            return float(value)
+        raise ValueError("FTS rank returned invalid value")
 
     def _build_leaf_expression(
         self,
-        column_expr,
+        column_expr: ColumnElement[object],
         field_name: str,
         field_type: str,
         operator: str,
-        value: Any,
-    ):
+        value: object,
+    ) -> ColumnElement[bool]:
         if operator == "$contains":
             if field_name == "tags":
-                return CRMEntity.tags.contains([value])
+                return self._sql_bool_expression(CRMEntity.tags.contains([value]))
             if field_type == "array":
-                return column_expr.contains([value])
-            return column_expr.ilike(f"%{value}%")
+                return self._sql_bool_expression(column_expr.contains([value]))
+            return self._sql_bool_expression(
+                self._string_expression(column_expr).ilike(f"%{value}%")
+            )
 
         if operator in {"$in", "$nin"}:
-            if not isinstance(value, list) or len(value) == 0:
-                raise ValueError(f"{operator} requires non-empty list value")
-            coerced_values = [self._coerce_scalar_value(field_type, item) for item in value]
+            values = self._object_list(value, operator)
+            coerced_values = [self._coerce_scalar_value(field_type, item) for item in values]
             expression = column_expr.in_(coerced_values)
             if operator == "$nin":
-                return ~expression
-            return expression
+                return self._sql_bool_expression(~expression)
+            return self._sql_bool_expression(expression)
 
         coerced = self._coerce_scalar_value(field_type, value)
         if operator == "$eq":
-            return column_expr == coerced
+            return self._sql_bool_expression(column_expr == coerced)
         if operator == "$ne":
-            return column_expr != coerced
+            return self._sql_bool_expression(column_expr != coerced)
         if operator == "$gt":
-            return column_expr > coerced
+            return self._sql_bool_expression(column_expr > coerced)
         if operator == "$gte":
-            return column_expr >= coerced
+            return self._sql_bool_expression(column_expr >= coerced)
         if operator == "$lt":
-            return column_expr < coerced
+            return self._sql_bool_expression(column_expr < coerced)
         if operator == "$lte":
-            return column_expr <= coerced
+            return self._sql_bool_expression(column_expr <= coerced)
         raise ValueError(f"Unsupported filter operator: {operator}")
 
     async def count_by_namespace(
@@ -715,9 +832,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             if exclude_entity_types:
                 stmt = stmt.where(CRMEntity.entity_type.notin_(exclude_entity_types))
             result = await session.execute(stmt)
-            type_ids = [
-                item for item in result.scalars().all() if isinstance(item, str) and item.strip()
-            ]
+            type_ids = [item for item in result.scalars().all() if item.strip()]
             return sorted(type_ids)
 
     # -- Semantic Search --
@@ -728,7 +843,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: JsonObject | None = None,
         filter_field_types: dict[str, str] | None = None,
         limit: int = 10,
         company_id: str | None = None,
@@ -740,22 +855,23 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         cid = company_id or self._get_company_id()
         resolved_namespace = namespace or "default"
         actx = get_context()
-        if actx is None or actx.user is None or str(actx.user.user_id).strip() == "":
+        if actx is None or str(actx.user.user_id).strip() == "":
             raise ValueError("Контекст пользователя обязателен для семантического поиска CRM.")
+        user_id = str(actx.user.user_id).strip()
         async with traced_operation(
             "crm.semantic.search_entities",
             event_type="crm.search",
             operation_category="embedding",
             extra_attributes={
                 trace_attributes.ATTR_TENANT_COMPANY_ID: cid,
-                trace_attributes.ATTR_USER_ID: str(actx.user.user_id).strip(),
+                trace_attributes.ATTR_USER_ID: user_id,
                 trace_attributes.ATTR_CRM_QUERY_MODE: "semantic_vector",
                 trace_attributes.ATTR_CRM_ENTITY_TYPE: entity_type or "",
                 "platform.crm.search_limit": limit,
                 "platform.crm.namespace": resolved_namespace,
             },
         ) as search_span:
-            search_filters: dict[str, Any] = {"company_id": cid}
+            search_filters: dict[str, object] = {"company_id": cid}
             if entity_type:
                 search_filters["entity_type"] = entity_type
 
@@ -805,7 +921,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 if namespace:
                     stmt = stmt.where(CRMEntity.namespace == namespace)
                 if filters:
-                    stmt = self._apply_filter_tree(stmt, filters, filter_field_types)
+                    stmt = stmt.where(self._build_filter_expression(filters, filter_field_types))
                 result = await session.execute(stmt)
                 matched_entities = list(result.scalars().all())
 
@@ -833,7 +949,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: JsonObject | None = None,
         filter_field_types: dict[str, str] | None = None,
         limit: int = 10,
         company_id: str | None = None,
@@ -908,7 +1024,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         entity_type: str | None = None,
         entity_subtype: str | None = None,
         namespace: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: JsonObject | None = None,
         filter_field_types: dict[str, str] | None = None,
         limit: int = 30,
         company_id: str | None = None,
@@ -935,18 +1051,18 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             if namespace:
                 stmt = stmt.where(CRMEntity.namespace == namespace)
             if filters:
-                stmt = self._apply_filter_tree(stmt, filters, filter_field_types)
+                stmt = stmt.where(self._build_filter_expression(filters, filter_field_types))
 
             result = await session.execute(stmt)
-            rows = result.all()
+            rows = type_cast(list[tuple[CRMEntity, object]], result.all())
 
-        return [(row[0], float(row[1])) for row in rows]
+        return [(entity, self._rank_to_float(rank)) for entity, rank in rows]
 
     async def aggregate_facets(
         self,
         namespace: str | None = None,
         company_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Фасетная агрегация: по entity_type, status, месяц создания."""
         cid = company_id or self._get_company_id()
         month_expr = func.to_char(CRMEntity.created_at, "YYYY-MM").label("month")

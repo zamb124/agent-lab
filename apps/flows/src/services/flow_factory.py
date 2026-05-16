@@ -3,7 +3,7 @@ FlowFactory - создание flow из БД.
 """
 
 import copy
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, TypedDict
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.db import FlowRepository
@@ -22,9 +22,9 @@ logger = get_logger(__name__)
 
 class EffectiveFlowConfig(TypedDict):
     entry: str | None
-    nodes: Dict[str, Dict[str, Any]]
-    edges: List[Edge]
-    variables: Dict[str, Any]
+    nodes: dict[str, dict[str, Any]]
+    edges: list[Edge]
+    variables: dict[str, Any]
 
 
 class FlowFactory:
@@ -43,9 +43,9 @@ class FlowFactory:
         self.container = container
 
     @staticmethod
-    def _resource_map_to_plain(ref_map: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _resource_map_to_plain(ref_map: dict[str, Any] | None) -> dict[str, Any]:
         """ResourceReference и dict в плоский dict для ResourceResolver."""
-        out: Dict[str, Any] = {}
+        out: dict[str, Any] = {}
         for key, value in (ref_map or {}).items():
             if hasattr(value, "model_dump"):
                 out[key] = value.model_dump()
@@ -67,8 +67,8 @@ class FlowFactory:
         return tools
 
     async def get_flow_config_snapshot(
-        self, flow_id: str, config_version: Optional[str] = None
-    ) -> Optional[FlowConfig]:
+        self, flow_id: str, config_version: str | None = None
+    ) -> FlowConfig | None:
         """Снимок FlowConfig: конкретная версия или последняя в flows."""
         if config_version:
             return await self.flow_repository.get_version(flow_id, config_version)
@@ -78,8 +78,8 @@ class FlowFactory:
         self,
         flow_id: str,
         branch_id: str = "default",
-        config_version: Optional[str] = None,
-    ) -> Optional[Flow]:
+        config_version: str | None = None,
+    ) -> Flow | None:
         """
         Загружает flow из БД и создаёт Flow.
         Применяет skill overrides если указан branch_id.
@@ -107,8 +107,8 @@ class FlowFactory:
         self,
         flow_id: str,
         branch_id: str,
-        config_version: Optional[str] = None,
-    ) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+        config_version: str | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         """
         Ресурсы уровня flow и skill из БД (без inline state.flow_config).
 
@@ -124,7 +124,7 @@ class FlowFactory:
             return {}, None
 
         flow_resources = self._resource_map_to_plain(config.resources)
-        skill_resources: Optional[Dict[str, Any]] = None
+        skill_resources: dict[str, Any] | None = None
         if branch_id and branch_id != "default" and config.branches and branch_id in config.branches:
             sk = config.branches[branch_id]
             raw_skill_res = sk.resources or {}
@@ -137,8 +137,8 @@ class FlowFactory:
         self,
         flow_id: str,
         branch_id: str,
-        config_version: Optional[str] = None,
-    ) -> Dict[str, Dict[str, Any]]:
+        config_version: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
         """Ноды графа после применения skill (для evaluation и отладки)."""
         config = await self.get_flow_config_snapshot(flow_id, config_version)
         if config is None:
@@ -147,7 +147,7 @@ class FlowFactory:
                     f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
                 )
             raise ValueError(f"Flow '{flow_id}' не найден")
-        effective = self._apply_branch(config, branch_id)
+        effective = self.apply_branch(config, branch_id)
         nodes = effective["nodes"]
         source = getattr(config, "source", None) or "manual"
         if source == "file":
@@ -159,11 +159,11 @@ class FlowFactory:
         flow_id: str,
         branch_id: str = "default",
         *,
-        config_version: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        config_version: str | None = None,
+    ) -> dict[str, Any]:
         """
         Словарь resolved variables для flow+skill — тот же, что попадает в ``Flow.variables``
-        (после ``_apply_branch`` и ``_resolve_variables``), без сборки графа.
+        (после ``apply_branch`` и ``_resolve_variables``), без сборки графа.
         """
         config = await self.get_flow_config_snapshot(flow_id, config_version)
         if config is None:
@@ -172,7 +172,7 @@ class FlowFactory:
                     f"Flow '{flow_id}' версия '{config_version}' не найдена в flows_versions"
                 )
             raise ValueError(f"Flow '{flow_id}' не найден")
-        effective = self._apply_branch(config, branch_id)
+        effective = self.apply_branch(config, branch_id)
         return await self._resolve_variables(effective["variables"])
 
     async def _create_flow(self, config: FlowConfig, branch_id: str = "default") -> Flow:
@@ -188,7 +188,7 @@ class FlowFactory:
         Returns:
             Flow
         """
-        effective = self._apply_branch(config, branch_id)
+        effective = self.apply_branch(config, branch_id)
         source = getattr(config, "source", None) or "manual"
         if source == "file":
             effective["nodes"] = repair_effective_nodes_from_bundle(
@@ -219,11 +219,11 @@ class FlowFactory:
 
         return await Flow.from_config(config_dict, container=self.container)
 
-    async def create_validation_flow(self, config: Dict[str, Any]) -> Flow:
+    async def create_validation_flow(self, config: dict[str, Any]) -> Flow:
         """Создаёт transient Flow из уже собранного inline config для валидатора."""
         return await Flow.from_config(config, container=self.container)
 
-    def _apply_branch(self, config: FlowConfig, branch_id: str) -> EffectiveFlowConfig:
+    def apply_branch(self, config: FlowConfig, branch_id: str) -> EffectiveFlowConfig:
         """
         Применяет ветку (branch) к конфигу flow.
 
@@ -235,7 +235,7 @@ class FlowFactory:
             Dict с effective конфигом (entry, nodes, edges, variables)
         """
         # Извлекаем значения из FlowVariableConfig объектов
-        variables_dict: Dict[str, Any] = {}
+        variables_dict: dict[str, Any] = {}
         for key, value in config.variables.items():
             if isinstance(value, FlowVariableConfig):
                 variables_dict[key] = value.value
@@ -293,7 +293,7 @@ class FlowFactory:
         return result
 
     def _merge_nodes(
-        self, base_nodes: Dict[str, Dict[str, Any]], skill_nodes: Dict[str, Dict[str, Any]]
+        self, base_nodes: dict[str, dict[str, Any]], skill_nodes: dict[str, dict[str, Any]]
     ) -> None:
         """
         Мержит skill nodes в base nodes.
@@ -306,7 +306,7 @@ class FlowFactory:
             else:
                 base_nodes[node_id] = copy.deepcopy(skill_node_config)
 
-    def _merge_edges(self, base_edges: List[Edge], skill_edges: List[Edge]) -> None:
+    def _merge_edges(self, base_edges: list[Edge], skill_edges: list[Edge]) -> None:
         """
         Мержит skill edges в base edges.
         Edges с той же парой (from_node, to_node) заменяются, новые добавляются.
@@ -318,7 +318,7 @@ class FlowFactory:
         base_edges.extend(filtered)
         base_edges.extend(skill_edges)
 
-    async def _resolve_variables(self, variables: Dict[str, Any]) -> Dict[str, Any]:
+    async def _resolve_variables(self, variables: dict[str, Any]) -> dict[str, Any]:
         """
         Резолвит @var:key ссылки в переменных и извлекает значения из FlowVariableConfig.
 
@@ -330,7 +330,7 @@ class FlowFactory:
         Returns:
             Словарь с резолвнутыми значениями (только values, без метаданных)
         """
-        company_variables = await self.variables_service._get_company_variables_map()
+        company_variables = await self.variables_service.get_company_variables_map()
         resolved = self._resolve_flow_variables(
             value=variables,
             company_variables=company_variables,
@@ -348,7 +348,7 @@ class FlowFactory:
     def _resolve_flow_variables(
         self,
         value: Any,
-        company_variables: Dict[str, Any],
+        company_variables: dict[str, Any],
     ) -> Any:
         if isinstance(value, dict):
             return {
@@ -384,7 +384,7 @@ class FlowFactory:
         """Удаляет flow из БД"""
         return await self.flow_repository.delete(flow_id)
 
-    async def get_branches(self, flow_id: str) -> Dict[str, BranchConfig]:
+    async def get_branches(self, flow_id: str) -> dict[str, BranchConfig]:
         """
         Возвращает ветки flow.
         Если branches не заданы — возвращает default-ветку.
@@ -471,7 +471,7 @@ class FlowFactory:
 
         return tools, subflows
 
-    async def get_flow_schema(self, flow_id: str) -> Optional[Dict[str, Any]]:
+    async def get_flow_schema(self, flow_id: str) -> dict[str, Any] | None:
         """
         Возвращает схему flow для всех веток (для визуализации).
 
@@ -491,9 +491,9 @@ class FlowFactory:
         else:
             branch_ids = ["default"]
 
-        branches_schema: Dict[str, Any] = {}
+        branches_schema: dict[str, Any] = {}
         for branch_id in branch_ids:
-            effective = self._apply_branch(config, branch_id)
+            effective = self.apply_branch(config, branch_id)
 
             # Конвертируем edges в простой формат (могут быть Edge или dict)
             edges = []

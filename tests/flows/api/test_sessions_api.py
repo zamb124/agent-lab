@@ -277,7 +277,7 @@ class TestSessionsAPI:
         date_in_range = (now - timedelta(days=1, hours=12)).replace(tzinfo=None)
         date_new = now.replace(tzinfo=None)
 
-        async with container.storage._get_session() as session:
+        async with container.storage.get_session() as session:
             await session.execute(
                 update(States)
                 .where(States.key == key_old)

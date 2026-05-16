@@ -3,7 +3,6 @@ API endpoints для сессий.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel
@@ -26,19 +25,19 @@ class SessionResponse(BaseModel):
     flow_id: str
     status: str
     message_count: int
-    first_message: Optional[str] = None
-    created_at: Optional[datetime] = None
-    last_activity: Optional[datetime] = None
+    first_message: str | None = None
+    created_at: datetime | None = None
+    last_activity: datetime | None = None
 
 
 @router.get("/", response_model=OffsetPage[SessionResponse])
 async def list_sessions(
     container: ContainerDep,
-    user_id: Optional[str] = Query(None, description="Фильтр по пользователю"),
-    flow_id: Optional[str] = Query(None, description="Фильтр по flow"),
-    branch_id: Optional[str] = Query(None, description="Фильтр по ветке (branch_id)"),
-    date_from: Optional[datetime] = Query(None, description="Начало периода"),
-    date_to: Optional[datetime] = Query(None, description="Конец периода"),
+    user_id: str | None = Query(None, description="Фильтр по пользователю"),
+    flow_id: str | None = Query(None, description="Фильтр по flow"),
+    branch_id: str | None = Query(None, description="Фильтр по ветке (branch_id)"),
+    date_from: datetime | None = Query(None, description="Начало периода"),
+    date_to: datetime | None = Query(None, description="Конец периода"),
     limit: int = Query(50, ge=1, le=200, description="Максимум записей"),
     offset: int = Query(0, ge=0, description="Смещение"),
 ) -> OffsetPage[SessionResponse]:

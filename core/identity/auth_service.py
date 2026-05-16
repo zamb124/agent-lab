@@ -150,7 +150,7 @@ class AuthService:
             result_data = json.loads(cached_result)
 
             user = await self._get_user(result_data["user_id"])
-            session = await self._get_session(result_data["session_id"])
+            session = await self.get_session(result_data["session_id"])
 
             if user and session:
                 cached_token = result_data.get("token")
@@ -258,7 +258,7 @@ class AuthService:
 
     async def get_user_by_session(self, session_id: str) -> Optional[User]:
         """Получает пользователя по ID сессии"""
-        session = await self._get_session(session_id)
+        session = await self.get_session(session_id)
         if not session:
             return None
 
@@ -376,7 +376,7 @@ class AuthService:
 
     async def _find_user_by_provider_id(self, provider_user_id: str) -> Optional[str]:
         """Находит user_id по provider_user_id через индекс JSONB"""
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             query = text("""
                 SELECT substring(key from 16) as user_id
                 FROM users
@@ -487,11 +487,10 @@ class AuthService:
         logger.info(f"Создана сессия {session_id} для пользователя {user.user_id}")
         return session
 
-    async def _get_session(self, session_id: str) -> Optional[AuthSession]:
+    async def get_session(self, session_id: str) -> Optional[AuthSession]:
         """Получает сессию по ID"""
         return await self._auth_session_repository.get(session_id)
 
     async def _delete_session(self, session_id: str):
         """Удаляет сессию"""
         await self._auth_session_repository.delete(session_id)
-

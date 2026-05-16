@@ -196,7 +196,7 @@ async def transcribe_audio(
     if record is None:
         raise ValueError(f"transcribe_audio: файл {file_id!r} не найден.")
 
-    s3 = await container.file_processor._get_s3_client()
+    s3 = await container.file_processor.get_s3_client()
     audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
 
     from apps.flows.src.services.flow_speech_resolve import (

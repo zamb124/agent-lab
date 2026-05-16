@@ -4,9 +4,8 @@ Saga Pattern для каскадных операций через PostgreSQL (c
 Обеспечивает транзакционность при работе с несколькими таблицами.
 """
 
-from dataclasses import dataclass
-from typing import Any
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 from core.logging import get_logger
 
@@ -25,10 +24,11 @@ class SagaStep:
         data: Данные для компенсации
         executed: Флаг выполнения
     """
+
     name: str
-    execute_fn: Callable[[], Awaitable[Any]] | None
-    compensate_fn: Callable[[], Awaitable[Any]] | None
-    data: Any = None
+    execute_fn: Callable[[], Awaitable[None]] | None
+    compensate_fn: Callable[[], Awaitable[None]] | None
+    data: object | None = None
     executed: bool = False
 
 
@@ -44,10 +44,10 @@ class EntityDeletionSaga:
     При ошибке - откат в обратном порядке.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._steps: list[SagaStep] = []
 
-    def add_step(self, step: SagaStep):
+    def add_step(self, step: SagaStep) -> None:
         """Добавляет шаг в Saga"""
         self._steps.append(step)
 
@@ -74,7 +74,7 @@ class EntityDeletionSaga:
             await self._compensate()
             raise EntityDeletionError(f"Cascade delete failed: {e}") from e
 
-    async def _compensate(self):
+    async def _compensate(self) -> None:
         """Откатывает выполненные шаги в обратном порядке"""
         for step in reversed(self._steps):
             if step.executed and step.compensate_fn:
@@ -83,12 +83,11 @@ class EntityDeletionSaga:
                     await step.compensate_fn()
                 except Exception as comp_error:
                     logger.error(
-                        f"Compensation failed for {step.name}: {comp_error}. "
-                        f"Manual intervention may be required!"
+                        f"Compensation failed for {step.name}: {comp_error}. Manual intervention may be required!"
                     )
 
 
 class EntityDeletionError(Exception):
     """Ошибка каскадного удаления entity"""
-    pass
 
+    pass

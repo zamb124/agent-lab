@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -34,7 +34,7 @@ class ScheduledTaskRepository:
         Returns:
             ID задачи
         """
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = (
                 insert(ScheduledTasks)
                 .values(
@@ -76,9 +76,9 @@ class ScheduledTaskRepository:
             await session.commit()
             return task.id
 
-    async def get_by_id(self, task_id: str) -> Optional[ScheduledTaskInfo]:
+    async def get_by_id(self, task_id: str) -> ScheduledTaskInfo | None:
         """Получает задачу по ID."""
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(ScheduledTasks).where(ScheduledTasks.id == task_id)
             result = await session.execute(stmt)
             row = result.scalar_one_or_none()
@@ -89,10 +89,10 @@ class ScheduledTaskRepository:
             return self._row_to_task_info(row)
 
     async def get_by_session(
-        self, session_id: str, status: Optional[ScheduledTaskStatus] = None
-    ) -> List[ScheduledTaskInfo]:
+        self, session_id: str, status: ScheduledTaskStatus | None = None
+    ) -> list[ScheduledTaskInfo]:
         """Получает задачи по session_id."""
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(ScheduledTasks).where(ScheduledTasks.session_id == session_id)
 
             if status:
@@ -105,10 +105,10 @@ class ScheduledTaskRepository:
             return [self._row_to_task_info(row) for row in rows]
 
     async def get_by_flow(
-        self, flow_id: str, status: Optional[ScheduledTaskStatus] = None
-    ) -> List[ScheduledTaskInfo]:
+        self, flow_id: str, status: ScheduledTaskStatus | None = None
+    ) -> list[ScheduledTaskInfo]:
         """Получает задачи по flow_id."""
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(ScheduledTasks).where(ScheduledTasks.flow_id == flow_id)
 
             if status:
@@ -124,12 +124,12 @@ class ScheduledTaskRepository:
         self,
         task_id: str,
         status: ScheduledTaskStatus,
-        executed_at: Optional[datetime] = None,
-        next_run: Optional[datetime] = None,
-        error_message: Optional[str] = None,
+        executed_at: datetime | None = None,
+        next_run: datetime | None = None,
+        error_message: str | None = None,
     ) -> bool:
         """Обновляет статус задачи."""
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             values: dict[str, Any] = {"status": status.value}
 
             if executed_at:
@@ -148,7 +148,7 @@ class ScheduledTaskRepository:
 
     async def delete(self, task_id: str) -> bool:
         """Удаляет задачу."""
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = delete(ScheduledTasks).where(ScheduledTasks.id == task_id)
             result = await session.execute(stmt)
             await session.commit()

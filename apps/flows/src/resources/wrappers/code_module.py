@@ -4,7 +4,7 @@ CodeModule - wrapper для code ресурса.
 Предоставляет доступ к функциям и классам из inline кода.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 
 class CodeModule:
@@ -22,7 +22,7 @@ class CodeModule:
         phone = helpers.format_phone("9161234567")
     """
 
-    def __init__(self, namespace: Dict[str, Any], source_code: str):
+    def __init__(self, namespace: dict[str, Any], source_code: str):
         """
         Args:
             namespace: Namespace с выполненным кодом

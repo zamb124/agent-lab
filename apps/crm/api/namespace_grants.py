@@ -3,6 +3,7 @@ API для управления грантами доступа к namespaces.
 """
 
 import asyncio
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -29,9 +30,7 @@ async def make_namespace_public(
         raise HTTPException(status_code=401, detail="Authentication required")
 
     grant = await container.access_grant_service.grant_namespace_public(
-        namespace=namespace,
-        company_id=ctx.active_company.company_id,
-        created_by=ctx.user.user_id
+        namespace=namespace, company_id=ctx.active_company.company_id, created_by=ctx.user.user_id
     )
 
     return AccessGrantResponse.model_validate(grant)
@@ -53,7 +52,7 @@ async def grant_to_user(
         company_id=ctx.active_company.company_id,
         target_user_id=request.user_id,
         role=request.role,
-        created_by=ctx.user.user_id
+        created_by=ctx.user.user_id,
     )
 
     return AccessGrantResponse.model_validate(grant)
@@ -75,7 +74,7 @@ async def grant_to_company(
         company_id=ctx.active_company.company_id,
         target_company_id=request.company_id,
         role=request.role,
-        created_by=ctx.user.user_id
+        created_by=ctx.user.user_id,
     )
 
     return AccessGrantResponse.model_validate(grant)
@@ -85,8 +84,8 @@ async def grant_to_company(
 async def list_grants(
     namespace: str,
     container: ContainerDep,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[AccessGrantResponse]:
     ctx = get_context()
     if not ctx or not ctx.active_company:
@@ -98,5 +97,5 @@ async def list_grants(
         container.access_grant_service.count_grants("namespace", namespace, company_id),
     )
     all_items = [AccessGrantResponse.model_validate(g) for g in grants]
-    page = all_items[offset:offset + limit]
+    page = all_items[offset : offset + limit]
     return OffsetPage[AccessGrantResponse](items=page, total=total, limit=limit, offset=offset)

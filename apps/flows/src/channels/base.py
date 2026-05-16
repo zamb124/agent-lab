@@ -11,7 +11,8 @@ import json
 import importlib
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+from typing import Any
+from collections.abc import AsyncGenerator
 from uuid import UUID
 
 from a2a.types import (
@@ -65,7 +66,7 @@ logger = get_logger(__name__)
 
 def effective_stream_task_id_for_session(
     params_task_id: str,
-    saved_state: Optional[ExecutionState],
+    saved_state: ExecutionState | None,
 ) -> str:
     """
     Task id для Pub/Sub `stream:{id}`: совпадает с тем, что в prepare, если
@@ -108,8 +109,8 @@ class BaseChannel(ABC):
     def __init__(
         self,
         flow_id: str,
-        context: Optional[Context] = None,
-        flow_config: Optional[Any] = None,
+        context: Context | None = None,
+        flow_config: Any | None = None,
         *,
         container: FlowRuntimeContainer,
     ):
@@ -124,8 +125,8 @@ class BaseChannel(ABC):
     async def send_to_user(
         self,
         content: str,
-        buttons: Optional[List[str]] = None,
-        attachments: Optional[List[Any]] = None,
+        buttons: list[str] | None = None,
+        attachments: list[Any] | None = None,
     ) -> None:
         """
         Отправляет сообщение пользователю через канал.
@@ -143,7 +144,7 @@ class BaseChannel(ABC):
         """Генерирует session_id из flow_id и context_id."""
         return f"{self.flow_id}:{context_id}"
 
-    def _generate_ids(self, message: Optional[Message] = None) -> tuple[str, str]:
+    def _generate_ids(self, message: Message | None = None) -> tuple[str, str]:
         """
         Генерирует task_id и context_id.
 
@@ -158,7 +159,7 @@ class BaseChannel(ABC):
             context_id = str(uuid.uuid4())
         return task_id, context_id
 
-    def _get_user_groups_from_context(self, context: Any) -> List[str]:
+    def _get_user_groups_from_context(self, context: Any) -> list[str]:
         """
         Извлекает группы пользователя из контекста.
 
@@ -183,8 +184,8 @@ class BaseChannel(ABC):
         return getattr(context, "user_groups", []) or []
 
     async def _normalize_request_variables(
-        self, request_variables: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, request_variables: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Нормализует metadata.variables от клиента перед merge в runtime_flow.variables.
 
@@ -192,12 +193,12 @@ class BaseChannel(ABC):
         - резолвим только верхнеуровневые строковые ссылки "@var:*";
         - вложенные структуры считаем данными UI-контекста и не интерпретируем как переменные.
         """
-        normalized: Dict[str, Any] = dict(request_variables)
+        normalized: dict[str, Any] = dict(request_variables)
         if "target_branch_id" not in normalized and "branch_id" in normalized:
             normalized["target_branch_id"] = normalized["branch_id"]
 
         container = self.container
-        resolved: Dict[str, Any] = {}
+        resolved: dict[str, Any] = {}
         for key, value in normalized.items():
             raw_value = value["value"] if isinstance(value, dict) and "value" in value else value
             if isinstance(raw_value, str) and raw_value.startswith("@var:"):
@@ -208,7 +209,7 @@ class BaseChannel(ABC):
 
     async def check_permissions(
         self,
-        user_groups: List[str],
+        user_groups: list[str],
         branch_id: str = "default",
     ) -> None:
         """
@@ -255,7 +256,7 @@ class BaseChannel(ABC):
                     PermissionDeniedA2AError.for_branch(branch_id, self.flow_id, required)
                 )
 
-    async def _get_state(self, session_id: str) -> Optional[ExecutionState]:
+    async def _get_state(self, session_id: str) -> ExecutionState | None:
         """Получает state из StateManager."""
         container = self.container
         return await container.state_manager.get_state(session_id)
@@ -265,7 +266,7 @@ class BaseChannel(ABC):
         container = self.container
         await container.state_manager.save_state(session_id, state)
 
-    async def _resolve_session_id_for_a2a_lookup(self, lookup_id: str) -> Optional[str]:
+    async def _resolve_session_id_for_a2a_lookup(self, lookup_id: str) -> str | None:
         """А2A ``tasks/get`` / ``tasks/cancel`` передают ``id`` (= task_id из стрима или context_id).
 
         Хранение state — по ``flow_id:context_id``; ``task_id`` может отличаться от ``context_id``,
@@ -281,7 +282,7 @@ class BaseChannel(ABC):
             self.flow_id, lookup_id
         )
 
-    async def _resolve_active_takeover_task(self, correlation_id: "UUID") -> Optional[str]:
+    async def _resolve_active_takeover_task(self, correlation_id: "UUID") -> str | None:
         """Проверяет, есть ли активная (CLAIMED/USER_DIALOG) задача оператора по correlation_id.
 
         Возвращает operator_task_id или None (задача уже завершена / не найдена).
@@ -308,12 +309,12 @@ class BaseChannel(ABC):
     async def _prepare_task_params(
         self,
         content: str,
-        context_id: Optional[str] = None,
-        task_id: Optional[str] = None,
-        message: Optional[Message] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        files_data: Optional[List[Dict[str, Any]]] = None,
-        user_id: Optional[str] = None,
+        context_id: str | None = None,
+        task_id: str | None = None,
+        message: Message | None = None,
+        metadata: dict[str, Any] | None = None,
+        files_data: list[dict[str, Any]] | None = None,
+        user_id: str | None = None,
     ) -> PreparedTaskParams:
         """
         Подготовка общих параметров для process_task.
@@ -449,7 +450,7 @@ class BaseChannel(ABC):
         self,
         params: PreparedTaskParams,
         state: ExecutionState,
-        flow_config: Optional[FlowConfig],
+        flow_config: FlowConfig | None,
     ) -> None:
         if not params.metadata:
             return
@@ -473,7 +474,7 @@ class BaseChannel(ABC):
         if not actions:
             return
         triggers_meta = params.metadata.get("triggers")
-        original_payload: Dict[str, Any] = {}
+        original_payload: dict[str, Any] = {}
         if isinstance(triggers_meta, dict):
             raw = triggers_meta.get(trigger_id)
             if isinstance(raw, dict):
@@ -492,7 +493,7 @@ class BaseChannel(ABC):
             original_payload=original_payload,
         )
 
-    async def process_task(self, params: PreparedTaskParams) -> Dict[str, Any]:
+    async def process_task(self, params: PreparedTaskParams) -> dict[str, Any]:
         """
         Обрабатывает запрос через агента.
 
@@ -625,7 +626,7 @@ class BaseChannel(ABC):
 
             request_triggers = params.metadata.get("triggers") if params.metadata else None
             if request_triggers:
-                merged: Dict[str, TriggerRuntimeSnapshot] = dict(state.triggers)
+                merged: dict[str, TriggerRuntimeSnapshot] = dict(state.triggers)
                 for tid, snap in request_triggers.items():
                     if isinstance(snap, TriggerRuntimeSnapshot):
                         merged[tid] = snap
@@ -808,7 +809,7 @@ class BaseChannel(ABC):
 
     # === Общая реализация on_get_task ===
 
-    async def _get_task_from_state(self, lookup_id: str) -> Optional[Task]:
+    async def _get_task_from_state(self, lookup_id: str) -> Task | None:
         """
         Получает Task из state.
 
@@ -838,7 +839,7 @@ class BaseChannel(ABC):
             task_state = TaskState.working
             response = ""
 
-        messages: List[Message] = list(state.messages)
+        messages: list[Message] = list(state.messages)
 
         task_id = state.task_id
 
@@ -849,7 +850,7 @@ class BaseChannel(ABC):
             history=messages if messages else None,
         )
 
-    async def _cancel_task_in_state(self, lookup_id: str) -> Optional[Task]:
+    async def _cancel_task_in_state(self, lookup_id: str) -> Task | None:
         """Отменяет Task в state (``id`` из ``tasks/cancel`` = task_id или context_id)."""
         session_id = await self._resolve_session_id_for_a2a_lookup(lookup_id)
 
@@ -878,7 +879,7 @@ class BaseChannel(ABC):
     @abstractmethod
     async def on_message_send(
         self, params: MessageSendParams, context: Any = None
-    ) -> Union[Task, Message]:
+    ) -> Task | Message:
         """
         Отправка сообщения (синхронно).
 
@@ -889,7 +890,7 @@ class BaseChannel(ABC):
     @abstractmethod
     def on_message_stream(
         self, params: MessageSendParams, context: Any = None
-    ) -> AsyncGenerator[Union[Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
+    ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """
         Отправка сообщения (streaming).
 
@@ -898,19 +899,19 @@ class BaseChannel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def on_get_task(self, params: TaskQueryParams, context: Any = None) -> Optional[Task]:
+    async def on_get_task(self, params: TaskQueryParams, context: Any = None) -> Task | None:
         """Получение задачи по ID."""
         pass
 
     @abstractmethod
-    async def on_cancel_task(self, params: TaskIdParams, context: Any = None) -> Optional[Task]:
+    async def on_cancel_task(self, params: TaskIdParams, context: Any = None) -> Task | None:
         """Отмена задачи."""
         pass
 
     @abstractmethod
     def on_resubscribe_to_task(
         self, params: TaskIdParams, context: Any = None
-    ) -> AsyncGenerator[Union[Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent], None]:
+    ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """Переподписка на события задачи."""
         raise NotImplementedError
 
@@ -924,13 +925,13 @@ class BaseChannel(ABC):
 
     async def on_get_task_push_notification_config(
         self, params: Any, context: Any = None
-    ) -> Optional[TaskPushNotificationConfig]:
+    ) -> TaskPushNotificationConfig | None:
         """Получение конфигурации push notification."""
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
 
     async def on_list_task_push_notification_config(
         self, params: Any, context: Any = None
-    ) -> List[TaskPushNotificationConfig]:
+    ) -> list[TaskPushNotificationConfig]:
         """Список конфигураций push notification."""
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
 
@@ -948,7 +949,7 @@ class BaseChannel(ABC):
 
     # === Branches CRUD ===
 
-    async def list_branches(self) -> List[Dict[str, Any]]:
+    async def list_branches(self) -> list[dict[str, Any]]:
         """Получить список веток (branches)."""
         container = self.container
         branches_map = await container.flow_factory.get_branches(self.flow_id)
@@ -962,7 +963,7 @@ class BaseChannel(ABC):
             for branch_id, branch_cfg in branches_map.items()
         ]
 
-    async def get_branch(self, branch_id: str) -> Optional[Dict[str, Any]]:
+    async def get_branch(self, branch_id: str) -> dict[str, Any] | None:
         """Получить ветку по ID."""
         container = self.container
         config = await container.flow_repository.get(self.flow_id)
@@ -1005,7 +1006,7 @@ class BaseChannel(ABC):
             "branch_body": branch_body,
         }
 
-    async def create_branch(self, branch_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def create_branch(self, branch_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """Создать новую ветку (branch)."""
         container = self.container
         config = await container.flow_repository.get(self.flow_id)
@@ -1074,7 +1075,7 @@ class BaseChannel(ABC):
         config.branches[branch_id] = new_branch_cfg
 
         # Применяем ветку к текущему конфигу и валидируем
-        effective = container.flow_factory._apply_branch(config, branch_id)
+        effective = container.flow_factory.apply_branch(config, branch_id)
 
         validator = FlowValidator(
             flow_repository=container.flow_repository,
@@ -1114,7 +1115,7 @@ class BaseChannel(ABC):
             "branch_id": branch_id,
         }
 
-    async def update_branch(self, branch_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_branch(self, branch_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """Обновить существующую ветку (branch)."""
         container = self.container
         config = await container.flow_repository.get(self.flow_id)
@@ -1204,7 +1205,7 @@ class BaseChannel(ABC):
         config.branches[branch_id] = updated_branch_cfg
 
         # Применяем ветку к текущему конфигу и валидируем
-        effective = container.flow_factory._apply_branch(config, branch_id)
+        effective = container.flow_factory.apply_branch(config, branch_id)
 
         validator = FlowValidator(
             flow_repository=container.flow_repository,
@@ -1244,7 +1245,7 @@ class BaseChannel(ABC):
             "branch_id": branch_id,
         }
 
-    async def delete_branch(self, branch_id: str) -> Dict[str, Any]:
+    async def delete_branch(self, branch_id: str) -> dict[str, Any]:
         """Удалить ветку (branch)."""
         container = self.container
         config = await container.flow_repository.get(self.flow_id)
@@ -1265,14 +1266,14 @@ class BaseChannel(ABC):
 
     # === Tools ===
 
-    async def get_branch_tools(self, branch_id: str) -> List[Dict[str, Any]]:
+    async def get_branch_tools(self, branch_id: str) -> list[dict[str, Any]]:
         """Получить список tools для ветки."""
         container = self.container
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             return []
 
-        effective = container.flow_factory._apply_branch(config, branch_id)
+        effective = container.flow_factory.apply_branch(config, branch_id)
         # Graph flow если есть реальные переходы между нодами (не только to: null)
         real_edges = [
             e
@@ -1457,7 +1458,7 @@ class BaseChannel(ABC):
 
     # === Schema ===
 
-    async def get_branch_schema(self) -> Dict[str, Any]:
+    async def get_branch_schema(self) -> dict[str, Any]:
         """Получить JSON Schema для создания ветки."""
         container = self.container
         config = await container.flow_repository.get(self.flow_id)
@@ -1475,7 +1476,7 @@ class BaseChannel(ABC):
 
     # === A2A AgentCard (спека) ===
 
-    async def get_agent_card(self, base_url: str) -> Dict[str, Any]:
+    async def get_agent_card(self, base_url: str) -> dict[str, Any]:
         """Собрать AgentCard (A2A) для этого flow_id."""
         container = self.container
         config = self._flow_config or await container.flow_repository.get(self.flow_id)
@@ -1587,10 +1588,10 @@ class BaseChannelHandler(ABC):
         self,
         recipient: str,
         text: str,
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
+        config: dict[str, Any],
+        variables: dict[str, Any],
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Отправляет текстовое сообщение.
 
@@ -1610,12 +1611,12 @@ class BaseChannelHandler(ABC):
     async def send_photo(
         self,
         recipient: str,
-        photo: Union[str, bytes],
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
-        caption: Optional[str] = None,
+        photo: str | bytes,
+        config: dict[str, Any],
+        variables: dict[str, Any],
+        caption: str | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Отправляет фото.
 
@@ -1632,13 +1633,13 @@ class BaseChannelHandler(ABC):
     async def send_document(
         self,
         recipient: str,
-        document: Union[str, bytes],
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
-        caption: Optional[str] = None,
-        filename: Optional[str] = None,
+        document: str | bytes,
+        config: dict[str, Any],
+        variables: dict[str, Any],
+        caption: str | None = None,
+        filename: str | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Отправляет документ/файл.
 
@@ -1655,10 +1656,10 @@ class BaseChannelHandler(ABC):
     async def execute_action(
         self,
         action: str,
-        params: Dict[str, Any],
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        params: dict[str, Any],
+        config: dict[str, Any],
+        variables: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Универсальный диспетчер действий.
 
@@ -1688,7 +1689,7 @@ class BaseChannelHandler(ABC):
 
         return await method(config=config, variables=variables, **params)
 
-    def _resolve_value(self, value: Any, variables: Dict[str, Any]) -> Any:
+    def _resolve_value(self, value: Any, variables: dict[str, Any]) -> Any:
         """Резолвит @var: значения."""
         if not isinstance(value, str):
             return value

@@ -6,7 +6,7 @@ BaseTriggerHandler - абстрактный базовый класс для о�
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.config import get_settings
 from apps.flows.src.container_contracts import FlowRuntimeContainer
@@ -90,8 +90,8 @@ class BaseTriggerHandler(ABC):
         self,
         flow_id: str,
         trigger_id: str,
-        payload: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Обрабатывает входящее событие триггера.
 

@@ -6,7 +6,7 @@ CRUD для триггеров + webhook endpoints для приема вход�
 
 import json
 import secrets
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -42,9 +42,9 @@ _SENSITIVE_TRIGGER_CONFIG_KEYS = frozenset(
 _REDACTED_CONFIG_SECRET = "(redacted)"
 
 
-def _public_trigger_config(config: Dict[str, Any]) -> Dict[str, Any]:
+def _public_trigger_config(config: dict[str, Any]) -> dict[str, Any]:
     """Убирает служебные ключи и скрывает секреты в ответах API."""
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     for k, v in config.items():
         if k.startswith("_"):
             continue
@@ -55,7 +55,7 @@ def _public_trigger_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _webhook_secret_from_request(request: Request) -> Optional[str]:
+def _webhook_secret_from_request(request: Request) -> str | None:
     for header in ("X-Trigger-Secret", "X-Webhook-Secret"):
         v = request.headers.get(header)
         if v:
@@ -73,20 +73,20 @@ class TriggerCreateRequest(BaseModel):
     name: str = Field(..., description="Название")
     type: TriggerType = Field(..., description="Тип триггера")
     enabled: bool = Field(default=True, description="Активен")
-    config: Dict[str, Any] = Field(default_factory=dict, description="Конфигурация")
-    output_mapping: Dict[str, str] = Field(
+    config: dict[str, Any] = Field(default_factory=dict, description="Конфигурация")
+    output_mapping: dict[str, str] = Field(
         default_factory=dict,
         description="Маппинг payload -> state (state.path -> payload.path)",
     )
-    input_mapping: Dict[str, str] = Field(
+    input_mapping: dict[str, str] = Field(
         default_factory=dict,
         description="DEPRECATED: используйте output_mapping",
     )
-    output_actions: List[OutputAction] = Field(
+    output_actions: list[OutputAction] = Field(
         default_factory=list,
         description="Действия отправки ответа в канал после агента",
     )
-    post_flow_output_enabled: Optional[bool] = Field(
+    post_flow_output_enabled: bool | None = Field(
         default=None,
         description="Включить рассылку после flow; None — дефолт по типу триггера",
     )
@@ -98,14 +98,14 @@ class TriggerCreateRequest(BaseModel):
 
 class TriggerUpdateRequest(BaseModel):
     """Запрос на обновление триггера."""
-    name: Optional[str] = None
-    enabled: Optional[bool] = None
-    config: Optional[Dict[str, Any]] = None
-    output_mapping: Optional[Dict[str, str]] = None
-    input_mapping: Optional[Dict[str, str]] = None
-    output_actions: Optional[List[OutputAction]] = None
-    post_flow_output_enabled: Optional[bool] = None
-    branch_id: Optional[str] = None
+    name: str | None = None
+    enabled: bool | None = None
+    config: dict[str, Any] | None = None
+    output_mapping: dict[str, str] | None = None
+    input_mapping: dict[str, str] | None = None
+    output_actions: list[OutputAction] | None = None
+    post_flow_output_enabled: bool | None = None
+    branch_id: str | None = None
 
 
 class TriggerResponse(BaseModel):
@@ -114,22 +114,22 @@ class TriggerResponse(BaseModel):
     name: str
     type: TriggerType
     enabled: bool
-    config: Dict[str, Any]
-    output_mapping: Dict[str, str]
-    input_mapping: Dict[str, str]
-    output_actions: List[OutputAction]
+    config: dict[str, Any]
+    output_mapping: dict[str, str]
+    input_mapping: dict[str, str]
+    output_actions: list[OutputAction]
     post_flow_output_enabled: bool
     branch_id: str
-    webhook_url: Optional[str] = None
+    webhook_url: str | None = None
     status: TriggerStatus
-    last_error: Optional[str] = None
+    last_error: str | None = None
 
 
 class TriggerVerifyRequest(BaseModel):
     """Проверка чернового конфига триггера (без сохранения)."""
     type: TriggerType = Field(..., description="Тип триггера")
-    config: Dict[str, Any] = Field(default_factory=dict, description="Конфиг как в trigger.config")
-    trigger_id: Optional[str] = Field(
+    config: dict[str, Any] = Field(default_factory=dict, description="Конфиг как в trigger.config")
+    trigger_id: str | None = Field(
         default=None,
         description="Черновой ID триггера (для подсказки пути webhook)",
     )
@@ -142,9 +142,9 @@ class TriggerVerifyRequest(BaseModel):
 class TriggerVerifyResponse(BaseModel):
     """Результат проверки (getMe, cron, схема пути)."""
     ok: bool
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    error_code: str | None = None
+    error_message: str | None = None
 
 
 # CRUD endpoints
@@ -220,7 +220,7 @@ async def verify_trigger_draft(
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
 
-    cfg: Dict[str, Any] = dict(request.config)
+    cfg: dict[str, Any] = dict(request.config)
     if request.type == TriggerType.TELEGRAM:
         raw_token = cfg.get("bot_token")
         if isinstance(raw_token, str) and raw_token == _REDACTED_CONFIG_SECRET:
@@ -482,7 +482,7 @@ async def reregister_flow_trigger(
 
 
 @router.delete("/flows/{flow_id}/triggers/{trigger_id}")
-async def delete_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> Dict[str, str]:
+async def delete_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> dict[str, str]:
     """Удалить триггер."""
     old_config = await container.flow_repository.get(flow_id)
 
@@ -521,8 +521,8 @@ async def telegram_webhook(
     trigger_id: str,
     request: Request,
     container: ContainerDep,
-    x_telegram_bot_api_secret_token: Optional[str] = Header(None),
-) -> Dict[str, str]:
+    x_telegram_bot_api_secret_token: str | None = Header(None),
+) -> dict[str, str]:
     """
     Webhook endpoint для Telegram Bot API.
 
@@ -627,7 +627,7 @@ async def generic_webhook(
     trigger_id: str,
     request: Request,
     container: ContainerDep,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Generic webhook endpoint для внешних сервисов.
     """
@@ -701,9 +701,9 @@ async def generic_webhook(
 async def test_trigger(
     flow_id: str,
     trigger_id: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     container: ContainerDep,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Тестирует триггер с заданным payload.
 

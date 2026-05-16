@@ -4,7 +4,7 @@ API endpoints для MCP серверов.
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -41,19 +41,19 @@ class MCPServerCreateRequest(BaseModel):
         default=MCPTransportType.HTTP,
         description="Тип транспорта"
     )
-    headers: Dict[str, str] = Field(default_factory=dict, description="HTTP headers")
-    description: Optional[str] = Field(default=None, description="Описание")
+    headers: dict[str, str] = Field(default_factory=dict, description="HTTP headers")
+    description: str | None = Field(default=None, description="Описание")
 
 
 class MCPServerUpdateRequest(BaseModel):
     """Запрос на обновление MCP сервера."""
 
-    name: Optional[str] = None
-    url: Optional[str] = None
-    transport_type: Optional[str] = None
-    headers: Optional[Dict[str, str]] = None
-    is_active: Optional[bool] = None
-    description: Optional[str] = None
+    name: str | None = None
+    url: str | None = None
+    transport_type: str | None = None
+    headers: dict[str, str] | None = None
+    is_active: bool | None = None
+    description: str | None = None
 
 
 class MCPServerResponse(BaseModel):
@@ -63,19 +63,19 @@ class MCPServerResponse(BaseModel):
     name: str
     url: str
     transport_type: str
-    headers: Dict[str, str]
+    headers: dict[str, str]
     is_active: bool
-    cached_tools: List[str]
-    last_sync_at: Optional[datetime]
-    description: Optional[str]
+    cached_tools: list[str]
+    last_sync_at: datetime | None
+    description: str | None
 
 
 class MCPToolResponse(BaseModel):
     """Информация о tool."""
 
     name: str
-    description: Optional[str]
-    input_schema: Optional[Dict[str, Any]]
+    description: str | None
+    input_schema: dict[str, Any] | None
 
 
 class MCPSyncResponse(BaseModel):
@@ -83,7 +83,7 @@ class MCPSyncResponse(BaseModel):
 
     success: bool
     tools_count: int
-    tools: List[MCPToolResponse]
+    tools: list[MCPToolResponse]
 
 
 class MCPTestResponse(BaseModel):
@@ -198,7 +198,7 @@ async def update_server(
 async def delete_server(
     server_id: str,
     container: ContainerDep,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Удаляет MCP сервер."""
     server = await container.mcp_server_repository.get(server_id)
     if not server:
@@ -265,7 +265,7 @@ async def test_server_connection(
         raise HTTPException(status_code=404, detail="Server not found")
 
     # Переменные нужны только если в headers есть @var: ссылки
-    variables: Dict[str, Any] = {}
+    variables: dict[str, Any] = {}
     has_var_refs = any("@var:" in str(v) for v in server.headers.values())
     if has_var_refs:
         variables = await container.variables_service.get_all_resolved_vars()

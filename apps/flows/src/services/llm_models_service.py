@@ -1,7 +1,6 @@
 """Сервис синхронизации LLM моделей от провайдеров."""
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
 
 import httpx
 
@@ -35,11 +34,11 @@ class LLMModelsService:
     def __init__(self, repository: LLMModelRepository, scheduler_client: SchedulerClient):
         self._repository = repository
         self._scheduler_client = scheduler_client
-        self._sync_schedule_id: Optional[str] = None
-        self._openrouter_free_schedule_id: Optional[str] = None
+        self._sync_schedule_id: str | None = None
+        self._openrouter_free_schedule_id: str | None = None
         self._sync_interval_seconds: int = 60
 
-    async def _fetch_bothub_models(self) -> List[str]:
+    async def _fetch_bothub_models(self) -> list[str]:
         """
         Запрос моделей от BotHub API.
         API: https://bothub.chat/api/v2/model/list?children=1
@@ -80,7 +79,7 @@ class LLMModelsService:
         logger.info(f"BotHub: получено {len(models)} моделей")
         return models
 
-    async def _fetch_openrouter_models(self) -> List[str]:
+    async def _fetch_openrouter_models(self) -> list[str]:
         """Запрос моделей от OpenRouter API."""
         settings = get_settings()
         cfg = settings.llm.openrouter
@@ -113,7 +112,7 @@ class LLMModelsService:
         logger.info(f"OpenRouter: получено {len(models)} моделей")
         return models
 
-    async def _fetch_openai_models(self) -> List[str]:
+    async def _fetch_openai_models(self) -> list[str]:
         """Запрос моделей от OpenAI API."""
         settings = get_settings()
         cfg = settings.llm.openai
@@ -143,7 +142,7 @@ class LLMModelsService:
         logger.info(f"OpenAI: получено {len(models)} моделей")
         return models
 
-    async def _fetch_yandex_models(self) -> List[str]:
+    async def _fetch_yandex_models(self) -> list[str]:
         """Запрос моделей от Yandex OpenAI-совместимого API."""
         settings = get_settings()
         cfg = settings.llm.yandex
@@ -183,7 +182,7 @@ class LLMModelsService:
         logger.info(f"Yandex LLM: получено {len(models)} моделей")
         return models
 
-    async def _fetch_provider_litserve_models(self) -> List[str]:
+    async def _fetch_provider_litserve_models(self) -> list[str]:
         """Запрос моделей от provider_litserve OpenAI-совместимого API."""
         settings = get_settings()
         provider_cfg = settings.provider_litserve
@@ -198,7 +197,7 @@ class LLMModelsService:
             logger.info(f"provider_litserve: получено {len(models)} моделей")
             return models
 
-    async def fetch_models_by_provider(self, provider: str) -> List[str]:
+    async def fetch_models_by_provider(self, provider: str) -> list[str]:
         """Запрос моделей от указанного провайдера."""
         if provider == "bothub":
             return await self._fetch_bothub_models()
@@ -214,7 +213,7 @@ class LLMModelsService:
             logger.warning(f"Неизвестный провайдер: {provider}")
             return []
 
-    async def fetch_models(self) -> List[str]:
+    async def fetch_models(self) -> list[str]:
         """Запрос моделей от текущего провайдера из конфига."""
         settings = get_settings()
         return await self.fetch_models_by_provider(settings.llm.provider)
@@ -246,7 +245,7 @@ class LLMModelsService:
         settings = get_settings()
         return await self.sync_models_by_provider(settings.llm.provider)
 
-    async def sync_all_providers(self) -> Dict[str, int]:
+    async def sync_all_providers(self) -> dict[str, int]:
         """Синхронизация моделей от ВСЕХ настроенных провайдеров."""
         settings = get_settings()
         results = {}
@@ -275,18 +274,18 @@ class LLMModelsService:
         logger.info(f"Синхронизировано {total} моделей от всех провайдеров: {results}")
         return results
 
-    async def get_models(self) -> List[str]:
+    async def get_models(self) -> list[str]:
         """Возвращает список id моделей текущего провайдера из БД."""
         settings = get_settings()
         return await self.get_models_by_provider(settings.llm.provider)
 
-    async def get_models_by_provider(self, provider: str) -> List[str]:
+    async def get_models_by_provider(self, provider: str) -> list[str]:
         """Возвращает список id моделей указанного провайдера из БД."""
         models = await self._repository.list_by_provider(provider)
         return [m.model_id for m in models]
 
     @staticmethod
-    def get_configured_providers() -> List[str]:
+    def get_configured_providers() -> list[str]:
         """Список реально настроенных LLM-провайдеров из conf.json.
 
         Провайдер считается настроенным, если в `settings.llm.<provider>` присутствует
@@ -294,7 +293,7 @@ class LLMModelsService:
         либо если для provider_litserve задан base_url.
         """
         settings = get_settings()
-        providers: List[str] = []
+        providers: list[str] = []
         if settings.llm.openai and settings.llm.openai.api_key:
             providers.append("openai")
         if settings.llm.openrouter and settings.llm.openrouter.api_key:

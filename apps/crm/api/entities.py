@@ -378,7 +378,7 @@ async def export_entities(
 
     from fastapi.responses import StreamingResponse
 
-    filters_arg = None
+    filters_arg: JsonObject | None = None
     filter_field_types: dict[str, str] = {}
     if status:
         filters_arg = {"field": "status", "op": "$eq", "value": status}
@@ -893,13 +893,10 @@ async def voice_input(
         raise HTTPException(status_code=400, detail="Пустой аудиофайл.")
 
     client = ServiceClient()
-    raw_data = cast(
-        object,
-        await client.post(
-            "voice",
-            "/voice/api/v1/transcribe",
-            files={"file": (file_name, audio_bytes, mime_type)},
-        ),
+    raw_data = await client.post(
+        "voice",
+        "/voice/api/v1/transcribe",
+        files={"file": (file_name, audio_bytes, mime_type)},
     )
     if not isinstance(raw_data, dict):
         raise HTTPException(status_code=502, detail="Invalid voice service response")

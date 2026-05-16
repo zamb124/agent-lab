@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
 
 from apps.crm.integrations.protocol import NamespaceIntegrationConnector
+from apps.crm.types import JsonObject
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
 
@@ -29,9 +29,7 @@ class IntegrationRegistry:
     def _register(self, connector: NamespaceIntegrationConnector) -> None:
         icon = _integration_svg_path(connector.provider_id)
         if not icon.is_file():
-            raise ValueError(
-                f"Для интеграции «{connector.provider_id}» нужен SVG в CRM UI: {icon}"
-            )
+            raise ValueError(f"Для интеграции «{connector.provider_id}» нужен SVG в CRM UI: {icon}")
         self._by_id[connector.provider_id] = connector
         self._by_provider[connector.integration_provider] = connector
 
@@ -57,8 +55,8 @@ class IntegrationRegistry:
         company_id: str,
         user_id: str,
         crm_settings: NamespaceCRMSettings | None,
-    ) -> list[dict[str, Any]]:
-        items: list[dict[str, Any]] = []
+    ) -> list[JsonObject]:
+        items: list[JsonObject] = []
         for connector in self._by_id.values():
             row = await connector.manifest_item(
                 namespace_name=namespace_name,

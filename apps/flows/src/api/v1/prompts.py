@@ -1,7 +1,7 @@
 """API для работы с промптами"""
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -16,7 +16,7 @@ class RenderPromptRequest(BaseModel):
     """Запрос на рендер промпта"""
 
     prompt: str
-    variables: Optional[Dict[str, Any]] = None
+    variables: dict[str, Any] | None = None
 
 
 class RenderPromptResponse(BaseModel):

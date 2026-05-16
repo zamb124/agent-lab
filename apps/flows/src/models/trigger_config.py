@@ -8,7 +8,7 @@ TriggerConfig - конфигурация триггера для запуска 
 """
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
@@ -52,26 +52,26 @@ class TriggerConfig(StrictBaseModel):
     enabled: bool = Field(default=True, description="Активен ли триггер")
 
     # Специфичные настройки по типу триггера
-    config: Dict[str, Any] = Field(
+    config: dict[str, Any] = Field(
         default_factory=dict,
         description="Конфигурация триггера (bot_token, cron, etc.)"
     )
 
     # Маппинг данных payload в state
     # Формат: {"путь_в_state": "путь_в_payload"}
-    output_mapping: Dict[str, str] = Field(
+    output_mapping: dict[str, str] = Field(
         default_factory=dict,
         description="Маппинг payload path -> state path"
     )
 
     # Deprecated: используйте output_mapping
-    input_mapping: Dict[str, str] = Field(
+    input_mapping: dict[str, str] = Field(
         default_factory=dict,
         description="DEPRECATED: используйте output_mapping"
     )
 
     # Output: действия после выполнения агента
-    output_actions: List[OutputAction] = Field(
+    output_actions: list[OutputAction] = Field(
         default_factory=list,
         description="Действия отправки ответа в канал после выполнения агента"
     )
@@ -86,11 +86,11 @@ class TriggerConfig(StrictBaseModel):
     )
 
     # Runtime данные (заполняются при регистрации)
-    webhook_url: Optional[str] = Field(
+    webhook_url: str | None = Field(
         default=None,
         description="URL webhook (генерируется при регистрации)"
     )
-    schedule_id: Optional[str] = Field(
+    schedule_id: str | None = Field(
         default=None,
         description="ID в TaskIQ scheduler (для cron)"
     )
@@ -98,7 +98,7 @@ class TriggerConfig(StrictBaseModel):
         default=TriggerStatus.INACTIVE,
         description="Текущий статус триггера"
     )
-    last_error: Optional[str] = Field(
+    last_error: str | None = Field(
         default=None,
         description="Последняя ошибка (если status=error)"
     )
@@ -133,19 +133,19 @@ class TelegramTriggerConfig(StrictBaseModel):
     """Конфигурация Telegram триггера."""
 
     bot_token: str = Field(..., description="Токен бота (@var:key для секрета)")
-    allowed_users: List[int] = Field(
+    allowed_users: list[int] = Field(
         default_factory=list,
         description="Разрешенные user_id (пусто = все)"
     )
-    allowed_chats: List[int] = Field(
+    allowed_chats: list[int] = Field(
         default_factory=list,
         description="Разрешенные chat_id (пусто = все)"
     )
-    commands: List[str] = Field(
+    commands: list[str] = Field(
         default_factory=list,
         description="Реагировать только на эти команды (пусто = все сообщения)"
     )
-    allowed_updates: List[str] = Field(
+    allowed_updates: list[str] = Field(
         default_factory=lambda: ["message"],
         description=(
             "Типы Update для setWebhook/getUpdates: message, callback_query "
@@ -163,7 +163,7 @@ class CronTriggerConfig(StrictBaseModel):
         default="",
         description="Начальный content для state"
     )
-    initial_variables: Dict[str, Any] = Field(
+    initial_variables: dict[str, Any] = Field(
         default_factory=dict,
         description="Начальные переменные для state"
     )
@@ -172,11 +172,11 @@ class CronTriggerConfig(StrictBaseModel):
 class WebhookTriggerConfig(StrictBaseModel):
     """Конфигурация HTTP Webhook триггера."""
 
-    secret_token: Optional[str] = Field(
+    secret_token: str | None = Field(
         default=None,
         description="Секретный токен для верификации"
     )
-    allowed_ips: List[str] = Field(
+    allowed_ips: list[str] = Field(
         default_factory=list,
         description="Whitelist IP адресов (пусто = все)"
     )
@@ -194,10 +194,10 @@ class EmailTriggerConfig(StrictBaseModel):
         description="Провайдер: imap, mailgun, sendgrid"
     )
     # IMAP конфигурация
-    imap_host: Optional[str] = Field(default=None)
+    imap_host: str | None = Field(default=None)
     imap_port: int = Field(default=993)
-    imap_user: Optional[str] = Field(default=None)
-    imap_password: Optional[str] = Field(
+    imap_user: str | None = Field(default=None)
+    imap_password: str | None = Field(
         default=None,
         description="Пароль (@var:key для секрета)"
     )
@@ -206,7 +206,7 @@ class EmailTriggerConfig(StrictBaseModel):
         description="Интервал проверки почты"
     )
     # Фильтры
-    allowed_senders: List[str] = Field(
+    allowed_senders: list[str] = Field(
         default_factory=list,
         description="Разрешенные отправители (пусто = все)"
     )

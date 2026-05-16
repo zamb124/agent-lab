@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import quote
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -59,15 +59,15 @@ class CrmSearchEntitiesArgs(BaseModel):
             "имена, фрагменты названий, ключевые слова; не пересказ всего диалога. Имя аргумента в вызове — query."
         ),
     )
-    entity_type: Optional[str] = Field(
+    entity_type: str | None = Field(
         None,
         description="Только если пользователь явно ограничил тип сущности; иначе не передавай (null).",
     )
-    entity_subtype: Optional[str] = Field(
+    entity_subtype: str | None = Field(
         None,
         description="Только при явном запросе подтипа; иначе null.",
     )
-    namespace: Optional[str] = Field(
+    namespace: str | None = Field(
         None,
         description="Пространство имён; null — берётся active_namespace из сессии CRM, не подставляй default сам.",
     )
@@ -95,21 +95,21 @@ class CrmCreateNoteArgs(BaseModel):
         "propose",
         description="propose — подготовить создание заметки для подтверждения; apply — выполнить по pending_action_id.",
     )
-    name: Optional[str] = Field(None, description="Заголовок заметки (обязателен при mode=propose).")
-    description: Optional[str] = Field(None, description="Текст заметки (обязателен при mode=propose).")
-    note_date: Optional[str] = Field(
+    name: str | None = Field(None, description="Заголовок заметки (обязателен при mode=propose).")
+    description: str | None = Field(None, description="Текст заметки (обязателен при mode=propose).")
+    note_date: str | None = Field(
         None,
         description="Дата заметки YYYY-MM-DD; только если уместно по смыслу.",
     )
-    namespace: Optional[str] = Field(
+    namespace: str | None = Field(
         None,
         description="Пространство имён CRM; null — из контекста сессии.",
     )
-    pending_action_id: Optional[str] = Field(
+    pending_action_id: str | None = Field(
         None,
         description="ID действия из propose. Обязателен для mode=apply.",
     )
-    idempotency_key: Optional[str] = Field(
+    idempotency_key: str | None = Field(
         None,
         description="Идемпотентный ключ выполнения. Если не передан, используется pending_action_id.",
     )
@@ -159,11 +159,11 @@ class CrmAnalyzeNoteTextArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     note_id: str = Field(..., min_length=1, description="entity_id созданной или существующей заметки.")
-    extract_entity_types: Optional[List[str]] = Field(
+    extract_entity_types: list[str] | None = Field(
         None,
         description="Ограничить извлечение указанными типами сущностей; иначе не передавай.",
     )
-    mentioned_entity_ids: Optional[List[str]] = Field(
+    mentioned_entity_ids: list[str] | None = Field(
         None,
         description="Уже известные id сущностей для контекста анализа; опционально.",
     )
@@ -181,16 +181,16 @@ class CrmCreateNoteAndAnalyzeArgs(BaseModel):
 
     name: str = Field(..., min_length=1, description="Заголовок новой заметки.")
     description: str = Field(..., min_length=1, description="Текст заметки; по нему же выполняется анализ.")
-    note_date: Optional[str] = Field(None, description="Дата YYYY-MM-DD; опционально.")
-    extract_entity_types: Optional[List[str]] = Field(
+    note_date: str | None = Field(None, description="Дата YYYY-MM-DD; опционально.")
+    extract_entity_types: list[str] | None = Field(
         None,
         description="Типы сущностей для извлечения при анализе; опционально.",
     )
-    mentioned_entity_ids: Optional[List[str]] = Field(
+    mentioned_entity_ids: list[str] | None = Field(
         None,
         description="Упомянутые id для контекста анализа; опционально.",
     )
-    namespace: Optional[str] = Field(None, description="Пространство имён; null — из контекста.")
+    namespace: str | None = Field(None, description="Пространство имён; null — из контекста.")
 
     @field_validator("note_date", "namespace", mode="before")
     @classmethod
@@ -219,11 +219,11 @@ class FlowsReadContextArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     flow_id: str = Field(..., min_length=1, description="ID flow в сервисе flows.")
-    branch_id: Optional[str] = Field(
+    branch_id: str | None = Field(
         None,
         description="ID ветки (branch). Для базового графа передай base или оставь пустым.",
     )
-    node_id: Optional[str] = Field(
+    node_id: str | None = Field(
         None,
         description="ID ноды в выбранном графе. Если не передан, вернётся только контекст flow/branch.",
     )
@@ -232,13 +232,13 @@ class FlowsReadContextArgs(BaseModel):
 class FlowsPatchNodeArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    flow_id: Optional[str] = Field(None, description="ID flow (обязателен при mode=propose).")
-    node_id: Optional[str] = Field(None, description="ID ноды (обязателен при mode=propose).")
-    patch_json: Optional[str] = Field(
+    flow_id: str | None = Field(None, description="ID flow (обязателен при mode=propose).")
+    node_id: str | None = Field(None, description="ID ноды (обязателен при mode=propose).")
+    patch_json: str | None = Field(
         None,
         description="JSON-объект изменений ноды при mode=propose.",
     )
-    branch_id: Optional[str] = Field(
+    branch_id: str | None = Field(
         None,
         description="ID ветки (branch). Для base можно не передавать.",
     )
@@ -246,11 +246,11 @@ class FlowsPatchNodeArgs(BaseModel):
         "propose",
         description="propose — подготовить действие и ждать подтверждения; apply — применить по pending_action_id.",
     )
-    pending_action_id: Optional[str] = Field(
+    pending_action_id: str | None = Field(
         None,
         description="ID действия из propose. Обязателен для mode=apply.",
     )
-    idempotency_key: Optional[str] = Field(
+    idempotency_key: str | None = Field(
         None,
         description="Идемпотентный ключ выполнения. Если не передан, используется pending_action_id.",
     )
@@ -285,8 +285,8 @@ class FlowsPatchNodeArgs(BaseModel):
 class FlowsPatchFlowArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    flow_id: Optional[str] = Field(None, description="ID flow (обязателен при mode=propose).")
-    patch_json: Optional[str] = Field(
+    flow_id: str | None = Field(None, description="ID flow (обязателен при mode=propose).")
+    patch_json: str | None = Field(
         None,
         description=(
             "JSON-объект изменений flow при mode=propose. Разрешённые поля: name, description, tags, variables."
@@ -296,11 +296,11 @@ class FlowsPatchFlowArgs(BaseModel):
         "propose",
         description="propose — подготовить действие и ждать подтверждения; apply — применить по pending_action_id.",
     )
-    pending_action_id: Optional[str] = Field(
+    pending_action_id: str | None = Field(
         None,
         description="ID действия из propose. Обязателен для mode=apply.",
     )
-    idempotency_key: Optional[str] = Field(
+    idempotency_key: str | None = Field(
         None,
         description="Идемпотентный ключ выполнения. Если не передан, используется pending_action_id.",
     )
@@ -327,7 +327,7 @@ class FlowsPatchFlowArgs(BaseModel):
         return self
 
 
-def _compact_entity_hit(raw: Dict[str, Any]) -> Dict[str, Any]:
+def _compact_entity_hit(raw: dict[str, Any]) -> dict[str, Any]:
     desc = raw.get("description")
     if isinstance(desc, str) and len(desc) > 400:
         desc = desc[:400] + "…"
@@ -369,11 +369,11 @@ def _compact_entity_hit(raw: Dict[str, Any]) -> Dict[str, Any]:
     ),
 )
 async def crm_search_entities(
-    query: Optional[str] = None,
-    search: Optional[str] = None,
-    entity_type: Optional[str] = None,
-    entity_subtype: Optional[str] = None,
-    namespace: Optional[str] = None,
+    query: str | None = None,
+    search: str | None = None,
+    entity_type: str | None = None,
+    entity_subtype: str | None = None,
+    namespace: str | None = None,
     limit: int = 100,
     *,
     state: "ExecutionState",
@@ -386,7 +386,7 @@ async def crm_search_entities(
             "Нужен непустой параметр query — короткая строка семантического поиска (ключевые слова из запроса пользователя)."
         )
     ns = namespace if namespace else _require_context_namespace()
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "query": q,
         "namespace": ns,
         "search_mode": "hybrid",
@@ -408,7 +408,7 @@ async def crm_search_entities(
 
     hits = [_compact_entity_hit(x) for x in raw_response["items"] if isinstance(x, dict)]
     summary = f"Найдено сущностей: {len(hits)}."
-    blocks: List[Dict[str, Any]] = [{"type": "text", "text": summary}]
+    blocks: list[dict[str, Any]] = [{"type": "text", "text": summary}]
     if hits:
         rows = [
             {
@@ -458,13 +458,13 @@ async def crm_search_entities(
     ),
 )
 async def crm_create_note(
-    name: Optional[str] = None,
-    description: Optional[str] = None,
-    note_date: Optional[str] = None,
-    namespace: Optional[str] = None,
+    name: str | None = None,
+    description: str | None = None,
+    note_date: str | None = None,
+    namespace: str | None = None,
     mode: Literal["propose", "apply"] = "propose",
-    pending_action_id: Optional[str] = None,
-    idempotency_key: Optional[str] = None,
+    pending_action_id: str | None = None,
+    idempotency_key: str | None = None,
     *,
     state: "ExecutionState",
 ) -> str:
@@ -591,15 +591,15 @@ async def crm_create_note(
 async def crm_create_note_and_analyze(
     name: str,
     description: str,
-    note_date: Optional[str] = None,
-    extract_entity_types: Optional[List[str]] = None,
-    mentioned_entity_ids: Optional[List[str]] = None,
-    namespace: Optional[str] = None,
+    note_date: str | None = None,
+    extract_entity_types: list[str] | None = None,
+    mentioned_entity_ids: list[str] | None = None,
+    namespace: str | None = None,
     *,
     state: "ExecutionState",
 ) -> str:
     ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
-    create_payload: Dict[str, Any] = {
+    create_payload: dict[str, Any] = {
         "entity_type": "note",
         "namespace": ns,
         "name": name.strip(),
@@ -613,13 +613,13 @@ async def crm_create_note_and_analyze(
         raise ValueError("create_note: missing entity_id")
     eid = created["entity_id"]
 
-    analyze_args: Dict[str, Any] = {"note_id": eid}
+    analyze_args: dict[str, Any] = {"note_id": eid}
     if extract_entity_types:
         analyze_args["extract_entity_types"] = extract_entity_types
     if mentioned_entity_ids:
         analyze_args["mentioned_entity_ids"] = mentioned_entity_ids
 
-    analyzed_raw = await crm_analyze_note_text._run_impl(analyze_args, state)
+    analyzed_raw = await crm_analyze_note_text.run(analyze_args, state)
     analyzed = json.loads(analyzed_raw)
     if not analyzed.get("success"):
         return json.dumps(
@@ -633,7 +633,7 @@ async def crm_create_note_and_analyze(
             ensure_ascii=False,
         )
 
-    blocks_out: List[Dict[str, Any]] = []
+    blocks_out: list[dict[str, Any]] = []
     for b in created.get("blocks") or []:
         if isinstance(b, dict):
             blocks_out.append(b)
@@ -666,13 +666,13 @@ async def crm_create_note_and_analyze(
 )
 async def crm_analyze_note_text(
     note_id: str,
-    extract_entity_types: Optional[List[str]] = None,
-    mentioned_entity_ids: Optional[List[str]] = None,
+    extract_entity_types: list[str] | None = None,
+    mentioned_entity_ids: list[str] | None = None,
     *,
     state: "ExecutionState",
 ) -> str:
     nid = str(note_id).strip()
-    body: Dict[str, Any] = {
+    body: dict[str, Any] = {
         "note_id": nid,
         "mode": "analyze",
         "include_attachments": True,
@@ -709,7 +709,7 @@ async def crm_analyze_note_text(
 
     loop = asyncio.get_running_loop()
     deadline = loop.time() + 120.0
-    terminal: Dict[str, Any] = {}
+    terminal: dict[str, Any] = {}
     while loop.time() < deadline:
         try:
             row = await client.get(
@@ -774,7 +774,7 @@ async def crm_analyze_note_text(
             ensure_ascii=False,
         )
 
-    draft: Dict[str, Any] = {}
+    draft: dict[str, Any] = {}
     try:
         entity = await client.get(
             "crm",
@@ -809,7 +809,7 @@ async def crm_analyze_note_text(
             if isinstance(cnt, int) and cnt > 0:
                 summary = f"Найдено сущностей: {cnt}."
 
-    analyze_payload: Dict[str, Any] = {"task_id": task_id}
+    analyze_payload: dict[str, Any] = {"task_id": task_id}
     analyze_payload.update(draft)
     terminal_data = terminal.get("data")
     if isinstance(terminal_data, dict):
@@ -881,12 +881,12 @@ async def push_embed_blocks(blocks_json: str, *, state: "ExecutionState") -> str
 )
 async def flows_read_context(
     flow_id: str,
-    branch_id: Optional[str] = None,
-    node_id: Optional[str] = None,
+    branch_id: str | None = None,
+    node_id: str | None = None,
     *,
     state: "ExecutionState",
 ) -> str:
-    def normalize_branch_id(raw_branch_id: Optional[str]) -> str:
+    def normalize_branch_id(raw_branch_id: str | None) -> str:
         if raw_branch_id is None:
             return "base"
         cleaned = raw_branch_id.strip()
@@ -894,7 +894,7 @@ async def flows_read_context(
             return "base"
         return cleaned
 
-    def resolve_node_scope(flow_data: Dict[str, Any], resolved_branch: str) -> Dict[str, Any]:
+    def resolve_node_scope(flow_data: dict[str, Any], resolved_branch: str) -> dict[str, Any]:
         if resolved_branch == "base":
             nodes = flow_data.get("nodes", {})
             if not isinstance(nodes, dict):
@@ -914,8 +914,8 @@ async def flows_read_context(
         return nodes
 
     def require_node(
-        flow_data: Dict[str, Any], resolved_branch: str, required_node_id: str
-    ) -> Dict[str, Any]:
+        flow_data: dict[str, Any], resolved_branch: str, required_node_id: str
+    ) -> dict[str, Any]:
         nodes = resolve_node_scope(flow_data, resolved_branch)
         node = nodes.get(required_node_id)
         if not isinstance(node, dict):
@@ -973,17 +973,17 @@ async def flows_read_context(
     ),
 )
 async def flows_patch_node(
-    flow_id: Optional[str] = None,
-    node_id: Optional[str] = None,
-    patch_json: Optional[str] = None,
-    branch_id: Optional[str] = None,
+    flow_id: str | None = None,
+    node_id: str | None = None,
+    patch_json: str | None = None,
+    branch_id: str | None = None,
     mode: Literal["propose", "apply"] = "propose",
-    pending_action_id: Optional[str] = None,
-    idempotency_key: Optional[str] = None,
+    pending_action_id: str | None = None,
+    idempotency_key: str | None = None,
     *,
     state: "ExecutionState",
 ) -> str:
-    def normalize_branch_id(raw_branch_id: Optional[str]) -> str:
+    def normalize_branch_id(raw_branch_id: str | None) -> str:
         if raw_branch_id is None:
             return "base"
         cleaned = raw_branch_id.strip()
@@ -1093,7 +1093,7 @@ async def flows_patch_node(
     node_before = preview_data.get("node_before")
     node_after = preview_data.get("node_after")
     action_payload = action.get("payload")
-    patch_restored: Dict[str, Any]
+    patch_restored: dict[str, Any]
     if isinstance(action_payload, dict) and isinstance(action_payload.get("patch"), dict):
         patch_restored = action_payload["patch"]
     else:
@@ -1147,11 +1147,11 @@ async def flows_patch_node(
     ),
 )
 async def flows_patch_flow(
-    flow_id: Optional[str] = None,
-    patch_json: Optional[str] = None,
+    flow_id: str | None = None,
+    patch_json: str | None = None,
     mode: Literal["propose", "apply"] = "propose",
-    pending_action_id: Optional[str] = None,
-    idempotency_key: Optional[str] = None,
+    pending_action_id: str | None = None,
+    idempotency_key: str | None = None,
     *,
     state: "ExecutionState",
 ) -> str:
@@ -1245,7 +1245,7 @@ async def flows_patch_flow(
     flow_after = preview_data.get("flow_after")
 
     payload = action.get("payload")
-    patch_restored: Dict[str, Any]
+    patch_restored: dict[str, Any]
     if isinstance(payload, dict) and isinstance(payload.get("patch"), dict):
         patch_restored = payload["patch"]
     else:
@@ -1288,11 +1288,11 @@ class CrmCreateEntityArgs(BaseModel):
 
     entity_type: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1)
-    entity_subtype: Optional[str] = None
-    namespace: Optional[str] = None
-    description: Optional[str] = None
-    attributes: Optional[Dict[str, Any]] = None
-    tags: Optional[List[str]] = None
+    entity_subtype: str | None = None
+    namespace: str | None = None
+    description: str | None = None
+    attributes: dict[str, Any] | None = None
+    tags: list[str] | None = None
 
 
 class CrmCreateRelationshipArgs(BaseModel):
@@ -1301,7 +1301,7 @@ class CrmCreateRelationshipArgs(BaseModel):
     source_entity_id: str = Field(..., min_length=1)
     target_entity_id: str = Field(..., min_length=1)
     relationship_type: str = Field(..., min_length=1)
-    namespace: Optional[str] = None
+    namespace: str | None = None
     weight: float = Field(default=1.0, ge=0.0)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
@@ -1309,14 +1309,14 @@ class CrmCreateRelationshipArgs(BaseModel):
 class CrmListEntityTypesArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    namespace: Optional[str] = None
+    namespace: str | None = None
 
 
 class CrmDailySummaryArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     date: str = Field(..., min_length=10, max_length=10, description="YYYY-MM-DD.")
-    namespace: Optional[str] = None
+    namespace: str | None = None
     force_rebuild: bool = False
 
 
@@ -1347,7 +1347,7 @@ async def crm_get_entity(entity_id: str, *, state: "ExecutionState") -> str:
         return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
     if not isinstance(raw, dict):
         return json.dumps({"success": False, "error": "crm_get_entity: invalid response"}, ensure_ascii=False)
-    blocks: List[Dict[str, Any]] = [
+    blocks: list[dict[str, Any]] = [
         {
             "type": "card",
             "title": raw.get("name") or cid,
@@ -1373,16 +1373,16 @@ async def crm_get_entity(entity_id: str, *, state: "ExecutionState") -> str:
 async def crm_create_entity(
     entity_type: str,
     name: str,
-    entity_subtype: Optional[str] = None,
-    namespace: Optional[str] = None,
-    description: Optional[str] = None,
-    attributes: Optional[Dict[str, Any]] = None,
-    tags: Optional[List[str]] = None,
+    entity_subtype: str | None = None,
+    namespace: str | None = None,
+    description: str | None = None,
+    attributes: dict[str, Any] | None = None,
+    tags: list[str] | None = None,
     *,
     state: "ExecutionState",
 ) -> str:
     ns = namespace if namespace and str(namespace).strip() else _require_context_namespace()
-    body: Dict[str, Any] = {
+    body: dict[str, Any] = {
         "entity_type": entity_type.strip(),
         "name": name.strip(),
         "namespace": ns,
@@ -1422,7 +1422,7 @@ async def crm_create_relationship(
     source_entity_id: str,
     target_entity_id: str,
     relationship_type: str,
-    namespace: Optional[str] = None,
+    namespace: str | None = None,
     weight: float = 1.0,
     confidence: float = 1.0,
     *,
@@ -1449,7 +1449,7 @@ async def crm_create_relationship(
         f"Связь {relationship_type.strip()} создана ({bid}): "
         f"{payload_obj['source_entity_id']} → {payload_obj['target_entity_id']}."
     )
-    blocks: List[Dict[str, Any]] = [{"type": "text", "text": txt}]
+    blocks: list[dict[str, Any]] = [{"type": "text", "text": txt}]
     return json.dumps({"success": True, "relationship": raw, "blocks": blocks}, ensure_ascii=False)
 
 
@@ -1464,7 +1464,7 @@ async def crm_create_relationship(
     ),
 )
 async def crm_list_entity_types(
-    namespace: Optional[str] = None,
+    namespace: str | None = None,
     *,
     state: "ExecutionState",
 ) -> str:
@@ -1487,7 +1487,7 @@ async def crm_list_entity_types(
         if isinstance(x, dict)
     ]
     lines = compact[:80]
-    blocks: List[Dict[str, Any]] = [
+    blocks: list[dict[str, Any]] = [
         {
             "type": "table",
             "title": "Типы сущностей",
@@ -1519,7 +1519,7 @@ async def crm_list_entity_types(
 )
 async def crm_daily_summary(
     date: str,
-    namespace: Optional[str] = None,
+    namespace: str | None = None,
     force_rebuild: bool = False,
     *,
     state: "ExecutionState",
@@ -1527,7 +1527,7 @@ async def crm_daily_summary(
     d_raw = date.strip()
     if not d_raw:
         raise ValueError("date is required")
-    body: Dict[str, Any] = {"date": d_raw, "force_rebuild": bool(force_rebuild)}
+    body: dict[str, Any] = {"date": d_raw, "force_rebuild": bool(force_rebuild)}
     ns_clear = namespace if namespace and str(namespace).strip() else None
     if ns_clear:
         body["namespace"] = ns_clear
@@ -1543,5 +1543,5 @@ async def crm_daily_summary(
         main = summary_text.strip()
     else:
         main = json.dumps(raw, ensure_ascii=False)[:2500]
-    blocks: List[Dict[str, Any]] = [{"type": "text", "text": main}]
+    blocks: list[dict[str, Any]] = [{"type": "text", "text": main}]
     return json.dumps({"success": True, "response": raw, "blocks": blocks}, ensure_ascii=False)

@@ -43,4 +43,11 @@ __all__ = [
     "MCPServerRepository",
     "ResourceRepository",
     "OperatorRepository",
+    "EvaluationResults",
+    "Flows",
+    "FlowsVersions",
+    "Nodes",
+    "ScheduledTasks",
+    "States",
+    "Tools",
 ]

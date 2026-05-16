@@ -7,7 +7,6 @@ TriggerRegistry - управление регистрацией триггеро
 - Вызывает register/unregister для handlers
 """
 
-from typing import Dict, Optional, Type
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import FlowConfig, TriggerConfig, TriggerStatus, TriggerType
@@ -55,12 +54,12 @@ class TriggerRegistry:
         """
         self.base_url = base_url
         self.container = container
-        self._handlers: Dict[TriggerType, BaseTriggerHandler] = {}
+        self._handlers: dict[TriggerType, BaseTriggerHandler] = {}
 
     def register_handler(
         self,
         trigger_type: TriggerType,
-        handler_class: Type[BaseTriggerHandler],
+        handler_class: type[BaseTriggerHandler],
     ) -> None:
         """
         Регистрирует handler для типа триггера.
@@ -73,7 +72,7 @@ class TriggerRegistry:
         self._handlers[trigger_type] = handler
         logger.info(f"Registered trigger handler: {trigger_type.value}")
 
-    def get_handler(self, trigger_type: TriggerType) -> Optional[BaseTriggerHandler]:
+    def get_handler(self, trigger_type: TriggerType) -> BaseTriggerHandler | None:
         """
         Получает handler по типу триггера.
 
@@ -88,7 +87,7 @@ class TriggerRegistry:
     async def sync_triggers(
         self,
         flow_id: str,
-        old_config: Optional[FlowConfig],
+        old_config: FlowConfig | None,
         new_config: FlowConfig,
     ) -> FlowConfig:
         """

@@ -10,7 +10,9 @@ import datetime as stdlib_datetime
 import importlib
 import math
 import operator
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+import typing as typing_module
+from typing import Any, Literal
+from collections.abc import Callable
 from urllib.parse import quote
 
 from a2a.types import (
@@ -78,8 +80,8 @@ from core.state.interrupt import (
 )
 
 
-def _create_safe_builtins() -> Dict[str, Any]:
-    safe: Dict[str, Any] = {}
+def _create_safe_builtins() -> dict[str, Any]:
+    safe: dict[str, Any] = {}
     for name in ALLOWED_BUILTINS:
         if hasattr(b, name):
             safe[name] = getattr(b, name)
@@ -100,7 +102,7 @@ def _inline_require_context_namespace() -> str:
     return ctx.active_namespace or "default"
 
 
-def _inline_compact_entity_hit(raw: Dict[str, Any]) -> Dict[str, Any]:
+def _inline_compact_entity_hit(raw: dict[str, Any]) -> dict[str, Any]:
     """Совпадает с lara_crm._compact_entity_hit."""
     desc = raw.get("description")
     if isinstance(desc, str) and len(desc) > 400:
@@ -123,10 +125,10 @@ class PythonNamespaceBuilder:
 
     def __init__(
         self,
-        context: Optional[Any] = None,
-        variables: Optional[Dict[str, Any]] = None,
-        resources: Optional[Dict[str, Any]] = None,
-        base_tool_class: Optional[type] = None,
+        context: Any | None = None,
+        variables: dict[str, Any] | None = None,
+        resources: dict[str, Any] | None = None,
+        base_tool_class: type | None = None,
     ):
         self.context = context
         self.variables = variables or {}
@@ -137,21 +139,21 @@ class PythonNamespaceBuilder:
             base_tool_class = BaseTool
         self.base_tool_class = base_tool_class
 
-    def build(self) -> Dict[str, Any]:
+    def build(self) -> dict[str, Any]:
         safe_builtins = _create_safe_builtins()
 
-        namespace: Dict[str, Any] = {
+        namespace: dict[str, Any] = {
             "__builtins__": safe_builtins,
             "__name__": "__inline__",
             "__doc__": None,
         }
 
-        namespace["Optional"] = Optional
-        namespace["List"] = List
-        namespace["Dict"] = Dict
+        namespace["Optional"] = getattr(typing_module, "Optional")
+        namespace["List"] = list
+        namespace["Dict"] = dict
         namespace["Any"] = Any
-        namespace["Union"] = Union
-        namespace["Tuple"] = Tuple
+        namespace["Union"] = getattr(typing_module, "Union")
+        namespace["Tuple"] = tuple
         namespace["Callable"] = Callable
         namespace["Literal"] = Literal
 

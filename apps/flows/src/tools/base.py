@@ -14,7 +14,7 @@ import copy
 import hashlib
 import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel
 
@@ -52,10 +52,10 @@ from core.logging import get_logger  # noqa: E402
 logger = get_logger(__name__)
 
 # Тип для permission: строка или список строк
-Permission = Optional[Union[str, List[str]]]
+Permission = str | list[str] | None
 
 
-def _external_api_flat_args_schema_to_model(schema: Dict[str, Any]) -> type[BaseModel]:
+def _external_api_flat_args_schema_to_model(schema: dict[str, Any]) -> type[BaseModel]:
     """Плоский {name: {type, description, default?}} -> Pydantic-модель для BaseTool.parameters."""
     from pydantic import Field, create_model
 
@@ -119,20 +119,20 @@ class BaseTool(ABC):
 
     name: str = "base_tool"
     description: str = "Базовый инструмент"
-    args_schema: Optional[Type[BaseModel]] = None
+    args_schema: type[BaseModel] | None = None
     permission: Permission = None
-    tags: List[str] = []  # Группы/категории: misc, math, docs, api, validation
+    tags: list[str] = []  # Группы/категории: misc, math, docs, api, validation
     react_role: ReactToolRole = ReactToolRole.STANDARD
 
     # Mock ответ для тестов (переопределить в наследниках)
     mock_response: Any = "mock_result"
 
-    def get_tags(self) -> List[str]:
+    def get_tags(self) -> list[str]:
         """Возвращает теги/группы тула."""
         return self.tags if self.tags else ["misc"]
 
     @property
-    def parameters(self) -> Dict[str, Any]:
+    def parameters(self) -> dict[str, Any]:
         """Генерирует JSON схему из args_schema или возвращает пустую."""
         if self.args_schema:
             schema = self.args_schema.model_json_schema()
@@ -144,7 +144,7 @@ class BaseTool(ABC):
         """Проверяет переопределён ли execute_mock в наследнике."""
         return type(self).execute_mock is not BaseTool.execute_mock
 
-    def _get_user_groups_from_state(self, state: "ExecutionState") -> List[str]:
+    def _get_user_groups_from_state(self, state: "ExecutionState") -> list[str]:
         """
         Извлекает группы пользователя из state.
 
@@ -163,7 +163,7 @@ class BaseTool(ABC):
 
         return []
 
-    def _check_permission(self, state: "ExecutionState") -> Optional[str]:
+    def _check_permission(self, state: "ExecutionState") -> str | None:
         """
         Проверяет permission на tool.
 
@@ -189,7 +189,7 @@ class BaseTool(ABC):
 
         return None
 
-    async def run(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def run(self, args: dict[str, Any], state: "ExecutionState") -> Any:
         """
         Единственная точка входа для выполнения tool.
 
@@ -210,8 +210,8 @@ class BaseTool(ABC):
         return await self._run_impl(args, state)
 
     async def _check_before_run(
-        self, args: Dict[str, Any], state: "ExecutionState"
-    ) -> Optional[Any]:
+        self, args: dict[str, Any], state: "ExecutionState"
+    ) -> Any | None:
         """
         Проверки перед выполнением: permissions, mock.
 
@@ -235,7 +235,7 @@ class BaseTool(ABC):
         return None
 
     @abstractmethod
-    async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
         """
         Реальное выполнение инструмента.
 
@@ -250,7 +250,7 @@ class BaseTool(ABC):
         """
         pass
 
-    async def execute_mock(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def execute_mock(self, args: dict[str, Any], state: "ExecutionState") -> Any:
         """
         Mock выполнение для тестов.
 
@@ -263,7 +263,7 @@ class BaseTool(ABC):
         """
         return self.mock_response
 
-    def to_openai_schema(self) -> Dict[str, Any]:
+    def to_openai_schema(self) -> dict[str, Any]:
         """
         Возвращает схему инструмента для OpenAI.
 
@@ -298,14 +298,14 @@ class CodeTool(BaseTool):
         self,
         tool_id: str,
         code: str,
-        title: Optional[str] = None,
-        description: Optional[str] = None,
-        parameters: Optional[Dict[str, Any]] = None,
-        parameters_schema: Optional[Dict[str, Any]] = None,
+        title: str | None = None,
+        description: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        parameters_schema: dict[str, Any] | None = None,
         permission: Permission = None,
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
-        resources: Optional[Dict[str, Any]] = None,
+        resources: dict[str, Any] | None = None,
         container: FlowRuntimeContainer | None = None,
     ):
         self.name = tool_id
@@ -352,13 +352,13 @@ class CodeTool(BaseTool):
             self._parameters = None
 
     @property
-    def parameters(self) -> Dict[str, Any]:
+    def parameters(self) -> dict[str, Any]:
         """Возвращает параметры."""
         if self._parameters:
             return self._parameters
         return {"type": "object", "properties": {}, "required": []}
 
-    async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
         """Выполняет inline код через SafeEval."""
         full_args = self._apply_defaults(args)
         schema = self._parameters
@@ -372,17 +372,22 @@ class CodeTool(BaseTool):
 
         container = self.container
         if container is None:
-            raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to execute inline code")
-        runner = container.get_code_runner(
-            language="python",
-            resources=resources,
-            variables=variables,
-        )
+            if resources:
+                raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to execute inline code")
+            from apps.flows.src.runners.python import PythonCodeRunner
+
+            runner = PythonCodeRunner(variables=variables)
+        else:
+            runner = container.get_code_runner(
+                language="python",
+                resources=resources,
+                variables=variables,
+            )
         result = await runner.execute_tool(self._code, full_args, state)
 
         return result
 
-    def _apply_defaults(self, args: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_defaults(self, args: dict[str, Any]) -> dict[str, Any]:
         """Применяет default значения из args_schema к args."""
         if not self._parameters:
             return args
@@ -400,24 +405,24 @@ class CodeTool(BaseTool):
 
         return result
 
-    async def _resolve_resources(self, state: "ExecutionState") -> Dict[str, Any]:
+    async def _resolve_resources(self, state: "ExecutionState") -> dict[str, Any]:
         """
         Резолвит resources для tool.
 
         Единообразно с нодами — иерархия flow > skill > tool.
         """
+        tool_resources = self._resources_config
         container = self.container
         if container is None:
-            raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to resolve resources")
+            if tool_resources:
+                raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to resolve resources")
+            return {}
 
         flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
             state.session_flow_id,
             state.branch_id,
             state.flow_config_version,
         )
-
-        # Ресурсы tool
-        tool_resources = self._resources_config
 
         if not flow_resources and not skill_resources and not tool_resources:
             return {}
@@ -443,17 +448,17 @@ class ExternalAPITool(BaseTool):
         api_id: str,
         url: str,
         method: str = "POST",
-        title: Optional[str] = None,
-        description: Optional[str] = None,
-        headers: Optional[Dict[str, str]] = None,
+        title: str | None = None,
+        description: str | None = None,
+        headers: dict[str, str] | None = None,
         body_template: str = "{}",
         timeout: float = 30.0,
-        response_mapping: Optional[Dict[str, str]] = None,
+        response_mapping: dict[str, str] | None = None,
         permission: Permission = None,
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
         *,
-        flat_args_schema: Optional[Dict[str, Any]] = None,
+        flat_args_schema: dict[str, Any] | None = None,
     ):
         self.api_id = api_id
         self.name = api_id
@@ -471,7 +476,7 @@ class ExternalAPITool(BaseTool):
             _external_api_flat_args_schema_to_model(flat_args_schema) if flat_args_schema else None
         )
 
-    async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
         """Вызывает внешний API."""
         api_config = ExternalAPIConfig(
             api_id=self.api_id,
@@ -512,6 +517,6 @@ class ExternalAPITool(BaseTool):
 
         return data
 
-    async def execute_mock(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def execute_mock(self, args: dict[str, Any], state: "ExecutionState") -> Any:
         """Mock - возвращает пустой успешный ответ."""
         return {"status": "completed", "data": {}}

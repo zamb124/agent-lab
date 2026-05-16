@@ -4,7 +4,7 @@ TelegramChannelHandler - отправка сообщений через Telegram
 
 import asyncio
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import httpx
 
@@ -33,7 +33,7 @@ async def _telegram_post(url: str, *, timeout: float, **kwargs: Any) -> httpx.Re
     )
 
 
-def _parse_mode_for_plain_send(config: Dict[str, Any]) -> Optional[str]:
+def _parse_mode_for_plain_send(config: dict[str, Any]) -> str | None:
     """
     Если ключ parse_mode отсутствует — HTML (обратная совместимость).
     Если задан null или пустая строка — без parse_mode (plain text).
@@ -48,7 +48,7 @@ def _parse_mode_for_plain_send(config: Dict[str, Any]) -> Optional[str]:
     return str(raw)
 
 
-def get_telegram_api_base(config: Optional[Dict[str, Any]] = None) -> str:
+def get_telegram_api_base(config: dict[str, Any] | None = None) -> str:
     """
     Возвращает базовый URL для Telegram API.
 
@@ -88,16 +88,16 @@ class TelegramChannelHandler(BaseChannelHandler):
         self,
         recipient: str,
         text: str,
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
-        reply_to_message_id: Optional[int] = None,
+        config: dict[str, Any],
+        variables: dict[str, Any],
+        reply_to_message_id: int | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Отправляет текстовое сообщение в Telegram."""
         bot_token = self._get_bot_token(config, variables)
         url = f"{get_telegram_api_base(config)}/bot{bot_token}/sendMessage"
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "chat_id": recipient,
             "text": text,
         }
@@ -136,11 +136,11 @@ class TelegramChannelHandler(BaseChannelHandler):
         recipient: str,
         draft_id: int,
         text: str,
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
-        parse_mode: Optional[str] = None,
-        message_thread_id: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        config: dict[str, Any],
+        variables: dict[str, Any],
+        parse_mode: str | None = None,
+        message_thread_id: int | None = None,
+    ) -> dict[str, Any]:
         """
         Частичное обновление текста через Bot API sendMessageDraft (стриминг генерации).
 
@@ -152,7 +152,7 @@ class TelegramChannelHandler(BaseChannelHandler):
         bot_token = self._get_bot_token(config, variables)
         url = f"{get_telegram_api_base(config)}/bot{bot_token}/sendMessageDraft"
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "chat_id": recipient,
             "draft_id": draft_id,
             "text": text,
@@ -186,13 +186,13 @@ class TelegramChannelHandler(BaseChannelHandler):
         recipient: str,
         draft_id: int,
         accumulated_text: str,
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
+        config: dict[str, Any],
+        variables: dict[str, Any],
         *,
-        last_sent_monotonic: Optional[List[float]] = None,
+        last_sent_monotonic: list[float] | None = None,
         min_interval_sec: float = MESSAGE_DRAFT_MIN_INTERVAL_SEC,
-        parse_mode: Optional[str] = None,
-        message_thread_id: Optional[int] = None,
+        parse_mode: str | None = None,
+        message_thread_id: int | None = None,
     ) -> None:
         """
         Отправляет sendMessageDraft с троттлингом по времени (список из одного float —
@@ -218,20 +218,20 @@ class TelegramChannelHandler(BaseChannelHandler):
     async def send_photo(
         self,
         recipient: str,
-        photo: Union[str, bytes],
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
-        caption: Optional[str] = None,
-        reply_to_message_id: Optional[int] = None,
+        photo: str | bytes,
+        config: dict[str, Any],
+        variables: dict[str, Any],
+        caption: str | None = None,
+        reply_to_message_id: int | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Отправляет фото в Telegram."""
         bot_token = self._get_bot_token(config, variables)
         url = f"{get_telegram_api_base(config)}/bot{bot_token}/sendPhoto"
 
         if isinstance(photo, bytes):
             files = {"photo": ("photo.jpg", photo, "image/jpeg")}
-            data: Dict[str, Any] = {"chat_id": recipient}
+            data: dict[str, Any] = {"chat_id": recipient}
 
             if caption:
                 data["caption"] = caption
@@ -242,7 +242,7 @@ class TelegramChannelHandler(BaseChannelHandler):
 
             response = await _telegram_post(url, timeout=60.0, data=data, files=files)
         else:
-            payload: Dict[str, Any] = {
+            payload: dict[str, Any] = {
                 "chat_id": recipient,
                 "photo": photo,
             }
@@ -273,14 +273,14 @@ class TelegramChannelHandler(BaseChannelHandler):
     async def send_document(
         self,
         recipient: str,
-        document: Union[str, bytes],
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
-        caption: Optional[str] = None,
-        filename: Optional[str] = None,
-        reply_to_message_id: Optional[int] = None,
+        document: str | bytes,
+        config: dict[str, Any],
+        variables: dict[str, Any],
+        caption: str | None = None,
+        filename: str | None = None,
+        reply_to_message_id: int | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Отправляет документ в Telegram."""
         bot_token = self._get_bot_token(config, variables)
         url = f"{get_telegram_api_base(config)}/bot{bot_token}/sendDocument"
@@ -288,7 +288,7 @@ class TelegramChannelHandler(BaseChannelHandler):
         if isinstance(document, bytes):
             fname = filename or "document"
             files = {"document": (fname, document, "application/octet-stream")}
-            data: Dict[str, Any] = {"chat_id": recipient}
+            data: dict[str, Any] = {"chat_id": recipient}
 
             if caption:
                 data["caption"] = caption
@@ -299,7 +299,7 @@ class TelegramChannelHandler(BaseChannelHandler):
 
             response = await _telegram_post(url, timeout=120.0, data=data, files=files)
         else:
-            payload: Dict[str, Any] = {
+            payload: dict[str, Any] = {
                 "chat_id": recipient,
                 "document": document,
             }
@@ -334,10 +334,10 @@ class TelegramChannelHandler(BaseChannelHandler):
         recipient: str,
         message_id: int,
         text: str,
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
+        config: dict[str, Any],
+        variables: dict[str, Any],
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Отвечает на сообщение (reply)."""
         return await self.send_message(
             recipient=recipient,
@@ -350,8 +350,8 @@ class TelegramChannelHandler(BaseChannelHandler):
 
     def _get_bot_token(
         self,
-        config: Dict[str, Any],
-        variables: Dict[str, Any],
+        config: dict[str, Any],
+        variables: dict[str, Any],
     ) -> str:
         """Извлекает bot_token из конфига или variables."""
         bot_token = config.get("bot_token") or config.get("_bot_token_resolved")

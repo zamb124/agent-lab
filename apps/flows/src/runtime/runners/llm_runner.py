@@ -10,7 +10,8 @@ import hashlib
 import json
 import time
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any
+from collections.abc import AsyncGenerator
 
 from a2a.types import (
     Message,
@@ -80,7 +81,7 @@ from .base_runner import BaseLlmNodeRunner
 
 logger = get_logger(__name__)
 
-def _get_trace_ctx_from_state() -> Optional[TraceContext]:
+def _get_trace_ctx_from_state() -> TraceContext | None:
     """Получает TraceContext из ContextVar worker'а."""
     trace_data = get_current_trace_context()
     if trace_data:
@@ -88,7 +89,7 @@ def _get_trace_ctx_from_state() -> Optional[TraceContext]:
     return None
 
 
-def _get_message_metadata(msg) -> Dict[str, Any]:
+def _get_message_metadata(msg) -> dict[str, Any]:
     """Получает metadata из Message."""
     if hasattr(msg, "metadata"):
         return msg.metadata or {}
@@ -109,7 +110,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     def __init__(
         self,
         node_config,
-        tools: List[Any],
+        tools: list[Any],
         llm,
         prompt: str,
         llm_node=None,
@@ -173,16 +174,16 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             f"Ошибка инструмента '{tool_name}': {type(exc).__name__}: {exc}"
         )
 
-    def _messages_for_llm_context(self, state: ExecutionState) -> List[Message]:
+    def _messages_for_llm_context(self, state: ExecutionState) -> list[Message]:
         if self.llm_node is not None:
             return self.llm_node._get_filtered_messages(state)
         return list(state.messages)
 
     async def run(
         self,
-        input_data: Dict[str, Any],
+        input_data: dict[str, Any],
         state: ExecutionState,
-        emitter: Optional[BaseEmitter] = None,
+        emitter: BaseEmitter | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Выполняет ReAct цикл.
@@ -197,9 +198,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
         if emitter is None:
             container = self.container
-            if container is None:
-                raise RuntimeError("LlmNodeRunner requires FlowContainer to create default emitter")
-            emitter = Emitter(container.redis_client, state)
+            if container is not None:
+                emitter = Emitter(container.redis_client, state)
+            else:
+                from apps.flows.src.streaming.memory import InMemoryEmitter
+
+                emitter = InMemoryEmitter(state)
 
         user_content = input_data.get("content", "")
         llm_node_label = self.node_config.name if self.node_config else "unknown"
@@ -226,7 +230,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         ):
             yield event
 
-    def _messages_to_dict(self, messages: List[Message]) -> List[Dict[str, Any]]:
+    def _messages_to_dict(self, messages: list[Message]) -> list[dict[str, Any]]:
         """Конвертирует Message объекты в dict для трейсинга."""
         result = []
         for msg in messages:
@@ -246,8 +250,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         return ReactLoopMode.AUTO, "finish", self.MAX_ITERATIONS, True, None
 
     def _find_exit_tool_call(
-        self, tool_calls: List[Dict[str, Any]], exit_tool: str
-    ) -> Optional[Dict[str, Any]]:
+        self, tool_calls: list[dict[str, Any]], exit_tool: str
+    ) -> dict[str, Any] | None:
         """Ищет exit tool среди tool_calls."""
         for tc in tool_calls:
             if tc.get("name") == exit_tool:
@@ -255,8 +259,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         return None
 
     def _find_tool_call_in_messages(
-        self, messages: List[Message], tool_name: str
-    ) -> Dict[str, Any]:
+        self, messages: list[Message], tool_name: str
+    ) -> dict[str, Any]:
         """Ищет tool_call по имени в последнем assistant сообщении."""
         for msg in reversed(messages):
             metadata = _get_message_metadata(msg)
@@ -272,9 +276,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         self,
         state: ExecutionState,
         tool_call_id: str,
-        tool_call: Dict[str, Any],
+        tool_call: dict[str, Any],
         context_id: str,
-        task_id: Optional[str] = None,
+        task_id: str | None = None,
     ) -> None:
         """Гарантирует наличие assistant.tool_calls перед tool_result."""
         sid = self._source_node_id()
@@ -295,9 +299,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         self,
         state: ExecutionState,
         user_answer: str,
-        interrupt_path: List[InterruptPathItem],
+        interrupt_path: list[InterruptPathItem],
         context_id: str,
-        task_id: Optional[str] = None,
+        task_id: str | None = None,
     ) -> None:
         """Обрабатывает resume после interrupt."""
         if not interrupt_path:
@@ -509,9 +513,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         llm_start = time.time()
                         input_tokens = 0
                         output_tokens = 0
-                        provider_reported_cost: Optional[float] = None
-                        provider_upstream_inference_cost: Optional[float] = None
-                        settlement_quantity_rub: Optional[int] = None
+                        provider_reported_cost: float | None = None
+                        provider_upstream_inference_cost: float | None = None
+                        settlement_quantity_rub: int | None = None
 
                         llm, stream_kw, max_tok = self._resolve_llm_client(
                             state,
@@ -521,7 +525,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         byok = is_llm_byok_override(
                             self.node_config.llm_override if self.node_config else None
                         )
-                        billing_res: Optional[str] = "llm:byok" if byok else None
+                        billing_res: str | None = "llm:byok" if byok else None
 
                         async with tracer.llm_call_span(
                             model,
@@ -841,7 +845,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         state: ExecutionState,
         *,
         allow_platform_paid_fallback: bool = True,
-    ) -> tuple[LLMClient | MockLLM, Dict[str, Any], Optional[int]]:
+    ) -> tuple[LLMClient | MockLLM, dict[str, Any], int | None]:
         override = self.node_config.llm_override if self.node_config else None
         max_tok = override.max_tokens if override is not None else None
         client_kwargs = client_kwargs_from_override(override, state)
@@ -855,13 +859,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     async def _call_llm(
         self,
         llm: LLMClient | MockLLM,
-        stream_kw: Dict[str, Any],
-        max_tok: Optional[int],
-        messages: List[Message],
-        tools: Optional[List[Dict[str, Any]]],
+        stream_kw: dict[str, Any],
+        max_tok: int | None,
+        messages: list[Message],
+        tools: list[dict[str, Any]] | None,
         context_id: str,
         task_id: str,
-        response_format: Optional[Dict[str, Any]],
+        response_format: dict[str, Any] | None,
         state: ExecutionState,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Вызывает LLM — ТОЛЬКО STREAM.
@@ -916,10 +920,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
     async def _execute_tools_parallel(
         self,
-        tool_calls: List[Dict[str, Any]],
+        tool_calls: list[dict[str, Any]],
         state: ExecutionState,
-        trace_ctx: Optional[TraceContext] = None,
-    ) -> List[Dict[str, str]]:
+        trace_ctx: TraceContext | None = None,
+    ) -> list[dict[str, str]]:
         """
         Выполняет tools ПАРАЛЛЕЛЬНО через asyncio.gather.
 
@@ -1009,10 +1013,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
     async def _execute_single_tool(
         self,
-        tc: Dict[str, Any],
+        tc: dict[str, Any],
         state: ExecutionState,
-        trace_ctx: Optional[TraceContext] = None,
-    ) -> List[Dict[str, str]]:
+        trace_ctx: TraceContext | None = None,
+    ) -> list[dict[str, str]]:
         """Выполняет один tool."""
         tracer = get_tracer()
         tool_name = tc["name"]
@@ -1123,7 +1127,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         state: ExecutionState,
         template: str,
         rendered: str,
-        variables: Dict[str, Any],
+        variables: dict[str, Any],
         node_id: str,
     ) -> None:
         """Сохраняет промпт в историю если он изменился."""
@@ -1149,7 +1153,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         )
         state.prompt_history.append(item)
 
-    def _build_tools_schema(self) -> List[Dict[str, Any]]:
+    def _build_tools_schema(self) -> list[dict[str, Any]]:
         """Строит схему инструментов для LLM."""
         schema = []
         for tool in self.tools:

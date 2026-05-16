@@ -6,7 +6,7 @@ ChannelConfig - конфигурация каналов для отправки 
 - TriggerConfig.output_actions (автоматическая отправка после агента)
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import Field
 
@@ -40,17 +40,17 @@ class OutputAction(StrictBaseModel):
     channel: ChannelType = Field(..., description="Тип канала (telegram, email, etc)")
     action: str = Field(..., description="Действие: send_message, send_photo, send_document")
 
-    mapping: Dict[str, str] = Field(
+    mapping: dict[str, str] = Field(
         default_factory=dict,
         description="Маппинг параметров: param_name -> @state:field.path"
     )
 
-    config: Dict[str, Any] = Field(
+    config: dict[str, Any] = Field(
         default_factory=dict,
         description="Статические параметры (parse_mode, etc)"
     )
 
-    condition: Optional[str] = Field(
+    condition: str | None = Field(
         default=None,
         description="Условие выполнения: @state:field == value"
     )
@@ -79,7 +79,7 @@ class ChannelNodeConfig(StrictBaseModel):
     channel: ChannelType = Field(..., description="Тип канала")
     action: str = Field(default="send_message", description="Действие")
 
-    channel_config: Dict[str, Any] = Field(
+    channel_config: dict[str, Any] = Field(
         default_factory=dict,
         description="Параметры канала (bot_token для Telegram, smtp для Email)"
     )
@@ -88,7 +88,7 @@ class ChannelNodeConfig(StrictBaseModel):
 def default_output_actions_for_trigger(
     trigger_id: str,
     trigger_type: TriggerType,
-) -> List[OutputAction]:
+) -> list[OutputAction]:
     if trigger_type == TriggerType.TELEGRAM:
         return [
             OutputAction(

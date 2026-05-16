@@ -6,7 +6,7 @@ MockResolver - резолвер mock конфигурации.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from apps.flows.config import get_settings
 from core.config.testing import is_testing as is_testing_env
@@ -21,10 +21,10 @@ logger = get_logger(__name__)
 
 
 def resolve_mock_config(
-    global_mock: Optional[Dict[str, Any]] = None,
-    flow_mock: Optional[Dict[str, Any]] = None,
-    skill_mock: Optional[Dict[str, Any]] = None,
-    request_mock: Optional[Dict[str, Any]] = None,
+    global_mock: dict[str, Any] | None = None,
+    flow_mock: dict[str, Any] | None = None,
+    skill_mock: dict[str, Any] | None = None,
+    request_mock: dict[str, Any] | None = None,
 ) -> MockConfig:
     """
     Резолвит итоговый mock конфиг с учётом иерархии.
@@ -44,7 +44,7 @@ def resolve_mock_config(
     Returns:
         Итоговый MockConfig
     """
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "enabled": False,
         "llm": None,
         "tools": {},
@@ -61,7 +61,7 @@ def resolve_mock_config(
     return MockConfig(**result)
 
 
-def _merge_mock(target: Dict[str, Any], source: Dict[str, Any]) -> None:
+def _merge_mock(target: dict[str, Any], source: dict[str, Any]) -> None:
     """
     Мержит source mock в target.
 
@@ -95,7 +95,7 @@ def _merge_mock(target: Dict[str, Any], source: Dict[str, Any]) -> None:
         target["permission_groups"] = source["permission_groups"]
 
 
-def is_mock_enabled(state_dict: Optional[Dict[str, Any]] = None) -> bool:
+def is_mock_enabled(state_dict: dict[str, Any] | None = None) -> bool:
     """
     Проверяет включен ли mock режим.
 
@@ -113,7 +113,7 @@ def is_mock_enabled(state_dict: Optional[Dict[str, Any]] = None) -> bool:
     return is_testing_env()
 
 
-def get_mock_for_tool(state: Optional["ExecutionState"], tool_id: str) -> Optional[Any]:
+def get_mock_for_tool(state: ExecutionState | None, tool_id: str) -> Any | None:
     """
     Получает mock ответ для tool.
 
@@ -139,7 +139,7 @@ def get_mock_for_tool(state: Optional["ExecutionState"], tool_id: str) -> Option
     return None
 
 
-def get_mock_for_flow(state: Optional["ExecutionState"], flow_id: str) -> Optional[Any]:
+def get_mock_for_flow(state: ExecutionState | None, flow_id: str) -> Any | None:
     """
     Получает mock ответ для вложенного flow.
 
@@ -165,7 +165,7 @@ def get_mock_for_flow(state: Optional["ExecutionState"], flow_id: str) -> Option
     return None
 
 
-def get_mock_for_node(state: Optional["ExecutionState"], node_id: str) -> Optional[Dict[str, Any]]:
+def get_mock_for_node(state: ExecutionState | None, node_id: str) -> dict[str, Any] | None:
     """
     Получает mock данные для ноды.
 
@@ -191,7 +191,7 @@ def get_mock_for_node(state: Optional["ExecutionState"], node_id: str) -> Option
     return None
 
 
-def get_mock_for_llm(state: Optional["ExecutionState"]) -> Optional[List[Dict[str, Any]]]:
+def get_mock_for_llm(state: ExecutionState | None) -> list[dict[str, Any]] | None:
     """
     Получает mock ответы для LLM.
 
@@ -223,7 +223,7 @@ def get_mock_for_llm(state: Optional["ExecutionState"]) -> Optional[List[Dict[st
     return None
 
 
-def check_mock_permission(user_groups: List[str], mock_config: MockConfig) -> bool:
+def check_mock_permission(user_groups: list[str], mock_config: MockConfig) -> bool:
     """
     Проверяет есть ли у пользователя право использовать mock через request metadata.
 

@@ -1,5 +1,6 @@
 """Репозиторий шаблонов namespace и их типов."""
 
+from typing import override
 from uuid import uuid4
 
 from sqlalchemy import delete, func, select
@@ -11,10 +12,12 @@ from core.db.utils import get_rowcount
 
 class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
     @property
+    @override
     def model_class(self) -> type[NamespaceTemplate]:
         return NamespaceTemplate
 
     @property
+    @override
     def id_field(self) -> str:
         return "template_key"
 

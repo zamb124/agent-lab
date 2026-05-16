@@ -8,12 +8,20 @@ CRM использует реляционную БД для:
 - Агрегаций и сортировки
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Generic, Optional, TypeVar
+from typing import ClassVar, Generic, TypeVar
+from typing import cast as type_cast
 
 from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute
 
 from core.context import get_context
 from core.db.utils import get_rowcount
@@ -30,16 +38,16 @@ class CRMDatabase:
     Создает engine и session factory для работы с PostgreSQL.
     """
 
-    _instance: Optional["CRMDatabase"] = None
+    _instance: ClassVar[CRMDatabase | None] = None
 
-    def __init__(self, db_url: str):
-        self._engine = create_async_engine(
+    def __init__(self, db_url: str) -> None:
+        self._engine: AsyncEngine = create_async_engine(
             db_url,
             echo=False,
             pool_size=5,
             max_overflow=10,
         )
-        self._session_factory = async_sessionmaker(
+        self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
             bind=self._engine, class_=AsyncSession, expire_on_commit=False
         )
 
@@ -57,7 +65,7 @@ class CRMDatabase:
         return cls._instance
 
     @classmethod
-    def reset(cls):
+    def reset(cls) -> None:
         """Сброс singleton (для тестов)"""
         cls._instance = None
 
@@ -77,8 +85,8 @@ class BaseCRMRepository(ABC, Generic[T]):
     - Автоматическую изоляцию по company_id из контекста
     """
 
-    def __init__(self, db: CRMDatabase):
-        self._db = db
+    def __init__(self, db: CRMDatabase) -> None:
+        self._db: CRMDatabase = db
 
     def _get_company_id(self) -> str:
         """
@@ -102,9 +110,12 @@ class BaseCRMRepository(ABC, Generic[T]):
         """Имя поля с ID"""
         pass
 
-    def _get_id_column(self):
+    def _get_id_column(self) -> InstrumentedAttribute[object]:
         """Получает колонку ID"""
-        return getattr(self.model_class, self.id_field)
+        return type_cast(
+            InstrumentedAttribute[object],
+            type_cast(object, getattr(self.model_class, self.id_field)),
+        )
 
     async def get(self, entity_id: str) -> T | None:
         """Получает запись по ID"""

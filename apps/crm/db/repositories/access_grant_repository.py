@@ -2,6 +2,7 @@
 Репозиторий для AccessGrants.
 """
 
+from typing import override
 
 from sqlalchemy import and_, delete, func, or_, select, update
 
@@ -17,10 +18,12 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
         super().__init__(db)
 
     @property
+    @override
     def model_class(self) -> type[AccessGrant]:
         return AccessGrant
 
     @property
+    @override
     def id_field(self) -> str:
         return "grant_id"
 
@@ -107,7 +110,11 @@ class AccessGrantRepository(BaseCRMRepository[AccessGrant]):
             return
         async with self._db.session() as session:
             for gid in to_delete:
-                await session.execute(delete(AccessGrant).where(AccessGrant.grant_id == gid))
+                result = await session.execute(
+                    delete(AccessGrant).where(AccessGrant.grant_id == gid)
+                )
+                if get_rowcount(result) != 1:
+                    raise ValueError(f"Access grant {gid} was not deleted")
             await session.commit()
 
     async def find_by_resources_batch(

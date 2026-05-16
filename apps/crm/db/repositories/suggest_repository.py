@@ -1,27 +1,40 @@
+from dataclasses import dataclass
+from typing import override
 
 from sqlalchemy import func, select, update
 
 from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import CRMSuggest
 from core.context import get_context
-from core.pagination import OffsetPage
+
+
+@dataclass(frozen=True)
+class CRMSuggestPage:
+    items: list[CRMSuggest]
+    total: int
+    limit: int
+    offset: int
 
 
 class SuggestRepository(BaseCRMRepository[CRMSuggest]):
     @property
+    @override
     def model_class(self) -> type[CRMSuggest]:
         return CRMSuggest
 
     @property
+    @override
     def id_field(self) -> str:
         return "id"
 
+    @override
     def _get_company_id(self) -> str:
         context = get_context()
         if not context or not context.active_company:
             raise ValueError("Нет активной компании в контексте")
         return context.active_company.company_id
 
+    @override
     async def get(
         self,
         entity_id: str,
@@ -45,7 +58,7 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
         status: str | None = "pending",
         limit: int = 50,
         offset: int = 0,
-    ) -> OffsetPage[CRMSuggest]:
+    ) -> CRMSuggestPage:
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(CRMSuggest).where(
@@ -62,8 +75,9 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
             result = await session.execute(stmt)
             items = list(result.scalars().all())
 
-            return OffsetPage(items=items, total=total, limit=limit, offset=offset)
+            return CRMSuggestPage(items=items, total=total, limit=limit, offset=offset)
 
+    @override
     async def create(self, entity: CRMSuggest) -> CRMSuggest:
         async with self._db.session() as session:
             session.add(entity)

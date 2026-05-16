@@ -9,7 +9,7 @@ InputMapper — маппинг данных триггера в state.
 
 import copy
 import re
-from typing import Any, Dict
+from typing import Any
 
 PathPart = str | int
 
@@ -28,9 +28,9 @@ class InputMapper:
     def map(
         self,
         trigger_id: str,
-        payload: Dict[str, Any],
-        output_mapping: Dict[str, str],
-    ) -> Dict[str, Any]:
+        payload: dict[str, Any],
+        output_mapping: dict[str, str],
+    ) -> dict[str, Any]:
         """
         Применяет маппинг к payload.
 
@@ -44,7 +44,7 @@ class InputMapper:
             msg = f"payload must be a dict, got {type(payload).__name__}"
             raise TypeError(msg)
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "triggers": {
                 trigger_id: {
                     "payload": copy.deepcopy(payload),
@@ -76,11 +76,11 @@ class InputMapper:
             result["content"] = ""
         return result
 
-    def _merge_shallow(self, target: Dict[str, Any], source: Dict[str, Any]) -> None:
+    def _merge_shallow(self, target: dict[str, Any], source: dict[str, Any]) -> None:
         for k, v in source.items():
             target[k] = v
 
-    def _get_value(self, expr: str, payload: Dict[str, Any]) -> Any:
+    def _get_value(self, expr: str, payload: dict[str, Any]) -> Any:
         if expr.startswith(self.CONST_PREFIX):
             return expr[len(self.CONST_PREFIX) :]
 
@@ -90,7 +90,7 @@ class InputMapper:
 
         return self._get_nested(payload, expr)
 
-    def _get_nested(self, data: Dict[str, Any], path: str) -> Any:
+    def _get_nested(self, data: dict[str, Any], path: str) -> Any:
         if not path:
             return data
 
@@ -126,7 +126,7 @@ class InputMapper:
 
         return parts
 
-    def _set_nested(self, data: Dict[str, Any], path: str, value: Any) -> None:
+    def _set_nested(self, data: dict[str, Any], path: str, value: Any) -> None:
         if not path:
             msg = "вложенный путь для context пуст"
             raise ValueError(msg)

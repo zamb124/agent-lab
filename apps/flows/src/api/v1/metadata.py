@@ -3,7 +3,7 @@ API endpoints для метаданных платформы.
 Предоставляет информацию о типах нод, доступных моделях и т.д.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from fastapi import APIRouter
 
@@ -17,7 +17,7 @@ router = APIRouter(tags=["metadata"])
 # Категория -> упорядоченный человекочитаемый ключ для UI-сайдбара.
 # Сами типы нод и связи с runtime — в `apps/flows/src/runtime/nodes.py`
 # (NodeType enum в `apps/flows/src/models/enums.py`).
-_NODE_TYPES: list[Dict[str, Any]] = [
+_NODE_TYPES: list[dict[str, Any]] = [
     {
         "category": "core",
         "type": "llm_node",
@@ -113,7 +113,7 @@ _NODE_TYPES: list[Dict[str, Any]] = [
 
 # Resource-типы для отдельного раздела «Ресурсы» в редакторе. Это не runtime
 # node, а ссылки на shared-сущности (Code, Files, LLM), которые подцепляются к нодам.
-_RESOURCE_TYPES: list[Dict[str, Any]] = [
+_RESOURCE_TYPES: list[dict[str, Any]] = [
     {"type": "code",   "name": "Code",   "icon": "code",     "description": "Inline Python/JS код",     "color": "#8b5cf6"},
     {"type": "files",  "name": "Files",  "icon": "folder",   "description": "S3/MinIO файловое хранилище", "color": "#f59e0b"},
     {"type": "llm",    "name": "LLM",    "icon": "bot",      "description": "LLM модель",                "color": "#ec4899"},
@@ -121,28 +121,28 @@ _RESOURCE_TYPES: list[Dict[str, Any]] = [
 
 
 @router.get("/node-types")
-async def get_node_types(container: ContainerDep) -> List[Dict[str, Any]]:
+async def get_node_types(container: ContainerDep) -> list[dict[str, Any]]:
     """Список доступных runtime-типов нод для палитры редактора."""
     _ = container
     return _NODE_TYPES
 
 
 @router.get("/resource-types")
-async def get_resource_types(container: ContainerDep) -> List[Dict[str, Any]]:
+async def get_resource_types(container: ContainerDep) -> list[dict[str, Any]]:
     """Список типов ресурсов (Code, Files, LLM)."""
     _ = container
     return _RESOURCE_TYPES
 
 
 @router.get("/exception-absorb-allow-names")
-async def get_exception_absorb_allow_names(container: ContainerDep) -> List[str]:
+async def get_exception_absorb_allow_names(container: ContainerDep) -> list[str]:
     """Имена классов исключений для whitelist exception_allow_types в редакторе нод."""
     _ = container
     return list_exception_absorb_allow_values()
 
 
 @router.get("/execution-limits")
-async def get_execution_limits(container: ContainerDep) -> Dict[str, int]:
+async def get_execution_limits(container: ContainerDep) -> dict[str, int]:
     """Лимиты исполнения графа для UI (кламп max_visits_per_run и т.п.)."""
     _ = container
     return {"graph_max_iterations": get_settings().graph_max_iterations}

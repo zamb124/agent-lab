@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -15,8 +15,8 @@ from a2a.types import Message, Part, Role, TextPart
 def build_user_message(
     content: str,
     source_node_id: str,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
+    context_id: str | None = None,
+    task_id: str | None = None,
 ) -> Message:
     """Сообщение пользователя с metadata.node_id для фильтрации и nested resume."""
     return Message(
@@ -32,13 +32,13 @@ def build_user_message(
 def build_assistant_message(
     content: str,
     source_node_id: str,
-    tool_calls: Optional[List[Dict[str, Any]]] = None,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
+    tool_calls: list[dict[str, Any]] | None = None,
+    context_id: str | None = None,
+    task_id: str | None = None,
     *,
     interrupted: bool = False,
 ) -> Message:
-    meta: Dict[str, Any] = {"node_id": source_node_id}
+    meta: dict[str, Any] = {"node_id": source_node_id}
     if tool_calls:
         meta["tool_calls"] = tool_calls
     if interrupted:
@@ -57,8 +57,8 @@ def build_tool_result_message(
     tool_call_id: str,
     content: str,
     source_node_id: str,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
+    context_id: str | None = None,
+    task_id: str | None = None,
 ) -> Message:
     return Message(
         message_id=str(uuid.uuid4()),
@@ -72,11 +72,11 @@ def build_tool_result_message(
 
 def build_system_message(
     content: str,
-    context_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-    source_node_id: Optional[str] = None,
+    context_id: str | None = None,
+    task_id: str | None = None,
+    source_node_id: str | None = None,
 ) -> Message:
-    meta: Dict[str, Any] = {"system": True}
+    meta: dict[str, Any] = {"system": True}
     if source_node_id is not None:
         meta["node_id"] = source_node_id
     return Message(

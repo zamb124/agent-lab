@@ -31,9 +31,15 @@ async def enqueue_note_markdown_format_task(
     expected_updated_at_iso: str,
 ) -> bool:
     """Ставит задачу в TaskIQ. Требует активный request context (JWT, user). Возвращает True, если задача поставлена и разослан WS ``started``."""
-    await task_service.start_note_markdown_format(
+    task = await task_service.start_note_markdown_format(
         note_id=note_id,
         expected_updated_at_iso=expected_updated_at_iso,
+    )
+    logger.info(
+        "note_markdown_format_task_started",
+        note_id=note_id,
+        task_id=task.task_id,
+        taskiq_task_id=task.taskiq_task_id,
     )
 
     entity = await entity_repository.get(note_id)
@@ -77,7 +83,7 @@ async def schedule_note_markdown_format(
     if not settings.note_attachment_markdown_format_enabled:
         return False
     ctx = get_context()
-    if ctx is None or not ctx.auth_token or ctx.user is None:
+    if ctx is None or not ctx.auth_token:
         logger.warning(
             "note_markdown_format_schedule_skip_no_context",
             note_id=note_id,

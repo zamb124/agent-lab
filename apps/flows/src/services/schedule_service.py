@@ -2,7 +2,7 @@
 
 import datetime
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.clients import SchedulerClient
 from core.context import get_context
@@ -90,10 +90,10 @@ class ScheduleService:
         user_id: str,
         content_type: ContentType,
         content: str,
-        tool_args: Optional[Dict[str, Any]],
-        cron: Optional[str] = None,
-        interval_seconds: Optional[int] = None,
-        run_at: Optional[datetime.datetime] = None,
+        tool_args: dict[str, Any] | None,
+        cron: str | None = None,
+        interval_seconds: int | None = None,
+        run_at: datetime.datetime | None = None,
     ) -> ScheduledTaskInfo:
         flow_task_id = str(uuid.uuid4())
         payload = {
@@ -141,8 +141,8 @@ class ScheduleService:
         cron: str,
         content_type: ContentType,
         content: str,
-        tool_args: Optional[Dict[str, Any]] = None,
-        description: Optional[str] = None,
+        tool_args: dict[str, Any] | None = None,
+        description: str | None = None,
     ) -> ScheduledTaskInfo:
         """
         Создает периодическую задачу по cron расписанию.
@@ -181,8 +181,8 @@ class ScheduleService:
         interval_minutes: int,
         content_type: ContentType,
         content: str,
-        tool_args: Optional[Dict[str, Any]] = None,
-        description: Optional[str] = None,
+        tool_args: dict[str, Any] | None = None,
+        description: str | None = None,
     ) -> ScheduledTaskInfo:
         """
         Создает периодическую задачу с интервалом.
@@ -221,8 +221,8 @@ class ScheduleService:
         run_at: datetime.datetime,
         content_type: ContentType,
         content: str,
-        tool_args: Optional[Dict[str, Any]] = None,
-        description: Optional[str] = None,
+        tool_args: dict[str, Any] | None = None,
+        description: str | None = None,
     ) -> ScheduledTaskInfo:
         """
         Создает одноразовую задачу на конкретное время.
@@ -256,8 +256,8 @@ class ScheduleService:
     async def list_tasks(
         self,
         session_id: str,
-        status: Optional[ScheduledTaskStatus] = None
-    ) -> List[ScheduledTaskInfo]:
+        status: ScheduledTaskStatus | None = None
+    ) -> list[ScheduledTaskInfo]:
         """
         Получает список задач для сессии.
 
@@ -327,7 +327,7 @@ class ScheduleService:
             await self._scheduled_task_repository.update_status(task_id, ScheduledTaskStatus.CANCELLED)
         return True
 
-    async def get_task(self, task_id: str) -> Optional[ScheduledTaskInfo]:
+    async def get_task(self, task_id: str) -> ScheduledTaskInfo | None:
         """Получает задачу по ID."""
         if self._scheduler_service is not None:
             context = get_context()

@@ -7,7 +7,7 @@ HTTP-эндпоинт, что и в проде: /flows/api/v1/triggers/telegram/
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 import httpx
 
@@ -28,7 +28,7 @@ class TelegramPollingBot:
         bot_token: str,
         subdomain: str,
         handler_callback,
-        allowed_updates: List[str],
+        allowed_updates: list[str],
     ):
         self.flow_id = flow_id
         self.trigger_id = trigger_id
@@ -53,7 +53,7 @@ class TelegramPollingBot:
         except httpx.HTTPError as e:
             logger.warning(f"[{self.bot_key}] Failed to delete webhook: {e}")
 
-    async def get_updates(self, client) -> List[Dict[str, Any]]:
+    async def get_updates(self, client) -> list[dict[str, Any]]:
         """Long polling getUpdates."""
         try:
             response = await client.get(
@@ -136,12 +136,12 @@ class TelegramDevPolling:
     """
 
     def __init__(self):
-        self.bots: Dict[str, TelegramPollingBot] = {}
+        self.bots: dict[str, TelegramPollingBot] = {}
         self.running = False
-        self._task: Optional[asyncio.Task[None]] = None
+        self._task: asyncio.Task[None] | None = None
         self._scan_interval = 10  # секунд между сканированиями
 
-    async def _get_telegram_triggers(self) -> List[Dict[str, Any]]:
+    async def _get_telegram_triggers(self) -> list[dict[str, Any]]:
         """Собирает все Telegram триггеры из агентов всех компаний."""
         from apps.flows.src.container import get_container
         from core.context import clear_context, set_context
@@ -237,11 +237,11 @@ class TelegramDevPolling:
         clear_context()
         return triggers
 
-    async def _get_all_subdomains(self, container) -> List[str]:
+    async def _get_all_subdomains(self, container) -> list[str]:
         """Уникальные идентификаторы tenant (сегмент company:*:flow:*) по ключам в таблице flows."""
         try:
             flows_table = container.flow_repository._get_table_name()
-            all_data = await container.flow_repository._storage._get_all_by_prefix_and_table(
+            all_data = await container.flow_repository._storage.get_all_by_prefix_and_table(
                 "company:", flows_table, 10_000, 0
             )
 
@@ -263,7 +263,7 @@ class TelegramDevPolling:
         self,
         flow_id: str,
         trigger_id: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         subdomain: str,
     ):
         """
@@ -281,7 +281,7 @@ class TelegramDevPolling:
         url = f"{base}{path}"
 
         container = get_container()
-        secret: Optional[str] = None
+        secret: str | None = None
         unscoped = await container.flow_repository.get_latest_by_flow_id_unscoped(flow_id)
         if unscoped is not None:
             flow_config, _ = unscoped
@@ -289,7 +289,7 @@ class TelegramDevPolling:
             if trig is not None:
                 secret = trig.config.get("_secret_token")
 
-        headers: Dict[str, str] = {}
+        headers: dict[str, str] = {}
         if secret:
             headers["X-Telegram-Bot-Api-Secret-Token"] = secret
 
@@ -316,7 +316,7 @@ class TelegramDevPolling:
 
         triggers = await self._get_telegram_triggers()
 
-        current_keys: Set[str] = set()
+        current_keys: set[str] = set()
 
         for trigger_data in triggers:
             key = f"{trigger_data['flow_id']}:{trigger_data['trigger_id']}"
@@ -391,7 +391,7 @@ class TelegramDevPolling:
 
 
 # Глобальный инстанс
-_dev_polling: Optional[TelegramDevPolling] = None
+_dev_polling: TelegramDevPolling | None = None
 
 
 def get_dev_polling() -> TelegramDevPolling:

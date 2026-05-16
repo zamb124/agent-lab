@@ -8,7 +8,7 @@ ResourceResolver - резолвинг ресурсов flow.
 - Иерархию: flow > skill > node
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.db import ResourceRepository
@@ -45,7 +45,7 @@ class ResourceResolver:
         self.repository = repository
         self.container = container
 
-        self._providers: Dict[ResourceType, BaseResourceProvider] = {
+        self._providers: dict[ResourceType, BaseResourceProvider] = {
             ResourceType.CODE: CodeResourceProvider(container),
             ResourceType.LLM: LLMResourceProvider(container),
             ResourceType.FILES: FilesResourceProvider(container),
@@ -53,11 +53,11 @@ class ResourceResolver:
 
     async def resolve_for_node(
         self,
-        flow_resources: Optional[Dict[str, ResourceReference]] = None,
-        skill_resources: Optional[Dict[str, ResourceReference]] = None,
-        node_resources: Optional[Dict[str, ResourceReference]] = None,
-        variables: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        flow_resources: dict[str, ResourceReference] | None = None,
+        skill_resources: dict[str, ResourceReference] | None = None,
+        node_resources: dict[str, ResourceReference] | None = None,
+        variables: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Резолвит все ресурсы для конкретной ноды.
 
@@ -81,7 +81,7 @@ class ResourceResolver:
             flow_resources, skill_resources, node_resources
         )
 
-        resolved: Dict[str, Any] = {}
+        resolved: dict[str, Any] = {}
 
         for resource_id, ref in merged.items():
             try:
@@ -102,7 +102,7 @@ class ResourceResolver:
         self,
         resource_id: str,
         ref: ResourceReference,
-        variables: Dict[str, Any],
+        variables: dict[str, Any],
     ) -> Any:
         """
         Резолвит одну ссылку на ресурс.
@@ -161,7 +161,7 @@ class ResourceResolver:
     async def resolve_single(
         self,
         ref: ResourceReference,
-        variables: Optional[Dict[str, Any]] = None,
+        variables: dict[str, Any] | None = None,
     ) -> Any:
         """
         Резолвит один ресурс.

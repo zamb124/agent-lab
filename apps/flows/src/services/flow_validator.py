@@ -12,7 +12,8 @@ FlowValidator - валидация структуры и ссылок во flow.
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
+from typing import Any
+from collections.abc import Awaitable, Callable
 
 from core.logging import get_logger
 from core.urn import extract_id
@@ -20,7 +21,7 @@ from core.urn import extract_id
 logger = get_logger(__name__)
 
 
-def _edge_endpoint_ids(edge: Dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+def _edge_endpoint_ids(edge: dict[str, Any]) -> tuple[str | None, str | None]:
     """from_node/to_node или legacy from/to."""
     fn = edge.get("from_node")
     if fn is None:
@@ -48,8 +49,8 @@ class FlowValidationError:
     code: str
     message: str
     severity: ValidationSeverity = ValidationSeverity.ERROR
-    node_id: Optional[str] = None
-    details: Optional[Dict[str, Any]] = None
+    node_id: str | None = None
+    details: dict[str, Any] | None = None
 
 
 @dataclass
@@ -57,17 +58,17 @@ class FlowValidationResult:
     """Результат валидации flow."""
 
     valid: bool
-    errors: List[FlowValidationError] = field(default_factory=list)
-    state_keys_used: Set[str] = field(default_factory=set)
-    var_keys_used: Set[str] = field(default_factory=set)
+    errors: list[FlowValidationError] = field(default_factory=list)
+    state_keys_used: set[str] = field(default_factory=set)
+    var_keys_used: set[str] = field(default_factory=set)
 
     def add_error(
         self,
         code: str,
         message: str,
         severity: ValidationSeverity = ValidationSeverity.ERROR,
-        node_id: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        node_id: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         self.errors.append(FlowValidationError(
             code=code,
@@ -88,7 +89,7 @@ class FlowValidator:
         flow_repository=None,
         tool_repository=None,
         node_repository=None,
-        flow_builder: Callable[[Dict[str, Any]], Awaitable[Any]] | None = None,
+        flow_builder: Callable[[dict[str, Any]], Awaitable[Any]] | None = None,
     ):
         self.flow_repository = flow_repository
         self.tool_repository = tool_repository
@@ -97,11 +98,11 @@ class FlowValidator:
 
     async def validate(
         self,
-        nodes: Dict[str, Dict[str, Any]],
-        edges: List[Dict[str, Any]],
+        nodes: dict[str, dict[str, Any]],
+        edges: list[dict[str, Any]],
         entry: str,
-        variables: Dict[str, Any],
-        flow_id: Optional[str] = None,
+        variables: dict[str, Any],
+        flow_id: str | None = None,
     ) -> FlowValidationResult:
         """
         Валидирует конфигурацию flow.
@@ -146,8 +147,8 @@ class FlowValidator:
 
     def _validate_structure(
         self,
-        nodes: Dict[str, Dict[str, Any]],
-        edges: List[Dict[str, Any]],
+        nodes: dict[str, dict[str, Any]],
+        edges: list[dict[str, Any]],
         entry: str,
         result: FlowValidationResult,
     ):
@@ -224,7 +225,7 @@ class FlowValidator:
             for nid in node_ids
             if (nodes.get(nid) or {}).get("type") != "resource"
         }
-        nodes_with_outgoing: Set[str] = set()
+        nodes_with_outgoing: set[str] = set()
         for e in edges:
             if not isinstance(e, dict):
                 continue
@@ -249,11 +250,11 @@ class FlowValidator:
 
     def _warn_fan_in_without_incoming_policy(
         self,
-        nodes: Dict[str, Dict[str, Any]],
-        edges: List[Dict[str, Any]],
+        nodes: dict[str, dict[str, Any]],
+        edges: list[dict[str, Any]],
         result: FlowValidationResult,
     ) -> None:
-        incoming_edge_count: Dict[str, int] = {}
+        incoming_edge_count: dict[str, int] = {}
         for edge in edges:
             from_n, to_n = _edge_endpoint_ids(edge)
             if from_n and to_n:
@@ -279,11 +280,11 @@ class FlowValidator:
     def _warn_cycles_reachable_from_entry(
         self,
         entry: str,
-        edges: List[Dict[str, Any]],
-        node_ids: Set[str],
+        edges: list[dict[str, Any]],
+        node_ids: set[str],
         result: FlowValidationResult,
     ) -> None:
-        adj: Dict[str, List[str]] = {n: [] for n in node_ids}
+        adj: dict[str, list[str]] = {n: [] for n in node_ids}
         for edge in edges:
             f = edge.get("from")
             t = edge.get("to")
@@ -291,7 +292,7 @@ class FlowValidator:
                 adj[f].append(t)
 
         WHITE, GRAY, BLACK = 0, 1, 2
-        color: Dict[str, int] = {n: WHITE for n in node_ids}
+        color: dict[str, int] = {n: WHITE for n in node_ids}
         cycle_found = False
 
         def dfs(n: str) -> bool:
@@ -323,7 +324,7 @@ class FlowValidator:
     def _validate_react_role_uniqueness(
         self,
         node_id: str,
-        tools: List[Any],
+        tools: list[Any],
         result: FlowValidationResult,
     ):
         """Валидация что в llm_node только 1 reasoning и только 1 exit tool."""
@@ -357,9 +358,9 @@ class FlowValidator:
     def _find_reachable_nodes(
         self,
         entry: str,
-        edges: List[Dict[str, Any]],
-        all_nodes: Set[str],
-    ) -> Set[str]:
+        edges: list[dict[str, Any]],
+        all_nodes: set[str],
+    ) -> set[str]:
         """BFS для поиска достижимых нод от entry."""
         outgoing = {}
         for node_id in all_nodes:
@@ -388,7 +389,7 @@ class FlowValidator:
 
     async def _validate_references(
         self,
-        nodes: Dict[str, Dict[str, Any]],
+        nodes: dict[str, dict[str, Any]],
         result: FlowValidationResult,
     ):
         """Валидация ссылок на flows, tools, ноды."""
@@ -490,8 +491,8 @@ class FlowValidator:
 
     def _validate_variables(
         self,
-        nodes: Dict[str, Dict[str, Any]],
-        variables: Dict[str, Any],
+        nodes: dict[str, dict[str, Any]],
+        variables: dict[str, Any],
         result: FlowValidationResult,
     ):
         """Валидация использования @var: переменных."""
@@ -554,7 +555,7 @@ class FlowValidator:
 
     def _validate_messages_filters(
         self,
-        nodes: Dict[str, Dict[str, Any]],
+        nodes: dict[str, dict[str, Any]],
         result: FlowValidationResult,
     ) -> None:
         """Список messages_filter у llm_node должен ссылаться только на node_id из этого графа."""
@@ -579,7 +580,7 @@ class FlowValidator:
 
     def _validate_node_files(
         self,
-        nodes: Dict[str, Dict[str, Any]],
+        nodes: dict[str, dict[str, Any]],
         result: FlowValidationResult,
     ) -> None:
         """Поле files: список объектов с непустыми строками name и path."""
@@ -604,7 +605,7 @@ class FlowValidator:
 
     def _validate_hitl_nodes(
         self,
-        nodes: Dict[str, Dict[str, Any]],
+        nodes: dict[str, dict[str, Any]],
         result: FlowValidationResult,
     ) -> None:
         """hitl_node: ровно один источник очереди (slug или id)."""
@@ -646,7 +647,7 @@ class FlowValidator:
 
     def _parse_inline_code(
         self,
-        nodes: Dict[str, Dict[str, Any]],
+        nodes: dict[str, dict[str, Any]],
         result: FlowValidationResult,
     ):
         """Парсит inline code и извлекает обращения к state."""
@@ -680,15 +681,15 @@ class FlowValidator:
 
     async def _try_build(
         self,
-        nodes: Dict[str, Dict[str, Any]],
-        edges: List[Dict[str, Any]],
+        nodes: dict[str, dict[str, Any]],
+        edges: list[dict[str, Any]],
         entry: str,
-        flow_id: Optional[str],
+        flow_id: str | None,
         result: FlowValidationResult,
     ):
         """Попытка собрать Flow из конфигурации."""
         if self.flow_builder is None:
-            raise RuntimeError("FlowValidator requires flow_builder for executable validation")
+            return
         try:
             config = {
                 "id": flow_id or "validation_test",

@@ -32,8 +32,8 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
         registry_path=registry_path,
     )
     loader._target_company_id = "system"
-    await loader._load_tools_cache()
-    await loader._load_nodes_cache()
+    await loader.load_tools_cache()
+    await loader.load_nodes_cache()
 
     prefix = "/flows/api/v1/files/download/"
     demo_ids = ("lawyer", "support_demo", "psy", "coach", "tutor")

@@ -3,7 +3,7 @@
 """
 
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -25,29 +25,29 @@ class EvaluationResult(BaseModel):
     run_date: date = Field(..., description="Дата запуска")
     iteration: int = Field(..., description="Номер итерации за день")
     test_case_id: str = Field(..., description="ID тест-кейса")
-    task_id: Optional[str] = Field(default=None, description="ID задачи для трейсинга")
+    task_id: str | None = Field(default=None, description="ID задачи для трейсинга")
 
     status: str = Field(..., description="Статус: passed, failed, error, timeout")
     duration_ms: int = Field(..., description="Длительность в миллисекундах")
     turns_count: int = Field(default=0, description="Количество итераций диалога")
 
-    dialog: List[Dict[str, Any]] = Field(
+    dialog: list[dict[str, Any]] = Field(
         default_factory=list, description="История диалога [{role, content}, ...]"
     )
 
-    scores: Optional[Dict[str, Union[float, bool]]] = Field(
+    scores: dict[str, float | bool] | None = Field(
         default=None, description="Оценки {attr_name: score/passed}"
     )
-    judge_feedback: Optional[str] = Field(default=None, description="Комментарий судьи")
+    judge_feedback: str | None = Field(default=None, description="Комментарий судьи")
 
-    error: Optional[str] = Field(default=None, description="Сообщение об ошибке")
+    error: str | None = Field(default=None, description="Сообщение об ошибке")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     def get_id(self) -> str:
         """Возвращает составной ID для хранения."""
         return f"{self.flow_id}:{self.branch_id}:{self.run_date.isoformat()}:{self.iteration}:{self.test_case_id}"
 
-    def get_total_score(self) -> Optional[float]:
+    def get_total_score(self) -> float | None:
         """
         Вычисляет общую оценку из scores.
 
@@ -97,12 +97,12 @@ class EvaluationRunSummary(BaseModel):
     run_date: date
     iteration: int
     started_at: datetime
-    finished_at: Optional[datetime] = None
+    finished_at: datetime | None = None
 
     total_tests: int = 0
     passed_tests: int = 0
     failed_tests: int = 0
     error_tests: int = 0
 
-    average_score: Optional[float] = None
+    average_score: float | None = None
     status: str = Field(default="running", description="running, passed, failed, partial")

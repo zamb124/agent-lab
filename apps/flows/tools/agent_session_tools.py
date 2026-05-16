@@ -4,7 +4,7 @@
 Группа для ReAct: reason, ask_user, self_check, final_answer, finish.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -67,7 +67,7 @@ class SelfCheckArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     hypothesis: str = Field(..., min_length=1, description="Проверяемая гипотеза или утверждение.")
-    supporting_facts: List[str] = Field(
+    supporting_facts: list[str] = Field(
         ...,
         min_length=1,
         description="Список фактов из контекста, которые поддерживают гипотезу.",
@@ -76,11 +76,11 @@ class SelfCheckArgs(BaseModel):
         ...,
         description='Итог проверки: например "confirmed" если гипотеза подтверждена, иначе другое значение.',
     )
-    contradicting_facts: Optional[List[str]] = Field(
+    contradicting_facts: list[str] | None = Field(
         None,
         description="Факты, которые противоречат гипотезе; можно не передавать.",
     )
-    notes: Optional[str] = Field(None, description="Дополнительные заметки по проверке.")
+    notes: str | None = Field(None, description="Дополнительные заметки по проверке.")
 
 
 class FinalAnswerArgs(BaseModel):
@@ -94,7 +94,7 @@ class FinalAnswerArgs(BaseModel):
         le=1.0,
         description="Уверенность от 0 до 1.",
     )
-    sources: Optional[List[str]] = Field(
+    sources: list[str] | None = Field(
         None,
         description="Ссылки на источники, цитаты или идентификаторы документов; опционально.",
     )
@@ -115,7 +115,7 @@ async def reason(
     *,
     state: "ExecutionState",
 ) -> str:
-    reasoning_entry: Dict[str, Any] = {
+    reasoning_entry: dict[str, Any] = {
         "observation": observation,
         "analysis": analysis,
         "plan": plan,
@@ -183,13 +183,13 @@ async def hitl_operator_task(
 )
 async def self_check(
     hypothesis: str,
-    supporting_facts: List[str],
+    supporting_facts: list[str],
     verification_result: str,
-    contradicting_facts: Optional[List[str]] = None,
-    notes: Optional[str] = None,
+    contradicting_facts: list[str] | None = None,
+    notes: str | None = None,
     *,
     state: "ExecutionState",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "hypothesis": hypothesis,
         "supporting_facts": supporting_facts,
@@ -211,10 +211,10 @@ async def final_answer(
     answer: str,
     justification: str,
     confidence: float,
-    sources: Optional[List[str]] = None,
+    sources: list[str] | None = None,
     *,
     state: "ExecutionState",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "answer": answer,
         "justification": justification,

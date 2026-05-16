@@ -15,8 +15,8 @@ class LaraWorkspaceService:
         task_repo: TaskRepository,
         entity_repo: EntityRepository,
     ) -> None:
-        self._task_repo = task_repo
-        self._entity_repo = entity_repo
+        self._task_repo: TaskRepository = task_repo
+        self._entity_repo: EntityRepository = entity_repo
 
     async def get_lara_summary(self, namespace: str) -> LaraWorkspaceSummaryResponse:
         ns = namespace.strip()

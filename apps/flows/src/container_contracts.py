@@ -52,6 +52,9 @@ class FlowRuntimeContainer(Protocol):
     def a2a_client(self) -> Any: ...
 
     @property
+    def flow_discovery(self) -> Any: ...
+
+    @property
     def billing_service(self) -> Any: ...
 
     @property

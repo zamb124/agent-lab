@@ -6,7 +6,7 @@ E2E тесты для полного цикла переопределений.
 
 import pytest
 
-from apps.flows.src.runtime import Flow
+from apps.flows.src.runtime.flow import Flow
 from core.state import ExecutionState
 
 

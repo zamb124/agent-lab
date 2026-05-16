@@ -10,7 +10,7 @@ import json
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
@@ -26,7 +26,7 @@ from core.state import ExecutionState
 logger = get_logger(__name__)
 
 
-def _execution_state_from_storage_dict(data: Dict[str, Any]) -> ExecutionState:
+def _execution_state_from_storage_dict(data: dict[str, Any]) -> ExecutionState:
     """Убирает устаревший ключ flow_config из JSON, переносит version в flow_config_version."""
     fc = data.pop("flow_config", None)
     if isinstance(fc, dict) and fc.get("version") and not data.get("flow_config_version"):
@@ -35,7 +35,7 @@ def _execution_state_from_storage_dict(data: Dict[str, Any]) -> ExecutionState:
 
 
 def _execution_state_for_storage(
-    state: Union[ExecutionState, Dict[str, Any]],
+    state: ExecutionState | dict[str, Any],
 ) -> ExecutionState:
     """Сериализация без тяжёлого flow_config (раньше писался в states)."""
     model = (
@@ -50,20 +50,20 @@ class StateData(BaseModel):
     """Модель для хранения state сессии."""
 
     session_id: str
-    data: "ExecutionState"
+    data: ExecutionState
 
 
 class BaseStateRepository(ABC):
     """Базовый интерфейс для StateRepository (для InMemory реализации)."""
 
     @abstractmethod
-    async def get(self, session_id: str) -> Optional["ExecutionState"]:
+    async def get(self, session_id: str) -> ExecutionState | None:
         """Получает состояние сессии."""
         pass
 
     @abstractmethod
     async def set(
-        self, session_id: str, state: Union["ExecutionState", Dict[str, Any]]
+        self, session_id: str, state: ExecutionState | dict[str, Any]
     ) -> bool:
         """Сохраняет состояние сессии (ExecutionState или dict для границы тестов/репозитория)."""
         pass
@@ -76,20 +76,20 @@ class BaseStateRepository(ABC):
     @abstractmethod
     async def resolve_session_id_by_flow_and_identifier(
         self, flow_id: str, lookup_id: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """По ``task_id`` или ``context_id`` возвращает ``session_id`` вида ``flow_id:context_id``."""
         pass
 
     async def get_for_update(
         self, session_id: str, conn: Any
-    ) -> Optional["ExecutionState"]:
+    ) -> ExecutionState | None:
         """Получает состояние с блокировкой."""
         return await self.get(session_id)
 
     async def set_in_transaction(
         self,
         session_id: str,
-        state: Union["ExecutionState", Dict[str, Any]],
+        state: ExecutionState | dict[str, Any],
         conn: Any,
     ) -> bool:
         """Сохраняет состояние в рамках транзакции."""
@@ -135,7 +135,7 @@ class DatabaseStateRepository(BaseStateRepository):
         company_identifier = context.active_company.subdomain or context.active_company.company_id
         return f"company:{company_identifier}:{key}"
 
-    def _build_final_prefix(self) -> Optional[str]:
+    def _build_final_prefix(self) -> str | None:
         if self.is_global:
             return None
         context = get_context()
@@ -144,7 +144,7 @@ class DatabaseStateRepository(BaseStateRepository):
         company_identifier = context.active_company.subdomain or context.active_company.company_id
         return f"company:{company_identifier}:{self._get_prefix()}"
 
-    async def get(self, session_id: str) -> Optional["ExecutionState"]:
+    async def get(self, session_id: str) -> ExecutionState | None:
         """
         Получает состояние сессии.
 
@@ -155,7 +155,7 @@ class DatabaseStateRepository(BaseStateRepository):
             ExecutionState или None
         """
         final_key = self._build_final_key(self._get_key(session_id))
-        data = await self._storage._get_with_session_and_table(final_key, self._get_table())
+        data = await self._storage.get_with_session_and_table(final_key, self._get_table())
         if data is None:
             return None
         entity = StateData.model_validate_json(data)
@@ -163,7 +163,7 @@ class DatabaseStateRepository(BaseStateRepository):
         return _execution_state_from_storage_dict(raw)
 
     async def set(
-        self, session_id: str, state: Union["ExecutionState", Dict[str, Any]]
+        self, session_id: str, state: ExecutionState | dict[str, Any]
     ) -> bool:
         """
         Сохраняет состояние сессии.
@@ -178,7 +178,7 @@ class DatabaseStateRepository(BaseStateRepository):
         to_store = _execution_state_for_storage(state)
         entity = StateData(session_id=session_id, data=to_store)
         final_key = self._build_final_key(self._get_key(session_id))
-        return await self._storage._set_with_table(
+        return await self._storage.set_with_table(
             final_key,
             entity.model_dump_json(),
             self._get_table(),
@@ -187,11 +187,11 @@ class DatabaseStateRepository(BaseStateRepository):
     async def delete(self, session_id: str) -> bool:
         """Удаляет состояние сессии."""
         final_key = self._build_final_key(self._get_key(session_id))
-        return await self._storage._delete_with_table(final_key, self._get_table())
+        return await self._storage.delete_with_table(final_key, self._get_table())
 
     async def get_for_update(
         self, session_id: str, conn: "Connection"
-    ) -> Optional["ExecutionState"]:
+    ) -> ExecutionState | None:
         """
         Получает состояние с блокировкой строки (FOR UPDATE).
 
@@ -218,7 +218,7 @@ class DatabaseStateRepository(BaseStateRepository):
     async def set_in_transaction(
         self,
         session_id: str,
-        state: Union["ExecutionState", Dict[str, Any]],
+        state: ExecutionState | dict[str, Any],
         conn: "Connection",
     ) -> bool:
         """
@@ -251,7 +251,7 @@ class DatabaseStateRepository(BaseStateRepository):
 
     async def resolve_session_id_by_flow_and_identifier(
         self, flow_id: str, lookup_id: str
-    ) -> Optional[str]:
+    ) -> str | None:
         if self._storage.session_factory is None:
             raise RuntimeError("Storage не подключен")
 
@@ -262,7 +262,7 @@ class DatabaseStateRepository(BaseStateRepository):
             )
 
         table = self._get_table()
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             from sqlalchemy import text
 
             query = text(f"""
@@ -301,14 +301,14 @@ class DatabaseStateRepository(BaseStateRepository):
 
     async def search_sessions(
         self,
-        user_id: Optional[str] = None,
-        flow_id: Optional[str] = None,
-        branch_id: Optional[str] = None,
-        date_from: Optional[datetime] = None,
-        date_to: Optional[datetime] = None,
+        user_id: str | None = None,
+        flow_id: str | None = None,
+        branch_id: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> Tuple[List[SessionConfig], int]:
+    ) -> tuple[list[SessionConfig], int]:
         """
         Поиск сессий с фильтрами.
 
@@ -371,7 +371,7 @@ class DatabaseStateRepository(BaseStateRepository):
         where_clause = " AND ".join(conditions) if conditions else "1=1"
         table = self._get_table()
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             from sqlalchemy import text
 
             count_query = text(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")
@@ -437,7 +437,7 @@ class DatabaseStateRepository(BaseStateRepository):
 
             return sessions, total
 
-    def _extract_first_message(self, messages: List[Any]) -> Optional[str]:
+    def _extract_first_message(self, messages: list[Any]) -> str | None:
         """Извлекает первое сообщение пользователя."""
         if not messages:
             return None
@@ -470,7 +470,7 @@ class DatabaseStateRepository(BaseStateRepository):
 
         return None
 
-    def _extract_text_from_part(self, part: Any) -> Optional[str]:
+    def _extract_text_from_part(self, part: Any) -> str | None:
         """Извлекает текст из part сообщения."""
         if isinstance(part, dict):
             root = part.get("root", part)
@@ -511,8 +511,8 @@ class InMemoryStateRepository(BaseStateRepository):
     """
 
     def __init__(self):
-        self._storage: Dict[str, "ExecutionState"] = {}
-        self._locks: Dict[str, asyncio.Lock] = {}
+        self._storage: dict[str, ExecutionState] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
 
     def _get_lock(self, session_id: str) -> asyncio.Lock:
         """Получает или создает блокировку для сессии."""
@@ -520,13 +520,13 @@ class InMemoryStateRepository(BaseStateRepository):
             self._locks[session_id] = asyncio.Lock()
         return self._locks[session_id]
 
-    async def get(self, session_id: str) -> Optional["ExecutionState"]:
+    async def get(self, session_id: str) -> ExecutionState | None:
         """Получает состояние сессии."""
         async with self._get_lock(session_id):
             return self._storage.get(session_id)
 
     async def set(
-        self, session_id: str, state: Union["ExecutionState", Dict[str, Any]]
+        self, session_id: str, state: ExecutionState | dict[str, Any]
     ) -> bool:
         """Сохраняет состояние сессии."""
         async with self._get_lock(session_id):
@@ -545,7 +545,7 @@ class InMemoryStateRepository(BaseStateRepository):
 
     async def resolve_session_id_by_flow_and_identifier(
         self, flow_id: str, lookup_id: str
-    ) -> Optional[str]:
+    ) -> str | None:
         prefix = f"{flow_id}:"
         for sid, state in tuple(self._storage.items()):
             if not sid.startswith(prefix):

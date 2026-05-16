@@ -12,7 +12,7 @@ InterruptManager - управление interrupt/resume для вложенны
 Zero-Guess: все методы работают с ExecutionState, не Dict.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID
 
 from apps.flows.src.runtime.a2a_messages import build_user_message
@@ -111,7 +111,7 @@ class InterruptManager:
         state.interrupt_path.insert(0, call_info)
 
     @staticmethod
-    def pop_interrupt_path(state: ExecutionState) -> Optional[InterruptPathItem]:
+    def pop_interrupt_path(state: ExecutionState) -> InterruptPathItem | None:
         """
         Извлекает последний элемент из пути interrupt.
 
@@ -126,7 +126,7 @@ class InterruptManager:
         return None
 
     @staticmethod
-    def get_interrupt_path(state: ExecutionState) -> List[InterruptPathItem]:
+    def get_interrupt_path(state: ExecutionState) -> list[InterruptPathItem]:
         """Возвращает текущий путь interrupt."""
         result = []
         for item in state.interrupt_path:
@@ -145,8 +145,8 @@ class InterruptManager:
     def apply_interrupt(
         state: ExecutionState,
         body: InterruptBody,
-        tool_call: Optional[Dict[str, Any]] = None,
-        correlation_id: Optional[UUID] = None,
+        tool_call: dict[str, Any] | None = None,
+        correlation_id: UUID | None = None,
     ) -> None:
         """
         Единая запись interrupt: тело (union) + системный конверт из текущего state.
@@ -177,7 +177,7 @@ class InterruptManager:
         state.interrupt = ir.model_copy(update={"system": new_system})
 
     @staticmethod
-    def get_interrupt(state: ExecutionState) -> Optional[InterruptData]:
+    def get_interrupt(state: ExecutionState) -> InterruptData | None:
         """Возвращает информацию об interrupt."""
         return state.interrupt
 

@@ -4,7 +4,7 @@
 Расширяет BaseSettings полями, специфичными для flows и runtime.
 """
 
-from typing import Any, Dict, List, Optional, Self
+from typing import Any, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -23,8 +23,8 @@ class ExternalFlowConfig(BaseModel):
     """Внешний flow (A2A endpoint) для подключения при старте."""
 
     url: str = Field(..., description="Base URL удалённого flow (A2A)")
-    headers: Dict[str, str] = Field(default_factory=dict, description="HTTP-заголовки к внешнему агенту")
-    name: Optional[str] = Field(
+    headers: dict[str, str] = Field(default_factory=dict, description="HTTP-заголовки к внешнему агенту")
+    name: str | None = Field(
         default=None,
         description="Отображаемое имя (если не задано — из A2A Agent Card удалённого endpoint)",
     )
@@ -33,7 +33,7 @@ class ExternalFlowConfig(BaseModel):
 class ExternalFlowsConfig(BaseModel):
     """Конфигурация реестра внешних flows (A2A endpoints)"""
 
-    flows: List[ExternalFlowConfig] = Field(
+    flows: list[ExternalFlowConfig] = Field(
         default_factory=list, description="Список внешних flows для инициализации"
     )
     health_check_interval: int = Field(
@@ -55,11 +55,11 @@ class MockConfig(BaseModel):
     """Конфигурация глобальных моков"""
 
     enabled: bool = Field(default=False, description="Включен ли mock режим глобально")
-    permission_groups: List[str] = Field(
+    permission_groups: list[str] = Field(
         default_factory=lambda: ["admin", "developers"],
         description="Группы с правом использования mock через request metadata"
     )
-    llm: Optional[dict[str, Any]] = Field(
+    llm: dict[str, Any] | None = Field(
         default=None, description="Mock конфигурация для LLM (default_response или очередь)"
     )
     tools: dict[str, Any] = Field(
@@ -90,14 +90,14 @@ class FlowSettings(BaseSettings):
     mock: MockConfig = Field(default_factory=MockConfig)
     push: PushConfig = Field(default_factory=_default_push_config)
 
-    cors_allow_origins: List[str] = Field(
+    cors_allow_origins: list[str] = Field(
         default_factory=list,
         description=(
             "Явные Origin для общего сервисного CORS (non-embed маршруты). "
             "Embed A2A CORS настраивается отдельно через embed-конфигурацию."
         ),
     )
-    cors_allow_origin_regex: Optional[str] = Field(
+    cors_allow_origin_regex: str | None = Field(
         default=None,
         description=(
             "Regex для разрешённого Origin. Если None и server.debug — в apps/flows/main.py "
@@ -167,7 +167,7 @@ class FlowSettings(BaseSettings):
         return self
 
 
-_settings: Optional[FlowSettings] = None
+_settings: FlowSettings | None = None
 
 
 def get_settings() -> FlowSettings:

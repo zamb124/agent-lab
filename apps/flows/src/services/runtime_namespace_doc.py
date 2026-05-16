@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import types
 import importlib
-from typing import List
 
 from core.docs.models import GlobalVariable
 
@@ -19,14 +18,14 @@ def _type_label(obj: object) -> str:
     return type(obj).__name__
 
 
-def build_runtime_namespace_global_variables() -> List[GlobalVariable]:
+def build_runtime_namespace_global_variables() -> list[GlobalVariable]:
     from core.docs.data.python.globals import GLOBALS as STATIC_GLOBALS
 
     namespace_module = importlib.import_module("apps.flows.src.eval.namespace")
     PythonNamespaceBuilder = getattr(namespace_module, "PythonNamespaceBuilder")
     documented = {g["name"] for g in STATIC_GLOBALS}
     ns = PythonNamespaceBuilder().build()
-    out: List[GlobalVariable] = []
+    out: list[GlobalVariable] = []
     for name in sorted(ns.keys()):
         if name.startswith("__"):
             continue

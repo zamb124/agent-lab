@@ -6,7 +6,7 @@
 import pytest
 
 from apps.flows.src.models import BranchConfig, Edge, FlowConfig, MergeMode
-from apps.flows.src.runtime import Flow
+from apps.flows.src.runtime.flow import Flow
 from core.state import ExecutionState
 
 
@@ -113,7 +113,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_branch(config, "custom")
+        effective = container.flow_factory.apply_branch(config, "custom")
 
         assert effective["entry"] == "skill_entry"
 
@@ -134,7 +134,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_branch(config, "custom")
+        effective = container.flow_factory.apply_branch(config, "custom")
 
         assert effective["variables"]["base_var"] == "base_value"
         assert effective["variables"]["skill_var"] == "skill_value"
@@ -158,7 +158,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_branch(config, "custom")
+        effective = container.flow_factory.apply_branch(config, "custom")
 
         # effective["variables"] содержит простые значения (после извлечения из FlowVariableConfig)
         assert "base_var" not in effective["variables"]
@@ -186,7 +186,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_branch(config, "custom")
+        effective = container.flow_factory.apply_branch(config, "custom")
 
         assert "main" not in effective["nodes"]
         assert "helper" not in effective["nodes"]
@@ -214,7 +214,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_branch(config, "custom")
+        effective = container.flow_factory.apply_branch(config, "custom")
 
         assert effective["nodes"]["main"]["prompt"] == "Custom prompt"
         assert effective["nodes"]["main"]["tools"] == ["tool1"]
@@ -240,7 +240,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_branch(config, "custom")
+        effective = container.flow_factory.apply_branch(config, "custom")
 
         assert len(effective["edges"]) == 1
         assert effective["edges"][0].from_node == "main"
@@ -266,7 +266,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_branch(config, "custom")
+        effective = container.flow_factory.apply_branch(config, "custom")
 
         assert len(effective["edges"]) == 3
         from_nodes = [e.from_node for e in effective["edges"]]
@@ -291,7 +291,7 @@ class TestApplySkill:
             },
         )
 
-        effective = container.flow_factory._apply_branch(config, "unknown")
+        effective = container.flow_factory.apply_branch(config, "unknown")
 
         assert effective["entry"] == "main"
 
@@ -305,7 +305,7 @@ class TestApplySkill:
             edges=[Edge(from_node="main", to_node=None)],
         )
 
-        effective = container.flow_factory._apply_branch(config, "default")
+        effective = container.flow_factory.apply_branch(config, "default")
 
         assert effective["entry"] == "main"
 

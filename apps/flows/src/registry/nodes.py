@@ -5,7 +5,7 @@ NodeRegistry - реестр типов нод.
 Zero-Guess: все типы нод регистрируются явно при startup.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.nodes import BaseNode, RUNTIME_NODE_CLASSES
@@ -38,7 +38,7 @@ class NodeRegistry(ResourceRegistry[type[BaseNode]]):
         self,
         key: str | NodeType,
         resource: type[BaseNode],
-        metadata: Dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Регистрирует класс ноды.

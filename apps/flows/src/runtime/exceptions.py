@@ -2,7 +2,7 @@
 Исключения агентов.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 from uuid import UUID
 
 from core.state.interrupt import (
@@ -58,7 +58,7 @@ class BreakpointInterrupt(Exception):
         self,
         node_id: str,
         node_type: str,
-        state_snapshot: Dict[str, Any],
+        state_snapshot: dict[str, Any],
         flow_id: str = "",
     ):
         self.node_id = node_id
@@ -71,7 +71,7 @@ class BreakpointInterrupt(Exception):
 class ToolExecutionError(Exception):
     """Ошибка выполнения tool."""
 
-    def __init__(self, message: str, error: Optional[Exception] = None):
+    def __init__(self, message: str, error: Exception | None = None):
         self.message = message
         self.error = error
         super().__init__(message)

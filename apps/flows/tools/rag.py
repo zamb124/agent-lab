@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -67,7 +67,7 @@ class RagCreateNamespaceArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: str = Field(..., min_length=1, description="Имя нового namespace внутри компании.")
-    description: Optional[str] = Field(
+    description: str | None = Field(
         None,
         description="Описание; можно не передавать.",
     )
@@ -83,12 +83,12 @@ class RagAddTextArgs(BaseModel):
         description="Подкорпус внутри namespace; кладётся в metadata.collection_id.",
     )
     text: str = Field(..., min_length=1, description="Текст для индексации.")
-    document_name: Optional[str] = Field(None, description="Имя документа; опционально.")
-    metadata: Optional[Dict[str, Any]] = Field(
+    document_name: str | None = Field(None, description="Имя документа; опционально.")
+    metadata: dict[str, Any] | None = Field(
         None,
         description="Метаданные документа (объект JSON); опционально.",
     )
-    document_id: Optional[str] = Field(
+    document_id: str | None = Field(
         None,
         description="Явный id документа для идемпотентной перезаписи; опционально.",
     )
@@ -113,22 +113,22 @@ class RagSearchArgs(BaseModel):
         description="Запрос естественным языком по смыслу фрагментов в этом namespace.",
     )
     limit: int = Field(5, ge=1, le=100)
-    filters: Optional[Dict[str, Any]] = Field(None, description="Фильтры по metadata; опционально.")
-    channels: Optional[Dict[str, Any]] = Field(
+    filters: dict[str, Any] | None = Field(None, description="Фильтры по metadata; опционально.")
+    channels: dict[str, Any] | None = Field(
         None,
         description="Каналы гибридного поиска (semantic/lexical); как у REST SearchRequest.",
     )
-    rrf_k: Optional[int] = Field(None, ge=1, description="Параметр RRF; опционально.")
-    per_channel_top_k: Optional[int] = Field(
+    rrf_k: int | None = Field(None, ge=1, description="Параметр RRF; опционально.")
+    per_channel_top_k: int | None = Field(
         None,
         ge=1,
         description="Верхняя граница кандидатов на канал; опционально.",
     )
-    rerank: Optional[bool] = Field(
+    rerank: bool | None = Field(
         None,
         description="Включить пост-retrieval реранк; None — дефолты сервера/профиля.",
     )
-    retrieval: Optional[bool] = Field(
+    retrieval: bool | None = Field(
         None,
         description="Флаг retrieval в теле поиска; семантика на стороне провайдера.",
     )
@@ -142,7 +142,7 @@ class RagSearchArgs(BaseModel):
 )
 async def rag_create_namespace(
     name: str,
-    description: Optional[str] = None,
+    description: str | None = None,
 ) -> JsonDict:
     client = RagClient()
     try:
@@ -162,11 +162,11 @@ async def rag_add_text(
     namespace_id: str,
     collection_id: str,
     text: str,
-    document_name: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-    document_id: Optional[str] = None,
+    document_name: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    document_id: str | None = None,
 ) -> JsonDict:
-    merged_meta: Dict[str, Any] = dict(metadata) if metadata is not None else {}
+    merged_meta: dict[str, Any] = dict(metadata) if metadata is not None else {}
     if "collection_id" in merged_meta and merged_meta["collection_id"] != collection_id:
         raise ValueError(
             "metadata.collection_id не совпадает с аргументом collection_id",
@@ -197,14 +197,14 @@ async def rag_search(
     collection_id: str,
     query: str,
     limit: int = 5,
-    filters: Optional[Dict[str, Any]] = None,
-    channels: Optional[Dict[str, Any]] = None,
-    rrf_k: Optional[int] = None,
-    per_channel_top_k: Optional[int] = None,
-    rerank: Optional[bool] = None,
-    retrieval: Optional[bool] = None,
+    filters: dict[str, Any] | None = None,
+    channels: dict[str, Any] | None = None,
+    rrf_k: int | None = None,
+    per_channel_top_k: int | None = None,
+    rerank: bool | None = None,
+    retrieval: bool | None = None,
 ) -> JsonDict:
-    merged_filters: Dict[str, Any] = dict(filters) if filters is not None else {}
+    merged_filters: dict[str, Any] = dict(filters) if filters is not None else {}
     if "collection_id" in merged_filters and merged_filters["collection_id"] != collection_id:
         raise ValueError(
             "filters.collection_id не совпадает с аргументом collection_id",

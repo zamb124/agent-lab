@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,12 +19,12 @@ class SessionConfig(BaseModel):
     channel: str = Field(..., description="Канал (a2a, telegram, api)")
     user_id: str = Field(..., description="Идентификатор пользователя")
     flow_id: str = Field(..., description="Идентификатор агента")
-    context_id: Optional[str] = Field(default=None, description="ID контекста (извлекается из session_id)")
+    context_id: str | None = Field(default=None, description="ID контекста (извлекается из session_id)")
     status: SessionStatus = Field(default=SessionStatus.ACTIVE, description="Статус сессии")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Метаданные сессии")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Метаданные сессии")
     message_count: int = Field(default=0, description="Количество сообщений")
-    first_message: Optional[str] = Field(default=None, description="Первое сообщение пользователя")
-    created_at: Optional[datetime] = Field(default=None, description="Время создания")
-    last_activity: Optional[datetime] = Field(
+    first_message: str | None = Field(default=None, description="Первое сообщение пользователя")
+    created_at: datetime | None = Field(default=None, description="Время создания")
+    last_activity: datetime | None = Field(
         default=None, description="Время последней активности"
     )

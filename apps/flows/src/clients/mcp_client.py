@@ -9,7 +9,7 @@ MCP (Model Context Protocol) использует JSON-RPC 2.0.
 
 import hashlib
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -48,13 +48,13 @@ class MCPClient:
     def __init__(
         self,
         config: MCPServerConfig,
-        variables: Optional[Dict[str, Any]] = None,
+        variables: dict[str, Any] | None = None,
         timeout: float = 60.0,
     ):
         self.config = config
         self.variables = variables or {}
         self.timeout = timeout
-        self.session_id: Optional[str] = None  # Получаем от сервера
+        self.session_id: str | None = None  # Получаем от сервера
         self._request_id = 0
         self._initialized = False
 
@@ -63,7 +63,7 @@ class MCPClient:
         self._request_id += 1
         return self._request_id
 
-    def _resolve_headers(self, include_session: bool = True) -> Dict[str, str]:
+    def _resolve_headers(self, include_session: bool = True) -> dict[str, str]:
         """Резолвит headers с @var: ссылками."""
         headers = {
             "Content-Type": "application/json",
@@ -83,7 +83,7 @@ class MCPClient:
         return headers
 
     @staticmethod
-    def _jsonrpc_envelope_from_body(text: str) -> Optional[Dict[str, Any]]:
+    def _jsonrpc_envelope_from_body(text: str) -> dict[str, Any] | None:
         """
         Извлекает один JSON-RPC 2.0 envelope из тела ответа.
 
@@ -152,7 +152,7 @@ class MCPClient:
     async def _rpc_call(
         self,
         method: str,
-        params: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         include_session: bool = True,
     ) -> tuple[Any, httpx.Headers]:
         """
@@ -255,7 +255,7 @@ class MCPClient:
 
         return result.get("result"), response_headers
 
-    async def initialize(self) -> Dict[str, Any]:
+    async def initialize(self) -> dict[str, Any]:
         """
         Инициализирует MCP сессию.
 
@@ -289,7 +289,7 @@ class MCPClient:
 
         return result
 
-    async def list_tools(self) -> List[MCPToolInfo]:
+    async def list_tools(self) -> list[MCPToolInfo]:
         """
         Получает список доступных tools с MCP сервера.
 
@@ -315,7 +315,7 @@ class MCPClient:
     async def call_tool(
         self,
         tool_name: str,
-        arguments: Optional[Dict[str, Any]] = None,
+        arguments: dict[str, Any] | None = None,
     ) -> MCPCallResult:
         """
         Вызывает tool на MCP сервере.
@@ -351,12 +351,12 @@ MCPHttpClient = MCPClient
 
 
 # Кэш клиентов по server_id
-_client_cache: Dict[str, MCPClient] = {}
+_client_cache: dict[str, MCPClient] = {}
 
 
 async def get_mcp_client(
     config: MCPServerConfig,
-    variables: Optional[Dict[str, Any]] = None,
+    variables: dict[str, Any] | None = None,
     timeout: float = 60.0,
 ) -> MCPClient:
     """
@@ -384,7 +384,7 @@ async def get_mcp_client(
     return client
 
 
-def clear_mcp_client_cache(server_id: Optional[str] = None) -> None:
+def clear_mcp_client_cache(server_id: str | None = None) -> None:
     """
     Очищает кэш MCP клиентов.
 

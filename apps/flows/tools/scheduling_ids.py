@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Tuple
 
 from core.state import ExecutionState
 
 
-def extract_ids_from_state(state: ExecutionState) -> Tuple[str, str, str]:
+def extract_ids_from_state(state: ExecutionState) -> tuple[str, str, str]:
     """
     Извлекает flow_id, session_id, user_id из state.
 

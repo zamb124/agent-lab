@@ -7,13 +7,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 
 
-def flow_variables_from_request_context(context: Optional[Context]) -> Dict[str, Any]:
+def flow_variables_from_request_context(context: Context | None) -> dict[str, Any]:
     """
     Словарь скаляров для runtime_flow.variables / ExecutionState.variables.
 

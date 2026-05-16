@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import List, Optional
 
 from pydantic import Field
 
@@ -25,12 +24,12 @@ class OperatorTaskStatus(StrEnum):
 class OperatorQueueCreate(StrictBaseModel):
     name: str = Field(..., min_length=1)
     slug: str = Field(..., min_length=1)
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class OperatorQueuePatch(StrictBaseModel):
-    name: Optional[str] = Field(None, min_length=1)
-    description: Optional[str] = None
+    name: str | None = Field(None, min_length=1)
+    description: str | None = None
 
 
 class OperatorQueueOut(StrictBaseModel):
@@ -38,9 +37,9 @@ class OperatorQueueOut(StrictBaseModel):
     company_id: str
     name: str
     slug: str
-    description: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    description: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
     i_am_member: bool = False
 
 
@@ -66,11 +65,11 @@ class OperatorTaskOut(StrictBaseModel):
         ...,
         description="Название skill из конфига; при отсутствии — branch_id",
     )
-    handoff_title: Optional[str] = Field(
+    handoff_title: str | None = Field(
         default=None,
         description="Заголовок из interrupt_snapshot (handoff)",
     )
-    handoff_message_preview: Optional[str] = Field(
+    handoff_message_preview: str | None = Field(
         default=None,
         description="Краткий текст вопроса пользователю из interrupt_snapshot",
     )
@@ -78,12 +77,12 @@ class OperatorTaskOut(StrictBaseModel):
         default="single_reply",
         description="Режим оператора: single_reply или takeover",
     )
-    a2a_task_id: Optional[str] = None
-    context_id: Optional[str] = None
-    correlation_id: Optional[str] = None
-    claimed_by_user_id: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    a2a_task_id: str | None = None
+    context_id: str | None = None
+    correlation_id: str | None = None
+    claimed_by_user_id: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 
@@ -93,9 +92,9 @@ class OperatorTaskPatch(StrictBaseModel):
 
 class OperatorTaskMessageBody(StrictBaseModel):
     text: str = Field(..., min_length=1)
-    file_ids: List[str] = Field(default_factory=list)
+    file_ids: list[str] = Field(default_factory=list)
 
 
 class OperatorTaskCompleteBody(StrictBaseModel):
     resolution: str = Field(..., min_length=1)
-    file_ids: List[str] = Field(default_factory=list)
+    file_ids: list[str] = Field(default_factory=list)

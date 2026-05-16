@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from apps.flows.src.models import ResourceType
 from apps.flows.src.models.node_config import NodeLLMOverride
@@ -18,11 +18,11 @@ from apps.flows.src.resources.merge_llm import merge_llm_resource_into_node_over
 
 async def infer_unique_llm_resource_key_from_merged_maps(
     *,
-    flow_resources: Dict[str, Any],
-    skill_resources: Optional[Dict[str, Any]],
-    node_resources_raw: Dict[str, Any],
+    flow_resources: dict[str, Any],
+    skill_resources: dict[str, Any] | None,
+    node_resources_raw: dict[str, Any],
     repository: Any,
-) -> Optional[str]:
+) -> str | None:
     """
     Если в merge (flow → skill → node) ровно один ключ с типом LLM — возвращает его идентификатор.
     Иначе None (0 или несколько LLM).
@@ -32,7 +32,7 @@ async def infer_unique_llm_resource_key_from_merged_maps(
     merged = merge_flow_skill_node_resource_maps(
         flow_resources, skill_resources, node_resources_raw
     )
-    llm_keys: List[str] = []
+    llm_keys: list[str] = []
     for key, ref_raw in merged.items():
         ref = ResourceReference.model_validate(ref_raw) if isinstance(ref_raw, dict) else ref_raw
         if ref.is_inline:
@@ -49,12 +49,12 @@ async def infer_unique_llm_resource_key_from_merged_maps(
 
 async def resolve_llm_override_with_resource_key(
     *,
-    llm_override: Optional[NodeLLMOverride],
-    flow_resources: Dict[str, Any],
-    skill_resources: Optional[Dict[str, Any]],
-    node_resources_raw: Dict[str, Any],
+    llm_override: NodeLLMOverride | None,
+    flow_resources: dict[str, Any],
+    skill_resources: dict[str, Any] | None,
+    node_resources_raw: dict[str, Any],
     repository: Any,
-) -> Optional[NodeLLMOverride]:
+) -> NodeLLMOverride | None:
     """
     Если в override задан llm_resource_key — подмешивает LLMResourceConfig из мержи ресурсов.
     Ключи flow → skill → node (как в ResourceResolver).

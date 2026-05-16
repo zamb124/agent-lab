@@ -7,7 +7,7 @@ TaskIQ задачи для выполнения tools.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
@@ -24,9 +24,9 @@ logger = get_logger(__name__)
 @broker.task(task_name="execute_tool", queue_name="flows_worker")
 async def execute_tool(
     tool_id_or_config: Any,
-    args: Dict[str, Any],
-    state_dict: Dict[str, Any],
-    context_data: Dict[str, Any] | None = None,
+    args: dict[str, Any],
+    state_dict: dict[str, Any],
+    context_data: dict[str, Any] | None = None,
 ):
     """
     Выполняет tool через TaskIQ.

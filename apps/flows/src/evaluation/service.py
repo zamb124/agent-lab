@@ -6,7 +6,8 @@
 """
 
 from datetime import date, datetime, timezone
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 from apps.flows.src.db import EvaluationRepository
 from apps.flows.src.models import TestCaseConfig
@@ -45,7 +46,7 @@ class EvaluationService:
         self,
         flow_id: str,
         branch_id: str,
-    ) -> Dict[str, TestCaseConfig]:
+    ) -> dict[str, TestCaseConfig]:
         """
         Получает тест-кейсы для ветки.
 
@@ -174,7 +175,7 @@ class EvaluationService:
             total_tests=len(test_cases),
         )
 
-        total_scores: List[float] = []
+        total_scores: list[float] = []
 
         for test_case_id, test_case in test_cases.items():
             runner = await self._create_runner(flow_id, branch_id, run_date, iteration, test_case)
@@ -249,8 +250,8 @@ class EvaluationService:
         flow_id: str,
         branch_id: str,
         test_case_id: str,
-        task_id: Optional[str] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        task_id: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Запускает один тест со streaming результатов.
 
@@ -319,7 +320,7 @@ class EvaluationService:
         self,
         flow_id: str,
         branch_id: str,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Запускает все тесты со streaming результатов.
 
@@ -347,7 +348,7 @@ class EvaluationService:
         passed = 0
         failed = 0
         errors = 0
-        total_scores: List[float] = []
+        total_scores: list[float] = []
 
         for test_case_id, test_case in test_cases.items():
             yield {
@@ -436,10 +437,10 @@ class EvaluationService:
         self,
         flow_id: str,
         branch_id: str,
-        run_date: Optional[date] = None,
-        iteration: Optional[int] = None,
+        run_date: date | None = None,
+        iteration: int | None = None,
         limit: int = 10,
-    ) -> List[EvaluationResult]:
+    ) -> list[EvaluationResult]:
         """
         Получает результаты оценки.
 

@@ -3,7 +3,7 @@
 """
 
 from datetime import date, datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
@@ -30,7 +30,7 @@ class Flows(Base):
     value: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__ = (
         UniqueConstraint("key", name="uq_flows_key"),
@@ -56,7 +56,7 @@ class FlowsVersions(Base):
     value: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__ = (
         UniqueConstraint("key", name="uq_flows_versions_key"),
@@ -82,7 +82,7 @@ class Nodes(Base):
     value: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__ = (
         UniqueConstraint("key", name="uq_nodes_key"),
@@ -108,7 +108,7 @@ class Tools(Base):
     value: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__ = (
         UniqueConstraint("key", name="uq_tools_key"),
@@ -134,7 +134,7 @@ class States(Base):
     value: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__ = (
         UniqueConstraint("key", name="uq_states_key"),
@@ -160,14 +160,14 @@ class EvaluationResults(Base):
     run_date: Mapped[date] = mapped_column(Date)
     iteration: Mapped[int] = mapped_column(Integer)
     test_case_id: Mapped[str] = mapped_column(String)
-    task_id: Mapped[Optional[str]] = mapped_column(String, default=None)
+    task_id: Mapped[str | None] = mapped_column(String, default=None)
     status: Mapped[str] = mapped_column(String)
     duration_ms: Mapped[int] = mapped_column(Integer)
     turns_count: Mapped[int] = mapped_column(Integer, default=0)
-    dialog: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
-    scores: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
-    judge_feedback: Mapped[Optional[str]] = mapped_column(String, default=None)
-    error: Mapped[Optional[str]] = mapped_column(String, default=None)
+    dialog: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    scores: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    judge_feedback: Mapped[str | None] = mapped_column(String, default=None)
+    error: Mapped[str | None] = mapped_column(String, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
 
     __table_args__ = (
@@ -190,23 +190,23 @@ class ScheduledTasks(Base):
     __tablename__ = "scheduled_tasks"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    schedule_id: Mapped[Optional[str]] = mapped_column(String, default=None)
+    schedule_id: Mapped[str | None] = mapped_column(String, default=None)
     flow_id: Mapped[str] = mapped_column(String)
     session_id: Mapped[str] = mapped_column(String)
     user_id: Mapped[str] = mapped_column(String)
     schedule_type: Mapped[str] = mapped_column(String)
     content_type: Mapped[str] = mapped_column(String)
-    cron: Mapped[Optional[str]] = mapped_column(String, default=None)
-    interval_minutes: Mapped[Optional[int]] = mapped_column(Integer, default=None)
-    run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
+    cron: Mapped[str | None] = mapped_column(String, default=None)
+    interval_minutes: Mapped[int | None] = mapped_column(Integer, default=None)
+    run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     content: Mapped[str] = mapped_column(String)
-    tool_args: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
-    description: Mapped[Optional[str]] = mapped_column(String, default=None)
+    tool_args: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    description: Mapped[str | None] = mapped_column(String, default=None)
     status: Mapped[str] = mapped_column(String, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
-    next_run: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
-    error_message: Mapped[Optional[str]] = mapped_column(String, default=None)
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    next_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    error_message: Mapped[str | None] = mapped_column(String, default=None)
 
     __table_args__ = (
         Index("ix_scheduled_tasks_session_id", "session_id"),
@@ -232,7 +232,7 @@ class Resources(Base):
     value: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__ = (
         UniqueConstraint("key", name="uq_resources_key"),
@@ -299,7 +299,7 @@ class OperatorQueues(Base):
     company_id: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(512), nullable=False)
     slug: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(String(2048), default=None)
+    description: Mapped[str | None] = mapped_column(String(2048), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now
@@ -359,14 +359,14 @@ class OperatorTasks(Base):
     end_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
     flow_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     branch_id: Mapped[str] = mapped_column(String(255), nullable=False, default="default")
-    a2a_task_id: Mapped[Optional[str]] = mapped_column(String(255), default=None)
-    context_id: Mapped[Optional[str]] = mapped_column(String(255), default=None)
-    correlation_id: Mapped[Optional[str]] = mapped_column(String(36), default=None, index=True)
-    interrupt_snapshot: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
-    claimed_by_user_id: Mapped[Optional[str]] = mapped_column(String(255), default=None)
-    resolution_payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
-    dialog_log: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSONB, default=None)
-    context_data_snapshot: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, default=None)
+    a2a_task_id: Mapped[str | None] = mapped_column(String(255), default=None)
+    context_id: Mapped[str | None] = mapped_column(String(255), default=None)
+    correlation_id: Mapped[str | None] = mapped_column(String(36), default=None, index=True)
+    interrupt_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    claimed_by_user_id: Mapped[str | None] = mapped_column(String(255), default=None)
+    resolution_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    dialog_log: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, default=None)
+    context_data_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now

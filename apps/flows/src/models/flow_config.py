@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
+from typing import Any, ClassVar, Literal
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
@@ -30,7 +30,7 @@ from .resource import ResourceReference
 from .trigger_config import TriggerConfig
 
 # Тип для permission: строка или список строк
-Permission = Optional[Union[str, List[str]]]
+Permission = str | list[str] | None
 
 
 class FlowType(str, Enum):
@@ -68,9 +68,9 @@ class FlowVariableConfig(StrictBaseModel):
     value: Any = Field(..., description="Значение переменной")
     secret: bool = Field(default=False, description="Скрывать значение в UI (симметрично company Variable.secret)")
     public: bool = Field(default=False, description="Публичная переменная для agent-card (A2A)")
-    title: Optional[str] = Field(default=None, description="Заголовок переменной")
-    description: Optional[str] = Field(default=None, description="Описание переменной")
-    order: Optional[int] = Field(default=None, description="Порядок отображения")
+    title: str | None = Field(default=None, description="Заголовок переменной")
+    description: str | None = Field(default=None, description="Описание переменной")
+    order: int | None = Field(default=None, description="Порядок отображения")
 
 
 class Edge(StrictBaseModel):
@@ -87,8 +87,8 @@ class Edge(StrictBaseModel):
     """
 
     from_node: str = Field(..., alias="from", description="ID исходной ноды")
-    to_node: Optional[str] = Field(..., alias="to", description="ID целевой ноды (null = конец)")
-    condition: Optional[Union[str, Dict[str, Any]]] = Field(
+    to_node: str | None = Field(..., alias="to", description="ID целевой ноды (null = конец)")
+    condition: str | dict[str, Any] | None = Field(
         default=None,
         description=(
             "Условие перехода. Строка legacy-выражения, объект simple "
@@ -131,7 +131,7 @@ class InputConfig(StrictBaseModel):
     """
     type: InputType = Field(..., description="Тип входа: text, inline_code, node")
     value: str = Field(default="", description="Текст | inline код | node_id")
-    node: Optional[Dict[str, Any]] = Field(
+    node: dict[str, Any] | None = Field(
         default=None, description="Inline нода как dict (будет преобразована в NodeConfig)"
     )
 
@@ -162,7 +162,7 @@ class CheckConfig(StrictBaseModel):
     """
     type: CheckType = Field(..., description="Тип проверки: string, inline_code, node")
     value: str = Field(default="", description="Checker expr | inline код | node_id")
-    node: Optional[Dict[str, Any]] = Field(
+    node: dict[str, Any] | None = Field(
         default=None, description="Inline нода-судья как dict (будет преобразована в NodeConfig)"
     )
 
@@ -193,7 +193,7 @@ class TestTurn(StrictBaseModel):
     __test__: ClassVar[bool] = False
 
     input: InputConfig = Field(..., description="Конфигурация входа")
-    check: Optional[CheckConfig] = Field(default=None, description="Конфигурация проверки (опционально)")
+    check: CheckConfig | None = Field(default=None, description="Конфигурация проверки (опционально)")
 
 
 class TestTarget(StrictBaseModel):
@@ -210,11 +210,11 @@ class TestTarget(StrictBaseModel):
     type: TestTargetType = Field(..., description="Тип цели: flow, node")
 
     # FLOW -- тестируем другой flow (если None, используется flow_id из контекста)
-    flow_id: Optional[str] = Field(default=None, description="ID flow")
-    branch_id: Optional[str] = Field(default="default", description="ID ветки графа (branch)")
+    flow_id: str | None = Field(default=None, description="ID flow")
+    branch_id: str | None = Field(default="default", description="ID ветки графа (branch)")
 
     # NODE -- только inline конфиг ноды
-    node_config: Optional[Dict[str, Any]] = Field(
+    node_config: dict[str, Any] | None = Field(
         default=None, description="Inline конфиг ноды для тестирования"
     )
 
@@ -238,19 +238,19 @@ class TestCaseConfig(StrictBaseModel):
     name: str = Field(..., description="Название теста")
     description: str = Field(default="", description="Описание теста")
 
-    target: Optional[TestTarget] = Field(
+    target: TestTarget | None = Field(
         default=None,
         description="Цель тестирования. None = flow из контекста"
     )
-    initial_state: Optional[Dict[str, Any]] = Field(
+    initial_state: dict[str, Any] | None = Field(
         default=None,
         description="Начальное состояние для теста (переменные, данные)"
     )
 
-    branch_ids: Union[Literal["*"], List[str]] = Field(
+    branch_ids: Literal["*"] | list[str] = Field(
         default="*", description="ID веток для теста. '*' = все"
     )
-    turns: List[TestTurn] = Field(..., description="Список ходов теста")
+    turns: list[TestTurn] = Field(..., description="Список ходов теста")
     max_turns: int = Field(default=10, description="Макс. итераций для flow-flow")
     timeout: int = Field(default=300, description="Таймаут в секундах")
 
@@ -266,15 +266,15 @@ class BranchConfig(StrictBaseModel):
 
     name: str = Field(..., description="Название ветки")
     description: str = Field(default="", description="Описание ветки")
-    tags: List[str] = Field(default_factory=list, description="Теги ветки")
-    permission: List[str] = Field(
+    tags: list[str] = Field(default_factory=list, description="Теги ветки")
+    permission: list[str] = Field(
         default_factory=list,
         description="Группы с доступом к ветке. Пустой список = доступ для всех",
     )
 
     @field_validator("permission", mode="before")
     @classmethod
-    def validate_permission(cls, v: Optional[Union[str, List[str]]]) -> List[str]:
+    def validate_permission(cls, v: str | list[str] | None) -> list[str]:
         """Конвертирует None в [], string в [string]."""
         if v is None:
             return []
@@ -283,22 +283,22 @@ class BranchConfig(StrictBaseModel):
         return v
 
     # Точка входа (всегда replace если указана)
-    entry: Optional[str] = Field(default=None, description="Точка входа")
+    entry: str | None = Field(default=None, description="Точка входа")
 
     # Ноды
-    nodes: Optional[Dict[str, Dict[str, Any]]] = Field(default=None, description="Ноды ветки")
+    nodes: dict[str, dict[str, Any]] | None = Field(default=None, description="Ноды ветки")
     nodes_mode: MergeMode = Field(
         default=MergeMode.REPLACE, description="Режим применения nodes: 'merge' или 'replace'"
     )
 
     # Связи между нодами
-    edges: Optional[List[Edge]] = Field(default=None, description="Связи между нодами")
+    edges: list[Edge] | None = Field(default=None, description="Связи между нодами")
     edges_mode: MergeMode = Field(
         default=MergeMode.REPLACE, description="Режим применения edges: 'merge' или 'replace'"
     )
 
     # Переменные
-    variables: Dict[str, Union[FlowVariableConfig, Any]] = Field(
+    variables: dict[str, FlowVariableConfig | Any] = Field(
         default_factory=dict, description="Переменные ветки с метаданными"
     )
     variables_mode: MergeMode = Field(
@@ -306,13 +306,13 @@ class BranchConfig(StrictBaseModel):
     )
 
     # Mock конфигурация
-    mock: Optional[Dict[str, Any]] = Field(
+    mock: dict[str, Any] | None = Field(
         default=None,
         description="Mock конфигурация для ветки. Переопределяет mock flow.",
     )
 
     # Ресурсы skill
-    resources: Dict[str, ResourceReference] = Field(
+    resources: dict[str, ResourceReference] = Field(
         default_factory=dict,
         description="Ресурсы ветки (мержатся с flow-level)",
     )
@@ -321,7 +321,7 @@ class BranchConfig(StrictBaseModel):
         description="Режим применения resources: 'merge' или 'replace'"
     )
 
-    speech: Optional[FlowSpeechSettings] = Field(
+    speech: FlowSpeechSettings | None = Field(
         default=None,
         description="Переопределение профиля речи для ветки (мержится поверх flow.speech)",
     )
@@ -396,39 +396,39 @@ class FlowConfig(StrictBaseModel):
 
     @field_validator("description", mode="before")
     @classmethod
-    def validate_description(cls, v: Optional[str]) -> str:
+    def validate_description(cls, v: str | None) -> str:
         """Конвертирует None в пустую строку."""
         return v if v is not None else ""
 
     # LOCAL FLOW ПОЛЯ - обязательны для LOCAL, опциональны для EXTERNAL
-    entry: Optional[str] = Field(default=None, description="ID стартовой ноды - ОБЯЗАТЕЛЬНО для LOCAL")
-    nodes: Optional[Dict[str, Dict[str, Any]]] = Field(
+    entry: str | None = Field(default=None, description="ID стартовой ноды - ОБЯЗАТЕЛЬНО для LOCAL")
+    nodes: dict[str, dict[str, Any]] | None = Field(
         default=None,
         description="Ноды графа - ОБЯЗАТЕЛЬНО для LOCAL"
     )
-    edges: List[Edge] = Field(
+    edges: list[Edge] = Field(
         default_factory=list,
         description="Связи между нодами",
     )
 
     # EXTERNAL FLOW ПОЛЯ - обязательны для EXTERNAL, опциональны для LOCAL
-    url: Optional[str] = Field(default=None, description="Base URL внешнего flow (A2A) - ОБЯЗАТЕЛЬНО для EXTERNAL")
-    headers: Dict[str, str] = Field(default_factory=dict, description="HTTP-заголовки к внешнему агенту (A2A)")
+    url: str | None = Field(default=None, description="Base URL внешнего flow (A2A) - ОБЯЗАТЕЛЬНО для EXTERNAL")
+    headers: dict[str, str] = Field(default_factory=dict, description="HTTP-заголовки к внешнему агенту (A2A)")
     status: ExternalAgentStatus = Field(
         default=ExternalAgentStatus.INACTIVE, description="Статус внешнего flow (A2A)"
     )
-    last_health_check: Optional[datetime] = Field(
+    last_health_check: datetime | None = Field(
         default=None, description="Время последней проверки здоровья"
     )
-    agent_card: Optional[Dict[str, Any]] = Field(default=None, description="Кэш agent-card.json")
-    permission: List[str] = Field(
+    agent_card: dict[str, Any] | None = Field(default=None, description="Кэш agent-card.json")
+    permission: list[str] = Field(
         default_factory=list,
         description="Группы с доступом. Пустой список = доступ для всех",
     )
 
     @field_validator("permission", mode="before")
     @classmethod
-    def validate_permission(cls, v: Optional[Union[str, List[str]]]) -> List[str]:
+    def validate_permission(cls, v: str | list[str] | None) -> list[str]:
         """Конвертирует None в [], string в [string]."""
         if v is None:
             return []
@@ -438,7 +438,7 @@ class FlowConfig(StrictBaseModel):
 
     @field_validator("timeout", mode="before")
     @classmethod
-    def validate_flow_timeout_seconds(cls, v: Any) -> Optional[int]:
+    def validate_flow_timeout_seconds(cls, v: Any) -> int | None:
         if v is None:
             return None
         iv = int(v)
@@ -451,14 +451,14 @@ class FlowConfig(StrictBaseModel):
 
     # Опциональные/технические поля
     version: str = Field(default="", description="Версия flow (timestamp)")
-    tags: List[str] = Field(default_factory=list, description="Теги для группировки")
+    tags: list[str] = Field(default_factory=list, description="Теги для группировки")
 
-    variables: Dict[str, Union[FlowVariableConfig, Any]] = Field(
+    variables: dict[str, FlowVariableConfig | Any] = Field(
         default_factory=dict,
         description="Переменные flow с метаданными. @var:key резолвятся из БД",
     )
 
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description=(
             "UI-метаданные flow editor (sticky_notes, layout-подсказки и пр.). "
@@ -500,25 +500,25 @@ class FlowConfig(StrictBaseModel):
             object.__setattr__(self, "variables", converted)
         return self
 
-    branches: Dict[str, BranchConfig] = Field(
+    branches: dict[str, BranchConfig] = Field(
         default_factory=dict,
         description="Ветки flow (варианты графа). Если пусто — автоматически default-ветка",
     )
-    channels: Dict[str, Dict[str, Any]] = Field(
+    channels: dict[str, dict[str, Any]] = Field(
         default_factory=lambda: {"a2a": {}}, description="Каналы"
     )
-    store: Dict[str, Any] = Field(default_factory=dict, description="Начальные данные")
-    timeout: Optional[int] = Field(
+    store: dict[str, Any] = Field(default_factory=dict, description="Начальные данные")
+    timeout: int | None = Field(
         default=None,
         description="Wall-clock лимит одного run flow (сек), верх снимается с flow_execution_wall_time_cap_seconds; None = default_flow_timeout_seconds",
     )
     max_retries: int = Field(default=0, description="Максимум повторов")
     source: str = Field(default="manual", description="Источник создания")
-    created_at: Optional[datetime] = Field(default=None)
-    updated_at: Optional[datetime] = Field(default=None)
+    created_at: datetime | None = Field(default=None)
+    updated_at: datetime | None = Field(default=None)
     hidden: bool = Field(default=False, description="Скрытый flow (не отображается в UI)")
 
-    store_card_image_url: Optional[str] = Field(
+    store_card_image_url: str | None = Field(
         default=None,
         description=(
             "URL обложки агента (витрина, публичные embed/лендинг). "
@@ -527,36 +527,36 @@ class FlowConfig(StrictBaseModel):
     )
 
     # Mock конфигурация
-    mock: Optional[Dict[str, Any]] = Field(
+    mock: dict[str, Any] | None = Field(
         default=None,
         description="Mock конфигурация (tools, flows, nodes, llm)"
     )
 
     # Ресурсы flow
-    resources: Dict[str, ResourceReference] = Field(
+    resources: dict[str, ResourceReference] = Field(
         default_factory=dict,
         description="Ресурсы flow, доступные всем нодам"
     )
 
     # Evaluation - словарь тест-кейсов {test_id: TestCaseConfig}
-    evaluation: Optional[Dict[str, TestCaseConfig]] = Field(
+    evaluation: dict[str, TestCaseConfig] | None = Field(
         default=None,
         description="Тест-кейсы для оценки flow {test_id: config}"
     )
 
-    speech: Optional[FlowSpeechSettings] = Field(
+    speech: FlowSpeechSettings | None = Field(
         default=None,
         description="Профиль речи (STT/TTS/VAD) без секретов; tier ниже explicit SpeechOverride, выше company",
     )
 
     # Триггеры flow — точки входа (telegram, cron, webhook, email)
-    triggers: Dict[str, TriggerConfig] = Field(
+    triggers: dict[str, TriggerConfig] = Field(
         default_factory=dict,
         description="Триггеры flow {trigger_id: TriggerConfig}"
     )
 
     # Контроль доступа для UI
-    public_fields: Optional[List[str]] = Field(
+    public_fields: list[str] | None = Field(
         default=None,
         description="Поля доступные для редактирования в UI. None = все поля доступны"
     )

@@ -6,7 +6,7 @@ import pytest
 
 from apps.flows.src.eval import SafeEvalError
 from apps.flows.src.models import Edge, FlowConfig
-from apps.flows.src.runtime import Flow
+from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import CodeNode, create_node
 from apps.flows.src.tools.base import CodeTool
 from core.state import ExecutionState

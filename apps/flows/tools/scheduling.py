@@ -5,7 +5,7 @@ Tools для управления scheduled tasks.
 """
 
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,7 +16,7 @@ from core.scheduler.models import ContentType
 from core.state import ExecutionState
 
 
-def _extract_ids_from_state(state: ExecutionState) -> Tuple[str, str, str]:
+def _extract_ids_from_state(state: ExecutionState) -> tuple[str, str, str]:
     return extract_ids_from_state(state)
 
 
@@ -34,11 +34,11 @@ class _ScheduledTaskContentArgs(BaseModel):
         min_length=1,
         description="При message — текст сообщения; при tool_call — имя тула (tool_id).",
     )
-    tool_args: Optional[Dict[str, Any]] = Field(
+    tool_args: dict[str, Any] | None = Field(
         None,
         description="Аргументы для tool_call (объект JSON); для message обычно не передаётся.",
     )
-    description: Optional[str] = Field(
+    description: str | None = Field(
         None,
         description="Краткое описание задачи для списка и логов планировщика.",
     )
@@ -94,8 +94,8 @@ async def schedule_cron_task(
     cron: str,
     content_type: str,
     content: str,
-    tool_args: Optional[Dict[str, Any]] = None,
-    description: Optional[str] = None,
+    tool_args: dict[str, Any] | None = None,
+    description: str | None = None,
     *,
     state: ExecutionState,
 ) -> str:
@@ -141,8 +141,8 @@ async def schedule_interval_task(
     interval_minutes: int,
     content_type: str,
     content: str,
-    tool_args: Optional[Dict[str, Any]] = None,
-    description: Optional[str] = None,
+    tool_args: dict[str, Any] | None = None,
+    description: str | None = None,
     *,
     state: ExecutionState,
 ) -> str:
@@ -188,8 +188,8 @@ async def schedule_one_time_task(
     run_at: str,
     content_type: str,
     content: str,
-    tool_args: Optional[Dict[str, Any]] = None,
-    description: Optional[str] = None,
+    tool_args: dict[str, Any] | None = None,
+    description: str | None = None,
     *,
     state: ExecutionState,
 ) -> str:

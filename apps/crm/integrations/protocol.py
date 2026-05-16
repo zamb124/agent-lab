@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
+from apps.crm.types import JsonObject
 from core.integrations.guided_integration_error import OAuthErrorLocale
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
@@ -44,11 +45,9 @@ class NamespaceIntegrationConnector(Protocol):
         """URL OAuth для подключения (открыть в браузере)."""
         ...
 
-    async def sync_entities(self, namespace_name: str) -> dict[str, int]:
-        ...
+    async def sync_entities(self, namespace_name: str) -> dict[str, int]: ...
 
-    async def sync_custom_field_catalog(self, namespace_name: str) -> dict[str, int]:
-        ...
+    async def sync_custom_field_catalog(self, namespace_name: str) -> dict[str, int]: ...
 
     async def on_credential_saved(self, credential: IntegrationCredential) -> None:
         """После сохранения OAuth credential: метаданные namespace (без секретов)."""
@@ -74,6 +73,6 @@ class NamespaceIntegrationConnector(Protocol):
         company_id: str,
         user_id: str,
         crm_settings: NamespaceCRMSettings | None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Строка для GET .../integrations (список карточек в UI)."""
         ...

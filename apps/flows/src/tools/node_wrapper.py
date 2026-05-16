@@ -4,7 +4,7 @@ NodeAsToolWrapper - обёртка ноды для использования к
 Логика:
 1. Создает args_schema для LLM из конфига ноды
 2. Для llm_node создает изолированный nested_state
-3. Вызывает node.run(state)
+3. Вызывает node.execute(state)
 4. При FlowInterrupt сохраняет nested_state для resume
 
 Нода сама берет нужные данные через input_mapping.
@@ -12,7 +12,7 @@ NodeAsToolWrapper - обёртка ноды для использования к
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 from pydantic import Field, create_model
 
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _infer_node_type_for_tool(node: "BaseNode") -> str:
+def _infer_node_type_for_tool(node: BaseNode) -> str:
     """Тип ноды для NodeConfig: из config или по классу (Zero-Guess)."""
     raw = node.config.get("type") if node.config else None
     if raw:
@@ -71,7 +71,7 @@ def _infer_node_type_for_tool(node: "BaseNode") -> str:
     )
 
 
-def _build_pydantic_schema(args_schema_dict: Optional[Dict[str, Any]]) -> type:
+def _build_pydantic_schema(args_schema_dict: dict[str, Any] | None) -> type:
     """Строит Pydantic модель из args_schema для OpenAI tools."""
     if not args_schema_dict:
         return create_model("EmptyArgs")
@@ -113,8 +113,8 @@ class NodeAsToolWrapper(BaseTool):
 
     def __init__(
         self,
-        node_config: Union[NodeConfig, Dict[str, Any]],
-        tool_registry: Optional[Any] = None,
+        node_config: NodeConfig | dict[str, Any],
+        tool_registry: Any | None = None,
         *,
         container: FlowRuntimeContainer | None = None,
     ):
@@ -155,8 +155,8 @@ class NodeAsToolWrapper(BaseTool):
         self.name = sanitize_tool_name(self.node_config.node_id)
         self.description = self.node_config.description or f"Вызов ноды {self.node_config.name}"
         self.tags = self.node_config.tags or [self.node_config.type]
-        self._node: Optional["BaseNode"] = None
-        self._bound_node: Optional["BaseNode"] = None
+        self._node: BaseNode | None = None
+        self._bound_node: BaseNode | None = None
         self.container = container
 
         self.args_schema = _build_pydantic_schema(self._args_schema_dict)
@@ -164,9 +164,9 @@ class NodeAsToolWrapper(BaseTool):
     @classmethod
     def from_base_node(
         cls,
-        node: "BaseNode",
-        tool_name: Optional[str] = None,
-        tool_description: Optional[str] = None,
+        node: BaseNode,
+        tool_name: str | None = None,
+        tool_description: str | None = None,
     ) -> "NodeAsToolWrapper":
         """
         Один канон с реестром: та же обёртка, что и для inline-нод, с привязкой к уже созданному экземпляру.
@@ -197,7 +197,7 @@ class NodeAsToolWrapper(BaseTool):
         wrapper.name = sanitize_tool_name(merged["name"])
         return wrapper
 
-    async def _get_node(self) -> "BaseNode":
+    async def _get_node(self) -> BaseNode:
         """Lazy создание ноды."""
         if self._bound_node is not None:
             return self._bound_node
@@ -233,7 +233,7 @@ class NodeAsToolWrapper(BaseTool):
 
         return self._node
 
-    async def _run_impl(self, args: Dict[str, Any], state: ExecutionState) -> Any:
+    async def _run_impl(self, args: dict[str, Any], state: ExecutionState) -> Any:
         """
         Вызывает ноду. Для llm_node создает изолированный state и обрабатывает interrupt.
         """
@@ -256,14 +256,14 @@ class NodeAsToolWrapper(BaseTool):
         for key, value in args.items():
             setattr(state, key, value)
 
-        result = await node._run_internal(state)
+        result = await node.execute(state)
         return self._extract_response(result)
 
     async def _run_llm_node(
         self,
-        node: "BaseNode",
+        node: BaseNode,
         node_id: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         parent_state: ExecutionState
     ) -> Any:
         """
@@ -287,7 +287,7 @@ class NodeAsToolWrapper(BaseTool):
             nested_state = self._create_nested_state(parent_state, args)
 
         try:
-            result = await node._run_internal(nested_state)
+            result = await node.execute(nested_state)
 
             # Успешное завершение - копируем результат в родительский state
             self._copy_result_to_parent(nested_state, parent_state)
@@ -322,7 +322,7 @@ class NodeAsToolWrapper(BaseTool):
             raise
 
     def _create_nested_state(
-        self, parent_state: ExecutionState, args: Dict[str, Any]
+        self, parent_state: ExecutionState, args: dict[str, Any]
     ) -> ExecutionState:
         """Создает изолированный state для субагента."""
         text = args.get("query")

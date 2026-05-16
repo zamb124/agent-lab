@@ -8,7 +8,7 @@ TelegramTriggerHandler - обработчик Telegram Bot webhook тригге�
 """
 
 import secrets
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from apps.flows.config import get_settings as flows_get_settings
 from apps.flows.src.container_contracts import FlowRuntimeContainer
@@ -222,8 +222,8 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         self,
         flow_id: str,
         trigger_id: str,
-        payload: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Обрабатывает входящий Telegram Update.
 
@@ -264,8 +264,8 @@ class TelegramTriggerHandler(BaseTriggerHandler):
     def normalize_allowed_updates(
         flow_id: str,
         trigger_id: str,
-        config: Dict[str, Any],
-    ) -> List[str]:
+        config: dict[str, Any],
+    ) -> list[str]:
         raw = config.get("allowed_updates")
         if raw is None:
             return ["message"]
@@ -276,7 +276,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                 trigger_id=trigger_id,
                 message="allowed_updates must be a list of strings",
             )
-        ordered: List[str] = []
+        ordered: list[str] = []
         for item in raw:
             if not isinstance(item, str) or not item.strip():
                 raise TriggerRegistrationError(
@@ -310,7 +310,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
     async def _validate_update(
         self,
         trigger: TriggerConfig,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ) -> None:
         """Валидирует Telegram Update (message или callback_query)."""
         config = trigger.config
@@ -318,11 +318,11 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         cq = payload.get("callback_query")
         if isinstance(cq, dict) and cq:
             from_user_raw = cq.get("from")
-            from_user: Dict[str, Any] = from_user_raw if isinstance(from_user_raw, dict) else {}
+            from_user: dict[str, Any] = from_user_raw if isinstance(from_user_raw, dict) else {}
             msg_raw = cq.get("message")
-            msg: Dict[str, Any] = msg_raw if isinstance(msg_raw, dict) else {}
+            msg: dict[str, Any] = msg_raw if isinstance(msg_raw, dict) else {}
             chat_raw = msg.get("chat")
-            chat: Dict[str, Any] = chat_raw if isinstance(chat_raw, dict) else {}
+            chat: dict[str, Any] = chat_raw if isinstance(chat_raw, dict) else {}
             user_id = from_user.get("id")
             chat_id = chat.get("id")
             data = cq.get("data")
@@ -350,9 +350,9 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             )
 
         from_user_raw = message.get("from")
-        from_user: Dict[str, Any] = from_user_raw if isinstance(from_user_raw, dict) else {}
+        from_user: dict[str, Any] = from_user_raw if isinstance(from_user_raw, dict) else {}
         chat_raw = message.get("chat")
-        chat: Dict[str, Any] = chat_raw if isinstance(chat_raw, dict) else {}
+        chat: dict[str, Any] = chat_raw if isinstance(chat_raw, dict) else {}
         text_raw = message.get("text", "")
         text = text_raw if isinstance(text_raw, str) else ""
 
@@ -373,7 +373,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             if not matched:
                 raise TriggerValidationError(f"Command not matched: {text}")
 
-    def _default_mapping_for_payload(self, payload: Dict[str, Any]) -> Dict[str, str]:
+    def _default_mapping_for_payload(self, payload: dict[str, Any]) -> dict[str, str]:
         """Дефолтный маппинг под тип Update."""
         cq = payload.get("callback_query")
         if isinstance(cq, dict) and cq:
@@ -417,7 +417,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
     def verify_secret_token(
         self,
         trigger: TriggerConfig,
-        received_token: Optional[str],
+        received_token: str | None,
     ) -> bool:
         """
         Сравнивает секрет из заголовка X-Telegram-Bot-Api-Secret-Token с сохранённым.

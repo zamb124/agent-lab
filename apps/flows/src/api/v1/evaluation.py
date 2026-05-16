@@ -6,7 +6,6 @@ API для получения результатов evaluation.
 """
 
 from datetime import date
-from typing import Optional
 
 from fastapi import APIRouter, Query
 
@@ -22,7 +21,7 @@ async def get_evaluation_results(
     container: ContainerDep,
     flow_id: str = Query(..., description="ID агента"),
     branch_id: str = Query("default", description="ID ветки (branch)"),
-    run_date: Optional[date] = Query(None, description="Дата запуска (по умолчанию сегодня)"),
+    run_date: date | None = Query(None, description="Дата запуска (по умолчанию сегодня)"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[EvaluationResult]:
@@ -48,7 +47,7 @@ async def get_evaluation_summary(
     container: ContainerDep,
     flow_id: str = Query(..., description="ID агента"),
     branch_id: str = Query("default", description="ID ветки (branch)"),
-    run_date: Optional[date] = Query(None, description="Дата запуска"),
+    run_date: date | None = Query(None, description="Дата запуска"),
 ):
     """
     Получение сводки по результатам evaluation.
@@ -120,8 +119,8 @@ async def get_test_result(
     container: ContainerDep,
     flow_id: str = Query(..., description="ID агента"),
     branch_id: str = Query("default", description="ID ветки (branch)"),
-    run_date: Optional[date] = Query(None, description="Дата запуска"),
-) -> Optional[EvaluationResult]:
+    run_date: date | None = Query(None, description="Дата запуска"),
+) -> EvaluationResult | None:
     """
     Получение результата конкретного теста.
 

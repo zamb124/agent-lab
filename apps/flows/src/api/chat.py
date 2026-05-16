@@ -4,7 +4,7 @@ Chat API - веб-интерфейс для SSE чата с агентами.
 
 import json
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["chat"])
 
 
-async def _get_flow_config(flow_id: str, container: FlowContainer) -> Optional[FlowConfig]:
+async def _get_flow_config(flow_id: str, container: FlowContainer) -> FlowConfig | None:
     """Получает конфигурацию агента из репозитория."""
     return await container.flow_repository.get(flow_id)
 
@@ -112,7 +112,7 @@ async def get_chat_interface(flow_id: str, request: Request, container: Containe
     return HTMLResponse(content=html_content)
 
 
-def _get_embedded_template(flow_id: str, base_url: str, branches: List[dict[str, Any]]) -> str:
+def _get_embedded_template(flow_id: str, base_url: str, branches: list[dict[str, Any]]) -> str:
     """Возвращает встроенный HTML шаблон если файл не найден."""
     branches_json = json.dumps(branches)
     return f"""<!DOCTYPE html>

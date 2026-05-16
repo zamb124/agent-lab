@@ -9,7 +9,7 @@ import copy
 import pathlib
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -65,7 +65,7 @@ def merge_state(base: 'ExecutionState | JsonDict', updates: JsonDict) -> 'Execut
         for key, value in updates.items():
             forbid_frozen_update_key(key, reason="merge")
             if key == "prompt_history" and value is not None:
-                value = ExecutionState._normalize_prompt_history(value)
+                value = ExecutionState.normalize_prompt_history(value)
             setattr(base, key, value)
         return base
     elif isinstance(base, dict):
@@ -160,7 +160,7 @@ def set_nested(data: 'ExecutionState | JsonDict', path: str, value: Any) -> 'Exe
         raise SafeEvalError("data must be ExecutionState or dict")
 
 
-def get_files(state: 'ExecutionState | JsonDict') -> List[Dict[str, Any]]:
+def get_files(state: 'ExecutionState | JsonDict') -> list[dict[str, Any]]:
     """
     Возвращает список файлов из state.
 
@@ -180,7 +180,7 @@ def get_files(state: 'ExecutionState | JsonDict') -> List[Dict[str, Any]]:
         return []
 
 
-def find_file(files: List[Dict[str, Any]], name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def find_file(files: list[dict[str, Any]], name: str | None = None) -> dict[str, Any] | None:
     """
     Ищет файл в списке state.files по имени.
 
@@ -257,7 +257,7 @@ def read_path_base64(file_path: str) -> str:
     return base64.b64encode(data).decode("utf-8")
 
 
-def get_user(state: Dict[str, Any]) -> Dict[str, Any]:
+def get_user(state: dict[str, Any]) -> dict[str, Any]:
     """
     Возвращает информацию о пользователе из state.
 
@@ -270,7 +270,7 @@ def get_user(state: Dict[str, Any]) -> Dict[str, Any]:
     return {"id": state.get("user_id", ""), "groups": state.get("user_groups", [])}
 
 
-def get_tool_result(state: Dict[str, Any], tool_name: str) -> Any:
+def get_tool_result(state: dict[str, Any], tool_name: str) -> Any:
     """
     Возвращает результат выполнения tool.
 
@@ -284,7 +284,7 @@ def get_tool_result(state: Dict[str, Any], tool_name: str) -> Any:
     return state.get("tool_results", {}).get(tool_name)
 
 
-def get_messages(state: Dict[str, Any]) -> List[Message]:
+def get_messages(state: dict[str, Any]) -> list[Message]:
     """
     Возвращает историю сообщений из state.
 
@@ -297,7 +297,7 @@ def get_messages(state: Dict[str, Any]) -> List[Message]:
     return state.get("messages", [])
 
 
-def add_user_message(state: Dict[str, Any], content: str) -> Dict[str, Any]:
+def add_user_message(state: dict[str, Any], content: str) -> dict[str, Any]:
     """
     Добавляет сообщение пользователя в state.
 
@@ -324,7 +324,7 @@ def add_user_message(state: Dict[str, Any], content: str) -> Dict[str, Any]:
     return state
 
 
-def add_agent_message(state: Dict[str, Any], content: str) -> Dict[str, Any]:
+def add_agent_message(state: dict[str, Any], content: str) -> dict[str, Any]:
     """
     Добавляет сообщение агента в state.
 
@@ -386,10 +386,10 @@ def push_ui_event(
     event_type: str,
     payload: JsonDict,
     *,
-    event_id: Optional[str] = None,
+    event_id: str | None = None,
     version: str = "1.0.0",
     source: str = "assistant",
-    correlation_id: Optional[str] = None,
+    correlation_id: str | None = None,
 ) -> JsonDict:
     """Добавляет UI событие в очередь state для последующей публикации в stream."""
     if state is None:
@@ -424,12 +424,12 @@ def push_ui_event(
 
 def push_ui_events(
     state: "ExecutionState | JsonDict | None",
-    events: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Добавляет пачку UI событий в очередь state."""
     if not isinstance(events, list):
         raise SafeEvalError("events must be a list")
-    queued: List[Dict[str, Any]] = []
+    queued: list[dict[str, Any]] = []
     for item in events:
         if not isinstance(item, dict):
             raise SafeEvalError("each event must be a dict")
@@ -457,7 +457,7 @@ def push_ui_events(
     return queued
 
 
-def pop_ui_events(state: "ExecutionState | JsonDict | None") -> List[Dict[str, Any]]:
+def pop_ui_events(state: "ExecutionState | JsonDict | None") -> list[dict[str, Any]]:
     """Извлекает и очищает очередь UI событий из state."""
     if state is None:
         raise SafeEvalError("state is required")

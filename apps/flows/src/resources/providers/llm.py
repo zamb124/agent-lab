@@ -2,7 +2,7 @@
 LLMResourceProvider - провайдер для llm ресурсов.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import LLMResourceConfig, ResourceDefinition
@@ -26,7 +26,7 @@ class LLMResourceProvider(BaseResourceProvider):
     async def resolve(
         self,
         definition: ResourceDefinition,
-        variables: Dict[str, Any],
+        variables: dict[str, Any],
     ) -> LLMResource:
         """
         Создаёт LLMResource.

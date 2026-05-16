@@ -2,7 +2,7 @@
 MCP Tool Wrapper - обёртка для вызова MCP tools через MCPClient.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import MCPServerConfig
@@ -31,10 +31,10 @@ class MCPTool(BaseTool):
         tool_id: str,
         mcp_server_config: MCPServerConfig,
         mcp_tool_name: str,
-        description: Optional[str] = None,
-        parameters: Optional[Dict[str, CallParameter]] = None,
-        parameters_schema: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
+        description: str | None = None,
+        parameters: dict[str, CallParameter] | None = None,
+        parameters_schema: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
     ):
         self.name = sanitize_tool_name(tool_id)
         self.description = description or f"MCP tool: {mcp_tool_name}"
@@ -45,7 +45,7 @@ class MCPTool(BaseTool):
         self.tags = tags or ["mcp"]
 
     @property
-    def parameters(self) -> Dict[str, Any]:
+    def parameters(self) -> dict[str, Any]:
         """JSON Schema параметров."""
         if self._parameters_schema is not None:
             return self._parameters_schema
@@ -69,7 +69,7 @@ class MCPTool(BaseTool):
             "required": required,
         }
 
-    async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
         """
         Вызывает MCP tool на удалённом сервере.
 

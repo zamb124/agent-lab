@@ -4,7 +4,6 @@ ChannelRegistry - реестр channel handlers.
 Регистрирует handlers для каждого типа канала.
 """
 
-from typing import Dict, Type, Union
 
 from apps.flows.src.models.enums import ChannelType
 from core.logging import get_logger
@@ -27,13 +26,13 @@ class ChannelRegistry:
     """
 
     def __init__(self):
-        self._handlers: Dict[ChannelType, Type[BaseChannelHandler]] = {}
-        self._instances: Dict[ChannelType, BaseChannelHandler] = {}
+        self._handlers: dict[ChannelType, type[BaseChannelHandler]] = {}
+        self._instances: dict[ChannelType, BaseChannelHandler] = {}
 
     def register(
         self,
         channel_type: ChannelType,
-        handler_class: Type[BaseChannelHandler],
+        handler_class: type[BaseChannelHandler],
     ) -> None:
         """
         Регистрирует handler для канала.
@@ -45,7 +44,7 @@ class ChannelRegistry:
         self._handlers[channel_type] = handler_class
         logger.debug(f"Channel handler registered: {channel_type.value}")
 
-    def get(self, channel_type: Union[ChannelType, str]) -> BaseChannelHandler:
+    def get(self, channel_type: ChannelType | str) -> BaseChannelHandler:
         """
         Возвращает handler для канала.
 
@@ -77,7 +76,7 @@ class ChannelRegistry:
         self._instances[channel_type] = instance
         return instance
 
-    def has(self, channel_type: Union[ChannelType, str]) -> bool:
+    def has(self, channel_type: ChannelType | str) -> bool:
         """Проверяет зарегистрирован ли канал."""
         if isinstance(channel_type, str):
             channel_type = ChannelType(channel_type)
@@ -86,6 +85,9 @@ class ChannelRegistry:
     def list_channels(self) -> list[str]:
         """Возвращает список зарегистрированных каналов."""
         return [ct.value for ct in self._handlers.keys()]
+
+    def __len__(self) -> int:
+        return len(self._handlers)
 
 
 def create_default_channel_registry() -> ChannelRegistry:
@@ -99,7 +101,7 @@ def create_default_channel_registry() -> ChannelRegistry:
     registry.register(ChannelType.TELEGRAM, TelegramChannelHandler)
     registry.register(ChannelType.WEBHOOK, WebhookChannelHandler)
 
-    logger.info(f"Channel registry created with {len(registry._handlers)} handlers")
+    logger.info(f"Channel registry created with {len(registry)} handlers")
 
     return registry
 

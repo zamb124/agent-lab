@@ -6,13 +6,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, UTC
-from typing import Any
+from datetime import UTC, date, datetime
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.db.models import CRMEntity
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.integrations.external_ref import external_ref_now, merge_external_refs
+from apps.crm.types import JsonObject
 
 
 async def upsert_canonical_by_external_ref(
@@ -25,7 +25,7 @@ async def upsert_canonical_by_external_ref(
     source_id: str,
     record_id: str,
     name: str,
-    patch_attributes: dict[str, Any],
+    patch_attributes: JsonObject,
     account_key: str | None = None,
     raw_version: str | None = None,
     description: str | None = None,

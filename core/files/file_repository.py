@@ -52,7 +52,7 @@ class FileRepository(BaseRepository[FileRecord]):
         final_key = self._build_final_key(key)
         table_name = self._get_table_name()
 
-        data = await self._storage._get_with_session_and_table(final_key, table_name)
+        data = await self._storage.get_with_session_and_table(final_key, table_name)
         if data is None:
             return None
 
@@ -74,5 +74,5 @@ class FileRepository(BaseRepository[FileRecord]):
         table_name = self._get_table_name()
 
         data = file_record.model_dump_json()
-        return await self._storage._set_with_table(final_key, data, table_name)
+        return await self._storage.set_with_table(final_key, data, table_name)
 

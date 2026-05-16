@@ -4,7 +4,7 @@ Push Notification Service.
 Tasks находятся в apps.idle_worker.tasks.push_notification_tasks.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from a2a.types import (
     PushNotificationAuthenticationInfo,
@@ -13,7 +13,7 @@ from a2a.types import (
 )
 
 
-def dict_to_config(data: Dict[str, Any]) -> TaskPushNotificationConfig:
+def dict_to_config(data: dict[str, Any]) -> TaskPushNotificationConfig:
     """Конвертирует dict в TaskPushNotificationConfig."""
     push_data = data.get("pushNotificationConfig", {})
 

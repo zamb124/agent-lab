@@ -6,13 +6,15 @@
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import cast as type_cast
+from typing import override
 
 from sqlalchemy import delete, func, select
 from sqlalchemy import update as sa_update
 
 from apps.crm.db.base import BaseCRMRepository
 from apps.crm.db.models import EntityType
+from apps.crm.types import JsonObject
 from core.db.utils import get_rowcount
 from core.logging import get_logger
 
@@ -23,10 +25,12 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     """Репозиторий для типов сущностей"""
 
     @property
+    @override
     def model_class(self) -> type[EntityType]:
         return EntityType
 
     @property
+    @override
     def id_field(self) -> str:
         return "type_id"
 
@@ -68,8 +72,11 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                 EntityType.namespace == namespace,
             )
             result = await session.execute(stmt)
-            rows = result.all()
-        return {r.type_id: r.parent_type_id for r in rows}
+            rows = type_cast(
+                list[tuple[str, str | None]],
+                type_cast(object, result.all()),
+            )
+        return {type_id: parent_type_id for type_id, parent_type_id in rows}
 
     async def count_all_for_company(
         self,
@@ -170,7 +177,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                 )
                 .values(**dict(fields))
             )
-            await session.execute(stmt)
+            _ = await session.execute(stmt)
             await session.commit()
 
     async def merge_optional_fields_if_absent(
@@ -179,7 +186,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         *,
         namespace: str,
         company_id: str,
-        extra: dict[str, Any],
+        extra: JsonObject,
     ) -> None:
         if not extra:
             return
@@ -195,7 +202,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                 raise ValueError(
                     f"EntityType '{type_id}' not found for company '{company_id}' namespace '{namespace}'"
                 )
-            current = dict(entity_type.optional_fields or {})
+            current: JsonObject = dict(entity_type.optional_fields or {})
             for key, value in extra.items():
                 if key not in current:
                     current[key] = value
@@ -214,7 +221,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                 )
                 .values(color=color)
             )
-            await session.execute(stmt)
+            _ = await session.execute(stmt)
             await session.commit()
 
     async def create_custom_type(

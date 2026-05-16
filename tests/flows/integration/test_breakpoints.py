@@ -20,7 +20,7 @@ import pytest_asyncio
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
-from apps.flows.src.runtime import Flow
+from apps.flows.src.runtime.flow import Flow
 from core.state import ExecutionState
 
 

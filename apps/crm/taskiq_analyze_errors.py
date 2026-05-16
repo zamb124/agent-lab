@@ -6,30 +6,59 @@ ValidationError из воркера TaskIQ при передаче в API час
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TypedDict
+from typing import cast as type_cast
 
 PREFIX = "TASKIQ_ANALYZE_VALIDATION_ERROR:"
 
-PREFIX_MENTIONED_ENTITY_SHORT_DESCRIPTION = (
-    "TASKIQ_ANALYZE_MENTIONED_ENTITY_SHORT_DESCRIPTION:"
-)
+PREFIX_MENTIONED_ENTITY_SHORT_DESCRIPTION = "TASKIQ_ANALYZE_MENTIONED_ENTITY_SHORT_DESCRIPTION:"
+
+type TaskiqValidationError = dict[str, object]
 
 
-def format_validation_for_taskiq(exc_errors: list[dict[str, Any]]) -> str:
+class MentionedEntityShortDescriptionError(TypedDict):
+    entity_id: str
+    entity_name: str
+    entity_type: str
+    min_len: int
+
+
+def _as_json_object(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    result: dict[str, object] = {}
+    for key, item in type_cast(dict[object, object], value).items():
+        if not isinstance(key, str):
+            return None
+        result[key] = item
+    return result
+
+
+def _as_json_object_list(value: object) -> list[TaskiqValidationError] | None:
+    if not isinstance(value, list):
+        return None
+    items: list[TaskiqValidationError] = []
+    for item in type_cast(list[object], value):
+        item_obj = _as_json_object(item)
+        if item_obj is None:
+            return None
+        items.append(item_obj)
+    return items
+
+
+def format_validation_for_taskiq(exc_errors: list[TaskiqValidationError]) -> str:
     return PREFIX + json.dumps(exc_errors, default=str)
 
 
-def parse_validation_from_task_message(message: str) -> list[dict[str, Any]] | None:
+def parse_validation_from_task_message(message: str) -> list[TaskiqValidationError] | None:
     if not message.startswith(PREFIX):
         return None
     raw = message[len(PREFIX) :]
     try:
-        parsed = json.loads(raw)
+        parsed = type_cast(object, json.loads(raw))
     except json.JSONDecodeError:
         return None
-    if isinstance(parsed, list):
-        return parsed
-    return None
+    return _as_json_object_list(parsed)
 
 
 def format_mentioned_entity_short_description_error(
@@ -53,20 +82,21 @@ def format_mentioned_entity_short_description_error(
 
 def parse_mentioned_entity_short_description_from_task_message(
     message: str,
-) -> dict[str, Any] | None:
+) -> MentionedEntityShortDescriptionError | None:
     if not message.startswith(PREFIX_MENTIONED_ENTITY_SHORT_DESCRIPTION):
         return None
     raw = message[len(PREFIX_MENTIONED_ENTITY_SHORT_DESCRIPTION) :]
     try:
-        parsed = json.loads(raw)
+        parsed = type_cast(object, json.loads(raw))
     except json.JSONDecodeError:
         return None
-    if not isinstance(parsed, dict):
+    payload = _as_json_object(parsed)
+    if payload is None:
         return None
-    entity_id = parsed.get("entity_id")
-    entity_name = parsed.get("entity_name")
-    entity_type = parsed.get("entity_type")
-    min_len = parsed.get("min_len")
+    entity_id = payload.get("entity_id")
+    entity_name = payload.get("entity_name")
+    entity_type = payload.get("entity_type")
+    min_len = payload.get("min_len")
     if (
         not isinstance(entity_id, str)
         or not entity_id.strip()

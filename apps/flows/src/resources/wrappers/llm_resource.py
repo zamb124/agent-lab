@@ -4,7 +4,7 @@ LLMResource - wrapper для llm ресурса.
 Предоставляет доступ к LLM для генерации текста.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from a2a.utils.message import get_message_text
 
@@ -50,20 +50,20 @@ class LLMResource:
         self,
         provider: str,
         model: str,
-        fallback_models: Optional[List[LLMCallConfig]] = None,
+        fallback_models: list[LLMCallConfig] | None = None,
         temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[ReasoningEffort] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        folder_id: Optional[str] = None,
-        extra_request_body: Optional[Dict[str, Any]] = None,
-        extra_request_headers: Optional[Dict[str, str]] = None,
+        max_tokens: int | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        folder_id: str | None = None,
+        extra_request_body: dict[str, Any] | None = None,
+        extra_request_headers: dict[str, str] | None = None,
         *,
         container: FlowRuntimeContainer,
     ):
@@ -121,8 +121,8 @@ class LLMResource:
     async def complete(
         self,
         prompt: str,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> str:
         """
         Генерация текста по промпту.
@@ -149,7 +149,7 @@ class LLMResource:
             billing_quantity=1,
             billing_pending_settlement=True,
         ):
-            chat_kw: Dict[str, Any] = {}
+            chat_kw: dict[str, Any] = {}
             if temperature is not None:
                 chat_kw["temperature"] = temperature
             if max_tokens is not None:
@@ -159,9 +159,9 @@ class LLMResource:
 
     async def chat(
         self,
-        messages: List[Dict[str, str]],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, str]],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> str:
         """
         Чат с историей сообщений.
@@ -188,7 +188,7 @@ class LLMResource:
             billing_quantity=1,
             billing_pending_settlement=True,
         ):
-            chat_kw: Dict[str, Any] = {}
+            chat_kw: dict[str, Any] = {}
             if temperature is not None:
                 chat_kw["temperature"] = temperature
             if max_tokens is not None:
@@ -207,10 +207,10 @@ class LLMResource:
 
     async def chat_with_tools(
         self,
-        messages: List[Dict[str, str]],
-        tools: List[Dict[str, Any]],
-        temperature: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        messages: list[dict[str, str]],
+        tools: list[dict[str, Any]],
+        temperature: float | None = None,
+    ) -> dict[str, Any]:
         """
         Чат с поддержкой tools.
 

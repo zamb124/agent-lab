@@ -72,7 +72,7 @@ class TestSkillValidationAndPersistence:
         assert (shared_var == "from_skill" or (hasattr(shared_var, "value") and shared_var.value == "from_skill"))
 
         # Проверяем что при применении skill переменные мержатся правильно
-        effective = container.flow_factory._apply_branch(agent, branch_id)
+        effective = container.flow_factory.apply_branch(agent, branch_id)
         assert effective["variables"]["base_var"] == "base_value"
         assert effective["variables"]["skill_var"] == "skill_value"
         assert effective["variables"]["shared_var"] == "from_skill"
@@ -129,7 +129,7 @@ class TestSkillValidationAndPersistence:
         assert skill.nodes["main"]["llm"]["max_tokens"] == 1000
 
         # Проверяем что при применении skill свойства мержатся
-        effective = container.flow_factory._apply_branch(agent, branch_id)
+        effective = container.flow_factory.apply_branch(agent, branch_id)
         # По умолчанию nodes_mode = MERGE - deep_merge мержит dict рекурсивно
         assert effective["nodes"]["main"]["prompt"] == "Skill prompt"
         assert effective["nodes"]["main"]["llm"]["temperature"] == 0.1
@@ -197,7 +197,7 @@ class TestSkillValidationAndPersistence:
         assert "state['path'] = 'skill'" in skill.nodes["skill_main"]["code"]
 
         # Проверяем что при применении skill ноды заменяются (nodes_mode = REPLACE по умолчанию)
-        effective = container.flow_factory._apply_branch(agent, branch_id)
+        effective = container.flow_factory.apply_branch(agent, branch_id)
         assert effective["entry"] == "skill_main"
         assert "skill_main" in effective["nodes"]
         assert "skill_helper" in effective["nodes"]
@@ -270,7 +270,7 @@ class TestSkillValidationAndPersistence:
         assert edge_to_b.condition == "state.get('value', 0) <= 5"
 
         # Проверяем что при применении skill условия сохраняются
-        effective = container.flow_factory._apply_branch(agent, branch_id)
+        effective = container.flow_factory.apply_branch(agent, branch_id)
         effective_edge_to_a = next(e for e in effective["edges"] if e.from_node == "main" and e.to_node == "branch_a")
         assert effective_edge_to_a.condition == "state.get('value', 0) > 5"
 
@@ -427,7 +427,7 @@ class TestSkillValidationAndPersistence:
             assert max_retries["description"] == "Maximum number of retry attempts"
 
         # Проверяем что при применении skill переменные мержатся с полными метаданными
-        effective = container.flow_factory._apply_branch(agent, branch_id)
+        effective = container.flow_factory.apply_branch(agent, branch_id)
         # В effective переменные извлекаются как простые значения (только value)
         assert effective["variables"]["api_key"] == "skill_secret_key"
         assert effective["variables"]["timeout"] == "30"

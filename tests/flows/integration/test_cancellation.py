@@ -148,14 +148,14 @@ class TestCancellationBetweenNodes:
         set_cancellation_token(token)
 
         node_a = flow.nodes["node_a"]
-        original_run_internal = node_a._run_internal
+        original_execute = node_a.execute
 
-        async def patched_run_internal(run_state):
-            result = await original_run_internal(run_state)
+        async def patched_execute(run_state):
+            result = await original_execute(run_state)
             await token.cancel()
             return result
 
-        node_a._run_internal = patched_run_internal
+        node_a.execute = patched_execute
 
         try:
             with pytest.raises(FlowCancelled):

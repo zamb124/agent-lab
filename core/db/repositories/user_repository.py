@@ -41,7 +41,7 @@ class UserRepository(BaseRepository[User]):
 
     async def find_by_email(self, email: str) -> Optional[User]:
         """Поиск пользователя по email (JSONB containment по полю emails)."""
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             emails_json = cast(json.dumps([email]), JSONB)
             result = await session.execute(
                 select(UsersModel.value)
@@ -72,7 +72,7 @@ class UserRepository(BaseRepository[User]):
             )
             ORDER BY u.key
         """)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             result = await session.execute(q, {"norm": norm})
             out: list[User] = []
             for row in result.scalars():
@@ -83,7 +83,7 @@ class UserRepository(BaseRepository[User]):
     async def search_by_query(self, query: str, limit: int = 20) -> list[User]:
         """Поиск пользователей по email или имени (ILIKE по JSONB полям)."""
         pattern = f"%{query}%"
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             result = await session.execute(
                 select(UsersModel.value)
                 .where(

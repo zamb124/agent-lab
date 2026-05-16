@@ -27,7 +27,7 @@ ProgressCb = Callable[[str, int, str], Awaitable[None]]
 
 class NoteProcessingService:
     def __init__(self, entity_service: EntityService) -> None:
-        self._entity_service = entity_service
+        self._entity_service: EntityService = entity_service
 
     async def resolve_note_text(
         self,
@@ -64,8 +64,7 @@ class NoteProcessingService:
                 stripped = text.strip()
                 if not stripped:
                     raise ValueError(
-                        f"Вложение '{filename}' (file_id={file_id}) не содержит извлекаемого текста. "
-                        "Анализ без полного содержимого всех вложений невозможен."
+                        f"Вложение '{filename}' (file_id={file_id}) не содержит извлекаемого текста. Анализ без полного содержимого всех вложений невозможен."
                     )
                 if len(stripped) > attachment_chars_limit:
                     if progress_cb:
@@ -153,9 +152,10 @@ class NoteProcessingService:
         progress_cb: ProgressCb | None = None,
     ) -> NoteProcessingResult:
         """Полный конвейер: analyze + apply."""
-        await self.analyze(note_id, config, progress_cb=progress_cb)
+        analysis = await self.analyze(note_id, config, progress_cb=progress_cb)
         if progress_cb:
-            await progress_cb("applying", 88, "Применение результатов")
+            extracted_count = len(analysis.entities)
+            await progress_cb("applying", 88, f"Применение результатов ({extracted_count})")
         apply_result = await self.apply(note_id, progress_cb=progress_cb)
         return NoteProcessingResult(
             note_id=note_id,

@@ -57,7 +57,7 @@ class VariableRepository(BaseRepository[VariableData]):
         final_key = self._build_final_key(base_key)
         table_name = self._get_table_name()
 
-        data = await self._storage._get_with_session_and_table(final_key, table_name)
+        data = await self._storage.get_with_session_and_table(final_key, table_name)
         if data is None:
             return None
 
@@ -84,7 +84,7 @@ class VariableRepository(BaseRepository[VariableData]):
         table_name = self._get_table_name()
 
         data = var_data.model_dump_json()
-        return await self._storage._set_with_table(final_key, data, table_name)
+        return await self._storage.set_with_table(final_key, data, table_name)
 
     async def delete(self, key: str) -> bool:
         """Удаляет переменную по ключу"""
@@ -92,7 +92,7 @@ class VariableRepository(BaseRepository[VariableData]):
         final_key = self._build_final_key(base_key)
         table_name = self._get_table_name()
 
-        return await self._storage._delete_with_table(final_key, table_name)
+        return await self._storage.delete_with_table(final_key, table_name)
 
     async def list(self, *, limit: int, offset: int = 0) -> list[Variable]:
         """Возвращает страницу переменных с ключами."""
@@ -100,7 +100,7 @@ class VariableRepository(BaseRepository[VariableData]):
         final_prefix = self._build_final_key(base_prefix)
         table_name = self._get_table_name()
 
-        all_data = await self._storage._get_all_by_prefix_and_table(
+        all_data = await self._storage.get_all_by_prefix_and_table(
             final_prefix, table_name, limit, offset
         )
 

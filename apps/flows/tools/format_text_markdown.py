@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,18 +15,18 @@ class FormatTextMarkdownArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     text: str = Field(..., min_length=1, description="Исходный текст.")
-    provider: Optional[str] = Field(
+    provider: str | None = Field(
         None,
         description=(
             "None — платформенный `get_llm()` default-route. "
             "`provider_litserve` — старый LitServe HTTP. Иначе — явный LLM-провайдер."
         ),
     )
-    model: Optional[str] = Field(
+    model: str | None = Field(
         None,
         description="Модель; для LitServe — api id локальной LLM; для OpenRouter — `openrouter:slug` или пара provider+model.",
     )
-    max_chunk_chars: Optional[int] = Field(
+    max_chunk_chars: int | None = Field(
         None,
         ge=512,
         le=100_000,
@@ -48,10 +48,10 @@ class FormatTextMarkdownArgs(BaseModel):
 )
 async def format_text_markdown(
     text: str,
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
-    max_chunk_chars: Optional[int] = None,
-    state: Optional[dict[str, Any]] = None,
+    provider: str | None = None,
+    model: str | None = None,
+    max_chunk_chars: int | None = None,
+    state: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     del state
     svc = get_text_transform_service()

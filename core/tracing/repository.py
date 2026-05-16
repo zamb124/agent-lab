@@ -137,7 +137,7 @@ class SpanRepository:
         if not service_name:
             raise ValueError("span_data['service_name'] обязателен для сохранения span")
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = (
                 insert(Spans)
                 .values(
@@ -174,7 +174,7 @@ class SpanRepository:
     async def get_span_by_id(self, span_id: str) -> Optional[Dict[str, Any]]:
         from core.db.models import Spans
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.span_id == span_id)
             result = await session.execute(stmt)
             row = result.scalar_one_or_none()
@@ -202,7 +202,7 @@ class SpanRepository:
         if limit < 1:
             raise ValueError("limit должен быть >= 1")
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.service_name == service_name)
             if company_id is not None:
                 stmt = stmt.where(Spans.company_id == company_id)
@@ -248,7 +248,7 @@ class SpanRepository:
         """Хронология событий по сущности (чат, заметка, документ и т.д.)."""
         from core.db.models import Spans
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans).where(
                 Spans.company_id == company_id,
                 Spans.resource_type == resource_type,
@@ -264,7 +264,7 @@ class SpanRepository:
     async def get_trace(self, trace_id: str) -> List[Dict[str, Any]]:
         from core.db.models import Spans
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.trace_id == trace_id).order_by(Spans.start_time.asc())
             result = await session.execute(stmt)
             rows = result.scalars().all()
@@ -273,7 +273,7 @@ class SpanRepository:
     async def get_spans_by_task(self, task_id: str) -> List[Dict[str, Any]]:
         from core.db.models import Spans
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = (
                 select(Spans)
                 .where(_json_text_eq(Spans.attributes, trace_attr.ATTR_TASK_ID, task_id))
@@ -290,7 +290,7 @@ class SpanRepository:
     ) -> List[Dict[str, Any]]:
         from core.db.models import Spans
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = (
                 select(Spans)
                 .where(Spans.session_agent == session_agent)
@@ -310,7 +310,7 @@ class SpanRepository:
     ) -> List[Dict[str, Any]]:
         from core.db.models import Spans
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.user_id == user_id)
             if from_time:
                 stmt = stmt.where(Spans.start_time >= from_time)
@@ -330,7 +330,7 @@ class SpanRepository:
     ) -> List[Dict[str, Any]]:
         from core.db.models import Spans
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans).where(
                 _json_text_eq(Spans.attributes, trace_attr.ATTR_FLOW_ID, flow_id)
             )
@@ -365,7 +365,7 @@ class SpanRepository:
     ) -> Tuple[List[Dict[str, Any]], int]:
         from core.db.models import Spans
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans)
             count_stmt = select(func.count()).select_from(Spans)
 
@@ -443,7 +443,7 @@ class SpanRepository:
         if service_name is None:
             service_name_frag = _admin_optional_ilike_param("service_name_query", service_name_query)
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans)
             if service_name is not None:
                 stmt = stmt.where(Spans.service_name == service_name)
@@ -514,7 +514,7 @@ class SpanRepository:
         res_txt = Spans.attributes[trace_attr.ATTR_BILLING_RESOURCE_NAME].astext
         pend_txt = Spans.attributes[trace_attr.ATTR_BILLING_PENDING_SETTLEMENT].astext
 
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = (
                 select(Spans)
                 .where(
@@ -542,7 +542,7 @@ class SpanRepository:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans.company_id).where(Spans.company_id.isnot(None))
             if frag is not None:
                 stmt = stmt.where(_admin_ilike(Spans.company_id, frag))
@@ -559,7 +559,7 @@ class SpanRepository:
 
         if max_ids < 1 or max_ids > 50_000:
             raise ValueError("max_ids должен быть от 1 до 50000")
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = (
                 select(Spans.company_id)
                 .where(Spans.company_id.isnot(None))
@@ -585,7 +585,7 @@ class SpanRepository:
         frag = _facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans.user_id).where(Spans.user_id.isnot(None))
             if scope_co is not None:
                 stmt = stmt.where(Spans.company_id == scope_co)
@@ -614,7 +614,7 @@ class SpanRepository:
             raise ValueError("max_ids должен быть от 1 до 50000")
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans.user_id).where(Spans.user_id.isnot(None))
             if scope_co is not None:
                 stmt = stmt.where(Spans.company_id == scope_co)
@@ -639,7 +639,7 @@ class SpanRepository:
         frag = _facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans.service_name).where(Spans.service_name.isnot(None))
             if scope_co is not None:
                 stmt = stmt.where(Spans.company_id == scope_co)
@@ -666,7 +666,7 @@ class SpanRepository:
         frag = _facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans.event_type).where(Spans.event_type.isnot(None))
             if scope_co is not None:
                 stmt = stmt.where(Spans.company_id == scope_co)
@@ -691,7 +691,7 @@ class SpanRepository:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans.namespace).where(Spans.namespace.isnot(None))
             if scope_co is not None:
                 stmt = stmt.where(Spans.company_id == scope_co)
@@ -716,7 +716,7 @@ class SpanRepository:
         frag = _facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             stmt = select(Spans.operation_name).where(Spans.operation_name.isnot(None))
             if scope_co is not None:
                 stmt = stmt.where(Spans.company_id == scope_co)

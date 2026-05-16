@@ -8,7 +8,7 @@ import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import cast
 
 from apps.crm.constants_graph import BELONGS_TO_RELATIONSHIP_TYPE
 from apps.crm.db.models import CRMEntity, Relationship
@@ -24,6 +24,7 @@ from apps.crm.integrations.entity_upsert import upsert_canonical_by_external_ref
 from apps.crm.models.api import NoteProcessingConfig
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.task_service import ActiveTaskExistsError, TaskService
+from apps.crm.types import JsonObject
 from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.http.client import get_httpx_client
@@ -45,6 +46,13 @@ AMO_STANDARD_TASK_TYPE_NAMES: dict[int, str] = {
 }
 
 AmoProgressFn = Callable[[str, int], Awaitable[None]]
+AmoItemMapper = Callable[[JsonObject, str, str, str, str, str], Awaitable[None]]
+
+
+def _as_json_object(value: object) -> JsonObject | None:
+    if isinstance(value, dict):
+        return cast(JsonObject, value)
+    return None
 
 
 class AmoCRMIntegrationService:
@@ -121,7 +129,7 @@ class AmoCRMIntegrationService:
         self,
         url: str,
         access_token: str,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         async with get_httpx_client(timeout=60.0) as client:
             response = await client.get(
                 url,
@@ -137,38 +145,52 @@ class AmoCRMIntegrationService:
             return {}
         if not response.content.strip():
             return {}
-        return response.json()
+        payload = cast(object, response.json())
+        payload_obj = _as_json_object(payload)
+        if payload_obj is None:
+            raise ValueError("AmoCRM API returned non-object JSON")
+        return payload_obj
 
-    def _next_page_url(self, payload: dict[str, Any]) -> str | None:
+    def _next_page_url(self, payload: JsonObject) -> str | None:
         links = payload.get("_links")
-        if not isinstance(links, dict):
+        links_obj = _as_json_object(links)
+        if links_obj is None:
             return None
-        nxt = links.get("next")
-        if isinstance(nxt, dict):
-            href = nxt.get("href")
+        nxt = links_obj.get("next")
+        nxt_obj = _as_json_object(nxt)
+        if nxt_obj is not None:
+            href = nxt_obj.get("href")
             if isinstance(href, str) and href.strip():
                 return href.strip()
         return None
 
-    def _embedded_list(self, payload: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    def _embedded_list(self, payload: JsonObject, key: str) -> list[JsonObject]:
         emb = payload.get("_embedded")
-        if not isinstance(emb, dict):
+        emb_obj = _as_json_object(emb)
+        if emb_obj is None:
             return []
-        raw = emb.get(key)
+        raw = emb_obj.get(key)
         if not isinstance(raw, list):
             return []
-        return [x for x in raw if isinstance(x, dict)]
+        out: list[JsonObject] = []
+        for item in cast(list[object], raw):
+            item_obj = _as_json_object(item)
+            if item_obj is not None:
+                out.append(item_obj)
+        return out
 
     @staticmethod
-    def _amo_ids_from_embedded_dict(emb: Any, key: str) -> list[str]:
-        if not isinstance(emb, dict):
+    def _amo_ids_from_embedded_dict(emb: object, key: str) -> list[str]:
+        emb_obj = _as_json_object(emb)
+        if emb_obj is None:
             return []
-        items = emb.get(key)
+        items = emb_obj.get(key)
         if not isinstance(items, list):
             return []
         out: list[str] = []
-        for item in items:
-            if not isinstance(item, dict):
+        for item_raw in cast(list[object], items):
+            item = _as_json_object(item_raw)
+            if item is None:
                 continue
             iid = item.get("id")
             if iid is None:
@@ -179,7 +201,7 @@ class AmoCRMIntegrationService:
         return out
 
     @staticmethod
-    def _amo_ids_from_item_embedded(raw: dict[str, Any], key: str) -> list[str]:
+    def _amo_ids_from_item_embedded(raw: JsonObject, key: str) -> list[str]:
         emb = raw.get("_embedded")
         return AmoCRMIntegrationService._amo_ids_from_embedded_dict(emb, key)
 
@@ -236,13 +258,14 @@ class AmoCRMIntegrationService:
         return True
 
     @staticmethod
-    def _amo_note_plain_text(raw: dict[str, Any]) -> str | None:
+    def _amo_note_plain_text(raw: JsonObject) -> str | None:
         t = raw.get("text")
         if isinstance(t, str) and t.strip():
             return t.strip()
         params = raw.get("params")
-        if isinstance(params, dict):
-            pt = params.get("text")
+        params_obj = _as_json_object(params)
+        if params_obj is not None:
+            pt = params_obj.get("text")
             if isinstance(pt, str) and pt.strip():
                 return pt.strip()
         return None
@@ -255,10 +278,11 @@ class AmoCRMIntegrationService:
         return s.replace("[", "(").replace("]", ")")
 
     @staticmethod
-    def _amo_users_directory_from_api(users: list[Any]) -> dict[str, dict[str, str]]:
+    def _amo_users_directory_from_api(users: list[object]) -> dict[str, dict[str, str]]:
         out: dict[str, dict[str, str]] = {}
-        for raw in users:
-            if not isinstance(raw, dict):
+        for raw_item in users:
+            raw = _as_json_object(raw_item)
+            if raw is None:
                 continue
             tid = raw.get("id")
             if tid is None:
@@ -278,7 +302,7 @@ class AmoCRMIntegrationService:
         *,
         company_id: str,
         account_key: str,
-        amo_author_id: Any,
+        amo_author_id: object,
         amo_users_by_id: dict[str, dict[str, str]],
     ) -> str:
         if amo_author_id is None:
@@ -309,7 +333,7 @@ class AmoCRMIntegrationService:
         )
 
     @staticmethod
-    def _note_date_from_amo_created_at(created: Any, *, fallback: date) -> date:
+    def _note_date_from_amo_created_at(created: object, *, fallback: date) -> date:
         """
         AmoCRM v4 отдаёт created_at как unix-seconds (число); в ответах бывает строка.
         Без распознанной даты ежедневник (фильтр по note_date) не покажет заметку.
@@ -335,7 +359,7 @@ class AmoCRMIntegrationService:
     async def _upsert_amocrm_note_if_text(
         self,
         *,
-        raw: dict[str, Any],
+        raw: JsonObject,
         parent_entity: CRMEntity,
         namespace: str,
         company_id: str,
@@ -357,14 +381,12 @@ class AmoCRMIntegrationService:
         if len(name) > 500:
             name = name[:500]
         parent_ts = parent_entity.created_at
-        if parent_ts is None:
-            raise ValueError("parent_entity.created_at обязателен для импорта примечания AmoCRM")
         fallback_date = parent_ts.astimezone(UTC).date()
         note_date = self._note_date_from_amo_created_at(
             raw.get("created_at"),
             fallback=fallback_date,
         )
-        patch_attrs: dict[str, Any] = {}
+        patch_attrs: JsonObject = {}
         nt = raw.get("note_type")
         if nt is not None:
             patch_attrs["amo_note_type"] = nt
@@ -441,7 +463,7 @@ class AmoCRMIntegrationService:
             url = self._next_page_url(payload)
 
     @staticmethod
-    def _canonical_entity_type_for_amo_task_parent(amo_entity_type: Any) -> str | None:
+    def _canonical_entity_type_for_amo_task_parent(amo_entity_type: object) -> str | None:
         if not isinstance(amo_entity_type, str):
             return None
         s = amo_entity_type.strip().lower()
@@ -454,7 +476,7 @@ class AmoCRMIntegrationService:
         return None
 
     @staticmethod
-    def _amo_timestamp_to_date(ts: Any) -> date | None:
+    def _amo_timestamp_to_date(ts: object) -> date | None:
         if not isinstance(ts, (int, float)):
             return None
         iv = int(ts)
@@ -506,8 +528,8 @@ class AmoCRMIntegrationService:
                 tx = raw.get("text")
                 if isinstance(tx, str) and tx.strip():
                     body_lines.append(tx.strip())
-                res = raw.get("result")
-                if isinstance(res, dict):
+                res = _as_json_object(raw.get("result"))
+                if res is not None:
                     rt = res.get("text")
                     if isinstance(rt, str) and rt.strip():
                         body_lines.append(rt.strip())
@@ -522,12 +544,14 @@ class AmoCRMIntegrationService:
 
                 due = self._amo_timestamp_to_date(raw.get("complete_till"))
 
-                attrs: dict[str, Any] = {}
+                attrs: JsonObject = {}
                 amo_done = raw.get("is_completed") is True
                 attrs["amo_is_completed"] = amo_done
                 attrs["status"] = "done" if amo_done else "todo"
                 tt_raw = raw.get("task_type_id")
                 if tt_raw is not None:
+                    if not isinstance(tt_raw, (str, int, float)) or isinstance(tt_raw, bool):
+                        raise ValueError(f"AmoCRM: task_type_id не число для задачи {tid}")
                     try:
                         tt_int = int(tt_raw)
                     except (TypeError, ValueError) as exc:
@@ -536,7 +560,7 @@ class AmoCRMIntegrationService:
                     tname = AMO_STANDARD_TASK_TYPE_NAMES.get(tt_int)
                     if tname is not None:
                         attrs["amo_task_type_name"] = tname
-                if isinstance(res, dict):
+                if res is not None:
                     rt_only = res.get("text")
                     if isinstance(rt_only, str) and rt_only.strip():
                         attrs["amo_result_text"] = rt_only.strip()
@@ -607,7 +631,7 @@ class AmoCRMIntegrationService:
         user_id: str,
         access_token: str,
         account_key: str,
-        map_item: Any,
+        map_item: AmoItemMapper,
         on_batch: Callable[[int], Awaitable[None]] | None = None,
     ) -> int:
         count = 0
@@ -652,7 +676,7 @@ class AmoCRMIntegrationService:
         on_progress: AmoProgressFn | None = None,
     ) -> dict[str, int]:
         ctx = get_context()
-        if ctx is None or ctx.user is None or ctx.active_company is None:
+        if ctx is None or ctx.active_company is None:
             raise ValueError("Контекст пользователя обязателен")
         company_id = ctx.active_company.company_id
         user_id = ctx.user.user_id
@@ -678,16 +702,18 @@ class AmoCRMIntegrationService:
         users_payload_prefetch = await self._get_json(
             f"{base}/api/v4/{AMO_USERS_PATH}", access_token
         )
-        users_list_cached = (users_payload_prefetch.get("_embedded") or {}).get("users")
-        if not isinstance(users_list_cached, list):
-            users_list_cached = []
+        embedded_prefetch = _as_json_object(users_payload_prefetch.get("_embedded"))
+        users_raw_cached = embedded_prefetch.get("users") if embedded_prefetch is not None else None
+        users_list_cached = (
+            cast(list[object], users_raw_cached) if isinstance(users_raw_cached, list) else []
+        )
         _ = self._amo_users_directory_from_api(users_list_cached)
 
         if on_progress is not None:
             await on_progress("contacts", 0)
 
         async def map_lead(
-            raw: dict[str, Any],
+            raw: JsonObject,
             ns: str,
             cid: str,
             uid: str,
@@ -702,7 +728,7 @@ class AmoCRMIntegrationService:
             price = raw.get("price")
             st = raw.get("status_id")
             pl = raw.get("pipeline_id")
-            attrs: dict[str, Any] = {}
+            attrs: JsonObject = {}
             if isinstance(price, (int, float)):
                 attrs["price"] = price
             if st is not None:
@@ -775,7 +801,7 @@ class AmoCRMIntegrationService:
             )
 
         async def map_contact(
-            raw: dict[str, Any],
+            raw: JsonObject,
             ns: str,
             cid: str,
             uid: str,
@@ -788,7 +814,7 @@ class AmoCRMIntegrationService:
             parts = [raw.get("first_name"), raw.get("last_name")]
             nmp = " ".join(str(p) for p in parts if isinstance(p, str) and p.strip())
             name = nmp if nmp.strip() else f"contact {rid}"
-            attrs: dict[str, Any] = {}
+            attrs: JsonObject = {}
             if isinstance(raw.get("first_name"), str):
                 attrs["first_name"] = raw.get("first_name")
             if isinstance(raw.get("last_name"), str):
@@ -842,7 +868,7 @@ class AmoCRMIntegrationService:
             )
 
         async def map_company(
-            raw: dict[str, Any],
+            raw: JsonObject,
             ns: str,
             cid: str,
             uid: str,
@@ -854,7 +880,7 @@ class AmoCRMIntegrationService:
                 raise ValueError("AmoCRM: в элементе нет id")
             nm = raw.get("name")
             name = str(nm) if isinstance(nm, str) and nm.strip() else f"organization {rid}"
-            org_attrs: dict[str, Any] = {}
+            org_attrs: JsonObject = {}
             ocb = raw.get("created_by")
             if ocb is not None:
                 org_attrs["amo_created_by"] = ocb
@@ -953,14 +979,15 @@ class AmoCRMIntegrationService:
         if on_progress is not None:
             await on_progress("users", 75)
         u_count = 0
-        for raw in users_list_cached:
-            if not isinstance(raw, dict):
+        for raw_item in users_list_cached:
+            raw = _as_json_object(raw_item)
+            if raw is None:
                 continue
             tid = raw.get("id")
             if tid is None:
                 continue
             name = str(raw.get("name") or raw.get("title") or f"member {tid}")
-            attrs: dict[str, Any] = {}
+            attrs: JsonObject = {}
             if raw.get("email") is not None:
                 attrs["email"] = str(raw.get("email"))
             if raw.get("is_active") is not None:
@@ -1014,7 +1041,7 @@ class AmoCRMIntegrationService:
         Подмешивает в optional_fields канонических типов сущностей (lead, contact, organization) поля amo_cf_<field_id> по справочнику custom_fields.
         """
         ctx = get_context()
-        if ctx is None or ctx.user is None or ctx.active_company is None:
+        if ctx is None or ctx.active_company is None:
             raise ValueError("Контекст пользователя обязателен")
         company_id = ctx.active_company.company_id
         user_id = ctx.user.user_id
@@ -1044,9 +1071,9 @@ class AmoCRMIntegrationService:
                 f"{base}/api/v4/{segment}/custom_fields",
                 access_token,
             )
-            fields = (data.get("_embedded") or {}).get("custom_fields")
-            if not isinstance(fields, list):
-                fields = []
+            embedded = _as_json_object(data.get("_embedded"))
+            fields_raw = embedded.get("custom_fields") if embedded is not None else None
+            fields = cast(list[object], fields_raw) if isinstance(fields_raw, list) else []
             et = await self._entity_type_repo.get_by_type_id(
                 type_id,
                 namespace=namespace_name,
@@ -1055,10 +1082,11 @@ class AmoCRMIntegrationService:
             if et is None:
                 updated[type_id] = 0
                 continue
-            opt = dict(et.optional_fields) if et.optional_fields else {}
+            opt: JsonObject = dict(et.optional_fields) if et.optional_fields else {}
             n_add = 0
-            for field in fields:
-                if not isinstance(field, dict):
+            for raw_field in fields:
+                field = _as_json_object(raw_field)
+                if field is None:
                     continue
                 fid = field.get("id")
                 if fid is None:
@@ -1081,7 +1109,7 @@ class AmoCRMIntegrationService:
                 }
                 n_add += 1
             if n_add:
-                await self._entity_type_repo.update_metadata(
+                _ = await self._entity_type_repo.update_metadata(
                     type_id,
                     namespace=namespace_name,
                     company_id=company_id,

@@ -15,7 +15,8 @@ import re
 import time
 import uuid
 from datetime import date
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
 
@@ -39,7 +40,7 @@ from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)
 
-ScoresType = Dict[str, float]
+ScoresType = dict[str, float]
 
 TEST_COMPLETE_MARKER = "[TEST_COMPLETE]"
 LOOP_DETECTION_WINDOW = 3
@@ -62,9 +63,9 @@ class TestRunner:
         run_date: date,
         iteration: int,
         *,
-        flow_factory: Any,
-        node_repository: Any,
-        tool_registry: Any,
+        flow_factory: Any | None = None,
+        node_repository: Any | None = None,
+        tool_registry: Any | None = None,
     ):
         self.target_id = target_id
         self.target_callable = target_callable
@@ -74,12 +75,20 @@ class TestRunner:
         self._node_repository = node_repository
         self._tool_registry = tool_registry
 
+    def _get_python_runner(self) -> Any:
+        if self._flow_factory is not None:
+            container = self._flow_factory.container
+            return container.get_code_runner(language="python")
+        from apps.flows.src.runners.python import PythonCodeRunner
+
+        return PythonCodeRunner()
+
     async def run(
         self,
         test_case: TestCaseConfig,
         test_case_id: str,
-        task_id: Optional[str] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        task_id: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Запускает тест со стримингом.
 
@@ -108,7 +117,7 @@ class TestRunner:
             **initial_state_dict,
         )
         response = ""
-        dialog: List[Dict[str, Any]] = []
+        dialog: list[dict[str, Any]] = []
 
         try:
             if not test_case.turns:
@@ -229,13 +238,13 @@ class TestRunner:
         execution_state: ExecutionState,
     ):
         """Диалог нода-тестер / нода-судья против тестируемого flow."""
-        dialog: List[Dict[str, Any]] = []
+        dialog: list[dict[str, Any]] = []
         turns = 0
 
         tester_config = await self._get_node_config(turn.input, execution_state)
 
         # Первое сообщение тестера
-        tester_messages: List[Dict[str, str]] = []
+        tester_messages: list[dict[str, str]] = []
         tester_response = await self._invoke_node(
             tester_config,
             tester_messages,
@@ -295,13 +304,13 @@ class TestRunner:
 
     async def _get_input(
         self, input_config: InputConfig, execution_state: ExecutionState
-    ) -> tuple[Optional[str], Optional[List[Dict[str, Any]]]]:
+    ) -> tuple[str | None, list[dict[str, Any]] | None]:
         """Получает input на основе конфигурации."""
         if input_config.type == InputType.TEXT:
             return input_config.value, None
 
         if input_config.type == InputType.INLINE_CODE:
-            runner = self._flow_factory.container.get_code_runner(language="python")
+            runner = self._get_python_runner()
             fn = runner.compiler.compile(input_config.value, "generate")
             sig = inspect.signature(fn)
             if inspect.iscoroutinefunction(fn):
@@ -323,8 +332,8 @@ class TestRunner:
         check_config: CheckConfig,
         execution_state: ExecutionState,
         response: str,
-        dialog: List[Dict[str, Any]],
-    ) -> Dict[str, float]:
+        dialog: list[dict[str, Any]],
+    ) -> dict[str, float]:
         """Выполняет проверку. Всегда возвращает Dict[str, float] (0-10)."""
         state_dict = execution_state.model_dump()
 
@@ -333,7 +342,7 @@ class TestRunner:
             return {"result": 10.0 if result else 0.0}
 
         if check_config.type == CheckType.INLINE_CODE:
-            runner = self._flow_factory.container.get_code_runner(language="python")
+            runner = self._get_python_runner()
             fn = runner.compiler.compile(check_config.value, "check")
             if inspect.iscoroutinefunction(fn):
                 result = await fn(state_dict, response)
@@ -348,7 +357,7 @@ class TestRunner:
 
         raise ValueError(f"Unknown check type: {check_config.type}")
 
-    def _normalize_check_result(self, result: Any) -> Dict[str, float]:
+    def _normalize_check_result(self, result: Any) -> dict[str, float]:
         """
         Нормализует результат проверки к единой структуре: Dict[str, float] (0-10).
 
@@ -377,7 +386,7 @@ class TestRunner:
         return {"result": 10.0}
 
     def _execute_string_checker(
-        self, checker: str, state: Dict[str, Any], response: str
+        self, checker: str, state: dict[str, Any], response: str
     ) -> bool:
         """Выполняет строковую проверку."""
         if checker.startswith("contains:"):
@@ -419,7 +428,7 @@ class TestRunner:
         else:
             return length >= int(spec)
 
-    def _check_state_expression(self, expression: str, state: Dict[str, Any]) -> bool:
+    def _check_state_expression(self, expression: str, state: dict[str, Any]) -> bool:
         """Проверяет выражение над state."""
         operators = ["==", "!=", ">=", "<=", ">", "<"]
         op = None
@@ -472,7 +481,7 @@ class TestRunner:
 
         return False
 
-    def _get_nested_value(self, data: Dict[str, Any], path: str) -> Any:
+    def _get_nested_value(self, data: dict[str, Any], path: str) -> Any:
         """Получает значение по вложенному пути (a.b.c)."""
         keys = path.split(".")
         value = data
@@ -490,7 +499,7 @@ class TestRunner:
         return getattr(module, func_name)
 
     async def _get_node_config(
-        self, input_config: InputConfig, execution_state: Optional[ExecutionState] = None
+        self, input_config: InputConfig, execution_state: ExecutionState | None = None
     ) -> NodeConfig:
         """Получает конфигурацию ноды: inline dict, из графа flow по session/skill/version или node_repository."""
         if input_config.node:
@@ -498,6 +507,8 @@ class TestRunner:
 
         node_id = input_config.value
         if node_id and execution_state:
+            if self._flow_factory is None:
+                raise ValueError("flow_factory is required for NODE input lookup")
             nodes_map = await self._flow_factory.get_effective_nodes_map(
                 execution_state.session_flow_id,
                 execution_state.branch_id,
@@ -510,6 +521,8 @@ class TestRunner:
                 return NodeConfig(**config)
 
         if node_id:
+            if self._node_repository is None:
+                raise ValueError("node_repository is required for NODE input lookup")
             node_config = await self._node_repository.get(node_id)
             if node_config is not None:
                 return node_config
@@ -522,7 +535,7 @@ class TestRunner:
     async def _invoke_node(
         self,
         node_config: NodeConfig,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         last_message: str,
     ) -> str:
         """Вызывает ноду (tester/judge) через LLM."""
@@ -535,6 +548,8 @@ class TestRunner:
 
         tools_for_llm = None
         if node_config.tools:
+            if self._tool_registry is None:
+                raise ValueError("tool_registry is required for NODE evaluation tools")
             tools = await self._tool_registry.create_tools(node_config.tools)
             tools_for_llm = [tool.to_llm_format() for tool in tools]
 
@@ -555,10 +570,10 @@ class TestRunner:
 
     async def _judge_dialog(
         self,
-        check_config: Optional[CheckConfig],
-        dialog: List[Dict[str, Any]],
-        execution_state: Optional[ExecutionState] = None,
-    ) -> tuple[ScoresType, Optional[str], bool]:
+        check_config: CheckConfig | None,
+        dialog: list[dict[str, Any]],
+        execution_state: ExecutionState | None = None,
+    ) -> tuple[ScoresType, str | None, bool]:
         """Вызывает агента-судью для оценки диалога."""
         if not check_config:
             return {"result": 10.0}, None, True
@@ -610,11 +625,11 @@ class TestRunner:
     async def _invoke_evaluation_llm(
         self,
         *,
-        messages: List[Dict[str, str]],
-        tools: Optional[List[Dict[str, Any]]],
+        messages: list[dict[str, str]],
+        tools: list[dict[str, Any]] | None,
         task_id: str,
         context_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         actx = get_context()
         if actx is None or actx.active_company is None:
             raise ValueError("Контекст с active_company обязателен для evaluation LLM")
@@ -690,7 +705,7 @@ class TestRunner:
             }
 
     async def _get_judge_config(
-        self, check_config: CheckConfig, execution_state: Optional[ExecutionState] = None
+        self, check_config: CheckConfig, execution_state: ExecutionState | None = None
     ) -> NodeConfig:
         """Получает конфигурацию судьи: inline dict, из графа flow по session/skill/version или node_repository."""
         if check_config.node:
@@ -698,6 +713,8 @@ class TestRunner:
 
         node_id = check_config.value
         if node_id and execution_state:
+            if self._flow_factory is None:
+                raise ValueError("flow_factory is required for NODE check lookup")
             nodes_map = await self._flow_factory.get_effective_nodes_map(
                 execution_state.session_flow_id,
                 execution_state.branch_id,
@@ -710,6 +727,8 @@ class TestRunner:
                 return NodeConfig(**config)
 
         if node_id:
+            if self._node_repository is None:
+                raise ValueError("node_repository is required for NODE check lookup")
             node_config = await self._node_repository.get(node_id)
             if node_config is not None:
                 return node_config
@@ -726,7 +745,7 @@ class TestRunner:
                 return False
         return True
 
-    def _detect_loop(self, dialog: List[Dict[str, Any]]) -> bool:
+    def _detect_loop(self, dialog: list[dict[str, Any]]) -> bool:
         """Определяет зацикливание в диалоге."""
         if len(dialog) < LOOP_DETECTION_WINDOW * 2:
             return False

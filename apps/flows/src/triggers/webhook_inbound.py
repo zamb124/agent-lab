@@ -5,9 +5,9 @@
 import ipaddress
 import time
 from collections import deque
-from typing import Any, Deque, Dict, Tuple
+from typing import Any
 
-_webhook_hits: Dict[Tuple[str, str, str], Deque[float]] = {}
+_webhook_hits: dict[tuple[str, str, str], deque[float]] = {}
 
 
 def check_webhook_rate_limit(

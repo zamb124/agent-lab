@@ -2,6 +2,8 @@
 Сводки рабочего пространства для встраиваемого ассистента Lara.
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.crm.dependencies import ContainerDep
@@ -13,7 +15,7 @@ router = APIRouter(prefix="/workspace", tags=["Workspace"])
 @router.get("/lara-summary", response_model=LaraWorkspaceSummaryResponse)
 async def get_lara_workspace_summary(
     container: ContainerDep,
-    namespace: str = Query(..., description="Пространство CRM"),
+    namespace: Annotated[str, Query(description="Пространство CRM")],
 ) -> LaraWorkspaceSummaryResponse:
     try:
         return await container.lara_workspace_service.get_lara_summary(namespace)

@@ -8,12 +8,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
     resolve_user_ids_for_namespace_broadcast,
 )
+from apps.crm.types import JsonObject
 from core.logging import get_logger
 from core.ui_events import publish_ui_event_to_user
 
@@ -29,7 +30,7 @@ async def broadcast_crm_daily_summary_updated(
     company_id: str,
     namespace: str | None,
     date_str: str,
-    state: dict[str, Any],
+    state: JsonObject,
     company_repository: CompanyRepository,
     access_grant_repository: AccessGrantRepository,
 ) -> None:
@@ -40,7 +41,7 @@ async def broadcast_crm_daily_summary_updated(
         company_repository=company_repository,
         access_grant_repository=access_grant_repository,
     )
-    payload = {
+    payload: JsonObject = {
         "company_id": company_id,
         "namespace": normalized_namespace,
         "date": date_str,
@@ -66,7 +67,7 @@ async def broadcast_crm_period_summary_updated(
     namespace: str | None,
     date_from: str,
     date_to: str,
-    state: dict[str, Any],
+    state: JsonObject,
     company_repository: CompanyRepository,
     access_grant_repository: AccessGrantRepository,
 ) -> None:
@@ -77,7 +78,7 @@ async def broadcast_crm_period_summary_updated(
         company_repository=company_repository,
         access_grant_repository=access_grant_repository,
     )
-    payload = {
+    payload: JsonObject = {
         "company_id": company_id,
         "namespace": normalized_namespace,
         "date_from": date_from,

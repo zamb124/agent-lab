@@ -2,7 +2,7 @@
 REST: подтверждение Lara pending-actions из embed/UI без повторного tool-call через LLM.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/lara", tags=["Lara"])
 class LaraPendingActionsApplyBody(BaseModel):
     pending_action_id: str = Field(..., min_length=1)
     context_id: str = Field(..., min_length=1)
-    idempotency_key: Optional[str] = Field(None, description="Опционально; по умолчанию из сохранённого действия")
+    idempotency_key: str | None = Field(None, description="Опционально; по умолчанию из сохранённого действия")
 
 
 @router.post("/pending-actions/apply")

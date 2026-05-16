@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -82,7 +82,7 @@ class PravoDocumentRagSearchArgs(BaseModel):
     )
 
 
-def _doc_filters(collection_id: str, rag_document_id: str) -> Dict[str, Any]:
+def _doc_filters(collection_id: str, rag_document_id: str) -> dict[str, Any]:
     return {
         "$and": [
             {"collection_id": collection_id},
@@ -99,8 +99,8 @@ def _ips_document_row(
     title: str | None,
     indexed_into_rag_this_call: bool,
     text_character_count: int | None = None,
-) -> Dict[str, Any]:
-    row: Dict[str, Any] = {
+) -> dict[str, Any]:
+    row: dict[str, Any] = {
         "document_hash": doc_hash,
         "source_url": source_url,
         "rag_document_id": rag_document_id,
@@ -117,8 +117,8 @@ async def _run_rag_search(
     namespace_id: str,
     query: str,
     limit: int,
-    filters: Dict[str, Any],
-) -> Dict[str, Any]:
+    filters: dict[str, Any],
+) -> dict[str, Any]:
     client = RagClient()
     return await client.search(
         namespace_id,
@@ -147,7 +147,7 @@ async def pravo_catalog_search(keyword: str, page: int = 1) -> JsonDict:
         msg = str(exc).strip() or type(exc).__name__
         return {"success": False, "error": msg}
 
-    items: List[Dict[str, Any]] = [
+    items: list[dict[str, Any]] = [
         {"title": h.title, "url": h.url, "document_hash": h.document_hash} for h in hits
     ]
     return {
@@ -194,7 +194,7 @@ async def pravo_document_rag_search(
             )
         except ServiceClientError as exc:
             return {"success": False, "error": str(exc)}
-        results_first: List[Any] = list(raw_first.get("results", []))
+        results_first: list[Any] = list(raw_first.get("results", []))
         if results_first:
             return {
                 "success": True,
@@ -223,7 +223,7 @@ async def pravo_document_rag_search(
         msg = str(exc).strip() or type(exc).__name__
         return {"success": False, "error": msg}
 
-    merged_meta: Dict[str, Any] = {
+    merged_meta: dict[str, Any] = {
         "collection_id": collection_id,
         "pravo_ips": True,
         "pravo_document_hash": doc_hash,

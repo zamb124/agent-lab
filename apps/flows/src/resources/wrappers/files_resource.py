@@ -4,7 +4,7 @@ FilesResource - wrapper для files ресурса.
 Предоставляет доступ к S3/MinIO файлам.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.logging import get_logger
 
@@ -27,9 +27,9 @@ class FilesResource:
         self,
         bucket: str,
         prefix: str = "",
-        endpoint_url: Optional[str] = None,
-        access_key_id: Optional[str] = None,
-        secret_access_key: Optional[str] = None,
+        endpoint_url: str | None = None,
+        access_key_id: str | None = None,
+        secret_access_key: str | None = None,
         region: str = "us-east-1",
         container: Any = None,
     ):
@@ -48,7 +48,7 @@ class FilesResource:
             return f"{self.prefix}/{path}"
         return path
 
-    async def _get_s3_client(self):
+    async def get_s3_client(self):
         """Получить или создать S3 клиент."""
         if self._s3_client is not None:
             return self._s3_client
@@ -102,7 +102,7 @@ class FilesResource:
         Returns:
             Бинарное содержимое
         """
-        s3 = await self._get_s3_client()
+        s3 = await self.get_s3_client()
         full_path = self._get_full_path(path)
 
         return await s3.download_bytes(full_path)
@@ -132,13 +132,13 @@ class FilesResource:
         Returns:
             Путь к сохранённому файлу
         """
-        s3 = await self._get_s3_client()
+        s3 = await self.get_s3_client()
         full_path = self._get_full_path(path)
 
         await s3.upload_bytes(content, full_path)
         return full_path
 
-    async def list(self, path: str = "") -> List[Dict[str, Any]]:
+    async def list(self, path: str = "") -> list[dict[str, Any]]:
         """
         Список файлов в директории.
 
@@ -148,7 +148,7 @@ class FilesResource:
         Returns:
             Список файлов с метаданными
         """
-        s3 = await self._get_s3_client()
+        s3 = await self.get_s3_client()
         full_path = self._get_full_path(path)
 
         return await s3.list_objects(prefix=full_path)
@@ -165,7 +165,7 @@ class FilesResource:
         """
         from botocore.exceptions import ClientError
 
-        s3 = await self._get_s3_client()
+        s3 = await self.get_s3_client()
         full_path = self._get_full_path(path)
 
         try:
@@ -185,7 +185,7 @@ class FilesResource:
         Returns:
             True если удалён
         """
-        s3 = await self._get_s3_client()
+        s3 = await self.get_s3_client()
         full_path = self._get_full_path(path)
 
         return await s3.delete_file(full_path)

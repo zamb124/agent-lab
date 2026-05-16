@@ -6,7 +6,6 @@
 
 import json
 from datetime import date, datetime, timezone
-from typing import List, Optional
 
 from sqlalchemy import text
 
@@ -39,7 +38,7 @@ class EvaluationRepository:
         Returns:
             ID записи
         """
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             query = text("""
                 INSERT INTO evaluation_results
                     (flow_id, branch_id, run_date, iteration, test_case_id, task_id,
@@ -87,8 +86,8 @@ class EvaluationRepository:
         flow_id: str,
         branch_id: str,
         run_date: date,
-        iteration: Optional[int] = None,
-    ) -> List[EvaluationResult]:
+        iteration: int | None = None,
+    ) -> list[EvaluationResult]:
         """
         Получает все результаты для конкретного запуска.
 
@@ -101,7 +100,7 @@ class EvaluationRepository:
         Returns:
             Список результатов
         """
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             if iteration is not None:
                 query = text("""
                     SELECT * FROM evaluation_results
@@ -141,7 +140,7 @@ class EvaluationRepository:
         flow_id: str,
         branch_id: str,
         limit: int = 10,
-    ) -> List[EvaluationResult]:
+    ) -> list[EvaluationResult]:
         """
         Получает последние результаты для агента/skill.
 
@@ -156,7 +155,7 @@ class EvaluationRepository:
         Returns:
             Список результатов
         """
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             query = text("""
                 SELECT * FROM evaluation_results
                 WHERE flow_id = :flow_id AND branch_id = :branch_id
@@ -186,7 +185,7 @@ class EvaluationRepository:
         Returns:
             Следующий номер итерации (начиная с 1)
         """
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             query = text("""
                 SELECT COALESCE(MAX(iteration), 0) + 1 as next_iteration
                 FROM evaluation_results
@@ -213,7 +212,7 @@ class EvaluationRepository:
         Returns:
             Количество удалённых записей
         """
-        async with self._storage._get_session() as session:
+        async with self._storage.get_session() as session:
             query = text("""
                 DELETE FROM evaluation_results
                 WHERE run_date < CURRENT_DATE - CAST(:days AS INTEGER)

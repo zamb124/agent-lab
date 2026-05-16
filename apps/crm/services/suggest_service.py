@@ -1,19 +1,19 @@
 import uuid
-from datetime import datetime, UTC
-from typing import Any
+from datetime import UTC, date, datetime
+from typing import cast as type_cast
 
 from apps.crm.db.models import CRMEntity, CRMSuggest
 from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-from apps.crm.db.repositories.suggest_repository import SuggestRepository
+from apps.crm.db.repositories.suggest_repository import CRMSuggestPage, SuggestRepository
 from apps.crm.models.api import EntityMergeRequest, MergeSide
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.note_processing_service import NoteProcessingService
-from core.pagination import OffsetPage
+from apps.crm.types import JsonObject
 
 _DUPLICATE_SIMILARITY_THRESHOLD = 0.85
 _SUGGEST_SCAN_LIMIT = 50
-_SUGGEST_MERGE_SCALAR_KEYS = (
+_SUGGEST_MERGE_SCALAR_KEYS: tuple[str, ...] = (
     "name",
     "description",
     "status",
@@ -33,12 +33,23 @@ class SuggestService:
         note_processing_service: NoteProcessingService,
         entity_repository: EntityRepository,
         entity_type_repository: EntityTypeRepository,
-    ):
-        self._repository = repository
-        self._entity_service = entity_service
-        self._note_processing_service = note_processing_service
-        self._entity_repository = entity_repository
-        self._entity_type_repository = entity_type_repository
+    ) -> None:
+        self._repository: SuggestRepository = repository
+        self._entity_service: EntityService = entity_service
+        self._note_processing_service: NoteProcessingService = note_processing_service
+        self._entity_repository: EntityRepository = entity_repository
+        self._entity_type_repository: EntityTypeRepository = entity_type_repository
+
+    @staticmethod
+    def _as_json_object(value: object) -> JsonObject | None:
+        if not isinstance(value, dict):
+            return None
+        result: JsonObject = {}
+        for key, item in type_cast(dict[object, object], value).items():
+            if not isinstance(key, str):
+                return None
+            result[key] = item
+        return result
 
     async def list_suggests(
         self,
@@ -46,7 +57,7 @@ class SuggestService:
         status: str | None = "pending",
         limit: int = 50,
         offset: int = 0,
-    ) -> OffsetPage[CRMSuggest]:
+    ) -> CRMSuggestPage:
         return await self._repository.list_suggests(namespace, status, limit, offset)
 
     async def get_suggest(self, suggest_id: str, *, namespace: str) -> CRMSuggest | None:
@@ -62,7 +73,7 @@ class SuggestService:
 
         if suggest.suggest_type == "duplicate":
             merge_req = EntityMergeRequest.model_validate(suggest.payload)
-            await self._entity_service.merge_entities(merge_req)
+            _ = await self._entity_service.merge_entities(merge_req)
         elif suggest.suggest_type == "missed_entity":
             note_id = suggest.payload.get("note_id")
             if not isinstance(note_id, str) or not note_id.strip():
@@ -75,10 +86,10 @@ class SuggestService:
             note = await self._entity_service.get_entity(note_id)
             if note is None:
                 raise ValueError(f"Note {note_id} not found")
-            draft = (note.attributes or {}).get("ai_analysis_draft")
-            if not isinstance(draft, dict) or draft.get("draft_version") != expected_draft_version:
+            draft = self._as_json_object(note.attributes.get("ai_analysis_draft"))
+            if draft is None or draft.get("draft_version") != expected_draft_version:
                 raise ValueError("missed_entity suggest draft version is stale")
-            await self._note_processing_service.apply(note_id)
+            _ = await self._note_processing_service.apply(note_id)
         else:
             raise ValueError(f"Unknown suggest type {suggest.suggest_type}")
 
@@ -178,25 +189,28 @@ class SuggestService:
                     )
 
                 merge_request = self._build_merge_request(entity, candidate)
+                merge_payload = self._as_json_object(merge_request.model_dump(mode="json"))
+                if merge_payload is None:
+                    raise ValueError("EntityMergeRequest payload must be JSON object")
                 if entity_type.auto_resolve_suggests:
-                    await self._entity_service.merge_entities(merge_request)
-                    await self._create_suggest(
+                    _ = await self._entity_service.merge_entities(merge_request)
+                    _ = await self._create_suggest(
                         company_id=company_id,
                         namespace=namespace,
                         suggest_type="duplicate",
                         status="auto_resolved",
                         target_entity_ids=target_entity_ids,
-                        payload=merge_request.model_dump(mode="json"),
+                        payload=merge_payload,
                     )
                     auto_resolved_count += 1
                 else:
-                    await self._create_suggest(
+                    _ = await self._create_suggest(
                         company_id=company_id,
                         namespace=namespace,
                         suggest_type="duplicate",
                         status="pending",
                         target_entity_ids=target_entity_ids,
-                        payload=merge_request.model_dump(mode="json"),
+                        payload=merge_payload,
                     )
                     created_count += 1
                 break
@@ -220,10 +234,13 @@ class SuggestService:
         )
         created_count = 0
         for note in notes:
-            draft = (note.attributes or {}).get("ai_analysis_draft")
-            if not isinstance(draft, dict) or not isinstance(draft.get("draft_version"), int):
+            draft = self._as_json_object(note.attributes.get("ai_analysis_draft"))
+            if draft is None:
                 raise ValueError(f"Note {note.entity_id} has invalid ai_analysis_draft")
-            draft_version = int(draft["draft_version"])
+            raw_draft_version = draft.get("draft_version")
+            if not isinstance(raw_draft_version, int):
+                raise ValueError(f"Note {note.entity_id} has invalid ai_analysis_draft")
+            draft_version = raw_draft_version
             existing = await self._repository.find_by_targets(
                 namespace=namespace,
                 suggest_type="missed_entity",
@@ -235,7 +252,7 @@ class SuggestService:
                     continue
                 if existing.payload.get("draft_version") == draft_version:
                     continue
-            await self._create_suggest(
+            _ = await self._create_suggest(
                 company_id=company_id,
                 namespace=namespace,
                 suggest_type="missed_entity",
@@ -254,7 +271,7 @@ class SuggestService:
         suggest_type: str,
         status: str,
         target_entity_ids: list[str],
-        payload: dict[str, Any],
+        payload: JsonObject,
     ) -> CRMSuggest:
         now = datetime.now(UTC)
         suggest = CRMSuggest(
@@ -290,8 +307,8 @@ class SuggestService:
         )
         scalar_choices: dict[str, MergeSide] = {}
         for key in _SUGGEST_MERGE_SCALAR_KEYS:
-            survivor_value = getattr(survivor, key)
-            source_value = getattr(source, key)
+            survivor_value = SuggestService._merge_scalar_value(survivor, key)
+            source_value = SuggestService._merge_scalar_value(source, key)
             if survivor_value != source_value:
                 scalar_choices[key] = "survivor"
 
@@ -308,3 +325,23 @@ class SuggestService:
             scalar_choices=scalar_choices,
             attribute_choices=attribute_choices,
         )
+
+    @staticmethod
+    def _merge_scalar_value(
+        entity: CRMEntity, key: str
+    ) -> str | int | float | date | datetime | None:
+        if key == "name":
+            return entity.name
+        if key == "description":
+            return entity.description
+        if key == "status":
+            return entity.status
+        if key == "entity_subtype":
+            return entity.entity_subtype
+        if key == "priority":
+            return entity.priority
+        if key == "note_date":
+            return entity.note_date
+        if key == "due_date":
+            return entity.due_date
+        raise ValueError(f"Unsupported suggest merge scalar key: {key}")

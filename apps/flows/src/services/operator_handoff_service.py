@@ -7,7 +7,7 @@ from __future__ import annotations
 import importlib
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from apps.flows.src.db.models import OperatorTasks
@@ -56,7 +56,7 @@ class OperatorHandoffService:
         task_title: str,
         assignee_queue_slug: str,
         handoff_mode: HandoffMode = HandoffMode.SINGLE_REPLY,
-        correlation_id: Optional[UUID] = None,
+        correlation_id: UUID | None = None,
     ) -> tuple[UUID, str]:
         """Возвращает (correlation_id, operator_task_id)."""
         ctx = get_context()

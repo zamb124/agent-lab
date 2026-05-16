@@ -7,7 +7,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any
+from collections.abc import Callable
 
 from apps.flows.src.models import ResourceType
 from apps.flows.src.models.resource import (
@@ -18,41 +19,41 @@ from apps.flows.src.resources.merge_llm import merge_llm_resource_config_with_pa
 
 
 def merge_flow_skill_node_resource_maps(
-    flow_resources: Optional[Dict[str, Any]],
-    skill_resources: Optional[Dict[str, Any]],
-    node_resources: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
+    flow_resources: dict[str, Any] | None,
+    skill_resources: dict[str, Any] | None,
+    node_resources: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Parity с ResourceResolver.resolve_for_node: объединение словарей по ключам."""
-    merged: Dict[str, Any] = {}
+    merged: dict[str, Any] = {}
     merged.update(flow_resources or {})
     merged.update(skill_resources or {})
     merged.update(node_resources or {})
     return merged
 
 
-MergeConfigFn = Callable[[Dict[str, Any], Dict[str, Any]], Dict[str, Any]]
+MergeConfigFn = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
 
 
-def _shallow_merge_config(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+def _shallow_merge_config(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     return {**base, **patch}
 
 
-def _llm_merge_config(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+def _llm_merge_config(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     typed_base = LLMResourceConfig.model_validate(base)
     merged = merge_llm_resource_config_with_patch(typed_base, patch)
     return merged.model_dump(mode="json", exclude_none=False)
 
 
-MERGE_SHARED_CONFIG_BY_TYPE: Dict[ResourceType, MergeConfigFn] = {
+MERGE_SHARED_CONFIG_BY_TYPE: dict[ResourceType, MergeConfigFn] = {
     ResourceType.LLM: _llm_merge_config,
 }
 
 
 def merge_shared_definition_config_with_patch(
     resource_type: ResourceType,
-    base_config: Dict[str, Any],
-    patch: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
+    base_config: dict[str, Any],
+    patch: dict[str, Any] | None,
+) -> dict[str, Any]:
     """
     Сливает shared definition.config с ResourceReference.config (override).
 

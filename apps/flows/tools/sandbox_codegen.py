@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -40,7 +40,7 @@ def _sandbox_codegen_default_model() -> str:
 class LLMGeneratedCode(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    code_lines: List[str] = Field(
+    code_lines: list[str] = Field(
         ...,
         min_length=1,
         description=(
@@ -62,7 +62,7 @@ class LLMGeneratedCode(BaseModel):
 
     @field_validator("code_lines", mode="after")
     @classmethod
-    def _no_embedded_newlines_in_code_lines(cls, value: List[str]) -> List[str]:
+    def _no_embedded_newlines_in_code_lines(cls, value: list[str]) -> list[str]:
         for i, line in enumerate(value):
             if "\n" in line or "\r" in line:
                 raise ValueError(
@@ -76,11 +76,11 @@ class SandboxCodegenArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     task: str = Field(..., min_length=1, description="Что должен сделать код во время выполнения.")
-    run_variables: Optional[Dict[str, Any]] = Field(
+    run_variables: dict[str, Any] | None = Field(
         default=None,
         description="Опционально: словарь, сливаемый в state.variables перед run (числа, входы; в коде — state.variables).",
     )
-    output_json_schema: Optional[str] = Field(
+    output_json_schema: str | None = Field(
         default=None,
         description="Опционально: текст JSON Schema ожидаемого dict в результате.",
     )
@@ -167,12 +167,12 @@ _sandbox_feedback_hint = sandbox_feedback_hint
 )
 async def sandbox_codegen(
     task: str,
-    run_variables: Optional[Any] = None,
-    output_json_schema: Optional[str] = None,
+    run_variables: Any | None = None,
+    output_json_schema: str | None = None,
     max_iterations: int = 5,
     max_doc_chars: int = 120_000,
     model: str = "qwen/qwen3.5-397b-a17b",
-    state: Optional[Any] = None,
+    state: Any | None = None,
 ) -> str:
     # FunctionTool._run_impl уже валидирует args через SandboxCodegenArgs и передаёт сюда keyword-аргументы.
     # Логика копии state — внутри тела: при code/execute весь туль исполняется как отдельная строка (<string>);
@@ -202,12 +202,12 @@ async def sandbox_codegen(
     exec_runner = get_code_runner(language="python")
     llm = get_llm(model_name=model, state=exec_state)
 
-    trace: List[Dict[str, Any]] = []
+    trace: list[dict[str, Any]] = []
     last_code = ""
-    feedback: Optional[str] = None
+    feedback: str | None = None
 
     for attempt in range(1, max_iterations + 1):
-        user_parts: List[str] = [f"Задача:\n{task}"]
+        user_parts: list[str] = [f"Задача:\n{task}"]
         if last_code:
             user_parts.append(f"Текущий код:\n```python\n{last_code}\n```")
         if feedback:

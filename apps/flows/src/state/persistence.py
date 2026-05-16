@@ -5,7 +5,7 @@ State persistence - управление состоянием сессий.
 """
 
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -54,18 +54,18 @@ class StateManager:
     def __init__(self, state_repository: "BaseStateRepository"):
         self._repository = state_repository
 
-    async def get_state(self, session_id: str) -> Optional[ExecutionState]:
+    async def get_state(self, session_id: str) -> ExecutionState | None:
         """Получает state сессии из БД."""
         return await self._repository.get(session_id)
 
     async def get_state_for_update(
         self, session_id: str, conn: Any
-    ) -> Optional[ExecutionState]:
+    ) -> ExecutionState | None:
         """Получает state с блокировкой."""
         return await self._repository.get_for_update(session_id, conn)
 
     async def save_state(
-        self, session_id: str, state: Union[ExecutionState, Dict[str, Any]]
+        self, session_id: str, state: ExecutionState | dict[str, Any]
     ) -> bool:
         """Сохраняет state сессии в БД."""
         st = ExecutionState.model_validate(state) if isinstance(state, dict) else state
@@ -74,7 +74,7 @@ class StateManager:
     async def save_state_in_transaction(
         self,
         session_id: str,
-        state: Union[ExecutionState, Dict[str, Any]],
+        state: ExecutionState | dict[str, Any],
         conn: Any,
     ) -> bool:
         """Сохраняет state в рамках транзакции."""
@@ -87,13 +87,13 @@ class StateManager:
 
     async def resolve_session_id_by_flow_and_identifier(
         self, flow_id: str, lookup_id: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """Находит ``session_id`` (`flow_id:context_id`) по ``task_id`` или ``context_id``."""
         return await self._repository.resolve_session_id_by_flow_and_identifier(
             flow_id, lookup_id
         )
 
-    async def get_messages(self, state: ExecutionState) -> List[Message]:
+    async def get_messages(self, state: ExecutionState) -> list[Message]:
         """Получает историю сообщений из ExecutionState."""
         return list(state.messages)
 

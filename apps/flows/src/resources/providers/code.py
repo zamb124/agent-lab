@@ -2,7 +2,7 @@
 CodeResourceProvider - провайдер для code ресурсов.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import CodeResourceConfig, ResourceDefinition
@@ -26,7 +26,7 @@ class CodeResourceProvider(BaseResourceProvider):
     async def resolve(
         self,
         definition: ResourceDefinition,
-        variables: Dict[str, Any],
+        variables: dict[str, Any],
     ) -> CodeModule:
         """
         Компилирует код и возвращает CodeModule.

@@ -20,21 +20,21 @@ Zero-Guess: работает с ExecutionState напрямую (но может
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Dict, Union
+from typing import TYPE_CHECKING, Any
 
 from core.variables import VarResolver
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-_VAR_FULL_VAR = VarResolver._VAR_REF_PATTERN
+_VAR_FULL_VAR = VarResolver.VAR_REF_PATTERN
 
 
 class MappingResolver:
     """Единая логика резолвинга @state:path и @var:name для всех нод."""
 
     @staticmethod
-    def resolve_value(source: Any, state: Union["ExecutionState", Dict[str, Any]]) -> Any:
+    def resolve_value(source: Any, state: ExecutionState | dict[str, Any]) -> Any:
         """
         Резолвит значение из маппинга.
 
@@ -95,7 +95,7 @@ class MappingResolver:
         return value
 
     @staticmethod
-    def resolve_vars_in_string(value: str, variables: Dict[str, Any]) -> str:
+    def resolve_vars_in_string(value: str, variables: dict[str, Any]) -> str:
         """
         Заменяет все @var:path в строке на значения из variables.
 
@@ -114,9 +114,9 @@ class MappingResolver:
 
     @staticmethod
     def build_mapped_state(
-        mapping: Dict[str, Any],
-        state: Union["ExecutionState", Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        mapping: dict[str, Any],
+        state: ExecutionState | dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Строит новый Dict на основе маппинга.
 
@@ -127,7 +127,7 @@ class MappingResolver:
         Returns:
             Новый Dict с замапленными полями
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         for target_field, source in mapping.items():
             result[target_field] = MappingResolver.resolve_value(source, state)
@@ -137,8 +137,8 @@ class MappingResolver:
     @staticmethod
     def resolve_json_template_string(
         s: str,
-        state: Union["ExecutionState", Dict[str, Any]],
-        variables: Dict[str, Any],
+        state: ExecutionState | dict[str, Any],
+        variables: dict[str, Any],
     ) -> Any:
         """
         Резолвит одну строку внутри JSON-шаблона тела запроса external_api.
@@ -165,8 +165,8 @@ class MappingResolver:
     @staticmethod
     def resolve_json_template_tree(
         value: Any,
-        state: Union["ExecutionState", Dict[str, Any]],
-        variables: Dict[str, Any],
+        state: ExecutionState | dict[str, Any],
+        variables: dict[str, Any],
     ) -> Any:
         """
         Рекурсивно резолвит JSON-дерево после json.loads (тело external_api).
@@ -188,8 +188,8 @@ class MappingResolver:
     @staticmethod
     def parse_and_resolve_body_template(
         body_template: str,
-        state: Union["ExecutionState", Dict[str, Any]],
-        variables: Dict[str, Any],
+        state: ExecutionState | dict[str, Any],
+        variables: dict[str, Any],
     ) -> Any:
         """Парсит JSON body_template и резолвит плейсхолдеры."""
         raw = body_template.strip() if isinstance(body_template, str) else ""
@@ -214,8 +214,8 @@ class MappingResolver:
     @staticmethod
     def resolve_http_header_value(
         value: Any,
-        state: Union["ExecutionState", Dict[str, Any]],
-        variables: Dict[str, Any],
+        state: ExecutionState | dict[str, Any],
+        variables: dict[str, Any],
     ) -> str:
         """
         Значение одного HTTP-заголовка: те же правила, что resolve_json_template_string, итог — str.
@@ -224,4 +224,3 @@ class MappingResolver:
             raise TypeError("header value must be str")
         resolved = MappingResolver.resolve_json_template_string(value, state, variables)
         return MappingResolver._coerce_to_header_string(resolved)
-

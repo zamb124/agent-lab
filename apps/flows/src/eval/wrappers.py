@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Type, TypeVar, Union, overload
+from typing import Any, TypeVar, overload
 
 import httpx
 from a2a.types import Message
@@ -23,17 +23,17 @@ T = TypeVar("T", bound=BaseModel)
 
 def _coerce_timeout_seconds(timeout: Any) -> float:
     if timeout is None:
-        return float(HttpxModule._default_timeout)
+        return float(HttpxModule.default_timeout)
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
         raise SafeEvalError("timeout must be a number of seconds")
     return float(timeout)
 
 
-def _coerce_url(url: Union[str, httpx.URL]) -> str:
+def _coerce_url(url: str | httpx.URL) -> str:
     return str(url)
 
 
-def _normalize_tools_for_llm(tools: Optional[List[Any]]) -> Optional[List[Dict[str, Any]]]:
+def _normalize_tools_for_llm(tools: list[Any] | None) -> list[dict[str, Any]] | None:
     """
     Приводит элементы tools к OpenAI-словарям для HTTP-тела.
 
@@ -42,7 +42,7 @@ def _normalize_tools_for_llm(tools: Optional[List[Any]]) -> Optional[List[Dict[s
     """
     if not tools:
         return None
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for i, item in enumerate(tools):
         if isinstance(item, dict):
             out.append(item)
@@ -70,7 +70,7 @@ class SafeLLMClient:
     seed, reasoning_effort, extra_body (произвольные поля тела запроса к провайдеру).
     """
 
-    def _get_llm(self, model: Optional[str] = None):
+    def _get_llm(self, model: str | None = None):
         """Получает LLM клиент."""
         return get_llm(model_name=model)
 
@@ -79,18 +79,18 @@ class SafeLLMClient:
         self,
         messages: MessageInput,
         *,
-        response_model: Type[T],
-        tools: Optional[List[Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[str] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
+        response_model: type[T],
+        tools: list[Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: str | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> T: ...
 
     @overload
@@ -99,35 +99,35 @@ class SafeLLMClient:
         messages: MessageInput,
         *,
         response_model: None = None,
-        tools: Optional[List[Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[str] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
+        tools: list[Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: str | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> Message: ...
 
     async def chat(
         self,
         messages: MessageInput,
         *,
-        response_model: Optional[Type[T]] = None,
-        tools: Optional[List[Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[str] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
+        response_model: type[T] | None = None,
+        tools: list[Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: str | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> Message | T:
         """
         Единый метод вызова LLM.
@@ -202,7 +202,7 @@ class SafeContext:
     Предоставляет только чтение основных полей.
     """
 
-    def __init__(self, context: Optional[Any] = None):
+    def __init__(self, context: Any | None = None):
         self._context = context
 
     @property
@@ -213,28 +213,28 @@ class SafeContext:
         return self._context.channel
 
     @property
-    def user_id(self) -> Optional[str]:
+    def user_id(self) -> str | None:
         """ID пользователя."""
         if self._context is None or self._context.user is None:
             return None
         return self._context.user.user_id
 
     @property
-    def session_id(self) -> Optional[str]:
+    def session_id(self) -> str | None:
         """ID сессии."""
         if self._context is None:
             return None
         return self._context.session_id
 
     @property
-    def flow_id(self) -> Optional[str]:
+    def flow_id(self) -> str | None:
         """ID агента."""
         if self._context is None:
             return None
         return self._context.flow_id
 
     @property
-    def metadata(self) -> Dict[str, Any]:
+    def metadata(self) -> dict[str, Any]:
         """Метаданные запроса (только для чтения)."""
         if self._context is None:
             return {}
@@ -246,7 +246,7 @@ class SafeChannel:
     Безопасная обертка для отправки сообщений пользователю.
     """
 
-    def __init__(self, context: Optional[Any] = None):
+    def __init__(self, context: Any | None = None):
         self._context = context
 
     async def send(self, content: str) -> None:
@@ -264,7 +264,7 @@ class SafeChannel:
         await channel.send_to_user(content)
 
     async def send_with_buttons(
-        self, content: str, buttons: List[str]
+        self, content: str, buttons: list[str]
     ) -> None:
         """
         Отправляет сообщение с кнопками быстрого ответа.
@@ -299,8 +299,8 @@ class _SandboxAsyncClientContext:
 
     async def __aexit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc: Optional[BaseException],
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
         tb: Any,
     ) -> None:
         if self._cm is not None:
@@ -313,7 +313,7 @@ class HttpxModule:
     Предоставляет простой API: httpx.get(), httpx.post() и т.д.
     """
 
-    _default_timeout = 30.0
+    default_timeout = 30.0
 
     RequestError = httpx.RequestError
     HTTPStatusError = httpx.HTTPStatusError
@@ -336,14 +336,14 @@ class HttpxModule:
 
     @staticmethod
     async def get(
-        url: Union[str, httpx.URL],
+        url: str | httpx.URL,
         *,
-        params: Optional[Union[Dict[str, Any], httpx.QueryParams]] = None,
-        headers: Optional[Union[Dict[str, str], httpx.Headers]] = None,
-        cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
-        auth: Optional[httpx.Auth] = None,
+        params: dict[str, Any] | httpx.QueryParams | None = None,
+        headers: dict[str, str] | httpx.Headers | None = None,
+        cookies: dict[str, str] | httpx.Cookies | None = None,
+        auth: httpx.Auth | None = None,
         follow_redirects: bool = False,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         **kwargs,
     ) -> httpx.Response:
         """GET с strategy=SMART (прямой канал, при блокировках — egress + learn в Redis)."""
@@ -361,18 +361,18 @@ class HttpxModule:
 
     @staticmethod
     async def post(
-        url: Union[str, httpx.URL],
+        url: str | httpx.URL,
         *,
-        content: Optional[Union[str, bytes]] = None,
-        data: Optional[Dict[str, Any]] = None,
-        files: Optional[Dict[str, Any]] = None,
-        json: Optional[Any] = None,
-        params: Optional[Union[Dict[str, Any], httpx.QueryParams]] = None,
-        headers: Optional[Union[Dict[str, str], httpx.Headers]] = None,
-        cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
-        auth: Optional[httpx.Auth] = None,
+        content: str | bytes | None = None,
+        data: dict[str, Any] | None = None,
+        files: dict[str, Any] | None = None,
+        json: Any | None = None,
+        params: dict[str, Any] | httpx.QueryParams | None = None,
+        headers: dict[str, str] | httpx.Headers | None = None,
+        cookies: dict[str, str] | httpx.Cookies | None = None,
+        auth: httpx.Auth | None = None,
         follow_redirects: bool = False,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         **kwargs,
     ) -> httpx.Response:
         """POST с strategy=SMART."""
@@ -394,18 +394,18 @@ class HttpxModule:
 
     @staticmethod
     async def put(
-        url: Union[str, httpx.URL],
+        url: str | httpx.URL,
         *,
-        content: Optional[Union[str, bytes]] = None,
-        data: Optional[Dict[str, Any]] = None,
-        files: Optional[Dict[str, Any]] = None,
-        json: Optional[Any] = None,
-        params: Optional[Union[Dict[str, Any], httpx.QueryParams]] = None,
-        headers: Optional[Union[Dict[str, str], httpx.Headers]] = None,
-        cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
-        auth: Optional[httpx.Auth] = None,
+        content: str | bytes | None = None,
+        data: dict[str, Any] | None = None,
+        files: dict[str, Any] | None = None,
+        json: Any | None = None,
+        params: dict[str, Any] | httpx.QueryParams | None = None,
+        headers: dict[str, str] | httpx.Headers | None = None,
+        cookies: dict[str, str] | httpx.Cookies | None = None,
+        auth: httpx.Auth | None = None,
         follow_redirects: bool = False,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         **kwargs,
     ) -> httpx.Response:
         """PUT с strategy=SMART."""
@@ -427,18 +427,18 @@ class HttpxModule:
 
     @staticmethod
     async def patch(
-        url: Union[str, httpx.URL],
+        url: str | httpx.URL,
         *,
-        content: Optional[Union[str, bytes]] = None,
-        data: Optional[Dict[str, Any]] = None,
-        files: Optional[Dict[str, Any]] = None,
-        json: Optional[Any] = None,
-        params: Optional[Union[Dict[str, Any], httpx.QueryParams]] = None,
-        headers: Optional[Union[Dict[str, str], httpx.Headers]] = None,
-        cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
-        auth: Optional[httpx.Auth] = None,
+        content: str | bytes | None = None,
+        data: dict[str, Any] | None = None,
+        files: dict[str, Any] | None = None,
+        json: Any | None = None,
+        params: dict[str, Any] | httpx.QueryParams | None = None,
+        headers: dict[str, str] | httpx.Headers | None = None,
+        cookies: dict[str, str] | httpx.Cookies | None = None,
+        auth: httpx.Auth | None = None,
         follow_redirects: bool = False,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         **kwargs,
     ) -> httpx.Response:
         """PATCH с strategy=SMART."""
@@ -460,14 +460,14 @@ class HttpxModule:
 
     @staticmethod
     async def delete(
-        url: Union[str, httpx.URL],
+        url: str | httpx.URL,
         *,
-        params: Optional[Union[Dict[str, Any], httpx.QueryParams]] = None,
-        headers: Optional[Union[Dict[str, str], httpx.Headers]] = None,
-        cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
-        auth: Optional[httpx.Auth] = None,
+        params: dict[str, Any] | httpx.QueryParams | None = None,
+        headers: dict[str, str] | httpx.Headers | None = None,
+        cookies: dict[str, str] | httpx.Cookies | None = None,
+        auth: httpx.Auth | None = None,
         follow_redirects: bool = False,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         **kwargs,
     ) -> httpx.Response:
         """DELETE с strategy=SMART."""
@@ -486,18 +486,18 @@ class HttpxModule:
     @staticmethod
     async def request(
         method: str,
-        url: Union[str, httpx.URL],
+        url: str | httpx.URL,
         *,
-        content: Optional[Union[str, bytes]] = None,
-        data: Optional[Dict[str, Any]] = None,
-        files: Optional[Dict[str, Any]] = None,
-        json: Optional[Any] = None,
-        params: Optional[Union[Dict[str, Any], httpx.QueryParams]] = None,
-        headers: Optional[Union[Dict[str, str], httpx.Headers]] = None,
-        cookies: Optional[Union[Dict[str, str], httpx.Cookies]] = None,
-        auth: Optional[httpx.Auth] = None,
+        content: str | bytes | None = None,
+        data: dict[str, Any] | None = None,
+        files: dict[str, Any] | None = None,
+        json: Any | None = None,
+        params: dict[str, Any] | httpx.QueryParams | None = None,
+        headers: dict[str, str] | httpx.Headers | None = None,
+        cookies: dict[str, str] | httpx.Cookies | None = None,
+        auth: httpx.Auth | None = None,
         follow_redirects: bool = False,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         **kwargs,
     ) -> httpx.Response:
         """request() с strategy=SMART."""

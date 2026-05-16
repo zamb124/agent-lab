@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -111,7 +111,7 @@ class GDocsCreateArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(..., min_length=1, description="Заголовок документа.")
-    file_id: Optional[str] = Field(
+    file_id: str | None = Field(
         None,
         description="ID файла DOCX в платформе (результат fill_docx_template). Если не передан — пустой документ.",
     )
@@ -159,7 +159,7 @@ class GDocsShareArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document_id: str = Field(..., min_length=1, description="ID документа.")
-    email: Optional[str] = Field(None, description="Email получателя.")
+    email: str | None = Field(None, description="Email получателя.")
     role: str = Field("reader", description="Уровень доступа: reader, commenter, writer.")
     anyone: bool = Field(False, description="Если true — доступ всем по ссылке.")
 
@@ -208,13 +208,13 @@ def _share_mock(args: JsonDict, state: Any = None) -> JsonDict:
     return {"success": True, "document_id": args.get("document_id", "mock_doc_id")}
 
 
-def _require_state(state: Optional["ExecutionState"]) -> "ExecutionState":
+def _require_state(state: ExecutionState | None) -> ExecutionState:
     if state is None:
         raise ValueError("Google Docs tools require ExecutionState")
     return state
 
 
-async def _get_docs_client(state: Optional["ExecutionState"]) -> GoogleDocsClient:
+async def _get_docs_client(state: ExecutionState | None) -> GoogleDocsClient:
     execution_state = _require_state(state)
     credentials_json = execution_state.variables.get("google_service_account")
     access_token = execution_state.variables.get("google_access_token")
@@ -242,8 +242,8 @@ async def _get_docs_client(state: Optional["ExecutionState"]) -> GoogleDocsClien
 )
 async def gdocs_create_document(
     title: str,
-    file_id: Optional[str] = None,
-    state: Optional["ExecutionState"] = None,
+    file_id: str | None = None,
+    state: ExecutionState | None = None,
 ) -> JsonDict:
     client = await _get_docs_client(state)
 
@@ -276,7 +276,7 @@ async def gdocs_create_document(
 )
 async def gdocs_read_document(
     document_id: str,
-    state: Optional["ExecutionState"] = None,
+    state: ExecutionState | None = None,
 ) -> JsonDict:
     client = await _get_docs_client(state)
 
@@ -294,7 +294,7 @@ async def gdocs_read_document(
 async def gdocs_append_text(
     document_id: str,
     text: str,
-    state: Optional["ExecutionState"] = None,
+    state: ExecutionState | None = None,
 ) -> JsonDict:
     client = await _get_docs_client(state)
 
@@ -313,7 +313,7 @@ async def gdocs_insert_text(
     document_id: str,
     text: str,
     index: int,
-    state: Optional["ExecutionState"] = None,
+    state: ExecutionState | None = None,
 ) -> JsonDict:
     client = await _get_docs_client(state)
 
@@ -333,7 +333,7 @@ async def gdocs_find_replace(
     find: str,
     replace: str,
     match_case: bool = True,
-    state: Optional["ExecutionState"] = None,
+    state: ExecutionState | None = None,
 ) -> JsonDict:
     client = await _get_docs_client(state)
 
@@ -362,7 +362,7 @@ async def gdocs_delete_range(
     document_id: str,
     start_index: int,
     end_index: int,
-    state: Optional["ExecutionState"] = None,
+    state: ExecutionState | None = None,
 ) -> JsonDict:
     client = await _get_docs_client(state)
 
@@ -379,10 +379,10 @@ async def gdocs_delete_range(
 )
 async def gdocs_share_document(
     document_id: str,
-    email: Optional[str] = None,
+    email: str | None = None,
     role: str = "reader",
     anyone: bool = False,
-    state: Optional["ExecutionState"] = None,
+    state: ExecutionState | None = None,
 ) -> JsonDict:
     client = await _get_docs_client(state)
 

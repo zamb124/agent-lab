@@ -6,7 +6,6 @@
 
 import json
 from enum import Enum
-from typing import Dict, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -57,12 +56,12 @@ class ExternalAPIConfig(BaseModel):
 
     api_id: str = Field(..., description="Уникальный идентификатор")
     name: str = Field(..., description="Название API")
-    description: Optional[str] = Field(default=None, description="Описание")
+    description: str | None = Field(default=None, description="Описание")
 
     url: str = Field(..., description="URL endpoint (поддерживает @var: и {path_params})")
     method: HTTPMethod = Field(default=HTTPMethod.POST, description="HTTP метод")
 
-    headers: Dict[str, str] = Field(
+    headers: dict[str, str] = Field(
         default_factory=dict,
         description="HTTP заголовки (строки: @state:path, @var:path, токены @var: в тексте)",
     )
@@ -82,7 +81,7 @@ class ExternalAPIConfig(BaseModel):
         description='JSON-тело запроса; в строках допускаются целые @state:path, @var:path и токены @var: в тексте',
     )
 
-    state_mapping: Dict[str, str] = Field(
+    state_mapping: dict[str, str] = Field(
         default_factory=dict,
         description="Маппинг полей ответа на state: {response_field: state_field}",
     )

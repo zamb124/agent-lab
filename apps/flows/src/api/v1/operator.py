@@ -5,7 +5,7 @@ API операторских очередей и задач: /flows/api/v1/opera
 from __future__ import annotations
 
 import asyncio
-from typing import Any, List, Optional, Set
+from typing import Any
 
 from a2a.types import Message
 from a2a.utils.message import get_message_text
@@ -62,14 +62,14 @@ def _company_and_user() -> tuple[str, str]:
     return ctx.active_company.company_id, uid
 
 
-def _company_operator_roles_normalized() -> Set[str]:
+def _company_operator_roles_normalized() -> set[str]:
     ctx = get_context()
     if ctx is None or ctx.active_company is None or ctx.user is None:
         return set()
     company_id = ctx.active_company.company_id
     raw = ctx.user.companies.get(company_id)
     if raw is None:
-        role_list: List[str] = []
+        role_list: list[str] = []
     elif isinstance(raw, str):
         role_list = [raw]
     else:
@@ -115,17 +115,17 @@ async def _caller_may_mutate_queue(
     return False
 
 
-def _interrupt_handoff_texts(row: OperatorTasks) -> tuple[Optional[str], Optional[str]]:
+def _interrupt_handoff_texts(row: OperatorTasks) -> tuple[str | None, str | None]:
     snap = row.interrupt_snapshot
     if snap is None or not isinstance(snap, dict):
         return None, None
-    title: Optional[str] = None
+    title: str | None = None
     raw_t = snap.get("task_title")
     if raw_t is not None:
         s = str(raw_t).strip()
         if s:
             title = s
-    preview: Optional[str] = None
+    preview: str | None = None
     raw_q = snap.get("question")
     if raw_q is not None:
         q = str(raw_q).strip()
@@ -137,14 +137,14 @@ def _interrupt_handoff_texts(row: OperatorTasks) -> tuple[Optional[str], Optiona
     return title, preview
 
 
-def _flow_display_name(flow_cfg: Optional[FlowConfig], flow_id: str) -> str:
+def _flow_display_name(flow_cfg: FlowConfig | None, flow_id: str) -> str:
     if flow_cfg is None:
         return flow_id
     n = flow_cfg.name.strip()
     return n if n else flow_id
 
 
-def _skill_display_name(flow_cfg: Optional[FlowConfig], branch_id: str) -> str:
+def _skill_display_name(flow_cfg: FlowConfig | None, branch_id: str) -> str:
     if flow_cfg is not None and flow_cfg.branches:
         sk = flow_cfg.branches.get(branch_id)
         if sk is not None:
@@ -156,7 +156,7 @@ def _skill_display_name(flow_cfg: Optional[FlowConfig], branch_id: str) -> str:
 def _task_to_out(
     row: OperatorTasks,
     *,
-    flow_cfg: Optional[FlowConfig] = None,
+    flow_cfg: FlowConfig | None = None,
 ) -> OperatorTaskOut:
     ht, hp = _interrupt_handoff_texts(row)
     handoff_mode = parse_handoff_mode(row).value
@@ -185,8 +185,8 @@ def _task_to_out(
 
 async def _flow_config_map_for_tasks(
     container: FlowContainer,
-    rows: List[OperatorTasks],
-) -> dict[str, Optional[FlowConfig]]:
+    rows: list[OperatorTasks],
+) -> dict[str, FlowConfig | None]:
     flow_ids = list({r.flow_id for r in rows})
     if not flow_ids:
         return {}
@@ -297,8 +297,8 @@ async def remove_queue_member(
 @router.get("/tasks", response_model=OffsetPage[OperatorTaskOut])
 async def list_operator_tasks(
     container: ContainerDep,
-    queue_id: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    queue_id: str | None = Query(None),
+    status: str | None = Query(None),
     limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[OperatorTaskOut]:
@@ -349,7 +349,7 @@ async def get_operator_task(
         raise HTTPException(status_code=404, detail="Задача не найдена")
     if not await repo.is_user_member_of_queue(task.queue_id, user_id):
         raise HTTPException(status_code=403, detail="Нет доступа к задаче")
-    dialog_messages: List[dict[str, Any]] = []
+    dialog_messages: list[dict[str, Any]] = []
     saved = await container.state_manager.get_state(task.session_id)
     if saved is not None and saved.messages:
         for m in saved.messages:

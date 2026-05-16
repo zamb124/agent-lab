@@ -8,7 +8,7 @@
   (например `@state:triggers.my_id.context.flag`), справа — литерал (строка в кавычках, true/false, число).
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows.src.mapping import MappingResolver
 
@@ -40,7 +40,7 @@ def parse_output_condition_literal(value: str) -> Any:
     return value
 
 
-def evaluate_output_action_condition(condition: str, state: Dict[str, Any]) -> bool:
+def evaluate_output_action_condition(condition: str, state: dict[str, Any]) -> bool:
     """
     Проверяет условие из `OutputAction.condition` относительно `state` (и резолвера @state: / @var:).
     """

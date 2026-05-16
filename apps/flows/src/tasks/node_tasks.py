@@ -6,7 +6,7 @@ TaskIQ task для выполнения нод.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from apps.flows_worker.broker import broker
 from core.logging import get_logger
@@ -17,9 +17,9 @@ logger = get_logger(__name__)
 @broker.task(task_name="execute_node", queue_name="flows_worker")
 async def execute_node(
     node_id: str,
-    node_config: Dict[str, Any],
-    state_dict: Dict[str, Any],
-) -> Dict[str, Any]:
+    node_config: dict[str, Any],
+    state_dict: dict[str, Any],
+) -> dict[str, Any]:
     """
     Выполняет ноду в воркере.
 
@@ -42,6 +42,6 @@ async def execute_node(
     logger.debug(f"Executing node {node_id} (type={node_config.get('type', 'unknown')})")
 
     # Вызываем напрямую, не через .kiq() чтобы избежать рекурсии
-    result_state = await node._run_internal(state)
+    result_state = await node.execute(state)
 
     return result_state.model_dump(exclude_none=False)

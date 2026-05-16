@@ -8,7 +8,7 @@ Zero-Guess Architecture:
 """
 
 import importlib
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
@@ -32,7 +32,7 @@ _TOOL_IDS_PROCESS_BUILTIN_ONLY = frozenset({"sandbox_codegen"})
 def _browser_runtime_mcp_tool_parameters_schema(
     server_config: MCPServerConfig,
     mcp_tool_name: str,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     JSON Schema аргументов MCP tools Browser Runtime для подсказки LLM.
 
@@ -50,7 +50,7 @@ def _browser_runtime_mcp_tool_parameters_schema(
     except ImportError:
         return None
 
-    model_by_name: Dict[str, Any] = {
+    model_by_name: dict[str, Any] = {
         "browser_create_session": ToolCreateSessionArgs,
         "browser_navigate": ToolNavigateArgs,
         "browser_observe": ToolObserveArgs,
@@ -83,7 +83,7 @@ class ToolRegistry:
     """
 
     def __init__(self, *, container: FlowRuntimeContainer | None = None):
-        self._tools: Dict[str, BaseTool] = {}
+        self._tools: dict[str, BaseTool] = {}
         self._initialized = False
         self.container = container
 
@@ -96,7 +96,7 @@ class ToolRegistry:
         self._tools[tool.name] = tool
         logger.debug(f"Tool зарегистрирован: {tool.name}")
 
-    def get(self, name: str) -> Optional[BaseTool]:
+    def get(self, name: str) -> BaseTool | None:
         """Получает tool по имени."""
         return self._tools.get(name)
 
@@ -104,7 +104,7 @@ class ToolRegistry:
         """Проверяет зарегистрирован ли tool."""
         return name in self._tools
 
-    def list_all(self) -> Dict[str, BaseTool]:
+    def list_all(self) -> dict[str, BaseTool]:
         """Возвращает все зарегистрированные tools."""
         return dict(self._tools)
 
@@ -128,7 +128,7 @@ class ToolRegistry:
     # Методы создания tools
     # =========================================================================
 
-    async def materialize(self, tool_ref: Union[Dict[str, Any], ToolReference]) -> BaseTool:
+    async def materialize(self, tool_ref: dict[str, Any] | ToolReference) -> BaseTool:
         """
         Единая материализация runnable tool.
 
@@ -147,7 +147,7 @@ class ToolRegistry:
         7. иначе ValueError
         """
         if isinstance(tool_ref, ToolReference):
-            ref: Dict[str, Any] = tool_ref.model_dump(exclude_none=True)
+            ref: dict[str, Any] = tool_ref.model_dump(exclude_none=True)
         elif isinstance(tool_ref, dict):
             ref = dict(tool_ref)
         else:
@@ -157,11 +157,11 @@ class ToolRegistry:
         if code_mode == CodeMode.MCP_TOOL.value or code_mode == CodeMode.MCP_TOOL:
             return await self._create_mcp_tool(ref)
 
-        def _has_nonempty_inline_code(r: Dict[str, Any]) -> bool:
+        def _has_nonempty_inline_code(r: dict[str, Any]) -> bool:
             c = r.get("code")
             return isinstance(c, str) and bool(c.strip())
 
-        def _tool_lookup_id(r: Dict[str, Any]) -> Optional[str]:
+        def _tool_lookup_id(r: dict[str, Any]) -> str | None:
             raw = r.get("tool_id") or r.get("name")
             return raw if isinstance(raw, str) and raw else None
 
@@ -239,7 +239,7 @@ class ToolRegistry:
 
         raise ValueError(f"Tool config requires 'type' or 'code' field: {ref}")
 
-    async def create_tool(self, tool_ref: Union[str, Dict[str, Any], ToolReference]) -> BaseTool:
+    async def create_tool(self, tool_ref: str | dict[str, Any] | ToolReference) -> BaseTool:
         """Алиас на ``materialize``; строки запрещены (инлайн через FlowsLoader)."""
         if isinstance(tool_ref, str):
             raise ValueError(
@@ -249,8 +249,8 @@ class ToolRegistry:
         return await self.materialize(tool_ref)
 
     async def create_tools(
-        self, tool_refs: List[Union[str, Dict[str, Any], ToolReference]]
-    ) -> List[BaseTool]:
+        self, tool_refs: list[str | dict[str, Any] | ToolReference]
+    ) -> list[BaseTool]:
         """
         Создает список tools из конфигов (CodeTool / нода как tool).
 
@@ -260,7 +260,7 @@ class ToolRegistry:
         Returns:
             Список BaseTool
         """
-        tools: List[BaseTool] = []
+        tools: list[BaseTool] = []
 
         for ref in tool_refs:
             if isinstance(ref, str):
@@ -276,7 +276,7 @@ class ToolRegistry:
 
         return tools
 
-    def _create_code_tool_from_config(self, config: Dict[str, Any]) -> BaseTool:
+    def _create_code_tool_from_config(self, config: dict[str, Any]) -> BaseTool:
         """
         Создает CodeTool из dict-конфига (поле code).
 
@@ -298,7 +298,7 @@ class ToolRegistry:
             raise ValueError(f"Code tool '{tool_id}' requires 'code' field")
         code = strip_forbidden_platform_import_lines(code)
 
-        parameters_cp: Optional[Dict[str, CallParameter]] = None
+        parameters_cp: dict[str, CallParameter] | None = None
         args_schema = config.get("args_schema")
         if args_schema:
             parameters_cp = {}
@@ -313,7 +313,7 @@ class ToolRegistry:
                     )
 
         ps_raw = config.get("parameters_schema")
-        resolved_schema: Optional[Dict[str, Any]] = None
+        resolved_schema: dict[str, Any] | None = None
         if ps_raw and isinstance(ps_raw, dict) and ps_raw.get("type") == "object":
             resolved_schema = ps_raw
         elif parameters_cp:
@@ -343,7 +343,7 @@ class ToolRegistry:
         )
         return tool
 
-    async def _create_mcp_tool(self, config: Dict[str, Any]) -> BaseTool:
+    async def _create_mcp_tool(self, config: dict[str, Any]) -> BaseTool:
         """
         Создает MCPTool из конфига.
 
@@ -368,14 +368,14 @@ class ToolRegistry:
         if not mcp_tool_name:
             raise ValueError(f"MCP tool '{tool_id}' requires 'mcp_tool_name'")
         if self.container is None:
-            raise RuntimeError("ToolRegistry requires FlowRuntimeContainer for MCP tools")
+            raise RuntimeError("ToolRegistry requires FlowContainer for MCP tools")
 
         server_config = await self.container.mcp_server_repository.get(mcp_server_id)
 
         if not server_config:
             raise ValueError(f"MCP server '{mcp_server_id}' not found")
 
-        parameters_schema: Optional[Dict[str, Any]] = None
+        parameters_schema: dict[str, Any] | None = None
         ps_raw = config.get("parameters_schema")
         if isinstance(ps_raw, dict) and ps_raw.get("type") == "object":
             parameters_schema = ps_raw
@@ -384,7 +384,7 @@ class ToolRegistry:
                 server_config, mcp_tool_name
             )
 
-        parameters: Optional[Dict[str, CallParameter]] = None
+        parameters: dict[str, CallParameter] | None = None
         args_schema = config.get("args_schema")
         if args_schema and parameters_schema is None:
             parameters = {}
@@ -410,7 +410,7 @@ class ToolRegistry:
         self.register(tool)
         return tool
 
-    def _create_node_as_tool(self, config: Dict[str, Any]) -> BaseTool:
+    def _create_node_as_tool(self, config: dict[str, Any]) -> BaseTool:
         """
         Создает NodeAsToolWrapper из inline llm_node конфига.
 

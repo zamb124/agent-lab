@@ -10,7 +10,8 @@
 - X-Platform-Namespace (если не default)
 """
 
-from typing import Any, Dict
+from collections.abc import Mapping
+from typing import cast as type_cast
 
 import httpx
 
@@ -30,6 +31,7 @@ NAMESPACE_HEADER = "X-Platform-Namespace"
 
 class ServiceClientError(Exception):
     """Ошибка межсервисного взаимодействия"""
+
     pass
 
 
@@ -46,7 +48,7 @@ class ServiceClient:
         settings = get_settings()
         return settings.server.get_service_url(service)
 
-    def _build_headers(self, include_content_type: bool = True) -> Dict[str, str]:
+    def _build_headers(self, include_content_type: bool = True) -> dict[str, str]:
         """
         Собирает заголовки из текущего контекста.
 
@@ -54,7 +56,7 @@ class ServiceClient:
             include_content_type: Включать ли Content-Type: application/json
                                  (False для multipart/form-data запросов)
         """
-        headers: Dict[str, str] = {}
+        headers: dict[str, str] = {}
 
         if include_content_type:
             headers["Content-Type"] = "application/json"
@@ -93,8 +95,8 @@ class ServiceClient:
         method: str,
         path: str,
         timeout: float = 30.0,
-        **kwargs
-    ) -> Any:
+        **kwargs: object,
+    ) -> object:
         """
         Выполняет HTTP запрос к сервису.
 
@@ -119,16 +121,23 @@ class ServiceClient:
         # (httpx сам установит multipart/form-data)
         include_content_type = "files" not in kwargs
         headers = self._build_headers(include_content_type=include_content_type)
-        if "headers" in kwargs:
-            headers.update(kwargs.pop("headers"))
+        extra_headers = kwargs.pop("headers", None)
+        if extra_headers is not None:
+            if not isinstance(extra_headers, Mapping):
+                raise ServiceClientError("headers must be a mapping")
+            extra_headers_map = type_cast(Mapping[object, object], extra_headers)
+            for key, value in extra_headers_map.items():
+                if not isinstance(key, str) or not isinstance(value, str):
+                    raise ServiceClientError("headers must contain only str keys and str values")
+                headers[key] = value
 
         try:
             async with get_httpx_client(timeout=timeout) as client:
                 response = await client.request(method, url, headers=headers, **kwargs)
-                response.raise_for_status()
+                response = response.raise_for_status()
 
                 if response.content:
-                    return response.json()
+                    return type_cast(object, response.json())
                 return None
 
         except httpx.HTTPStatusError as e:
@@ -138,23 +147,28 @@ class ServiceClient:
         except Exception as e:
             raise ServiceClientError(f"Ошибка запроса к {service}: {e}")
 
-    async def get(self, service: str, path: str, **kwargs) -> Any:
+    async def get(self, service: str, path: str, timeout: float = 30.0, **kwargs: object) -> object:
         """GET запрос к сервису"""
-        return await self.request(service, "GET", path, **kwargs)
+        return await self.request(service, "GET", path, timeout=timeout, **kwargs)
 
-    async def post(self, service: str, path: str, **kwargs) -> Any:
+    async def post(
+        self, service: str, path: str, timeout: float = 30.0, **kwargs: object
+    ) -> object:
         """POST запрос к сервису"""
-        return await self.request(service, "POST", path, **kwargs)
+        return await self.request(service, "POST", path, timeout=timeout, **kwargs)
 
-    async def put(self, service: str, path: str, **kwargs) -> Any:
+    async def put(self, service: str, path: str, timeout: float = 30.0, **kwargs: object) -> object:
         """PUT запрос к сервису"""
-        return await self.request(service, "PUT", path, **kwargs)
+        return await self.request(service, "PUT", path, timeout=timeout, **kwargs)
 
-    async def patch(self, service: str, path: str, **kwargs) -> Any:
+    async def patch(
+        self, service: str, path: str, timeout: float = 30.0, **kwargs: object
+    ) -> object:
         """PATCH запрос к сервису"""
-        return await self.request(service, "PATCH", path, **kwargs)
+        return await self.request(service, "PATCH", path, timeout=timeout, **kwargs)
 
-    async def delete(self, service: str, path: str, **kwargs) -> Any:
+    async def delete(
+        self, service: str, path: str, timeout: float = 30.0, **kwargs: object
+    ) -> object:
         """DELETE запрос к сервису"""
-        return await self.request(service, "DELETE", path, **kwargs)
-
+        return await self.request(service, "DELETE", path, timeout=timeout, **kwargs)

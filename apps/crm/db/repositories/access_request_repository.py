@@ -2,6 +2,7 @@
 Репозиторий для запросов на доступ.
 """
 
+from typing import override
 
 from sqlalchemy import delete, func, select, update
 
@@ -19,10 +20,12 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
         super().__init__(db)
 
     @property
+    @override
     def model_class(self) -> type[AccessRequest]:
         return AccessRequest
 
     @property
+    @override
     def id_field(self) -> str:
         return "request_id"
 
@@ -65,7 +68,11 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
             return
         async with self._db.session() as session:
             for rid in to_delete:
-                await session.execute(delete(AccessRequest).where(AccessRequest.request_id == rid))
+                result = await session.execute(
+                    delete(AccessRequest).where(AccessRequest.request_id == rid)
+                )
+                if get_rowcount(result) != 1:
+                    raise ValueError(f"Access request {rid} was not deleted")
             await session.commit()
 
     async def _fetch_pending_entity_requests(self, entity_id: str) -> list[AccessRequest]:
@@ -82,6 +89,7 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    @override
     async def create(self, entity: AccessRequest) -> AccessRequest:
         """Создает запрос на доступ"""
         async with self._db.session() as session:

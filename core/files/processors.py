@@ -46,7 +46,7 @@ class FileProcessor:
         self.bucket_name = bucket_name
         self._s3_client: Optional[S3Client] = None
 
-    async def _get_s3_client(self) -> S3Client:
+    async def get_s3_client(self) -> S3Client:
         """Получает S3 клиент"""
         if self._s3_client is None:
             if self.bucket_name:
@@ -143,7 +143,7 @@ class FileProcessor:
         extension = Path(original_name).suffix or ".bin"
         s3_key = f"files/{file_id}_{file_hash}{extension}"
 
-        s3_client = await self._get_s3_client()
+        s3_client = await self.get_s3_client()
 
         s3_metadata = FileProcessor._to_ascii_s3_metadata(metadata or {})
         await s3_client.upload_bytes(
@@ -373,7 +373,7 @@ class AudioProcessor:
         self.bucket_name = bucket_name
         self._s3_client: Optional[S3Client] = None
 
-    async def _get_s3_client(self) -> S3Client:
+    async def get_s3_client(self) -> S3Client:
         if self._s3_client is None:
             if self.bucket_name:
                 self._s3_client = S3ClientFactory.create_client_for_bucket(self.bucket_name)
@@ -406,7 +406,7 @@ class AudioProcessor:
         extension = Path(original_name).suffix or ".wav"
         s3_key = f"audio/{file_id}_{file_hash}{extension}"
 
-        s3_client = await self._get_s3_client()
+        s3_client = await self.get_s3_client()
 
         await s3_client.upload_bytes(
             data=data,

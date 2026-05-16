@@ -7,7 +7,7 @@ import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -79,7 +79,7 @@ def _preview_share_base_urls(request: Request) -> tuple[str, str]:
 
 class FlowPreviewShareRequest(BaseModel):
     branch_id: str = Field(default="default", description="Ветка графа (skill)")
-    guest_max_user_messages: Optional[int] = Field(
+    guest_max_user_messages: int | None = Field(
         default=None,
         ge=1,
         le=500,
@@ -91,7 +91,7 @@ class FlowPreviewShareResponse(BaseModel):
     share_url: str
 
 
-def _speech_to_json(settings: FlowSpeechSettings | None) -> Optional[Dict[str, Any]]:
+def _speech_to_json(settings: FlowSpeechSettings | None) -> dict[str, Any] | None:
     if settings is None:
         return None
     dumped = settings.model_dump(mode="json", exclude_none=True)
@@ -111,7 +111,7 @@ def _drop_files_fields(value: Any) -> Any:
     return value
 
 
-def _flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
+def _flow_semantic_payload(flow_cfg: FlowConfig) -> dict[str, Any]:
     """
     Детерминированный payload для сравнения текущего flow и bundle.
 
@@ -143,7 +143,7 @@ def _flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
     return _drop_files_fields(payload)
 
 
-def _canonical_flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
+def _canonical_flow_semantic_payload(flow_cfg: FlowConfig) -> dict[str, Any]:
     """
     Payload для сравнения с bundle после того же пайплайна, что при READ из БД:
     ``model_dump`` → ``normalize_flow_config_dict`` → ``FlowConfig.model_validate``.
@@ -154,7 +154,7 @@ def _canonical_flow_semantic_payload(flow_cfg: FlowConfig) -> Dict[str, Any]:
     return _flow_semantic_payload(canonical)
 
 
-def _build_bundle_index(flows_root: Path) -> Dict[str, str]:
+def _build_bundle_index(flows_root: Path) -> dict[str, str]:
     """flow_id -> bundle_id для записей из registry.yaml."""
     registry_path = flows_root / "registry.yaml"
     bundles_dir = flows_root / "bundles"
@@ -169,7 +169,7 @@ def _build_bundle_index(flows_root: Path) -> Dict[str, str]:
     if not isinstance(registry_flows, list):
         raise HTTPException(status_code=500, detail="Registry field 'flows' must be a list")
 
-    flow_to_bundle: Dict[str, str] = {}
+    flow_to_bundle: dict[str, str] = {}
     for entry in registry_flows:
         if isinstance(entry, str):
             bundle_id = entry
@@ -197,10 +197,10 @@ def _build_bundle_index(flows_root: Path) -> Dict[str, str]:
 
 
 async def _get_bundle_update_flags(
-    flows: List[FlowConfig],
+    flows: list[FlowConfig],
     container: ContainerDep,
     flows_root: Path,
-) -> Dict[str, bool]:
+) -> dict[str, bool]:
     """Возвращает признак наличия обновлений bundle для flow с source=file."""
     flow_to_bundle = _build_bundle_index(flows_root)
     file_flow_ids = [f.flow_id for f in flows if (getattr(f, "source", None) or "manual") == "file"]
@@ -218,10 +218,10 @@ async def _get_bundle_update_flags(
     # Иначе _defaults пустой: _apply_defaults не мержит registry.yaml defaults.llm,
     # а после reload в БД llm уже с defaults — вечный has_bundle_update.
     loader.load_registry_yaml()
-    await loader._load_tools_cache()
-    await loader._load_nodes_cache()
+    await loader.load_tools_cache()
+    await loader.load_nodes_cache()
 
-    flags: Dict[str, bool] = {}
+    flags: dict[str, bool] = {}
     for flow_cfg in flows:
         source_value = getattr(flow_cfg, "source", None) or "manual"
         if source_value != "file":
@@ -231,7 +231,7 @@ async def _get_bundle_update_flags(
         if not bundle_id:
             raise HTTPException(status_code=500, detail=f"Bundle mapping not found for flow '{flow_cfg.flow_id}'")
 
-        await loader._preload_nodes_to_cache(bundle_id)
+        await loader.preload_nodes_to_cache(bundle_id)
         bundle_cfg = await loader.build_flow_bundle_config(bundle_id)
         if bundle_cfg is None:
             raise HTTPException(status_code=500, detail=f"Failed to build bundle config for '{bundle_id}'")
@@ -243,7 +243,7 @@ async def _get_bundle_update_flags(
     return flags
 
 
-def _generate_flow_url(flow_id: str, flow_kind: Optional[FlowType] = None, external_url: Optional[str] = None) -> str:
+def _generate_flow_url(flow_id: str, flow_kind: FlowType | None = None, external_url: str | None = None) -> str:
     """Публичный URL flow (или внешний base URL для EXTERNAL)."""
     if flow_kind == FlowType.EXTERNAL and external_url:
         return external_url
@@ -254,9 +254,9 @@ def _generate_flow_url(flow_id: str, flow_kind: Optional[FlowType] = None, exter
 
 
 async def _inline_tools_in_nodes(
-    nodes: Dict[str, Dict[str, Any]],
+    nodes: dict[str, dict[str, Any]],
     container: FlowContainer
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """
     Инлайнит tools в nodes flow.
 
@@ -268,7 +268,7 @@ async def _inline_tools_in_nodes(
         # Инлайним tools для llm_node
         tools = node_config.get("tools", [])
         if tools:
-            node_config["tools"] = await _inline_tools_list(tools, container)
+            node_config["tools"] = await inline_tools_list(tools, container)
 
         # Инлайним code для code-нод с tool_id без кода
         if node_config.get("type") == "code" and node_config.get("tool_id") and not node_config.get("code"):
@@ -288,10 +288,10 @@ async def _inline_tools_in_nodes(
     return nodes
 
 
-async def _inline_tools_list(
-    tools: List[Any],
+async def inline_tools_list(
+    tools: list[Any],
     container: FlowContainer
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Инлайнит список tools."""
     inlined = []
     for tool in tools:
@@ -304,7 +304,7 @@ async def _inline_tools_list(
 async def _inline_single_tool(
     tool: Any,
     container: FlowContainer
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     """Инлайнит один tool."""
     if isinstance(tool, str):
         # tool_id - достаём из библиотеки
@@ -330,7 +330,7 @@ async def _inline_single_tool(
         # Если это llm_node - рекурсивно инлайним его tools
         if tool.get("type") == "llm_node" or tool.get("prompt"):
             if "tools" in tool:
-                tool["tools"] = await _inline_tools_list(tool["tools"], container)
+                tool["tools"] = await inline_tools_list(tool["tools"], container)
             return tool
 
         # Если нет code - дополняем из библиотеки
@@ -346,7 +346,7 @@ async def _inline_single_tool(
     return None
 
 
-async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> Dict[str, Any]:
+async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> dict[str, Any]:
     """Конвертирует NodeConfig в inline tool."""
     result: dict[str, Any] = {
         "tool_id": node.node_id,
@@ -361,11 +361,11 @@ async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> Di
         result["code"] = node.code
     if node.tools:
         tools_list = [t.model_dump() if hasattr(t, "model_dump") else t for t in node.tools]
-        result["tools"] = await _inline_tools_list(tools_list, container)
+        result["tools"] = await inline_tools_list(tools_list, container)
     return result
 
 
-def _flow_config_to_inline_tool(flow_cfg: FlowConfig) -> Dict[str, Any]:
+def _flow_config_to_inline_tool(flow_cfg: FlowConfig) -> dict[str, Any]:
     """Конвертирует FlowConfig в inline tool."""
     return {
         "tool_id": flow_cfg.flow_id,
@@ -386,8 +386,8 @@ class EdgeRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
     from_node: str
-    to_node: Optional[str]
-    condition: Optional[str] = None
+    to_node: str | None
+    condition: str | None = None
 
 
 class BranchRequest(BaseModel):
@@ -395,15 +395,15 @@ class BranchRequest(BaseModel):
 
     name: str
     description: str = ""
-    tags: List[str] = []
-    entry: Optional[str] = None
-    nodes: Optional[Dict[str, Any]] = None
-    nodes_mode: Optional[str] = None
-    edges: Optional[List[Dict[str, Any]]] = None
-    edges_mode: Optional[str] = None
-    variables: Dict[str, Any] = {}
-    variables_mode: Optional[str] = None
-    speech: Optional[FlowSpeechSettings] = None
+    tags: list[str] = []
+    entry: str | None = None
+    nodes: dict[str, Any] | None = None
+    nodes_mode: str | None = None
+    edges: list[dict[str, Any]] | None = None
+    edges_mode: str | None = None
+    variables: dict[str, Any] = {}
+    variables_mode: str | None = None
+    speech: FlowSpeechSettings | None = None
 
 
 class BranchResponse(BaseModel):
@@ -411,15 +411,15 @@ class BranchResponse(BaseModel):
 
     name: str
     description: str = ""
-    tags: List[str] = []
-    entry: Optional[str] = None
-    nodes: Optional[Dict[str, Any]] = None
-    edges: Optional[List[Dict[str, Any]]] = None
-    variables: Dict[str, Any] = {}
-    nodes_mode: Optional[str] = None
-    edges_mode: Optional[str] = None
-    variables_mode: Optional[str] = None
-    speech: Optional[Dict[str, Any]] = None
+    tags: list[str] = []
+    entry: str | None = None
+    nodes: dict[str, Any] | None = None
+    edges: list[dict[str, Any]] | None = None
+    variables: dict[str, Any] = {}
+    nodes_mode: str | None = None
+    edges_mode: str | None = None
+    variables_mode: str | None = None
+    speech: dict[str, Any] | None = None
 
 
 def _branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
@@ -469,7 +469,7 @@ def _branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
 def _branch_request_to_config(
     branch_id: str,
     branch_req: BranchRequest,
-    existing: Optional[BranchConfig] = None,
+    existing: BranchConfig | None = None,
 ) -> BranchConfig:
     """Конвертирует BranchRequest в BranchConfig."""
     edges = None
@@ -484,8 +484,8 @@ def _branch_request_to_config(
         ]
 
     def _mode(
-        raw: Optional[str],
-        ex: Optional[MergeMode],
+        raw: str | None,
+        ex: MergeMode | None,
         default: MergeMode,
     ) -> MergeMode:
         if raw is not None and raw != "":
@@ -497,7 +497,7 @@ def _branch_request_to_config(
     ex_n = existing.nodes_mode if existing is not None else None
     ex_e = existing.edges_mode if existing is not None else None
     ex_v = existing.variables_mode if existing is not None else None
-    speech_val: Optional[FlowSpeechSettings] = None
+    speech_val: FlowSpeechSettings | None = None
     if branch_req.speech is not None:
         speech_val = branch_req.speech
     elif existing is not None:
@@ -523,22 +523,22 @@ class FlowCreateRequest(BaseModel):
 
     flow_id: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     entry: str
-    nodes: Dict[str, Any]
-    edges: List[Dict[str, Any]]
-    variables: Dict[str, Any] = {}
-    tags: List[str] = []
-    branches: Dict[str, BranchRequest] = {}
-    evaluation: Optional[Dict[str, Any]] = None
-    triggers: Dict[str, Any] = {}
-    resources: Dict[str, Any] = {}
-    store_card_image_url: Optional[str] = None
-    speech: Optional[FlowSpeechSettings] = None
+    nodes: dict[str, Any]
+    edges: list[dict[str, Any]]
+    variables: dict[str, Any] = {}
+    tags: list[str] = []
+    branches: dict[str, BranchRequest] = {}
+    evaluation: dict[str, Any] | None = None
+    triggers: dict[str, Any] = {}
+    resources: dict[str, Any] = {}
+    store_card_image_url: str | None = None
+    speech: FlowSpeechSettings | None = None
 
     @field_validator("store_card_image_url", mode="before")
     @classmethod
-    def _empty_store_card_image_url(cls, value: Any) -> Optional[str]:
+    def _empty_store_card_image_url(cls, value: Any) -> str | None:
         if value is None:
             return None
         if isinstance(value, str) and not value.strip():
@@ -552,55 +552,55 @@ class FlowResponse(BaseModel):
     flow_id: str
     version: str = ""
     name: str
-    description: Optional[str]
-    type: Optional[FlowType] = FlowType.LOCAL
+    description: str | None
+    type: FlowType | None = FlowType.LOCAL
 
     # LOCAL flow
-    entry: Optional[str] = None
-    nodes: Optional[Dict[str, Any]] = None
-    edges: Optional[List[Dict[str, Any]]] = None
-    variables: Dict[str, Any] = {}
-    tags: List[str] = []
-    branches: Dict[str, BranchResponse] = {}
-    evaluation: Optional[Dict[str, Any]] = None
+    entry: str | None = None
+    nodes: dict[str, Any] | None = None
+    edges: list[dict[str, Any]] | None = None
+    variables: dict[str, Any] = {}
+    tags: list[str] = []
+    branches: dict[str, BranchResponse] = {}
+    evaluation: dict[str, Any] | None = None
     hidden: bool = False
     has_bundle_update: bool = False
 
     # EXTERNAL flow (A2A)
-    url: Optional[str] = None
-    headers: Optional[Dict[str, str]] = None
-    status: Optional[str] = None
-    last_health_check: Optional[str] = None
-    agent_card: Optional[Dict[str, Any]] = None
+    url: str | None = None
+    headers: dict[str, str] | None = None
+    status: str | None = None
+    last_health_check: str | None = None
+    agent_card: dict[str, Any] | None = None
 
     # A2A capabilities
-    capabilities: Dict[str, Any] = {
+    capabilities: dict[str, Any] = {
         "streaming": True,
         "pushNotifications": True,
     }
 
     # Триггеры агента
-    triggers: Dict[str, Any] = {}
+    triggers: dict[str, Any] = {}
 
     # Ресурсы агента
-    resources: Dict[str, Any] = {}
+    resources: dict[str, Any] = {}
 
     # UI-метаданные (sticky_notes и пр.)
-    metadata: Dict[str, Any] = {}
+    metadata: dict[str, Any] = {}
 
     # URL обложки агента (после загрузки файла или из bundle)
-    store_card_image_url: Optional[str] = None
+    store_card_image_url: str | None = None
 
     # manual | api | file (bundle в репозитории)
     source: str = "manual"
 
-    speech: Optional[Dict[str, Any]] = None
+    speech: dict[str, Any] | None = None
 
 
 class FlowVoiceSessionQueryResponse(BaseModel):
     """Query-параметры для WS voice-сессии (effective flow + branch speech)."""
 
-    query: Dict[str, str]
+    query: dict[str, str]
 
 
 class ReloadFlowFromBundleResponse(BaseModel):
@@ -612,19 +612,19 @@ class FlowStoreBundleResponse(BaseModel):
     bundle_id: str
     flow_id: str
     name: str
-    description: Optional[str] = None
-    tags: List[str] = []
+    description: str | None = None
+    tags: list[str] = []
     installed: bool
 
 
 class FlowValidateRequest(BaseModel):
     """Запрос на валидацию агента"""
 
-    nodes: Dict[str, Any]
-    edges: List[Dict[str, Any]]
+    nodes: dict[str, Any]
+    edges: list[dict[str, Any]]
     entry: str
-    variables: Dict[str, Any] = {}
-    flow_id: Optional[str] = None
+    variables: dict[str, Any] = {}
+    flow_id: str | None = None
 
 
 class ValidationErrorResponse(BaseModel):
@@ -633,17 +633,17 @@ class ValidationErrorResponse(BaseModel):
     code: str
     message: str
     severity: str
-    node_id: Optional[str] = None
-    details: Optional[Dict[str, Any]] = None
+    node_id: str | None = None
+    details: dict[str, Any] | None = None
 
 
 class FlowValidateResponse(BaseModel):
     """Ответ на валидацию агента"""
 
     valid: bool
-    errors: List[ValidationErrorResponse] = []
-    state_keys_used: List[str] = []
-    var_keys_used: List[str] = []
+    errors: list[ValidationErrorResponse] = []
+    state_keys_used: list[str] = []
+    var_keys_used: list[str] = []
 
 
 @router.post("/validate", response_model=FlowValidateResponse)
@@ -697,7 +697,7 @@ async def validate_flow(
 @router.get("/", response_model=OffsetPage[FlowResponse])
 async def list_flows(
     container: ContainerDep,
-    type: Optional[FlowType] = None,
+    type: FlowType | None = None,
     limit: int = Query(500, ge=1, le=2000, description="Максимум flows"),
     offset: int = Query(0, ge=0, description="Смещение для пагинации"),
 ) -> OffsetPage[FlowResponse]:
@@ -848,7 +848,7 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
 
 
 async def _validate_tool_nodes(
-    nodes: Dict[str, Dict[str, Any]],
+    nodes: dict[str, dict[str, Any]],
     container: FlowContainer
 ) -> None:
     """Валидирует tool_id в code-нодах при отсутствии inline code."""
@@ -1265,7 +1265,7 @@ async def update_flow(
     merged_top_nodes = merge_incoming_node_dict_for_persist(
         dict(request.nodes), existing.nodes or {}
     )
-    branches: Dict[str, BranchConfig] = {}
+    branches: dict[str, BranchConfig] = {}
     for branch_id, branch_req in request.branches.items():
         ex = (existing.branches or {}).get(branch_id)
         ex_n = (ex.nodes if ex else None) or {}
@@ -1372,14 +1372,14 @@ async def update_flow(
 class BulkDeleteNodesRequest(BaseModel):
     """Запрос на массовое удаление нод с отчисткой связанных рёбер."""
 
-    node_ids: List[str]
+    node_ids: list[str]
 
 
 class BulkDeleteNodesResponse(BaseModel):
     """Результат массового удаления."""
 
     flow_id: str
-    deleted_node_ids: List[str]
+    deleted_node_ids: list[str]
     deleted_edge_count: int
 
 
@@ -1398,15 +1398,15 @@ async def bulk_delete_nodes(
         raise HTTPException(status_code=404, detail="Flow not found")
 
     target_ids = set(request.node_ids)
-    deleted_ids: List[str] = []
-    new_nodes: Dict[str, Any] = {}
+    deleted_ids: list[str] = []
+    new_nodes: dict[str, Any] = {}
     for node_id, node_value in (existing.nodes or {}).items():
         if node_id in target_ids:
             deleted_ids.append(node_id)
             continue
         new_nodes[node_id] = node_value
 
-    new_edges: List[Edge] = []
+    new_edges: list[Edge] = []
     deleted_edge_count = 0
     for edge in existing.edges or []:
         if edge.from_node in target_ids or edge.to_node in target_ids:
@@ -1455,12 +1455,12 @@ async def bulk_delete_nodes(
 class FlowMetadataRequest(BaseModel):
     """PATCH-обновление flow.config.metadata (sticky_notes, etc.)."""
 
-    sticky_notes: Optional[List[Dict[str, Any]]] = None
+    sticky_notes: list[dict[str, Any]] | None = None
 
 
 class FlowMetadataResponse(BaseModel):
     flow_id: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 @router.patch("/{flow_id}/metadata", response_model=FlowMetadataResponse)
@@ -1474,7 +1474,7 @@ async def update_flow_metadata(
     if existing is None:
         raise HTTPException(status_code=404, detail="Flow not found")
 
-    metadata: Dict[str, Any] = dict(getattr(existing, "metadata", None) or {})
+    metadata: dict[str, Any] = dict(getattr(existing, "metadata", None) or {})
     if request.sticky_notes is not None:
         metadata["sticky_notes"] = request.sticky_notes
 
@@ -1590,7 +1590,7 @@ async def rollback_version(
     flow_id: str,
     version: str,
     container: ContainerDep,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Откатывает flow к указанной версии.
 

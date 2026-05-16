@@ -49,7 +49,7 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
     ) -> Optional[EmbedConfig]:
         final_key = self._final_key_for_company_identifier(company_identifier.strip(), embed_id)
         table_name = self._get_table_name()
-        data = await self._storage._get_with_session_and_table(final_key, table_name)
+        data = await self._storage.get_with_session_and_table(final_key, table_name)
         if data is None:
             return None
         return self.model_class.model_validate_json(data)
@@ -59,7 +59,7 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
     ) -> List[EmbedConfig]:
         final_prefix = self._final_prefix_for_company_identifier(company_identifier.strip())
         table_name = self._get_table_name()
-        all_data = await self._storage._get_all_by_prefix_and_table(
+        all_data = await self._storage.get_all_by_prefix_and_table(
             final_prefix, table_name, limit, offset
         )
         entities: List[EmbedConfig] = []

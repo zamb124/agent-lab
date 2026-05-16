@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import List
 
 from apps.flows.src.container import FlowContainer
 from core.context import get_context
@@ -23,7 +22,7 @@ def _code_mode_str(value: object) -> str:
     return str(value)
 
 
-async def collect_platform_tool_docs(container: FlowContainer) -> List[PlatformToolDoc]:
+async def collect_platform_tool_docs(container: FlowContainer) -> list[PlatformToolDoc]:
     """
     Все динамические / зарегистрированные tools: сначала из tool_repository текущей компании,
     затем дополняются экземплярами из ToolRegistry, которых нет в БД.

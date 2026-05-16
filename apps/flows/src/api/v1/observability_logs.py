@@ -6,7 +6,7 @@ request_id, span_id, user_id. Произвольный LogQL от клиента
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -48,8 +48,8 @@ async def get_logs_by_trace_id(
     trace_id: str,
     container: ContainerDep,
     limit: int = Query(default=_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
-    time_from: Optional[datetime] = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
-    time_to: Optional[datetime] = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
+    time_from: datetime | None = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
+    time_to: datetime | None = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
 ) -> dict[str, Any]:
     """
     Возвращает записи логов для trace_id из flows/flows_worker.
@@ -84,8 +84,8 @@ async def get_logs_by_session_id(
     session_id: str,
     container: ContainerDep,
     limit: int = Query(default=_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
-    time_from: Optional[datetime] = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
-    time_to: Optional[datetime] = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
+    time_from: datetime | None = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
+    time_to: datetime | None = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
 ) -> dict[str, Any]:
     """
     Возвращает записи логов для session_id из flows/flows_worker.
@@ -120,8 +120,8 @@ async def get_logs_by_request_id(
     request_id: str,
     container: ContainerDep,
     limit: int = Query(default=_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
-    time_from: Optional[datetime] = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
-    time_to: Optional[datetime] = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
+    time_from: datetime | None = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
+    time_to: datetime | None = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
 ) -> dict[str, Any]:
     """
     Возвращает записи логов для request_id из flows/flows_worker (поле request_id в JSON).
@@ -154,8 +154,8 @@ async def get_logs_by_span_id(
     span_id: str,
     container: ContainerDep,
     limit: int = Query(default=_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
-    time_from: Optional[datetime] = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
-    time_to: Optional[datetime] = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
+    time_from: datetime | None = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
+    time_to: datetime | None = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
 ) -> dict[str, Any]:
     """
     Возвращает записи логов для span_id из flows/flows_worker (поле span_id в JSON).
@@ -188,8 +188,8 @@ async def get_logs_by_user_id(
     user_id: str,
     container: ContainerDep,
     limit: int = Query(default=_DEFAULT_LIMIT, ge=1, le=_MAX_LIMIT),
-    time_from: Optional[datetime] = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
-    time_to: Optional[datetime] = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
+    time_from: datetime | None = Query(default=None, description="Начало интервала (UTC ISO 8601)"),
+    time_to: datetime | None = Query(default=None, description="Конец интервала (UTC ISO 8601)"),
 ) -> dict[str, Any]:
     """
     Возвращает записи логов для user_id из flows/flows_worker (поле user_id в JSON).

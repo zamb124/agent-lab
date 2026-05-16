@@ -7,7 +7,8 @@ Legacy wrapper для обратной совместимости.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 from apps.flows.src.eval.compiler import PythonCompiler
 from apps.flows.src.eval.namespace import PythonNamespaceBuilder
@@ -27,10 +28,10 @@ class SafeEval:
 
     def __init__(
         self,
-        context: Optional[Any] = None,
-        variables: Optional[Dict[str, Any]] = None,
-        resources: Optional[Dict[str, Any]] = None,
-        base_tool_class: Optional[type] = None,
+        context: Any | None = None,
+        variables: dict[str, Any] | None = None,
+        resources: dict[str, Any] | None = None,
+        base_tool_class: type | None = None,
     ):
         self.context = context
         self.variables = variables or {}
@@ -42,17 +43,17 @@ class SafeEval:
             base_tool_class=base_tool_class,
         )
 
-    def _build_namespace(self) -> Dict[str, Any]:
+    def _build_namespace(self) -> dict[str, Any]:
         return self._runner.namespace_builder.build()
 
     def _compile(self, code: str, func_name: str, auto_find: bool = True) -> Callable[..., Any]:
         return self._runner.compiler.compile(code, func_name, auto_find=auto_find)
 
-    async def execute_node(self, code: str, state: "ExecutionState") -> Any:
+    async def execute_node(self, code: str, state: ExecutionState) -> Any:
         return await self._runner.execute(code, state, func_name="run")
 
     async def execute_tool(
-        self, code: str, args: Dict[str, Any], state: Optional["ExecutionState"] = None
+        self, code: str, args: dict[str, Any], state: ExecutionState | None = None
     ) -> Any:
         return await self._runner.execute_tool(code, args, state)
 
@@ -60,10 +61,10 @@ class SafeEval:
 def compile_function(
     code: str,
     func_name: str = "run",
-    context: Optional[Any] = None,
-    variables: Optional[Dict[str, Any]] = None,
+    context: Any | None = None,
+    variables: dict[str, Any] | None = None,
     auto_find: bool = False,
-    base_tool_class: Optional[type] = None,
+    base_tool_class: type | None = None,
     *,
     strip_platform_imports: bool = True,
 ) -> Callable[..., Any]:
@@ -82,8 +83,8 @@ def compile_function(
 
 async def safe_eval(
     code: str,
-    state: "ExecutionState",
-    context: Optional[Any] = None,
+    state: ExecutionState,
+    context: Any | None = None,
     func_name: str = "run",
 ) -> Any:
     """Безопасно выполняет inline код ноды."""

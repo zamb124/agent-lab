@@ -4,7 +4,7 @@ HTTP и JSON-RPC эндпоинты A2A для flows (a2a-sdk).
 """
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from a2a.types import (
     DeleteTaskPushNotificationConfigParams,
@@ -38,7 +38,7 @@ JsonDict = dict[str, Any]
 JsonRpcId = str | int
 
 
-def _embed_session_branch_from_token_metadata(metadata: Dict[str, Any]) -> str | None:
+def _embed_session_branch_from_token_metadata(metadata: dict[str, Any]) -> str | None:
     if not isinstance(metadata, dict):
         return None
     b = metadata.get("embed_branch_id")
@@ -47,7 +47,7 @@ def _embed_session_branch_from_token_metadata(metadata: Dict[str, Any]) -> str |
     return None
 
 
-def _metadata_effective_branch(metadata: Dict[str, Any] | None) -> str | None:
+def _metadata_effective_branch(metadata: dict[str, Any] | None) -> str | None:
     if not isinstance(metadata, dict):
         return None
     b = metadata.get("branch")
@@ -116,7 +116,7 @@ A2A_METHODS = {
 _STREAM_METHODS = {"message/stream", "tasks/resubscribe"}
 
 
-def _is_embed_session_token(token_data: Optional[TokenData]) -> bool:
+def _is_embed_session_token(token_data: TokenData | None) -> bool:
     return token_data is not None and token_data.token_type == TokenType.EMBED_SESSION
 
 
@@ -136,7 +136,7 @@ return n
 """
 
 
-def _a2a_message_context_id(params_dict: Dict[str, Any]) -> str:
+def _a2a_message_context_id(params_dict: dict[str, Any]) -> str:
     msg = params_dict.get("message")
     if not isinstance(msg, dict):
         return ""
@@ -152,9 +152,9 @@ async def _embed_session_guest_turn_limit_error(
     container: FlowContainer,
     token_data: TokenData,
     embed_target: EmbedTarget | None,
-    method: Optional[str],
-    params_dict: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
+    method: str | None,
+    params_dict: dict[str, Any],
+) -> dict[str, Any] | None:
     if method not in {"message/send", "message/stream"}:
         return None
     if embed_target is None or not embed_target.embed_id.strip():
@@ -215,9 +215,9 @@ def _validate_embed_session_request(
     embed_id: str | None,
     flow_id: str,
     method: str,
-    params_dict: Dict[str, Any],
+    params_dict: dict[str, Any],
     expected_branch_id: str | None = None,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Проверяет claims embed-session токена для A2A вызова."""
     metadata = token_data.metadata if isinstance(token_data.metadata, dict) else {}
     embed_token_id = metadata.get("embed_id")
@@ -285,8 +285,8 @@ def _sse_error_response(rpc_id: JsonRpcId | None, code: int, message: str) -> St
 
 
 async def _get_flow_config(
-    flow_id: str, container: FlowContainer, version: Optional[str] = None,
-) -> Optional[FlowConfig]:
+    flow_id: str, container: FlowContainer, version: str | None = None,
+) -> FlowConfig | None:
     """
     Получает конфигурацию агента.
 
@@ -332,8 +332,8 @@ async def get_agent_card_well_known(
     flow_id: str,
     request: Request,
     container: ContainerDep,
-    v: Optional[str] = None,
-) -> Dict[str, Any]:
+    v: str | None = None,
+) -> dict[str, Any]:
     """
     Agent Card по well-known URL.
 
@@ -358,8 +358,8 @@ async def get_agent_card(
     flow_id: str,
     request: Request,
     container: ContainerDep,
-    v: Optional[str] = None,
-) -> Dict[str, Any]:
+    v: str | None = None,
+) -> dict[str, Any]:
     """
     Agent Card по A2A спецификации - GET на URL агента.
 
@@ -413,7 +413,7 @@ async def _json_rpc_handler_internal(
     flow_id: str,
     request: Request,
     container: ContainerDep,
-    v: Optional[str] = None,
+    v: str | None = None,
     embed_target: EmbedTarget | None = None,
 ):
     """
@@ -465,7 +465,7 @@ async def _json_rpc_handler_internal(
 
     _raw_params = body.get("params")
     if _raw_params is None:
-        params_dict: Dict[str, Any] = {}
+        params_dict: dict[str, Any] = {}
     elif isinstance(_raw_params, dict):
         params_dict = dict(_raw_params)
     else:
@@ -707,7 +707,7 @@ async def json_rpc_handler(
     flow_id: str,
     request: Request,
     container: ContainerDep,
-    v: Optional[str] = None,
+    v: str | None = None,
 ):
     return await _json_rpc_handler_internal(
         flow_id=flow_id,
@@ -722,7 +722,7 @@ async def json_rpc_embed_handler(
     embed_id: str,
     request: Request,
     container: ContainerDep,
-    v: Optional[str] = None,
+    v: str | None = None,
 ):
     embed_target = await resolve_embed_target(container, embed_id)
     if embed_target is None:
@@ -753,7 +753,7 @@ async def json_rpc_embed_handler(
 
 
 @router.get("/{flow_id}/branches")
-async def list_branches(flow_id: str, container: ContainerDep) -> List[Dict[str, Any]]:
+async def list_branches(flow_id: str, container: ContainerDep) -> list[dict[str, Any]]:
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=container)
     config = await _get_flow_config(flow_id, container)
@@ -763,7 +763,7 @@ async def list_branches(flow_id: str, container: ContainerDep) -> List[Dict[str,
 
 
 @router.get("/{flow_id}/branches/{branch_id}")
-async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> Dict[str, Any]:
+async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> dict[str, Any]:
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=container)
     config = await _get_flow_config(flow_id, container)
@@ -777,7 +777,7 @@ async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> D
 
 
 @router.get("/{flow_id}/branches/{branch_id}/tools")
-async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep) -> List[Dict[str, Any]]:
+async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep) -> list[dict[str, Any]]:
     """Получить список tools для ветки с полной информацией."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=container)
@@ -795,7 +795,7 @@ async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep
 
 
 @router.get("/{flow_id}/schema")
-async def get_branch_schema(flow_id: str, container: ContainerDep) -> Dict[str, Any]:
+async def get_branch_schema(flow_id: str, container: ContainerDep) -> dict[str, Any]:
     """Получить JSON Schema для создания ветки в формате ISchema."""
     _ = container
     context = get_context()
@@ -843,7 +843,7 @@ async def create_branch(flow_id: str, request: Request, container: ContainerDep)
 
 
 @router.put("/{flow_id}/branches/{branch_id}")
-async def update_branch(flow_id: str, branch_id: str, request: Request, container: ContainerDep) -> Dict[str, Any]:
+async def update_branch(flow_id: str, branch_id: str, request: Request, container: ContainerDep) -> dict[str, Any]:
     """Обновить существующую ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=container)
@@ -875,7 +875,7 @@ async def update_branch(flow_id: str, branch_id: str, request: Request, containe
 
 
 @router.delete("/{flow_id}/branches/{branch_id}")
-async def delete_branch(flow_id: str, branch_id: str, container: ContainerDep) -> Dict[str, Any]:
+async def delete_branch(flow_id: str, branch_id: str, container: ContainerDep) -> dict[str, Any]:
     """Удалить ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=container)

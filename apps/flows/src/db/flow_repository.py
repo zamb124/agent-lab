@@ -8,7 +8,6 @@
 
 import json
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
 
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
@@ -70,7 +69,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         # Сохраняем версию в flows_versions
         version_key = self._get_key(f"{flow_id}_v{new_version}")
         final_version_key = self._build_final_key(version_key)
-        await self._storage._set_with_table(final_version_key, data, self._get_versions_table())
+        await self._storage.set_with_table(final_version_key, data, self._get_versions_table())
 
         # Сохраняем актуальный конфиг в flows
         await super().set(entity)
@@ -78,25 +77,25 @@ class FlowRepository(BaseRepository[FlowConfig]):
         logger.info(f"Flow '{flow_id}' saved as version {new_version}")
         return True
 
-    async def get(self, entity_id: str) -> Optional[FlowConfig]:
+    async def get(self, entity_id: str) -> FlowConfig | None:
         """Получает последнюю версию агента."""
         return await self.get_latest(entity_id)
 
-    async def get_latest(self, flow_id: str) -> Optional[FlowConfig]:
+    async def get_latest(self, flow_id: str) -> FlowConfig | None:
         """
         Получает последнюю версию из таблицы flows.
         """
         base_key = self._get_key(flow_id)
         final_key = self._build_final_key(base_key)
         table_name = self._get_table_name()
-        data = await self._storage._get_with_session_and_table(final_key, table_name)
+        data = await self._storage.get_with_session_and_table(final_key, table_name)
         if data is None:
             return None
         return _flow_config_from_storage_json(data)
 
     async def get_latest_by_flow_id_unscoped(
         self, flow_id: str
-    ) -> Optional[tuple[FlowConfig, str]]:
+    ) -> tuple[FlowConfig, str] | None:
         """
         Ищет актуальный flow по flow_id по всем ключам company:*:flow:* без контекста компании.
 
@@ -104,7 +103,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         Возвращает (config, company_identifier) — идентификатор сегмента company:* из ключа.
         """
         table_name = self._get_table_name()
-        all_data = await self._storage._get_all_by_prefix_and_table(
+        all_data = await self._storage.get_all_by_prefix_and_table(
             "company:", table_name, 10_000, 0
         )
         for key, raw in all_data.items():
@@ -121,26 +120,26 @@ class FlowRepository(BaseRepository[FlowConfig]):
             return (_flow_config_from_storage_json(raw), company_identifier)
         return None
 
-    async def get_version(self, flow_id: str, version: str) -> Optional[FlowConfig]:
+    async def get_version(self, flow_id: str, version: str) -> FlowConfig | None:
         """
         Получает конкретную версию из flows_versions.
         """
         version_key = self._get_key(f"{flow_id}_v{version}")
         final_version_key = self._build_final_key(version_key)
-        data = await self._storage._get_with_session_and_table(final_version_key, self._get_versions_table())
+        data = await self._storage.get_with_session_and_table(final_version_key, self._get_versions_table())
 
         if not data:
             return None
 
         return _flow_config_from_storage_json(data)
 
-    async def list_versions(self, flow_id: str) -> List[str]:
+    async def list_versions(self, flow_id: str) -> list[str]:
         """
         Список всех версий (от новых к старым) из flows_versions.
         """
         prefix = self._get_key(f"{flow_id}_v")
         final_prefix = self._build_final_key(prefix)
-        all_data = await self._storage._get_all_by_prefix_and_table(final_prefix, self._get_versions_table(), 1000)
+        all_data = await self._storage.get_all_by_prefix_and_table(final_prefix, self._get_versions_table(), 1000)
 
         versions = []
         for key in all_data.keys():
@@ -152,13 +151,13 @@ class FlowRepository(BaseRepository[FlowConfig]):
 
         return sorted(versions, reverse=True)
 
-    async def get_many(self, entity_ids: List[str]) -> Dict[str, FlowConfig]:
+    async def get_many(self, entity_ids: list[str]) -> dict[str, FlowConfig]:
         if not entity_ids:
             return {}
         table_name = self._get_table_name()
         final_keys = [self._build_final_key(self._get_key(eid)) for eid in entity_ids]
-        all_data = await self._storage._get_many_with_table(final_keys, table_name)
-        result: Dict[str, FlowConfig] = {}
+        all_data = await self._storage.get_many_with_table(final_keys, table_name)
+        result: dict[str, FlowConfig] = {}
         for i, entity_id in enumerate(entity_ids):
             final_key = final_keys[i]
             if final_key in all_data:
@@ -172,11 +171,11 @@ class FlowRepository(BaseRepository[FlowConfig]):
         """Страница flow (последние версии). Читает из таблицы flows."""
         base_prefix = self._get_prefix()
         final_prefix = self._build_final_key(base_prefix)
-        all_data = await self._storage._get_all_by_prefix_and_table(
+        all_data = await self._storage.get_all_by_prefix_and_table(
             final_prefix, self._get_table_name(), limit, offset
         )
 
-        items: List[FlowConfig] = []
+        items: list[FlowConfig] = []
         for key, value in all_data.items():
             try:
                 cfg = _flow_config_from_storage_json(value)
@@ -204,12 +203,12 @@ class FlowRepository(BaseRepository[FlowConfig]):
         if current:
             row_key = self._get_key(flow_id)
             final_flow_key = self._build_final_key(row_key)
-            await self._storage._delete_with_table(final_flow_key, self._get_table_name())
+            await self._storage.delete_with_table(final_flow_key, self._get_table_name())
 
         for version in versions:
             version_key = self._get_key(f"{flow_id}_v{version}")
             final_version_key = self._build_final_key(version_key)
-            await self._storage._delete_with_table(final_version_key, self._get_versions_table())
+            await self._storage.delete_with_table(final_version_key, self._get_versions_table())
 
         logger.info(f"Flow '{flow_id}' deleted with {len(versions)} versions")
         return True
@@ -227,7 +226,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         data = snapshot.model_dump_json()
         key = self._get_key(flow_id)
         final_key = self._build_final_key(key)
-        await self._storage._set_with_table(final_key, data, self._get_table_name())
+        await self._storage.set_with_table(final_key, data, self._get_table_name())
 
         logger.info(f"Flow '{flow_id}' rolled back to version {version}")
         return True

@@ -2,7 +2,6 @@
 Репозиторий для MCP серверов.
 """
 
-from typing import List, Optional
 
 from apps.flows.src.models.mcp import MCPServerConfig
 from core.db import BaseRepository, Storage
@@ -33,11 +32,11 @@ class MCPServerRepository(BaseRepository[MCPServerConfig]):
     def _extract_entity_id(self, entity: MCPServerConfig) -> str:
         return entity.server_id
 
-    async def list_active(self) -> List[MCPServerConfig]:
+    async def list_active(self) -> list[MCPServerConfig]:
         """Возвращает только активные серверы."""
         all_servers = await self.list(limit=1000)
         return [s for s in all_servers if s.is_active]
 
-    async def get_by_id(self, server_id: str) -> Optional[MCPServerConfig]:
+    async def get_by_id(self, server_id: str) -> MCPServerConfig | None:
         """Получает сервер по ID."""
         return await self.get(server_id)

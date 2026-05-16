@@ -2,6 +2,8 @@
 API для работы с вложениями (attachments).
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from apps.crm.dependencies import ContainerDep
@@ -13,7 +15,7 @@ router = APIRouter(tags=["Attachments"])
 async def upload_attachment(
     entity_id: str,
     container: ContainerDep,
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File()],
 ):
     """Загрузить вложение для entity"""
     if file.filename is None or not file.filename.strip():
@@ -35,9 +37,7 @@ async def list_attachments(
     container: ContainerDep,
 ):
     """Получить список вложений entity"""
-    attachments = await container.attachment_service.get_attachments(
-        entity_id=entity_id
-    )
+    attachments = await container.attachment_service.get_attachments(entity_id=entity_id)
     return attachments
 
 
@@ -49,8 +49,7 @@ async def delete_attachment(
 ):
     """Удалить вложение"""
     success = await container.attachment_service.remove_attachment(
-        entity_id=entity_id,
-        document_id=attachment_id
+        entity_id=entity_id, document_id=attachment_id
     )
 
     if not success:

@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 from apps.flows.src.eval.import_policy import (
     filtered_namespace_import_roots,
@@ -65,7 +66,7 @@ class PythonCompiler:
 
     def __init__(
         self,
-        namespace_builder: Optional[PythonNamespaceBuilder] = None,
+        namespace_builder: PythonNamespaceBuilder | None = None,
         *,
         strip_platform_imports: bool = True,
     ):

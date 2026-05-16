@@ -5,7 +5,7 @@ read_file — чтение вложений; create_file — FileWriter() + crea
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -64,7 +64,7 @@ file_size, checksum (если есть), is_public.
 
 
 def _read_file_mock(args: JsonDict, state: Any = None) -> JsonDict:
-    def _pick(entries: List[JsonDict], name: Any) -> Optional[JsonDict]:
+    def _pick(entries: list[JsonDict], name: Any) -> JsonDict | None:
         if not entries:
             return None
         if not name:
@@ -119,7 +119,7 @@ def _read_file_mock(args: JsonDict, state: Any = None) -> JsonDict:
 class ReadFileArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    file_name: Optional[str] = Field(
+    file_name: str | None = Field(
         None,
         description="Имя вложения как в state.files[].name; не передавай — будет взято последнее вложение в списке (обычно последняя загрузка пользователя).",
     )
@@ -127,7 +127,7 @@ class ReadFileArgs(BaseModel):
         False,
         description="Включать ли картинки/вложения из PDF в ответ как base64 (увеличивает размер ответа).",
     )
-    vision_prompt: Optional[str] = Field(
+    vision_prompt: str | None = Field(
         None,
         description="Для изображений: инструкция для vision-анализа содержимого.",
     )
@@ -165,13 +165,13 @@ class CreateFileArgs(BaseModel):
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def read_file(
-    file_name: Optional[str] = None,
+    file_name: str | None = None,
     include_asset_bytes: bool = False,
-    vision_prompt: Optional[str] = None,
+    vision_prompt: str | None = None,
     *,
     state: ExecutionState,
 ) -> JsonDict:
-    def _pick_file(files_list: List[Dict[str, Any]], name: Optional[str]) -> Optional[Dict[str, Any]]:
+    def _pick_file(files_list: list[dict[str, Any]], name: str | None) -> dict[str, Any] | None:
         if not files_list:
             return None
         if not name:

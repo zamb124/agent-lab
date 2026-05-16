@@ -18,17 +18,17 @@ class AccessGrantService:
     def __init__(
         self,
         grant_repo: AccessGrantRepository,
-        entity_repo: EntityRepository
-    ):
-        self._grant_repo = grant_repo
-        self._entity_repo = entity_repo
+        entity_repo: EntityRepository,
+    ) -> None:
+        self._grant_repo: AccessGrantRepository = grant_repo
+        self._entity_repo: EntityRepository = entity_repo
 
     # === ENTITY GRANTS ===
 
     async def grant_entity_public(
         self,
         entity_id: str,
-        created_by: str
+        created_by: str,
     ) -> AccessGrant:
         """Сделать entity публичной"""
 
@@ -50,10 +50,10 @@ class AccessGrantService:
             resource_type="entity",
             resource_id=entity_id,
             grant_type="public",
-            role="viewer"
+            role="viewer",
         )
 
-        await self._grant_repo.create(grant)
+        grant = await self._grant_repo.create(grant)
         logger.info(f"Entity {entity_id} made public by {created_by}")
         return grant
 
@@ -62,7 +62,7 @@ class AccessGrantService:
         entity_id: str,
         target_user_id: str,
         role: str,
-        created_by: str
+        created_by: str,
     ) -> AccessGrant:
         """Пошерить entity конкретному user"""
 
@@ -84,10 +84,10 @@ class AccessGrantService:
             resource_id=entity_id,
             grant_type="user",
             target_user_id=target_user_id,
-            role=role
+            role=role,
         )
 
-        await self._grant_repo.create(grant)
+        grant = await self._grant_repo.create(grant)
         logger.info(f"Entity {entity_id} shared with user {target_user_id} (role={role})")
         return grant
 
@@ -96,7 +96,7 @@ class AccessGrantService:
         entity_id: str,
         target_company_id: str,
         role: str,
-        created_by: str
+        created_by: str,
     ) -> AccessGrant:
         """Пошерить entity целой компании"""
 
@@ -118,10 +118,10 @@ class AccessGrantService:
             resource_id=entity_id,
             grant_type="company",
             target_company_id=target_company_id,
-            role=role
+            role=role,
         )
 
-        await self._grant_repo.create(grant)
+        grant = await self._grant_repo.create(grant)
         logger.info(f"Entity {entity_id} shared with company {target_company_id} (role={role})")
         return grant
 
@@ -131,7 +131,7 @@ class AccessGrantService:
         self,
         namespace: str,
         company_id: str,
-        created_by: str
+        created_by: str,
     ) -> AccessGrant:
         """Сделать весь namespace публичным"""
 
@@ -142,10 +142,10 @@ class AccessGrantService:
             resource_type="namespace",
             resource_id=namespace,
             grant_type="public",
-            role="viewer"
+            role="viewer",
         )
 
-        await self._grant_repo.create(grant)
+        grant = await self._grant_repo.create(grant)
         logger.info(f"Namespace {namespace} made public by {created_by}")
         return grant
 
@@ -155,7 +155,7 @@ class AccessGrantService:
         company_id: str,
         target_user_id: str,
         role: str,
-        created_by: str
+        created_by: str,
     ) -> AccessGrant:
         """Пошерить namespace конкретному user"""
 
@@ -167,10 +167,10 @@ class AccessGrantService:
             resource_id=namespace,
             grant_type="user",
             target_user_id=target_user_id,
-            role=role
+            role=role,
         )
 
-        await self._grant_repo.create(grant)
+        grant = await self._grant_repo.create(grant)
         logger.info(f"Namespace {namespace} shared with user {target_user_id} (role={role})")
         return grant
 
@@ -180,7 +180,7 @@ class AccessGrantService:
         company_id: str,
         target_company_id: str,
         role: str,
-        created_by: str
+        created_by: str,
     ) -> AccessGrant:
         """Пошерить namespace целой компании"""
 
@@ -192,10 +192,10 @@ class AccessGrantService:
             resource_id=namespace,
             grant_type="company",
             target_company_id=target_company_id,
-            role=role
+            role=role,
         )
 
-        await self._grant_repo.create(grant)
+        grant = await self._grant_repo.create(grant)
         logger.info(f"Namespace {namespace} shared with company {target_company_id} (role={role})")
         return grant
 
@@ -204,7 +204,7 @@ class AccessGrantService:
     async def revoke_grant(
         self,
         grant_id: str,
-        user_id: str
+        user_id: str,
     ) -> bool:
         """Отозвать grant"""
 
@@ -215,7 +215,9 @@ class AccessGrantService:
         if grant.created_by != user_id:
             raise PermissionError("Only creator can revoke")
 
-        await self._grant_repo.delete(grant_id)
+        deleted = await self._grant_repo.delete(grant_id)
+        if not deleted:
+            raise ValueError("Grant delete failed")
         logger.info(f"Grant {grant_id} revoked by {user_id}")
         return True
 
@@ -225,7 +227,9 @@ class AccessGrantService:
         resource_id: str,
         resource_company_id: str | None = None,
     ) -> list[AccessGrant]:
-        return await self._grant_repo.find_by_resource(resource_type, resource_id, resource_company_id)
+        return await self._grant_repo.find_by_resource(
+            resource_type, resource_id, resource_company_id
+        )
 
     async def count_grants(
         self,
@@ -233,7 +237,9 @@ class AccessGrantService:
         resource_id: str,
         resource_company_id: str | None = None,
     ) -> int:
-        return await self._grant_repo.count_by_resource(resource_type, resource_id, resource_company_id)
+        return await self._grant_repo.count_by_resource(
+            resource_type, resource_id, resource_company_id
+        )
 
     async def get_grant(self, grant_id: str) -> AccessGrant:
         """Получить grant по ID"""
@@ -241,4 +247,3 @@ class AccessGrantService:
         if not grant:
             raise ValueError("Grant not found")
         return grant
-

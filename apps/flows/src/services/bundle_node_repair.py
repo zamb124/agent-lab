@@ -10,7 +10,7 @@ import json
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import yaml
 
@@ -22,7 +22,7 @@ _FLOWS_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @lru_cache(maxsize=1)
-def _registry_flow_to_bundle() -> Dict[str, str]:
+def _registry_flow_to_bundle() -> dict[str, str]:
     """
     flow_id (из flow.json) -> bundle_id по registry.yaml.
     """
@@ -34,7 +34,7 @@ def _registry_flow_to_bundle() -> Dict[str, str]:
     entries = data.get("flows")
     if not isinstance(entries, list):
         return {}
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     for entry in entries:
         if isinstance(entry, str):
             bundle_id = entry
@@ -56,7 +56,7 @@ def _registry_flow_to_bundle() -> Dict[str, str]:
 
 
 @lru_cache(maxsize=64)
-def _bundle_top_level_nodes(flow_id: str) -> Optional[Dict[str, Any]]:
+def _bundle_top_level_nodes(flow_id: str) -> dict[str, Any] | None:
     bmap = _registry_flow_to_bundle()
     bundle_id = bmap.get(flow_id)
     if not bundle_id:
@@ -72,14 +72,14 @@ def _bundle_top_level_nodes(flow_id: str) -> Optional[Dict[str, Any]]:
     return nodes
 
 
-def get_bundle_base_nodes_for_flow(flow_id: str) -> Optional[Dict[str, Any]]:
+def get_bundle_base_nodes_for_flow(flow_id: str) -> dict[str, Any] | None:
     """Секция ``nodes`` из flow.json bundle для flow_id (если flow зарегистрирован)."""
     return _bundle_top_level_nodes(flow_id)
 
 
 def repair_effective_nodes_from_bundle(
-    flow_id: str, source: Optional[str], nodes: Dict[str, Any]
-) -> Dict[str, Any]:
+    flow_id: str, source: str | None, nodes: dict[str, Any]
+) -> dict[str, Any]:
     """
     Для source=file: подмешивает в «пустые» (только canvas) ноды конфиг из bundle flow.json.
     """
@@ -92,9 +92,9 @@ def repair_effective_nodes_from_bundle(
 
 
 def repair_node_map_with_canonical_top_level(
-    nodes: Dict[str, Any], canonical: Dict[str, Any]
-) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
+    nodes: dict[str, Any], canonical: dict[str, Any]
+) -> dict[str, Any]:
+    out: dict[str, Any] = {}
     for node_id, cfg in nodes.items():
         if not node_config_is_canvas_placement_only(cfg):
             out[node_id] = deepcopy(cfg) if isinstance(cfg, dict) else cfg

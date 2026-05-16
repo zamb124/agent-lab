@@ -23,13 +23,15 @@ from core.models.i18n_models import (
 )
 
 logger = get_logger(__name__)
+
+
 class TranslationManager:
     """
     Центральный менеджер переводов.
     Управляет загрузкой, генерацией и предоставлением переводов.
     """
 
-    _instance: Optional['TranslationManager'] = None
+    _instance: Optional["TranslationManager"] = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -58,6 +60,7 @@ class TranslationManager:
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
+
                 def load_in_thread():
                     new_loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(new_loop)
@@ -76,13 +79,14 @@ class TranslationManager:
             # Если нет цикла событий, создаем новый
             asyncio.run(self._load_existing_translations())
 
-
     async def _load_existing_translations(self):
         """Загружает существующие переводы при создании экземпляра"""
         try:
             await self._ensure_directories()
             await self._load_translations()
-            logger.debug(f"Загружено переводов: {sum(len(t) for t in self._translations_cache.values())} ключей")
+            logger.debug(
+                f"Загружено переводов: {sum(len(t) for t in self._translations_cache.values())} ключей"
+            )
         except Exception as e:
             logger.debug(f"Ошибка загрузки переводов: {e}")
 
@@ -118,7 +122,7 @@ class TranslationManager:
         directories = [
             self.translations_dir / "translations",
             self.translations_dir / "keys",
-            self.translations_dir / "generated"
+            self.translations_dir / "generated",
         ]
 
         for directory in directories:
@@ -136,7 +140,9 @@ class TranslationManager:
                 try:
                     translations = await self._load_modular_translations(lang_dir)
                     self._translations_cache[language] = translations
-                    logger.debug(f"Загружено {len(translations)} переводов для языка {language.value} (модульная структура)")
+                    logger.debug(
+                        f"Загружено {len(translations)} переводов для языка {language.value} (модульная структура)"
+                    )
                 except Exception as e:
                     logger.error(f"Ошибка загрузки модульных переводов для {language.value}: {e}")
                     self._translations_cache[language] = {}
@@ -145,15 +151,19 @@ class TranslationManager:
                 old_file_path = translations_path / f"{language.value}.json"
                 if old_file_path.exists():
                     try:
-                        with open(old_file_path, 'r', encoding='utf-8') as f:
+                        with open(old_file_path, "r", encoding="utf-8") as f:
                             data = json.load(f)
 
                         translations = {}
                         self._extract_nested_translations(data, translations, prefix="")
-                        translations = {k: v for k, v in translations.items() if not k.startswith("meta.")}
+                        translations = {
+                            k: v for k, v in translations.items() if not k.startswith("meta.")
+                        }
 
                         self._translations_cache[language] = translations
-                        logger.debug(f"Загружено {len(translations)} переводов для языка {language.value} (монолитная структура)")
+                        logger.debug(
+                            f"Загружено {len(translations)} переводов для языка {language.value} (монолитная структура)"
+                        )
                     except Exception as e:
                         logger.error(f"Ошибка загрузки переводов для {language.value}: {e}")
                         self._translations_cache[language] = {}
@@ -173,7 +183,7 @@ class TranslationManager:
 
             module_name = json_file.stem
             try:
-                with open(json_file, 'r', encoding='utf-8') as f:
+                with open(json_file, "r", encoding="utf-8") as f:
                     module_data = json.load(f)
 
                 # Добавляем переводы с префиксом модуля
@@ -190,11 +200,13 @@ class TranslationManager:
 
                 model_name = json_file.stem
                 try:
-                    with open(json_file, 'r', encoding='utf-8') as f:
+                    with open(json_file, "r", encoding="utf-8") as f:
                         model_data = json.load(f)
 
                     # Добавляем переводы с префиксом models.model_name
-                    self._extract_nested_translations(model_data, translations, prefix=f"models.{model_name}")
+                    self._extract_nested_translations(
+                        model_data, translations, prefix=f"models.{model_name}"
+                    )
                 except Exception as e:
                     logger.warning(f"Ошибка загрузки модели {json_file}: {e}")
 
@@ -248,7 +260,7 @@ class TranslationManager:
     async def _scan_python_file(self, file_path: Path):
         """Сканирует Python файл для поиска Field() с title, description и т.д."""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             # Парсим AST
@@ -262,7 +274,9 @@ class TranslationManager:
                     # Ищем поля с аннотациями
                     for field_node in node.body:
                         if isinstance(field_node, ast.AnnAssign) and field_node.value:
-                            field_name = field_node.target.id if hasattr(field_node.target, 'id') else None
+                            field_name = (
+                                field_node.target.id if hasattr(field_node.target, "id") else None
+                            )
 
                             if field_name and isinstance(field_node.value, ast.Call):
                                 # Извлекаем параметры Field()
@@ -270,15 +284,21 @@ class TranslationManager:
 
                                 # Создаем ключи для title, description, placeholder
                                 for param_name, param_value in field_params.items():
-                                    if param_name in ['title', 'description', 'placeholder', 'help_text'] and param_value:
-                                        key = f"models.{model_name}.fields.{field_name}.{param_name}"
+                                    if (
+                                        param_name
+                                        in ["title", "description", "placeholder", "help_text"]
+                                        and param_value
+                                    ):
+                                        key = (
+                                            f"models.{model_name}.fields.{field_name}.{param_name}"
+                                        )
 
                                         self._discovered_keys[key] = TranslationKey(
                                             key=key,
                                             context=f"Model {node.name}, field {field_name}, parameter {param_name}",
                                             source_file=str(file_path),
                                             default_value=param_value,
-                                            category="models"
+                                            category="models",
                                         )
 
         except Exception as e:
@@ -287,9 +307,9 @@ class TranslationManager:
     def _is_pydantic_model(self, node: ast.ClassDef) -> bool:
         """Проверяет, является ли класс наследником BaseModel"""
         for base in node.bases:
-            if isinstance(base, ast.Name) and base.id in ['BaseModel']:
+            if isinstance(base, ast.Name) and base.id in ["BaseModel"]:
                 return True
-            elif isinstance(base, ast.Attribute) and base.attr in ['BaseModel']:
+            elif isinstance(base, ast.Attribute) and base.attr in ["BaseModel"]:
                 return True
         return False
 
@@ -297,10 +317,10 @@ class TranslationManager:
         """Извлекает параметры из вызова Field()"""
         params = {}
 
-        if isinstance(call_node.func, ast.Name) and call_node.func.id == 'Field':
+        if isinstance(call_node.func, ast.Name) and call_node.func.id == "Field":
             # Извлекаем keyword arguments
             for keyword in call_node.keywords:
-                if keyword.arg in ['title', 'description', 'placeholder', 'help_text']:
+                if keyword.arg in ["title", "description", "placeholder", "help_text"]:
                     if isinstance(keyword.value, ast.Constant):
                         params[keyword.arg] = str(keyword.value.value)
 
@@ -310,10 +330,7 @@ class TranslationManager:
         """Сканирует HTML шаблоны для поиска вызовов t() и других функций перевода"""
         logger.debug("Сканирование HTML шаблонов...")
 
-        template_dirs = [
-            Path("apps/frontend/shared/templates"),
-            Path("apps/frontend/modules")
-        ]
+        template_dirs = [Path("apps/frontend/shared/templates"), Path("apps/frontend/modules")]
 
         for template_dir in template_dirs:
             if template_dir.exists():
@@ -326,7 +343,7 @@ class TranslationManager:
     async def _scan_html_file(self, file_path: Path):
         """Сканирует HTML файл для поиска вызовов функций перевода"""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             # Ищем вызовы t('key') и t("key") - только как вызов функции
@@ -341,7 +358,7 @@ class TranslationManager:
                         context="HTML template function call",
                         source_file=str(file_path),
                         default_value="",  # Пустое значение по умолчанию, чтобы не заменять существующие переводы
-                        category="templates"
+                        category="templates",
                     )
 
         except Exception as e:
@@ -364,14 +381,14 @@ class TranslationManager:
     async def _scan_js_file(self, file_path: Path):
         """Сканирует JS файл для поиска вызовов функций перевода"""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             # Ищем различные паттерны вызовов
             patterns = [
                 r'app\.i18n\.t\([\'"]([^\'"]+)[\'"]\)',  # app.i18n.t('key')
-                r'\.t\([\'"]([^\'"]+)[\'"]\)',            # .t('key')
-                r'i18n\.t\([\'"]([^\'"]+)[\'"]\)'         # i18n.t('key')
+                r'\.t\([\'"]([^\'"]+)[\'"]\)',  # .t('key')
+                r'i18n\.t\([\'"]([^\'"]+)[\'"]\)',  # i18n.t('key')
             ]
 
             for pattern in patterns:
@@ -385,7 +402,7 @@ class TranslationManager:
                             context="JavaScript function call",
                             source_file=str(file_path),
                             default_value=key,
-                            category="frontend"
+                            category="frontend",
                         )
 
         except Exception as e:
@@ -420,7 +437,7 @@ class TranslationManager:
 
         for key, translation_key in self._discovered_keys.items():
             # Определяем модуль по ключу
-            parts = key.split('.')
+            parts = key.split(".")
             if len(parts) < 2 or parts[0] == "":
                 module_name = "misc"
                 relative_key = key
@@ -429,11 +446,11 @@ class TranslationManager:
                 if len(parts) < 2:
                     continue
                 module_name = f"models/{parts[1]}"
-                relative_key = '.'.join(parts[2:]) if len(parts) > 2 else parts[1]
+                relative_key = ".".join(parts[2:]) if len(parts) > 2 else parts[1]
             else:
                 # common.save -> common.json, key: save
                 module_name = parts[0]
-                relative_key = '.'.join(parts[1:])
+                relative_key = ".".join(parts[1:])
 
             if module_name not in modules_data:
                 modules_data[module_name] = {}
@@ -459,7 +476,7 @@ class TranslationManager:
 
             # Загружаем существующий модуль
             if file_path.exists():
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     module_data = json.load(f)
             else:
                 module_data = {}
@@ -472,7 +489,7 @@ class TranslationManager:
                     updated = True
 
             if updated:
-                with open(file_path, 'w', encoding='utf-8') as f:
+                with open(file_path, "w", encoding="utf-8") as f:
                     json.dump(module_data, f, ensure_ascii=False, indent=2)
                 logger.info(
                     "i18n.module_updated",
@@ -485,7 +502,7 @@ class TranslationManager:
 
         # Загружаем существующий файл или создаем новый
         if file_path.exists():
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         else:
             data = {
@@ -495,7 +512,7 @@ class TranslationManager:
                     "last_updated": datetime.now().isoformat(),
                     "completeness": 0,
                     "total_keys": 0,
-                    "translated_keys": 0
+                    "translated_keys": 0,
                 }
             }
 
@@ -518,17 +535,23 @@ class TranslationManager:
             # Подсчитываем статистику
             all_translations = {}
             self._extract_nested_translations(data, all_translations)
-            all_translations = {k: v for k, v in all_translations.items() if not k.startswith("meta.")}
+            all_translations = {
+                k: v for k, v in all_translations.items() if not k.startswith("meta.")
+            }
 
             total_keys = len(all_translations)
-            translated_keys = sum(1 for v in all_translations.values() if not str(v).startswith("[TODO:"))
+            translated_keys = sum(
+                1 for v in all_translations.values() if not str(v).startswith("[TODO:")
+            )
 
             data["meta"]["total_keys"] = total_keys
             data["meta"]["translated_keys"] = translated_keys
-            data["meta"]["completeness"] = (translated_keys / total_keys * 100) if total_keys > 0 else 0
+            data["meta"]["completeness"] = (
+                (translated_keys / total_keys * 100) if total_keys > 0 else 0
+            )
 
             # Сохраняем файл
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
 
             logger.info(
@@ -540,7 +563,7 @@ class TranslationManager:
 
     def _key_exists_in_data(self, key: str, data: dict) -> bool:
         """Проверяет существование ключа в данных"""
-        keys = key.split('.')
+        keys = key.split(".")
         current = data
 
         for k in keys:
@@ -553,7 +576,7 @@ class TranslationManager:
 
     def _set_nested_key(self, data: dict, key: str, value: str):
         """Устанавливает значение по вложенному ключу"""
-        keys = key.split('.')
+        keys = key.split(".")
         current = data
 
         # Проходим по всем частям ключа кроме последней
@@ -589,12 +612,12 @@ class TranslationManager:
 
                 # Сохраняем в static директорию
                 static_js_file = frontend_static_path / f"{language.value}.js"
-                with open(static_js_file, 'w', encoding='utf-8') as f:
+                with open(static_js_file, "w", encoding="utf-8") as f:
                     f.write(js_content)
 
         logger.debug(f"Сгенерированы JS модули для {len(Language)} языков")
 
-    def t(self, key: str, language: Language = None, **kwargs) -> str:
+    def t(self, key: str, language: Language | None = None, **kwargs: object) -> str:
         """
         Основная функция перевода
 
@@ -645,23 +668,27 @@ class TranslationManager:
         for language in Language:
             translations = self._translations_cache.get(language, {})
             total_keys = len(translations)
-            translated_keys = sum(1 for v in translations.values() if not str(v).startswith("[TODO:"))
+            translated_keys = sum(
+                1 for v in translations.values() if not str(v).startswith("[TODO:")
+            )
 
             languages_stats[language] = TranslationFile(
                 language=language,
                 total_keys=total_keys,
                 translated_keys=translated_keys,
-                completeness=(translated_keys / total_keys * 100) if total_keys > 0 else 0
+                completeness=(translated_keys / total_keys * 100) if total_keys > 0 else 0,
             )
 
         return TranslationStats(
             total_languages=len(Language),
             total_keys=len(self._translations_cache.get(Language.RU, {})),
-            languages_stats=languages_stats
+            languages_stats=languages_stats,
         )
+
 
 # Глобальный экземпляр менеджера
 _translation_manager: Optional[TranslationManager] = None
+
 
 def get_translation_manager() -> TranslationManager:
     """Получить глобальный экземпляр менеджера переводов"""
@@ -670,7 +697,8 @@ def get_translation_manager() -> TranslationManager:
         _translation_manager = TranslationManager()
     return _translation_manager
 
-def t(key: str, language: Language = None, **kwargs) -> str:
+
+def t(key: str, language: Language | None = None, **kwargs: object) -> str:
     """Глобальная функция перевода"""
     manager = get_translation_manager()
     return manager.t(key, language, **kwargs)
