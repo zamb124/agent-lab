@@ -156,17 +156,17 @@ class ToolRegistry:
         """
         Единая материализация runnable tool.
 
-        Исполнение пользовательского кода идёт только через CodeTool/remote runner.
-        Trusted platform tools из ``BUILTIN_TOOL_SPECS`` — reserved ids и всегда
-        материализуются как процессные FunctionTool, даже если в старом ref остался
-        ``code``. Так platform imports не попадают в sandbox source.
+        Исполнение кода идёт через CodeTool/remote runner, если в ref или
+        tool_repository есть непустое поле ``code``. Builtin ids из
+        ``BUILTIN_TOOL_SPECS`` — только seed/fallback: после загрузки в БД они
+        ведут себя как обычные editable code tools.
 
         Порядок веток:
         1. ``code_mode=mcp_tool`` → MCPTool
-        2. ``tool_id`` из builtin ids → процессный platform tool.
-        3. иначе ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → custom template из ``tool_repository``
-        4. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
-        5. Непустой ``code`` → CodeTool.
+        2. ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → template из ``tool_repository``
+        3. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
+        4. Непустой ``code`` → CodeTool.
+        5. ``tool_id`` из builtin ids без DB/inline code → процессный fallback FunctionTool
         6. ``type=code`` без кода → NodeAsToolWrapper
         7. иначе ValueError
         """
@@ -200,15 +200,7 @@ class ToolRegistry:
             NodeType.HITL_NODE.value,
             "channel",
         )
-
         tid = _tool_lookup_id(ref)
-        if tid and tid in builtin_tool_ids() and not _node_as_tool_kind:
-            if not self._initialized:
-                self.register_builtin_tools()
-            builtin_tool = self.get(tid)
-            if builtin_tool is None:
-                raise ValueError(f"Builtin platform tool '{tid}' is not registered")
-            return builtin_tool
 
         if (
             tid
@@ -249,6 +241,14 @@ class ToolRegistry:
             if not isinstance(code_text, str):
                 raise ValueError(f"Tool 'code' must be str, got {type(code_text)}")
             return self._create_code_tool_from_config(ref)
+
+        if tid and tid in builtin_tool_ids() and not _node_as_tool_kind:
+            if not self._initialized:
+                self.register_builtin_tools()
+            builtin_tool = self.get(tid)
+            if builtin_tool is None:
+                raise ValueError(f"Builtin platform tool '{tid}' is not registered")
+            return builtin_tool
 
         if node_exec_kind == NodeType.CODE.value:
             return self._create_node_as_tool(ref)

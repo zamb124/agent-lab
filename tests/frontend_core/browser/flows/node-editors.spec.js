@@ -183,6 +183,42 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(last.patch.tools).to.deep.equal([{ tool_id: 'ts_tool', language: 'typescript' }]);
     });
 
+    it('flows-llm-node-editor — выбранный MCP tool сохраняет server/tool metadata', async () => {
+        const node = { node_id: 'a', type: 'llm_node', name: 'A', prompt: 'hi', tools: [] };
+        const el = await fixture(html`
+            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+            </flows-llm-node-editor>
+        `);
+        await elementUpdated(el);
+        let last = null;
+        el.addEventListener('change', (e) => { last = e.detail; });
+        el.openModal = (kind, props) => {
+            expect(kind).to.equal('flows.tool_picker');
+            props.onPick({
+                kind: 'tool',
+                tool_id: 'mcp:browser:browser_create_session',
+                item: {
+                    tool_id: 'mcp:browser:browser_create_session',
+                    item_type: 'tool',
+                    code_mode: 'mcp_tool',
+                    mcp_server_id: 'browser',
+                    mcp_tool_name: 'browser_create_session',
+                },
+            });
+        };
+
+        el._onPickTool();
+
+        expect(last.patch.tools).to.deep.equal([{
+            tool_id: 'mcp:browser:browser_create_session',
+            type: 'mcp',
+            code_mode: 'mcp_tool',
+            mcp_server_id: 'browser',
+            mcp_tool_name: 'browser_create_session',
+        }]);
+    });
+
     it('flows-code-workbench — прокидывает выбранный язык в completionContext', async () => {
         const workbench = await fixture(html`
             <flows-code-workbench
@@ -336,6 +372,26 @@ describe('node editors — top-level NodeConfig contract', () => {
         const base = el.shadowRoot.querySelector('flows-base-node-editor');
         const enumFields = base.querySelectorAll('platform-field[type="enum"]');
         expect(enumFields.length).to.be.greaterThanOrEqual(2);
+    });
+
+    it('flows-mcp-node-editor — читает mcp_server_id/mcp_tool_name из ToolReference', async () => {
+        const node = {
+            node_id: 'mcp:browser:browser_create_session',
+            type: 'mcp',
+            name: 'MCP tool',
+            mcp_server_id: 'browser',
+            mcp_tool_name: 'browser_create_session',
+        };
+        const el = await fixture(html`
+            <flows-mcp-node-editor .nodeId=${'mcp:browser:browser_create_session'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'mcp'}>
+            </flows-mcp-node-editor>
+        `);
+        await elementUpdated(el);
+        const fields = el.shadowRoot.querySelector('flows-base-node-editor')
+            .querySelectorAll('.mcp-control-row platform-field');
+        expect(fields[0].value).to.equal('browser');
+        expect(fields[1].value).to.equal('browser_create_session');
     });
 
     it('flows-flow-node-editor — toggle ручного ID', async () => {

@@ -65,7 +65,30 @@ export class FlowsMcpNodeEditor extends PlatformElement {
             }
             .row { display: flex; align-items: center; gap: var(--space-2); }
             .row > select, .row > input { flex: 1; }
+            .mcp-control-row {
+                display: grid;
+                grid-template-columns: minmax(180px, 0.55fr) minmax(260px, 1fr) auto;
+                align-items: end;
+                gap: var(--space-2);
+                margin-bottom: var(--space-2);
+            }
+            .mcp-control-row platform-field {
+                min-width: 0;
+            }
+            .mcp-sync-button {
+                min-height: 40px;
+                white-space: nowrap;
+            }
             .mcp-hint { font-size: var(--text-xs); color: var(--text-tertiary); margin: 0 0 var(--space-2) 0; line-height: 1.4; }
+            @media (max-width: 900px) {
+                .mcp-control-row {
+                    grid-template-columns: minmax(0, 1fr);
+                    align-items: stretch;
+                }
+                .mcp-sync-button {
+                    justify-self: start;
+                }
+            }
         `,
     ];
 
@@ -126,14 +149,22 @@ export class FlowsMcpNodeEditor extends PlatformElement {
         let serverId = '';
         if (typeof o.server_id === 'string' && o.server_id.length > 0) {
             serverId = o.server_id;
+        } else if (typeof o.mcp_server_id === 'string' && o.mcp_server_id.length > 0) {
+            serverId = o.mcp_server_id;
         } else if (nest && typeof nest.server_id === 'string' && nest.server_id.length > 0) {
             serverId = nest.server_id;
+        } else if (nest && typeof nest.mcp_server_id === 'string' && nest.mcp_server_id.length > 0) {
+            serverId = nest.mcp_server_id;
         }
         let toolName = '';
         if (typeof o.tool_name === 'string' && o.tool_name.length > 0) {
             toolName = o.tool_name;
+        } else if (typeof o.mcp_tool_name === 'string' && o.mcp_tool_name.length > 0) {
+            toolName = o.mcp_tool_name;
         } else if (nest && typeof nest.tool_name === 'string' && nest.tool_name.length > 0) {
             toolName = nest.tool_name;
+        } else if (nest && typeof nest.mcp_tool_name === 'string' && nest.mcp_tool_name.length > 0) {
+            toolName = nest.mcp_tool_name;
         }
         let headers;
         if (isPlainObject(o.headers)) {
@@ -409,32 +440,33 @@ export class FlowsMcpNodeEditor extends PlatformElement {
             >
                 <div slot="settings">
                     <p class="mcp-hint">${this.t('mcp_node_editor.input_mapping_hint')}</p>
-                    <div class="field">
-                        <label>${this.t('mcp_node_editor.server_id')}</label>
-                        <div class="row">
-                            <platform-field
-                                mode="edit"
-                                type="enum"
-                                .value=${serverId}
-                                .config=${{ values: serverValues }}
-                                @change=${this._onServer}
-                            ></platform-field>
-                            <glass-button size="sm" variant="ghost" ?disabled=${!serverId || this._sync.busy}
-                                @click=${() => this._onSync(serverId)}>
-                                <platform-icon name="refresh"></platform-icon>
-                                ${this.t('mcp_node_editor.sync_server')}
-                            </glass-button>
-                        </div>
-                    </div>
-                    <div class="field">
-                        <label>${this.t('mcp_node_editor.tool_name')}</label>
+                    <div class="mcp-control-row">
                         <platform-field
                             mode="edit"
                             type="enum"
+                            .label=${this.t('mcp_node_editor.server_id')}
+                            .value=${serverId}
+                            .config=${{ values: serverValues }}
+                            @change=${this._onServer}
+                        ></platform-field>
+                        <platform-field
+                            mode="edit"
+                            type="enum"
+                            .label=${this.t('mcp_node_editor.tool_name')}
                             .value=${toolName}
                             .config=${{ values: toolValues }}
                             @change=${this._onTool}
                         ></platform-field>
+                        <glass-button
+                            class="mcp-sync-button"
+                            size="sm"
+                            variant="ghost"
+                            ?disabled=${!serverId || this._sync.busy}
+                            @click=${() => this._onSync(serverId)}
+                        >
+                            <platform-icon name="refresh"></platform-icon>
+                            ${this.t('mcp_node_editor.sync_server')}
+                        </glass-button>
                     </div>
                     ${schema ? html`
                         <details>

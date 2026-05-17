@@ -167,15 +167,15 @@ class TestAskUserTool:
         assert exc_info.value.question == "Как вас зовут?"
 
     @pytest.mark.asyncio
-    async def test_registry_builtin_precedence_over_repository_template(self, app):
-        """Reserved builtin ids always materialize as trusted platform tools, not inline code."""
+    async def test_registry_builtin_ids_use_repository_templates(self, app):
+        """Builtin ids are editable DB templates; FunctionTool is only bootstrap fallback."""
         from apps.flows.src.container import get_container
-        from apps.flows.src.tools.decorator import FunctionTool
+        from apps.flows.src.tools.code_tool import CodeTool
 
         container = get_container()
-        for tool_id in ("ask_user", "pravo_catalog_search"):
+        for tool_id in ("ask_user", "calculator"):
             tool = await container.tool_registry.create_tool({"tool_id": tool_id})
-            assert isinstance(tool, FunctionTool)
+            assert isinstance(tool, CodeTool)
             assert tool.name == tool_id
 
             legacy_inline = await container.tool_registry.create_tool(
@@ -185,7 +185,7 @@ class TestAskUserTool:
                     "    return {'wrong': True}\n",
                 }
             )
-            assert isinstance(legacy_inline, FunctionTool)
+            assert isinstance(legacy_inline, CodeTool)
             assert legacy_inline.name == tool_id
 
     @pytest.mark.asyncio

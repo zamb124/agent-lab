@@ -47,6 +47,7 @@ import {
     normalizeToolRef as normalizeVisualToolRef,
 } from '../../_helpers/flows-tool-visual.js';
 import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
+import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from '../../_helpers/flows-mcp-tool-registry.js';
 import { sanitizeToolName } from '@platform/lib/utils/sanitize-tool-name.js';
 
 const REACT_LOOP_MODES = Object.freeze(['auto', 'explicit']);
@@ -98,6 +99,39 @@ function _toolListEntryKey(t) {
         return `flow:${id}`;
     }
     return `tool:${id}`;
+}
+
+function _mcpToolRefFromPicker(toolId, item) {
+    const ref = {
+        tool_id: toolId,
+        type: 'mcp',
+        code_mode: 'mcp_tool',
+    };
+    if (isPlainObject(item)) {
+        for (const key of ['name', 'title', 'description', 'parameters_schema', 'args_schema', 'tags', 'react_role']) {
+            if (item[key] !== undefined && item[key] !== null) {
+                ref[key] = item[key];
+            }
+        }
+    }
+    let serverId = isPlainObject(item) && typeof item.mcp_server_id === 'string' ? item.mcp_server_id : '';
+    let toolName = isPlainObject(item) && typeof item.mcp_tool_name === 'string' ? item.mcp_tool_name : '';
+    if ((serverId.length === 0 || toolName.length === 0) && toolId.startsWith('mcp:')) {
+        const parsed = parseMcpToolIdToNodeConfig(toolId);
+        if (serverId.length === 0) {
+            serverId = parsed.server_id;
+        }
+        if (toolName.length === 0) {
+            toolName = parsed.tool_name;
+        }
+    }
+    if (serverId.length > 0) {
+        ref.mcp_server_id = serverId;
+    }
+    if (toolName.length > 0) {
+        ref.mcp_tool_name = toolName;
+    }
+    return ref;
 }
 
 export class FlowsLlmNodeEditor extends PlatformElement {
@@ -614,8 +648,10 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 if (kind === 'flow') {
                     tools.push({ type: 'flow', tool_id: toolId });
                 } else {
-                    const ref = { tool_id: toolId };
                     const item = isPlainObject(detail.item) ? detail.item : null;
+                    const ref = (item !== null && isMcpToolRegistryItem(item)) || toolId.startsWith('mcp:')
+                        ? _mcpToolRefFromPicker(toolId, item)
+                        : { tool_id: toolId };
                     if (
                         item !== null
                         && typeof item.code === 'string'

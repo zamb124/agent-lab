@@ -10,10 +10,12 @@
 
 from __future__ import annotations
 
+import ast
 import importlib
 import inspect
 import json
 import mimetypes
+import textwrap
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -31,13 +33,36 @@ from apps.flows.src.tools.json_schema_parameters import (
     call_parameters_to_parameters_schema,
     pydantic_model_to_parameters_schema,
 )
-from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS, builtin_tool_ids
+from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.context import get_context
 from core.files.processors import get_default_file_processor
 from core.files.reader import FileReader, ReadOptions
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+_SANDBOX_IMPORT_ROOTS = {
+    "__future__",
+    "asyncio",
+    "ast",
+    "base64",
+    "collections",
+    "datetime",
+    "decimal",
+    "functools",
+    "hashlib",
+    "html",
+    "itertools",
+    "json",
+    "math",
+    "random",
+    "re",
+    "statistics",
+    "string",
+    "time",
+    "typing",
+    "uuid",
+}
 
 
 def _call_parameters_from_pydantic_model(model: type[BaseModel]) -> dict[str, CallParameter]:
@@ -85,6 +110,70 @@ def _call_parameters_from_pydantic_model(model: type[BaseModel]) -> dict[str, Ca
             required=name in required_names,
         )
     return out
+
+
+def _sandbox_safe_imports_for_function(func: Any) -> list[str]:
+    module = inspect.getmodule(func)
+    if module is None:
+        return []
+    try:
+        source = inspect.getsource(module)
+    except (OSError, TypeError):
+        return []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    imports: list[str] = []
+    seen: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            names = []
+            for alias in node.names:
+                root = alias.name.split(".", 1)[0]
+                if root in _SANDBOX_IMPORT_ROOTS:
+                    names.append(alias)
+            if not names:
+                continue
+            stmt = ast.Import(names=names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level != 0 or node.module is None:
+                continue
+            root = node.module.split(".", 1)[0]
+            if root not in _SANDBOX_IMPORT_ROOTS:
+                continue
+            stmt = node
+        else:
+            continue
+        line = ast.unparse(stmt)
+        if line not in seen:
+            seen.add(line)
+            imports.append(line)
+    return imports
+
+
+def _function_tool_template_code(tool_instance: FunctionTool) -> str:
+    """Editable sandbox template for a decorated builtin FunctionTool."""
+    source = textwrap.dedent(tool_instance.get_source_code())
+    tree = ast.parse(source)
+    fn_node = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ),
+        None,
+    )
+    if fn_node is None:
+        raise ValueError(f"Tool '{tool_instance.name}': function source not found")
+    fn_node.decorator_list = []
+    ast.fix_missing_locations(fn_node)
+    imports = _sandbox_safe_imports_for_function(tool_instance._func)
+    body = ast.unparse(fn_node)
+    if imports:
+        return "\n".join(imports) + "\n\n" + body + "\n"
+    return body + "\n"
 
 
 class FlowsLoader:
@@ -189,13 +278,9 @@ class FlowsLoader:
 
     async def load_tools_cache(self) -> None:
         """Загружает tool refs из БД в кеш. MCP-тулы пропускаются — они проксируются через MCP-сервер."""
-        builtin_ids = builtin_tool_ids()
         tools = await self.tool_repository.list(limit=10000)
         for tool in tools:
             if tool.tool_id.startswith("mcp:"):
-                continue
-            if tool.tool_id in builtin_ids:
-                self._tools_cache[tool.tool_id] = tool.model_copy(update={"code": None})
                 continue
             if not tool.code:
                 raise ValueError(
@@ -1185,7 +1270,7 @@ async def load_tools_to_db(
                 tool_id=tool_id,
                 title=tool_id,
                 description=tool_instance.description,
-                code=None,
+                code=_function_tool_template_code(tool_instance),
                 parameters_schema=parameters_schema_full,
                 args_schema=args_schema_dict,
                 mock_map=mock_map,

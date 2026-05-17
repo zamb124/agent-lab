@@ -7,6 +7,27 @@ import { asString, isPlainObject } from './flows-resolvers.js';
 import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from './flows-mcp-tool-registry.js';
 import { normalizeFlowCodeLanguage } from './flows-code-languages.js';
 
+function _mcpFieldsFromRef(raw, toolId) {
+    let serverId = asString(raw.server_id);
+    if (serverId.length === 0) {
+        serverId = asString(raw.mcp_server_id);
+    }
+    let toolName = asString(raw.tool_name);
+    if (toolName.length === 0) {
+        toolName = asString(raw.mcp_tool_name);
+    }
+    if ((serverId.length === 0 || toolName.length === 0) && toolId.startsWith('mcp:')) {
+        const parsed = parseMcpToolIdToNodeConfig(toolId);
+        if (serverId.length === 0) {
+            serverId = parsed.server_id;
+        }
+        if (toolName.length === 0) {
+            toolName = parsed.tool_name;
+        }
+    }
+    return { serverId, toolName };
+}
+
 /**
  * @param {unknown} ref
  * @returns {{ tool_id: string, raw: Record<string, unknown> }}
@@ -44,6 +65,9 @@ export function toolRefNeedsRegistryFetch(raw) {
     if (raw.mcp_server_id) {
         return false;
     }
+    if (asString(raw.tool_id).startsWith('mcp:')) {
+        return false;
+    }
     const t = asString(raw.type);
     if (t === 'mcp' || t === 'channel' || t === 'flow' || t === 'external_api' || t === 'remote_flow' || t === 'hitl_node') {
         return false;
@@ -76,8 +100,21 @@ export function toolRefToInitialNode(raw, toolId) {
     }
 
     const explicitType = asString(raw.type);
-    if (explicitType === 'mcp') {
-        return { ...raw, node_id: rid, type: 'mcp' };
+    if (
+        explicitType === 'mcp'
+        || rid.startsWith('mcp:')
+        || raw.code_mode === 'mcp_tool'
+        || asString(raw.mcp_server_id).length > 0
+        || asString(raw.mcp_tool_name).length > 0
+    ) {
+        const { serverId, toolName } = _mcpFieldsFromRef(raw, rid);
+        return {
+            ...raw,
+            node_id: rid,
+            type: 'mcp',
+            server_id: serverId,
+            tool_name: toolName,
+        };
     }
     if (explicitType === 'flow') {
         const base = { ...raw, node_id: rid, type: 'flow' };
@@ -190,6 +227,31 @@ export function nodeConfigToToolRef(node) {
     const nid = asString(node.node_id);
     if (nid.length === 0) {
         throw new Error('flows-tool-ref: node_id is required to save tool ref');
+    }
+    if (asString(node.type) === 'mcp') {
+        const { serverId, toolName } = _mcpFieldsFromRef(node, nid);
+        const out = {};
+        for (const [k, v] of Object.entries(node)) {
+            if (
+                k === 'node_id'
+                || k === 'tool_id'
+                || k === 'server_id'
+                || k === 'tool_name'
+                || k === 'headers'
+                || k === 'state_mapping'
+                || k === 'input_mapping'
+            ) {
+                continue;
+            }
+            if (STRIP_NODE_KEYS.has(k)) continue;
+            out[k] = v;
+        }
+        out.tool_id = nid;
+        out.type = 'mcp';
+        out.code_mode = 'mcp_tool';
+        out.mcp_server_id = serverId;
+        out.mcp_tool_name = toolName;
+        return out;
     }
     const out = {};
     for (const [k, v] of Object.entries(node)) {
