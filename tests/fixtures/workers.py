@@ -38,6 +38,46 @@ _CRM_WORKER_PID = "/tmp/platform_test_crm_taskiq_worker.pid"
 _TEST_INFRA_EPOCH_FILE = Path("/tmp/platform_test_infra_epoch")
 
 
+def _terminate_process_group_or_pid(pid: int, *, graceful_timeout: float = 0.2) -> None:
+    """Terminate an isolated fixture process group, falling back to one PID.
+
+    Managed fixture subprocesses are started with ``start_new_session=True``;
+    for them the recorded main PID is also the process-group id. In that case
+    killing the process group stops the parent plus all subprocesses it spawned.
+
+    For stale processes started before that convention, do not kill the whole
+    inherited process group because it may contain unrelated pytest/shell
+    processes. Terminate only the recorded PID instead.
+    """
+    try:
+        pgid = os.getpgid(pid)
+    except OSError:
+        return
+
+    if pgid == pid:
+        try:
+            os.killpg(pgid, signal.SIGTERM)
+        except OSError:
+            return
+        time.sleep(graceful_timeout)
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except OSError:
+            pass
+        return
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+        time.sleep(graceful_timeout)
+        try:
+            os.kill(pid, 0)
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    except OSError:
+        pass
+
+
 def _reset_taskiq_stream_before_worker_start(stream_name: str, redis_url: str) -> None:
     parsed = urlparse(redis_url)
     if parsed.hostname is None or parsed.port is None:
@@ -96,7 +136,7 @@ class SessionWorkerManager:
             pid_file="/tmp/taskiq.pid",
             command=[sys.executable, "-m", "taskiq", "worker", "apps.flows_worker.worker:worker_app"],
             env={"TESTING": "true"},
-            cleanup_patterns=["taskiq.*worker", "multiprocessing.spawn"],
+            cleanup_patterns=["taskiq.*worker"],
             startup_wait=3
         )
 
@@ -251,21 +291,15 @@ class SessionWorkerManager:
     def _worker_envsig_path(self) -> Path:
         return self.pid_path.with_name(self.pid_path.name + ".envsig")
 
+    def _terminate_process_group_or_pid(self, pid: int) -> None:
+        _terminate_process_group_or_pid(pid)
+
     def _invalidate_stale_worker_pid(self, existing_pid: int) -> None:
         print(
             f"⚠️  {self.name} worker PID {existing_pid}: нет .envsig или неверная сигнатура окружения, "
             "останавливаем (возможен «осиротевший» процесс от старого прогона с тем же Redis)."
         )
-        try:
-            os.kill(existing_pid, signal.SIGTERM)
-            time.sleep(0.2)
-            try:
-                os.kill(existing_pid, 0)
-                os.kill(existing_pid, signal.SIGKILL)
-            except OSError:
-                pass
-        except OSError:
-            pass
+        self._terminate_process_group_or_pid(existing_pid)
         self.pid_path.unlink(missing_ok=True)
         self._worker_envsig_path().unlink(missing_ok=True)
         self.ref_count_path.unlink(missing_ok=True)
@@ -352,6 +386,7 @@ class SessionWorkerManager:
             stdout=worker_log,
             stderr=worker_err,
             env=worker_env,
+            start_new_session=True,
         )
 
         # Как SessionServerManager._start_server: убеждаемся, что процесс не вышел сразу.
@@ -369,20 +404,12 @@ class SessionWorkerManager:
         """Останавливает worker и его дочерние процессы."""
         print(f"🛑 Останавливаем {self.name} worker (PID: {pid}, последний ref)...")
 
-        # Убиваем процесс
-        try:
-            os.kill(pid, signal.SIGTERM)
-            time.sleep(0.2)
-            try:
-                os.kill(pid, 0)  # Проверка что еще жив
-                os.kill(pid, signal.SIGKILL)
-            except OSError:
-                pass
-        except OSError:
-            pass
+        self._terminate_process_group_or_pid(pid)
 
-        # Убиваем все дочерние процессы
-        print(f"🧹 Очистка оставшихся child процессов {self.name}...")
+        # Service-specific safety net for old workers that were started before
+        # process groups were used. Do not add broad multiprocessing patterns:
+        # they kill children of other worker services under xdist.
+        print(f"🧹 Очистка оставшихся процессов {self.name}...")
         for pattern in self.cleanup_patterns:
             subprocess.run(
                 ["pkill", "-9", "-f", pattern],
@@ -491,8 +518,6 @@ def taskiq_worker():
         },
         cleanup_patterns=[
             "taskiq.*apps.flows_worker.worker:worker_app",
-            "multiprocessing.spawn.*spawn_main",
-            "multiprocessing.resource_tracker",
         ],
         log_file="/tmp/taskiq_worker_test.log",
         err_file="/tmp/taskiq_worker_test_err.log",
@@ -533,8 +558,6 @@ def rag_worker():
         },
         cleanup_patterns=[
             "apps.rag_worker.worker",
-            "multiprocessing.spawn.*spawn_main",
-            "multiprocessing.resource_tracker",
         ],
         log_file="/tmp/rag_worker_test.log",
         err_file="/tmp/rag_worker_test_err.log",
@@ -612,8 +635,6 @@ def sync_worker():
         cleanup_patterns=[
             "apps.sync_worker.worker",
             "taskiq.*apps.sync_worker.worker:worker_app",
-            "multiprocessing.spawn.*spawn_main",
-            "multiprocessing.resource_tracker",
         ],
         log_file="/tmp/sync_taskiq_worker_test.log",
         err_file="/tmp/sync_taskiq_worker_test_err.log",
@@ -654,8 +675,6 @@ def crm_worker():
         cleanup_patterns=[
             "apps.crm_worker.worker",
             "taskiq.*apps.crm_worker.worker:worker_app",
-            "multiprocessing.spawn.*spawn_main",
-            "multiprocessing.resource_tracker",
         ],
         log_file="/tmp/crm_taskiq_worker_test.log",
         err_file="/tmp/crm_taskiq_worker_test_err.log",
@@ -705,6 +724,7 @@ def taskiq_scheduler():
             "AUTH__PERMISSIONS_ENABLED": "false",
             "MOCK_LLM_REDIS_KEY": "mock_llm:responses:flows",
         },
+        start_new_session=True,
     )
 
     # Ждём пока scheduler стартанёт
@@ -724,7 +744,7 @@ def taskiq_scheduler():
 
     yield scheduler_process
 
-    scheduler_process.terminate()
+    _terminate_process_group_or_pid(scheduler_process.pid, graceful_timeout=0.5)
     try:
         scheduler_process.wait(timeout=5)
     except subprocess.TimeoutExpired:
@@ -943,13 +963,18 @@ class SessionServerManager:
             stdout=server_log,
             stderr=server_err,
             env=full_env,
+            start_new_session=True,
         )
 
         if not self._wait_for_port(timeout=self.startup_wait, process=server_process):
             exit_code = server_process.poll()
             if exit_code is None:
-                server_process.kill()
-                server_process.wait(timeout=3)
+                _terminate_process_group_or_pid(server_process.pid)
+                try:
+                    server_process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    server_process.kill()
+                    server_process.wait(timeout=2)
             server_log.close()
             server_err.close()
             with open(self.err_file, "r") as f:
@@ -985,16 +1010,7 @@ class SessionServerManager:
         """Останавливает server и ждёт пока порт освободится."""
         print(f"🛑 Останавливаем {self.name} server (PID: {pid}, последний ref)...")
 
-        try:
-            os.kill(pid, signal.SIGTERM)
-            time.sleep(0.3)
-            try:
-                os.kill(pid, 0)
-                os.kill(pid, signal.SIGKILL)
-            except OSError:
-                pass
-        except OSError:
-            pass
+        _terminate_process_group_or_pid(pid, graceful_timeout=0.3)
 
         self.pid_path.unlink(missing_ok=True)
         self._wait_port_free(timeout=3.0)
@@ -1032,10 +1048,18 @@ class SessionServerManager:
                 with ctx_self.manager.lock:
                     ref_count = ctx_self.manager._decrement_ref_count()
                     if ref_count == 0:
-                        print(
-                            f"📉 {ctx_self.manager.name} server: последний ref "
-                            f"освобождён, сервер остаётся жив для других gw-workers"
-                        )
+                        if ctx_self.manager.pid_path.exists():
+                            try:
+                                server_pid = int(
+                                    ctx_self.manager.pid_path.read_text().strip()
+                                )
+                                ctx_self.manager._stop_server(server_pid)
+                            except (ValueError, OSError) as e:
+                                print(
+                                    f"⚠️  Ошибка при остановке {ctx_self.manager.name} "
+                                    f"server: {e}"
+                                )
+                                ctx_self.manager.pid_path.unlink(missing_ok=True)
                     else:
                         print(
                             f"✅ {ctx_self.manager.name} server сохранен "

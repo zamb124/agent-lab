@@ -27,8 +27,8 @@ from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.clients.mcp_client import MCPHttpClient
-from apps.flows.src.container_state import get_current_container
 from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.container_state import get_current_container
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.mock import get_mock_for_node
 from apps.flows.src.models import NodeConfig, NodeLLMOverride, ReactConfig
@@ -133,6 +133,7 @@ class BaseNode(ABC):
 
     name: str = "node"
     description: str | None = None
+    node_type: NodeType | None = None
 
     def __init__(
         self,
@@ -143,6 +144,8 @@ class BaseNode(ABC):
     ):
         self.node_id = node_id
         self.config = config or {}
+        if self.node_type is not None and not self.config.get("type"):
+            self.config = {**self.config, "type": self.node_type.value}
         self.container = container or get_current_container()
         self.input_mapping = self.config.get("input_mapping")
         self.output_mapping: dict[str, str] | None = self.config.get("output_mapping")
@@ -464,6 +467,7 @@ class LlmNode(BaseNode):
 
     # Атрибуты для кастомных классов
     name: str = "llm_node"
+    node_type = NodeType.LLM_NODE
     description: str | None = None
     prompt: str | None = None
     tools: list[Any] = []
@@ -885,6 +889,8 @@ class CodeNode(BaseNode):
     ``tool_id`` — идентификатор для UI/ссылок, не путь к FunctionTool в процессе.
     """
 
+    node_type = NodeType.CODE
+
     def __init__(
         self,
         node_id: str,
@@ -947,6 +953,8 @@ class CodeNode(BaseNode):
 class FlowNode(BaseNode):
     """Вложенный Flow с поддержкой skill."""
 
+    node_type = NodeType.FLOW
+
     def __init__(
         self,
         node_id: str,
@@ -1005,6 +1013,8 @@ class FlowNode(BaseNode):
 
 class RemoteFlowNode(BaseNode):
     """Внешний flow по A2A протоколу."""
+
+    node_type = NodeType.REMOTE_FLOW
 
     def __init__(
         self,
@@ -1095,6 +1105,8 @@ class RemoteFlowNode(BaseNode):
 class ExternalAPINode(BaseNode):
     """Вызов внешнего HTTP API."""
 
+    node_type = NodeType.EXTERNAL_API
+
     def __init__(
         self,
         node_id: str,
@@ -1165,6 +1177,8 @@ class MCPNode(BaseNode):
 
     Подключается к MCP серверу и вызывает указанный tool.
     """
+
+    node_type = NodeType.MCP
 
     def __init__(
         self,
@@ -1247,6 +1261,8 @@ class ChannelNode(BaseNode):
     - send_notification: A2A нотификация (для webhook)
     """
 
+    node_type = NodeType.CHANNEL
+
     def __init__(
         self,
         node_id: str,
@@ -1309,6 +1325,8 @@ class HitlNode(BaseNode):
     После complete в очереди: resume с тем же correlation — задача в БД completed,
     нода выставляет response и отдаёт управление следующим нодам по рёбрам.
     """
+
+    node_type = NodeType.HITL_NODE
 
     async def _run_impl(self, state: ExecutionState, inputs: dict[str, Any]) -> Any:
         ctx = get_request_context()
@@ -1426,6 +1444,7 @@ class ResourceNode(BaseNode):
     """
 
     name = "resource"
+    node_type = NodeType.RESOURCE
 
     async def _run_impl(self, state: ExecutionState, inputs: dict[str, Any]) -> None:
         return None
