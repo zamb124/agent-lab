@@ -1,43 +1,14 @@
 """
 Тесты для CodeNode.
 
-CodeNode позволяет использовать BaseTool как ноду графа.
+CodeNode выполняет inline function-entrypoint через execute_tool.
 Поддерживает input_mapping для @state:, @var: и констант.
 Поддерживает функции с именованными аргументами и дефолтами.
 """
 
-from typing import Any, Dict
-
 import pytest
 
 from apps.flows.src.runtime.nodes import CodeNode, create_node
-from apps.flows.src.tools.base import BaseTool
-
-
-class SimpleTool(BaseTool):
-    """Тестовый tool для unit-тестов."""
-
-    name = "simple_tool"
-    description = "Простой тестовый tool"
-
-    async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any]) -> Any:
-        """Возвращает сумму x и y из args."""
-        x = args.get("x", 0)
-        y = args.get("y", 0)
-        return x + y
-
-
-class FormatterTool(BaseTool):
-    """Tool для форматирования строк."""
-
-    name = "formatter_tool"
-    description = "Форматирует строку"
-
-    async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any]) -> Any:
-        """Форматирует шаблон с переменными."""
-        template = args.get("template", "")
-        name = args.get("name", "")
-        return template.format(name=name)
 
 
 class TestCodeNode:

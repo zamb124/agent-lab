@@ -940,7 +940,7 @@ class CodeNode(BaseNode):
     Универсальная нода для выполнения кода.
 
     Поддерживает разные языки (python, javascript, go).
-    Только runner.execute_tool(code, args, state) по строке ``code`` из конфига;
+    Только function-entrypoint через runner.execute_tool(code, args, state) по строке ``code`` из конфига;
     ``tool_id`` — идентификатор для UI/ссылок, не путь к FunctionTool в процессе.
     """
 

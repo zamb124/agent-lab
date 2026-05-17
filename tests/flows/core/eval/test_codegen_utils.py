@@ -41,3 +41,19 @@ async def test_run_codegen_stages_validate_failure(unique_id):
     assert isinstance(out, CodegenStagesFailure)
     assert out.phase == "validate"
     assert out.detail
+
+
+@pytest.mark.asyncio
+async def test_run_codegen_stages_requires_run_entrypoint(unique_id):
+    runner = get_code_runner(language="python")
+    state = ExecutionState.create(
+        task_id=f"t_codegen_entry_{unique_id}",
+        context_id=f"c_codegen_entry_{unique_id}",
+        user_id=f"u_codegen_entry_{unique_id}",
+        session_id=f"flow_codegen_entry:{unique_id}",
+    )
+    code = "async def execute(state):\n    return {'ok': True}\n"
+    out = await run_codegen_stages(runner, code, state)
+    assert isinstance(out, CodegenStagesFailure)
+    assert out.phase == "compile"
+    assert "Function 'run' not found" in out.detail

@@ -448,55 +448,70 @@ def _parse_function_signature(code: str, func_name: str | None = None) -> dict[s
     Парсит сигнатуру функции из Python кода.
     """
     tree = ast.parse(code)
-    target_names = [func_name] if func_name else ["execute", "run"]
+    top_level_funcs = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    if func_name:
+        candidates = [node for node in top_level_funcs if node.name == func_name]
+    else:
+        by_name = {node.name: node for node in top_level_funcs}
+        candidates = []
+        for entry_name in ("run", "execute"):
+            node = by_name.get(entry_name)
+            if node is not None:
+                candidates.append(node)
+                break
+        if not candidates and top_level_funcs:
+            candidates.append(top_level_funcs[0])
 
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name in target_names or (func_name is None and not node.name.startswith("_")):
-                params = {}
-                args = node.args
+    for node in candidates:
+        params = {}
+        args = node.args
 
-                num_args = len(args.args)
-                num_defaults = len(args.defaults)
-                first_default_idx = num_args - num_defaults
+        num_args = len(args.args)
+        num_defaults = len(args.defaults)
+        first_default_idx = num_args - num_defaults
 
-                for i, arg in enumerate(args.args):
-                    param_name = arg.arg
+        for i, arg in enumerate(args.args):
+            param_name = arg.arg
 
-                    if param_name in ("self", "cls", "state", "args"):
-                        continue
+            if param_name in ("self", "cls", "state", "args"):
+                continue
 
-                    type_str = "string"
-                    if arg.annotation:
-                        type_str = ast.unparse(arg.annotation)
+            type_str = "string"
+            if arg.annotation:
+                type_str = ast.unparse(arg.annotation)
 
-                    has_default = i >= first_default_idx
-                    default_value = None
-                    if has_default:
-                        default_idx = i - first_default_idx
-                        default_node = args.defaults[default_idx]
-                        try:
-                            default_value = ast.literal_eval(default_node)
-                        except (ValueError, TypeError):
-                            default_value = ast.unparse(default_node)
+            has_default = i >= first_default_idx
+            default_value = None
+            if has_default:
+                default_idx = i - first_default_idx
+                default_node = args.defaults[default_idx]
+                try:
+                    default_value = ast.literal_eval(default_node)
+                except (ValueError, TypeError):
+                    default_value = ast.unparse(default_node)
 
-                    json_type = _python_type_to_json_type(type_str)
+            json_type = _python_type_to_json_type(type_str)
 
-                    params[param_name] = {
-                        "type": json_type,
-                        "python_type": type_str,
-                        "required": not has_default,
-                        "has_default": has_default,
-                        "default": default_value,
-                    }
+            params[param_name] = {
+                "type": json_type,
+                "python_type": type_str,
+                "required": not has_default,
+                "has_default": has_default,
+                "default": default_value,
+            }
 
-                return {
-                    "func_name": node.name,
-                    "parameters": params,
-                    "is_async": isinstance(node, ast.AsyncFunctionDef),
-                }
+        return {
+            "func_name": node.name,
+            "parameters": params,
+            "is_async": isinstance(node, ast.AsyncFunctionDef),
+        }
 
-    raise ValueError(f"Функция не найдена: {target_names}")
+    target = func_name or "run/execute/first top-level function"
+    raise ValueError(f"Функция не найдена: {target}")
 
 
 @router.post("/parse-signature", response_model=ParseSignatureResponse)

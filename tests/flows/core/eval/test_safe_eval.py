@@ -1066,6 +1066,55 @@ async def probe_exec_path(state):
     assert out == {"probe": True, "vars_len": len(state.variables)}
 
 
+@pytest.mark.asyncio
+async def test_execute_tool_prefers_run_over_execute() -> None:
+    from apps.flows.src.runners.python import PythonCodeRunner
+
+    runner = PythonCodeRunner()
+    code = """
+async def execute(args, state):
+    return {"entry": "execute"}
+
+async def run(args, state):
+    return {"entry": "run"}
+"""
+    out = await runner.execute_tool(code, {}, None)
+    assert out == {"entry": "run"}
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_falls_back_to_first_top_level_function() -> None:
+    from apps.flows.src.runners.python import PythonCodeRunner
+
+    runner = PythonCodeRunner()
+    code = """
+async def first(value, state=None):
+    return {"entry": "first", "value": value}
+
+async def second(value, state=None):
+    return {"entry": "second", "value": value}
+"""
+    out = await runner.execute_tool(code, {"value": 7}, None)
+    assert out == {"entry": "first", "value": 7}
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_rejects_basetool_class_as_entrypoint() -> None:
+    from apps.flows.src.runners.python import PythonCodeRunner
+
+    runner = PythonCodeRunner()
+    code = """
+class MyTool(BaseTool):
+    name = "my_tool"
+    description = "not an inline entrypoint"
+
+    async def _run_impl(self, args, state):
+        return {"entry": "class"}
+"""
+    with pytest.raises(SafeEvalError, match="No top-level function"):
+        await runner.execute_tool(code, {}, None)
+
+
 def test_compile_rejects_container_import_in_source() -> None:
     code = """
 import apps.flows.src.container as c

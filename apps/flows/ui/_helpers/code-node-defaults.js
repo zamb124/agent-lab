@@ -1,15 +1,16 @@
 /**
  * Дефолтный конфиг новой code-ноды: тот же контракт, что у inline tool —
- * PythonCodeRunner.execute_tool (execute / BaseTool / последняя top-level функция).
+ * PythonCodeRunner.execute_tool (run / execute / первая top-level функция).
  */
 
 /** @returns {string} */
 export function getBlankCodeNodeCode() {
     return `# Графовая нода type=code и inline tool исполняются одинаково (execute_tool).
-# Допустимы: def / async def execute(args, state), класс BaseTool, или последняя top-level функция.
+# Предпочитай async def run(...); execute(...) допустим для совместимости.
+# Если run/execute нет, будет вызвана первая top-level функция.
 # args собираются из args_schema и input mapping панели ноды.
 
-def execute(args, state):
+async def run(args, state):
     return {}
 `;
 }

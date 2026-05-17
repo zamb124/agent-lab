@@ -4,7 +4,7 @@
 
 from typing import Any, Dict, List
 
-# Шаблоны для tool нод (execute function)
+# Шаблоны для tool/code нод (предпочтительный entrypoint run)
 CODE_TEMPLATES: List[Dict[str, Any]] = [
     {
         "id": "http_get",
@@ -13,7 +13,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "http",
         "node_type": "tool",
         "tags": ["http", "api", "external"],
-        "code": '''async def execute(url: str, state: dict = None):
+        "code": '''async def run(url: str, state: dict = None):
     """
     HTTP GET запрос к внешнему API.
 
@@ -39,7 +39,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "http",
         "node_type": "tool",
         "tags": ["http", "api", "external"],
-        "code": '''async def execute(url: str, data: dict = None, state: dict = None):
+        "code": '''async def run(url: str, data: dict = None, state: dict = None):
     """
     HTTP POST запрос к внешнему API.
 
@@ -66,7 +66,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "llm",
         "node_type": "tool",
         "tags": ["llm", "ai"],
-        "code": '''async def execute(prompt: str, state: dict = None):
+        "code": '''async def run(prompt: str, state: dict = None):
     """
     Вызов LLM с промптом.
 
@@ -91,7 +91,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "interaction",
         "node_type": "tool",
         "tags": ["interrupt", "user", "interaction"],
-        "code": '''async def execute(question: str = "Уточните, пожалуйста", state: dict = None):
+        "code": '''async def run(question: str = "Уточните, пожалуйста", state: dict = None):
     """
     Запрашивает информацию у пользователя.
 
@@ -112,7 +112,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "data",
         "node_type": "tool",
         "tags": ["json", "parsing", "data"],
-        "code": '''async def execute(text: str, state: dict = None):
+        "code": '''async def run(text: str, state: dict = None):
     """
     Извлекает JSON из текста (включая markdown блоки).
 
@@ -138,7 +138,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "files",
         "node_type": "tool",
         "tags": ["files", "processing"],
-        "code": '''async def execute(state: dict = None):
+        "code": '''async def run(state: dict = None):
     """
     Обрабатывает файлы из state.
 
@@ -175,7 +175,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "state",
         "node_type": "tool",
         "tags": ["state", "data"],
-        "code": '''async def execute(key: str, value: str = None, state: dict = None):
+        "code": '''async def run(key: str, value: str = None, state: dict = None):
     """
     Читает или устанавливает значение в state.
 
@@ -202,7 +202,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "files",
         "node_type": "tool",
         "tags": ["files", "find_file", "reader"],
-        "code": '''async def execute(file_name: str = None, state: dict = None):
+        "code": '''async def run(file_name: str = None, state: dict = None):
     """
     Поиск файла по имени и извлечение текста.
 
@@ -236,7 +236,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "llm",
         "node_type": "tool",
         "tags": ["llm", "tools", "react"],
-        "code": '''async def execute(prompt: str, state: dict = None):
+        "code": '''async def run(prompt: str, state: dict = None):
     """
     LLM с tools: определяет tool_calls, выполняет и возвращает.
 
@@ -275,7 +275,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "http",
         "node_type": "tool",
         "tags": ["http", "api", "platform"],
-        "code": '''async def execute(query: str, state: dict = None):
+        "code": '''async def run(query: str, state: dict = None):
     """
     Поиск сущностей через CRM API.
 
@@ -299,7 +299,7 @@ CODE_TEMPLATES: List[Dict[str, Any]] = [
         "category": "http",
         "node_type": "tool",
         "tags": ["mcp", "tools", "platform"],
-        "code": '''async def execute(server_id: str, tool_name: str, arguments: dict = None, state: dict = None):
+        "code": '''async def run(server_id: str, tool_name: str, arguments: dict = None, state: dict = None):
     """
     Унифицированный вызов MCP tool из code/tool ноды.
     """

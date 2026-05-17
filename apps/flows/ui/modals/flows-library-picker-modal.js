@@ -563,7 +563,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             ? null
             : await this._codeParseSignature.run({
                 code: t.code,
-                func_name: 'execute',
             });
         this.close();
         if (typeof fn === 'function') {

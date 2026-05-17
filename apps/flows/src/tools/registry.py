@@ -303,7 +303,7 @@ class ToolRegistry:
                 "tool_id": "my_tool",
                 "description": "...",
                 "args_schema": {"param": {"type": "string", "description": "..."}},
-                "code": "def execute(args, state): ..."
+                "code": "def run(args, state): ..."
             }
 
         Returns:

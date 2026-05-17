@@ -679,14 +679,10 @@ GLOBALS: List[Dict[str, Any]] = [
         "name": "BaseTool",
         "type": "class",
         "doc": (
-            "Базовый класс для создания tool-классов (альтернатива @tool):\n"
-            "class MyTool(BaseTool):\n"
-            "    name = 'my_tool'\n"
-            "    description = 'Описание'\n"
-            "    args_schema = MyArgs  # Pydantic BaseModel\n\n"
-            "    async def _run_impl(self, args, state):\n"
-            "        return {'result': args['input']}\n\n"
-            "Экземпляр передаётся в llm.chat(..., tools=[MyTool()])."
+            "Базовый класс platform tools для объектов, которые передаются в `llm.chat(..., tools=[...])`. "
+            "Не является точкой входа inline code / CodeNode: рантайм inline-кода вызывает только "
+            "top-level функцию (`run`, `execute` или первую функцию в файле). Для обычного inline tool "
+            "пиши функцию; для ad-hoc LLM-tools внутри кода обычно проще использовать `@tool`."
         ),
         "perspectives": ["editor", "flow", "tool", "node"],
         "tags": ["tools", "llm"],

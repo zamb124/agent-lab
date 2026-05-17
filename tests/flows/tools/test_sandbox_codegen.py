@@ -18,6 +18,7 @@ from apps.flows.tools.sandbox_codegen import (
     _import_or_async_glued_without_newlines,
     _LLMGeneratedCode,
     _syntax_retry_hint,
+    _system_rules_block,
     sandbox_codegen,
 )
 from core.clients.llm.factory import setup_mock_responses
@@ -290,6 +291,28 @@ def test_sandbox_documentation_markdown_skips_module_methods_and_builtin_list():
     assert "В sandbox разрешено подмножество API" in md
     assert "ограниченный whitelist встроенных имён" in md
     assert "### `json`" not in md
+
+
+def test_documentation_entry_contracts_are_function_only():
+    q = DocumentationQuery(
+        language="python",
+        perspective="tool",
+        include_templates=False,
+        include_platform_tools=False,
+    )
+    md = get_documentation_service().to_markdown(q)
+    assert "Контракты выполнения" in md
+    assert "`run` → `execute` → первая top-level функция" in md
+    assert "class MyTool(BaseTool)" not in md
+    assert "tool-класс" not in md
+    assert "не является entrypoint" in md
+
+
+def test_sandbox_codegen_system_rules_pin_run_function_entrypoint():
+    rules = _system_rules_block()
+    assert "async def run(state)" in rules
+    assert "inline entrypoint всегда функция" in rules
+    assert "BaseTool" in rules
 
 
 def test_documentation_query_includes_runtime_namespace_extras_in_markdown():

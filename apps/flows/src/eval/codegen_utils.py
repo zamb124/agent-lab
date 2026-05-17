@@ -125,7 +125,7 @@ async def run_codegen_stages(
     code: str,
     exec_state: ExecutionState,
 ) -> CodegenStagesResult:
-    """Ожидается `PythonCodeRunner` из `get_code_runner(\"python\")` (фасад `platform_services`). Код — `async def run(state):` → dict."""
+    """Ожидается `PythonCodeRunner` из `get_code_runner(\"python\")` (фасад `platform_services`). Код — строго `async def run(state):` → dict."""
     try:
         runner.compiler.validate(code)
     except Exception as e:
@@ -136,7 +136,7 @@ async def run_codegen_stages(
         )
 
     try:
-        runner.compiler.compile(code, "run", auto_find=True)
+        runner.compiler.compile(code, "run", auto_find=False)
     except SafeEvalError as e:
         return CodegenStagesFailure(
             phase="compile",
@@ -145,7 +145,7 @@ async def run_codegen_stages(
         )
 
     try:
-        raw_result = await runner.execute(code, exec_state, func_name="run")
+        raw_result = await runner.execute(code, exec_state, func_name="run", auto_find=False)
     except Exception as e:
         return CodegenStagesFailure(
             phase="execute",

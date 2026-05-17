@@ -44,11 +44,11 @@ describe('flows library picker code templates', () => {
             const href = String(url);
             if (href.endsWith('/flows/api/v1/code/parse-signature')) {
                 const body = JSON.parse(String(options.body));
-                expect(body.func_name).to.equal('execute');
-                expect(body.code).to.include('async def execute');
+                expect(body.func_name).to.equal(undefined);
+                expect(body.code).to.include('async def run');
                 return jsonResponse({
                     success: true,
-                    func_name: 'execute',
+                    func_name: 'run',
                     parameters: {},
                     args_schema: {
                         url: {
@@ -79,7 +79,7 @@ describe('flows library picker code templates', () => {
             id: 'http_post',
             name: 'HTTP POST запрос',
             language: 'python',
-            code: 'async def execute(url: str, data: dict = None, state: dict = None):\n    return {}',
+            code: 'async def run(url: str, data: dict = None, state: dict = None):\n    return {}',
         });
         await aTimeout(0);
 

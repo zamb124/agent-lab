@@ -60,7 +60,8 @@ class PythonCodeRunner(BaseCodeRunner):
         self,
         code: str,
         state: ExecutionState,
-        func_name: str = "run"
+        func_name: str = "run",
+        auto_find: bool = True,
     ) -> Any:
         """
         Выполняет код ноды.
@@ -69,11 +70,12 @@ class PythonCodeRunner(BaseCodeRunner):
             code: Python код с определением функции
             state: ExecutionState для передачи
             func_name: Имя функции для вызова
+            auto_find: Разрешить fallback на первую функцию при отсутствии func_name
 
         Returns:
             Результат выполнения
         """
-        func = self.compiler.compile(code, func_name, auto_find=True)
+        func = self.compiler.compile(code, func_name, auto_find=auto_find)
         snap = self._snapshot_frozen_if_state(state)
         with user_code_state_mutation_guard():
             if inspect.iscoroutinefunction(func):
@@ -92,9 +94,10 @@ class PythonCodeRunner(BaseCodeRunner):
         """
         Выполняет код tool.
 
-        Поддерживает два формата:
-        1. Функция: def execute(args, state) или async def execute(args, state) (или последняя top-level функция)
-        2. Класс: class MyTool(BaseTool) с async run
+        Поддерживает только top-level функцию. Порядок выбора entrypoint:
+        1. `run`
+        2. `execute`
+        3. первая top-level функция в файле
 
         Args:
             code: Python код
@@ -108,35 +111,30 @@ class PythonCodeRunner(BaseCodeRunner):
         if state is not None:
             self.namespace_builder.variables = dict(state.variables)
 
-        target, is_class = self.compiler.compile_tool(code)
+        func = self.compiler.compile_tool(code)
 
         snap = self._snapshot_frozen_if_state(state)
         with user_code_state_mutation_guard():
-            if is_class:
-                tool_instance = target()
-                result = await tool_instance.run(args, state)
-            else:
-                func = target
-                sig = inspect.signature(func)
-                params = list(sig.parameters.keys())
+            sig = inspect.signature(func)
+            params = list(sig.parameters.keys())
 
-                if params and params[0] == "args":
-                    call_kwargs: dict[str, Any] = {"args": args}
-                    if "state" in params:
-                        call_kwargs["state"] = state
-                    if inspect.iscoroutinefunction(func):
-                        result = await func(**call_kwargs)
-                    else:
-                        result = func(**call_kwargs)
+            if params and params[0] == "args":
+                call_kwargs: dict[str, Any] = {"args": args}
+                if "state" in params:
+                    call_kwargs["state"] = state
+                if inspect.iscoroutinefunction(func):
+                    result = await func(**call_kwargs)
                 else:
-                    kwargs = dict(args)
-                    if "state" in params:
-                        kwargs["state"] = state
+                    result = func(**call_kwargs)
+            else:
+                kwargs = dict(args)
+                if "state" in params:
+                    kwargs["state"] = state
 
-                    if inspect.iscoroutinefunction(func):
-                        result = await func(**kwargs)
-                    else:
-                        result = func(**kwargs)
+                if inspect.iscoroutinefunction(func):
+                    result = await func(**kwargs)
+                else:
+                    result = func(**kwargs)
         self._assert_frozen_if_needed(state, snap)
         return result
 

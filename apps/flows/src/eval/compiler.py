@@ -131,18 +131,23 @@ class PythonCompiler:
 
         return namespace[func_name]
 
-    def compile_tool(self, code: str) -> tuple[Callable[..., Any] | type, bool]:
+    def compile_tool(self, code: str) -> Callable[..., Any]:
         """
-        Компилирует код tool и возвращает функцию или класс.
+        Компилирует inline tool/code-node код и возвращает функцию-точку входа.
+
+        Контракт намеренно function-only:
+        1. `run`
+        2. `execute`
+        3. первая top-level функция в файле
 
         Args:
             code: Python код
 
         Returns:
-            Tuple[Callable | type, bool] - (функция/класс, is_class)
+            Callable - скомпилированная функция
 
         Raises:
-            SafeEvalError: Если код невалиден или не найдена функция/класс
+            SafeEvalError: Если код невалиден или не найдена top-level функция
         """
         code = self._prepare_source(code)
         namespace = self.namespace_builder.build()
@@ -154,17 +159,6 @@ class PythonCompiler:
         except Exception as e:
             raise SafeEvalError(f"Compilation error: {e}") from e
 
-        # Ищем класс наследующий BaseTool
-        base_tool_cls = namespace.get("BaseTool")
-        if base_tool_cls:
-            for name, obj in namespace.items():
-                if isinstance(obj, type) and issubclass(obj, base_tool_cls) and obj is not base_tool_cls:
-                    return obj, True
-
-        # Ищем функцию execute
-        if "execute" in namespace:
-            return namespace["execute"], False
-
         try:
             tree = ast.parse(code)
         except SyntaxError as e:
@@ -175,10 +169,18 @@ class PythonCompiler:
             for n in tree.body
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
         ]
-        if top_level_funcs:
-            entry_name = top_level_funcs[-1].name
+        top_level_func_names = {n.name for n in top_level_funcs}
+        for entry_name in ("run", "execute"):
+            if entry_name not in top_level_func_names:
+                continue
             fn = namespace.get(entry_name)
             if callable(fn):
-                return fn, False
+                return fn
 
-        raise SafeEvalError("No function found in code")
+        if top_level_funcs:
+            entry_name = top_level_funcs[0].name
+            fn = namespace.get(entry_name)
+            if callable(fn):
+                return fn
+
+        raise SafeEvalError("No top-level function found in code")

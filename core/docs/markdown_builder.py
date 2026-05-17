@@ -39,34 +39,54 @@ def _escape_html_text(text: str) -> str:
 
 
 def _entry_point_section_lines(lang: str, perspective: str) -> list[str]:
-    """Секция «точка входа» для ноды code и inline tool (execute_tool), не codegen run(state)."""
+    """Единая секция контрактов выполнения для UI-документации и sandbox_codegen."""
     if lang != "python":
         return []
     if perspective not in ("editor", "node", "tool"):
         return []
-    sample_execute = """def execute(args, state):
-    return {}"""
-    sample_tool_class = """class MyTool(BaseTool):
-    async def run(self, args, state):
-        return {}"""
+    sample_node = """async def run(state):
+    state["result"] = {"ok": True}
+    return state"""
+    sample_tool_run = """async def run(value: int, state=None):
+    return {"value": value}"""
+    sample_tool_execute = """async def execute(args, state):
+    return {"value": args["value"]}"""
+    sample_codegen = """async def run(state):
+    values = state.variables.get("values", [])
+    return {"total": sum(values)}"""
     return [
-        '<h2 id="doc-entry">Точка входа (нода <code>code</code> и inline tool)</h2>',
+        '<h2 id="doc-entry">Контракты выполнения</h2>',
         "",
-        "Один и тот же рантайм: `PythonCodeRunner.execute_tool`. Не путать с codegen-путём "
-        "`async def run(state): ...` (`PythonCodeRunner.execute`, другой контракт).",
+        "Один справочник описывает Python-контракты sandbox для UI и codegen. "
+        "Точка входа inline-кода — только top-level функция; `BaseTool`-класс не является entrypoint.",
         "",
-        "В порядке приоритета компилятор ищет:",
+        "| Где пишется код | Точка входа | Вход | Что вернуть |",
+        "| --- | --- | --- | --- |",
+        "| Нода `code` flow | `async def run(state):` | `ExecutionState` текущего flow | Обычно тот же `state` после изменений |",
+        "| `sandbox_codegen` | `async def run(state):` | Копия `ExecutionState`; `run_variables` уже в `state.variables` | Только JSON-сериализуемый `dict` результата |",
+        "| Inline platform tool / `CodeTool` | `async def run(..., state=None):` предпочтительно; `execute` допустим | `args` по имени параметров или весь dict через параметр `args`; текущий `state` при наличии параметра | Любой JSON-сериализуемый результат tool |",
+        "| Fallback inline code | первая top-level функция | Те же правила аргументов, что у inline tool | Любой JSON-сериализуемый результат |",
         "",
-        "1. Класс, наследник `BaseTool`, с методом `run(self, args, state)`.",
-        "2. Функцию `execute` (sync или async) с аргументами `args` и при необходимости `state`.",
-        "3. Иначе — **последнюю** top-level функцию в файле; `args` маппятся в параметры по имени.",
+        "**Правила для всех контрактов:**",
         "",
-        "**Пример (функция):**",
+        "- Импорты только из whitelist и globals sandbox; `apps.*` и `core.*` не импортировать.",
+        "- Каждый `import`, `from ... import` и `async def` — отдельной физической строкой.",
+        "- Используй готовые globals (`reader`, `writer`, `httpx`, `llm`, `ServiceClient`, `call_mcp_tool`) вместо внутренних модулей платформы.",
+        "- Для точного результата возвращай компактный JSON-сериализуемый `dict` с явными ключами, даже если контракт допускает больше.",
+        "- Для inline tool компилятор выбирает entrypoint в порядке: `run` → `execute` → первая top-level функция.",
         "",
-        _fence_python(sample_execute),
-        "**Пример (класс):**",
+        "**Пример: нода `code` flow (`run` меняет state):**",
         "",
-        _fence_python(sample_tool_class),
+        _fence_python(sample_node),
+        "**Пример: `sandbox_codegen` (`run` возвращает dict результата):**",
+        "",
+        _fence_python(sample_codegen),
+        "**Пример: inline tool-функция (`run` с именованными аргументами):**",
+        "",
+        _fence_python(sample_tool_run),
+        "**Пример: inline tool-функция (`execute` с полным args dict, legacy-compatible):**",
+        "",
+        _fence_python(sample_tool_execute),
         "",
     ]
 
@@ -87,7 +107,7 @@ def build_documentation_markdown(
 
     toc: list[str] = []
     if entry_lines:
-        toc.append("- [Точка входа (code / tool)](#doc-entry)")
+        toc.append("- [Контракты выполнения](#doc-entry)")
     toc.append("- [Глобальные объекты](#doc-globals)")
     if response.runtime_namespace_extras is not None:
         toc.append("- [Доп. символы sandbox](#doc-runtime-namespace)")
@@ -240,8 +260,12 @@ def _global_to_md(g: GlobalVariable) -> list[str]:
         f"### `{g.name}`",
         "",
         f"**Тип:** `{g.type}`",
-        "",
     ]
+    if g.tags:
+        out.append("**Теги:** " + ", ".join(f"`{x}`" for x in g.tags))
+    if g.perspective:
+        out.append("**Ракурсы:** " + ", ".join(f"`{x}`" for x in g.perspective))
+    out.append("")
     if g.doc.strip():
         out.append(g.doc.strip())
         out.append("")
