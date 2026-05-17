@@ -25,6 +25,7 @@ import '../nodes/flows-base-node-editor.js';
  * @param {object} ctx.flowVariables
  * @param {Array<{id:string,name:string,type:string}>} ctx.graphNodes
  * @param {object} ctx.previewExecutionState
+ * @param {object|null} [ctx.dataflowNode]
  * @param {boolean} ctx.expanded
  * @param {boolean} [ctx.embedded]
  * @param {(e: CustomEvent) => void} ctx.onChange
@@ -45,6 +46,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
     const flowVariables = isPlainObject(ctx.flowVariables) ? ctx.flowVariables : {};
     const graphNodes = Array.isArray(ctx.graphNodes) ? ctx.graphNodes : [];
     const preview = ctx.previewExecutionState;
+    const dataflowNode = isPlainObject(ctx.dataflowNode) ? ctx.dataflowNode : null;
     const expanded = ctx.expanded === true;
     const embedded = ctx.embedded === true;
     const onChange = ctx.onChange;
@@ -67,6 +69,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
                 ?expanded=${expanded} ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
@@ -77,6 +80,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
                 ?expanded=${expanded} ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
@@ -87,6 +91,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
                 ?expanded=${expanded} ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
@@ -97,6 +102,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
                 ?expanded=${expanded} ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
@@ -107,6 +113,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
                 ?expanded=${expanded} ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
@@ -117,6 +124,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
                 ?expanded=${expanded} ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
@@ -127,6 +135,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
                 ?expanded=${expanded} ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
@@ -137,6 +146,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
                 ?expanded=${expanded} ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
@@ -147,6 +157,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .nodeConfig=${node} .nodeType=${node.type}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
                 ?expanded=${expanded} ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}
@@ -157,6 +168,7 @@ export function renderFlowsNodeEditorSurface(ctx) {
                 .nodeConfig=${node} .nodeType=${asString(node.type)}
                 .flowVariables=${flowVariables} .graphNodes=${graphNodes}
                 .previewExecutionState=${preview}
+                .dataflowNode=${dataflowNode}
                 ?expanded=${expanded} ?embedded=${embedded}
                 @change=${onChange}
                 @delete-node=${onDelete} @duplicate-node=${onDuplicate}

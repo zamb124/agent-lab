@@ -42,6 +42,7 @@ import { codeCompletionsOp, codeDocumentationOp, codeTemplatesOp,
          codeToolSourceOp, codeParseSignatureOp, codeValidateOp,
          codeExecuteOp } from '../events/resources/code.resource.js';
 import { promptRenderOp } from '../events/resources/prompts.resource.js';
+import { dataflowInspectOp } from '../events/resources/dataflow.resource.js';
 import { integrationsListOp, integrationsRemoveOp } from '../events/resources/integrations.resource.js';
 import { fileUploadOp } from '../events/resources/files.resource.js';
 import { chatResource, chatSendOp, chatCancelOp } from '../events/resources/chat.resource.js';
@@ -147,6 +148,7 @@ export class FlowsApp extends PlatformApp {
         codeParseSignatureOp,
         codeValidateOp,
         codeExecuteOp,
+        dataflowInspectOp,
         promptRenderOp,
         integrationsListOp,
         integrationsRemoveOp,

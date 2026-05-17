@@ -246,6 +246,8 @@ export const editorResource = createAsyncOp({
         agentExecutionRunning: false,
         activeTool: 'select',
         previewExecutionState: null,
+        dataflow: null,
+        dataflowObservations: {},
         mode: 'edit',
         isDirty: false,
         isSaving: false,
@@ -291,6 +293,8 @@ export const editorResource = createAsyncOp({
         DIRTY_SET: 'dirty_set',
         SAVING_SET: 'saving_set',
         PREVIEW_STATE_SET: 'preview_state_set',
+        DATAFLOW_SET: 'dataflow_set',
+        DATAFLOW_OBSERVATION_RECORDED: 'dataflow_observation_recorded',
         HISTORY_PUSHED: 'history_pushed',
         HISTORY_UNDONE: 'history_undone',
         HISTORY_REDONE: 'history_redone',
@@ -327,6 +331,8 @@ export const editorResource = createAsyncOp({
         setDirty: 'dirty_set',
         setSaving: 'saving_set',
         setPreviewExecutionState: 'preview_state_set',
+        setDataflow: 'dataflow_set',
+        recordDataflowObservation: 'dataflow_observation_recorded',
         pushHistory: 'history_pushed',
         undo: 'history_undone',
         redo: 'history_redone',
@@ -374,6 +380,8 @@ export const editorResource = createAsyncOp({
                 inheritedNodeIds: effective.inheritedNodeIds,
                 inheritedEdgeKeys: effective.inheritedEdgeKeys,
                 previewExecutionState: p.previewExecutionState && typeof p.previewExecutionState === 'object' ? p.previewExecutionState : null,
+                dataflow: null,
+                dataflowObservations: {},
                 agentExecutionRunning: false,
                 isDirty: loadLayoutDirty,
                 historyStack: [],
@@ -427,6 +435,8 @@ export const editorResource = createAsyncOp({
                 entryNodeId: nextEntry,
                 inheritedNodeIds,
                 inheritedEdgeKeys,
+                dataflow: null,
+                dataflowObservations: {},
             };
         }
 
@@ -538,6 +548,23 @@ export const editorResource = createAsyncOp({
 
         if (t === 'flows/editor/preview_state_set') {
             return { ...state, previewExecutionState: p.snapshot && typeof p.snapshot === 'object' ? p.snapshot : null };
+        }
+
+        if (t === 'flows/editor/dataflow_set') {
+            return { ...state, dataflow: p.dataflow && typeof p.dataflow === 'object' ? p.dataflow : null };
+        }
+
+        if (t === 'flows/editor/dataflow_observation_recorded') {
+            const nodeId = typeof p.nodeId === 'string' && p.nodeId.length > 0 ? p.nodeId : null;
+            const observation = p.observation && typeof p.observation === 'object' ? p.observation : null;
+            if (!nodeId || !observation) return state;
+            return {
+                ...state,
+                dataflowObservations: {
+                    ...(state.dataflowObservations && typeof state.dataflowObservations === 'object' ? state.dataflowObservations : {}),
+                    [nodeId]: observation,
+                },
+            };
         }
 
         if (t === 'flows/editor/history_pushed') {

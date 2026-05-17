@@ -138,6 +138,12 @@ class FlowSettings(BaseSettings):
             "не больше flow_execution_wall_time_cap_seconds"
         ),
     )
+    stream_heartbeat_interval_seconds: int = Field(
+        default=15,
+        ge=1,
+        le=300,
+        description="Интервал heartbeat status-update working для A2A SSE-стримов flows",
+    )
     graph_max_iterations: int = Field(
         default=100,
         ge=1,

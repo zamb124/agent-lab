@@ -410,6 +410,28 @@ export class ChatMessage extends PlatformElement {
                 box-shadow: var(--glass-shadow-subtle);
             }
 
+            .tool-orb.browser-preview {
+                border-color: color-mix(in srgb, var(--accent) 65%, var(--glass-border-subtle));
+                background: color-mix(in srgb, var(--accent) 12%, var(--glass-solid-subtle));
+                cursor: pointer;
+                box-shadow:
+                    var(--glass-shadow-subtle),
+                    0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+            }
+
+            .tool-orb.browser-preview:hover {
+                border-color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 20%, var(--glass-solid-subtle));
+                box-shadow:
+                    var(--glass-shadow-subtle),
+                    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent),
+                    0 0 16px color-mix(in srgb, var(--accent) 28%, transparent);
+            }
+
+            .tool-orb.browser-preview.browser-closed {
+                opacity: 0.72;
+            }
+
             .tool-orb:first-child {
                 margin-left: 0;
             }
@@ -426,6 +448,46 @@ export class ChatMessage extends PlatformElement {
                 justify-content: center;
                 width: 100%;
                 height: 100%;
+            }
+
+            .tool-orb-button {
+                appearance: none;
+                border: 0;
+                padding: 0;
+                margin: 0;
+                background: transparent;
+                color: inherit;
+                cursor: pointer;
+                border-radius: 50%;
+            }
+
+            .tool-orb-button:hover {
+                color: var(--accent);
+            }
+
+            .browser-preview-dot {
+                position: absolute;
+                top: -3px;
+                right: -3px;
+                z-index: 2;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: var(--success, #22c55e);
+                border: 2px solid var(--glass-solid-subtle);
+                box-shadow:
+                    0 0 0 2px color-mix(in srgb, var(--success, #22c55e) 16%, transparent),
+                    0 0 10px color-mix(in srgb, var(--success, #22c55e) 55%, transparent);
+            }
+
+            .tool-orb.browser-preview:hover .browser-preview-dot {
+                box-shadow:
+                    0 0 0 3px color-mix(in srgb, var(--success, #22c55e) 24%, transparent),
+                    0 0 14px color-mix(in srgb, var(--success, #22c55e) 70%, transparent);
+            }
+
+            .tool-orb.browser-closed .browser-preview-dot {
+                background: var(--text-tertiary);
             }
             
             @keyframes message-enter {
@@ -624,6 +686,7 @@ export class ChatMessage extends PlatformElement {
         activity: { type: String },
         toolCalls: { type: Array },
         toolResults: { type: Array },
+        browserPreviews: { type: Array },
         error: { type: String },
         errorI18nKey: { type: String },
         inputRequired: { type: Object },
@@ -649,6 +712,7 @@ export class ChatMessage extends PlatformElement {
         this.activity = '';
         this.toolCalls = [];
         this.toolResults = [];
+        this.browserPreviews = [];
         this.error = '';
         this.errorI18nKey = null;
         this.inputRequired = null;
@@ -767,6 +831,9 @@ export class ChatMessage extends PlatformElement {
             return true;
         }
         if (asArray(this.toolResults).length > 0) {
+            return true;
+        }
+        if (asArray(this.browserPreviews).length > 0) {
             return true;
         }
         return false;
@@ -914,6 +981,97 @@ export class ChatMessage extends PlatformElement {
         return parts.join('\n');
     }
 
+    _toolRowId(call, result) {
+        if (isPlainObject(call) && typeof call.id === 'string' && call.id.length > 0) {
+            return call.id;
+        }
+        if (isPlainObject(result) && typeof result.id === 'string' && result.id.length > 0) {
+            return result.id;
+        }
+        if (isPlainObject(result) && typeof result.tool_call_id === 'string' && result.tool_call_id.length > 0) {
+            return result.tool_call_id;
+        }
+        return '';
+    }
+
+    _browserPreviewForToolRow(call, result) {
+        const previews = asArray(this.browserPreviews);
+        if (previews.length === 0) {
+            return null;
+        }
+        const rowId = this._toolRowId(call, result);
+        const displayName = this._toolRowDisplayName(call, result);
+        const candidates = previews.filter((preview) => {
+            if (!isPlainObject(preview)) return false;
+            const previewToolCallId =
+                typeof preview.parentToolCallId === 'string' && preview.parentToolCallId.length > 0
+                    ? preview.parentToolCallId
+                    : typeof preview.toolCallId === 'string'
+                      ? preview.toolCallId
+                      : '';
+            if (rowId.length > 0 && previewToolCallId === rowId) {
+                return true;
+            }
+            return (
+                typeof preview.topLevelToolName === 'string' &&
+                preview.topLevelToolName.length > 0 &&
+                preview.topLevelToolName === displayName
+            );
+        });
+        if (candidates.length === 0) {
+            return null;
+        }
+        return candidates[candidates.length - 1];
+    }
+
+    _browserPreviewHint(preview, fallback) {
+        const status = isPlainObject(preview) ? asString(preview.status) : '';
+        const parts = [
+            status === 'closed'
+                ? 'Browser preview is closed'
+                : 'Click to open browser preview',
+            'Watch the live browser window for this tool.',
+            '',
+        ];
+        if (isPlainObject(preview)) {
+            const url = asString(preview.currentUrl);
+            if (status.length > 0) {
+                parts.push(`Status: ${status}`);
+            }
+            if (url.length > 0) {
+                parts.push(url);
+            }
+        }
+        if (fallback.length > 0) {
+            parts.push('');
+            parts.push('Tool details:');
+            parts.push(fallback);
+        }
+        return parts.join('\n');
+    }
+
+    _openBrowserPreview(preview, event) {
+        if (event && typeof event.stopPropagation === 'function') {
+            event.stopPropagation();
+        }
+        if (!isPlainObject(preview)) {
+            return;
+        }
+        const url = asString(preview.viewerUrl);
+        if (url.length === 0) {
+            return;
+        }
+        const sessionId = asString(preview.sessionId).replace(/[^a-zA-Z0-9_-]/g, '_') || 'browser';
+        const opened = window.open(
+            url,
+            `browser_preview_${sessionId}`,
+            'popup=yes,width=1240,height=860,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes',
+        );
+        if (!opened) {
+            window.location.assign(url);
+        }
+    }
+
     _renderToolOrbs() {
         const rows = this._pairToolCallsAndResults();
         if (rows.length === 0) {
@@ -929,18 +1087,43 @@ export class ChatMessage extends PlatformElement {
                 ${rows.map((row, index) => {
                     const name = this._toolRowDisplayName(row.call, row.result);
                     const icon = toolCallIconName(name);
-                    const hint = this._formatToolPairHintText(row.call, row.result);
+                    const preview = this._browserPreviewForToolRow(row.call, row.result);
+                    const baseHint = this._formatToolPairHintText(row.call, row.result);
+                    const hint = preview ? this._browserPreviewHint(preview, baseHint) : baseHint;
                     const z = index + 1;
+                    const closed = isPlainObject(preview) && preview.status === 'closed';
                     return html`
-                        <span class="tool-orb" style="z-index: ${z};">
+                        <span
+                            class=${classMap({
+                                'tool-orb': true,
+                                'browser-preview': !!preview,
+                                'browser-closed': closed,
+                            })}
+                            style="z-index: ${z};"
+                        >
                             <platform-help-hint
                                 .text=${hint}
-                                .label=${name}
+                                .label=${preview ? 'Click to open browser preview' : name}
                                 ?wide=${true}
                             >
-                                <span class="tool-orb-inner" tabindex="0" role="img" aria-label=${name}>
-                                    <platform-icon name=${icon} size="16"></platform-icon>
-                                </span>
+                                ${preview
+                                    ? html`
+                                          <button
+                                              type="button"
+                                              class="tool-orb-inner tool-orb-button"
+                                              aria-label=${`Click to open browser preview: ${name}`}
+                                              title="Click to open browser preview"
+                                              @click=${(event) => this._openBrowserPreview(preview, event)}
+                                          >
+                                              <platform-icon name=${icon} size="16"></platform-icon>
+                                              <span class="browser-preview-dot" aria-hidden="true"></span>
+                                          </button>
+                                      `
+                                    : html`
+                                          <span class="tool-orb-inner" tabindex="0" role="img" aria-label=${name}>
+                                              <platform-icon name=${icon} size="16"></platform-icon>
+                                          </span>
+                                      `}
                             </platform-help-hint>
                         </span>
                     `;

@@ -10,7 +10,7 @@ import re
 import uuid
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.browser.contracts.control_types import BrowserCapabilityError
@@ -322,6 +322,17 @@ class ControlClickBody(BaseModel):
     timeout_ms: int = Field(default=5_000, ge=1000)
 
 
+class ControlPointerClickBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = Field(ge=0)
+    y: float = Field(ge=0)
+    image_width: float = Field(gt=0)
+    image_height: float = Field(gt=0)
+    button: Literal["left", "right", "middle"] = "left"
+    click_count: int = Field(default=1, ge=1, le=3)
+
+
 class ControlFillBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -343,6 +354,15 @@ class ControlWaitBody(BaseModel):
     selector: Optional[str] = None
     load_state: Optional[Literal["domcontentloaded", "networkidle"]] = None
     timeout_ms: int = Field(default=5_000, ge=1000)
+
+
+class ControlSessionStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    url: str
+    title: str
+    closed: bool = False
 
 
 def _features_dict(runtime: Any) -> dict[str, bool]:
@@ -706,6 +726,78 @@ async def control_click(
         return out
 
 
+async def _viewport_size(
+    page: Any,
+    *,
+    fallback_width: float,
+    fallback_height: float,
+) -> tuple[float, float]:
+    size = page.viewport_size
+    if isinstance(size, dict):
+        width = size.get("width")
+        height = size.get("height")
+        if isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 0 and height > 0:
+            return float(width), float(height)
+    js_size = await page.evaluate(
+        "() => ({ width: window.innerWidth || document.documentElement.clientWidth,"
+        " height: window.innerHeight || document.documentElement.clientHeight })"
+    )
+    if isinstance(js_size, dict):
+        width = js_size.get("width")
+        height = js_size.get("height")
+        if isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 0 and height > 0:
+            return float(width), float(height)
+    return float(fallback_width), float(fallback_height)
+
+
+@router.post("/sessions/{session_id}/pointer/click")
+async def control_pointer_click(
+    session_id: str,
+    body: ControlPointerClickBody,
+    container: ContainerDep,
+) -> dict[str, Any]:
+    runtime = container.browser_runtime
+    async with runtime.lease_manager.session_navigate_exclusive(session_id):
+        try:
+            page = await runtime.lease_manager.get_page_for_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        viewport_width, viewport_height = await _viewport_size(
+            page,
+            fallback_width=body.image_width,
+            fallback_height=body.image_height,
+        )
+        x = max(0.0, min(viewport_width - 1.0, body.x / body.image_width * viewport_width))
+        y = max(0.0, min(viewport_height - 1.0, body.y / body.image_height * viewport_height))
+        await page.mouse.click(
+            x,
+            y,
+            button=body.button,
+            click_count=body.click_count,
+        )
+        out = {
+            "ok": True,
+            "x": x,
+            "y": y,
+            "viewport_width": viewport_width,
+            "viewport_height": viewport_height,
+            "url": str(getattr(page, "url", "") or ""),
+        }
+        event_path = _write_session_event(
+            runtime=runtime,
+            session_id=session_id,
+            op="control.pointer_click",
+            request=body,
+            response=out,
+            error=None,
+            meta={"transport": "http", "path": f"/control/sessions/{session_id}/pointer/click"},
+        )
+        _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
+        return out
+
+
 @router.post("/sessions/{session_id}/fill")
 async def control_fill(
     session_id: str,
@@ -812,6 +904,74 @@ async def control_wait(
         )
         _write_console_sidecars(runtime=runtime, session_id=session_id, event_path=event_path)
         return out
+
+
+@router.get("/sessions/{session_id}/status", response_model=ControlSessionStatusResponse)
+async def control_session_status(
+    session_id: str,
+    container: ContainerDep,
+) -> ControlSessionStatusResponse:
+    runtime = container.browser_runtime
+    try:
+        page = await runtime.lease_manager.get_page_for_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    closed = bool(page.is_closed())
+    title = ""
+    if not closed:
+        try:
+            title = await page.title()
+        except Exception:
+            title = ""
+    return ControlSessionStatusResponse(
+        session_id=session_id,
+        url=str(getattr(page, "url", "") or ""),
+        title=title,
+        closed=closed,
+    )
+
+
+@router.get("/sessions/{session_id}/screenshot")
+async def control_session_screenshot(
+    session_id: str,
+    container: ContainerDep,
+    image_format: Literal["jpeg", "png"] = Query(default="jpeg", alias="format"),
+    quality: int = Query(default=70, ge=1, le=100),
+    full_page: bool = Query(default=False),
+) -> Response:
+    runtime = container.browser_runtime
+    try:
+        page = await runtime.lease_manager.get_page_for_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if page.is_closed():
+        raise HTTPException(status_code=410, detail="browser page is closed")
+
+    screenshot_kwargs: dict[str, Any] = {
+        "type": image_format,
+        "full_page": full_page,
+        "timeout": 5_000,
+        "animations": "disabled",
+    }
+    if image_format == "jpeg":
+        screenshot_kwargs["quality"] = quality
+    try:
+        body = await page.screenshot(**screenshot_kwargs)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"screenshot failed: {exc}") from exc
+    return Response(
+        content=body,
+        media_type=f"image/{image_format}",
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @router.delete("/sessions/{session_id}")

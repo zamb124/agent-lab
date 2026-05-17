@@ -158,6 +158,7 @@ export class ChatMessages extends PlatformElement {
                             .activity=${asString(message.activity)}
                             .toolCalls=${asArray(message.toolCalls)}
                             .toolResults=${asArray(message.toolResults)}
+                            .browserPreviews=${asArray(message.browserPreviews)}
                             .inputRequired=${message.inputRequired}
                             .operatorReply=${asString(message.operatorReply)}
                             .breakpoint=${message.breakpoint}

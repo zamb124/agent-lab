@@ -24,6 +24,7 @@ import {
 
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_OBJECT = Object.freeze({});
+const BROWSER_PREVIEW_EVENT_PREFIX = 'browser.preview.';
 
 /** Ключ i18n `flows.chat_message.*` при обрыве SSE без терминального status-update. */
 const STREAM_INCOMPLETE_I18N_KEY = 'stream_incomplete';
@@ -160,6 +161,22 @@ function _processArtifactDataTrace(ctx, cid, taskId, artifact, causationId) {
                 const raw = typeof d.payload === 'string' ? d.payload : JSON.stringify(d.payload);
                 payloadPreview = raw.length > 100 ? raw.slice(0, 100) : raw;
             }
+            if (d.type.startsWith(BROWSER_PREVIEW_EVENT_PREFIX) && canMutateMessages) {
+                ctx.dispatch(
+                    'flows/chat/browser_preview_event',
+                    {
+                        task_id: taskId,
+                        context_id: cid,
+                        event: {
+                            id: typeof d.id === 'string' ? d.id : '',
+                            type: d.type,
+                            payload: d.payload && typeof d.payload === 'object' ? d.payload : {},
+                            timestamp: typeof d.timestamp === 'string' ? d.timestamp : '',
+                        },
+                    },
+                    meta,
+                );
+            }
             _appendRunTrace(
                 ctx,
                 cid,
@@ -223,6 +240,7 @@ function _newAssistantMessage(taskId, id) {
         errorI18nKey: null,
         toolCalls: [],
         toolResults: [],
+        browserPreviews: [],
         streaming: true,
         taskId,
         inputRequired: null,
@@ -398,6 +416,79 @@ function _setMessageFields(taskId, fields) {
         const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
         return _replaceMessage(nextMsgs, idx, (m) => ({ ...m, ...fields }));
     };
+}
+
+function _browserPreviewSessionId(payload) {
+    if (!payload || typeof payload !== 'object') return '';
+    const sid = typeof payload.browser_session_id === 'string'
+        ? payload.browser_session_id
+        : typeof payload.session_id === 'string'
+          ? payload.session_id
+          : '';
+    return sid.trim();
+}
+
+function _browserPreviewStatus(eventType, payload) {
+    if (eventType.endsWith('.session_closed')) return 'closed';
+    if (eventType.endsWith('.tool_failed')) return 'failed';
+    if (payload && payload.status === 'failed') return 'failed';
+    if (eventType.endsWith('.tool_started')) return 'running';
+    return 'live';
+}
+
+function _upsertBrowserPreview(list, event) {
+    if (!event || typeof event !== 'object') return list;
+    const payload = event.payload && typeof event.payload === 'object' ? event.payload : {};
+    const sessionId = _browserPreviewSessionId(payload);
+    if (sessionId.length === 0) return list;
+    const existing = Array.isArray(list) ? list : [];
+    const idx = existing.findIndex((item) => item && item.sessionId === sessionId);
+    const prev = idx >= 0 ? existing[idx] : {};
+    const toolCallId =
+        typeof payload.parent_tool_call_id === 'string' && payload.parent_tool_call_id.length > 0
+            ? payload.parent_tool_call_id
+            : typeof payload.tool_call_id === 'string'
+              ? payload.tool_call_id
+              : '';
+    const next = {
+        ...prev,
+        sessionId,
+        browserSessionId: sessionId,
+        toolCallId: toolCallId || prev.toolCallId || '',
+        parentToolCallId: toolCallId || prev.parentToolCallId || '',
+        topLevelToolName:
+            typeof payload.top_level_tool_name === 'string'
+                ? payload.top_level_tool_name
+                : prev.topLevelToolName || '',
+        browserToolName:
+            typeof payload.browser_tool_name === 'string'
+                ? payload.browser_tool_name
+                : prev.browserToolName || '',
+        status: _browserPreviewStatus(event.type, payload),
+        viewerUrl:
+            typeof payload.viewer_url === 'string' && payload.viewer_url.length > 0
+                ? payload.viewer_url
+                : prev.viewerUrl || '',
+        screenshotUrl:
+            typeof payload.screenshot_url === 'string' && payload.screenshot_url.length > 0
+                ? payload.screenshot_url
+                : prev.screenshotUrl || '',
+        currentUrl:
+            typeof payload.final_url === 'string' && payload.final_url.length > 0
+                ? payload.final_url
+                : typeof payload.url === 'string' && payload.url.length > 0
+                  ? payload.url
+                  : prev.currentUrl || '',
+        lastEventType: typeof event.type === 'string' ? event.type : prev.lastEventType || '',
+        updatedAt:
+            typeof event.timestamp === 'string' && event.timestamp.length > 0
+                ? event.timestamp
+                : new Date().toISOString(),
+    };
+    if (idx < 0) {
+        return [...existing, next];
+    }
+    return existing.map((item, i) => (i === idx ? next : item));
 }
 
 function _extractTextFromParts(parts) {
@@ -674,6 +765,21 @@ function _dispatchA2aEvent(ctx, contextId, currentTaskId, result, causationId) {
         const state = status.state;
         const final = result.final === true;
         const metadata = _resolveStatusMetadata(result, message);
+
+        if (metadata && metadata.platform_ping === true) {
+            ctx.dispatch(
+                'flows/chat/stream_ping',
+                {
+                    task_id: taskId,
+                    context_id: cid,
+                    sent_at: typeof metadata.sent_at === 'string' ? metadata.sent_at : '',
+                    received_at: Date.now(),
+                    sequence: typeof metadata.sequence === 'number' ? metadata.sequence : null,
+                },
+                { causation_id: causationId, source: 'http' },
+            );
+            return taskId;
+        }
 
         if (message) {
             _dispatchMessageMetadata(ctx, taskId, message, causationId);
@@ -1117,6 +1223,8 @@ export const chatResource = createResourceCollection({
         currentTaskId: null,
         streaming: false,
         sessionId: null,
+        lastStreamPingAt: null,
+        streamPingByContextId: EMPTY_OBJECT,
     },
     extraEvents: {
         SESSION_INIT: 'session_init',
@@ -1344,6 +1452,37 @@ export const chatResource = createResourceCollection({
             return withTask;
         }
 
+        if (type === 'flows/chat/stream_ping') {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') return state;
+            const taskId = typeof p.task_id === 'string' ? p.task_id : null;
+            const contextId = typeof p.context_id === 'string' && p.context_id.length > 0
+                ? p.context_id
+                : state.currentContextId;
+            const receivedAt = typeof p.received_at === 'number' ? p.received_at : Date.now();
+            const sentAt = typeof p.sent_at === 'string' ? p.sent_at : '';
+            const sequence = typeof p.sequence === 'number' ? p.sequence : null;
+            if (typeof contextId !== 'string' || contextId.length === 0) {
+                return {
+                    ...state,
+                    lastStreamPingAt: receivedAt,
+                };
+            }
+            return {
+                ...state,
+                lastStreamPingAt: receivedAt,
+                streamPingByContextId: {
+                    ...state.streamPingByContextId,
+                    [contextId]: {
+                        taskId,
+                        sentAt,
+                        receivedAt,
+                        sequence,
+                    },
+                },
+            };
+        }
+
         if (type === 'flows/chat/activity') {
             const p = event.payload;
             if (!p || typeof p !== 'object') return state;
@@ -1457,6 +1596,27 @@ export const chatResource = createResourceCollection({
                     return { ...m, toolResults: [...existing, tr] };
                 });
             });
+        }
+
+        if (type === 'flows/chat/browser_preview_event') {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') return state;
+            const taskId = typeof p.task_id === 'string' ? p.task_id : null;
+            const contextId = typeof p.context_id === 'string' ? p.context_id : null;
+            const browserEvent = p.event;
+            if (!taskId || !browserEvent || typeof browserEvent !== 'object') return state;
+            return _applyToBucketMessages(
+                state,
+                taskId,
+                (messages) => {
+                    const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
+                    return _replaceMessage(nextMsgs, idx, (m) => ({
+                        ...m,
+                        browserPreviews: _upsertBrowserPreview(m.browserPreviews, browserEvent),
+                    }));
+                },
+                contextId,
+            );
         }
 
         if (type === 'flows/chat/breakpoint') {

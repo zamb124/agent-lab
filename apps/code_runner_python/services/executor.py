@@ -703,7 +703,6 @@ class PythonSandboxExecutor:
 
                     namespace = build_namespace()
                     namespace["variables"] = state.get("variables", {{}})
-                    namespace["files"] = state.get("files", [])
                     sys.stdout = stdout_buffer
                     sys.stderr = stderr_buffer
                     stage = "load"

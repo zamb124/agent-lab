@@ -18,6 +18,7 @@ from apps.flows.src.models.mcp import (
     MCPServerConfig,
     MCPToolInfo,
 )
+from apps.flows.src.services.browser_preview import emit_browser_preview_mcp_event
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
@@ -331,19 +332,44 @@ class MCPClient:
             await self.initialize()
 
         logger.debug(f"MCP tool call: {tool_name}")
-
-        result, _ = await self._rpc_call(
-            "tools/call",
-            {
-                "name": tool_name,
-                "arguments": arguments or {},
-            },
+        args = arguments or {}
+        await emit_browser_preview_mcp_event(
+            config=self.config,
+            tool_name=tool_name,
+            arguments=args,
+            phase="started",
         )
 
-        return MCPCallResult(
+        try:
+            result, _ = await self._rpc_call(
+                "tools/call",
+                {
+                    "name": tool_name,
+                    "arguments": args,
+                },
+            )
+        except Exception as exc:
+            await emit_browser_preview_mcp_event(
+                config=self.config,
+                tool_name=tool_name,
+                arguments=args,
+                phase="failed",
+                error=str(exc),
+            )
+            raise
+
+        call_result = MCPCallResult(
             is_error=result.get("isError", False),
             content=result.get("content", []),
         )
+        await emit_browser_preview_mcp_event(
+            config=self.config,
+            tool_name=tool_name,
+            arguments=args,
+            phase="failed" if call_result.is_error else "finished",
+            result=call_result,
+        )
+        return call_result
 
 
 # Алиас для обратной совместимости

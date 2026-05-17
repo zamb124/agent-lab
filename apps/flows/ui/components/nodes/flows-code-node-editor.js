@@ -25,6 +25,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        dataflowNode: { type: Object },
         expanded: { type: Boolean, reflect: true },
         embedded: { type: Boolean, reflect: true },
         _hydrateKey: { state: true },
@@ -56,6 +57,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.dataflowNode = null;
         this.expanded = false;
         this.embedded = false;
         this._hydrateKey = '';
@@ -161,6 +163,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
+                .dataflowNode=${this.dataflowNode}
                 ?expanded=${this.expanded}
                 ?embedded=${this.embedded}
             >

@@ -1,4 +1,4 @@
-import { html, css } from 'lit';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 
 const ALLOWED_INPUT_TYPES = Object.freeze(['text', 'email', 'password', 'url', 'tel', 'search']);
@@ -12,6 +12,7 @@ export class PlatformFieldString extends PlatformElement {
         disabled: { type: Boolean },
         placeholder: { type: String },
         inputType: { type: String, attribute: 'input-type' },
+        suggestions: { type: Array },
     };
 
     static styles = [
@@ -40,6 +41,8 @@ export class PlatformFieldString extends PlatformElement {
         this.disabled = false;
         this.placeholder = '';
         this.inputType = 'text';
+        this.suggestions = [];
+        this._listId = `platform-field-string-${Math.random().toString(36).slice(2, 10)}`;
     }
 
     _onInput(e) {
@@ -78,6 +81,12 @@ export class PlatformFieldString extends PlatformElement {
         return this.inputType;
     }
 
+    _normalizedSuggestions() {
+        return Array.isArray(this.suggestions)
+            ? this.suggestions.filter((item) => typeof item === 'string' && item.length > 0).slice(0, 120)
+            : [];
+    }
+
     render() {
         if (this.mode === 'view') {
             const display = this.value != null && this.value !== '';
@@ -90,17 +99,26 @@ export class PlatformFieldString extends PlatformElement {
         }
 
         const t = this._resolvedInputType();
+        const suggestions = this._normalizedSuggestions();
         return html`
             <input
                 type=${t}
                 class="field-pill-input"
                 .value=${this.value ?? ''}
                 placeholder=${this.placeholder}
+                list=${suggestions.length > 0 ? this._listId : nothing}
                 ?disabled=${this.disabled}
                 @input=${this._onInput}
                 @focusin=${this._onManagedFocusIn}
                 @focusout=${this._onManagedFocusOut}
             />
+            ${suggestions.length > 0
+                ? html`
+                    <datalist id=${this._listId}>
+                        ${suggestions.map((value) => html`<option value=${value}></option>`)}
+                    </datalist>
+                `
+                : nothing}
         `;
     }
 }

@@ -218,11 +218,19 @@ export class PlatformApp extends PlatformElement {
             await this.updateComplete;
         });
         this._activeRouteTransition = transition;
-        transition.finished.finally(() => {
-            if (this._activeRouteTransition === transition) {
-                this._activeRouteTransition = null;
-            }
-        });
+        transition.finished
+            .catch((error) => {
+                const name = error && typeof error.name === 'string' ? error.name : '';
+                if (name !== 'AbortError' && name !== 'InvalidStateError') {
+                    // Keep unexpected transition failures visible without surfacing benign aborts as uncaught promises.
+                    console.warn('PlatformApp route transition failed', error);
+                }
+            })
+            .finally(() => {
+                if (this._activeRouteTransition === transition) {
+                    this._activeRouteTransition = null;
+                }
+            });
     }
 
     disconnectedCallback() {

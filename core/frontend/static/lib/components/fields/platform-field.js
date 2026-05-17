@@ -43,6 +43,7 @@ export class PlatformField extends PlatformElement {
         config: { type: Object },
         placeholder: { type: String },
         inputType: { type: String, attribute: 'input-type' },
+        suggestions: { type: Array },
         hint: { type: String },
         pillDensity: { type: String, attribute: 'pill-density' },
         pillEmbed: { type: Boolean, attribute: 'pill-embed' },
@@ -68,6 +69,7 @@ export class PlatformField extends PlatformElement {
         this.config = {};
         this.placeholder = '';
         this.inputType = 'text';
+        this.suggestions = [];
         this.hint = '';
         this.pillDensity = 'default';
         this.pillEmbed = false;
@@ -102,6 +104,7 @@ export class PlatformField extends PlatformElement {
                 .mode=${this.mode}
                 .placeholder=${this.placeholder}
                 .inputType=${this.inputType}
+                .suggestions=${this.suggestions}
                 ?disabled=${this.disabled}
                 @change=${this._onChange}
             ></platform-field-string>`;
@@ -114,6 +117,7 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     .placeholder=${this.placeholder}
                     .inputType=${this.inputType}
+                    .suggestions=${this.suggestions}
                     ?disabled=${this.disabled}
                     @change=${this._onChange}
                 ></platform-field-string>`;
@@ -212,6 +216,7 @@ export class PlatformField extends PlatformElement {
                     .mode=${this.mode}
                     .placeholder=${this.placeholder}
                     .inputType=${this.inputType}
+                    .suggestions=${this.suggestions}
                     ?disabled=${this.disabled}
                     @change=${this._onChange}
                 ></platform-field-string>`;

@@ -8,9 +8,12 @@ import uuid
 
 import pytest
 
+pytestmark = pytest.mark.skip(
+    reason="Legacy in-process resource injection is no longer supported; sandbox code uses capabilities."
+)
+
 from apps.flows.src.models import ResourceDefinition, ResourceReference
 from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
-from apps.flows.src.resources.wrappers import FilesResource
 from apps.flows.src.runtime.nodes import CodeNode, LlmNode
 from core.state import ExecutionState
 

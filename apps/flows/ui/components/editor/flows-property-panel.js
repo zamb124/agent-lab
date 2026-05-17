@@ -119,6 +119,7 @@ export class FlowsPropertyPanel extends PlatformElement {
             ? Object.entries(skillsData.nodes).map(([id, n]) => ({ id, name: typeof n?.name === 'string' && n.name.length > 0 ? n.name : id, type: asString(n?.type) }))
             : [];
         const previewExecutionState = state.previewExecutionState;
+        const dataflowNode = isPlainObject(state.dataflow?.nodes?.[nodeId]) ? state.dataflow.nodes[nodeId] : null;
         const expanded = state.panelExpanded === true;
         return renderFlowsNodeEditorSurface({
             node,
@@ -128,6 +129,7 @@ export class FlowsPropertyPanel extends PlatformElement {
             flowVariables,
             graphNodes,
             previewExecutionState,
+            dataflowNode,
             expanded,
             embedded: false,
             onChange: (e) => this._onChange(e),

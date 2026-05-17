@@ -36,6 +36,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        dataflowNode: { type: Object },
         expanded: { type: Boolean, reflect: true },
         embedded: { type: Boolean, reflect: true },
     };
@@ -78,6 +79,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.dataflowNode = null;
         this.expanded = false;
         this.embedded = false;
     }
@@ -343,6 +345,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
                 .flowVariables=${this.flowVariables}
                 .graphNodes=${this.graphNodes}
                 .previewExecutionState=${this.previewExecutionState}
+                .dataflowNode=${this.dataflowNode}
                 ?expanded=${this.expanded}
                 ?embedded=${this.embedded}
             >

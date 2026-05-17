@@ -42,6 +42,7 @@ from apps.flows.src.runtime.llm_override_params import (
     client_kwargs_from_override,
     split_llm_override_for_client,
 )
+from apps.flows.src.runtime.tool_call_context import active_tool_call_context
 from apps.flows.src.state.cancellation import (
     FlowCancelled,
     check_cancellation,
@@ -689,7 +690,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                             try:
                                 tool_results = await self._execute_tools_parallel(
-                                    tool_calls, state, trace_ctx
+                                    tool_calls, state, trace_ctx, emitter
                                 )
 
                                 for tr in tool_results:
@@ -921,6 +922,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         tool_calls: list[dict[str, Any]],
         state: ExecutionState,
         trace_ctx: TraceContext | None = None,
+        emitter: BaseEmitter | None = None,
     ) -> list[dict[str, str]]:
         """
         Выполняет tools ПАРАЛЛЕЛЬНО через asyncio.gather.
@@ -930,7 +932,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         """
         if len(tool_calls) == 1:
             # Один tool - выполняем напрямую без копирования
-            return await self._execute_single_tool(tool_calls[0], state, trace_ctx)
+            return await self._execute_single_tool(tool_calls[0], state, trace_ctx, emitter)
 
         # Несколько tools - параллельное выполнение
         original_msg_count = len(state.messages)
@@ -943,7 +945,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
         # Запускаем все tools параллельно
         tasks = [
-            self._execute_single_tool(tc, state_copy, trace_ctx)
+            self._execute_single_tool(tc, state_copy, trace_ctx, emitter)
             for tc, state_copy in zip(tool_calls, state_copies)
         ]
 
@@ -1014,6 +1016,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         tc: dict[str, Any],
         state: ExecutionState,
         trace_ctx: TraceContext | None = None,
+        emitter: BaseEmitter | None = None,
     ) -> list[dict[str, str]]:
         """Выполняет один tool."""
         tracer = get_tracer()
@@ -1053,7 +1056,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
             logger.info(f"Выполняю tool: {tool_name}")
             try:
-                result = await tool.run(tool_args, state)
+                with active_tool_call_context(
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                    state=state,
+                    emitter=emitter,
+                ):
+                    result = await tool.run(tool_args, state)
                 state.tool_results[tool_name] = result
 
                 tool_duration = (time.time() - tool_start) * 1000

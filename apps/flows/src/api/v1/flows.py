@@ -3,6 +3,7 @@ API endpoints для flows.
 """
 
 import asyncio
+import copy
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -31,6 +32,7 @@ from apps.flows.src.services.bundle_node_repair import (
     repair_node_map_with_canonical_top_level,
 )
 from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
+from apps.flows.src.services.flow_dataflow_inspector import inspect_flow_dataflow
 from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
 from apps.flows.src.services.flow_speech_resolve import (
     effective_flow_speech_settings,
@@ -642,6 +644,123 @@ class FlowValidateResponse(BaseModel):
     errors: list[ValidationErrorResponse] = []
     state_keys_used: list[str] = []
     var_keys_used: list[str] = []
+
+
+class FlowDataflowInspectRequest(BaseModel):
+    """Запрос статического анализа state до/после нод редактора."""
+
+    flow_id: str | None = None
+    branch_id: str = "default"
+    entry: str | None = None
+    nodes: dict[str, Any] = Field(default_factory=dict)
+    edges: list[Any] = Field(default_factory=list)
+    variables: dict[str, Any] = Field(default_factory=dict)
+    sample_state: dict[str, Any] | None = None
+    observed_runs: dict[str, Any] = Field(default_factory=dict)
+
+
+async def _attach_nested_dataflow_for_editor(
+    nodes: dict[str, Any],
+    container: FlowContainer,
+    *,
+    seen_flow_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    """Adds one-level static nested-flow summaries used only by the dataflow inspector."""
+    if not isinstance(nodes, dict):
+        return {}
+    seen = set(seen_flow_ids or set())
+    out = copy.deepcopy(nodes)
+    for node_id, node in out.items():
+        if not isinstance(node, dict):
+            continue
+        if node.get("type") != "flow":
+            continue
+        nested_flow_id = node.get("flow_id")
+        if not isinstance(nested_flow_id, str) or not nested_flow_id or nested_flow_id in seen:
+            continue
+        nested_cfg = await container.flow_repository.get(nested_flow_id)
+        if nested_cfg is None:
+            continue
+        nested_branch_id = node.get("branch_id") if isinstance(node.get("branch_id"), str) else "default"
+        nested_effective = container.flow_factory.apply_branch(nested_cfg, nested_branch_id)
+        nested_nodes = nested_effective.get("nodes") or {}
+        nested_edges = [
+            edge.model_dump(mode="json", by_alias=True) if hasattr(edge, "model_dump") else edge
+            for edge in (nested_effective.get("edges") or [])
+        ]
+        try:
+            nested_nodes = await _inline_tools_in_nodes(copy.deepcopy(nested_nodes), container)
+        except Exception as exc:
+            logger.warning(
+                "flows.dataflow.nested_inline_tools_failed",
+                flow_id=nested_flow_id,
+                branch_id=nested_branch_id,
+                node_id=node_id,
+                exception_type=type(exc).__name__,
+            )
+        nested_nodes = await _attach_nested_dataflow_for_editor(
+            nested_nodes,
+            container,
+            seen_flow_ids={*seen, nested_flow_id},
+        )
+        node["__dataflow_nested"] = inspect_flow_dataflow(
+            flow_id=nested_flow_id,
+            branch_id=nested_branch_id,
+            entry=nested_effective.get("entry"),
+            nodes=nested_nodes,
+            edges=nested_edges,
+            variables=nested_effective.get("variables") or {},
+            sample_state=None,
+            observed_runs={},
+        )
+    return out
+
+
+@router.post("/dataflow/inspect")
+async def inspect_dataflow(
+    request: FlowDataflowInspectRequest,
+    container: ContainerDep,
+) -> dict[str, Any]:
+    """Возвращает статический snapshot того, какие поля state входят и выходят из каждой ноды."""
+    nodes = request.nodes
+    edges = request.edges
+    entry = request.entry
+    variables = request.variables
+
+    if not nodes and request.flow_id:
+        flow_cfg = await container.flow_repository.get(request.flow_id)
+        if flow_cfg is None:
+            raise HTTPException(status_code=404, detail=f"Flow not found: {request.flow_id}")
+        effective = container.flow_factory.apply_branch(flow_cfg, request.branch_id or "default")
+        nodes = effective.get("nodes") or {}
+        edges = [
+            edge.model_dump(mode="json", by_alias=True) if hasattr(edge, "model_dump") else edge
+            for edge in (effective.get("edges") or [])
+        ]
+        entry = effective.get("entry")
+        variables = effective.get("variables") or {}
+
+    try:
+        nodes = await _inline_tools_in_nodes(copy.deepcopy(nodes), container)
+    except Exception as exc:
+        logger.warning(
+            "flows.dataflow.inline_tools_failed",
+            flow_id=request.flow_id,
+            branch_id=request.branch_id,
+            exception_type=type(exc).__name__,
+        )
+    nodes = await _attach_nested_dataflow_for_editor(nodes, container)
+
+    return inspect_flow_dataflow(
+        flow_id=request.flow_id,
+        branch_id=request.branch_id or "default",
+        entry=entry,
+        nodes=nodes,
+        edges=edges,
+        variables=variables,
+        sample_state=request.sample_state,
+        observed_runs=request.observed_runs,
+    )
 
 
 @router.post("/validate", response_model=FlowValidateResponse)

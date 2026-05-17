@@ -34,6 +34,13 @@ import '../modals/flows-preview-share-modal.js';
 import { getNodeTypeMeta, getCategoryToken } from '../constants/node-icons.js';
 import { asObject, isPlainObject } from '../_helpers/flows-resolvers.js';
 
+function stableStringify(value) {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+}
+
 export class FlowEditorPage extends PlatformPage {
     static properties = {
         flowId: { type: String, attribute: 'flow-id' },
@@ -104,6 +111,11 @@ export class FlowEditorPage extends PlatformPage {
         this._editor = this.useOp('flows/editor');
         this._flows = this.useResource('flows/flows');
         this._editorStateOp = this.useOp('flows/code_editor_state');
+        this._dataflowInspectOp = this.useOp('flows/dataflow_inspect');
+        this._dataflowTimer = null;
+        this._lastDataflowKey = '';
+        this._pendingDataflowKey = '';
+        this._dataflowSeq = 0;
         this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => this._loadFlowIfNeeded());
         this.useEvent('flows/flows/item_loaded', (e) => {
             const item = e && e.payload && e.payload.item;
@@ -117,6 +129,14 @@ export class FlowEditorPage extends PlatformPage {
         super.connectedCallback();
         this.classList.toggle('flow-settings-panel-open', Boolean(this._flowSettingsOpen));
         this._loadFlowIfNeeded();
+    }
+
+    disconnectedCallback() {
+        if (this._dataflowTimer) {
+            clearTimeout(this._dataflowTimer);
+            this._dataflowTimer = null;
+        }
+        super.disconnectedCallback?.();
     }
 
     updated(changed) {
@@ -161,6 +181,57 @@ export class FlowEditorPage extends PlatformPage {
         });
         if (previewExecutionState !== null) {
             this._editor.setPreviewExecutionState({ snapshot: previewExecutionState });
+        }
+        this._scheduleDataflowRefresh(asObject(this._editor.state));
+    }
+
+    _buildDataflowPayload(state) {
+        const branchData = isPlainObject(state.branchData) ? state.branchData : null;
+        if (!branchData || !isPlainObject(branchData.nodes)) return null;
+        const apiBranch = (typeof this.branchId !== 'string' || this.branchId.length === 0 || this.branchId === 'base')
+            ? 'default'
+            : this.branchId;
+        return {
+            flow_id: this.flowId || state.flowId || null,
+            branch_id: apiBranch,
+            entry: typeof branchData.entry === 'string' && branchData.entry.length > 0 ? branchData.entry : null,
+            nodes: branchData.nodes,
+            edges: Array.isArray(branchData.edges) ? branchData.edges : [],
+            variables: isPlainObject(branchData.variables) ? branchData.variables : {},
+            sample_state: isPlainObject(state.previewExecutionState) ? state.previewExecutionState : null,
+            observed_runs: isPlainObject(state.dataflowObservations) ? state.dataflowObservations : {},
+        };
+    }
+
+    _scheduleDataflowRefresh(state) {
+        const payload = this._buildDataflowPayload(state);
+        if (!payload) {
+            if (state.dataflow) this._editor.setDataflow({ dataflow: null });
+            return;
+        }
+        const key = stableStringify(payload);
+        if (key === this._lastDataflowKey || key === this._pendingDataflowKey) return;
+        this._pendingDataflowKey = key;
+        if (this._dataflowTimer) clearTimeout(this._dataflowTimer);
+        this._dataflowTimer = setTimeout(() => {
+            this._dataflowTimer = null;
+            void this._refreshDataflow(key, payload);
+        }, 220);
+    }
+
+    async _refreshDataflow(key, payload) {
+        const seq = ++this._dataflowSeq;
+        try {
+            const dataflow = await this._dataflowInspectOp.run(payload);
+            if (seq !== this._dataflowSeq || key !== this._pendingDataflowKey) return;
+            this._lastDataflowKey = key;
+            this._pendingDataflowKey = '';
+            this._editor.setDataflow({ dataflow });
+        } catch {
+            if (seq === this._dataflowSeq) {
+                this._pendingDataflowKey = '';
+                this._editor.setDataflow({ dataflow: null });
+            }
         }
     }
 
@@ -240,6 +311,7 @@ export class FlowEditorPage extends PlatformPage {
     }
 
     render() {
+        this._scheduleDataflowRefresh(asObject(this._editor.state));
         const dismissSafe = this._flowSettingsOpen ? 'flow-settings-dismiss-safe' : '';
         return html`
             ${this._flowSettingsOpen

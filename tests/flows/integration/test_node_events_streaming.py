@@ -13,6 +13,7 @@ from a2a.types import TaskArtifactUpdateEvent
 
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.streaming import EventSubscriber
+from core.errors import CodeExecutionRuntimeError
 from core.state import ExecutionState
 
 
@@ -239,7 +240,7 @@ class TestNodeEventsStreaming:
             await asyncio.sleep(0.05)
             try:
                 await agent.run(state)
-            except ValueError:
+            except (ValueError, CodeExecutionRuntimeError):
                 pass  # Ожидаемая ошибка
 
         try:

@@ -7,10 +7,12 @@ BaseChannel - абстрактный базовый класс для канал
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
+from contextlib import suppress
 from typing import Any
 from uuid import UUID
 
@@ -110,7 +112,7 @@ def _branch_body_from_request(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def effective_stream_task_id_for_session(
-    params_task_id: str,
+    params_task_id: str | None,
     saved_state: ExecutionState | None,
 ) -> str:
     """
@@ -122,7 +124,12 @@ def effective_stream_task_id_for_session(
         sid = saved_state.interrupt.system.task_id
         if sid:
             return sid
-    return params_task_id
+    requested_task_id = (params_task_id or "").strip()
+    if requested_task_id:
+        return requested_task_id
+    if saved_state is not None and saved_state.task_id:
+        return saved_state.task_id
+    return ""
 
 
 class PermissionDenied(Exception):
@@ -563,6 +570,11 @@ class BaseChannel(ABC):
         saved_state = await container.state_manager.get_state(params.session_id)
 
         effective_task_id = effective_stream_task_id_for_session(params.task_id, saved_state)
+        if not effective_task_id:
+            effective_task_id = params.context_id or params.session_id or str(uuid.uuid4())
+        params.task_id = effective_task_id
+        if not params.context_id:
+            params.context_id = params.session_id or effective_task_id
 
         logger.debug(
             f"[process_task] Starting task_id={effective_task_id} (from params: {params.task_id})"
@@ -585,6 +597,7 @@ class BaseChannel(ABC):
         emitter = Emitter(container.redis_client, exec_state)
 
         logger.debug(f"[process_task] Emitter created for stream:{effective_task_id}")
+        heartbeat_task = asyncio.create_task(self._run_stream_heartbeat(emitter))
 
         try:
             pinned_version = saved_state.flow_config_version if saved_state else None
@@ -830,7 +843,37 @@ class BaseChannel(ABC):
             await self._send_push_notification(params.task_id, params.context_id, "failed", str(e))
             raise
         finally:
+            heartbeat_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat_task
             clear_context()
+
+    async def _run_stream_heartbeat(self, emitter: Emitter) -> None:
+        """Пока задача работает, публикует A2A heartbeat через тот же emitter."""
+        try:
+            interval = float(get_settings().stream_heartbeat_interval_seconds)
+            sequence = 0
+            while True:
+                await asyncio.sleep(interval)
+                sequence += 1
+                try:
+                    await emitter.emit_ping(sequence=sequence)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning(
+                        "flow.stream_heartbeat.emit_failed task_id=%s error=%s",
+                        emitter.state.task_id,
+                        exc,
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "flow.stream_heartbeat.stopped task_id=%s error=%s",
+                emitter.state.task_id,
+                exc,
+            )
 
     async def _send_push_notification(
         self, task_id: str, context_id: str, state: str, message: str

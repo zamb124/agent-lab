@@ -114,6 +114,10 @@ A2A_METHODS = {
 }
 
 _STREAM_METHODS = {"message/stream", "tasks/resubscribe"}
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",
+}
 
 
 def _is_embed_session_token(token_data: TokenData | None) -> bool:
@@ -281,7 +285,7 @@ def _sse_error_response(rpc_id: JsonRpcId | None, code: int, message: str) -> St
     async def _gen():
         yield f"data: {error_payload}\n\n"
 
-    return StreamingResponse(_gen(), media_type="text/event-stream")
+    return StreamingResponse(_gen(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
 async def _get_flow_config(
@@ -606,6 +610,7 @@ async def _json_rpc_handler_internal(
             return StreamingResponse(
                 _handle_streaming(handler, params, rpc_id, channel_context),
                 media_type="text/event-stream",
+                headers=_SSE_HEADERS,
             )
 
         elif method == "tasks/get":
@@ -637,6 +642,7 @@ async def _json_rpc_handler_internal(
             return StreamingResponse(
                 _handle_resubscribe_streaming(handler, params, rpc_id),
                 media_type="text/event-stream",
+                headers=_SSE_HEADERS,
             )
 
         elif method == "tasks/pushNotificationConfig/get":

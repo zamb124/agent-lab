@@ -52,6 +52,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         flowVariables: { type: Object },
         graphNodes: { type: Array },
         previewExecutionState: { type: Object },
+        dataflowNode: { type: Object },
         expanded: { type: Boolean, reflect: true },
         /** Редактирование вложенного tool: без смены node id */
         embedded: { type: Boolean, reflect: true },
@@ -216,6 +217,110 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 border-color: var(--accent-subtle);
             }
 
+            .dataflow-lanes {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                gap: var(--space-2);
+            }
+            .dataflow-lane {
+                min-width: 0;
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-sm);
+                background: var(--glass-solid-subtle);
+                padding: var(--space-2);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+            }
+            .dataflow-lane-title {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                font-weight: var(--font-semibold);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            .dataflow-list {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                min-width: 0;
+            }
+            .dataflow-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+                align-items: center;
+                gap: 6px;
+                min-width: 0;
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+            }
+            .dataflow-row .arrow {
+                color: var(--text-tertiary);
+            }
+            .dataflow-chip {
+                min-width: 0;
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                max-width: 100%;
+                padding: 3px 7px;
+                border-radius: var(--radius-sm);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-medium);
+                color: var(--text-secondary);
+                line-height: 1.2;
+            }
+            .dataflow-chip .label {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .dataflow-chip .type {
+                color: var(--text-tertiary);
+                flex-shrink: 0;
+            }
+            .dataflow-chip[data-status="missing"],
+            .dataflow-chip[data-severity="error"] {
+                color: var(--error);
+                border-color: color-mix(in oklab, var(--error) 36%, var(--glass-border-subtle));
+                background: color-mix(in oklab, var(--error) 10%, var(--glass-solid-subtle));
+            }
+            .dataflow-chip[data-severity="warning"] {
+                color: var(--warning);
+                border-color: color-mix(in oklab, var(--warning) 36%, var(--glass-border-subtle));
+                background: color-mix(in oklab, var(--warning) 10%, var(--glass-solid-subtle));
+            }
+            .dataflow-empty {
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                line-height: 1.35;
+            }
+            .dataflow-issues {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                margin-top: var(--space-1);
+            }
+            .dataflow-issue {
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                line-height: 1.35;
+                padding-left: var(--space-2);
+                border-left: 2px solid var(--border-subtle);
+            }
+            .dataflow-issue[data-severity="warning"] {
+                border-left-color: var(--warning);
+            }
+            .dataflow-issue[data-severity="error"] {
+                border-left-color: var(--error);
+            }
+            @media (max-width: 720px) {
+                .dataflow-lanes {
+                    grid-template-columns: minmax(0, 1fr);
+                }
+            }
+
             .reset-link {
                 background: none; border: none; padding: 0;
                 color: var(--text-tertiary);
@@ -238,6 +343,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this.flowVariables = null;
         this.graphNodes = null;
         this.previewExecutionState = null;
+        this.dataflowNode = null;
         this.expanded = false;
         this.embedded = false;
         this._mappingTab = 'input';
@@ -459,13 +565,27 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         }
         const skill = typeof this.branchId === 'string' && this.branchId.length > 0 ? this.branchId : 'base';
         setCodeExecuteRequestClientId(this._codeExecuteClientId);
-        await this._nodeExecute.run({
+        const result = await this._nodeExecute.run({
             node_type: this.nodeType,
             node_config: asObject(this.nodeConfig),
             state,
             flow_id: this.flowId,
             branch_id: skill,
         });
+        if (result && typeof result === 'object' && result.success === true) {
+            if (result.output_state && typeof result.output_state === 'object' && !Array.isArray(result.output_state)) {
+                this._flowEditor.setPreviewExecutionState({ snapshot: result.output_state });
+            }
+            this._flowEditor.recordDataflowObservation({
+                nodeId: this.nodeId,
+                observation: {
+                    diff: Array.isArray(result.diff) ? result.diff : [],
+                    output_state: result.output_state && typeof result.output_state === 'object' ? result.output_state : null,
+                    duration_ms: typeof result.duration_ms === 'number' ? result.duration_ms : null,
+                    observed_at: new Date().toISOString(),
+                },
+            });
+        }
     }
 
     _onOpenExecuteFull(e) {
@@ -1141,6 +1261,167 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         `;
     }
 
+    _dataflowLabel(value) {
+        if (typeof value !== 'string' || value.length === 0) {
+            return '—';
+        }
+        return value;
+    }
+
+    _dataflowType(value) {
+        return typeof value === 'string' && value.length > 0 ? value : 'any';
+    }
+
+    _renderDataflowInputRows(rows, incoming) {
+        if (Array.isArray(rows) && rows.length > 0) {
+            return html`
+                <div class="dataflow-list">
+                    ${rows.slice(0, 8).map((row) => html`
+                        <div class="dataflow-row">
+                            <span
+                                class="dataflow-chip"
+                                data-status=${row.status === 'missing' ? 'missing' : 'ok'}
+                                title=${this._dataflowLabel(row.source)}
+                            >
+                                <span class="label">${this._dataflowLabel(row.source_path || row.source)}</span>
+                                <span class="type">${this._dataflowType(row.type)}</span>
+                            </span>
+                            <span class="arrow">→</span>
+                            <span class="dataflow-chip" title=${this._dataflowLabel(row.target)}>
+                                <span class="label">${this._dataflowLabel(row.target)}</span>
+                            </span>
+                        </div>
+                    `)}
+                </div>
+            `;
+        }
+        const visible = Array.isArray(incoming)
+            ? incoming.filter((item) => item && item.source !== 'system').slice(0, 8)
+            : [];
+        if (visible.length === 0) {
+            return html`<div class="dataflow-empty">${this.t('base_node_editor.dataflow_inputs_empty')}</div>`;
+        }
+        return html`
+            <div class="dataflow-list">
+                ${visible.map((item) => html`
+                    <span class="dataflow-chip" title=${this._dataflowLabel(item.path)}>
+                        <span class="label">${this._dataflowLabel(item.path)}</span>
+                        <span class="type">${this._dataflowType(item.type)}</span>
+                    </span>
+                `)}
+            </div>
+        `;
+    }
+
+    _renderDataflowWrites(writes) {
+        const visible = Array.isArray(writes) ? writes.slice(0, 10) : [];
+        if (visible.length === 0) {
+            return html`<div class="dataflow-empty">${this.t('base_node_editor.dataflow_outputs_empty')}</div>`;
+        }
+        return html`
+            <div class="dataflow-list">
+                ${visible.map((item) => html`
+                    <span
+                        class="dataflow-chip"
+                        data-status=${item.protected ? 'missing' : 'ok'}
+                        title=${this._dataflowLabel(item.source)}
+                    >
+                        <span class="label">${this._dataflowLabel(item.path)}</span>
+                        <span class="type">${this._dataflowType(item.type)}</span>
+                    </span>
+                `)}
+            </div>
+        `;
+    }
+
+    _renderDataflowIssues(issues) {
+        const visible = Array.isArray(issues)
+            ? issues.filter((issue) => issue && issue.severity !== 'info').slice(0, 4)
+            : [];
+        if (visible.length === 0) return nothing;
+        return html`
+            <div class="dataflow-issues">
+                ${visible.map((issue) => html`
+                    <div class="dataflow-issue" data-severity=${this._dataflowLabel(issue.severity)}>
+                        ${this._dataflowLabel(issue.message)}
+                    </div>
+                `)}
+            </div>
+        `;
+    }
+
+    _renderDataflow() {
+        const df = isPlainObject(this.dataflowNode) ? this.dataflowNode : null;
+        if (!df) return nothing;
+        const inputs = Array.isArray(df.input_mapping) ? [...df.input_mapping] : [];
+        if (Array.isArray(df.reads)) {
+            for (const read of df.reads) {
+                inputs.push({
+                    target: read.config_path,
+                    source: read.source_kind && read.source_path ? `@${read.source_kind}:${read.source_path}` : read.source_path,
+                    source_path: read.source_path,
+                    status: read.status,
+                    type: read.type,
+                });
+            }
+        }
+        const incoming = Array.isArray(df.incoming_state) ? df.incoming_state : [];
+        const writes = Array.isArray(df.writes) ? df.writes : [];
+        const issues = Array.isArray(df.issues) ? df.issues : [];
+        return html`
+            <div class="section">
+                <div class="section-title">${this.t('base_node_editor.section_dataflow')}</div>
+                <div class="dataflow-lanes">
+                    <div class="dataflow-lane">
+                        <div class="dataflow-lane-title">${this.t('base_node_editor.dataflow_inputs')}</div>
+                        ${this._renderDataflowInputRows(inputs, incoming)}
+                    </div>
+                    <div class="dataflow-lane">
+                        <div class="dataflow-lane-title">${this.t('base_node_editor.dataflow_outputs')}</div>
+                        ${this._renderDataflowWrites(writes)}
+                    </div>
+                </div>
+                ${this._renderDataflowIssues(issues)}
+            </div>
+        `;
+    }
+
+    _dataflowStateSuggestions() {
+        const df = isPlainObject(this.dataflowNode) ? this.dataflowNode : null;
+        const rows = df && Array.isArray(df.incoming_state) ? df.incoming_state : [];
+        const writes = df && Array.isArray(df.writes) ? df.writes : [];
+        const paths = [];
+        for (const item of [...rows, ...writes]) {
+            if (!item || typeof item.path !== 'string' || item.path.length === 0) continue;
+            if (item.path.startsWith('variables.')) continue;
+            paths.push(item.path);
+        }
+        return Array.from(new Set(paths));
+    }
+
+    _dataflowVarSuggestions() {
+        const df = isPlainObject(this.dataflowNode) ? this.dataflowNode : null;
+        const rows = df && Array.isArray(df.incoming_state) ? df.incoming_state : [];
+        const vars = [];
+        for (const item of rows) {
+            if (!item || typeof item.path !== 'string') continue;
+            if (item.path.startsWith('variables.')) vars.push(item.path.slice('variables.'.length));
+        }
+        const fv = this.flowVariables && typeof this.flowVariables === 'object' ? this.flowVariables : {};
+        for (const key of Object.keys(fv)) {
+            vars.push(key);
+        }
+        return Array.from(new Set(vars));
+    }
+
+    _dataflowResultSuggestions() {
+        const df = isPlainObject(this.dataflowNode) ? this.dataflowNode : null;
+        if (df && Array.isArray(df.result_keys)) {
+            return df.result_keys.filter((item) => typeof item === 'string' && item.length > 0);
+        }
+        return [];
+    }
+
     _renderInputState() {
         const value = this._stateValue();
         return html`
@@ -1195,6 +1476,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                     syncKey=${syncKey}
                     kind=${tab === 'input' ? 'input' : 'output'}
                     .mapping=${mapping}
+                    .stateSuggestions=${this._dataflowStateSuggestions()}
+                    .varSuggestions=${this._dataflowVarSuggestions()}
+                    .resultSuggestions=${this._dataflowResultSuggestions()}
                     @change=${(e) => this._onMapping(field, e)}
                 ></flows-state-mapping-editor>
             </div>
@@ -1222,6 +1506,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                     <div class="panel-main">
                         <div class="panel-run-fallback" data-node-run-fallback="expanded"></div>
                         ${this._renderSettingsSlot()}
+                        ${this.nodeType === 'resource' ? nothing : this._renderDataflow()}
                         ${this.nodeType === 'resource' ? nothing : this._renderMapping()}
                     </div>
                 </div>
@@ -1233,6 +1518,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 ${this._renderBasic()}
                 ${this._shouldShowPinnedResourcesSection() ? this._renderResources() : nothing}
                 ${this._renderSettingsSlot()}
+                ${this.nodeType === 'resource' ? nothing : this._renderDataflow()}
                 ${this.nodeType === 'resource' ? nothing : this._renderMapping()}
                 ${this._renderInputState()}
             </div>

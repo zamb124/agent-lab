@@ -85,6 +85,23 @@ describe('platform-field dispatcher', () => {
         expect(inp.getAttribute('type')).to.equal('email');
     });
 
+    it('пробрасывает suggestions в string-подкомпонент как datalist', async () => {
+        const el = await fixture(html`
+            <platform-field
+                type="string"
+                mode="edit"
+                value=""
+                .suggestions=${['state.user.name', '', 'state.order.total']}
+            ></platform-field>
+        `);
+        const inner = el.shadowRoot.querySelector('platform-field-string');
+        const inp = inner.shadowRoot.querySelector('input.field-pill-input');
+        const listId = inp.getAttribute('list');
+        const list = inner.shadowRoot.querySelector(`datalist#${listId}`);
+        const options = Array.from(list.querySelectorAll('option')).map((option) => option.value);
+        expect(options).to.deep.equal(['state.user.name', 'state.order.total']);
+    });
+
     it('view-режим рендерит pill + field-pill-readonly-text', async () => {
         const el = await fixture(html`<platform-field type="string" mode="view" label="L" value="visible"></platform-field>`);
         expect(el.shadowRoot.querySelector('.field-pill')).to.exist;

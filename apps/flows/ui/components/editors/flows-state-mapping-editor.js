@@ -45,6 +45,9 @@ export class FlowsStateMappingEditor extends PlatformElement {
         /** "input" — input_mapping; "output" — output_mapping / state_mapping. */
         kind: { type: String },
         title: { type: String },
+        stateSuggestions: { type: Array },
+        varSuggestions: { type: Array },
+        resultSuggestions: { type: Array },
         _rows: { state: true },
     };
 
@@ -159,6 +162,9 @@ export class FlowsStateMappingEditor extends PlatformElement {
         this.mapping = null;
         this.kind = 'input';
         this.title = '';
+        this.stateSuggestions = [];
+        this.varSuggestions = [];
+        this.resultSuggestions = [];
         this._rows = [];
         /** Не тянуть `mapping` с родителя после первого init (иначе пропадут незаполненные новые строки). */
         this._parentMappingSettled = false;
@@ -274,6 +280,37 @@ export class FlowsStateMappingEditor extends PlatformElement {
         };
     }
 
+    _suggestionsForInputSource(sourceType) {
+        if (sourceType === 'var') {
+            return Array.isArray(this.varSuggestions) ? this.varSuggestions : [];
+        }
+        if (sourceType === 'state') {
+            return Array.isArray(this.stateSuggestions) ? this.stateSuggestions : [];
+        }
+        return [];
+    }
+
+    _normalizedSuggestions(suggestions) {
+        return Array.isArray(suggestions)
+            ? suggestions.filter((item) => typeof item === 'string' && item.length > 0).slice(0, 120)
+            : [];
+    }
+
+    _renderInputText(value, suggestions, onInput, placeholder = '') {
+        const values = this._normalizedSuggestions(suggestions);
+        return html`
+            <platform-field
+                type="string"
+                mode="edit"
+                label=""
+                .value=${typeof value === 'string' ? value : ''}
+                .placeholder=${placeholder}
+                .suggestions=${values}
+                @change=${(e) => onInput(typeof e.detail.value === 'string' ? e.detail.value : '')}
+            ></platform-field>
+        `;
+    }
+
     render() {
         const isOut = this._isOutput;
         const empty = this._rows.length === 0;
@@ -318,21 +355,19 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 ${isOut
                     ? this._rows.map((r, i) => html`
                         <div class="map-row output-grid">
-                            <platform-field
-                                type="string"
-                                mode="edit"
-                                label=""
-                                .value=${r.resultKey}
-                                @change=${(e) => this._updateOutputRow(i, { resultKey: typeof e.detail.value === 'string' ? e.detail.value : '' })}
-                            ></platform-field>
+                            ${this._renderInputText(
+                                r.resultKey,
+                                this.resultSuggestions,
+                                (value) => this._updateOutputRow(i, { resultKey: value }),
+                                this.t('state_mapping_editor.placeholder_result_key'),
+                            )}
                             <span class="arrow" title="">→</span>
-                            <platform-field
-                                type="string"
-                                mode="edit"
-                                label=""
-                                .value=${r.stateField}
-                                @change=${(e) => this._updateOutputRow(i, { stateField: typeof e.detail.value === 'string' ? e.detail.value : '' })}
-                            ></platform-field>
+                            ${this._renderInputText(
+                                r.stateField,
+                                this.stateSuggestions,
+                                (value) => this._updateOutputRow(i, { stateField: value }),
+                                this.t('state_mapping_editor.placeholder_state_field'),
+                            )}
                             <button
                                 type="button"
                                 class="remove-btn"
@@ -342,13 +377,12 @@ export class FlowsStateMappingEditor extends PlatformElement {
                     `)
                     : this._rows.map((r, i) => html`
                         <div class="map-row input-grid">
-                            <platform-field
-                                type="string"
-                                mode="edit"
-                                label=""
-                                .value=${r.sourcePath}
-                                @change=${(e) => this._updateInputRow(i, { sourcePath: typeof e.detail.value === 'string' ? e.detail.value : '' })}
-                            ></platform-field>
+                            ${this._renderInputText(
+                                r.sourcePath,
+                                this._suggestionsForInputSource(r.sourceType),
+                                (value) => this._updateInputRow(i, { sourcePath: value }),
+                                this.t('state_mapping_editor.placeholder_source_path'),
+                            )}
                             <span class="sep" aria-hidden="true">|</span>
                             <platform-field
                                 type="enum"

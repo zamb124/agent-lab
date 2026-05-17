@@ -318,7 +318,6 @@ class CodeTool(BaseTool):
         namespace = _local_test_namespace()
         state_proxy = _ExecutionStateProxy(state)
         namespace["variables"] = state.variables
-        namespace["files"] = state.files
 
         compiled = compile(
             self._code,

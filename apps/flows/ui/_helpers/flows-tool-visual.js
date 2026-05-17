@@ -7,10 +7,10 @@ import { isPlainObject } from './flows-resolvers.js';
 import { isFlowCodeLanguage, normalizeFlowCodeLanguage } from './flows-code-languages.js';
 
 /**
- * Число чипов в одном ряду карточки ноды (ширина карточки 200px,
- * chip 28px + gap 6px даёт ~5 штук в ряд).
+ * Число чипов в одном ряду карточки ноды: tool strip имеет левый отступ
+ * под node icon, поэтому при ширине карточки 200px реально помещается 3.
  */
-export const CHIPS_PER_ROW = 5;
+export const CHIPS_PER_ROW = 3;
 
 /** Макс. число рядов чипов (чтобы карточка не росла бесконечно). */
 export const MAX_CHIP_ROWS = 3;

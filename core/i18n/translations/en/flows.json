@@ -847,7 +847,12 @@
     "tab_settings": "Settings",
     "tab_input": "Input",
     "tab_output": "Output",
-    "tab_test": "Test"
+    "tab_test": "Test",
+    "section_dataflow": "State flow",
+    "dataflow_inputs": "Reads",
+    "dataflow_outputs": "Writes",
+    "dataflow_inputs_empty": "No explicit reads",
+    "dataflow_outputs_empty": "No state writes"
   },
   "code_editor": {
     "fullscreen": "Fullscreen",
@@ -859,6 +864,9 @@
     "add": "Add",
     "placeholder_param": "Parameter",
     "placeholder_source": "@state:..., @var:..., constant",
+    "placeholder_source_path": "state path",
+    "placeholder_result_key": "result key",
+    "placeholder_state_field": "state field",
     "hint_legend_input": "state / var / constant → node parameter",
     "hint_legend_output": "response key → state field",
     "col_source": "Source",

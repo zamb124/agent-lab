@@ -5,6 +5,7 @@
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from a2a.types import (
@@ -221,6 +222,26 @@ class BaseEmitter(ABC):
 
     async def emit(self, event: Any) -> None:
         """Публикует произвольное событие (StreamEvent от runner)."""
+        await self._publish(event)
+
+    async def emit_ping(self, *, sequence: int | None = None) -> None:
+        """Публикует heartbeat кадр для живого SSE-потока без пользовательского текста."""
+        now = datetime.now(timezone.utc).isoformat()
+        metadata: dict[str, Any] = {
+            "platform_ping": True,
+            "sent_at": now,
+        }
+        if sequence is not None:
+            metadata["sequence"] = sequence
+
+        event = TaskStatusUpdateEvent(
+            task_id=self.state.task_id,
+            context_id=self.state.context_id,
+            status=TaskStatus(state=TaskState.working, timestamp=now),
+            final=False,
+            metadata=metadata,
+        )
+
         await self._publish(event)
 
     async def emit_node_start(

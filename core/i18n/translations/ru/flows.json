@@ -847,7 +847,12 @@
     "tab_settings": "Настройки",
     "tab_input": "Вход",
     "tab_output": "Выход",
-    "tab_test": "Тест"
+    "tab_test": "Тест",
+    "section_dataflow": "Поток state",
+    "dataflow_inputs": "Читает",
+    "dataflow_outputs": "Пишет",
+    "dataflow_inputs_empty": "Нет явных чтений",
+    "dataflow_outputs_empty": "Нет записей в state"
   },
   "code_editor": {
     "fullscreen": "Полноэкранный режим",
@@ -859,6 +864,9 @@
     "add": "Добавить",
     "placeholder_param": "Параметр",
     "placeholder_source": "@state:..., @var:..., константа",
+    "placeholder_source_path": "путь state",
+    "placeholder_result_key": "ключ результата",
+    "placeholder_state_field": "поле state",
     "hint_legend_input": "путь state / var / константа → параметр ноды",
     "hint_legend_output": "ключ в ответе → поле в state",
     "col_source": "Источник",
