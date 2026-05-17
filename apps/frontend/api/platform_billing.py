@@ -63,19 +63,38 @@ async def _resolve_company_for_billing_admin(container: "FrontendContainer", raw
     q = raw.strip()
     if not q:
         raise HTTPException(status_code=422, detail="Пустой запрос")
-    direct = await container.company_repository.get(q)
-    if direct is not None:
-        return direct
-    q_lower = q.lower()
-    mapped_id = await container.subdomain_repository.get_company_id(q_lower)
-    if mapped_id:
-        co = await container.company_repository.get(mapped_id)
-        if co is not None:
-            return co
+
+    candidates: list[str] = [q]
+    if q.endswith(")") and "(" in q:
+        open_idx = q.rfind("(")
+        before = q[:open_idx].strip()
+        inside = q[open_idx + 1 : -1].strip()
+        for candidate in (inside, before):
+            if candidate and candidate not in candidates:
+                candidates.append(candidate)
+
+    for candidate in candidates:
+        direct = await container.company_repository.get(candidate)
+        if direct is not None:
+            return direct
+
+    for candidate in candidates:
+        mapped_id = await container.subdomain_repository.get_company_id(candidate.lower())
+        if mapped_id:
+            co = await container.company_repository.get(mapped_id)
+            if co is not None:
+                return co
+
     companies = await container.company_repository.list(limit=_BILLING_COMPANY_LIST_CAP)
-    for co in companies:
-        if co.subdomain and co.subdomain.lower() == q_lower:
-            return co
+    lowered = [candidate.lower() for candidate in candidates]
+    for q_lower in lowered:
+        for co in companies:
+            if co.company_id.lower() == q_lower:
+                return co
+            if co.subdomain and co.subdomain.lower() == q_lower:
+                return co
+            if co.name.lower() == q_lower:
+                return co
     raise HTTPException(
         status_code=404,
         detail=f"Компания не найдена по id или slug: {q!r}",
@@ -471,8 +490,19 @@ async def get_usage_report(
     )
     for row in serialized:
         cid = row.get("company_id")
-        if not cid:
-            continue
-        co = companies.get(cid)
+        co = companies.get(cid) if cid else None
         row["company_name"] = co.name if co else None
+        metadata = row.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+        row["span_id"] = metadata.get("span_id")
+        row["trace_id"] = metadata.get("trace_id")
+        row["rule_id"] = metadata.get("rule_id")
+        row["settlement_source"] = metadata.get("settlement_source")
+        quantity = row.get("quantity")
+        cost = row.get("cost")
+        if isinstance(quantity, (int, float)) and quantity > 0 and isinstance(cost, (int, float)):
+            row["unit_cost"] = cost / quantity
+        else:
+            row["unit_cost"] = None
     return PlatformBillingUsageReportResponse(items=serialized)

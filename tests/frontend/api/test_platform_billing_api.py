@@ -111,6 +111,17 @@ async def test_platform_billing_facets_resource_names_system(frontend_client_sys
 
 
 @pytest.mark.asyncio
+async def test_platform_billing_company_resolve_accepts_display_label(frontend_client_system):
+    response = await frontend_client_system.get(
+        "/frontend/api/platform-billing/company-resolve",
+        params={"q": "System (system)"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["company_id"] == "system"
+
+
+@pytest.mark.asyncio
 async def test_platform_billing_settlement_rules_roundtrip(frontend_client_system, frontend_container, unique_id):
     cid = "system"
     key = company_settlement_rules_storage_key(cid)
