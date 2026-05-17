@@ -55,6 +55,7 @@ _SANDBOX_IMPORT_ROOTS = {
     "itertools",
     "json",
     "math",
+    "operator",
     "random",
     "re",
     "statistics",
@@ -62,6 +63,15 @@ _SANDBOX_IMPORT_ROOTS = {
     "time",
     "typing",
     "uuid",
+}
+
+_INLINE_SOURCE_BUILTIN_TOOLS = {
+    "ask_user",
+    "calculator",
+    "final_answer",
+    "finish",
+    "reason",
+    "self_check",
 }
 
 
@@ -155,6 +165,19 @@ def _sandbox_safe_imports_for_function(func: Any) -> list[str]:
 
 def _function_tool_template_code(tool_instance: FunctionTool) -> str:
     """Editable sandbox template for a decorated builtin FunctionTool."""
+    if tool_instance.name not in _INLINE_SOURCE_BUILTIN_TOOLS:
+        return textwrap.dedent(
+            f"""
+            # platform:builtin:{tool_instance.name}
+            async def {tool_instance.name}(args, state):
+                return await capability(
+                    "tools.call_builtin",
+                    tool_id="{tool_instance.name}",
+                    arguments=dict(args),
+                )
+            """
+        ).lstrip()
+
     source = textwrap.dedent(tool_instance.get_source_code())
     tree = ast.parse(source)
     fn_node = next(

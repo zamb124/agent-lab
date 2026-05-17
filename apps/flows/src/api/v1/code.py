@@ -1020,6 +1020,7 @@ class ExecuteRequest(BaseModel):
     """Запрос на выполнение ноды."""
     node_type: str = "code"
     node_config: dict[str, Any] = {}
+    code: str | None = None
     state: dict[str, Any]
     entrypoint: str | None = None
     flow_id: str | None = None
@@ -1271,10 +1272,14 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
 
     except CodeExecutionRuntimeError as e:
         duration_ms = int((time.time() - start_time) * 1000)
+        error_text = str(e)
+        exception_type = e.payload.get("exception_type") if isinstance(e.payload, dict) else None
+        if isinstance(exception_type, str) and exception_type and exception_type not in error_text:
+            error_text = f"{exception_type}: {error_text}"
         return ExecuteResponse(
             success=False,
             input_state=input_state_raw,
-            error=str(e),
+            error=error_text,
             error_payload=e.payload,
             duration_ms=duration_ms,
         )
@@ -1295,8 +1300,9 @@ def _validate_node_config(config: dict[str, Any]) -> None:
     node_type = config.get("type")
 
     if node_type == "code":
-        if not config.get("code"):
-            raise ValueError("code is required for code node execution")
+        code = config.get("code")
+        if not isinstance(code, str) or not code.strip():
+            raise ValueError("code, tool_id или function обязателен")
 
     elif node_type == "external_api":
         if not config.get("url"):
@@ -1324,6 +1330,8 @@ def _validate_node_config(config: dict[str, Any]) -> None:
 async def _build_node_config(request: ExecuteRequest) -> dict[str, Any]:
     """Строит node_config из ExecuteRequest."""
     config = request.node_config.copy()
+    if request.code is not None and "code" not in config:
+        config["code"] = request.code
     config["type"] = _require_execute_node_type(str(request.node_type))
     if request.entrypoint is not None:
         config["entrypoint"] = request.entrypoint

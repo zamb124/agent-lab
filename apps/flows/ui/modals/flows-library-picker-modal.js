@@ -253,6 +253,28 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 flex: 0 1 240px;
                 min-width: 160px;
             }
+            .search-wrap platform-field {
+                width: 100%;
+                min-width: 0;
+            }
+            .tool-picker-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                margin-bottom: var(--space-3);
+                min-width: 0;
+            }
+            .tool-picker-toolbar .tabs {
+                margin-bottom: 0;
+                min-width: 0;
+            }
+            .tool-picker-toolbar .search-wrap {
+                flex: 0 0 170px;
+                min-width: 140px;
+                max-width: 170px;
+                margin-left: auto;
+            }
             .tabs {
                 display: flex;
                 gap: var(--space-1);
@@ -445,6 +467,16 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 font-size: var(--text-sm);
                 padding: var(--space-4);
                 text-align: center;
+            }
+            @media (max-width: 640px) {
+                .tool-picker-toolbar {
+                    flex-wrap: wrap;
+                    align-items: flex-start;
+                }
+                .tool-picker-toolbar .search-wrap {
+                    flex: 1 1 160px;
+                    max-width: 220px;
+                }
             }
         `,
     ];
@@ -780,6 +812,30 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
+    _renderSearchField(searchWrapClass = '') {
+        return html`
+            <div class="search-wrap ${searchWrapClass}">
+                <platform-field
+                    type="string"
+                    input-type="search"
+                    mode="edit"
+                    .value=${this._search}
+                    .placeholder=${this.t('tool_picker_modal.search_placeholder')}
+                    @change=${this._onSearchInput}
+                ></platform-field>
+            </div>
+        `;
+    }
+
+    _renderToolPickerToolbar() {
+        return html`
+            <div class="tool-picker-toolbar">
+                ${this._renderToolCategoryTabs()}
+                ${this._renderSearchField('search-wrap--tool')}
+            </div>
+        `;
+    }
+
     _renderRegistryCard(t, { onSelect }) {
         const icon = registryItemIconName(t);
         const kindAttr = this._iconKindAttr(t);
@@ -907,21 +963,18 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const rows = this._pickModeRows();
         if (busy && this._toolsAllItems().length === 0) {
             return html`
-                ${this._renderFilterBar()}
-                ${this._renderToolCategoryTabs()}
+                ${this._renderToolPickerToolbar()}
                 <glass-spinner></glass-spinner>
             `;
         }
         if (rows.length === 0) {
             return html`
-                ${this._renderFilterBar()}
-                ${this._renderToolCategoryTabs()}
+                ${this._renderToolPickerToolbar()}
                 <div class="lib-empty">${this.t('tool_picker_modal.empty')}</div>
             `;
         }
         return html`
-            ${this._renderFilterBar()}
-            ${this._renderToolCategoryTabs()}
+            ${this._renderToolPickerToolbar()}
             <div class="lib-grid" role="list">
                 ${rows.map((t) => this._renderRegistryCard(t, { onSelect: () => this._pickToolLike(t) }))}
             </div>

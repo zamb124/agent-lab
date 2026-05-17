@@ -23,6 +23,7 @@ class ResourceType(str, Enum):
     """Типы ресурсов."""
 
     LLM = "llm"
+    FILES = "files"
 
 
 class LLMResourceConfig(LLMCallConfig):
@@ -114,7 +115,7 @@ class LLMResourcePatch(StrictBaseModel):
 
 
 
-ResourceConfigUnion = LLMResourceConfig
+ResourceConfigUnion = LLMResourceConfig | dict[str, Any]
 
 
 class ResourceDefinition(StrictBaseModel):
@@ -161,6 +162,8 @@ def parse_typed_resource_config(
     """Строгая материализация config по ResourceType."""
     if resource_type == ResourceType.LLM:
         return LLMResourceConfig.model_validate(config)
+    if resource_type == ResourceType.FILES:
+        return dict(config)
     raise ValueError(f"Unknown resource type: {resource_type!r}")
 
 

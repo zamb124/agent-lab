@@ -117,6 +117,9 @@ export function inferToolRefLanguage(ref) {
     if (typeof ref.language === 'string' && isFlowCodeLanguage(ref.language)) {
         return normalizeFlowCodeLanguage(ref.language);
     }
+    if (typeof ref.code === 'string' && ref.code.trim().length > 0) {
+        return 'python';
+    }
     const pieces = [];
     for (const key of ['tool_id', 'name', 'title']) {
         const value = ref[key];

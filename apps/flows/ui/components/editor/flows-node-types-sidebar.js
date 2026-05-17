@@ -239,24 +239,48 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
 
             /* Node type card */
             .node-item {
-                display: flex; align-items: center; gap: var(--space-2);
-                padding: var(--space-2);
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-height: 42px;
+                padding: 6px 8px;
                 border-radius: var(--radius-sm);
+                border: 1px solid transparent;
+                background: transparent;
+                box-sizing: border-box;
                 cursor: grab;
-                transition: background var(--duration-fast);
+                transition: var(--motion-transition-interactive);
             }
-            .node-item:hover { background: var(--glass-solid-medium); }
+            .node-item:hover {
+                background: color-mix(in oklab, var(--glass-solid-medium) 86%, var(--accent) 8%);
+                border-color: var(--glass-border-subtle);
+                box-shadow:
+                    0 7px 18px rgba(0, 0, 0, 0.12),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+                transform: translateY(-1px);
+            }
             .node-item:active { cursor: grabbing; }
             .node-icon {
-                width: 28px; height: 28px;
+                width: 30px;
+                height: 30px;
                 flex-shrink: 0;
                 border-radius: var(--radius-sm);
-                display: flex; align-items: center; justify-content: center;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow:
+                    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+                    0 3px 10px rgba(0, 0, 0, 0.1);
             }
             .node-name {
                 font-size: var(--text-sm);
                 color: var(--text-primary);
                 font-weight: var(--font-medium);
+                min-width: 0;
+                line-height: 1.2;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             .empty-row {
                 font-size: var(--text-xs);

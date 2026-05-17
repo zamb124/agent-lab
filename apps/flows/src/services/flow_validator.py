@@ -504,14 +504,20 @@ class FlowValidator:
         for key, value in variables.items():
             available_vars.add(key)
 
-        def check_var_refs(value: Any, node_id: str, context: str):
+        def check_var_refs(
+            value: Any,
+            node_id: str,
+            context: str,
+            *,
+            require_flow_variable: bool = True,
+        ):
             """Рекурсивно проверяет @var: ссылки в значении."""
             if isinstance(value, str):
                 for match in var_pattern.finditer(value):
                     var_name = match.group(1).split(".")[0]
                     result.var_keys_used.add(var_name)
 
-                    if var_name not in available_vars:
+                    if require_flow_variable and var_name not in available_vars:
                         result.add_error(
                             code="undefined_variable",
                             message=f"Переменная '@var:{var_name}' не определена в секции variables",
@@ -521,10 +527,20 @@ class FlowValidator:
                         )
             elif isinstance(value, dict):
                 for k, v in value.items():
-                    check_var_refs(v, node_id, f"{context}.{k}")
+                    check_var_refs(
+                        v,
+                        node_id,
+                        f"{context}.{k}",
+                        require_flow_variable=require_flow_variable,
+                    )
             elif isinstance(value, list):
                 for i, v in enumerate(value):
-                    check_var_refs(v, node_id, f"{context}[{i}]")
+                    check_var_refs(
+                        v,
+                        node_id,
+                        f"{context}[{i}]",
+                        require_flow_variable=require_flow_variable,
+                    )
 
         for node_id, config in nodes.items():
             # input_mapping
@@ -548,11 +564,23 @@ class FlowValidator:
         # Проверяем значения переменных flow на @var: ссылки
         for var_key, var_value in variables.items():
             if isinstance(var_value, dict) and "value" in var_value:
-                # FlowVariableConfig формат - проверяем value поле
-                check_var_refs(var_value["value"], "variables", f"variables.{var_key}.value")
+                # FlowVariableConfig.value может быть ссылкой на company variable.
+                # Такие @var:* должны попадать в var_keys_used, но не обязаны быть
+                # объявлены в этой же flow variables секции.
+                check_var_refs(
+                    var_value["value"],
+                    "variables",
+                    f"variables.{var_key}.value",
+                    require_flow_variable=False,
+                )
             elif isinstance(var_value, str):
-                # Простой строковый формат
-                check_var_refs(var_value, "variables", f"variables.{var_key}")
+                # Простой строковый формат также используется как flow variable value.
+                check_var_refs(
+                    var_value,
+                    "variables",
+                    f"variables.{var_key}",
+                    require_flow_variable=False,
+                )
 
     def _validate_messages_filters(
         self,

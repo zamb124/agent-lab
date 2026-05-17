@@ -473,7 +473,7 @@ class PythonSandboxExecutor:
             def build_namespace():
                 allowed_import_roots = {{
                     "__future__", "asyncio", "ast", "base64", "collections", "datetime", "decimal",
-                    "functools", "hashlib", "html", "itertools", "json", "math",
+                    "functools", "hashlib", "html", "itertools", "json", "math", "operator",
                     "random", "re", "statistics", "string", "time", "typing", "uuid",
                 }}
 
@@ -547,6 +547,7 @@ class PythonSandboxExecutor:
                     "str": str,
                     "sum": sum,
                     "tuple": tuple,
+                    "type": type,
                     "zip": zip,
                     "__import__": safe_import,
                 }}
@@ -701,6 +702,8 @@ class PythonSandboxExecutor:
                         compiled_cache[key] = compiled
 
                     namespace = build_namespace()
+                    namespace["variables"] = state.get("variables", {{}})
+                    namespace["files"] = state.get("files", [])
                     sys.stdout = stdout_buffer
                     sys.stderr = stderr_buffer
                     stage = "load"

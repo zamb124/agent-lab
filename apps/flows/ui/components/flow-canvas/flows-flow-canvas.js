@@ -31,10 +31,11 @@
 import { html, css, svg } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveUiIconFile } from '@platform/lib/utils/file-icons.js';
-import { getNodeTypeMeta } from '../../constants/node-icons.js';
+import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
 import { renderEdgeLabel } from './flows-edge-label.js';
 import './flows-canvas-context-menu.js';
 import './flows-sticky-note.js';
+import '../common/flows-code-language-icon.js';
 import {
     asNumber,
     asString,
@@ -62,7 +63,6 @@ import {
     inferToolRefLanguage,
     MAX_CHIPS_SHOWN,
 } from '../../_helpers/flows-tool-visual.js';
-import { flowCodeLanguageIconName, flowCodeLanguageShortLabel } from '../../_helpers/flows-code-languages.js';
 import { getBlankCodeNodeConfig } from '../../_helpers/code-node-defaults.js';
 import { getBlankExternalApiNodeConfig } from '../../_helpers/flows-external-api-defaults.js';
 const NODE_RADIUS = 12;
@@ -84,6 +84,34 @@ function pathFor(srcX, srcY, dstX, dstY) {
 
 function midpoint(srcX, srcY, dstX, dstY) {
     return { x: (srcX + dstX) / 2, y: (srcY + dstY) / 2 };
+}
+
+function rectBoundaryAnchor(rect, target) {
+    const cx = rect.x + rect.w / 2;
+    const cy = rect.y + rect.h / 2;
+    const dx = target.x - cx;
+    const dy = target.y - cy;
+    if (dx === 0 && dy === 0) return { x: cx, y: cy };
+    const sx = dx === 0 ? Infinity : (rect.w / 2) / Math.abs(dx);
+    const sy = dy === 0 ? Infinity : (rect.h / 2) / Math.abs(dy);
+    const scale = Math.min(sx, sy);
+    return {
+        x: cx + dx * scale,
+        y: cy + dy * scale,
+    };
+}
+
+function attachPathFor(srcX, srcY, dstX, dstY) {
+    const dx = dstX - srcX;
+    const dy = dstY - srcY;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+        const dir = dx >= 0 ? 1 : -1;
+        const c = Math.max(36, Math.abs(dx) * 0.45);
+        return `M ${srcX} ${srcY} C ${srcX + dir * c} ${srcY} ${dstX - dir * c} ${dstY} ${dstX} ${dstY}`;
+    }
+    const dir = dy >= 0 ? 1 : -1;
+    const c = Math.max(36, Math.abs(dy) * 0.45);
+    return `M ${srcX} ${srcY} C ${srcX} ${srcY + dir * c} ${dstX} ${dstY - dir * c} ${dstX} ${dstY}`;
 }
 
 export class FlowsFlowCanvas extends PlatformElement {
@@ -119,48 +147,89 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
 
             /* Node */
-            g.node { transition: opacity 150ms; }
-            g.node[data-inherited] { opacity: 0.85; }
-            g.node[data-inherited] .node-card {
-                stroke: var(--border-default, var(--border-subtle));
-                stroke-dasharray: 5 4;
+            g.node {
+                --node-accent: var(--accent);
+                --node-surface: color-mix(in oklab, var(--glass-solid-strong) 88%, var(--node-accent) 12%);
+                --node-border: color-mix(in oklab, var(--glass-border-medium) 70%, var(--node-accent) 30%);
+                --node-glow: color-mix(in srgb, var(--node-accent) 34%, transparent);
+                transition: opacity var(--motion-duration-micro) var(--motion-ease-standard);
+            }
+            g.node[data-inherited] { opacity: 0.78; }
+            g.node .node-aura {
+                fill: var(--node-accent);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity var(--motion-duration-enter) var(--motion-ease-standard);
             }
             g.node .node-card {
-                fill: var(--glass-solid-strong);
-                stroke: var(--border-subtle);
-                stroke-width: 1.5;
-                transition: stroke 0.12s, filter 0.12s;
+                fill: var(--node-surface);
+                stroke: var(--node-border);
+                stroke-width: 1.25;
+                filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.18));
+                transition:
+                    stroke var(--motion-duration-micro) var(--motion-ease-standard),
+                    filter var(--motion-duration-micro) var(--motion-ease-standard),
+                    fill var(--motion-duration-micro) var(--motion-ease-standard);
+                vector-effect: non-scaling-stroke;
+            }
+            g.node .node-sheen {
+                fill: rgba(255, 255, 255, 0.24);
+                opacity: 0.42;
+                pointer-events: none;
+            }
+            g.node:hover .node-aura {
+                opacity: 0.11;
             }
             g.node:hover .node-card {
-                stroke: var(--glass-border-medium);
-                filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.18));
+                stroke: color-mix(in oklab, var(--node-accent) 58%, var(--glass-border-strong) 42%);
+                filter:
+                    drop-shadow(0 14px 30px rgba(0, 0, 0, 0.24))
+                    drop-shadow(0 0 14px var(--node-glow));
             }
-            g.node[data-selected] .node-card {
-                stroke: var(--accent);
+            g.node[data-inherited] .node-card {
+                stroke-dasharray: 5 4;
+            }
+            g.node[data-selected] .node-aura,
+            g.node[data-multi-selected] .node-aura {
+                opacity: 0.18;
+            }
+            g.node[data-selected] .node-card,
+            g.node[data-multi-selected] .node-card {
+                stroke: var(--node-accent);
                 stroke-width: 2;
+                filter:
+                    drop-shadow(0 16px 34px rgba(0, 0, 0, 0.26))
+                    drop-shadow(0 0 18px var(--node-glow));
             }
             g.node[data-multi-selected] .node-card {
-                stroke: var(--accent);
-                stroke-width: 2;
                 stroke-dasharray: 6 3;
             }
             g.node[data-state="running"] .node-card {
                 stroke: var(--info);
                 stroke-width: 2;
                 animation: nodePulseRunning 1.4s ease-in-out infinite;
+                filter:
+                    drop-shadow(0 16px 34px rgba(0, 0, 0, 0.26))
+                    drop-shadow(0 0 18px color-mix(in srgb, var(--info) 36%, transparent));
             }
             g.node[data-state="completed"] .node-card {
                 stroke: var(--success);
-                stroke-width: 1.5;
+                stroke-width: 1.75;
             }
             g.node[data-state="error"] .node-card {
                 stroke: var(--error);
                 stroke-width: 2;
+                filter:
+                    drop-shadow(0 16px 34px rgba(0, 0, 0, 0.24))
+                    drop-shadow(0 0 16px color-mix(in srgb, var(--error) 34%, transparent));
             }
             g.node[data-state="breakpoint-hit"] .node-card {
                 stroke: var(--warning);
                 stroke-width: 2;
                 animation: nodePulseRunning 1s ease-in-out infinite;
+                filter:
+                    drop-shadow(0 16px 34px rgba(0, 0, 0, 0.24))
+                    drop-shadow(0 0 16px color-mix(in srgb, var(--warning) 34%, transparent));
             }
 
             @keyframes nodePulseRunning {
@@ -169,18 +238,25 @@ export class FlowsFlowCanvas extends PlatformElement {
             }
 
             .node-icon-wrap {
-                width: 36px; height: 36px;
-                display: flex; align-items: center; justify-content: center;
-                border-radius: var(--radius-sm);
-            }
-            .node-icon-wrap[data-cat="core"]         { background: var(--accent-subtle); color: var(--accent); }
-            .node-icon-wrap[data-cat="integrations"] { background: var(--info-bg); color: var(--info); }
-            .node-icon-wrap[data-cat="flow"]         { background: var(--accent-secondary-subtle); color: var(--accent-secondary); }
-            .node-icon-wrap[data-cat="hitl"]         { background: var(--warning-bg); color: var(--warning); }
-            .node-icon-wrap[data-language-icon] {
-                background: var(--glass-solid);
-                border: 1px solid var(--glass-border-subtle);
+                width: 38px;
+                height: 38px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 10px;
+                border: 1px solid color-mix(in oklab, var(--node-accent) 24%, var(--glass-border-subtle));
+                background: color-mix(in oklab, var(--node-accent) 13%, var(--glass-solid-medium));
+                color: var(--node-accent);
                 box-sizing: border-box;
+                box-shadow:
+                    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+                    0 4px 12px color-mix(in srgb, var(--node-accent) 16%, transparent);
+                flex: 0 0 auto;
+                overflow: hidden;
+                position: relative;
+            }
+            .node-icon-wrap[data-language-icon] {
+                background: color-mix(in oklab, var(--glass-solid-strong) 84%, var(--node-accent) 16%);
             }
             .canvas-icon {
                 width: var(--canvas-icon-size, 16px);
@@ -215,8 +291,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                 display: inline-flex;
             }
             .node-card-content {
-                display: flex; align-items: center; gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+                padding: 10px 12px 9px 15px;
                 width: 100%; height: 100%;
                 box-sizing: border-box;
                 font-family: var(--font-sans);
@@ -224,15 +302,16 @@ export class FlowsFlowCanvas extends PlatformElement {
             .node-card-content.has-tools {
                 flex-direction: column;
                 align-items: stretch;
-                gap: var(--space-1);
+                gap: 7px;
             }
             .node-card-main {
                 display: flex;
                 flex-direction: row;
                 align-items: center;
-                gap: var(--space-2);
+                gap: var(--space-3);
                 min-width: 0;
                 flex: 1;
+                min-height: 44px;
             }
             .node-tools-row {
                 display: flex;
@@ -241,13 +320,14 @@ export class FlowsFlowCanvas extends PlatformElement {
                 align-items: center;
                 gap: 6px;
                 flex-shrink: 0;
-                padding: 2px 0 0 0;
+                padding: 0 0 0 50px;
             }
             .node-tool-chip {
+                --tool-accent: var(--node-accent);
                 width: 28px;
                 height: 28px;
                 border-radius: var(--radius-full);
-                border: 1px solid var(--glass-border-subtle);
+                border: 1px solid color-mix(in oklab, var(--tool-accent) 22%, var(--glass-border-subtle));
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -256,86 +336,71 @@ export class FlowsFlowCanvas extends PlatformElement {
                 cursor: pointer;
                 flex-shrink: 0;
                 box-sizing: border-box;
-                background: var(--glass-solid);
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+                color: var(--tool-accent);
+                background: color-mix(in oklab, var(--tool-accent) 12%, var(--glass-solid-medium));
+                box-shadow:
+                    0 2px 8px rgba(0, 0, 0, 0.12),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+                transition:
+                    border-color var(--motion-duration-micro) var(--motion-ease-standard),
+                    box-shadow var(--motion-duration-micro) var(--motion-ease-standard),
+                    transform var(--motion-duration-micro) var(--motion-ease-standard);
             }
             .node-tool-chip:hover {
-                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-                border-color: var(--glass-border);
+                transform: translateY(-1px);
+                border-color: color-mix(in oklab, var(--tool-accent) 46%, var(--glass-border-strong));
+                box-shadow:
+                    0 5px 14px color-mix(in srgb, var(--tool-accent) 24%, transparent),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.12);
             }
-            .node-tool-chip[data-cat="core"] {
-                background: var(--accent-subtle);
-                color: var(--accent);
-                border-color: color-mix(in srgb, var(--accent) 18%, transparent);
-                box-shadow: 0 1px 4px color-mix(in srgb, var(--accent) 18%, transparent),
-                            inset 0 1px 0 rgba(255, 255, 255, 0.08);
-            }
-            .node-tool-chip[data-cat="core"]:hover {
-                box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 26%, transparent),
-                            inset 0 1px 0 rgba(255, 255, 255, 0.12);
-            }
-            .node-tool-chip[data-cat="integrations"] {
-                background: var(--info-bg);
-                color: var(--info);
-                border-color: color-mix(in srgb, var(--info) 18%, transparent);
-                box-shadow: 0 1px 4px color-mix(in srgb, var(--info) 18%, transparent),
-                            inset 0 1px 0 rgba(255, 255, 255, 0.08);
-            }
-            .node-tool-chip[data-cat="integrations"]:hover {
-                box-shadow: 0 2px 8px color-mix(in srgb, var(--info) 26%, transparent),
-                            inset 0 1px 0 rgba(255, 255, 255, 0.12);
-            }
-            .node-tool-chip[data-cat="flow"] {
-                background: var(--accent-secondary-subtle);
-                color: var(--accent-secondary);
-                border-color: color-mix(in srgb, var(--accent-secondary) 18%, transparent);
-                box-shadow: 0 1px 4px color-mix(in srgb, var(--accent-secondary) 18%, transparent),
-                            inset 0 1px 0 rgba(255, 255, 255, 0.08);
-            }
-            .node-tool-chip[data-cat="flow"]:hover {
-                box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-secondary) 26%, transparent),
-                            inset 0 1px 0 rgba(255, 255, 255, 0.12);
-            }
-            .node-tool-chip[data-cat="hitl"] {
-                background: var(--warning-bg);
-                color: var(--warning);
-                border-color: color-mix(in srgb, var(--warning) 18%, transparent);
-                box-shadow: 0 1px 4px color-mix(in srgb, var(--warning) 18%, transparent),
-                            inset 0 1px 0 rgba(255, 255, 255, 0.08);
-            }
-            .node-tool-chip[data-cat="hitl"]:hover {
-                box-shadow: 0 2px 8px color-mix(in srgb, var(--warning) 26%, transparent),
-                            inset 0 1px 0 rgba(255, 255, 255, 0.12);
-            }
+            .node-tool-chip[data-cat="core"] { --tool-accent: var(--accent); }
+            .node-tool-chip[data-cat="code"] { --tool-accent: var(--success); }
+            .node-tool-chip[data-cat="integrations"] { --tool-accent: var(--info); }
+            .node-tool-chip[data-cat="flow"] { --tool-accent: var(--accent-secondary); }
+            .node-tool-chip[data-cat="hitl"] { --tool-accent: var(--warning); }
             .node-tool-chip[data-language-icon] {
-                background: var(--glass-solid);
                 color: inherit;
             }
-            .node-tool-chip[data-language-icon] .canvas-icon {
-                width: 24px;
-                height: 24px;
-            }
-            .node-tool-chip[data-language-icon] .canvas-icon-img {
-                width: 24px;
-                height: 24px;
+            .node-tool-chip[data-language-icon] flows-code-language-icon {
+                flex: 0 0 auto;
             }
             .node-tools-more {
                 font-size: var(--text-xs);
-                color: var(--text-tertiary);
-                padding: 0 4px;
+                color: color-mix(in oklab, var(--node-accent) 46%, var(--text-tertiary));
+                padding: 0 5px;
                 flex-shrink: 0;
+                font-weight: var(--font-semibold);
             }
-            .node-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+            .node-meta {
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+                flex: 1;
+                gap: 4px;
+            }
             .node-name {
                 font-size: var(--text-sm);
                 font-weight: var(--font-semibold);
                 color: var(--text-primary);
+                line-height: 1.2;
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             }
             .node-type {
-                font-size: var(--text-xs);
-                color: var(--text-tertiary);
+                align-self: flex-start;
+                max-width: 100%;
+                box-sizing: border-box;
+                padding: 2px 7px;
+                border-radius: var(--radius-full);
+                border: 1px solid color-mix(in oklab, var(--node-accent) 18%, var(--glass-border-subtle));
+                background: color-mix(in oklab, var(--node-accent) 9%, transparent);
+                color: color-mix(in oklab, var(--node-accent) 44%, var(--text-secondary));
+                font-size: 10px;
+                font-weight: var(--font-semibold);
+                line-height: 1.15;
+                letter-spacing: 0;
                 white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
 
             /* Badges */
@@ -369,23 +434,45 @@ export class FlowsFlowCanvas extends PlatformElement {
 
             /* Ports */
             .port {
-                fill: var(--accent);
-                stroke: var(--bg-primary);
-                stroke-width: 1.5;
+                fill: var(--node-accent, var(--accent));
+                stroke: var(--glass-solid-strong);
+                stroke-width: 2;
                 cursor: crosshair;
-                transition: r 120ms, fill 120ms;
+                filter:
+                    drop-shadow(0 2px 6px rgba(0, 0, 0, 0.22))
+                    drop-shadow(0 0 8px color-mix(in srgb, var(--node-accent, var(--accent)) 26%, transparent));
+                transform-box: fill-box;
+                transform-origin: center;
+                transition:
+                    fill var(--motion-duration-micro) var(--motion-ease-standard),
+                    transform var(--motion-duration-micro) var(--motion-ease-standard),
+                    filter var(--motion-duration-micro) var(--motion-ease-standard);
+                vector-effect: non-scaling-stroke;
             }
-            .port:hover { fill: var(--accent-hover); }
-            .port.in { fill: var(--text-tertiary); }
-            .port.in:hover { fill: var(--accent); }
+            .port:hover {
+                fill: var(--accent-hover);
+                transform: scale(1.18);
+            }
+            .port.in {
+                fill: color-mix(in oklab, var(--node-accent, var(--accent)) 38%, var(--text-tertiary));
+            }
+            .port.in:hover {
+                fill: var(--node-accent, var(--accent));
+            }
 
             /* Edges */
             .edge {
                 fill: none;
-                stroke: var(--text-tertiary);
+                stroke: color-mix(in oklab, var(--text-tertiary) 78%, var(--accent) 22%);
                 stroke-width: 2;
+                stroke-linecap: round;
                 pointer-events: none;
-                transition: stroke 0.12s, stroke-width 0.12s;
+                filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.12));
+                transition:
+                    stroke var(--motion-duration-micro) var(--motion-ease-standard),
+                    stroke-width var(--motion-duration-micro) var(--motion-ease-standard),
+                    filter var(--motion-duration-micro) var(--motion-ease-standard);
+                vector-effect: non-scaling-stroke;
             }
             .edge-hit {
                 fill: none;
@@ -397,6 +484,9 @@ export class FlowsFlowCanvas extends PlatformElement {
             .edge-group:hover .edge {
                 stroke: var(--accent);
                 stroke-width: 3;
+                filter:
+                    drop-shadow(0 3px 8px rgba(0, 0, 0, 0.18))
+                    drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 24%, transparent));
             }
             .edge:hover, .edge[data-hover] {
                 stroke: var(--accent);
@@ -451,30 +541,39 @@ export class FlowsFlowCanvas extends PlatformElement {
                 font-family: var(--font-mono);
                 fill: var(--bg-primary);
                 pointer-events: none;
-                letter-spacing: -0.3px;
+                letter-spacing: 0;
             }
             .edge-temp {
                 fill: none;
                 stroke: var(--accent);
                 stroke-width: 2;
                 stroke-dasharray: 4 4;
+                stroke-linecap: round;
                 pointer-events: none;
             }
             .edge-label .label-bg {
-                fill: var(--glass-solid-strong);
-                stroke: var(--glass-border-subtle);
+                fill: color-mix(in oklab, var(--glass-solid-strong) 88%, var(--accent) 12%);
+                stroke: color-mix(in oklab, var(--glass-border-subtle) 68%, var(--accent) 32%);
                 stroke-width: 1;
+                filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.16));
             }
             .edge-label .label-text {
                 font-family: var(--font-mono);
                 font-size: 10px;
-                fill: var(--text-secondary);
+                font-weight: var(--font-semibold);
+                letter-spacing: 0;
+                fill: color-mix(in oklab, var(--accent) 38%, var(--text-secondary));
                 pointer-events: none;
             }
             .edge-label { cursor: pointer; pointer-events: all; }
             .edge-label .label-bg { pointer-events: all; }
             .edge-label--empty .label-text { fill: var(--text-tertiary); }
-            .edge-label:hover .label-bg { stroke: var(--accent); }
+            .edge-label:hover .label-bg {
+                stroke: var(--accent);
+                filter:
+                    drop-shadow(0 8px 16px rgba(0, 0, 0, 0.18))
+                    drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 22%, transparent));
+            }
 
             /* Selection rect */
             .selection-box {
@@ -501,11 +600,13 @@ export class FlowsFlowCanvas extends PlatformElement {
             /* Sticky → node attach line */
             .sticky-attach-line {
                 fill: none;
-                stroke: var(--accent-secondary);
-                stroke-width: 1.5;
-                stroke-dasharray: 4 3;
-                opacity: 0.65;
+                stroke: color-mix(in oklab, var(--accent-secondary) 62%, var(--text-tertiary));
+                stroke-width: 1.25;
+                stroke-linecap: round;
+                stroke-dasharray: 6 6;
+                opacity: 0.52;
                 pointer-events: none;
+                vector-effect: non-scaling-stroke;
             }
 
             /* Link mode: highlight all nodes as clickable */
@@ -621,7 +722,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         const iconName = typeof name === 'string' && name.length > 0 ? name : 'tool';
         const label = fallbackLabel.length > 0 ? fallbackLabel : this._iconFallbackLabel(iconName);
         return html`
-            <span class="canvas-icon" style=${`--canvas-icon-size: ${size}px`}>
+            <span class="canvas-icon" data-icon=${iconName} style=${`--canvas-icon-size: ${size}px`}>
                 <img
                     class="canvas-icon-img"
                     src=${this._iconAssetSrc(iconName)}
@@ -632,6 +733,10 @@ export class FlowsFlowCanvas extends PlatformElement {
                 <span class="canvas-icon-fallback">${label}</span>
             </span>
         `;
+    }
+
+    _renderCodeLanguageIcon(language, size) {
+        return html`<flows-code-language-icon language=${language} size=${size}></flows-code-language-icon>`;
     }
 
     _portCoords(node, side) {
@@ -1715,13 +1820,10 @@ export class FlowsFlowCanvas extends PlatformElement {
         const visibleTools = canvasTools.slice(0, maxShown);
         const moreTools = canvasTools.length - visibleTools.length;
         const meta = getNodeTypeMeta(node.type);
+        const nodeStyle = `--node-accent: ${getCategoryToken(meta.category)};`;
         const isCodeNode = node.type === 'code';
         const nodeIcon = isCodeNode
-            ? this._renderCanvasIcon(
-                flowCodeLanguageIconName(node.language),
-                28,
-                flowCodeLanguageShortLabel(node.language),
-            )
+            ? this._renderCodeLanguageIcon(node.language, 28)
             : this._renderCanvasIcon(meta.icon, 18);
         const state = this._state();
         const multi = asArray(state.multiSelection);
@@ -1742,6 +1844,7 @@ export class FlowsFlowCanvas extends PlatformElement {
             <div
                 xmlns="http://www.w3.org/1999/xhtml"
                 class="node-card-content ${hasToolStrip ? 'has-tools' : ''}"
+                style=${nodeStyle}
                 @dragover=${(ev) => this._onNodeCardDragOver(ev, id)}
                 @dragleave=${(ev) => this._onNodeCardDragLeave(ev, id)}
                 @drop=${(ev) => this._onNodeCardDrop(ev, id)}
@@ -1767,12 +1870,9 @@ export class FlowsFlowCanvas extends PlatformElement {
                             const label = getToolLabel(ref);
                             const inferredLanguage = inferToolRefLanguage(ref);
                             const isLanguageTool = inferredLanguage.length > 0;
+                            const chipStyle = `--tool-accent: ${getCategoryToken(tm.category)};`;
                             const chipIcon = isLanguageTool
-                                ? this._renderCanvasIcon(
-                                    flowCodeLanguageIconName(inferredLanguage),
-                                    24,
-                                    flowCodeLanguageShortLabel(inferredLanguage),
-                                )
+                                ? this._renderCodeLanguageIcon(inferredLanguage, 24)
                                 : this._renderCanvasIcon(tm.icon, 14);
                             return html`
                                 <button
@@ -1780,6 +1880,7 @@ export class FlowsFlowCanvas extends PlatformElement {
                                     class="node-tool-chip"
                                     data-cat=${tm.category}
                                     ?data-language-icon=${isLanguageTool}
+                                    style=${chipStyle}
                                     title=${label}
                                     @pointerdown=${(e) => {
                                         e.stopPropagation();
@@ -1803,13 +1904,17 @@ export class FlowsFlowCanvas extends PlatformElement {
                 ?data-selected=${isSelected}
                 ?data-multi-selected=${isMulti}
                 ?data-inherited=${isInherited}
+                data-cat=${meta.category}
                 data-state=${asString(runtimeState)}
+                style=${nodeStyle}
                 ?data-palette-drop-target=${this._paletteDndMode === 'resource' && this._paletteDndHoverNodeId === id}
                 @pointerdown=${(e) => this._onPointerDownNode(e, id)}
                 @contextmenu=${(e) => this._onContextMenu(e, 'node', id)}
                 @dblclick=${() => this._editor.selectNode({ nodeId: id })}
             >
+                <rect class="node-aura" x="-5" y="-5" width=${NODE_W + 10} height=${h + 10} rx=${NODE_RADIUS + 5} ry=${NODE_RADIUS + 5}></rect>
                 <rect class="node-card" x="0" y="0" width=${NODE_W} height=${h} rx=${NODE_RADIUS} ry=${NODE_RADIUS}></rect>
+                <rect class="node-sheen" x="10" y="1" width=${NODE_W - 20} height="1.5" rx="1" ry="1"></rect>
                 <foreignObject x="0" y="0" width=${NODE_W} height=${h}>${foBody}</foreignObject>
                 ${hasBp ? svg`<circle class="badge-bp-circle" cx=${NODE_W - 8} cy="8" r="5"></circle>` : ''}
                 ${isInherited ? svg`<text class="badge-inherited" x="6" y=${h - 6} font-size="10">↑</text>` : ''}
@@ -1985,12 +2090,14 @@ export class FlowsFlowCanvas extends PlatformElement {
             const w = Number.isFinite(wRaw) && wRaw > 0 ? wRaw : STICKY_W;
             const hRaw = Number(note.height);
             const h = collapsed ? STICKY_COLLAPSED_H : (Number.isFinite(hRaw) && hRaw > 0 ? hRaw : STICKY_H);
-            const noteCx = asNumber(note.x) + w / 2;
-            const noteCy = asNumber(note.y) + h / 2;
-            const nodeCx = asNumber(node.pos_x) + NODE_W / 2;
-            const nodeCy = asNumber(node.pos_y) + getNodeCanvasHeight(node) / 2;
-            const dx = Math.abs(nodeCx - noteCx) * 0.4;
-            const d = `M ${noteCx} ${noteCy} C ${noteCx + (nodeCx > noteCx ? dx : -dx)} ${noteCy} ${nodeCx + (nodeCx > noteCx ? -dx : dx)} ${nodeCy} ${nodeCx} ${nodeCy}`;
+            const noteRect = { x: asNumber(note.x), y: asNumber(note.y), w, h };
+            const nodeH = getNodeCanvasHeight(node);
+            const nodeRect = { x: asNumber(node.pos_x), y: asNumber(node.pos_y), w: NODE_W, h: nodeH };
+            const noteCenter = { x: noteRect.x + noteRect.w / 2, y: noteRect.y + noteRect.h / 2 };
+            const nodeCenter = { x: nodeRect.x + nodeRect.w / 2, y: nodeRect.y + nodeRect.h / 2 };
+            const start = rectBoundaryAnchor(noteRect, nodeCenter);
+            const end = rectBoundaryAnchor(nodeRect, noteCenter);
+            const d = attachPathFor(start.x, start.y, end.x, end.y);
             out.push(svg`<path class="sticky-attach-line" d=${d}></path>`);
         }
         return out;
@@ -2081,9 +2188,9 @@ export class FlowsFlowCanvas extends PlatformElement {
                 </defs>
                 <rect x="-1000000" y="-1000000" width="2000000" height="2000000" fill="url(#canvas-grid)"></rect>
 
-                <g class="sticky-layer">${this._renderStickyNotes()}</g>
-
                 <g class="sticky-attach-layer">${this._renderStickyAttachLines()}</g>
+
+                <g class="sticky-layer">${this._renderStickyNotes()}</g>
 
                 <g class="edges-layer">
                     ${edges.map((edge, i) => this._renderEdge(edge, i, nodes))}

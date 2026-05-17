@@ -474,6 +474,7 @@ class CapabilityRegistry:
             "channel.send_with_buttons": self._channel_send_with_buttons,
             "flow.ask_user": self._flow_ask_user,
             "tools.call": self._tools_call,
+            "tools.call_builtin": self._tools_call_builtin,
         }
         for method in HTTP_METHODS:
             self._handlers[f"http.{method.lower()}"] = self._make_http_method_handler(method)
@@ -2032,6 +2033,46 @@ class CapabilityRegistry:
             raise _CapabilityInterruptFromTool(interrupt)
         if status != "ok":
             raise RuntimeError(f"flows tool-runtime returned invalid status: {status!r}")
+        return raw_response.get("result")
+
+    async def _tools_call_builtin(self, request: CapabilityCallRequest) -> JsonValue:
+        self._reject_positional_args(request)
+        tool_id = _required_string(request.kwargs.get("tool_id"), "tool_id")
+        arguments_raw = request.kwargs.get("arguments")
+        if not isinstance(arguments_raw, dict):
+            raise TypeError("arguments must be object")
+
+        context = await self._context_service.build_context(request.context)
+        payload = {
+            "context": request.context.model_dump(mode="json"),
+            "tool_id": tool_id,
+            "arguments": arguments_raw,
+            "state": request.state,
+        }
+        with self._context_service.activate(context):
+            raw_response = await self._container.service_client.post(
+                "flows",
+                "/flows/api/v1/tool-runtime/call-builtin",
+                json=payload,
+                timeout=120.0,
+            )
+
+        if not isinstance(raw_response, dict):
+            raise RuntimeError("flows builtin tool-runtime response must be an object")
+
+        returned_state = raw_response.get("state")
+        if isinstance(returned_state, dict):
+            request.state.clear()
+            request.state.update(returned_state)
+
+        status = raw_response.get("status")
+        if status == "interrupt":
+            interrupt = raw_response.get("interrupt")
+            if not isinstance(interrupt, dict):
+                raise RuntimeError("flows builtin tool-runtime interrupt response lacks interrupt envelope")
+            raise _CapabilityInterruptFromTool(interrupt)
+        if status != "ok":
+            raise RuntimeError(f"flows builtin tool-runtime returned invalid status: {status!r}")
         return raw_response.get("result")
 
     def _reject_positional_args(self, request: CapabilityCallRequest) -> None:

@@ -73,6 +73,42 @@ from core.tracing.provider import is_tracing_enabled
 
 logger = get_logger(__name__)
 
+_BRANCH_BODY_FIELDS = {
+    "entry",
+    "nodes",
+    "nodes_mode",
+    "edges",
+    "edges_mode",
+    "variables",
+    "variables_mode",
+    "mock",
+}
+
+
+def _branch_body_from_request(data: dict[str, Any]) -> dict[str, Any]:
+    """Extract branch payload from current and legacy request shapes."""
+    for key in ("branch_body", "skill_body"):
+        raw_body = data.get(key)
+        if isinstance(raw_body, dict):
+            return raw_body
+
+    branch_body: dict[str, Any] = {}
+    for key in _BRANCH_BODY_FIELDS:
+        if key not in data:
+            continue
+        value = data[key]
+        if key in {"nodes", "variables"} and isinstance(value, dict) and not value:
+            continue
+        if key == "edges" and isinstance(value, list) and not value:
+            continue
+        if key in {"entry", "nodes_mode", "edges_mode", "variables_mode"} and value in (None, ""):
+            continue
+        if key == "mock" and value is None:
+            continue
+        branch_body[key] = value
+    return branch_body
+
+
 def effective_stream_task_id_for_session(
     params_task_id: str,
     saved_state: ExecutionState | None,
@@ -1020,19 +1056,10 @@ class BaseChannel(ABC):
         if config.branches and branch_id in config.branches:
             raise ValueError(f"Ветка '{branch_id}' уже существует")
 
-        branch_body = data.get("branch_body", {})
+        branch_body = _branch_body_from_request(data)
 
         # Zero-Guess: валидация неизвестных полей в branch_body
-        allowed_branch_body_fields = {
-            "entry",
-            "nodes",
-            "nodes_mode",
-            "edges",
-            "edges_mode",
-            "variables",
-            "variables_mode",
-            "mock",
-        }
+        allowed_branch_body_fields = _BRANCH_BODY_FIELDS
         unknown_fields = set(branch_body.keys()) - allowed_branch_body_fields
         if unknown_fields:
             raise ValueError(
@@ -1129,19 +1156,10 @@ class BaseChannel(ABC):
         if not config.branches or branch_id not in config.branches:
             raise ValueError(f"Ветка '{branch_id}' не найдена")
 
-        branch_body = data.get("branch_body", {})
+        branch_body = _branch_body_from_request(data)
 
         # Zero-Guess: валидация неизвестных полей в branch_body
-        allowed_branch_body_fields = {
-            "entry",
-            "nodes",
-            "nodes_mode",
-            "edges",
-            "edges_mode",
-            "variables",
-            "variables_mode",
-            "mock",
-        }
+        allowed_branch_body_fields = _BRANCH_BODY_FIELDS
         unknown_fields = set(branch_body.keys()) - allowed_branch_body_fields
         if unknown_fields:
             raise ValueError(

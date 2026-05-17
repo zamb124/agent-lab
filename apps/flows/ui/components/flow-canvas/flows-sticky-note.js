@@ -22,11 +22,11 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 
-const COLOR_VAR = Object.freeze({
-    warning_bg: 'var(--warning-bg)',
-    info_bg: 'var(--info-bg)',
-    success_bg: 'var(--success-bg)',
-    accent_secondary_subtle: 'var(--accent-secondary-subtle)',
+const COLOR_ACCENT_VAR = Object.freeze({
+    warning_bg: 'var(--warning)',
+    info_bg: 'var(--info)',
+    success_bg: 'var(--success)',
+    accent_secondary_subtle: 'var(--accent-secondary)',
 });
 
 export class FlowsStickyNote extends PlatformElement {
@@ -45,14 +45,20 @@ export class FlowsStickyNote extends PlatformElement {
         PlatformElement.styles,
         css`
             :host {
+                --sticky-accent: var(--warning);
                 display: flex;
                 flex-direction: column;
                 width: 100%;
                 height: 100%;
                 box-sizing: border-box;
                 border-radius: var(--radius-md);
-                box-shadow: var(--glass-shadow-medium);
-                border: 1px solid var(--border-subtle);
+                box-shadow:
+                    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+                    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+                border: 1px solid color-mix(in oklab, var(--sticky-accent) 20%, var(--border-subtle));
+                background:
+                    linear-gradient(180deg, color-mix(in oklab, var(--sticky-accent) 7%, transparent), transparent 58%),
+                    color-mix(in oklab, var(--bg-elevated) 90%, var(--sticky-accent) 10%);
                 position: relative;
                 overflow: hidden;
             }
@@ -67,7 +73,8 @@ export class FlowsStickyNote extends PlatformElement {
                 padding: 4px 6px;
                 min-height: 28px;
                 box-sizing: border-box;
-                border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+                border-bottom: 1px solid color-mix(in oklab, var(--sticky-accent) 14%, var(--border-subtle));
+                background: color-mix(in oklab, var(--bg-elevated) 86%, var(--sticky-accent) 8%);
                 cursor: move;
                 touch-action: none;
                 user-select: none;
@@ -113,14 +120,23 @@ export class FlowsStickyNote extends PlatformElement {
             .body {
                 flex: 1;
                 min-height: 0;
-                padding: var(--space-2);
+                padding: 14px 16px 18px 16px;
                 box-sizing: border-box;
                 position: relative;
                 display: flex;
                 flex-direction: column;
+                background: transparent;
             }
             :host([collapsed]) .body { display: none; }
-            :host([collapsed]) .body { display: none; }
+            platform-field {
+                display: block;
+                flex: 1;
+                min-height: 0;
+                --field-pill-textarea-min-height: var(--sticky-editor-min-height);
+                --field-pill-textarea-resize: none;
+                --field-pill-input-size: var(--text-base);
+                --field-pill-input-weight: var(--font-normal);
+            }
 
             .resize-handle {
                 position: absolute;
@@ -162,8 +178,8 @@ export class FlowsStickyNote extends PlatformElement {
     updated(changed) {
         super.updated?.(changed);
         if (changed.has('colorToken')) {
-            const cv = COLOR_VAR[this.colorToken];
-            this.style.background = typeof cv === 'string' && cv.length > 0 ? cv : COLOR_VAR.warning_bg;
+            const cv = COLOR_ACCENT_VAR[this.colorToken];
+            this.style.setProperty('--sticky-accent', typeof cv === 'string' && cv.length > 0 ? cv : COLOR_ACCENT_VAR.warning_bg);
         }
     }
 
@@ -262,12 +278,17 @@ export class FlowsStickyNote extends PlatformElement {
     }
 
     render() {
+        const rawHeight = Number(this.height);
+        const noteHeight = Number.isFinite(rawHeight) && rawHeight > 0 ? rawHeight : 140;
+        const editorMinHeight = Math.max(52, noteHeight - 62);
         return html`
             ${this._renderHeader()}
             <div class="body">
                 <platform-field
                     mode="edit"
                     type="text"
+                    pill-embed
+                    style=${`--sticky-editor-min-height: ${editorMinHeight}px;`}
                     .value=${this.text}
                     .placeholder=${this.t('canvas.sticky_note.placeholder')}
                     @change=${this._onInput}

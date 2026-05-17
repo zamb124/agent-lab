@@ -28,8 +28,8 @@ export class FlowsCodeLanguageIcon extends PlatformElement {
             :host {
                 --flows-code-language-icon-size: 20px;
                 display: inline-flex;
-                width: var(--flows-code-language-icon-size);
-                height: var(--flows-code-language-icon-size);
+                width: auto;
+                height: auto;
                 align-items: center;
                 justify-content: center;
                 flex: 0 0 auto;
@@ -37,8 +37,8 @@ export class FlowsCodeLanguageIcon extends PlatformElement {
                 vertical-align: middle;
             }
             .icon {
-                width: 100%;
-                height: 100%;
+                width: var(--flows-code-language-icon-size);
+                height: var(--flows-code-language-icon-size);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
@@ -50,6 +50,12 @@ export class FlowsCodeLanguageIcon extends PlatformElement {
                 width: 100%;
                 height: 100%;
                 object-fit: contain;
+            }
+            .icon[data-language='javascript'] img,
+            .icon[data-language='typescript'] img {
+                width: 82%;
+                height: 82%;
+                border-radius: calc(var(--flows-code-language-icon-size) * 0.16);
             }
             .fallback {
                 display: inline-flex;
@@ -106,7 +112,7 @@ export class FlowsCodeLanguageIcon extends PlatformElement {
         const size = this._normalizedSize();
         const style = `--flows-code-language-icon-size: ${size}px;`;
         return html`
-            <span class="icon" style=${style}>
+            <span class="icon" data-language=${language} style=${style}>
                 ${this._failed
                     ? html`<span class="fallback">${flowCodeLanguageShortLabel(language)}</span>`
                     : html`<img

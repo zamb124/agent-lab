@@ -13,7 +13,7 @@
 export const NODE_TYPE_META = Object.freeze({
     llm_node:     { icon: 'llm_node', category: 'core' },
     resource:     { icon: 'box', category: 'flow' },
-    code:         { icon: 'code',     category: 'core' },
+    code:         { icon: 'code',     category: 'code' },
     formatter:    { icon: 'sparkle',  category: 'core' },
     external_api: { icon: 'globe',    category: 'integrations' },
     mcp:          { icon: 'mcp',      category: 'integrations' },
@@ -25,6 +25,7 @@ export const NODE_TYPE_META = Object.freeze({
 
 export const CATEGORY_TOKEN = Object.freeze({
     core: 'var(--accent)',
+    code: 'var(--success)',
     integrations: 'var(--info)',
     flow: 'var(--accent-secondary)',
     hitl: 'var(--warning)',

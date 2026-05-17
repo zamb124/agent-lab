@@ -77,6 +77,52 @@ class TestSkillValidationAndPersistence:
         assert effective["variables"]["skill_var"] == "skill_value"
         assert effective["variables"]["shared_var"] == "from_skill"
 
+    async def test_create_skill_allows_company_variable_aliases(self, client, container, unique_id):
+        """Создание ветки не падает на variables.*.value = @var:company_secret."""
+        flow_id = f"test_agent_company_alias_{unique_id}"
+
+        base_agent = {
+            "flow_id": flow_id,
+            "name": "Test Agent With Company Alias",
+            "entry": "main",
+            "nodes": {
+                "main": {
+                    "type": "code",
+                    "code": "async def run(args, state):\n    return state",
+                    "input_mapping": {
+                        "bot_token": "@var:telegram_mirror_bot_token",
+                    },
+                }
+            },
+            "edges": [{"from": "main", "to": None}],
+            "variables": {
+                "telegram_mirror_bot_token": {
+                    "value": "@var:telegram_notify_bot_token",
+                    "secret": True,
+                },
+            },
+        }
+
+        create_resp = await client.post("/flows/api/v1/flows/", json=base_agent)
+        assert create_resp.status_code == 200
+
+        branch_id = f"test_skill_{unique_id}"
+        resp = await client.post(
+            f"/flows/api/v1/{flow_id}/branches",
+            json={
+                "branch_id": branch_id,
+                "name": "Test Skill",
+                "description": "Payload shape used by the branch create modal",
+                "nodes": {},
+                "edges": [],
+            },
+        )
+        assert resp.status_code == 201, resp.text
+
+        agent = await container.flow_repository.get(flow_id)
+        assert agent is not None
+        assert branch_id in agent.branches
+
     async def test_create_skill_saves_node_properties(self, client, container, unique_id):
         """Создание skill сохраняет свойства нод."""
         flow_id = f"test_agent_props_{unique_id}"
@@ -864,4 +910,3 @@ class TestSkillValidationAndPersistence:
         assert "flow" in detail
         assert "goal" in detail
         assert "allowed fields" in detail
-

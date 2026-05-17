@@ -353,6 +353,7 @@ class ToolRegistry:
             title=config.get("title"),
             description=config.get("description"),
             parameters_schema=resolved_schema,
+            permission=config.get("permission", []),
             react_role=react_role,
             language=str(config.get("language", "python")),
             entrypoint=_optional_entrypoint(config),

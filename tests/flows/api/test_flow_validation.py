@@ -469,6 +469,39 @@ class TestFlowValidationVariables:
         assert "undefined_variable" in error_codes
 
     @pytest.mark.asyncio
+    async def test_validate_variable_value_can_reference_company_variable(self, client, app):
+        """FlowVariableConfig.value с @var: ссылается на company variable, не на эту же секцию."""
+        response = await client.post(
+            "/flows/api/v1/flows/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "llm_node",
+                        "prompt": "Test",
+                        "input_mapping": {
+                            "bot_token": "@var:telegram_mirror_bot_token",
+                        },
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {
+                    "telegram_mirror_bot_token": {
+                        "value": "@var:telegram_notify_bot_token",
+                        "secret": True,
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "undefined_variable" not in error_codes
+        assert "telegram_mirror_bot_token" in data["var_keys_used"]
+        assert "telegram_notify_bot_token" in data["var_keys_used"]
+
+    @pytest.mark.asyncio
     async def test_validate_variable_in_url(self, client, app):
         """@var: в url remote_flow."""
         response = await client.post(
@@ -833,4 +866,3 @@ class TestFlowValidationComplexCases:
         # Агент как tool должен быть найден
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes
-

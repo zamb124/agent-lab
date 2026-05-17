@@ -172,6 +172,8 @@ class BaseTool(ABC):
 
         if not config.auth.permissions_enabled:
             return None
+        if self.permission == []:
+            return None
 
         user_groups = self._get_user_groups_from_state(state)
 

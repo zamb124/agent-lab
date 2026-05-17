@@ -177,6 +177,46 @@ async def call_tool_runtime(
             set_context(previous_context)
 
 
+@router.post("/call-builtin", response_model=ToolRuntimeCallResponse)
+async def call_builtin_tool_runtime(
+    container: ContainerDep,
+    request: ToolRuntimeCallRequest,
+) -> ToolRuntimeCallResponse:
+    """Execute the trusted builtin implementation, bypassing editable DB templates."""
+    verify_execution_context(request.context)
+    runtime_context = await _build_context(container, request.context)
+    previous_context = get_context()
+    set_context(runtime_context)
+    try:
+        state = ExecutionState.model_validate(request.state)
+        container.tool_registry.register_builtin_tools()
+        tool = container.tool_registry.get(request.tool_id)
+        if tool is None:
+            raise HTTPException(status_code=404, detail=f"Builtin tool not found: {request.tool_id}")
+        try:
+            result = await tool.run(dict(request.arguments), state)
+        except FlowInterrupt as exc:
+            body = exc.body.model_dump(mode="json")
+            return ToolRuntimeCallResponse(
+                status="interrupt",
+                state=state.model_dump(mode="json", exclude_none=False),
+                interrupt=CapabilityInterruptEnvelope(
+                    kind=str(body.get("kind", "interrupt")),
+                    body=body,
+                ),
+            )
+        return ToolRuntimeCallResponse(
+            status="ok",
+            result=result,
+            state=state.model_dump(mode="json", exclude_none=False),
+        )
+    finally:
+        if previous_context is None:
+            clear_context()
+        else:
+            set_context(previous_context)
+
+
 async def _build_context(container: Any, execution_context: CapabilityExecutionContext) -> Context:
     if execution_context.user_id is None:
         raise HTTPException(status_code=401, detail="Capability context requires user_id")

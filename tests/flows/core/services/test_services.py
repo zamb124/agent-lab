@@ -228,7 +228,7 @@ class TestFlowsLoader:
         if "calculator" in loaded:
             tool = await container.tool_repository.get("calculator")
             assert tool is not None
-            assert tool.code is None
+            assert isinstance(tool.code, str) and "async def calculator" in tool.code
             assert tool.parameters_schema is not None
             assert tool.parameters_schema.get("type") == "object"
             assert "properties" in tool.parameters_schema
@@ -236,7 +236,7 @@ class TestFlowsLoader:
         if "crm_search_entities" in loaded:
             crm_tool = await container.tool_repository.get("crm_search_entities")
             assert crm_tool is not None
-            assert crm_tool.code is None
+            assert isinstance(crm_tool.code, str) and "async def crm_search_entities" in crm_tool.code
             assert crm_tool.parameters_schema is not None
             props = crm_tool.parameters_schema.get("properties") or {}
             assert "query" in props

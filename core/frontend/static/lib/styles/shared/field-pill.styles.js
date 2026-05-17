@@ -208,7 +208,7 @@ export const fieldPillStyles = css`
 
     .field-pill-textarea,
     .form-textarea {
-        resize: vertical;
+        resize: var(--field-pill-textarea-resize, vertical);
         min-height: var(--field-pill-textarea-min-height);
         line-height: var(--leading-normal);
         font-weight: var(--font-normal);

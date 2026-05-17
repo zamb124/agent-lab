@@ -55,7 +55,9 @@ def merge_shared_definition_config_with_patch(
         return dict(base_config)
     merger = MERGE_SHARED_CONFIG_BY_TYPE.get(resource_type)
     if merger is None:
-        raise ValueError(f"Unsupported resource type: {resource_type}")
+        merged = {**dict(base_config), **patch}
+        parse_typed_resource_config(resource_type, merged)
+        return merged
     merged = merger(dict(base_config), patch)
     parse_typed_resource_config(resource_type, merged)
     return merged
