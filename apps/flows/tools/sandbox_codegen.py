@@ -1,95 +1,72 @@
-"""
-Мета-тул sandbox_codegen: генерация Python в песочнице по задаче (LLM + validate/compile/execute).
-
-Механика прогона — `apps.flows.src.eval.codegen_utils` (`run_codegen_stages`).
-"""
+"""Multilingual codegen tool over isolated code runners and capability-gateway."""
 
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from apps.flows.src.eval.codegen_utils import (
-    CodegenStagesFailure,
-    CodegenStagesSuccess,
-    build_sandbox_docs_markdown,
-    execution_state_for_codegen,
-    import_merged_with_async_def_on_same_line,
-    import_or_async_glued_without_newlines,
-    run_codegen_stages,
-    sandbox_feedback_hint,
-    syntax_retry_hint,
-)
-from apps.flows.src.eval.platform_services import get_code_runner
+from apps.flows.src.services.platform_facades import get_code_runner
 from apps.flows.src.tools.decorator import tool
+from core.capabilities import CAPABILITY_LANGUAGES, CapabilityLanguage, JsonObject
 from core.clients.llm import get_llm
+from core.clients.service_client import ServiceClient
 from core.config import get_settings
+from core.errors import CodeExecutionRuntimeError
+from core.state import ExecutionState
+
+_CAPABILITY_DOCUMENTATION_PATH = "/capability-gateway/api/v1/capabilities/documentation"
+_LANGUAGES = CAPABILITY_LANGUAGES
 
 
 def _sandbox_codegen_default_model() -> str:
-    """Платформенный дефолт модели codegen — берётся из ``settings.llm.default_model``."""
-    s = get_settings()
-    m = (s.llm.default_model or "").strip()
-    if not m:
-        raise ValueError("sandbox_codegen: settings.llm.default_model не задан")
-    return m
+    model = (get_settings().llm.default_model or "").strip()
+    if not model:
+        raise ValueError("sandbox_codegen: settings.llm.default_model is required")
+    return model
 
 
-class LLMGeneratedCode(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+class GeneratedCode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-    code_lines: list[str] = Field(
+    code: str = Field(
         ...,
         min_length=1,
-        description=(
-            "Исходник Python как массив строк: каждый элемент — ровно одна физическая строка файла .py "
-            "по порядку сверху вниз; пустая строка в файле — элемент ''. Отступы тел блоков — пробелы "
-            "в начале элемента. Запрещено вставлять \\n внутрь одного элемента и склеивать несколько "
-            "операторов в одном элементе (отдельные элементы для import httpx, import re, async def …)."
-        ),
+        description="Complete source code for the requested language and requested entrypoint.",
     )
-
-    @field_validator("code_lines", mode="before")
-    @classmethod
-    def _coerce_code_lines(cls, value: Any) -> Any:
-        if not isinstance(value, list):
-            raise ValueError(
-                "code_lines должен быть JSON-массивом строк; каждая строка .py — отдельный элемент",
-            )
-        return [str(item) for item in value]
-
-    @field_validator("code_lines", mode="after")
-    @classmethod
-    def _no_embedded_newlines_in_code_lines(cls, value: list[str]) -> list[str]:
-        for i, line in enumerate(value):
-            if "\n" in line or "\r" in line:
-                raise ValueError(
-                    f"code_lines[{i}]: один элемент — одна строка без символов перевода внутри; "
-                    "разбей на несколько элементов массива",
-                )
-        return value
 
 
 class SandboxCodegenArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    task: str = Field(..., min_length=1, description="Что должен сделать код во время выполнения.")
+    task: str = Field(..., min_length=1, description="What the generated code must do.")
+    language: CapabilityLanguage = Field(
+        "python",
+        description="Target runtime language.",
+    )
+    entrypoint: str | None = Field(
+        None,
+        description="Function/export name to execute. None means the first function in source.",
+    )
+    run_args: dict[str, Any] | None = Field(
+        None,
+        description="JSON object passed as args to the entrypoint(args, state) call.",
+    )
     run_variables: dict[str, Any] | None = Field(
-        default=None,
-        description="Опционально: словарь, сливаемый в state.variables перед run (числа, входы; в коде — state.variables).",
+        None,
+        description="JSON object merged into state.variables before execution.",
     )
     output_json_schema: str | None = Field(
-        default=None,
-        description="Опционально: текст JSON Schema ожидаемого dict в результате.",
+        None,
+        description="Optional JSON Schema text describing the expected generated-code result.",
     )
-    max_iterations: int = Field(default=5, ge=1, le=20)
-    max_doc_chars: int = Field(default=120_000, ge=5000, le=500_000)
+    max_iterations: int = Field(5, ge=1, le=20)
+    max_doc_chars: int = Field(120_000, ge=5_000, le=500_000)
     model: str = Field(
         default_factory=_sandbox_codegen_default_model,
         min_length=1,
-        description="Имя модели LLM для codegen; дефолт берётся из settings.llm.default_model.",
+        description="LLM model for code generation.",
     )
 
     @field_validator("model", mode="before")
@@ -101,192 +78,192 @@ class SandboxCodegenArgs(BaseModel):
             return _sandbox_codegen_default_model()
         return value
 
-    @field_validator("run_variables", mode="before")
+    @field_validator("run_args", "run_variables", mode="before")
     @classmethod
-    def _coerce_run_variables(cls, value: Any) -> Any:
-        if value is None:
-            return None
-        if isinstance(value, dict):
+    def _coerce_json_object(cls, value: Any) -> Any:
+        if value is None or isinstance(value, dict):
             return value
         if isinstance(value, str):
             stripped = value.strip()
-            if stripped == "":
+            if not stripped:
                 return None
-            try:
-                parsed = json.loads(stripped)
-            except json.JSONDecodeError as exc:
-                raise ValueError(
-                    "run_variables: нужен объект или JSON-объект в строке",
-                ) from exc
+            parsed = json.loads(stripped)
             if not isinstance(parsed, dict):
-                raise ValueError("run_variables: после JSON.parse ожидается объект с парами ключ-значение")
+                raise ValueError("expected JSON object")
             return parsed
-        raise ValueError(
-            f"run_variables: ожидался dict или строка с JSON-объектом, получено {type(value).__name__}",
-        )
+        raise ValueError(f"expected object or JSON object string, got {type(value).__name__}")
 
 
-def _system_rules_block() -> str:
+async def _language_docs(language: CapabilityLanguage, max_doc_chars: int) -> str:
+    raw = await ServiceClient().get(
+        "capability_gateway",
+        _CAPABILITY_DOCUMENTATION_PATH,
+        params={"language": language},
+        timeout=30.0,
+    )
+    if not isinstance(raw, dict) or not isinstance(raw.get("markdown"), str):
+        raise RuntimeError("capability-gateway documentation response is invalid")
+    docs = str(raw["markdown"])
+    if len(docs) <= max_doc_chars:
+        return docs
+    return docs[:max_doc_chars] + "\n\n# ... [documentation truncated by max_doc_chars]\n"
+
+
+def _entrypoint_contract(language: CapabilityLanguage, entrypoint: str | None) -> str:
+    if entrypoint is None:
+        return "Make the first top-level function in the source the executable entrypoint with signature (args, state)"
+    if language == "go":
+        return f"Implement exactly: func {entrypoint}(args map[string]any, state map[string]any) (any, error)"
+    if language == "csharp":
+        return f"Implement exactly: async Task<object?> {entrypoint}(Dictionary<string, object?> args, Dictionary<string, object?> state)"
+    if language == "python":
+        return f"Implement exactly: async def {entrypoint}(args, state)"
+    return f"Implement exactly: async function {entrypoint}(args, state)"
+
+
+def _system_prompt(
+    *,
+    language: CapabilityLanguage,
+    entrypoint: str | None,
+    docs: str,
+    output_json_schema: str | None,
+) -> str:
+    schema_hint = ""
+    if output_json_schema and output_json_schema.strip():
+        schema_hint = f"\nExpected result JSON Schema:\n{output_json_schema.strip()}\n"
     return (
-        "Ты генерируешь только Python для sandbox Humanitec (inline code flows).\n"
-        "Документация ниже — единый источник правды для UI-разработчика и codegen; "
-        "используй её API и раздел «Контракты выполнения», но для этого tool всегда выбирай "
-        "контракт `sandbox_codegen`.\n"
-        "Запрещены импорты apps.* и core.* и любой доступ к закрытым модулям платформы.\n"
-        "Используй только API из приложенной документации.\n"
-        "Для `sandbox_codegen` нужен ровно один entrypoint `async def run(state):`, который возвращает "
-        "`dict` (сериализуемый JSON-объект). "
-        "Не генерируй `BaseTool`-класс как код ноды/tool: inline entrypoint всегда функция.\n"
-        "Входные данные вызова — в `state.variables` (поле вызова `run_variables` сливается туда перед run).\n"
-        "Формат ответа модели: поле `code_lines` — JSON-массив строк; каждый элемент — одна строка будущего .py "
-        "(первая строка файла — первый элемент). Несколько операторов подряд — несколько элементов. "
-        "Пустая строка в файле — элемент \"\". Нельзя класть перевод строки внутрь одного элемента.\n"
-        "После `:` следующая логическая строка — следующий элемент с отступом 4 пробела в начале.\n"
-        "Импорты: отдельный элемент на каждый `import` / `from`; перед `async def` — отдельный элемент; "
-        "запрещено в одном элементе писать `import re async def` или `import httpximport`.\n"
-        "Regex в строках: для пробелов в шаблоне нужен один "
-        "обратный слэш перед `s` (как в обычном .py), не цепочка из лишних слэшей — иначе матчится "
-        "литерал, а не класс whitespace.\n"
+        "Generate production-quality user code for Humanitec isolated code runners.\n"
+        f"Target language: {language}.\n"
+        f"{_entrypoint_contract(language, entrypoint)}.\n"
+        "Do not import apps.* or core.*. Do not call platform internals directly.\n"
+        "Use only the documented generated SDK namespaces for platform access; they are generated from the capability manifest.\n"
+        "Do not use JavaScript/TypeScript export syntax; runners resolve and export the entrypoint internally.\n"
+        "Return a JSON-serializable value and update state only through the provided state object.\n"
+        "Reply only with structured JSON matching GeneratedCode.\n"
+        f"{schema_hint}\n"
+        "Capability documentation:\n"
+        f"{docs}"
     )
 
 
-# Обратная совместимость тестов (префикс _).
-_LLMGeneratedCode = LLMGeneratedCode
-_build_sandbox_docs_markdown = build_sandbox_docs_markdown
-_import_merged_with_async_def_on_same_line = import_merged_with_async_def_on_same_line
-_import_or_async_glued_without_newlines = import_or_async_glued_without_newlines
-_syntax_retry_hint = syntax_retry_hint
-_sandbox_feedback_hint = sandbox_feedback_hint
+def _execution_state_for_codegen(
+    state: Any,
+    run_variables: dict[str, Any] | None,
+) -> ExecutionState:
+    if isinstance(state, ExecutionState):
+        base = state.model_copy(deep=True)
+    elif isinstance(state, dict):
+        base = ExecutionState.model_validate(state)
+    else:
+        raise ValueError("sandbox_codegen requires ExecutionState")
+    if run_variables:
+        base.variables = {**(base.variables or {}), **run_variables}
+    return base
 
 
 @tool(
     name="sandbox_codegen",
     description=(
-        "Сгенерировать и выполнить Python в песочнице Humanitec по полю task (codegen). "
-        "Ожидается async def run(state): → dict. Опционально run_variables сливается в state.variables. "
-        "Ответ — JSON-строка: success, result, final_code, attempts, trace."
+        "Generate and execute code in an isolated Humanitec language runner. "
+        "Supports python, javascript, typescript, go and csharp. The generated code uses capability-gateway for every platform capability."
     ),
-    tags=["eval", "codegen", "inline", "sandbox"],
+    tags=["codegen", "sandbox", "capabilities"],
     args_schema=SandboxCodegenArgs,
-    listed_in_platform_tool_docs=False,
 )
 async def sandbox_codegen(
     task: str,
-    run_variables: Any | None = None,
+    language: CapabilityLanguage = "python",
+    entrypoint: str | None = None,
+    run_args: dict[str, Any] | None = None,
+    run_variables: dict[str, Any] | None = None,
     output_json_schema: str | None = None,
     max_iterations: int = 5,
     max_doc_chars: int = 120_000,
-    model: str = "qwen/qwen3.5-397b-a17b",
+    model: str = "",
+    *,
     state: Any | None = None,
-) -> str:
-    # FunctionTool._run_impl уже валидирует args через SandboxCodegenArgs и передаёт сюда keyword-аргументы.
-    # Логика копии state — внутри тела: при code/execute весь туль исполняется как отдельная строка (<string>);
-    # воркер не подмешивает в namespace функции с уровня модуля (например бывший _exec_state_for_sandbox_run).
-    base = execution_state_for_codegen(state)
-    if run_variables:
-        exec_state = base.model_copy(
-            update={"variables": {**base.variables, **run_variables}},
-        )
-    else:
-        exec_state = base
-    doc_md = await build_sandbox_docs_markdown()
-    if len(doc_md) > max_doc_chars:
-        doc_md = (
-            doc_md[:max_doc_chars]
-            + "\n\n# ... [documentation truncated by max_doc_chars]\n"
-        )
-
-    system_rules = _system_rules_block()
-    schema_hint = ""
-    if output_json_schema and output_json_schema.strip():
-        schema_hint = f"\nОриентир формы ответа (JSON Schema):\n{output_json_schema.strip()}\n"
-
-    doc_block = "## Документация sandbox\n\n" + doc_md
-    system_content = system_rules + schema_hint + doc_block
-
-    exec_runner = get_code_runner(language="python")
-    llm = get_llm(model_name=model, state=exec_state)
-
+) -> dict[str, Any]:
+    capability_language = cast(CapabilityLanguage, language)
+    if capability_language not in _LANGUAGES:
+        raise ValueError(f"Unsupported language: {language}")
+    entrypoint_name = entrypoint.strip() if isinstance(entrypoint, str) and entrypoint.strip() else None
+    selected_model = model.strip() if model and model.strip() else _sandbox_codegen_default_model()
+    exec_state = _execution_state_for_codegen(state, run_variables)
+    docs = await _language_docs(capability_language, max_doc_chars)
+    llm = get_llm(model_name=selected_model, state=exec_state)
+    runner = get_code_runner(language=capability_language)
+    args = cast(JsonObject, dict(run_args or {}))
     trace: list[dict[str, Any]] = []
     last_code = ""
     feedback: str | None = None
 
     for attempt in range(1, max_iterations + 1):
-        user_parts: list[str] = [f"Задача:\n{task}"]
+        user_parts = [f"Task:\n{task}"]
         if last_code:
-            user_parts.append(f"Текущий код:\n```python\n{last_code}\n```")
+            user_parts.append(f"Previous code:\n```{capability_language}\n{last_code}\n```")
         if feedback:
-            user_parts.append(feedback)
-        user_content = "\n\n".join(user_parts)
+            user_parts.append(f"Execution feedback:\n{feedback}")
 
-        gen = await llm.chat(
+        generated = await llm.chat(
             [
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content},
-            ],
-            response_model=LLMGeneratedCode,
-            model=model,
-        )
-        code = "\n".join(gen.code_lines).strip()
-        last_code = code
-        feedback = None
-
-        out = await run_codegen_stages(exec_runner, code, exec_state)
-        if isinstance(out, CodegenStagesSuccess):
-            trace.append({"attempt": attempt, "phase": "success", "detail": "ok"})
-            return json.dumps(
                 {
-                    "success": True,
-                    "result": out.result,
-                    "final_code": last_code,
-                    "attempts": attempt,
-                    "trace": trace,
+                    "role": "system",
+                    "content": _system_prompt(
+                        language=capability_language,
+                        entrypoint=entrypoint_name,
+                        docs=docs,
+                        output_json_schema=output_json_schema,
+                    ),
                 },
-                ensure_ascii=False,
-            )
-
-        fail: CodegenStagesFailure = out
-        trace.append(
-            {
-                "attempt": attempt,
-                "phase": fail.phase,
-                "detail": fail.detail,
-                "traceback": fail.traceback,
-            }
+                {"role": "user", "content": "\n\n".join(user_parts)},
+            ],
+            response_model=GeneratedCode,
+            model=selected_model,
         )
-        if fail.phase == "validate":
-            feedback = (
-                f"Ошибка проверки кода (sandbox, фаза validate): {fail.detail}\n"
-                "Полный traceback есть только в trace ответа тула для отладки; для исправления кода "
-                "достаточно сообщения выше и правил из system.\nИсправь код."
-                + sandbox_feedback_hint(fail.detail)
-                + syntax_retry_hint(code, fail.detail)
+        last_code = generated.code.strip()
+        try:
+            result = await runner.execute_tool(last_code, args, exec_state, entrypoint=entrypoint_name)
+        except CodeExecutionRuntimeError as exc:
+            trace.append(
+                {
+                    "attempt": attempt,
+                    "phase": "execute",
+                    "error": str(exc),
+                    "payload": exc.payload,
+                }
             )
-        elif fail.phase == "compile":
-            feedback = (
-                f"Ошибка компиляции (фаза compile): {fail.detail}\n"
-                "Traceback — в trace ответа тула.\nИсправь код."
-                + sandbox_feedback_hint(fail.detail)
-                + syntax_retry_hint(code, fail.detail)
+            feedback = json.dumps(exc.payload, ensure_ascii=False, indent=2)
+            continue
+        except Exception as exc:
+            trace.append(
+                {
+                    "attempt": attempt,
+                    "phase": "execute",
+                    "error": str(exc),
+                    "exception_type": type(exc).__name__,
+                }
             )
-        elif fail.phase == "execute":
-            feedback = (
-                f"Ошибка выполнения (фаза execute): {fail.detail}\n"
-                "Traceback — в trace ответа тула.\nИсправь код."
-            )
-        else:
-            feedback = (
-                f"Ошибка: код должен вернуть dict (JSON-объект). {fail.detail}\nИсправь код."
-            )
+            feedback = f"{type(exc).__name__}: {exc}"
+            continue
 
-    return json.dumps(
-        {
-            "success": False,
-            "result": None,
+        trace.append({"attempt": attempt, "phase": "success"})
+        return {
+            "success": True,
+            "language": capability_language,
+            "result": result,
+            "state": exec_state.model_dump(mode="json", exclude_none=False),
             "final_code": last_code,
-            "attempts": max_iterations,
+            "attempts": attempt,
             "trace": trace,
-            "error": "max_iterations_exhausted",
-        },
-        ensure_ascii=False,
-    )
+        }
+
+    return {
+        "success": False,
+        "language": capability_language,
+        "result": None,
+        "state": exec_state.model_dump(mode="json", exclude_none=False),
+        "final_code": last_code,
+        "attempts": max_iterations,
+        "trace": trace,
+        "error": "max_iterations_exhausted",
+    }

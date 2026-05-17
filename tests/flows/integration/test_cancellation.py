@@ -43,7 +43,7 @@ class TestCancellationBetweenNodes:
                     "node_a": {
                         "type": "code",
                         "code": (
-                            "async def run(state):\n"
+                            "async def run(args, state):\n"
                             "    state['executed_a'] = True\n"
                             "    return state\n"
                         ),
@@ -51,7 +51,7 @@ class TestCancellationBetweenNodes:
                     "node_b": {
                         "type": "code",
                         "code": (
-                            "async def run(state):\n"
+                            "async def run(args, state):\n"
                             "    state['executed_b'] = True\n"
                             "    return state\n"
                         ),
@@ -111,7 +111,7 @@ class TestCancellationBetweenNodes:
                     "node_a": {
                         "type": "code",
                         "code": (
-                            "async def run(state):\n"
+                            "async def run(args, state):\n"
                             "    state['executed_a'] = True\n"
                             "    return state\n"
                         ),
@@ -119,7 +119,7 @@ class TestCancellationBetweenNodes:
                     "node_b": {
                         "type": "code",
                         "code": (
-                            "async def run(state):\n"
+                            "async def run(args, state):\n"
                             "    state['executed_b'] = True\n"
                             "    return state\n"
                         ),
@@ -284,7 +284,7 @@ class TestCancellationStateRestoration:
                 "main": {
                     "type": "code",
                     "code": (
-                        "async def run(state):\n"
+                        "async def run(args, state):\n"
                         "    counter = state.get('counter', 0)\n"
                         "    state['counter'] = counter + 1\n"
                         "    state['response'] = f'counter={counter + 1}'\n"

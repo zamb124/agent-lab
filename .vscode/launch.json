@@ -203,6 +203,91 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
+            "name": "Run: capability_gateway",
+            "consoleTitle": "run.py: capability_gateway 🔌",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "capability_gateway"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: code_runner_python",
+            "consoleTitle": "run.py: code_runner_python 🐍",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "code_runner_python"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: code_runner_node",
+            "consoleTitle": "run.py: code_runner_node 🟨",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "code_runner_node"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: code_runner_go",
+            "consoleTitle": "run.py: code_runner_go 🐹",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "code_runner_go"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Run: code_runner_csharp",
+            "consoleTitle": "run.py: code_runner_csharp 📘",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run.py",
+            "args": [
+                "code_runner_csharp"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
             "name": "Run: flows_worker",
             "consoleTitle": "run.py: flows_worker ⚙️",
             "type": "debugpy",
@@ -319,6 +404,11 @@
                 "Run: browser",
                 "Run: provider_litserve",
                 "Run: voice",
+                "Run: capability_gateway",
+                "Run: code_runner_python",
+                "Run: code_runner_node",
+                "Run: code_runner_go",
+                "Run: code_runner_csharp",
                 "Run: flows_worker",
                 "Run: rag_worker",
                 "Run: sync_worker",

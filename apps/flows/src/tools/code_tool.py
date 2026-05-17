@@ -1,9 +1,9 @@
 """
-CodeTool - runnable tool backed by inline Python code from flow config.
+CodeTool - runnable tool backed by inline code from flow config.
 
 The abstract BaseTool stays independent from the code runner stack. This keeps
-the tool decorator and sandbox namespace importable without pulling PythonCompiler
-back into the tools package during module initialization.
+the tool decorator importable without pulling any language runner back into the
+tools package during module initialization.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.enums import ReactToolRole
-from apps.flows.src.runners.python import PythonCodeRunner
 from apps.flows.src.tools.base import BaseTool, Permission
 from apps.flows.src.tools.json_schema_parameters import validate_tool_args_against_parameters_schema
 
@@ -23,8 +22,8 @@ if TYPE_CHECKING:
 
 class CodeTool(BaseTool):
     """
-    Тул из Python-кода в конфиге (поле code).
-    Выполнение через SafeEval.execute_tool.
+    Тул из inline-кода в конфиге (поле code).
+    Выполнение через isolated remote code runner.
 
     Не кладётся в процессный ToolRegistry.register и не показывается в platform tools документации:
     экземпляры живут только в списке tools конкретной llm_node (materialize).
@@ -43,6 +42,8 @@ class CodeTool(BaseTool):
         permission: Permission = None,
         tags: list[str] | None = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
+        language: str = "python",
+        entrypoint: str | None = None,
         resources: dict[str, Any] | None = None,
         container: FlowRuntimeContainer | None = None,
     ):
@@ -51,6 +52,8 @@ class CodeTool(BaseTool):
         self.permission = permission
         self.tags = tags or ["misc"]
         self.react_role = react_role
+        self.language = language
+        self.entrypoint = entrypoint.strip() if isinstance(entrypoint, str) and entrypoint.strip() else None
         self._code = code
         self._resources_config = resources or {}
         self.container = container
@@ -97,27 +100,23 @@ class CodeTool(BaseTool):
         return {"type": "object", "properties": {}, "required": []}
 
     async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
-        """Выполняет inline код через SafeEval."""
+        """Выполняет inline код через isolated remote code runner."""
+        if self._resources_config:
+            raise ValueError(
+                f"CodeTool '{self.name}': resources are not injected into sandbox code. "
+                "Use capability('tools.call', ...) / Capability('tools.call', ...) or a dedicated platform capability."
+            )
         full_args = self._apply_defaults(args)
         schema = self._parameters
         if isinstance(schema, dict) and schema.get("type") == "object":
             validate_tool_args_against_parameters_schema(schema=schema, arguments=dict(full_args))
 
-        variables = state.variables
-        resources = await self._resolve_resources(state)
-
         container = self.container
         if container is None:
-            if resources:
-                raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to execute inline code")
-            runner = PythonCodeRunner(variables=variables)
+            raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to execute remote code")
         else:
-            runner = container.get_code_runner(
-                language="python",
-                resources=resources,
-                variables=variables,
-            )
-        return await runner.execute_tool(self._code, full_args, state)
+            runner = container.get_code_runner(language=self.language)
+        return await runner.execute_tool(self._code, full_args, state, entrypoint=self.entrypoint)
 
     def _apply_defaults(self, args: dict[str, Any]) -> dict[str, Any]:
         """Применяет default значения из args_schema к args."""
@@ -136,32 +135,3 @@ class CodeTool(BaseTool):
                 result[prop_name] = prop_schema["default"]
 
         return result
-
-    async def _resolve_resources(self, state: "ExecutionState") -> dict[str, Any]:
-        """
-        Резолвит resources для tool.
-
-        Единообразно с нодами — иерархия flow > skill > tool.
-        """
-        tool_resources = self._resources_config
-        container = self.container
-        if container is None:
-            if tool_resources:
-                raise RuntimeError(f"CodeTool '{self.name}' requires FlowContainer to resolve resources")
-            return {}
-
-        flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
-            state.session_flow_id,
-            state.branch_id,
-            state.flow_config_version,
-        )
-
-        if not flow_resources and not skill_resources and not tool_resources:
-            return {}
-
-        return await container.resource_resolver.resolve_for_node(
-            flow_resources=flow_resources,
-            skill_resources=skill_resources,
-            node_resources=tool_resources,
-            variables=state.variables,
-        )

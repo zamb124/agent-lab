@@ -24,7 +24,7 @@ endif
 endif
 
 # APP_EXCLUDE=… — тот же эффект (через запятую), можно совмещать с make app --ex …
-app:
+app: runtime-bootstrap
 	@APP_EXCLUDE="$(APP_EXCLUDE)" uv run python scripts/run.py from-make $(MAKECMDGOALS) $(if $(filter 1,$(APP_KILL)),--from-make-kill,)
 
 # Только освободить порты 8001-8006 (без запуска сервисов).

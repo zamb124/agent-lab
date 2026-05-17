@@ -1,5 +1,5 @@
 /**
- * Каталог автодополнения Python для flows-code-editor из ответа GET /flows/api/v1/code/completions.
+ * Каталог автодополнения для flows-code-editor из ответа GET /flows/api/v1/code/completions.
  * Единый источник символов — JSON API (globals, runtime_namespace_extras, platform_tools, …).
  */
 
@@ -13,6 +13,8 @@
  */
 
 const PYTHON_IDENT_RE = /^[A-Za-z_]\w*$/;
+const JS_IDENT_RE = /^[$A-Za-z_][$\w]*$/;
+const SIMPLE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * @param {string} text
@@ -114,6 +116,8 @@ export function normalizeCatalogResponse(raw) {
                 : {},
         state_fields: Array.isArray(r.state_fields) ? r.state_fields : [],
         platform_tools: Array.isArray(r.platform_tools) ? r.platform_tools : [],
+        capability_namespaces: Array.isArray(r.capability_namespaces) ? r.capability_namespaces : [],
+        capabilities: Array.isArray(r.capabilities) ? r.capabilities : [],
         runtime_namespace_extras: Array.isArray(r.runtime_namespace_extras)
             ? r.runtime_namespace_extras
             : [],
@@ -128,27 +132,20 @@ export function isValidPythonIdentifier(name) {
 }
 
 /**
- * @param {unknown} g
+ * @param {unknown} language
+ * @param {unknown} name
  */
-function globalEntryToOption(g) {
-    if (!g || typeof g !== 'object') {
-        return null;
+function isValidLanguageIdentifier(language, name) {
+    if (typeof name !== 'string') {
+        return false;
     }
-    const name = 'name' in g && typeof g.name === 'string' ? g.name : '';
-    if (!isValidPythonIdentifier(name)) {
-        return null;
+    if (language === 'javascript' || language === 'typescript') {
+        return JS_IDENT_RE.test(name);
     }
-    const typeRaw = 'type' in g && typeof g.type === 'string' ? g.type : 'variable';
-    const doc = 'doc' in g && typeof g.doc === 'string' ? g.doc : '';
-    const opt = {
-        label: name,
-        type: mapDocTypeToCm(typeRaw),
-        detail: typeRaw,
-    };
-    if (doc.trim().length > 0) {
-        opt.info = completionMarkdownInfo(doc);
+    if (language === 'go' || language === 'csharp') {
+        return SIMPLE_IDENT_RE.test(name);
     }
-    return opt;
+    return isValidPythonIdentifier(name);
 }
 
 /**
@@ -183,9 +180,11 @@ export function buildGlobalSymbolMap(catalog) {
             return;
         }
         for (const g of arr) {
-            const opt = globalEntryToOption(g);
-            if (opt && !map.has(opt.label)) {
-                map.set(opt.label, opt);
+            const opts = globalEntryToGenericOptions('python', g);
+            for (const opt of opts) {
+                if (!map.has(opt.label)) {
+                    map.set(opt.label, opt);
+                }
             }
         }
     };
@@ -234,6 +233,23 @@ export function buildGlobalSymbolMap(catalog) {
                 map.set(tid, toolOpt);
             }
         }
+    }
+
+    for (const ns of catalog.capability_namespaces) {
+        if (!ns || typeof ns !== 'object') {
+            continue;
+        }
+        const name = 'name' in ns && typeof ns.name === 'string' ? ns.name : '';
+        if (!isValidPythonIdentifier(name) || map.has(name)) {
+            continue;
+        }
+        const type = 'type' in ns && typeof ns.type === 'string' ? ns.type : 'capability namespace';
+        map.set(name, {
+            label: name,
+            type: 'namespace',
+            detail: type,
+            info: '',
+        });
     }
 
     return map;
@@ -421,6 +437,48 @@ function filterStateFields(partial, stateFields) {
 }
 
 /**
+ * @param {string} language
+ * @param {string} partial
+ * @param {string} namespace
+ * @param {ReturnType<normalizeCatalogResponse>} catalog
+ */
+function filterCapabilityMethods(language, partial, namespace, catalog) {
+    const p = partial.toLowerCase();
+    /** @type {CMCompletionOption[]} */
+    const out = [];
+    for (const c of catalog.capabilities) {
+        if (!c || typeof c !== 'object') {
+            continue;
+        }
+        const ns = 'namespace' in c && typeof c.namespace === 'string' ? c.namespace : '';
+        if (ns !== namespace) {
+            continue;
+        }
+        const method = 'method' in c && typeof c.method === 'string' ? c.method : '';
+        if (!isValidLanguageIdentifier(language, method)) {
+            continue;
+        }
+        if (p && !method.toLowerCase().startsWith(p)) {
+            continue;
+        }
+        const signature = 'signature' in c && typeof c.signature === 'string' ? c.signature : '';
+        const title = 'title' in c && typeof c.title === 'string' ? c.title : '';
+        const doc = 'documentation' in c && typeof c.documentation === 'string' ? c.documentation : '';
+        const opt = {
+            label: method,
+            type: 'function',
+            detail: signature || title || 'capability',
+        };
+        if (doc.trim().length > 0) {
+            opt.info = completionMarkdownInfo(doc);
+        }
+        out.push(opt);
+    }
+    out.sort((a, b) => a.label.localeCompare(b.label));
+    return out;
+}
+
+/**
  * @param {string} partial
  * @param {Map<string, CMCompletionOption>} symbolMap
  */
@@ -459,6 +517,160 @@ function filterVariableKeys(partial, keys) {
         }
     }
     out.sort((a, b) => a.label.localeCompare(b.label));
+    return out;
+}
+
+/**
+ * @param {unknown} name
+ * @returns {string[]}
+ */
+function splitGlobalNames(name) {
+    if (typeof name !== 'string' || name.length === 0) {
+        return [];
+    }
+    return name
+        .split(/[\/,]+/)
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0);
+}
+
+/**
+ * @param {unknown} language
+ * @param {unknown} g
+ * @returns {CMCompletionOption[]}
+ */
+function globalEntryToGenericOptions(language, g) {
+    if (!g || typeof g !== 'object') {
+        return [];
+    }
+    const rawName = 'name' in g && typeof g.name === 'string' ? g.name : '';
+    const typeRaw = 'type' in g && typeof g.type === 'string' ? g.type : 'variable';
+    const doc = 'doc' in g && typeof g.doc === 'string' ? g.doc : '';
+    const out = [];
+    for (const name of splitGlobalNames(rawName)) {
+        if (!isValidLanguageIdentifier(language, name)) {
+            continue;
+        }
+        const opt = {
+            label: name,
+            type: mapDocTypeToCm(typeRaw),
+            detail: typeRaw,
+        };
+        if (doc.trim().length > 0) {
+            opt.info = completionMarkdownInfo(doc);
+        }
+        out.push(opt);
+    }
+    return out;
+}
+
+/**
+ * @param {string} docText
+ * @param {number} pos
+ */
+function scanGenericFragment(docText, pos) {
+    if (pos <= 0 || typeof docText !== 'string') {
+        return { from: pos, chain: '', partial: '', completesAfterDot: false };
+    }
+    let i = pos - 1;
+    while (i >= 0) {
+        const ch = docText[i];
+        if (/[A-Za-z0-9_$.]/.test(ch)) {
+            i--;
+            continue;
+        }
+        break;
+    }
+    const from = i + 1;
+    const fragment = docText.slice(from, pos);
+    if (fragment.endsWith('.')) {
+        return { from, chain: fragment.slice(0, -1), partial: '', completesAfterDot: true };
+    }
+    const lastDot = fragment.lastIndexOf('.');
+    if (lastDot >= 0) {
+        const partial = fragment.slice(lastDot + 1);
+        return {
+            from: pos - partial.length,
+            chain: fragment.slice(0, lastDot),
+            partial,
+            completesAfterDot: false,
+        };
+    }
+    return { from, chain: '', partial: fragment, completesAfterDot: false };
+}
+
+/**
+ * @param {string} partial
+ * @param {CMCompletionOption[]} options
+ */
+function filterCompletionOptions(partial, options) {
+    const p = partial.toLowerCase();
+    const seen = new Set();
+    const out = [];
+    for (const opt of options) {
+        if (!opt || typeof opt.label !== 'string' || opt.label.length === 0) {
+            continue;
+        }
+        if (seen.has(opt.label)) {
+            continue;
+        }
+        seen.add(opt.label);
+        if (!p || opt.label.toLowerCase().startsWith(p)) {
+            out.push({ ...opt });
+        }
+    }
+    out.sort((a, b) => a.label.localeCompare(b.label));
+    return out;
+}
+
+/**
+ * @param {{ language: string, catalog: ReturnType<normalizeCatalogResponse> }} args
+ */
+function buildGenericSymbolOptions(args) {
+    const language = typeof args.language === 'string' ? args.language : 'javascript';
+    const catalog = args.catalog && typeof args.catalog === 'object' ? args.catalog : normalizeCatalogResponse({});
+    const out = [];
+    for (const row of [...catalog.globals, ...catalog.runtime_namespace_extras]) {
+        out.push(...globalEntryToGenericOptions(language, row));
+    }
+    for (const name of catalog.builtins) {
+        if (isValidLanguageIdentifier(language, name)) {
+            out.push({ label: name, type: 'function', detail: 'builtin', info: '' });
+        }
+    }
+    if (Array.isArray(catalog.platform_tools)) {
+        for (const t of catalog.platform_tools) {
+            if (!t || typeof t !== 'object') {
+                continue;
+            }
+            const tid = 'tool_id' in t && typeof t.tool_id === 'string' ? t.tool_id : '';
+            if (!isValidLanguageIdentifier(language, tid)) {
+                continue;
+            }
+            const displayName = 'display_name' in t && typeof t.display_name === 'string' ? t.display_name : '';
+            const desc = 'description' in t && typeof t.description === 'string' ? t.description : '';
+            const opt = {
+                label: tid,
+                type: 'function',
+                detail: displayName.length > 0 ? displayName : 'platform tool',
+            };
+            if (desc.trim().length > 0) {
+                opt.info = completionMarkdownInfo(desc);
+            }
+            out.push(opt);
+        }
+    }
+    for (const ns of catalog.capability_namespaces) {
+        if (!ns || typeof ns !== 'object') {
+            continue;
+        }
+        const name = 'name' in ns && typeof ns.name === 'string' ? ns.name : '';
+        if (!isValidLanguageIdentifier(language, name)) {
+            continue;
+        }
+        const type = 'type' in ns && typeof ns.type === 'string' ? ns.type : 'capability namespace';
+        out.push({ label: name, type: 'namespace', detail: type, info: '' });
+    }
     return out;
 }
 
@@ -518,6 +730,11 @@ export function buildPythonCompletions(args) {
         return opts.length === 0 ? null : { from, options: opts };
     }
 
+    const capabilityMethods = filterCapabilityMethods('python', partial, chain, catalog);
+    if (capabilityMethods.length > 0) {
+        return { from, options: capabilityMethods };
+    }
+
     const methods = catalog.module_methods[chain];
     if (Array.isArray(methods) && methods.length > 0) {
         const opts = filterModuleMethods(partial, methods);
@@ -525,4 +742,29 @@ export function buildPythonCompletions(args) {
     }
 
     return null;
+}
+
+/**
+ * @param {{ language?: string, docText: string, pos: number, catalog: ReturnType<normalizeCatalogResponse>, variableKeys?: string[], explicit?: boolean }} args
+ * @returns {{ from: number, options: CMCompletionOption[] } | null}
+ */
+export function buildCodeCompletions(args) {
+    const language = typeof args.language === 'string' && args.language.length > 0 ? args.language : 'python';
+    if (language === 'python') {
+        return buildPythonCompletions(args);
+    }
+    const docText = typeof args.docText === 'string' ? args.docText : '';
+    const pos = typeof args.pos === 'number' ? args.pos : 0;
+    const catalog = args.catalog && typeof args.catalog === 'object' ? args.catalog : normalizeCatalogResponse({});
+    const explicit = args.explicit === true;
+    const { from, chain, partial, completesAfterDot } = scanGenericFragment(docText, pos);
+    if (!explicit && partial.length === 0 && !completesAfterDot) {
+        return null;
+    }
+    if (chain) {
+        const opts = filterCapabilityMethods(language, partial, chain, catalog);
+        return opts.length === 0 ? null : { from, options: opts };
+    }
+    const opts = filterCompletionOptions(partial, buildGenericSymbolOptions({ language, catalog }));
+    return opts.length === 0 ? null : { from, options: opts };
 }

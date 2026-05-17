@@ -388,7 +388,7 @@
     "subtitle_separator": "→",
     "save_header_title": "Save edge condition",
     "mode_simple": "Simple mode",
-    "mode_python": "Python code",
+    "mode_python": "Code",
     "preview_label": "Result:",
     "preview_empty": "No condition yet",
     "skip_no_condition": "Skip (no condition)",
@@ -398,14 +398,14 @@
     "label_value": "Value",
     "value_placeholder": "String, number, or literal",
     "variables_available": "Available variables:",
-    "python_hint_1": "The function check(state) must return True or False.",
-    "python_hint_2": "state is a dict with all variables of the current state.",
+    "python_hint_1": "The function check(args, state) must return True or False.",
+    "python_hint_2": "Use the language switcher above to match the isolated runner.",
     "err_variable": "Select a variable",
     "err_value": "Enter a value",
-    "err_code": "Code must define check(state)",
+    "err_code": "Condition code cannot be empty",
     "apply": "Apply",
-    "preview_python": "Python: check(state) -> bool",
-    "field_condition": "Condition (Python expression)",
+    "preview_python": "Code: check(args, state) -> bool",
+    "field_condition": "Condition code",
     "action_cancel": "Cancel",
     "action_save": "Save"
   },
@@ -562,7 +562,7 @@
     "unresolved": "Could not open resource definition \"{{id}}\": missing on branch or in catalog."
   },
   "code_node_editor": {
-    "field_code": "Code (Python)",
+    "field_code": "Code",
     "field_parameters_schema": "Parameters schema (JSON)",
     "section_code": "Code",
     "tab_code": "Code",
@@ -573,11 +573,12 @@
     "schema_form": "Form",
     "schema_json": "JSON",
     "docs": "Documentation",
-    "execute_tool_hint": "Same contract as inline tools: entry point execute(args, state) or a BaseTool subclass; async is optional. See Documentation.",
+    "execute_tool_hint": "Code nodes and inline tools run run(args, state) in the selected isolated runner. See Documentation.",
     "execute_tool_hint_aria": "Help: code node entry point"
   },
   "code_workbench": {
-    "tab_params": "Parameters"
+    "tab_params": "Parameters",
+    "language_aria": "Code language"
   },
   "code_node_drop_modal": {
     "title": "Code node",
@@ -932,7 +933,7 @@
     "capabilities_title": "Service surface",
     "capabilities_subtitle": "Core runtime and editor areas.",
     "cap_build_title": "Graph building",
-    "cap_build_text": "LLM nodes, Python code, nested flows, and shared resources.",
+    "cap_build_text": "LLM nodes, multi-language code, nested flows, and shared resources.",
     "cap_connect_title": "Integrations",
     "cap_connect_text": "HTTP API, MCP, remote A2A, and delivery channels.",
     "cap_operate_title": "Operations",

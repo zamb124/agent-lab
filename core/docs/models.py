@@ -73,7 +73,7 @@ class DocumentationQuery(BaseModel):
         description="False — в Markdown краткая отсылка к whitelist builtins, без списка имён.",
     )
 
-    # Секция «Platform tools» в Markdown; для codegen (sandbox_codegen) обычно False — без каталога тулов
+    # Секция «Platform tools» в Markdown.
     include_platform_tools: bool = True
 
     # Заполняется вызывающим кодом (flows API): реестр + БД компании
@@ -81,7 +81,7 @@ class DocumentationQuery(BaseModel):
     # Заполняется только из apps/flows (там же строится список без импорта core→apps)
     runtime_namespace_extras: Optional[List[GlobalVariable]] = Field(
         default=None,
-        description="Символы sandbox-namespace, отсутствующие в статическом GLOBALS (обычно из PythonNamespaceBuilder).",
+        description="Дополнительные runtime symbols для редактора, если вызывающий сервис их поддерживает.",
     )
 
 

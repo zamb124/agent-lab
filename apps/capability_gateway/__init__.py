@@ -1,0 +1,1 @@
+"""Capability gateway service."""

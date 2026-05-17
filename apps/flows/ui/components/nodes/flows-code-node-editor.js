@@ -11,6 +11,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-code-workbench.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
+import { normalizeFlowCodeLanguage } from '../../_helpers/flows-code-languages.js';
 
 export class FlowsCodeNodeEditor extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -123,7 +124,12 @@ export class FlowsCodeNodeEditor extends PlatformElement {
             if (typeof d.language !== 'string' || d.language.length === 0) {
                 throw new Error('flows-code-node-editor: language required');
             }
-            this._emitPatch({ language: d.language });
+            const patch = { language: normalizeFlowCodeLanguage(d.language) };
+            if (typeof d.code === 'string') {
+                patch.code = d.code;
+                patch.tool_id = null;
+            }
+            this._emitPatch(patch);
             return;
         }
         throw new Error('flows-code-node-editor: unknown code-workbench-change type');
@@ -135,7 +141,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
         const argsSchema = cfg.args_schema && typeof cfg.args_schema === 'object' && !Array.isArray(cfg.args_schema)
             ? cfg.args_schema
             : {};
-        const language = typeof cfg.language === 'string' && cfg.language.length > 0 ? cfg.language : 'python';
+        const language = normalizeFlowCodeLanguage(cfg.language);
         const fv =
             this.flowVariables &&
             typeof this.flowVariables === 'object' &&

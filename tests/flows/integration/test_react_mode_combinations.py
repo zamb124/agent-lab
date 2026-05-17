@@ -572,12 +572,12 @@ class TestExplicitModeWithExitOnly:
         step1 = {
             "tool_id": "step1",
             "description": "Шаг 1",
-            "code": "async def execute(args, state): return 'step1_done'"
+            "code": "async def run(args, state): return 'step1_done'"
         }
         step2 = {
             "tool_id": "step2",
             "description": "Шаг 2",
-            "code": "async def execute(args, state): return 'step2_done'"
+            "code": "async def run(args, state): return 'step2_done'"
         }
 
         flow_config = FlowConfig(

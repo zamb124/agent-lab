@@ -168,14 +168,25 @@ class TestAskUserTool:
 
     @pytest.mark.asyncio
     async def test_registry_builtin_precedence_over_repository_template(self, app):
-        """Для tool_id с процессным builtin materialize возвращает FunctionTool, не CodeTool из БД."""
+        """Reserved builtin ids always materialize as trusted platform tools, not inline code."""
         from apps.flows.src.container import get_container
         from apps.flows.src.tools.decorator import FunctionTool
 
         container = get_container()
-        tool = await container.tool_registry.create_tool({"tool_id": "ask_user"})
-        assert isinstance(tool, FunctionTool)
-        assert tool.name == "ask_user"
+        for tool_id in ("ask_user", "pravo_catalog_search"):
+            tool = await container.tool_registry.create_tool({"tool_id": tool_id})
+            assert isinstance(tool, FunctionTool)
+            assert tool.name == tool_id
+
+            legacy_inline = await container.tool_registry.create_tool(
+                {
+                    "tool_id": tool_id,
+                    "code": f"async def {tool_id}(args, state) -> JsonDict:\n"
+                    "    return {'wrong': True}\n",
+                }
+            )
+            assert isinstance(legacy_inline, FunctionTool)
+            assert legacy_inline.name == tool_id
 
     @pytest.mark.asyncio
     async def test_registry_create_tool_from_repository_without_builtin(self, app, unique_id):
@@ -189,7 +200,7 @@ class TestAskUserTool:
         await container.tool_repository.set(
             ToolReference(
                 tool_id=tid,
-                code="async def execute(args, state):\n    return 'from_repo'",
+                code="async def run(args, state):\n    return 'from_repo'",
             )
         )
         tool = await container.tool_registry.create_tool({"tool_id": tid})
@@ -207,7 +218,7 @@ class TestToolRegistryPolicy:
         reg = ToolRegistry()
         ct = CodeTool(
             tool_id="ephemeral",
-            code="async def execute(args, state):\n    return {}",
+            code="async def run(args, state):\n    return {}",
         )
         with pytest.raises(ValueError, match="CodeTool"):
             reg.register(ct)

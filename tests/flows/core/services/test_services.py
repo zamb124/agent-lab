@@ -92,6 +92,7 @@ class TestFlowFactory:
 
         # Получаем flow - variables должны быть резолвнуты
         flow = await factory.get_flow("test_var_flow")
+        assert flow is not None
 
         assert flow.variables["test_var"] == "resolved!"
         assert flow.variables["static_var"] == "static_value"
@@ -126,6 +127,7 @@ class TestFlowFactory:
         await container.flow_repository.set(flow_config)
 
         flow = await factory.get_flow("test_unresolved_var_flow")
+        assert flow is not None
 
         assert flow.variables["only_ref"] is None
         assert flow.variables["composite"] is None
@@ -226,6 +228,7 @@ class TestFlowsLoader:
         if "calculator" in loaded:
             tool = await container.tool_repository.get("calculator")
             assert tool is not None
+            assert tool.code is None
             assert tool.parameters_schema is not None
             assert tool.parameters_schema.get("type") == "object"
             assert "properties" in tool.parameters_schema
@@ -233,6 +236,7 @@ class TestFlowsLoader:
         if "crm_search_entities" in loaded:
             crm_tool = await container.tool_repository.get("crm_search_entities")
             assert crm_tool is not None
+            assert crm_tool.code is None
             assert crm_tool.parameters_schema is not None
             props = crm_tool.parameters_schema.get("properties") or {}
             assert "query" in props
@@ -447,7 +451,9 @@ class TestFlowDiscoveryService:
         assert result is True
 
         updated = await container.flow_repository.get(flow_id)
+        assert updated is not None
         assert updated.status == ExternalAgentStatus.ACTIVE
+        assert updated.agent_card is not None
         assert updated.agent_card["name"] == "Test Agent"
 
     @pytest.mark.asyncio
@@ -471,6 +477,7 @@ class TestFlowDiscoveryService:
         assert result is False
 
         updated = await container.flow_repository.get(flow_id)
+        assert updated is not None
         assert updated.status == ExternalAgentStatus.UNHEALTHY
 
     @pytest.mark.asyncio

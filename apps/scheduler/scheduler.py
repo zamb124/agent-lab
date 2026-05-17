@@ -15,7 +15,6 @@ import apps.crm_worker.tasks.daily_summary_tasks as _crm_daily_summary_tasks  # 
 import apps.crm_worker.tasks.reembed_tasks as _crm_reembed_tasks  # noqa: E402
 import apps.crm_worker.tasks.scheduled_integration_sync_tasks as _crm_scheduled_integration_sync_tasks  # noqa: E402
 import apps.crm_worker.tasks.suggest_tasks as _crm_suggest_tasks  # noqa: E402
-import apps.flows.src.tasks.eval_task as _flows_eval_task  # noqa: E402
 import apps.flows.src.tasks.flow_tasks as _flows_flow_tasks  # noqa: E402
 import apps.flows.src.tasks.llm_tasks as _flows_llm_tasks  # noqa: E402
 import apps.flows.src.tasks.scheduled_tasks as _flows_scheduled_tasks  # noqa: E402
@@ -44,7 +43,6 @@ _TASK_REGISTRATION_MODULES = (
     _crm_reembed_tasks,
     _crm_scheduled_integration_sync_tasks,
     _crm_suggest_tasks,
-    _flows_eval_task,
     _flows_flow_tasks,
     _flows_llm_tasks,
     _flows_scheduled_tasks,
@@ -62,7 +60,6 @@ _FLOWS_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "execute_tool",
     "invoke_llm",
     "execute_scheduled_task",
-    "apps.flows.src.tasks.eval_task:execute_inline_code",
 )
 
 _IDLE_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (

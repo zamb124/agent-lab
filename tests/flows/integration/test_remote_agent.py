@@ -228,7 +228,7 @@ class TestFlowWithRemoteAgent:
                 "prepare": {
                     "type": "code",
                     "code": """
-async def run(state):
+async def run(args, state):
     state['content'] = state.get('content', '').upper()
     state['prepared'] = True
     return state
@@ -284,7 +284,7 @@ async def run(state):
                 "process": {
                     "type": "code",
                     "code": """
-async def run(state):
+async def run(args, state):
     response = state.get('response', '')
     state['final'] = f"Final: {response}"
     return state
@@ -457,7 +457,7 @@ class TestRemoteAgentInputMapping:
                 "prepare": {
                     "type": "code",
                     "code": """
-async def run(state):
+async def run(args, state):
     state['prepared_query'] = 'Query from function node'
     return state
 """

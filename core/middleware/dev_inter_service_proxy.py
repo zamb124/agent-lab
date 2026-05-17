@@ -47,12 +47,22 @@ _SERVICE_PREFIXES: tuple[str, ...] = (
     "documents",
     "frontend",
     "litserve",
+    "capability-gateway",
+    "code-runner-python",
+    "code-runner-node",
+    "code-runner-go",
+    "code-runner-csharp",
 )
 
 # Где публичный первый сегмент пути не совпадает с ключом get_service_url / SERVER__*_SERVICE_URL.
 _PREFIX_TO_SERVICE_URL_KEY: dict[str, str] = {
     "documents": "office",
     "litserve": "provider_litserve",
+    "capability-gateway": "capability_gateway",
+    "code-runner-python": "code_runner_python",
+    "code-runner-node": "code_runner_node",
+    "code-runner-go": "code_runner_go",
+    "code-runner-csharp": "code_runner_csharp",
 }
 
 _ONLYOFFICE_STATIC_SEGMENTS: frozenset[str] = frozenset(

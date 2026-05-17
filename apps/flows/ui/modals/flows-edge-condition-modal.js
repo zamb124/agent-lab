@@ -8,14 +8,14 @@
  * Два режима:
  *   - Простой: variable + operator + value → сохраняется как
  *     `{type: 'simple', variable, operator, value}`.
- *   - Python: код функции `def check(state) -> bool:` → сохраняется
- *     как `{type: 'python', code}`.
+ *   - Code: функция `check(args, state)` в языке isolated runner → сохраняется
+ *     как `{type: 'code', language, code}`.
  *
  * Skip-link очищает условие (`null`).
  *
  * Сохранение идёт в editor-resource: `updateBranchData` с новым
- * `edges[edgeIndex].condition` + `setDirty: true`. Backend хранит поле в
- * `Edge.condition: Optional[Union[str, Dict]]` и понимает оба формата.
+ * `edges[edgeIndex].condition` + `setDirty: true`. UI читает legacy `type=python`,
+ * но сохраняет новый `type=code`.
  */
 
 import { html, css } from 'lit';
@@ -25,19 +25,13 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '../components/editors/flows-code-editor.js';
 import { getEdgeEndpoints } from '../_helpers/flows-resolvers.js';
-
-const DEFAULT_PYTHON_CODE = `def check(state):
-    """
-    Edge transition condition.
-
-    Args:
-        state: dict - current execution state
-
-    Returns:
-        bool - True when the condition is met
-    """
-    return state.get('route') == 'expected_value'
-`;
+import {
+    FLOW_CODE_LANGUAGES,
+    edgeConditionStarterCodeForLanguage,
+    flowCodeLanguageShortLabel,
+    isKnownEdgeConditionStarterCode,
+    normalizeFlowCodeLanguage,
+} from '../_helpers/flows-code-languages.js';
 
 const OPERATORS = Object.freeze(['==', '!=', '>', '<', '>=', '<=', 'in']);
 
@@ -87,6 +81,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         _operator: { state: true },
         _value: { state: true },
         _pythonCode: { state: true },
+        _codeLanguage: { state: true },
         _hydrated: { state: true },
     };
 
@@ -174,6 +169,48 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             }
 
             .python-mode { margin-top: var(--space-2); }
+            .code-mode-head {
+                display: flex;
+                justify-content: flex-end;
+                margin-bottom: var(--space-2);
+            }
+            .language-segment {
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding: 2px;
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+            }
+            .language-button {
+                width: 36px;
+                height: 24px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 0;
+                border-radius: calc(var(--radius-md) - 2px);
+                background: transparent;
+                color: var(--text-tertiary);
+                font-size: 11px;
+                font-weight: var(--font-semibold);
+                line-height: 1;
+                cursor: pointer;
+            }
+            .language-button:hover {
+                color: var(--text-primary);
+                background: var(--glass-tint-medium);
+            }
+            .language-button[active] {
+                color: var(--accent);
+                background: var(--accent-subtle);
+            }
+            .language-button:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 1px;
+            }
             flows-code-editor { display: block; min-height: 200px; }
             .python-hint {
                 margin-top: var(--space-2);
@@ -242,7 +279,8 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         this._variable = '';
         this._operator = '==';
         this._value = '';
-        this._pythonCode = DEFAULT_PYTHON_CODE;
+        this._codeLanguage = 'python';
+        this._pythonCode = edgeConditionStarterCodeForLanguage(this._codeLanguage);
         this._hydrated = false;
         this._editor = this.useOp('flows/editor');
     }
@@ -275,16 +313,26 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             this._variable = '';
             this._operator = '==';
             this._value = '';
-            this._pythonCode = DEFAULT_PYTHON_CODE;
+            this._codeLanguage = 'python';
+            this._pythonCode = edgeConditionStarterCodeForLanguage(this._codeLanguage);
             return;
         }
         if (typeof condition === 'object') {
             const type = condition.type;
             if (type === 'python') {
                 this._mode = 'python';
+                this._codeLanguage = 'python';
                 this._pythonCode = typeof condition.code === 'string' && condition.code.length > 0
                     ? condition.code
-                    : DEFAULT_PYTHON_CODE;
+                    : edgeConditionStarterCodeForLanguage(this._codeLanguage);
+                return;
+            }
+            if (type === 'code') {
+                this._mode = 'python';
+                this._codeLanguage = normalizeFlowCodeLanguage(condition.language);
+                this._pythonCode = typeof condition.code === 'string' && condition.code.length > 0
+                    ? condition.code
+                    : edgeConditionStarterCodeForLanguage(this._codeLanguage);
                 return;
             }
             if (type === 'simple') {
@@ -345,7 +393,11 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
 
     _buildConditionValue() {
         if (this._mode === 'python') {
-            return { type: 'python', code: this._pythonCode };
+            return {
+                type: 'code',
+                language: normalizeFlowCodeLanguage(this._codeLanguage),
+                code: this._pythonCode,
+            };
         }
         if (this._variable.length === 0 || this._value.length === 0) {
             return null;
@@ -374,7 +426,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 errors.value = this.t('edge_condition_modal.err_value');
             }
         } else if (this._mode === 'python') {
-            if (this._pythonCode.indexOf('def check') < 0) {
+            if (this._pythonCode.trim().length === 0) {
                 errors.code = this.t('edge_condition_modal.err_code');
             }
         }
@@ -440,6 +492,37 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         if (typeof next !== 'string') return;
         this._pythonCode = next;
         this.isDirty = true;
+    }
+
+    _setCodeLanguage(language) {
+        const normalized = normalizeFlowCodeLanguage(language);
+        if (this._codeLanguage === normalized) {
+            return;
+        }
+        const currentCode = typeof this._pythonCode === 'string' ? this._pythonCode : '';
+        this._codeLanguage = normalized;
+        if (currentCode.trim().length === 0 || isKnownEdgeConditionStarterCode(currentCode)) {
+            this._pythonCode = edgeConditionStarterCodeForLanguage(normalized);
+        }
+        this.isDirty = true;
+    }
+
+    _renderCodeLanguageSegment() {
+        const current = normalizeFlowCodeLanguage(this._codeLanguage);
+        return html`
+            <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
+                ${FLOW_CODE_LANGUAGES.map((lang) => html`
+                    <button
+                        type="button"
+                        class="language-button"
+                        ?active=${current === lang.value}
+                        title=${lang.label}
+                        aria-label=${lang.label}
+                        @click=${() => this._setCodeLanguage(lang.value)}
+                    >${flowCodeLanguageShortLabel(lang.value)}</button>
+                `)}
+            </div>
+        `;
     }
 
     _onSkip() {
@@ -551,9 +634,12 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
     _renderPython() {
         return html`
             <div class="python-mode">
+                <div class="code-mode-head">
+                    ${this._renderCodeLanguageSegment()}
+                </div>
                 <flows-code-editor
                     .value=${this._pythonCode}
-                    language="python"
+                    .language=${normalizeFlowCodeLanguage(this._codeLanguage)}
                     @change=${this._onPythonChange}
                 ></flows-code-editor>
                 <div class="python-hint">

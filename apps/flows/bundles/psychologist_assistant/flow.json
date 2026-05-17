@@ -15,7 +15,7 @@
       "type": "code",
       "tool_id": "tg_fmt_in",
       "name": "Текст входа для TG",
-      "code": "async def execute(args, state):\n    sid = state.session_id\n    if not isinstance(sid, str) or not sid.strip():\n        raise ValueError(\"session_id required for telegram mirror\")\n    if state.content is None:\n        raise ValueError(\"content required for telegram mirror\")\n    body = str(state.content)\n    state.telegram_mirror_in_text = (\n        \"session_id: \" + sid.strip() + \"\\n\" + \"Входящее:\\n\" + body\n    )\n    return state.telegram_mirror_in_text\n"
+      "code": "async def run(args, state):\n    sid = state.session_id\n    if not isinstance(sid, str) or not sid.strip():\n        raise ValueError(\"session_id required for telegram mirror\")\n    if state.content is None:\n        raise ValueError(\"content required for telegram mirror\")\n    body = str(state.content)\n    state.telegram_mirror_in_text = (\n        \"session_id: \" + sid.strip() + \"\\n\" + \"Входящее:\\n\" + body\n    )\n    return state.telegram_mirror_in_text\n"
     },
     "tg_send_in": {
       "type": "channel",
@@ -53,7 +53,7 @@
               "description": "Поисковый запрос для базы знаний"
             }
           },
-          "code": "async def execute(args, state):\n    query = args.get('query')\n    if not query:\n        return 'Пожалуйста, укажите поисковый запрос.'\n    raw = await rag_search(\n        namespace_id='psychology',\n        collection_id='default',\n        query=query,\n        limit=3,\n    )\n    if not raw.get('success'):\n        return str(raw.get('error', 'Ошибка поиска'))\n    results = raw.get('results') or []\n    if not results:\n        return 'В психологической базе знаний ничего не найдено по данному запросу.'\n    output = []\n    for res in results:\n        name = res.get('document_name') or res.get('document_id', '')\n        output.append(f\"--- {name} ---\\n{res.get('content', '')}\")\n    return '\\n\\n'.join(output)"
+          "code": "async def run(args, state):\n    query = args.get('query')\n    if not query:\n        return 'Пожалуйста, укажите поисковый запрос.'\n    raw = await rag_search(\n        namespace_id='psychology',\n        collection_id='default',\n        query=query,\n        limit=3,\n    )\n    if not raw.get('success'):\n        return str(raw.get('error', 'Ошибка поиска'))\n    results = raw.get('results') or []\n    if not results:\n        return 'В психологической базе знаний ничего не найдено по данному запросу.'\n    output = []\n    for res in results:\n        name = res.get('document_name') or res.get('document_id', '')\n        output.append(f\"--- {name} ---\\n{res.get('content', '')}\")\n    return '\\n\\n'.join(output)"
         }
       ],
       "output_key": "response"
@@ -62,7 +62,7 @@
       "type": "code",
       "tool_id": "tg_fmt_out",
       "name": "Текст ответа для TG",
-      "code": "async def execute(args, state):\n    sid = state.session_id\n    if not isinstance(sid, str) or not sid.strip():\n        raise ValueError(\"session_id required for telegram mirror\")\n    if state.response is None:\n        raise ValueError(\"response required for telegram mirror after llm\")\n    body = str(state.response)\n    state.telegram_mirror_out_text = (\n        \"session_id: \" + sid.strip() + \"\\n\" + \"Ответ ассистента:\\n\" + body\n    )\n    return state.telegram_mirror_out_text\n"
+      "code": "async def run(args, state):\n    sid = state.session_id\n    if not isinstance(sid, str) or not sid.strip():\n        raise ValueError(\"session_id required for telegram mirror\")\n    if state.response is None:\n        raise ValueError(\"response required for telegram mirror after llm\")\n    body = str(state.response)\n    state.telegram_mirror_out_text = (\n        \"session_id: \" + sid.strip() + \"\\n\" + \"Ответ ассистента:\\n\" + body\n    )\n    return state.telegram_mirror_out_text\n"
     },
     "tg_send_out": {
       "type": "channel",

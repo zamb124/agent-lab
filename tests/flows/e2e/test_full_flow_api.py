@@ -44,7 +44,7 @@ def _e2e_router_flow_create_payload(flow_id: str) -> dict[str, Any]:
             "classifier": {
                 "type": "code",
                 "code": """
-async def run(state):
+async def run(args, state):
     content = state.get('content', '')
     if 'urgent' in content.lower():
         state['route'] = 'urgent'
@@ -55,11 +55,11 @@ async def run(state):
             },
             "urgent_handler": {
                 "type": "code",
-                "code": "async def run(state):\n    state['response'] = 'URGENT: Processing immediately!'\n    return state",
+                "code": "async def run(args, state):\n    state['response'] = 'URGENT: Processing immediately!'\n    return state",
             },
             "normal_handler": {
                 "type": "code",
-                "code": "async def run(state):\n    state['response'] = 'Normal: Added to queue'\n    return state",
+                "code": "async def run(args, state):\n    state['response'] = 'Normal: Added to queue'\n    return state",
             },
         },
         "edges": [
@@ -101,7 +101,7 @@ class TestE2EFlowCreationViaAPI:
                 "description": "Калькулятор для E2E теста",
                 "code_mode": "INLINE_CODE",
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     a = args.get('a', 0)
     b = args.get('b', 0)
     return a + b
@@ -141,11 +141,11 @@ async def execute(args, state):
                 "nodes": {
                     "init": {
                         "type": "code",
-                        "code": "async def run(state):\n    return state",
+                        "code": "async def run(args, state):\n    return state",
                     },
                     "process": {
                         "type": "code",
-                        "code": "async def run(state):\n    company = state.variables.get('e2e_company_name', 'Unknown')\n    state.response = f'Hello from {company}!'\n    return state",
+                        "code": "async def run(args, state):\n    company = state.variables.get('e2e_company_name', 'Unknown')\n    state.response = f'Hello from {company}!'\n    return state",
                     },
                 },
                 "edges": [
@@ -247,7 +247,7 @@ class TestE2EInterruptInCodeNode:
                     "ask_name": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     if 'user_name' not in state:
         state['interrupt'] = {'question': 'Как вас зовут?'}
         return state
@@ -257,7 +257,7 @@ async def run(state):
                     "greet": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     name = state.get('user_name', 'Guest')
     state['response'] = f'Привет, {name}!'
     return state
@@ -286,7 +286,7 @@ async def run(state):
                     "ask_name": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     if 'user_name' not in state:
         state['interrupt'] = {'question': 'Как вас зовут?'}
         return state
@@ -296,7 +296,7 @@ async def run(state):
                     "greet": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     name = state.get('user_name', 'Guest')
     state['response'] = f'Привет, {name}!'
     return state
@@ -357,7 +357,7 @@ class TestE2EInterruptInCodeNodeV2:
                         "code": """
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 
-async def run(state):
+async def run(args, state):
     # Не используем ключ user_name: в state.variables уже есть user_name из JWT
     # (flow_variables_from_request_context), иначе interrupt никогда не сработает.
     if state.variables.get('interrupt_demo_name'):
@@ -373,7 +373,7 @@ async def run(state):
                     "greet": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     name = state.variables.get('interrupt_demo_name', 'Guest')
     state.response = f'Привет, {name}!'
     return state
@@ -456,7 +456,7 @@ class TestE2EExternalAPIWithVarAuth:
                     "format_result": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     result = state.get('api_result', 'No data')
     state['response'] = f'API returned: {result}'
     return state
@@ -489,7 +489,7 @@ class TestE2EMultipleInterruptScenarios:
                     "classifier": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     content = state.get('content', '').lower()
     if 'order' in content:
         state['route'] = 'order'
@@ -503,7 +503,7 @@ async def run(state):
                     "order_handler": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     if 'order_id' in state:
         state['response'] = f"Заказ {state['order_id']} найден!"
         return state
@@ -519,7 +519,7 @@ async def run(state):
                     "support_handler": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     if 'problem' in state:
         state['response'] = f"Создан тикет по проблеме: {state['problem']}"
         return state
@@ -535,7 +535,7 @@ async def run(state):
                     "general_handler": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     state['response'] = 'Добро пожаловать! Напишите "order" или "support".'
     return state
 """,
@@ -574,7 +574,7 @@ async def run(state):
                     "classifier": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     content = state.get('content', '').lower()
     if 'order' in content:
         state['route'] = 'order'
@@ -588,7 +588,7 @@ async def run(state):
                     "order_handler": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     # При resume content содержит ответ пользователя (номер заказа)
     if 'order_id' in state:
         state['response'] = f"Заказ {state['order_id']} найден!"
@@ -607,7 +607,7 @@ async def run(state):
                     "support_handler": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     if 'problem' in state:
         state['response'] = f"Создан тикет по проблеме: {state['problem']}"
         return state
@@ -623,7 +623,7 @@ async def run(state):
                     "general_handler": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     state['response'] = 'Добро пожаловать! Напишите "order" или "support".'
     return state
 """,
@@ -744,7 +744,7 @@ class TestE2EExternalA2AInFlow:
                     "process_result": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     agent_response = state.get('response', '')
     state['response'] = f'Agent said: {agent_response}'
     return state
@@ -791,7 +791,7 @@ class TestE2EFullScenario:
                 "description": "Форматирует текст",
                 "code_mode": "INLINE_CODE",
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     text = args.get('text', '')
     return f'[FORMATTED] {text}'
 """,
@@ -812,7 +812,7 @@ async def execute(args, state):
                     "welcome": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     greeting = state.get('variables', {}).get('greeting', 'Hello')
     state['welcome_msg'] = greeting
     return state
@@ -821,7 +821,7 @@ async def run(state):
                     "ask_action": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     if 'action' in state:
         return state
     if state.get('asked_action'):
@@ -835,7 +835,7 @@ async def run(state):
                     "process_action": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     action = state.get('action', '')
     if 'calc' in action:
         state['response'] = 'Калькулятор: 2+2=4'

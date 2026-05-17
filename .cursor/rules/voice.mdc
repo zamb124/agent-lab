@@ -183,7 +183,7 @@ tts = await get_tts_client(company_id=company_id)
 vad = await get_vad_client(company_id=company_id)
 ```
 
-Tools `transcribe_audio` / `synthesize_speech` для inline-кода и `llm_node` — в `apps/flows/src/eval/platform_services.py` (через `voice_resolver`). Авто-STT входящих audio-вложений (A2A/embed/чат) — `apps/flows/src/files/audio_input.py`.
+Capabilities `voice.transcribe_audio` / `voice.synthesize_speech` для isolated code runners и `llm_node` проходят через `capability-gateway` (через `voice_resolver`). Авто-STT входящих audio-вложений (A2A/embed/чат) — `apps/flows/src/files/audio_input.py`.
 
 ## Batch-транскрипция
 

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import ResourceDefinition, ResourceType
+from apps.flows.src.models.resource import parse_typed_resource_config
 from core.logging import get_logger
 from core.pagination import OffsetPage
 
@@ -111,6 +112,7 @@ async def create_resource(
     container: ContainerDep,
 ) -> ResourceResponse:
     """Создать shared ресурс"""
+    parse_typed_resource_config(request.type, request.config)
     existing = await container.resource_repository.get(request.resource_id)
     if existing:
         raise HTTPException(
@@ -157,6 +159,7 @@ async def update_resource(
     update_data = request.model_dump(exclude_unset=True)
     resource_dict = resource.model_dump()
     resource_dict.update(update_data)
+    parse_typed_resource_config(ResourceType(resource_dict["type"]), resource_dict["config"])
 
     updated_resource = ResourceDefinition.model_validate(resource_dict)
     await container.resource_repository.set(updated_resource)

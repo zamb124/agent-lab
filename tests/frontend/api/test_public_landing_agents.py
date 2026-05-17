@@ -117,7 +117,7 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
             "main": {
                 "type": "code",
                 "code": (
-                    "async def run(state):\n"
+                    "async def run(args, state):\n"
                     "    state['response'] = 'ok'\n"
                     "    return state\n"
                 ),

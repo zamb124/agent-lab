@@ -85,10 +85,8 @@ class _RuntimeContainer:
     def get_code_runner(
         self,
         language: str = "python",
-        resources: dict[str, object] | None = None,
-        variables: dict[str, object] | None = None,
     ) -> object:
-        _ = language, resources, variables
+        _ = language
         raise AssertionError("Code runner is not used by these tests")
 
 
@@ -149,7 +147,7 @@ class TestCodeNodeFrozenFields:
         frozen_before = frozen_snapshot(snap)
 
         code = """
-async def run(state):
+async def run(args, state):
     return {"task_id": "forged", "safe_marker": 1}
 """
         node = CodeNode(node_id=f"code_{unique_id}", config={"code": code})
@@ -166,7 +164,7 @@ async def run(state):
         frozen_before = frozen_snapshot(snap)
 
         code = """
-async def run(state):
+async def run(args, state):
     return {"x": "evil"}
 """
         node = CodeNode(
@@ -277,12 +275,12 @@ class TestLlmNodeRunnerParallelToolsFrozen:
         )
 
         code_a = f"""
-async def execute(args, state):
+async def run(args, state):
     state.variables["vk_{unique_id}_a"] = "a"
     return "a"
 """
         code_b = f"""
-async def execute(args, state):
+async def run(args, state):
     state.variables["vk_{unique_id}_b"] = "b"
     return "b"
 """
@@ -334,12 +332,12 @@ async def execute(args, state):
         )
 
         code_ok = f"""
-async def execute(args, state):
+async def run(args, state):
     state.variables["vk_{unique_id}_ok"] = 1
     return "ok"
 """
         code_evil = """
-async def execute(args, state):
+async def run(args, state):
     state.task_id = "tampered"
     return "no"
 """

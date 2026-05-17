@@ -8,10 +8,12 @@
  * `condition` может быть:
  *   - строкой legacy-выражения (`route == 'order'`);
  *   - объектом `{type: 'simple', variable, operator, value}`;
- *   - объектом `{type: 'python', code}`.
+ *   - legacy-объектом `{type: 'python', code}`;
+ *   - объектом `{type: 'code', language, code}`.
  */
 
 import { svg } from 'lit';
+import { flowCodeLanguageShortLabel } from '../../_helpers/flows-code-languages.js';
 
 const MAX_VISIBLE = 36;
 
@@ -39,6 +41,10 @@ export function formatEdgeCondition(condition) {
     }
     if (type === 'python') {
         return 'check(state)';
+    }
+    if (type === 'code') {
+        const label = flowCodeLanguageShortLabel(condition.language);
+        return `check · ${label}`;
     }
     return '';
 }

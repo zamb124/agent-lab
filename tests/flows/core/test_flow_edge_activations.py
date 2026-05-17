@@ -12,7 +12,7 @@ from core.state import ExecutionState
 
 def _trivial_code(node_id: str) -> str:
     return f"""
-async def execute(args, state):
+async def run(args, state):
     return {{"k": "{node_id}"}}
 """
 
@@ -148,55 +148,3 @@ async def test_flow_emits_both_edges_on_and_join(
     assert len(to3_from_0) == 1, f"0->3 once, {calls!r}"
     assert len(to3_from_2) == 1, f"2->3 once, {calls!r}"
 
-
-@pytest.mark.asyncio
-async def test_flow_emits_edge_error_on_python_condition_failure(
-    make_test_state, unique_id, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Падение check(state) на ребре: emit edge_error, затем исходное исключение."""
-    nodes = {
-        "a": CodeNode("a", {"type": "code", "code": _trivial_code("a")}),
-        "b": CodeNode("b", {"type": "code", "code": _trivial_code("b")}),
-    }
-    edges = [
-        {
-            "from": "a",
-            "to": "b",
-            "condition": {
-                "type": "python",
-                "code": "def check(state):\n    return 1 / 0\n",
-            },
-        },
-    ]
-    flow = Flow(
-        flow_id=f"edge_err_{unique_id}",
-        name="edge_err",
-        entry="a",
-        nodes=nodes,
-        edges=edges,
-    )
-    st = make_test_state()
-    state = ExecutionState.model_validate(
-        {**st.model_dump(exclude_none=False), "task_id": "t_err", "context_id": "c_err"},
-    )
-    err_calls: list[tuple[int, str, str, str]] = []
-
-    async def capture_error(
-        _self,
-        edge_index: int,
-        from_node: str,
-        to_node: str,
-        error: str,
-    ) -> None:
-        err_calls.append((edge_index, from_node, to_node, error))
-
-    monkeypatch.setattr(BaseEmitter, "emit_edge_error", capture_error, raising=True)
-
-    with pytest.raises(ValueError, match="Python-условие ребра"):
-        await flow.run(state)
-
-    assert len(err_calls) == 1
-    assert err_calls[0][0] == 0
-    assert err_calls[0][1] == "a"
-    assert err_calls[0][2] == "b"
-    assert "division" in err_calls[0][3].lower() or "zero" in err_calls[0][3].lower()

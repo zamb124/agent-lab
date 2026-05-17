@@ -1,4 +1,4 @@
-.PHONY: help dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres
+.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres
 .PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai build-i18n
 .PHONY: clean-i18n-unused base
@@ -21,6 +21,13 @@ HELM_VALUES_PROD ?= $(HELM_CHART)/values-prod.yaml
 IMAGE_TAG ?= latest
 # Первый helm install (много образов, StatefulSets, hook миграций) часто >15m.
 HELM_WAIT_TIMEOUT ?= 30m
+PLATFORM_RUNTIME_DIR ?= $(HOME)/.cache/agent-lab/runtimes
+PLATFORM_RUNTIME_BIN := $(PLATFORM_RUNTIME_DIR)/bin
+export PLATFORM_RUNTIME_DIR
+export PATH := $(PLATFORM_RUNTIME_BIN):$(PATH)
+
+runtime-bootstrap:
+	@uv run python scripts/bootstrap_runtimes.py
 
 # ============================================================================
 # Локальная разработка (без Docker для приложения)
@@ -29,7 +36,7 @@ HELM_WAIT_TIMEOUT ?= 30m
 dev: dev-up
 
 # Development инфраструктура: postgres :54321, redis :63791, MinIO :19001/19011, Chromium CDP :9222
-dev-up:
+dev-up: runtime-bootstrap
 	@echo "Запуск Development окружения (БД/Redis/MinIO в Docker)..."
 	docker-compose -f docker-compose-dev.yaml up -d
 	@echo "Dev окружение запущено (PostgreSQL: 54321, Redis: 63791, MinIO: 19001/19011, Chromium CDP: 9222)"

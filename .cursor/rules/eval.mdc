@@ -1,144 +1,121 @@
 ---
-description: "Eval Sandbox: безопасное исполнение тулов, namespace whitelist, паттерн фасадов"
+description: "Code Execution 2026: isolated runners, capability gateway, no in-process eval"
 alwaysApply: false
 ---
-# Eval Sandbox
+# Code Execution Sandbox
 
-Код тула = **публичный код**: его редактирует внешний разработчик через UI редактора. Поэтому:
+Пользовательский код **никогда** не исполняется внутри процесса `flows`.
 
-- Тул исполняется в **sandbox** (`PythonNamespaceBuilder` → `exec` в ограниченном namespace).
-- Sandbox видит **только whitelist** имён.
-- Платформенные сервисы (`core/`, `apps/`) — защищённый внутренний код, недоступный напрямую.
-
-Доступ из тула к платформе — **только через узкие фасады** (`platform_services.py`), зарегистрированные в namespace. Суммаризация и Markdown — `get_text_transform_service()` (`TextTransformService`): биллинг `require_balance` + списание как у LLM; HTTP Markdown LitServe — span `llm.provider_litserve.format_markdown` с токенами из поля `usage` ответа.
-
-**In-process sandbox:** где возможно — подмена безопасными объектами (реестр `apps/flows/src/eval/shim_registry.py`: `httpx`, `llm`, …) вместо запрета по имени, если семантика совместима. Полный CPython / произвольный `os`/`subprocess` в одном процессе с платформой недоступны (для этого нужен out-of-process sandbox — отдельная задача). Нормализация исходника (удаление `import apps|core*`) встроена в `PythonCompiler` при `strip_platform_imports=True` (default в `PythonCodeRunner`).
-
-## Абсолютные запреты в коде тулов
-
-1. **Прямой обход `platform_services` в кастомном коде**: не импортировать `get_container`, не ссылаться на внутренний DI. Только фасады из `platform_services` + регистрация в `namespace`. В sandbox-register для **codegen** лежит `get_code_runner` (без `FlowContainer`) — паритет `exec` со встроенным `sandbox_codegen`; не путать с «можно обойти фасады в кастомном туле».
-2. **Импорты `apps.*` / `core.*`** — при сохранении в БД строки вырезаются `strip_forbidden_platform_import_lines` (`apps/flows/src/eval/inline_tool_sanitize.py`). Перед `validate`/`exec` — то же делает `PythonCompiler._prepare_source` (default `strip_platform_imports=True`).
-3. **Импорты между модулями тулов** (`from apps.flows.tools.files import _find_file`) — вырезаются вместе с `apps.*`. Хелпер не попадёт в namespace → `NameError` в рантайме.
-4. **Прямой `httpx.AsyncClient` к сервисам платформы** — только `ServiceClient` (уже в namespace).
-
-## Жизненный цикл
+## Архитектура
 
 ```
-@tool(name="my_tool") в apps/flows/tools/
-  ↓ load_tools_to_db (inspect.getsource → strip imports → tool_repository)
-  ↓ FlowsLoader._inline_single_tool (код инлайнится в flow config, поле code)
-  ↓ ToolRegistry.materialize (видит code → CodeTool)
-  ↓ PythonNamespaceBuilder.build() (whitelist namespace)
-  ↓ exec(code, namespace)
+flows runtime / code API
+  -> RemoteCodeRunner
+  -> code-runner-python | code-runner-node | code-runner-go | code-runner-csharp
+  -> capability-gateway
+  -> trusted platform services
 ```
 
-Любая зависимость, которой нет в namespace, даст `NameError`. Тул должен быть **самодостаточен**.
+- `flows` оркестрирует graph/state/tasks и подписывает execution context.
+- `code-runner-*` исполняют код в отдельном процессе своего языка.
+- `code-runner-python` и `code-runner-node` держат persistent worker pool с cached compiled artifact/script.
+- `code-runner-go` и `code-runner-csharp` кэшируют build artifact по hash(source+entrypoint+manifest) и не компилируют каждый вызов заново.
+- `capability-gateway` — единственный trusted API к платформенным возможностям.
+- Python, JavaScript, TypeScript, Go и C# получают один `CapabilityManifest`.
 
-**Default-значения в сигнатуре** (`def f(x: T = NAME)`): `NAME` разрешается **в момент `exec`** в sandbox. Допустимы только литералы или идентификаторы, уже присутствующие в `namespace` (например константа модуля верхнего уровня в **том же** фрагменте `code`, если он целиком попадает в БД). Ссылка на константу только из исходника `apps/...` без включения в строку — `NameError` при предпросмотре `code/execute` или inline-копии.
+## Запреты
 
-## Паттерны
+1. Не добавлять in-process `exec`, `eval`, `safe_eval`, `PythonNamespaceBuilder`, `PythonCompiler`.
+2. Не добавлять `apps/flows/src/eval`.
+3. Не импортировать `apps.*` / `core.*` из пользовательского кода; source sanitizer удаляет такие строки до сохранения/исполнения.
+4. Не делать language-specific platform APIs: новая возможность добавляется как capability в `capability-gateway` и автоматически появляется во всех языках.
+5. Не добавлять mock/fallback runtime path. Если `node`, `go` или `dotnet` отсутствует в окружении, это ошибка окружения, а не fallback.
 
-### Хелпер для одного тула
+## Где что находится
 
-Внутри тела функции (как `_pick_file` в `read_file`):
+| Что | Файл |
+|---|---|
+| Контракты capability/code execution | `core/capabilities/models.py` |
+| Execution token | `core/capabilities/tokens.py` |
+| Capability registry + docs | `apps/capability_gateway/services/registry.py` |
+| Python runner | `apps/code_runner_python/` |
+| JS/TS runner | `apps/code_runner_node/` |
+| Go runner | `apps/code_runner_go/` |
+| C# runner | `apps/code_runner_csharp/` |
+| Flows adapter | `apps/flows/src/runners/remote.py` |
+| CodeNode | `apps/flows/src/runtime/nodes.py::CodeNode` |
+| Source sanitizer | `core/capabilities/source_sanitize.py` |
+
+## Контракт пользовательского кода
+
+Если `entrypoint` не задан в конфиге ноды/tool, исполняющий runner вызывает первую функцию,
+объявленную в source. `run` — только имя в примерах, не требование.
+
+### Python
 
 ```python
-@tool(name="my_tool", ...)
-async def my_tool(arg: str, state: Optional[dict] = None) -> dict:
-    def _helper(x): return x.strip().lower()
-    return {"result": _helper(arg)}
+async def run(args, state):
+    result = await files.get_bytes(file_id=args["file_id"])
+    return {"result": result}
 ```
 
-### Хелпер для нескольких тулов
+### JavaScript / TypeScript
 
-1. Добавить в `apps/flows/src/eval/state_utils.py`.
-2. Зарегистрировать в `apps/flows/src/eval/namespace.py` (`namespace["helper_name"] = helper_name`).
-3. Использовать как глобальное имя.
-4. Для FunctionTool-пути (прямой вызов builtin) — дополнительно inline-копия внутри функции.
+```ts
+async function run(args, state) {
+  const result = await files.get_bytes({file_id: args.file_id});
+  return {result};
+}
+```
 
-Примеры: `find_file`, `_extract_ids_from_state`, `_require_context_namespace`.
+### Go
 
-### Доступ к платформенному сервису
+```go
+package main
 
-1. Добавить **фасад** в `apps/flows/src/eval/platform_services.py`.
-2. Зарегистрировать в `namespace.py`.
-3. Вызывать из тула по имени фасада.
+func run(args map[string]any, state map[string]any) (any, error) {
+    result, err := files.GetBytes(map[string]any{"file_id": args["file_id"]})
+    if err != nil {
+        return nil, err
+    }
+    return map[string]any{"result": result}, nil
+}
+```
 
-Существующие фасады: `get_oauth_service`, `get_file_bytes`, `get_schedule_service`, `get_operator_handoff_service`, `get_google_oauth_token`, `get_lara_facade`, `get_code_runner`, `transcribe_audio`, `synthesize_speech`.
+### C#
 
-### Голос: `transcribe_audio` / `synthesize_speech`
+```csharp
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
-Пара фасадов поверх `core.clients.voice_resolver` (см. `voice.mdc`). В namespace регистрируются как **tools** (вызываются из `llm_node` или inline `code`), не как ноды графа. Канон выбора провайдера/модели — строго через `voice_resolver` (`override` аргумент → `company_voice_providers` для `ctx.company.company_id` → `settings.voice`).
+async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)
+{
+    var result = await files.GetBytes(new Dictionary<string, object?> { ["file_id"] = args["file_id"] });
+    return new Dictionary<string, object?> { ["result"] = result };
+}
+```
 
-| Фасад | Назначение | Биллинг |
-|---|---|---|
-| `transcribe_audio(file_id, *, language=None, provider=None, model=None) -> str` | Скачать файл из S3 (`file_processor`), вызвать STT, вернуть текст | `record_stt_usage(provider, audio_seconds)` (длительность из ffprobe — `probe_audio_duration_seconds_from_upload`); при недоступности — usage пропускается с предупреждением |
-| `synthesize_speech(text, *, voice=None, language=None, provider=None, model=None, response_format=None, file_name=None) -> str` | Синтезировать речь, сохранить в S3 как `file`, вернуть `file_id` | `record_tts_usage(provider, char_count=len(text))` |
+## Добавление platform capability
 
-Импорт `core.clients.voice_resolver` или специфических клиентов прямо в теле тула запрещён (`voice.mdc`); вызывай фасад по имени.
+1. Добавить `CapabilityDefinition` в `apps/capability_gateway/services/registry.py`.
+2. Добавить handler там же.
+3. Проверить, что capability использует `CAPABILITY_LANGUAGES`, если capability должна быть общей.
+4. Не добавлять language-specific SDK вручную: SDK namespace строится из manifest в каждом runner.
+5. Обновить tests для manifest/docs и выполнения через каждый runner.
 
-Параллельно работает **авто-STT входящих audio-вложений** в flows (`apps/flows/src/files/audio_input.py`) для каналов A2A SDK/CLI, embed-chat и нашего чата: аудио-файлы транскрибируются один раз перед передачей сообщения и подмешиваются в `content` блоком `[AUDIO_TRANSCRIPT name=<file>]…[/AUDIO_TRANSCRIPT]`. Тулу не нужно повторно транскрибировать — текст уже в сообщении.
+## Трассировка и ошибки
 
-## Состав namespace (SSOT)
+Каждый runner возвращает `CodeExecutionResponse`.
+При ошибке обязательно заполнены:
 
-| Что | Где смотреть |
-|---|---|
-| Фактический набор имён + регистрация shims/тулов | `apps/flows/src/eval/namespace.py` |
-| Символы codegen / паритет `code/execute` | тот же файл, `register_sandbox_codegen_namespace` |
-| Whitelist `import` | `core/inline_python_eval_policy.py` (`ALLOWED_IMPORT_ROOTS`); shims — `apps/flows/src/eval/shim_registry.py` |
-| Описания globals для редактора | `core/docs/data/python/globals.py` |
-| Контракты веб-поиска и описания страницы (`Search`, `Describe`) | `apps/flows/src/eval/web_snapshot.py` |
-| Модули/методы в справке | `core/docs/data/python/modules.py` |
-| CI: модули и namespace покрыты докой | `make check-inline-docs` (`tests/core/test_inline_docs_inventory.py`) |
+- `language`
+- `service`
+- `stage`
+- `message`
+- `exception_type`
+- `traceback`
+- `stdout` / `stderr`, если есть
+- `request_id`
+- `trace_id`
 
-**Чего нет в sandbox:** `get_settings`, `Path`, `os`, `sys`, `subprocess`, `socket`, произвольный `importlib` (кроме политики). `get_code_runner`/`get_llm`/codegen-хелперы могут присутствовать как платформенная регистрация (паритет с встроенным `sandbox_codegen`); не путать с «можно в кастомном туле обойти фасады».
-
-**Валидация AST (`compiler._validate_code`):** запрещён доступ к атрибутам из `FORBIDDEN_INLINE_DUNDER_ATTRIBUTES` в `core/inline_python_eval_policy.py` (интроспекция: `__class__`, `__bases__`, `__subclasses__`, …). `super().__init__()`, `__enter__`/`__exit__` и обычные dunder разрешены. Имя типа исключения без обхода валидатора — `getattr(type(exc), "__name__", "")` (литерал, не `ast.Attribute`).
-
-## Документация внешнего разработчика — обязательно
-
-При **любом** изменении namespace, eval-окружения или добавлении тула — **сразу** актуализировать `core/docs/data/python/`:
-
-| Изменение | Что |
-|---|---|
-| Новая функция/объект в namespace | `globals.py` — запись с `name`, `type`, `doc` |
-| Новый фасад в `platform_services.py` | `globals.py` — запись |
-| Изменение сигнатуры | `globals.py` — обновить `doc` |
-| Новый модуль в `ALLOWED_IMPORT_ROOTS` | `modules.py`: `MODULE_METHODS` для каждого имени из `COMMON_MODULES`; иначе `make check-inline-docs` падает |
-| Новый builtin | `core/inline_python_eval_policy.py` (подхватится автоматически) |
-| Новый паттерн | `templates.py` — пример кода |
-
-Символ в `PythonNamespaceBuilder`, но ещё не в статическом `GLOBALS`: для редактора и промпта `sandbox_codegen` есть секция «доп. символы sandbox» — `apps/flows/src/services/runtime_namespace_doc.py` → `DocumentationQuery.runtime_namespace_extras` (HTTP: `GET /flows/api/v1/code/documentation?include_runtime_namespace_extras=true`).
-
-**Без актуализации `core/docs` изменение не считается завершённым.** Внешний разработчик видит только то, что описано в `core/docs` — если функция в namespace, но нет в документации, для него она не существует.
-
-Инварианты полноты: `tests/core/test_inline_docs_inventory.py` — `COMMON_MODULES` ⊆ `MODULE_METHODS`; namespace ⊆ GLOBALS ∪ `runtime_namespace_extras`. CI: `make check-inline-docs`.
-
-## Чеклист добавления тула
-
-1. Модуль в `apps/flows/tools/` с декоратором `@tool`.
-2. Pydantic `args_schema` с `Field(description=...)` — обязательно.
-3. Никаких импортов `apps.*`/`core.*` в теле функции — будут вырезаны.
-4. Хелперы — внутри тела или через namespace (`state_utils.py`).
-5. Платформенные сервисы — только через фасады (`platform_services.py`).
-6. Имя в `apps/flows/tools/__init__.py` → `__all__`.
-7. Регистрация в `ToolRegistry.register_builtin_tools`.
-8. `mock_response` для тестового режима.
-9. Актуализировать `core/docs/data/python/globals.py` (если тул добавляет глобалы в namespace).
-
-## Ключевые файлы
-
-| Файл | Назначение |
-|---|---|
-| `apps/flows/src/eval/namespace.py` | `PythonNamespaceBuilder` — whitelist namespace |
-| `apps/flows/src/eval/sandbox_codegen_namespace.py` | `register_sandbox_codegen_namespace` — паритет `exec`/`sandbox_codegen` |
-| `apps/flows/src/eval/state_utils.py` | Утилиты для inline-кода (`find_file`, `get_files`, `ask_user`, …) |
-| `apps/flows/src/eval/platform_services.py` | Узкие фасады |
-| `apps/flows/src/eval/compiler.py` | Компиляция и валидация |
-| `apps/flows/src/eval/import_policy.py` | Whitelist импортов (`safe_inline_import`) |
-| `apps/flows/src/eval/inline_tool_sanitize.py` | `strip_forbidden_platform_import_lines` |
-| `core/inline_python_eval_policy.py` | `ALLOWED_BUILTINS`, `FORBIDDEN_INLINE_DUNDER_ATTRIBUTES` |
-| `apps/flows/tools/__init__.py` | `__all__` экспортов |
-| `apps/flows/src/services/runtime_namespace_doc.py` | Sandbox-имена вне `GLOBALS` для markdown/docs |
-| `apps/flows/tools/sandbox_codegen.py` | Мета-тул: schemas, prompt, LLM, JSON-ответ; вызывает `run_codegen_stages` |
-| `apps/flows/src/eval/codegen_utils.py` | Markdown sandbox-доки, эвристики, `run_codegen_stages` через `PythonCodeRunner` |
+`flows` не должен терять этот payload: API `/flows/api/v1/code/execute` возвращает `error_payload`.

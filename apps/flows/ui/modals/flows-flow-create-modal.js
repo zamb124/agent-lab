@@ -22,6 +22,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
+import { getBlankCodeNodeConfig } from '../_helpers/code-node-defaults.js';
 
 const FLOW_ID_PATTERN = /^[a-z][a-z0-9_]*$/;
 
@@ -54,8 +55,16 @@ const FLOW_PRESETS = Object.freeze([
             flow_id, name, description,
             entry: 'start',
             nodes: {
-                start: { type: 'code', name: 'Start', config: { code: 'def run(state):\n    return state\n' } },
-                end:   { type: 'code', name: 'End',   config: { code: 'def run(state):\n    return state\n' } },
+                start: {
+                    type: 'code',
+                    name: 'Start',
+                    config: { ...getBlankCodeNodeConfig(), code: 'async def run(args, state):\n    return state\n' },
+                },
+                end: {
+                    type: 'code',
+                    name: 'End',
+                    config: { ...getBlankCodeNodeConfig(), code: 'async def run(args, state):\n    return state\n' },
+                },
             },
             edges: [{ from: 'start', to: 'end' }],
             variables: {}, tags: ['preset:graph'], branches: {}, triggers: {}, resources: {},
@@ -92,7 +101,10 @@ const FLOW_PRESETS = Object.freeze([
                 compute: {
                     type: 'code',
                     name: 'Compute',
-                    config: { code: 'def run(state):\n    # TODO: write your logic\n    return state\n' },
+                    config: {
+                        ...getBlankCodeNodeConfig(),
+                        code: 'async def run(args, state):\n    # TODO: write your logic\n    return state\n',
+                    },
                 },
             },
             edges: [],
@@ -111,7 +123,10 @@ const FLOW_PRESETS = Object.freeze([
                 start: {
                     type: 'code',
                     name: 'Start',
-                    config: { code: 'def run(state):\n    # TODO: replace with remote_flow node in editor\n    return state\n' },
+                    config: {
+                        ...getBlankCodeNodeConfig(),
+                        code: 'async def run(args, state):\n    # TODO: replace with remote_flow node in editor\n    return state\n',
+                    },
                 },
             },
             edges: [],

@@ -3,7 +3,7 @@
 
 Читает ``apps/flows/registry.yaml``, для каждого id из секции ``flows`` подгружает
 каталог ``apps/flows/bundles/<bundle_id>/`` с ``flow.json`` и при необходимости
-``nodes.json`` (устаревшее имя файла — ``agents.json``). Инлайнит tools через ``tool_repository``.
+``nodes.json`` (устаревшее имя файла — ``agents.json``). Резолвит tool refs через ``tool_repository``.
 
 Конфигурация тулов по пути в репозитории: ``apps/flows/tools/``.
 """
@@ -23,18 +23,15 @@ from pydantic import BaseModel
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
-from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 from apps.flows.src.models import FlowConfig, NodeConfig, ToolReference, TriggerConfig
-from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.models.tool_reference import CallParameter
-from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.src.tools.json_schema_parameters import (
     call_parameters_to_parameters_schema,
     pydantic_model_to_parameters_schema,
 )
-from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
+from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS, builtin_tool_ids
 from core.context import get_context
 from core.files.processors import get_default_file_processor
 from core.files.reader import FileReader, ReadOptions
@@ -109,7 +106,7 @@ class FlowsLoader:
         self._registry: dict[str, Any] = {}
         self._defaults: dict[str, Any] = {}
         self._loaded_nodes: list[str] = []
-        self._tools_cache: dict[str, ToolReference] = {}  # Кеш tools для инлайнинга
+        self._tools_cache: dict[str, ToolReference] = {}  # Кеш tool refs для сборки flow config
         self._nodes_cache: dict[str, NodeConfig] = {}  # Кеш nodes для инлайнинга
         self._target_company_id: str | None = None
 
@@ -191,19 +188,23 @@ class FlowsLoader:
         await self._load_nodes(bundle_dir, nodes_path)
 
     async def load_tools_cache(self) -> None:
-        """Загружает inline tools из БД в кеш. MCP-тулы пропускаются — они проксируются через MCP-сервер."""
+        """Загружает tool refs из БД в кеш. MCP-тулы пропускаются — они проксируются через MCP-сервер."""
+        builtin_ids = builtin_tool_ids()
         tools = await self.tool_repository.list(limit=10000)
         for tool in tools:
             if tool.tool_id.startswith("mcp:"):
                 continue
+            if tool.tool_id in builtin_ids:
+                self._tools_cache[tool.tool_id] = tool.model_copy(update={"code": None})
+                continue
             if not tool.code:
                 raise ValueError(
                     f"Tool '{tool.tool_id}' в БД не имеет code. "
-                    f"Все tools должны иметь inline code для изоляции flow."
+                    f"Пользовательские code tools должны иметь inline code для isolated runner."
                 )
             self._tools_cache[tool.tool_id] = tool
 
-        logger.info(f"Загружен кеш из {len(self._tools_cache)} inline tools")
+        logger.info(f"Загружен кеш из {len(self._tools_cache)} tool refs")
 
     async def load_nodes_cache(self) -> None:
         """Загружает все nodes из БД в кеш для инлайнинга."""
@@ -717,12 +718,12 @@ class FlowsLoader:
 
     def _inline_tools_in_nodes(self, nodes: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
         """
-        Рекурсивно инлайнит tools в nodes агента.
+        Рекурсивно резолвит tools в nodes агента.
 
         Для каждой ноды:
-        1. Заменяет tool_id на полные конфиги с кодом
+        1. Заменяет tool_id на контракт tool ref; code есть только у пользовательских code tools
         2. Валидирует уникальность reason/exit tools по react_role
-        3. Для нод типа tool с tool_id инлайнит код из tools_cache
+        3. Для code-node templates с tool_id подтягивает пользовательский code template
         """
         for node_id, node_config in nodes.items():
             node_type = node_config.get("type")
@@ -769,7 +770,7 @@ class FlowsLoader:
         self, tools: list[Any], context: str, depth: int = 0
     ) -> list[dict[str, Any]]:
         """
-        Рекурсивно инлайнит список tools.
+        Рекурсивно резолвит список tools.
 
         Args:
             tools: Список tools (строки или dict)
@@ -791,7 +792,7 @@ class FlowsLoader:
         self, tool: Any, context: str, depth: int
     ) -> dict[str, Any] | None:
         """
-        Инлайнит один tool рекурсивно.
+        Резолвит один tool рекурсивно.
 
         Если tool — llm_node (вложенный flow как tool), рекурсивно инлайнит его tools.
         """
@@ -801,7 +802,7 @@ class FlowsLoader:
             tool_ref = self._tools_cache.get(tool)
             if tool_ref:
                 result = tool_ref.model_dump(exclude_none=True)
-                logger.debug(f"{context}: инлайнен tool '{tool}'")
+                logger.debug(f"{context}: резолвнут tool ref '{tool}'")
                 return result
 
             # Если не нашли как tool - ищем в nodes_cache (node используется как tool)
@@ -837,13 +838,13 @@ class FlowsLoader:
             if tool_id and not tool.get("code"):
                 # Сначала в tools_cache
                 tool_ref = self._tools_cache.get(tool_id)
-                if tool_ref and tool_ref.code:
+                if tool_ref:
                     merged = tool_ref.model_dump(exclude_none=True)
                     # Переопределения из tool - только непустые значения
                     for key, value in tool.items():
                         if value is not None and value != {} and value != []:
                             merged[key] = value
-                    logger.debug(f"{context}: инлайнен код для tool '{tool_id}'")
+                    logger.debug(f"{context}: резолвнут tool ref '{tool_id}'")
                     return merged
 
                 # Если не нашли как tool - ищем в nodes_cache (node как tool)
@@ -1125,11 +1126,10 @@ async def load_tools_to_db(
     modules: list[str] | None = None,
 ) -> list[str]:
     """
-    Загружает tools из Python модулей в БД.
+    Загружает контракты trusted platform tools из Python модулей в БД.
 
     Поддерживает:
-    - FunctionTool (созданные через @tool декоратор) - извлекается код функции
-    - BaseTool классы - извлекается код класса
+    - FunctionTool (созданные через @tool декоратор) - сохраняет schema/metadata без source-кода
 
     Args:
         tool_repository: ToolRepository для сохранения
@@ -1143,9 +1143,6 @@ async def load_tools_to_db(
         for module_path, attr_name in BUILTIN_TOOL_SPECS:
             module = importlib.import_module(module_path)
             tool_attrs.append((module_path, attr_name, getattr(module, attr_name)))
-        base_module = importlib.import_module("apps.flows.src.tools.base")
-        for attr_name in dir(base_module):
-            tool_attrs.append(("apps.flows.src.tools.base", attr_name, getattr(base_module, attr_name)))
     else:
         for module_path in modules:
             module = importlib.import_module(module_path)
@@ -1162,18 +1159,6 @@ async def load_tools_to_db(
             tool_id = tool_instance.name
             if tool_id in loaded_ids:
                 continue
-
-            # Извлекаем код функции БЕЗ декоратора
-            full_source = tool_instance.get_source_code()
-            # Убираем декоратор @tool(...) - ищем начало функции
-            lines = full_source.split("\n")
-            func_start = 0
-            for i, line in enumerate(lines):
-                stripped = line.lstrip()
-                if stripped.startswith("async def ") or stripped.startswith("def "):
-                    func_start = i
-                    break
-            source_code = strip_forbidden_platform_import_lines("\n".join(lines[func_start:]))
 
             if tool_instance.args_schema is not None:
                 args_schema_dict = _call_parameters_from_pydantic_model(tool_instance.args_schema)
@@ -1200,7 +1185,7 @@ async def load_tools_to_db(
                 tool_id=tool_id,
                 title=tool_id,
                 description=tool_instance.description,
-                code=source_code,
+                code=None,
                 parameters_schema=parameters_schema_full,
                 args_schema=args_schema_dict,
                 mock_map=mock_map,
@@ -1213,48 +1198,6 @@ async def load_tools_to_db(
             loaded_ids.add(tool_id)
             logger.info(f"  {tool_id}: FunctionTool")
             continue
-
-        # BaseTool класс
-        if isinstance(attr, type) and issubclass(attr, BaseTool) and attr is not BaseTool:
-            tool_class = attr
-            tool_id = tool_class.name
-            if tool_id in loaded_ids:
-                continue
-
-            # Извлекаем исходный код класса
-            source_code = inspect.getsource(tool_class)
-
-            args_schema_dict: dict[str, CallParameter] = {}
-            parameters_schema_full = None
-            if tool_class.args_schema:
-                args_schema_dict = _call_parameters_from_pydantic_model(tool_class.args_schema)
-                parameters_schema_full = pydantic_model_to_parameters_schema(
-                    tool_class.args_schema
-                )
-
-            mock_map = None
-            if hasattr(tool_class, "mock_response"):
-                mock_map = {"default_response": tool_class.mock_response}
-
-            tags = getattr(tool_class, "tags", [])
-            react_role = getattr(tool_class, "react_role", ReactToolRole.STANDARD)
-
-            tool_ref = ToolReference(
-                tool_id=tool_id,
-                title=tool_class.__name__,
-                description=tool_class.description,
-                code=source_code,
-                parameters_schema=parameters_schema_full,
-                args_schema=args_schema_dict,
-                mock_map=mock_map,
-                tags=tags,
-                react_role=react_role,
-            )
-
-            await tool_repository.set(tool_ref)
-            loaded.append(tool_id)
-            loaded_ids.add(tool_id)
-            logger.info(f"  {tool_id}: {tool_class.__name__}")
 
     logger.info(f"Загружено {len(loaded)} tools в БД")
     return loaded

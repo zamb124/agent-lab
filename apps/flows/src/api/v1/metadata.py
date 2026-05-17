@@ -33,7 +33,7 @@ _NODE_TYPES: list[dict[str, Any]] = [
         "type": "code",
         "name": "Code Node",
         "icon": "code",
-        "description": "Python функция",
+        "description": "Python/JavaScript/TypeScript/Go через isolated runners",
         "color": "#8b5cf6",
         "inputs": 1,
         "outputs": 1,
@@ -111,11 +111,9 @@ _NODE_TYPES: list[dict[str, Any]] = [
 ]
 
 
-# Resource-типы для отдельного раздела «Ресурсы» в редакторе. Это не runtime
-# node, а ссылки на shared-сущности (Code, Files, LLM), которые подцепляются к нодам.
+# Resource-типы для отдельного раздела «Ресурсы» в редакторе. Runtime resources
+# остаются декларативными LLM-конфигами; sandbox code использует capabilities/tools.
 _RESOURCE_TYPES: list[dict[str, Any]] = [
-    {"type": "code",   "name": "Code",   "icon": "code",     "description": "Inline Python/JS код",     "color": "#8b5cf6"},
-    {"type": "files",  "name": "Files",  "icon": "folder",   "description": "S3/MinIO файловое хранилище", "color": "#f59e0b"},
     {"type": "llm",    "name": "LLM",    "icon": "bot",      "description": "LLM модель",                "color": "#ec4899"},
 ]
 
@@ -129,7 +127,7 @@ async def get_node_types(container: ContainerDep) -> list[dict[str, Any]]:
 
 @router.get("/resource-types")
 async def get_resource_types(container: ContainerDep) -> list[dict[str, Any]]:
-    """Список типов ресурсов (Code, Files, LLM)."""
+    """Список типов runtime resources."""
     _ = container
     return _RESOURCE_TYPES
 

@@ -1,5 +1,5 @@
 """
-Helpers для записи биллинга STT/TTS-вызовов voice gateway и фасадов eval.
+Helpers для записи биллинга STT/TTS-вызовов voice gateway и voice capabilities.
 
 Прайсы живут в `conf.json` → `platform.billing.resource_base_prices`,
 категории `stt`, `tts`, `vad` (см. конфиг). resource_name строится как
@@ -12,8 +12,8 @@ Helpers для записи биллинга STT/TTS-вызовов voice gatewa
 - `apps/voice/api/transcribe.py` после батч-STT (секунды из ffprobe;
   при ошибке probe — без `record_stt_usage`, см. лог);
 - `apps/voice/api/synthesize.py` после streaming-TTS-сессии;
-- `apps/flows/src/eval/platform_services.py` (`transcribe_audio`,
-  `synthesize_speech`) — единый фасад для tools.
+- `apps/capability_gateway/services/registry.py` (`voice.transcribe_audio`,
+  `voice.synthesize_speech`) — единый capability-контур для isolated runners.
 
 Real-time длительность voice-сессии и поминутный учёт — в spans
 ``platform_tracing`` (`category=voice`, `resource_name="session_minute"`),

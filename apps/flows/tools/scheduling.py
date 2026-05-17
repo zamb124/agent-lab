@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.eval.platform_services import get_schedule_service
+from apps.flows.src.services.platform_facades import get_schedule_service
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.scheduling_ids import extract_ids_from_state
 from core.scheduler.models import ContentType

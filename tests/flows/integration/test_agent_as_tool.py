@@ -75,7 +75,7 @@ class TestFlowWithSubagentInterrupt:
         ask_user_code = '''
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 
-async def execute(args, state):
+async def run(args, state):
     question = args.get("question", "")
     raise FlowInterrupt(question)
 '''
@@ -187,7 +187,7 @@ class TestSubagentMessagesIntegrity:
         ask_user_code = '''
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 
-async def execute(args, state):
+async def run(args, state):
     question = args.get("question", "")
     raise FlowInterrupt(question)
 '''
@@ -385,7 +385,7 @@ class TestFilesPassingToSubnode:
     def agent_with_file_tool(self) -> Dict[str, Any]:
         """Агент с субагентом который проверяет наличие файлов в state."""
         check_files_code = '''
-async def execute(args, state):
+async def run(args, state):
     files = state.get("files", [])
     if not files:
         return {"success": False, "error": "No files in state"}

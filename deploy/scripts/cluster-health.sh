@@ -38,7 +38,7 @@ CHECK_PUBLIC="${CHECK_PUBLIC:-1}"
 # При отключении компонента через Helm (*.enabled: false) уберите имя отсюда (см. deploy/README.md
 # «Состав приложений: Helm и cluster-health»).
 EXPECTED_DEPLOYMENTS=(
-  flows frontend crm rag sync office scheduler-api voice browser
+  flows frontend crm rag sync office scheduler-api voice browser capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp
   flows-worker scheduler rag-worker sync-worker crm-worker idle-worker
   livekit livekit-egress onlyoffice grafana provider-litserve
 )

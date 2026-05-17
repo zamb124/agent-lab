@@ -11,7 +11,6 @@ import importlib
 from typing import Any
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.eval.inline_tool_sanitize import strip_forbidden_platform_import_lines
 from apps.flows.src.models import ToolReference
 from apps.flows.src.models.enums import CodeMode, NodeType, ReactToolRole
 from apps.flows.src.models.mcp import MCPServerConfig
@@ -20,7 +19,8 @@ from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
 from apps.flows.src.tools.mcp_wrapper import MCPTool
-from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
+from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS, builtin_tool_ids
+from core.capabilities.source_sanitize import strip_forbidden_platform_import_lines
 from core.logging import get_logger
 
 try:
@@ -38,9 +38,15 @@ except ImportError:
 
 logger = get_logger(__name__)
 
-# Тулы, чей исходник кладётся в tool_repository для документации/шаблона, но исполнять
-# их как CodeTool нельзя: тело опирается на модули вне sandbox (импорты режутся).
-_TOOL_IDS_PROCESS_BUILTIN_ONLY = frozenset({"sandbox_codegen"})
+
+def _optional_entrypoint(config: dict[str, Any]) -> str | None:
+    raw = config.get("entrypoint")
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise ValueError("entrypoint must be a string")
+    stripped = raw.strip()
+    return stripped if stripped else None
 
 
 def _browser_runtime_mcp_tool_parameters_schema(
@@ -150,17 +156,17 @@ class ToolRegistry:
         """
         Единая материализация runnable tool.
 
-        Исполнение только через код в конфиге (CodeTool / нода как tool). Записи в
-        ``tool_repository`` — шаблоны с полем ``code``; процессный ``registry.get`` (FunctionTool)
-        для runtime flow не используется.
+        Исполнение пользовательского кода идёт только через CodeTool/remote runner.
+        Trusted platform tools из ``BUILTIN_TOOL_SPECS`` — reserved ids и всегда
+        материализуются как процессные FunctionTool, даже если в старом ref остался
+        ``code``. Так platform imports не попадают в sandbox source.
 
         Порядок веток:
         1. ``code_mode=mcp_tool`` → MCPTool
-        2. ``tool_id`` без инлайн ``code`` → если есть процессный builtin (``register_builtin_tools``), он имеет приоритет над шаблоном в ``tool_repository`` (Python-реализация, не sandbox).
-        3. иначе ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → merge из ``tool_repository``
+        2. ``tool_id`` из builtin ids → процессный platform tool.
+        3. иначе ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → custom template из ``tool_repository``
         4. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
-        5. Непустой ``code`` → CodeTool, кроме ``tool_id`` из
-           ``_TOOL_IDS_PROCESS_BUILTIN_ONLY`` (процессный FunctionTool).
+        5. Непустой ``code`` → CodeTool.
         6. ``type=code`` без кода → NodeAsToolWrapper
         7. иначе ValueError
         """
@@ -196,6 +202,14 @@ class ToolRegistry:
         )
 
         tid = _tool_lookup_id(ref)
+        if tid and tid in builtin_tool_ids() and not _node_as_tool_kind:
+            if not self._initialized:
+                self.register_builtin_tools()
+            builtin_tool = self.get(tid)
+            if builtin_tool is None:
+                raise ValueError(f"Builtin platform tool '{tid}' is not registered")
+            return builtin_tool
+
         if (
             tid
             and not _has_nonempty_inline_code(ref)
@@ -203,12 +217,6 @@ class ToolRegistry:
             and not tid.startswith("mcp:")
             and not _node_as_tool_kind
         ):
-            if not self._initialized:
-                self.register_builtin_tools()
-            builtin_tool = self.get(tid)
-            if builtin_tool is not None:
-                return builtin_tool
-
             container = self.container
             if container is None:
                 raise RuntimeError(f"Tool '{tid}' requires FlowContainer to load tool template")
@@ -237,16 +245,6 @@ class ToolRegistry:
             return self._create_node_as_tool(ref)
 
         if _has_nonempty_inline_code(ref):
-            tid_builtin = _tool_lookup_id(ref)
-            if tid_builtin and tid_builtin in _TOOL_IDS_PROCESS_BUILTIN_ONLY:
-                if not self._initialized:
-                    self.register_builtin_tools()
-                process_tool = self.get(tid_builtin)
-                if process_tool is None:
-                    raise ValueError(
-                        f"Tool '{tid_builtin}': требуется процессный builtin (register_builtin_tools)"
-                    )
-                return process_tool
             code_text = ref["code"]
             if not isinstance(code_text, str):
                 raise ValueError(f"Tool 'code' must be str, got {type(code_text)}")
@@ -356,6 +354,8 @@ class ToolRegistry:
             description=config.get("description"),
             parameters_schema=resolved_schema,
             react_role=react_role,
+            language=str(config.get("language", "python")),
+            entrypoint=_optional_entrypoint(config),
             resources=resources,
             container=self.container,
         )

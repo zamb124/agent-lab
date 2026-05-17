@@ -81,9 +81,9 @@ class Edge(StrictBaseModel):
     Если condition не указан - безусловный переход.
 
     Допустимые форматы condition:
-      - строка: legacy-выражение `"<variable> <op> <value>"` (например, `route == 'order'`);
+      - строка: выражение `"<variable> <op> <value>"` (например, `route == 'order'`);
       - объект `{"type": "simple", "variable": str, "operator": str, "value": Any}`;
-      - объект `{"type": "python", "code": str}` — функция `def check(state) -> bool`.
+      - объект `{"type": "code", "language": "python|javascript|typescript|go|csharp", "code": str}`.
     """
 
     from_node: str = Field(..., alias="from", description="ID исходной ноды")
@@ -91,8 +91,8 @@ class Edge(StrictBaseModel):
     condition: str | dict[str, Any] | None = Field(
         default=None,
         description=(
-            "Условие перехода. Строка legacy-выражения, объект simple "
-            "({type, variable, operator, value}) или python ({type, code})."
+            "Условие перехода. Строковое выражение, объект simple "
+            "({type, variable, operator, value}) или code ({type, language, code})."
         ),
     )
     contributes_to_join: bool = Field(
@@ -125,12 +125,14 @@ class InputConfig(StrictBaseModel):
 
     Примеры:
     - {"type": "text", "value": "Привет"}
-    - {"type": "inline_code", "value": "def generate(): return 'test'"}
+    - {"type": "inline_code", "language": "typescript", "value": "export async function run(args, state) { return 'test' }"}
     - {"type": "node", "value": "tester_node_id"}
     - {"type": "node", "node": {...}}  # inline node config как dict
     """
     type: InputType = Field(..., description="Тип входа: text, inline_code, node")
     value: str = Field(default="", description="Текст | inline код | node_id")
+    language: str = Field(default="python", description="Язык inline code: python, javascript, typescript, go, csharp")
+    entrypoint: str | None = Field(default=None, description="Имя entrypoint-функции inline code; null = первая функция")
     node: dict[str, Any] | None = Field(
         default=None, description="Inline нода как dict (будет преобразована в NodeConfig)"
     )
@@ -156,12 +158,14 @@ class CheckConfig(StrictBaseModel):
 
     Примеры:
     - {"type": "string", "value": "contains:привет"}
-    - {"type": "inline_code", "value": "def check(s,r): return 'ok' in r"}
+    - {"type": "inline_code", "language": "python", "value": "async def run(args, state): return args['response'] == 'ok'"}
     - {"type": "node", "value": "judge_node_id"}
     - {"type": "node", "node": {...}}  # inline node config как dict
     """
     type: CheckType = Field(..., description="Тип проверки: string, inline_code, node")
     value: str = Field(default="", description="Checker expr | inline код | node_id")
+    language: str = Field(default="python", description="Язык inline code: python, javascript, typescript, go, csharp")
+    entrypoint: str | None = Field(default=None, description="Имя entrypoint-функции inline code; null = первая функция")
     node: dict[str, Any] | None = Field(
         default=None, description="Inline нода-судья как dict (будет преобразована в NodeConfig)"
     )

@@ -27,6 +27,11 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нати
 | browser | 8009 | Browser Runtime: Playwright + CDP (`apps/browser`) |
 | provider_litserve | 8014 | LitServe: эмбеддинги, реранк, локальные STT/TTS/VAD |
 | voice | 8015 | Voice gateway: real-time STT/TTS/VAD; WS `/voice/api/ws/session/{id}` |
+| capability_gateway | 8016 | Trusted gateway platform capabilities и manifest/docs sandbox API |
+| code_runner_python | 8017 | Isolated Python user-code runner |
+| code_runner_node | 8018 | Isolated JavaScript/TypeScript user-code runner |
+| code_runner_go | 8019 | Isolated Go user-code runner |
+| code_runner_csharp | 8020 | Isolated C# user-code runner |
 | scheduler | 8006 | Scheduler control-plane API + TaskIQ scheduler |
 | flows_worker, crm_worker, rag_worker, sync_worker, idle_worker | — | TaskIQ воркеры |
 
@@ -56,7 +61,7 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нати
    ```
 8. **Никаких голых типов.** Полные аннотации публичных API (`dict[str, Any]`, `list[str]`, не голые `dict`/`list`). Доменные модели — Pydantic/`dataclass`, не сырые словари.
 9. **Никакого дублирования функционала.** Перед реализацией — проверь что нет уже похожего. Дубль запрещён.
-10. **`platform_services` / песочница тулов.** Кастомный код в `apps/flows/tools/` и inline Python — только узкие функции из `platform_services` и явный `namespace`. **`get_container`** и полный DI в теле тула — запрещены. Платформа регистрирует `get_code_runner`/`get_llm`/codegen helpers через `register_sandbox_codegen_namespace` — это не приглашение обходить фасады. Детали → **`eval.mdc`**.
+10. **Isolated code execution.** Пользовательский code_node / inline tool / code-condition исполняется только через `RemoteCodeRunner` → `code-runner-*`. Доступ к платформе — только через `capability-gateway`; in-process `eval`/`exec`/`PythonNamespaceBuilder` запрещены. Детали → **`eval.mdc`**.
 
 ## Типизация и import-gate
 

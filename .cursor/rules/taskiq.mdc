@@ -48,7 +48,7 @@ globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
 
 `apps/scheduler/scheduler.py`: **сначала** side-effect импорты модулей с `@broker.task`, затем **`require_tasks_registered_for_scheduler`** (`core/scheduler/scheduler.py`), затем **`create_scheduler`**. Если задача не зарегистрирована на нужном брокере (забыт импорт или неверное имя) — процесс **падает при старте** с `RuntimeError` и списком отсутствующих `task_name`.
 
-Новая задача, попадающая в Redis-расписание: импорт модуля в `apps/scheduler/scheduler.py` + имя в одном из `_FLOWS_SCHEDULER_REQUIRED_TASK_NAMES` / `_IDLE_SCHEDULER_REQUIRED_TASK_NAMES` / `_CRM_SCHEDULER_REQUIRED_TASK_NAMES`. Для `execute_inline_code` ключ — `apps.flows.src.tasks.eval_task:execute_inline_code`.
+Новая задача, попадающая в Redis-расписание: импорт модуля в `apps/scheduler/scheduler.py` + имя в одном из `_FLOWS_SCHEDULER_REQUIRED_TASK_NAMES` / `_IDLE_SCHEDULER_REQUIRED_TASK_NAMES` / `_CRM_SCHEDULER_REQUIRED_TASK_NAMES`. Пользовательский код не регистрируется как TaskIQ eval-task; исполнение идёт через `code-runner-*`.
 
 **Воркер обязан импортировать тот же модуль**, иначе при выполнении будет «task is not found». Пример: `crm_reembed_stale_documents_tick` — модуль `apps.crm_worker.tasks.reembed_tasks` в `apps/crm_worker/worker.py`; `crm_reconcile_daily_summary` — модуль `apps.crm_worker.tasks.daily_summary_tasks` в `apps/crm_worker/worker.py` и `apps/scheduler/scheduler.py`.
 

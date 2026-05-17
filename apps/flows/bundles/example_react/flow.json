@@ -590,7 +590,7 @@
       "nodes": {
         "hitl_prepare": {
           "type": "code",
-          "code": "async def run(state):\n    c = str(state.get('content', '')).strip()\n    state['hitl_handoff_note'] = c[:500] if c else '(empty)'\n    return state"
+          "code": "async def run(args, state):\n    c = str(state.get('content', '')).strip()\n    state['hitl_handoff_note'] = c[:500] if c else '(empty)'\n    return state"
         },
         "hitl_pause": {
           "type": "hitl_node",

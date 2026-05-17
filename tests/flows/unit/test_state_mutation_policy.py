@@ -1,14 +1,13 @@
 """
-Защита системных полей ExecutionState от user/eval-кода.
+Защита системных полей ExecutionState от user code/runtime merge.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.eval.state_utils import merge_state, set_nested
-from apps.flows.src.runners.python import PythonCodeRunner
 from apps.flows.src.runtime.nodes import BaseNode
+from apps.flows.src.runtime_helpers.state_utils import merge_state, set_nested
 from core.errors import FrozenStateFieldError
 from core.state import ExecutionState
 from core.state.mutation_policy import (
@@ -64,19 +63,6 @@ def test_snapshot_detects_in_place_mutation() -> None:
     with pytest.raises(FrozenStateFieldError) as exc:
         assert_frozen_fields_unchanged(state, snap)
     assert exc.value.payload["reason"] == "in_place_mutation"
-
-
-@pytest.mark.asyncio
-async def test_python_runner_blocks_frozen_assign() -> None:
-    state = _minimal_state()
-    runner = PythonCodeRunner()
-    code = """
-async def run(state):
-    state.user_id = "evil"
-    return None
-"""
-    with pytest.raises(FrozenStateFieldError):
-        await runner.execute(code, state, func_name="run")
 
 
 class _DummyNode(BaseNode):

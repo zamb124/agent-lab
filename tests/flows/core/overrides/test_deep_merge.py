@@ -256,14 +256,14 @@ class TestDeepMergeToolReference:
         base = {
             "tool_id": "format_greeting",
             "description": "Форматирует приветствие",
-            "code": "async def execute(args, state): return 'Hello'",
+            "code": "async def run(args, state): return 'Hello'",
             "args_schema": {
                 "name": {"type": "string", "description": "Имя"}
             }
         }
         override = {
             "tool_id": "format_greeting",
-            "code": "async def execute(args, state): return f'Hi {args[\"name\"]}'",
+            "code": "async def run(args, state): return f'Hi {args[\"name\"]}'",
             "args_schema": {
                 "style": {"type": "string", "description": "Стиль"}
             }

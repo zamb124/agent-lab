@@ -13,8 +13,15 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
-
-const RESOURCE_LANGUAGES = Object.freeze(['python', 'javascript']);
+import {
+    FLOW_CODE_LANGUAGES,
+    flowCodeLanguageOptions,
+    flowCodeLanguageShortLabel,
+    flowCodeMirrorLanguage,
+    isKnownStarterCode,
+    normalizeFlowCodeLanguage,
+    starterCodeForLanguage,
+} from '../../_helpers/flows-code-languages.js';
 
 export class FlowsCodeWorkbench extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -68,6 +75,45 @@ export class FlowsCodeWorkbench extends PlatformElement {
                 align-items: center;
                 gap: var(--space-1);
                 flex-shrink: 0;
+            }
+            .language-segment {
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding: 2px;
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                flex: 0 0 auto;
+            }
+            .language-button {
+                width: 36px;
+                height: 24px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 0;
+                border-radius: calc(var(--radius-md) - 2px);
+                background: transparent;
+                color: var(--text-tertiary);
+                font-size: 11px;
+                font-weight: var(--font-semibold);
+                line-height: 1;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            .language-button:hover {
+                color: var(--text-primary);
+                background: var(--glass-tint-medium);
+            }
+            .language-button[active] {
+                color: var(--accent);
+                background: var(--accent-subtle);
+            }
+            .language-button:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 1px;
             }
             .execute-tool-hint-trigger {
                 width: 28px;
@@ -192,7 +238,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
     _completionContextPayload() {
         const lang = this._normalizedLanguage();
         return {
-            language: lang === 'javascript' ? 'javascript' : 'python',
+            language: lang,
             perspective: this._documentationPerspectiveResolved(),
             include_runtime_namespace_extras: true,
         };
@@ -258,29 +304,12 @@ export class FlowsCodeWorkbench extends PlatformElement {
     }
 
     _normalizedLanguage() {
-        const v = typeof this.variant === 'string' ? this.variant : 'node';
         const raw = typeof this.language === 'string' ? this.language : 'python';
-        if (v === 'resource') {
-            if (RESOURCE_LANGUAGES.includes(raw)) {
-                return raw;
-            }
-            return 'python';
-        }
-        if (raw === 'javascript') {
-            return 'javascript';
-        }
-        if (raw === 'python') {
-            return 'python';
-        }
-        return raw.length > 0 ? raw : 'python';
+        return normalizeFlowCodeLanguage(raw);
     }
 
     _cmLanguageForCodeTab() {
-        const lang = this._normalizedLanguage();
-        if (lang === 'python') {
-            return 'python';
-        }
-        return 'text';
+        return flowCodeMirrorLanguage(this._normalizedLanguage());
     }
 
     _secondTabLabel() {
@@ -325,6 +354,16 @@ export class FlowsCodeWorkbench extends PlatformElement {
         }
     }
 
+    _emitLanguageChange(language) {
+        const normalized = normalizeFlowCodeLanguage(language);
+        const currentCode = typeof this.code === 'string' ? this.code : '';
+        const detail = { type: 'language', language: normalized };
+        if (currentCode.trim().length === 0 || isKnownStarterCode(currentCode)) {
+            detail.code = starterCodeForLanguage(normalized);
+        }
+        this._emitWorkbench(detail);
+    }
+
     _onLanguageFieldChange(e) {
         const d = e.detail;
         if (!isPlainObject(d)) {
@@ -337,10 +376,28 @@ export class FlowsCodeWorkbench extends PlatformElement {
         if (typeof v !== 'string') {
             throw new Error('flows-code-workbench: language string required');
         }
-        if (!RESOURCE_LANGUAGES.includes(v)) {
+        if (!FLOW_CODE_LANGUAGES.some((lang) => lang.value === v)) {
             throw new Error('flows-code-workbench: language unknown');
         }
-        this._emitWorkbench({ type: 'language', language: v });
+        this._emitLanguageChange(v);
+    }
+
+    _renderLanguageSegment() {
+        const current = this._normalizedLanguage();
+        return html`
+            <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
+                ${FLOW_CODE_LANGUAGES.map((lang) => html`
+                    <button
+                        type="button"
+                        class="language-button"
+                        ?active=${current === lang.value}
+                        title=${lang.label}
+                        aria-label=${lang.label}
+                        @click=${() => this._emitLanguageChange(lang.value)}
+                    >${flowCodeLanguageShortLabel(lang.value)}</button>
+                `)}
+            </div>
+        `;
     }
 
     _renderToolbarStart() {
@@ -368,6 +425,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
                         ${secondaryLabel}
                     </button>
                 </div>
+                ${this._renderLanguageSegment()}
                 <div class="toolbar-start-actions">
                     <glass-button size="sm" variant="ghost" @click=${this._openDocs}>
                         ${this.t('code_node_editor.docs')}
@@ -404,7 +462,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
 
         if (this.variant === 'resource') {
             const lang = this._normalizedLanguage();
-            const langValues = RESOURCE_LANGUAGES.map((l) => ({ value: l, label: l }));
+            const langValues = flowCodeLanguageOptions();
             return html`
                 <div class="settings-wrap">
                     ${this._mainTab === 'code'

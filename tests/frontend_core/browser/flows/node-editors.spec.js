@@ -116,6 +116,57 @@ describe('node editors — top-level NodeConfig contract', () => {
         expect(jsonEditor).to.not.be.null;
     });
 
+    it('flows-code-node-editor — переключение языка кода эмитит language patch', async () => {
+        const node = { node_id: 'a', type: 'code', name: 'A', code: '' };
+        const el = await fixture(html`
+            <flows-code-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'code'}>
+            </flows-code-node-editor>
+        `);
+        await elementUpdated(el);
+        let last = null;
+        el.addEventListener('change', (e) => { last = e.detail; });
+        const workbench = el.shadowRoot.querySelector('flows-code-workbench');
+        await elementUpdated(workbench);
+        const buttons = Array.from(workbench.shadowRoot.querySelectorAll('.language-button'));
+        expect(buttons.length).to.equal(5);
+        const tsButton = buttons.find((button) => button.textContent.trim() === 'TS');
+        expect(tsButton).to.not.be.undefined;
+        tsButton.click();
+        await elementUpdated(workbench);
+        expect(last.patch).to.have.property('language', 'typescript');
+        expect(last.patch.code).to.include('async function run');
+        expect(last.patch).to.have.property('tool_id', null);
+    });
+
+    it('flows-code-workbench — прокидывает выбранный язык в completionContext', async () => {
+        const workbench = await fixture(html`
+            <flows-code-workbench
+                .variant=${'node'}
+                .language=${'go'}
+                .code=${''}
+                .documentationPerspective=${'node'}
+            ></flows-code-workbench>
+        `);
+        await elementUpdated(workbench);
+        let editor = workbench.shadowRoot.querySelector('flows-code-editor');
+        expect(editor).to.not.be.null;
+        expect(editor.completionContext).to.deep.include({
+            language: 'go',
+            perspective: 'node',
+            include_runtime_namespace_extras: true,
+        });
+
+        workbench.language = 'csharp';
+        await elementUpdated(workbench);
+        editor = workbench.shadowRoot.querySelector('flows-code-editor');
+        expect(editor.completionContext).to.deep.include({
+            language: 'csharp',
+            perspective: 'node',
+            include_runtime_namespace_extras: true,
+        });
+    });
+
     it('flows-channel-node-editor — поля channel/action', async () => {
         const node = { node_id: 'a', type: 'channel', name: 'A', channel: 'telegram', action: 'send_message', channel_config: {} };
         const el = await fixture(html`

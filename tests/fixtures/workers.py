@@ -603,6 +603,10 @@ def sync_worker():
             "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
             "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
             "SERVER__SYNC_SERVICE_URL": "http://127.0.0.1:9005",
+            "SERVER__CAPABILITY_GATEWAY_SERVICE_URL": "http://localhost:9016",
+            "SERVER__CODE_RUNNER_PYTHON_SERVICE_URL": "http://localhost:9017",
+            "SERVER__CODE_RUNNER_NODE_SERVICE_URL": "http://localhost:9018",
+            "SERVER__CODE_RUNNER_GO_SERVICE_URL": "http://localhost:9019",
             "MOCK_LLM_REDIS_KEY": "mock_llm:responses:sync",
         },
         cleanup_patterns=[

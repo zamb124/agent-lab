@@ -626,7 +626,7 @@ class TestSkillCombinedOverrides:
             nodes={
                 "classifier": {
                     "type": "code",
-                    "code": "async def run(state):\n    content = state.get('content', '').lower()\n    if 'заказ' in content:\n        state['route'] = 'order'\n    elif 'жалоб' in content:\n        state['route'] = 'complaint'\n    else:\n        state['route'] = 'general'\n    return state"
+                    "code": "async def run(args, state):\n    content = state.get('content', '').lower()\n    if 'заказ' in content:\n        state['route'] = 'order'\n    elif 'жалоб' in content:\n        state['route'] = 'complaint'\n    else:\n        state['route'] = 'general'\n    return state"
                 },
                 "order_processor": {"type": "llm_node", "prompt": "Order"},
                 "complaint_processor": {"type": "llm_node", "prompt": "Complaint"},
@@ -646,7 +646,7 @@ class TestSkillCombinedOverrides:
                     nodes={
                         "classifier": {
                             "type": "code",
-                            "code": "async def run(state):\n    content = state.get('content', '').lower()\n    if 'заказ' in content or 'order' in content:\n        state['route'] = 'order'\n    else:\n        state['route'] = 'general'\n    return state"
+                            "code": "async def run(args, state):\n    content = state.get('content', '').lower()\n    if 'заказ' in content or 'order' in content:\n        state['route'] = 'order'\n    else:\n        state['route'] = 'general'\n    return state"
                         }
                     },
                     nodes_mode=MergeMode.MERGE,

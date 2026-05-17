@@ -14,6 +14,11 @@
 - crm_service: CRM сервис (порт 9003)
 - frontend_service: Frontend сервис (порт 9004)
 - sync_service: Sync сервис (порт 9005)
+- capability_gateway_service: capability gateway (порт 9016)
+- code_runner_python_service: Python runner (порт 9017)
+- code_runner_node_service: Node.js runner (порт 9018)
+- code_runner_go_service: Go runner (порт 9019)
+- code_runner_csharp_service: C# runner (порт 9020)
 """
 
 import pytest
@@ -37,6 +42,21 @@ _FRONTEND_SERVER_PID = "/tmp/platform_test_frontend_server.pid"
 _SYNC_SERVER_LOCK = "/tmp/platform_test_sync_server.lock"
 _SYNC_SERVER_PID = "/tmp/platform_test_sync_server.pid"
 
+_CAPABILITY_GATEWAY_SERVER_LOCK = "/tmp/platform_test_capability_gateway_server.lock"
+_CAPABILITY_GATEWAY_SERVER_PID = "/tmp/platform_test_capability_gateway_server.pid"
+
+_CODE_RUNNER_PYTHON_SERVER_LOCK = "/tmp/platform_test_code_runner_python_server.lock"
+_CODE_RUNNER_PYTHON_SERVER_PID = "/tmp/platform_test_code_runner_python_server.pid"
+
+_CODE_RUNNER_NODE_SERVER_LOCK = "/tmp/platform_test_code_runner_node_server.lock"
+_CODE_RUNNER_NODE_SERVER_PID = "/tmp/platform_test_code_runner_node_server.pid"
+
+_CODE_RUNNER_GO_SERVER_LOCK = "/tmp/platform_test_code_runner_go_server.lock"
+_CODE_RUNNER_GO_SERVER_PID = "/tmp/platform_test_code_runner_go_server.pid"
+
+_CODE_RUNNER_CSHARP_SERVER_LOCK = "/tmp/platform_test_code_runner_csharp_server.lock"
+_CODE_RUNNER_CSHARP_SERVER_PID = "/tmp/platform_test_code_runner_csharp_server.pid"
+
 
 # Общие env переменные для всех сервисов (те же БД, что в conftest и миграциях)
 _COMMON_TEST_ENV = {
@@ -52,6 +72,11 @@ _COMMON_TEST_ENV = {
     "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
     "SERVER__SYNC_SERVICE_URL": "http://localhost:9005",
     "SERVER__VOICE_SERVICE_URL": "http://localhost:9015",
+    "SERVER__CAPABILITY_GATEWAY_SERVICE_URL": "http://localhost:9016",
+    "SERVER__CODE_RUNNER_PYTHON_SERVICE_URL": "http://localhost:9017",
+    "SERVER__CODE_RUNNER_NODE_SERVICE_URL": "http://localhost:9018",
+    "SERVER__CODE_RUNNER_GO_SERVICE_URL": "http://localhost:9019",
+    "SERVER__CODE_RUNNER_CSHARP_SERVICE_URL": "http://localhost:9020",
     "VOICE__STT__PROVIDER": "mock",
     "VOICE__STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
     "CALLS__LIVEKIT_URL": "ws://localhost:7890",
@@ -107,6 +132,110 @@ def flows_service():
 
     with manager.start():
         yield
+
+
+@pytest.fixture(scope="session")
+def capability_gateway_service(setup_database_before_tests, flows_service):
+    """Trusted capability gateway как реальный HTTP сервер на порту 9016."""
+    _ = setup_database_before_tests, flows_service
+    manager = SessionServerManager(
+        name="CapabilityGateway",
+        lock_file=_CAPABILITY_GATEWAY_SERVER_LOCK,
+        pid_file=_CAPABILITY_GATEWAY_SERVER_PID,
+        app_path="apps.capability_gateway.main:app",
+        port=9016,
+        startup_wait=20.0,
+        env=_COMMON_TEST_ENV,
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def code_runner_python_service(capability_gateway_service):
+    """Python code runner как реальный HTTP сервер на порту 9017."""
+    manager = SessionServerManager(
+        name="CodeRunnerPython",
+        lock_file=_CODE_RUNNER_PYTHON_SERVER_LOCK,
+        pid_file=_CODE_RUNNER_PYTHON_SERVER_PID,
+        app_path="apps.code_runner_python.main:app",
+        port=9017,
+        startup_wait=12.0,
+        env=_COMMON_TEST_ENV,
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def code_runner_node_service(capability_gateway_service):
+    """Node.js code runner как реальный HTTP сервер на порту 9018."""
+    manager = SessionServerManager(
+        name="CodeRunnerNode",
+        lock_file=_CODE_RUNNER_NODE_SERVER_LOCK,
+        pid_file=_CODE_RUNNER_NODE_SERVER_PID,
+        app_path="apps.code_runner_node.main:app",
+        port=9018,
+        startup_wait=12.0,
+        env=_COMMON_TEST_ENV,
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def code_runner_go_service(capability_gateway_service):
+    """Go code runner как реальный HTTP сервер на порту 9019."""
+    manager = SessionServerManager(
+        name="CodeRunnerGo",
+        lock_file=_CODE_RUNNER_GO_SERVER_LOCK,
+        pid_file=_CODE_RUNNER_GO_SERVER_PID,
+        app_path="apps.code_runner_go.main:app",
+        port=9019,
+        startup_wait=12.0,
+        env=_COMMON_TEST_ENV,
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def code_runner_csharp_service(capability_gateway_service):
+    """C# code runner как реальный HTTP сервер на порту 9020."""
+    manager = SessionServerManager(
+        name="CodeRunnerCsharp",
+        lock_file=_CODE_RUNNER_CSHARP_SERVER_LOCK,
+        pid_file=_CODE_RUNNER_CSHARP_SERVER_PID,
+        app_path="apps.code_runner_csharp.main:app",
+        port=9020,
+        startup_wait=20.0,
+        env=_COMMON_TEST_ENV,
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def sandbox_services(
+    code_runner_python_service,
+    code_runner_node_service,
+    code_runner_go_service,
+    code_runner_csharp_service,
+):
+    """Поднимает весь sandbox контур для тестов без monkeypatch."""
+    return {
+        "flows": "http://localhost:9001",
+        "capability_gateway": "http://localhost:9016",
+        "code_runner_python": "http://localhost:9017",
+        "code_runner_node": "http://localhost:9018",
+        "code_runner_go": "http://localhost:9019",
+        "code_runner_csharp": "http://localhost:9020",
+    }
 
 
 @pytest.fixture(scope="session")
@@ -266,6 +395,10 @@ def all_services(flows_service, rag_service, crm_service, frontend_service, sync
         "crm": "http://localhost:9003",
         "frontend": "http://localhost:9004",
         "sync": "http://localhost:9005",
+        "capability_gateway": "http://localhost:9016",
+        "code_runner_python": "http://localhost:9017",
+        "code_runner_node": "http://localhost:9018",
+        "code_runner_go": "http://localhost:9019",
+        "code_runner_csharp": "http://localhost:9020",
         "s3_endpoint": "http://localhost:19002",
     }
-

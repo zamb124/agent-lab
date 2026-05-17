@@ -6,9 +6,15 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 WORKDIR /app
 
+ARG NODE_MAJOR=24
+ARG GO_VERSION=1.26.1
+ARG DOTNET_CHANNEL=10.0
+
 # Системные зависимости для всех сервисов
 RUN apt-get update && apt-get install -y \
     curl \
+    ca-certificates \
+    gnupg \
     build-essential \
     pkg-config \
     libcairo2-dev \
@@ -17,7 +23,40 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-rus \
     libgl1 \
     libglib2.0-0 \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+      | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" \
+      > /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) go_arch="amd64" ;; \
+      arm64) go_arch="arm64" ;; \
+      *) echo "Unsupported architecture for Go: $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${go_arch}.tar.gz" -o /tmp/go.tgz; \
+    rm -rf /usr/local/go; \
+    tar -C /usr/local -xzf /tmp/go.tgz; \
+    ln -sf /usr/local/go/bin/go /usr/local/bin/go; \
+    ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt; \
+    rm -f /tmp/go.tgz; \
+    node --version; \
+    go version
+
+ENV DOTNET_ROOT=/usr/share/dotnet
+ENV PATH="${DOTNET_ROOT}:${PATH}"
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
+    bash /tmp/dotnet-install.sh --channel "${DOTNET_CHANNEL}" --quality ga --install-dir "${DOTNET_ROOT}" && \
+    ln -sf "${DOTNET_ROOT}/dotnet" /usr/local/bin/dotnet && \
+    rm -f /tmp/dotnet-install.sh && \
+    dotnet --version
 
 # Copy only dependency files
 COPY pyproject.toml uv.lock README.md ./

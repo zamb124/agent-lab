@@ -882,7 +882,7 @@ async def test_hitl_node_single_reply_graph(
             "fmt": {
                 "type": "code",
                 "code": (
-                    "async def run(state):\n"
+                    "async def run(args, state):\n"
                     "    state['response'] = f\"[FMT] {state.get('response', '')}\"\n"
                     "    return state"
                 ),
@@ -971,7 +971,7 @@ async def test_hitl_node_takeover_graph(
             "fmt": {
                 "type": "code",
                 "code": (
-                    "async def run(state):\n"
+                    "async def run(args, state):\n"
                     "    state['response'] = f\"[FMT] {state.get('response', '')}\"\n"
                     "    return state"
                 ),
@@ -1271,7 +1271,7 @@ async def test_operator_complete_with_files_takeover_dialog_log(
             "fmt": {
                 "type": "code",
                 "code": (
-                    "async def run(state):\n"
+                    "async def run(args, state):\n"
                     "    state['response'] = f\"[FMT] {state.get('response', '')}\"\n"
                     "    return state"
                 ),

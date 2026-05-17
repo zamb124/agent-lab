@@ -1,7 +1,7 @@
 """
 Интеграционные тесты bundle «Универсальный агент» (universal_agent).
 
-Покрытие: реальный запуск flow из БД, реальные тулы (calculator, ask_user, sandbox_codegen,
+Покрытие: реальный запуск flow из БД, реальные тулы (calculator, ask_user,
 rag_create_namespace, rag_add_text, rag_search). Очередь ответов — только MockLLM
 (`mock_llm_with_queue` / `setup_mock_responses`).
 
@@ -56,7 +56,6 @@ async def test_universal_agent_with_rag_skill_merges_rag_tools(app):
     for name in (
         "ask_user",
         "calculator",
-        "sandbox_codegen",
         "rag_create_namespace",
         "rag_add_text",
         "rag_search",
@@ -98,43 +97,6 @@ async def test_universal_agent_calculator_tool(app, mock_llm_with_queue, unique_
     calc_out = result.tool_results["calculator"]
     assert "42" in str(calc_out)
     assert "42" in (result.response or "")
-
-
-@pytest.mark.asyncio
-@pytest.mark.xdist_group(name="universal_agent_llm")
-async def test_universal_agent_sandbox_codegen_tool(app, mock_llm_with_queue, unique_id):
-    gen_code = "async def run(state):\n    return {'k': 99}\n"
-    mock_llm_with_queue(
-        [
-            {
-                "type": "tool_call",
-                "tool": "sandbox_codegen",
-                "args": {
-                    "task": "Верни dict с ключом k и значением 99",
-                    "max_iterations": 2,
-                },
-            },
-            {"type": "structured_output", "data": {"code_lines": gen_code.splitlines()}},
-            "Готово: k=99 по результату мета-тула.",
-        ]
-    )
-    container = get_container()
-    flow = await container.flow_factory.get_flow(FLOW_ID)
-    context_id = f"ua-eval-{unique_id}"
-    state = ExecutionState(
-        task_id=f"task-{unique_id}",
-        context_id=context_id,
-        user_id=f"user-{unique_id}",
-        session_id=f"{FLOW_ID}:{context_id}",
-        content="Запусти вычисление через sandbox_codegen",
-    )
-    result = await flow.run(state)
-    assert result.interrupt is None
-    assert "sandbox_codegen" in result.tool_results
-    raw = result.tool_results["sandbox_codegen"]
-    payload = json.loads(raw) if isinstance(raw, str) else raw
-    assert payload["success"] is True
-    assert payload["result"] == {"k": 99}
 
 
 @pytest.mark.asyncio

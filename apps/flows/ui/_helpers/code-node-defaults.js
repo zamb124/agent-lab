@@ -1,24 +1,20 @@
 /**
  * Дефолтный конфиг новой code-ноды: тот же контракт, что у inline tool —
- * PythonCodeRunner.execute_tool (run / execute / первая top-level функция).
+ * isolated code-runner вызывает экспорт/функцию run(args, state).
  */
 
-/** @returns {string} */
-export function getBlankCodeNodeCode() {
-    return `# Графовая нода type=code и inline tool исполняются одинаково (execute_tool).
-# Предпочитай async def run(...); execute(...) допустим для совместимости.
-# Если run/execute нет, будет вызвана первая top-level функция.
-# args собираются из args_schema и input mapping панели ноды.
+import { normalizeFlowCodeLanguage, starterCodeForLanguage } from './flows-code-languages.js';
 
-async def run(args, state):
-    return {}
-`;
+/** @returns {string} */
+export function getBlankCodeNodeCode(language = 'python') {
+    return starterCodeForLanguage(language);
 }
 
 /** @returns {{ code: string, language: string }} */
-export function getBlankCodeNodeConfig() {
+export function getBlankCodeNodeConfig(language = 'python') {
+    const normalized = normalizeFlowCodeLanguage(language);
     return {
-        code: getBlankCodeNodeCode(),
-        language: 'python',
+        code: getBlankCodeNodeCode(normalized),
+        language: normalized,
     };
 }

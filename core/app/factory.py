@@ -129,6 +129,9 @@ def create_service_app(
     openapi_url: str = "/openapi.json",
     include_auth_middleware: bool = True,
     include_crud_routers: bool = True,
+    include_tracing_lifecycle: bool | None = None,
+    include_platform_lifecycle: bool = True,
+    include_platform_routers: bool = True,
     mount_repo_documentation: bool = True,
     documentation_gateway_prefix: str | None = None,
     include_platform_pwa: bool | None = None,
@@ -154,6 +157,9 @@ def create_service_app(
         docs_url, redoc_url, openapi_url: Пути для документации
         include_auth_middleware: Включать ли AuthMiddleware
         include_crud_routers: Включать ли автоматические CRUD роутеры
+        include_tracing_lifecycle: Включать ли tracing startup hooks. None — вместе с include_platform_lifecycle.
+        include_platform_lifecycle: Включать ли Redis/billing/push startup hooks
+        include_platform_routers: Включать ли общие платформенные роутеры (files/auth/calendar/ws/i18n)
         mount_repo_documentation: Смонтировать статическую документацию (Zensical) из корня репозитория ``documentation-dist/`` на ``/documentation/`` (False для flows со своим ``apps/flows/site``).
         documentation_gateway_prefix: Если задан (например ``documents`` для office), первый сегмент публичных путей HTTP API и платформенных роутеров (team, ws, auth, …); плюс дублирование документации на ``/{prefix}/documentation/`` за ingress.
         include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
@@ -163,6 +169,10 @@ def create_service_app(
     Returns:
         Настроенное FastAPI приложение
     """
+
+    tracing_lifecycle_enabled = (
+        include_platform_lifecycle if include_tracing_lifecycle is None else include_tracing_lifecycle
+    )
 
     # Загрузка конфигурации (silent: без записей до setup_logging)
     settings, project_root = load_service_settings(service_name, settings_class)
@@ -186,8 +196,9 @@ def create_service_app(
     async def _run_startup(app: FastAPI) -> None:
         logger.info("service.starting", service=service_name)
 
-        # Инициализация трейсинга
-        if settings.tracing.enabled:
+        # Инициализация трейсинга отделена от полного platform lifecycle: lightweight
+        # sandbox services должны писать spans, но не поднимать Redis/billing/push.
+        if tracing_lifecycle_enabled and settings.tracing.enabled:
             setup_tracing(settings.tracing)
             if settings.tracing.postgres_enabled:
                 if not settings.database.tracing_url:
@@ -198,71 +209,73 @@ def create_service_app(
                 set_span_repository(container.span_repository)
             logger.info("Трейсинг инициализирован")
 
-        # Redis pub/sub listener для WebSocket уведомлений
-        await notification_manager.start_redis_listener(settings.database.redis_url)
-        logger.info("Notification manager запущен")
+        if include_platform_lifecycle:
 
-        # Инициализация глобального BillingService
-        set_billing_service(container.billing_service)
-        logger.info("BillingService инициализирован")
+            # Redis pub/sub listener для WebSocket уведомлений
+            await notification_manager.start_redis_listener(settings.database.redis_url)
+            logger.info("Notification manager запущен")
 
-        # Инициализация курса USD/RUB от ЦБ РФ: один запрос при старте,
-        # затем фоновое обновление каждые 5 минут.
-        # Fallback при недоступности ЦБ — billing.usd_to_rub_rate из конфига.
-        _cbr_fallback = settings.billing.usd_to_rub_rate
-        if is_testing():
-            logger.info(
-                "billing.cbr_rate.skipped_testing",
-                fallback=_cbr_fallback,
-            )
-        else:
-            await _cbr_refresh_once(fallback=_cbr_fallback)
-            run_with_log_context(
-                _cbr_loop_coro(fallback=_cbr_fallback),
-                name="billing.cbr_rate_refresh",
-                background_kind="startup",
-            )
-            logger.info("billing.cbr_rate.loop_scheduled")
+            # Инициализация глобального BillingService
+            set_billing_service(container.billing_service)
+            logger.info("BillingService инициализирован")
 
-        if hasattr(container, "file_repository"):
-            initialize_default_processors(container.file_repository)
-            logger.info(
-                "initialize_default_processors: FileReader может грузить файлы по file_id / S3"
-            )
-
-        # Инициализация WebPushService
-        if settings.push.enabled:
-            if not settings.push.vapid_private_key or not settings.push.vapid_public_key:
-                raise ValueError(
-                    "push.enabled=true требует push.vapid_private_key и push.vapid_public_key"
+            # Инициализация курса USD/RUB от ЦБ РФ: один запрос при старте,
+            # затем фоновое обновление каждые 5 минут.
+            # Fallback при недоступности ЦБ — billing.usd_to_rub_rate из конфига.
+            _cbr_fallback = settings.billing.usd_to_rub_rate
+            if is_testing():
+                logger.info(
+                    "billing.cbr_rate.skipped_testing",
+                    fallback=_cbr_fallback,
                 )
-            init_web_push_service(
-                vapid_private_key=settings.push.vapid_private_key,
-                vapid_public_key=settings.push.vapid_public_key,
-                vapid_email=settings.push.vapid_email,
-            )
-            logger.info("WebPushService инициализирован")
+            else:
+                await _cbr_refresh_once(fallback=_cbr_fallback)
+                run_with_log_context(
+                    _cbr_loop_coro(fallback=_cbr_fallback),
+                    name="billing.cbr_rate_refresh",
+                    background_kind="startup",
+                )
+                logger.info("billing.cbr_rate.loop_scheduled")
 
-        apns = resolve_apns_credentials(settings)
-        if apns:
-            init_apns_push_service(
-                team_id=apns.team_id,
-                key_id=apns.key_id,
-                private_key_pem=apns.private_key_pem,
-                bundle_id=apns.bundle_id,
-                use_sandbox=apns.use_sandbox,
-            )
-            logger.info("ApnsPushService инициализирован")
+            if hasattr(container, "file_repository"):
+                initialize_default_processors(container.file_repository)
+                logger.info(
+                    "initialize_default_processors: FileReader может грузить файлы по file_id / S3"
+                )
 
-        fcm = resolve_fcm_credentials(settings)
-        if fcm:
-            init_fcm_push_service(
-                project_id=fcm.project_id,
-                client_email=fcm.client_email,
-                private_key_pem=fcm.private_key_pem,
-                token_uri=fcm.token_uri,
-            )
-            logger.info("FcmPushService инициализирован project_id=%s", fcm.project_id)
+            # Инициализация WebPushService
+            if settings.push.enabled:
+                if not settings.push.vapid_private_key or not settings.push.vapid_public_key:
+                    raise ValueError(
+                        "push.enabled=true требует push.vapid_private_key и push.vapid_public_key"
+                    )
+                init_web_push_service(
+                    vapid_private_key=settings.push.vapid_private_key,
+                    vapid_public_key=settings.push.vapid_public_key,
+                    vapid_email=settings.push.vapid_email,
+                )
+                logger.info("WebPushService инициализирован")
+
+            apns = resolve_apns_credentials(settings)
+            if apns:
+                init_apns_push_service(
+                    team_id=apns.team_id,
+                    key_id=apns.key_id,
+                    private_key_pem=apns.private_key_pem,
+                    bundle_id=apns.bundle_id,
+                    use_sandbox=apns.use_sandbox,
+                )
+                logger.info("ApnsPushService инициализирован")
+
+            fcm = resolve_fcm_credentials(settings)
+            if fcm:
+                init_fcm_push_service(
+                    project_id=fcm.project_id,
+                    client_email=fcm.client_email,
+                    private_key_pem=fcm.private_key_pem,
+                    token_uri=fcm.token_uri,
+                )
+                logger.info("FcmPushService инициализирован project_id=%s", fcm.project_id)
 
         # Кастомный startup
         if on_startup:
@@ -278,7 +291,7 @@ def create_service_app(
 
         # В одном процессе pytest поднимается несколько приложений (flows, office, rag, sync);
         # stop_redis_listener обнуляет глобальный клиент и ломает notify_user в чужих тестах.
-        if not is_testing():
+        if include_platform_lifecycle and not is_testing():
             await notification_manager.stop_redis_listener()
 
     # Создание приложения
@@ -405,53 +418,53 @@ def create_service_app(
             tags = router.tags or [service_name]
             app.include_router(router, prefix=api_prefix, tags=tags)
 
-    # Файловый роутер (upload/download/metadata) — единообразный контракт для всех сервисов.
-    # Даже когда S3 выключен, upload должен отвечать 503, а не 404.
-    files_api_prefix = f"/{url_route_segment}/api/{api_version or 'v1'}"
-    _file_router = build_file_api_router(
-        get_file_repo=lambda: container.file_repository,
-        service_api_prefix=files_api_prefix,
-    )
-    app.include_router(_file_router, prefix=f"{files_api_prefix}/files")
-    logger.info("service.router_attached", router="files", prefix=f"{files_api_prefix}/files")
-
     public_segment = url_route_segment
 
-    auth_prefix = f"/{public_segment}/api/auth"
-    logger.info("service.router_attached", router="core_auth", prefix=auth_prefix)
-    app.include_router(core_auth_router, prefix=auth_prefix, tags=["auth"])
-    if service_name == "frontend":
-        logger.info("service.router_attached", router="core_auth_oauth", prefix="/auth")
-        app.include_router(core_auth_router, prefix="/auth", tags=["auth"])
+    if include_platform_routers:
+        # Файловый роутер (upload/download/metadata) — единообразный контракт для доменных сервисов.
+        files_api_prefix = f"/{url_route_segment}/api/{api_version or 'v1'}"
+        _file_router = build_file_api_router(
+            get_file_repo=lambda: container.file_repository,
+            service_api_prefix=files_api_prefix,
+        )
+        app.include_router(_file_router, prefix=f"{files_api_prefix}/files")
+        logger.info("service.router_attached", router="files", prefix=f"{files_api_prefix}/files")
 
-    calendar_prefix = f"/{public_segment}/api/calendar"
-    logger.info("service.router_attached", router="core_calendar", prefix=calendar_prefix)
-    app.include_router(core_calendar_router, prefix=calendar_prefix, tags=["calendar"])
+        auth_prefix = f"/{public_segment}/api/auth"
+        logger.info("service.router_attached", router="core_auth", prefix=auth_prefix)
+        app.include_router(core_auth_router, prefix=auth_prefix, tags=["auth"])
+        if service_name == "frontend":
+            logger.info("service.router_attached", router="core_auth_oauth", prefix="/auth")
+            app.include_router(core_auth_router, prefix="/auth", tags=["auth"])
 
-    integrations_prefix = f"/{public_segment}"
-    logger.info("service.router_attached", router="core_integrations", prefix=integrations_prefix)
-    app.include_router(core_integrations_router, prefix=integrations_prefix, tags=["integrations"])
+        calendar_prefix = f"/{public_segment}/api/calendar"
+        logger.info("service.router_attached", router="core_calendar", prefix=calendar_prefix)
+        app.include_router(core_calendar_router, prefix=calendar_prefix, tags=["calendar"])
 
-    team_prefix = f"/{public_segment}/api/team"
-    logger.info("service.router_attached", router="core_team", prefix=team_prefix)
-    app.include_router(core_team_router, prefix=team_prefix, tags=["team"])
+        integrations_prefix = f"/{public_segment}"
+        logger.info("service.router_attached", router="core_integrations", prefix=integrations_prefix)
+        app.include_router(core_integrations_router, prefix=integrations_prefix, tags=["integrations"])
 
-    if service_name == "frontend":
-        companies_prefix = "/frontend/api/companies"
-    else:
-        companies_prefix = f"/{public_segment}/api/companies"
-    logger.info("service.router_attached", router="core_companies", prefix=companies_prefix)
-    app.include_router(core_companies_router, prefix=companies_prefix, tags=["companies"])
+        team_prefix = f"/{public_segment}/api/team"
+        logger.info("service.router_attached", router="core_team", prefix=team_prefix)
+        app.include_router(core_team_router, prefix=team_prefix, tags=["team"])
 
-    push_prefix = f"/{public_segment}"
-    logger.info("service.router_attached", router="push", prefix=f"{push_prefix}/api/push")
-    app.include_router(push_router, prefix=push_prefix, tags=["push"])
+        if service_name == "frontend":
+            companies_prefix = "/frontend/api/companies"
+        else:
+            companies_prefix = f"/{public_segment}/api/companies"
+        logger.info("service.router_attached", router="core_companies", prefix=companies_prefix)
+        app.include_router(core_companies_router, prefix=companies_prefix, tags=["companies"])
 
-    # WebSocket роутер для уведомлений (`/<svc>/api/ws/notifications`).
-    ws_prefix = f"/{public_segment}/api" if service_name != "core" else ""
-    ws_path = f"{ws_prefix}/ws/notifications" if service_name != "core" else "/ws/notifications"
-    logger.info("service.router_attached", router="ws_notifications", path=ws_path)
-    app.include_router(ws_router, prefix=ws_prefix, tags=["websocket"])
+        push_prefix = f"/{public_segment}"
+        logger.info("service.router_attached", router="push", prefix=f"{push_prefix}/api/push")
+        app.include_router(push_router, prefix=push_prefix, tags=["push"])
+
+        # WebSocket роутер для уведомлений (`/<svc>/api/ws/notifications`).
+        ws_prefix = f"/{public_segment}/api" if service_name != "core" else ""
+        ws_path = f"{ws_prefix}/ws/notifications" if service_name != "core" else "/ws/notifications"
+        logger.info("service.router_attached", router="ws_notifications", path=ws_path)
+        app.include_router(ws_router, prefix=ws_prefix, tags=["websocket"])
 
     # Pages роутеры (добавляем префикс сервиса к их собственному префиксу)
     if pages_routers:
@@ -480,15 +493,16 @@ def create_service_app(
     if include_platform_pwa is None:
         include_platform_pwa = not is_testing()
 
-    if include_platform_pwa:
+    if include_platform_routers and include_platform_pwa:
         register_platform_pwa_routes(app, project_root)
         logger.info("PWA: /manifest.json, /sw.js, /offline.html")
 
-    register_platform_i18n_routes(app, project_root)
-    logger.info("I18n: GET /api/i18n/{locale}")
+    if include_platform_routers:
+        register_platform_i18n_routes(app, project_root)
+        logger.info("I18n: GET /api/i18n/{locale}")
 
-    register_platform_file_types_route(app)
-    logger.info("FileTypes: GET /api/platform/file-types")
+        register_platform_file_types_route(app)
+        logger.info("FileTypes: GET /api/platform/file-types")
 
     if services_spa_index is not None and services_spa_index.is_file():
         _services_spa_html = services_spa_index.read_text(encoding="utf-8")

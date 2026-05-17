@@ -66,7 +66,7 @@ async def flow_with_permission(container, unique_id):
         nodes={
             "main": {
                 "type": "code",
-                "code": "async def run(state): state['response'] = 'Agent executed'; return state",
+                "code": "async def run(args, state): state['response'] = 'Agent executed'; return state",
             }
         },
         edges=[Edge(from_node="main", to_node=None)],
@@ -95,11 +95,11 @@ async def flow_with_skill_permission(container, unique_id):
         nodes={
             "main": {
                 "type": "code",
-                "code": "async def run(state): state['response'] = 'Default skill'; return state",
+                "code": "async def run(args, state): state['response'] = 'Default skill'; return state",
             },
             "vip_main": {
                 "type": "code",
-                "code": "async def run(state): state['response'] = 'VIP skill'; return state",
+                "code": "async def run(args, state): state['response'] = 'VIP skill'; return state",
             }
         },
         edges=[
@@ -139,7 +139,7 @@ async def flow_with_tool_permission(container, unique_id, mock_llm_with_queue):
         description="Tool requiring special permission",
         code_mode=CodeMode.INLINE_CODE,
         code="""
-async def execute(args, state):
+async def run(args, state):
     return "Special tool executed"
 """,
         permission="special",

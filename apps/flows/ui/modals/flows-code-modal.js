@@ -8,6 +8,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/editors/flows-code-editor.js';
+import { normalizeFlowCodeLanguage } from '../_helpers/flows-code-languages.js';
 
 export class FlowsCodeModal extends PlatformModal {
     static modalKind = 'flows.code';
@@ -44,7 +45,7 @@ export class FlowsCodeModal extends PlatformModal {
     renderBody() {
         return html`
             <flows-code-editor
-                .language=${this.language}
+                .language=${normalizeFlowCodeLanguage(this.language)}
                 .value=${this.code}
                 ?readonly=${this.readonly}
             ></flows-code-editor>

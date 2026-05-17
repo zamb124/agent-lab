@@ -18,7 +18,7 @@ def _minimal_local_flow() -> dict:
             "main": {
                 "node_id": "main",
                 "type": "code",
-                "code": "async def run(state):\n    return state",
+                "code": "async def run(args, state):\n    return state",
             }
         },
         "edges": [{"from": "main", "to": None}],
@@ -35,7 +35,7 @@ def test_normalize_migrates_skills_to_branches() -> None:
                 "main": {
                     "node_id": "main",
                     "type": "code",
-                    "code": "async def run(state):\n    return state",
+                    "code": "async def run(args, state):\n    return state",
                 }
             },
             "edges": [],

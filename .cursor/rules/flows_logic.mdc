@@ -213,10 +213,7 @@ output_mapping - куда пишем результат:
     from apps.flows.src.runtime.exceptions import FlowInterrupt
     raise FlowInterrupt(question="Как вас зовут?")
 
-Или использовать готовую функцию:
-
-    from apps.flows.src.eval.state_utils import ask_user
-    ask_user("Как вас зовут?")
+Или использовать builtin tool `ask_user` из `apps/flows/tools/agent_session_tools.py`.
 
 ### Ключевые компоненты
 

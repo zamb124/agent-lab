@@ -469,12 +469,12 @@ async def execute(args: dict, state: dict = None):
                         {
                             "tool_id": "step1",
                             "description": "Первый шаг",
-                            "code": "async def execute(args, state):\n    return 'STEP1_DONE'"
+                            "code": "async def run(args, state):\n    return 'STEP1_DONE'"
                         },
                         {
                             "tool_id": "step2",
                             "description": "Второй шаг",
-                            "code": "async def execute(args, state):\n    return 'STEP2_DONE'"
+                            "code": "async def run(args, state):\n    return 'STEP2_DONE'"
                         }
                     ]
                 }

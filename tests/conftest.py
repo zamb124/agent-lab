@@ -58,6 +58,11 @@ os.environ["SERVER__CRM_SERVICE_URL"] = "http://localhost:9003"
 os.environ["SERVER__FRONTEND_SERVICE_URL"] = "http://localhost:9004"
 os.environ["SERVER__SYNC_SERVICE_URL"] = "http://localhost:9005"
 os.environ.setdefault("SERVER__VOICE_SERVICE_URL", "http://localhost:9015")
+os.environ.setdefault("SERVER__CAPABILITY_GATEWAY_SERVICE_URL", "http://localhost:9016")
+os.environ.setdefault("SERVER__CODE_RUNNER_PYTHON_SERVICE_URL", "http://localhost:9017")
+os.environ.setdefault("SERVER__CODE_RUNNER_NODE_SERVICE_URL", "http://localhost:9018")
+os.environ.setdefault("SERVER__CODE_RUNNER_GO_SERVICE_URL", "http://localhost:9019")
+os.environ.setdefault("SERVER__CODE_RUNNER_CSHARP_SERVICE_URL", "http://localhost:9020")
 os.environ.setdefault("VOICE__STT__PROVIDER", "mock")
 os.environ.setdefault(
     "VOICE__STT__MOCK_TRANSCRIPT_TEXT",
@@ -476,7 +481,7 @@ async def setup_database_before_tests():
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    test_ports = [9001, 9002, 9003, 9004, 9005]
+    test_ports = [9001, 9002, 9003, 9004, 9005, 9016, 9017, 9018, 9019, 9020]
     print(f"\n Освобождаем тестовые порты: {test_ports}...")
     for port in test_ports:
         try:
@@ -622,6 +627,16 @@ def pytest_configure(config):
         "/tmp/platform_test_crm_server.pid.ref_count",
         "/tmp/platform_test_frontend_server.pid.ref_count",
         "/tmp/platform_test_sync_server.pid.ref_count",
+        "/tmp/platform_test_capability_gateway_server.pid",
+        "/tmp/platform_test_capability_gateway_server.pid.ref_count",
+        "/tmp/platform_test_code_runner_python_server.pid",
+        "/tmp/platform_test_code_runner_python_server.pid.ref_count",
+        "/tmp/platform_test_code_runner_node_server.pid",
+        "/tmp/platform_test_code_runner_node_server.pid.ref_count",
+        "/tmp/platform_test_code_runner_go_server.pid",
+        "/tmp/platform_test_code_runner_go_server.pid.ref_count",
+        "/tmp/platform_test_code_runner_csharp_server.pid",
+        "/tmp/platform_test_code_runner_csharp_server.pid.ref_count",
     ]:
         path = pathlib.Path(marker)
         if path.exists():
@@ -1696,7 +1711,7 @@ async def test_agent_for_tool(container, unique_id):
         nodes={
             "main": {
                 "type": "code",
-                "code": "async def run(state):\n    return state",
+                "code": "async def run(args, state):\n    return state",
             }
         },
     )

@@ -53,7 +53,7 @@ class TestReactToolsModifyState:
             "args_schema": {"value": {"type": "integer"}},
             "input_mapping": {"value": "@state:value"},
             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.step1_done = True
     state.step1_value = args['value'] * 2
     return {'step1': 'completed', 'result': state.step1_value}
@@ -68,7 +68,7 @@ async def execute(args, state):
             "args_schema": {"multiplier": {"type": "integer"}},
             "input_mapping": {"multiplier": "@state:multiplier"},
             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.step2_done = True
     state.step2_value = state.step1_value * args['multiplier']
     return {'step2': 'completed', 'result': state.step2_value}
@@ -83,7 +83,7 @@ async def execute(args, state):
             "args_schema": {"suffix": {"type": "string"}},
             "input_mapping": {"suffix": "@state:suffix"},
             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.step3_done = True
     state.final_result = f"Result: {state.step2_value}{args['suffix']}"
     return {'step3': 'completed', 'final': state.final_result}
@@ -145,7 +145,7 @@ async def execute(args, state):
             "args_schema": {"items": {"type": "array"}},
             "input_mapping": {"items": "@state:items"},
             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.my_list = args['items']
     state.list_created = True
     return {'status': 'list created', 'count': len(state.my_list)}
@@ -160,7 +160,7 @@ async def execute(args, state):
             "args_schema": {"item": {"type": "integer"}},
             "input_mapping": {"item": "@state:item"},
             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.my_list.append(args['item'])
     state.item_added = True
     return {'status': 'item added', 'new_count': len(state.my_list)}
@@ -174,7 +174,7 @@ async def execute(args, state):
             "description": "Суммирует список",
             "args_schema": {},
             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.total = sum(state.my_list)
     state.sum_done = True
     return {'total': state.total}
@@ -239,7 +239,7 @@ class TestCodeNodeWithNamedParams:
                 "dict_param": "@state:dict_param",
             },
             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.received_str = args['str_param']
     state.received_int = args['int_param']
     state.received_float = args['float_param']
@@ -304,7 +304,7 @@ class TestAgentSkillsAsTools:
             nodes={
                 "default": {
                     "type": "code",
-                    "code": "async def execute(args, state): return state",
+                    "code": "async def run(args, state): return state",
                 }
             },
             edges=[Edge(from_node="default", to_node=None)],
@@ -317,7 +317,7 @@ class TestAgentSkillsAsTools:
                             "type": "code",
                             "input_mapping": {"x": "@state:x", "y": "@state:y"},
                             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.math_executed = True
     state.math_result = args['x'] + args['y']
     state.response = f"Math: {state.math_result}"
@@ -335,7 +335,7 @@ async def execute(args, state):
                             "type": "code",
                             "input_mapping": {"text": "@state:text"},
                             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.text_executed = True
     state.text_result = args['text'].upper()
     state.response = f"Text: {state.text_result}"
@@ -412,7 +412,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
             "args_schema": {"value": {"type": "integer"}},
             "input_mapping": {"value": "@state:value"},
             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.code_executed = True
     state.code_result = args['value'] * 100
     return {'result': state.code_result}
@@ -447,7 +447,7 @@ async def execute(args, state):
                 "type": "code",
                 "description": "Set flag",
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     state.helper_flag = True
     state.helper_value = 42
     return {'status': 'flag set'}
@@ -485,7 +485,7 @@ async def execute(args, state):
             flow_id="skill_test_agent",
             name="Skill Agent",
             entry="main",
-            nodes={"main": {"type": "code", "code": "async def execute(args, state): return state"}},
+            nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             branches={
                 "my_skill": {
@@ -496,7 +496,7 @@ async def execute(args, state):
                             "type": "code",
                             "input_mapping": {"param": "@state:param"},
                             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.skill_executed = True
     state.skill_result = f"skill:{args['param']}"
     state.response = state.skill_result
@@ -700,7 +700,7 @@ class TestAgentCallsOwnSkillsAsTools:
                             "type": "code",
                             "input_mapping": {"number": "@state:number"},
                             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.skill_a_executed = True
     state.skill_a_result = args['number'] ** 2
     state.response = f"Skill A: {state.skill_a_result}"
@@ -718,7 +718,7 @@ async def execute(args, state):
                             "type": "code",
                             "input_mapping": {"text": "@state:text"},
                             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.skill_b_executed = True
     state.skill_b_result = args['text'].upper() + "!!!"
     state.response = f"Skill B: {state.skill_b_result}"
@@ -767,7 +767,7 @@ async def execute(args, state):
             flow_id="helper_agent",
             name="Helper Agent",
             entry="main",
-            nodes={"main": {"type": "code", "code": "async def execute(args, state): return state"}},
+            nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             branches={
                 "helper_skill": {
@@ -778,7 +778,7 @@ async def execute(args, state):
                             "type": "code",
                             "input_mapping": {"request": "@state:request"},
                             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.helper_executed = True
     state.helper_response = f"Helper helped with: {args['request']}"
     state.response = state.helper_response
@@ -833,7 +833,7 @@ async def execute(args, state):
                             "type": "code",
                             "input_mapping": {"value": "@state:value"},
                             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.own_skill_executed = True
     state.own_result = args['value'] * 10
     state.response = f"Own: {state.own_result}"
@@ -897,7 +897,7 @@ class TestParallelToolExecution:
             "input_mapping": {"value": "@state:value"},
             "code": """
 import asyncio
-async def execute(args, state):
+async def run(args, state):
     await asyncio.sleep(0.1)  # Медленный
     state.slow_done = True
     state.slow_result = args['value'] * 10
@@ -913,7 +913,7 @@ async def execute(args, state):
             "args_schema": {"value": {"type": "integer"}},
             "input_mapping": {"value": "@state:value"},
             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.fast_done = True
     state.fast_result = args['value'] * 100
     return {'tool': 'fast', 'result': state.fast_result}
@@ -929,7 +929,7 @@ async def execute(args, state):
             "input_mapping": {"value": "@state:value"},
             "code": """
 import asyncio
-async def execute(args, state):
+async def run(args, state):
     await asyncio.sleep(0.05)  # Средний
     state.medium_done = True
     state.medium_result = args['value'] * 50
@@ -1000,7 +1000,7 @@ async def execute(args, state):
             "args_schema": {},
             "code": """
 import asyncio
-async def execute(args, state):
+async def run(args, state):
     await asyncio.sleep(0.1)
     state.tool_0_done = True
     return {'idx': 0, 'done': True}
@@ -1013,7 +1013,7 @@ async def execute(args, state):
             "args_schema": {},
             "code": """
 import asyncio
-async def execute(args, state):
+async def run(args, state):
     await asyncio.sleep(0.1)
     state.tool_1_done = True
     return {'idx': 1, 'done': True}
@@ -1026,7 +1026,7 @@ async def execute(args, state):
             "args_schema": {},
             "code": """
 import asyncio
-async def execute(args, state):
+async def run(args, state):
     await asyncio.sleep(0.1)
     state.tool_2_done = True
     return {'idx': 2, 'done': True}
@@ -1081,7 +1081,7 @@ async def execute(args, state):
             "description": "Writes fast",
             "args_schema": {},
             "code": """
-async def execute(args, state):
+async def run(args, state):
     state.shared_value = 100
     state.first_wrote = True
     return {'wrote': 100}
@@ -1096,7 +1096,7 @@ async def execute(args, state):
             "args_schema": {},
             "code": """
 import asyncio
-async def execute(args, state):
+async def run(args, state):
     await asyncio.sleep(0.05)  # Медленнее
     state.shared_value = 999
     state.second_wrote = True
@@ -1144,7 +1144,7 @@ class TestNodeAsToolWrapperBasics:
             }
 
             if node_type == NodeType.CODE:
-                config["code"] = "async def execute(args, state): return {}"
+                config["code"] = "async def run(args, state): return {}"
             elif node_type == NodeType.LLM_NODE:
                 config["prompt"] = "Test"
                 config["tools"] = []

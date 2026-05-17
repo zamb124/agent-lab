@@ -9,7 +9,7 @@ DOCKER_COMPOSE_PULL ?= never
 # E2E UI (pytest + Playwright) и старый каталог browser — не гонять в unit/cov без инфраструктуры
 _PYTEST_IGNORE_UI := --ignore=tests/frontend/browser --ignore=tests/ui
 
-test-up:
+test-up: runtime-bootstrap
 	docker-compose -f docker-compose-test.yaml up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
 	@echo "Ожидание готовности сервисов (postgres, redis, minio, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli, loki, tempo, alloy, grafana)..."
 	@sleep 7
@@ -46,7 +46,7 @@ test-ui-doc: test-ui
 	@$(MAKE) doc
 
 # Компонентные Lit-тесты (Web Test Runner, без реального бэкенда)
-test-ui-components:
+test-ui-components: runtime-bootstrap
 	@echo "Запуск компонентных UI-тестов (npm run test:ui-components)..."
 	npm ci
 	npm run test:ui-components
@@ -64,12 +64,12 @@ test-frontend-core-canon:
 	@echo "Layer 1/3: канон core/frontend (regex)..."
 	@uv run python scripts/check_core_frontend_canon.py
 
-test-frontend-core-unit:
+test-frontend-core-unit: runtime-bootstrap
 	@echo "Layer 2/3: pure-node unit (Vitest)..."
 	@npm ci --silent
 	@npm run test:core-unit
 
-test-frontend-core-browser:
+test-frontend-core-browser: runtime-bootstrap
 	@echo "Layer 3/3: браузерные тесты (Web Test Runner + Playwright)..."
 	@npm ci --silent
 	@npm run test:core-browser

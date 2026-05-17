@@ -388,7 +388,7 @@
     "subtitle_separator": "→",
     "save_header_title": "Сохранить условие перехода",
     "mode_simple": "Простой режим",
-    "mode_python": "Python код",
+    "mode_python": "Код",
     "preview_label": "Результат:",
     "preview_empty": "Условие ещё не задано",
     "skip_no_condition": "Пропустить (без условия)",
@@ -398,14 +398,14 @@
     "label_value": "Значение",
     "value_placeholder": "Строка, число или литерал",
     "variables_available": "Доступные переменные:",
-    "python_hint_1": "Функция check(state) должна возвращать True или False.",
-    "python_hint_2": "state — dict со всеми переменными текущего состояния.",
+    "python_hint_1": "Функция check(args, state) должна возвращать True или False.",
+    "python_hint_2": "Переключатель языка выше выбирает isolated runner для условия.",
     "err_variable": "Выберите переменную",
     "err_value": "Введите значение",
-    "err_code": "Код должен содержать функцию check(state)",
+    "err_code": "Код условия не должен быть пустым",
     "apply": "Применить",
-    "preview_python": "Python: check(state) -> bool",
-    "field_condition": "Условие (Python expression)",
+    "preview_python": "Код: check(args, state) -> bool",
+    "field_condition": "Код условия",
     "action_cancel": "Отмена",
     "action_save": "Сохранить"
   },
@@ -562,7 +562,7 @@
     "unresolved": "Не удалось открыть определение ресурса «{{id}}»: нет записи на ветке или в каталоге."
   },
   "code_node_editor": {
-    "field_code": "Код (Python)",
+    "field_code": "Код",
     "field_parameters_schema": "Parameters schema (JSON)",
     "section_code": "Код",
     "tab_code": "Код",
@@ -573,11 +573,12 @@
     "schema_form": "Форма",
     "schema_json": "JSON",
     "docs": "Документация",
-    "execute_tool_hint": "Как у inline tool: точка входа execute(args, state) или класс BaseTool; async не обязателен. Подробнее — «Документация».",
+    "execute_tool_hint": "Code-ноды и inline tools запускают run(args, state) в выбранном isolated runner. Подробнее — «Документация».",
     "execute_tool_hint_aria": "Справка по точке входа code-ноды"
   },
   "code_workbench": {
-    "tab_params": "Параметры"
+    "tab_params": "Параметры",
+    "language_aria": "Язык кода"
   },
   "code_node_drop_modal": {
     "title": "Code-нода",
@@ -932,7 +933,7 @@
     "capabilities_title": "Поверхность сервиса",
     "capabilities_subtitle": "Основные части runtime и редактора.",
     "cap_build_title": "Сборка графа",
-    "cap_build_text": "LLM-ноды, Python-код, вложенные flow и shared-ресурсы.",
+    "cap_build_text": "LLM-ноды, мультиязычный код, вложенные flow и shared-ресурсы.",
     "cap_connect_title": "Интеграции",
     "cap_connect_text": "HTTP API, MCP, remote A2A и каналы доставки.",
     "cap_operate_title": "Операции",

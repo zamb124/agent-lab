@@ -605,11 +605,11 @@ class TestBreakpointsAPIIntegration:
             nodes={
                 "step1": {
                     "type": "code",
-                    "code": "async def run(state):\n    state['step1_done'] = True\n    return state",
+                    "code": "async def run(args, state):\n    state['step1_done'] = True\n    return state",
                 },
                 "step2": {
                     "type": "code",
-                    "code": "async def run(state):\n    state['step2_done'] = True\n    state['response'] = 'All done'\n    return state",
+                    "code": "async def run(args, state):\n    state['step2_done'] = True\n    state['response'] = 'All done'\n    return state",
                 },
             },
             edges=[

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
+from functools import lru_cache
+
 BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.math_tools", "calculator"),
     ("apps.flows.tools.files", "create_file"),
@@ -28,6 +31,9 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.lara_crm", "crm_get_entity"),
     ("apps.flows.tools.lara_crm", "crm_list_entity_types"),
     ("apps.flows.tools.lara_crm", "crm_search_entities"),
+    ("apps.flows.tools.lara_crm", "flows_read_context"),
+    ("apps.flows.tools.lara_crm", "flows_patch_node"),
+    ("apps.flows.tools.lara_crm", "flows_patch_flow"),
     ("apps.flows.tools.docx_template", "fill_docx_template"),
     ("apps.flows.tools.agent_session_tools", "final_answer"),
     ("apps.flows.tools.finish_tool", "finish"),
@@ -43,6 +49,22 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.scheduling", "schedule_one_time_task"),
     ("apps.flows.tools.scheduling", "list_scheduled_tasks"),
     ("apps.flows.tools.scheduling", "cancel_scheduled_task"),
+    ("apps.flows.tools.web_browser", "browser_duckduckgo_links"),
+    ("apps.flows.tools.web_browser", "browser_duckduckgo_links_batch"),
+    ("apps.flows.tools.web_browser", "browser_page_markdown"),
+    ("apps.flows.tools.web_browser", "browser_page_snapshot"),
 )
 
-__all__ = ["BUILTIN_TOOL_SPECS"]
+
+@lru_cache(maxsize=1)
+def builtin_tool_ids() -> frozenset[str]:
+    """Return canonical ids reserved for trusted platform tools."""
+    ids: list[str] = []
+    for module_name, attr_name in BUILTIN_TOOL_SPECS:
+        tool = getattr(importlib.import_module(module_name), attr_name)
+        raw_name = getattr(tool, "name", None)
+        ids.append(raw_name if isinstance(raw_name, str) and raw_name else attr_name)
+    return frozenset(ids)
+
+
+__all__ = ["BUILTIN_TOOL_SPECS", "builtin_tool_ids"]

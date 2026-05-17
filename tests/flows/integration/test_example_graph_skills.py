@@ -641,45 +641,6 @@ class TestDefaultSkill:
         assert result.get("processed") is True
 
     @pytest.mark.asyncio
-    async def test_cat_route_goes_to_cat_fact_api(self, app, monkeypatch):
-        """Маршрут cat должен идти в cat_fact_api, а не в general_processor."""
-        from apps.flows.src.eval import wrappers
-
-        class _R:
-            status_code = 200
-
-            def json(self):
-                return {"fact": "CAT FACT STUB", "length": 12}
-
-        async def _fake_get(url, **kwargs):
-            return _R()
-
-        monkeypatch.setattr(wrappers.HttpxModule, "get", staticmethod(_fake_get))
-
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph")
-
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="cat"
-        )
-        result = await flow.run(state)
-
-        assert result.get("route") == "cat", f"Route должен быть 'cat', получен {result.get('route')}"
-
-        # Проверяем что выполнился cat_fact_api, а не general_processor
-        executed_nodes = result.get("node_history", {})
-        assert "cat_fact_api" in executed_nodes, "cat_fact_api должен быть выполнен"
-        assert "general_processor" not in executed_nodes, "general_processor НЕ должен быть выполнен для route=cat"
-
-        # cat_fact_api записывает api_response, formatter форматирует в response
-        # Проверяем что api_response содержит факт или response содержит CAT
-        assert result.get("api_response") is not None or "CAT" in str(result.get("response", "")).upper()
-
-    @pytest.mark.asyncio
     async def test_greeting_route_with_variables(self, app):
         """Маршрут greeting использует переменные."""
         container = get_container()
@@ -857,4 +818,3 @@ class TestSkillEdgeCases:
 
         assert result.interrupt is not None
         assert result.interrupt.question is not None
-

@@ -49,7 +49,12 @@ class ToolReference(BaseModel):
         default=None, description="Mock данные для api_call tools"
     )
     params: dict[str, Any] = Field(default_factory=dict, description="Параметры инструмента")
-    code: str | None = Field(default=None, description="Python код инструмента")
+    language: str = Field(default="python", description="Язык исполнения code tool")
+    entrypoint: str | None = Field(
+        default=None,
+        description="Имя entrypoint-функции code tool; None = первая функция в source",
+    )
+    code: str | None = Field(default=None, description="Код инструмента")
     permission: list[str] = Field(
         default_factory=list,
         description="Группы с доступом к tool. Пустой список = доступ для всех",

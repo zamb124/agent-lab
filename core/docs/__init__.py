@@ -1,7 +1,4 @@
-"""
-Сервис документации для редактора кода.
-Поддерживает разные языки (Python, JavaScript) и фильтрацию.
-"""
+"""Shared documentation response models."""
 
 from core.docs.models import (
     CodeTemplate,
@@ -12,7 +9,6 @@ from core.docs.models import (
     PlatformToolDoc,
     StateField,
 )
-from core.docs.service import DocumentationService
 
 __all__ = [
     "DocumentationQuery",
@@ -22,5 +18,4 @@ __all__ = [
     "CodeTemplate",
     "ModuleMethod",
     "PlatformToolDoc",
-    "DocumentationService",
 ]

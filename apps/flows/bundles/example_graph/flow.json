@@ -13,7 +13,7 @@
   "nodes": {
     "classifier": {
       "type": "code",
-      "code": "async def run(state):\n    content = state.get('content', '').lower()\n    if 'заказ' in content or 'order' in content:\n        state['route'] = 'order'\n    elif 'жалоб' in content or 'complaint' in content:\n        state['route'] = 'complaint'\n    elif 'кот' in content or 'кошка' in content or 'cat' in content:\n        state['route'] = 'cat'\n    elif 'привет' in content or 'hello' in content:\n        state['route'] = 'greeting'\n    elif (\n        'takeover' in content\n        or 'перехват' in content\n        or 'handover' in content\n    ):\n        state['route'] = 'takeover'\n    elif (\n        'оператор' in content\n        or 'operator' in content\n        or 'hitl' in content\n        or 'human' in content\n        or 'живой человек' in content\n    ):\n        state['route'] = 'operator'\n    else:\n        state['route'] = 'general'\n    return state"
+      "code": "async def run(args, state):\n    content = state.get('content', '').lower()\n    if 'заказ' in content or 'order' in content:\n        state['route'] = 'order'\n    elif 'жалоб' in content or 'complaint' in content:\n        state['route'] = 'complaint'\n    elif 'кот' in content or 'кошка' in content or 'cat' in content:\n        state['route'] = 'cat'\n    elif 'привет' in content or 'hello' in content:\n        state['route'] = 'greeting'\n    elif (\n        'takeover' in content\n        or 'перехват' in content\n        or 'handover' in content\n    ):\n        state['route'] = 'takeover'\n    elif (\n        'оператор' in content\n        or 'operator' in content\n        or 'hitl' in content\n        or 'human' in content\n        or 'живой человек' in content\n    ):\n        state['route'] = 'operator'\n    else:\n        state['route'] = 'general'\n    return state"
     },
     "order_processor": {
       "type": "llm_node",
@@ -60,11 +60,11 @@
     },
     "greeting_node": {
       "type": "code",
-      "code": "async def run(state):\n    company = state.get('company_name', 'Компания')\n    state['response'] = f'Привет! Добро пожаловать в {company}!'\n    return state"
+      "code": "async def run(args, state):\n    company = state.get('company_name', 'Компания')\n    state['response'] = f'Привет! Добро пожаловать в {company}!'\n    return state"
     },
     "prepare_user_data": {
       "type": "code",
-      "code": "async def run(state):\n    state['user_data_prepared'] = True\n    return state"
+      "code": "async def run(args, state):\n    state['user_data_prepared'] = True\n    return state"
     },
     "hitl_queue_demo": {
       "type": "hitl_node",
@@ -82,7 +82,7 @@
     },
     "formatter": {
       "type": "code",
-      "code": "async def format_response(state):\n    route = state.get('route', 'unknown')\n    possible_fields = {\n        'greeting': ['greeting_message', 'response'],\n        'order': ['order_total', 'response'],\n        'cat': ['cat_fact', 'response'],\n        'operator': ['response'],\n    }\n    fields_to_check = possible_fields.get(route, ['response'])\n    response = ''\n    for field in fields_to_check:\n        value = state.get(field)\n        if value is not None:\n            response = str(value)\n            break\n    state['response'] = f'[{route.upper()}] {response}'\n    state['processed'] = True\n    return state\n\nasync def run(state):\n    return await format_response(state)"
+      "code": "async def format_response(state):\n    route = state.get('route', 'unknown')\n    possible_fields = {\n        'greeting': ['greeting_message', 'response'],\n        'order': ['order_total', 'response'],\n        'cat': ['cat_fact', 'response'],\n        'operator': ['response'],\n    }\n    fields_to_check = possible_fields.get(route, ['response'])\n    response = ''\n    for field in fields_to_check:\n        value = state.get(field)\n        if value is not None:\n            response = str(value)\n            break\n    state['response'] = f'[{route.upper()}] {response}'\n    state['processed'] = True\n    return state\n\nasync def run(args, state):\n    return await format_response(state)"
     }
   },
   "edges": [
@@ -304,7 +304,7 @@
       "nodes": {
         "classifier": {
           "type": "code",
-          "code": "async def run(state):\n    content = state.get('content', '').lower()\n    if 'заказ' in content or 'order' in content:\n        state['route'] = 'order'\n    elif (\n        'оператор' in content\n        or 'operator' in content\n        or 'hitl' in content\n        or 'human' in content\n    ):\n        state['route'] = 'operator'\n    else:\n        state['route'] = 'general'\n    return state"
+          "code": "async def run(args, state):\n    content = state.get('content', '').lower()\n    if 'заказ' in content or 'order' in content:\n        state['route'] = 'order'\n    elif (\n        'оператор' in content\n        or 'operator' in content\n        or 'hitl' in content\n        or 'human' in content\n    ):\n        state['route'] = 'operator'\n    else:\n        state['route'] = 'general'\n    return state"
         },
         "complaint_processor": {
           "type": "llm_node",

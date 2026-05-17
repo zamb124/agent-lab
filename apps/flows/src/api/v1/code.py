@@ -1,17 +1,19 @@
 """
 API endpoints для работы с кодом.
-Предоставляет данные для autocomplete в редакторе Python.
-Эндпоинты для валидации и выполнения inline кода.
+
+Документация и выполнение идут через единый capability/code-runner контур:
+Python, JavaScript, TypeScript, Go и C# получают один manifest возможностей.
 """
 
 import ast
 import copy
 import importlib
 import inspect
+import keyword
 import re
 import time
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
@@ -20,24 +22,239 @@ from apps.flows.src.api.v1.flows import inline_tools_list
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.runtime.nodes import create_node
-from apps.flows.src.services.platform_tool_docs import collect_platform_tool_docs
-from apps.flows.src.services.runtime_namespace_doc import build_runtime_namespace_global_variables
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
+from core.capabilities import (
+    CAPABILITY_LANGUAGE_SET,
+    CapabilityDocumentation,
+    CapabilityLanguage,
+    CapabilityNamespaceDocumentation,
+    CapabilitySdkMethodDocumentation,
+)
+from core.clients.service_client import ServiceClient
 from core.context import get_context
-from core.docs import DocumentationQuery
 from core.docs.models import (
     CodeTemplate,
     GlobalVariable,
     PlatformToolDoc,
     StateField,
 )
-from core.docs.service import get_documentation_service
-from core.errors import SafeEvalError
+from core.errors import CodeExecutionRuntimeError
 from core.logging import get_logger
 from core.state import ExecutionState
 
 router = APIRouter(tags=["code"])
 logger = get_logger(__name__)
+
+CAPABILITY_DOCUMENTATION_PATH = "/capability-gateway/api/v1/capabilities/documentation"
+
+
+def _require_capability_language(language: str) -> CapabilityLanguage:
+    if language not in CAPABILITY_LANGUAGE_SET:
+        raise HTTPException(status_code=400, detail=f"Unsupported language: {language}")
+    return cast(CapabilityLanguage, language)
+
+
+async def _capability_documentation(language: CapabilityLanguage) -> CapabilityDocumentation:
+    raw = await ServiceClient().get(
+        "capability_gateway",
+        CAPABILITY_DOCUMENTATION_PATH,
+        params={"language": language},
+        timeout=30.0,
+    )
+    if not isinstance(raw, dict):
+        raise RuntimeError("capability documentation response must be an object")
+    return CapabilityDocumentation.model_validate(raw)
+
+
+async def _capability_markdown(language: CapabilityLanguage) -> str:
+    docs = await _capability_documentation(language)
+    return docs.markdown
+
+
+def _capability_global(language: CapabilityLanguage) -> GlobalVariable:
+    namespace_names = "tools/files/http/text/voice/flow_state/log/trace/platform/channel/flow"
+    if language == "go":
+        return GlobalVariable(
+            name=namespace_names,
+            type="generated Go SDK namespaces",
+            doc="Generated namespaces from CapabilityManifest: tools.Calculator(...), files.Create(...), http.Request(...), flow_state.GetNested(...), channel.Send(...).",
+            perspective=["editor", "flow", "tool", "node"],
+            tags=["capability", "sandbox"],
+        )
+    if language == "csharp":
+        return GlobalVariable(
+            name=namespace_names,
+            type="generated C# SDK namespace properties",
+            doc="Generated namespaces from CapabilityManifest: await tools.Calculator(...), await files.Create(...), await http.Request(...), await flow_state.GetNested(...), await channel.Send(...).",
+            perspective=["editor", "flow", "tool", "node"],
+            tags=["capability", "sandbox"],
+        )
+    if language == "python":
+        type_name = "generated async SDK namespaces"
+    else:
+        type_name = "generated async SDK namespace proxies"
+    return GlobalVariable(
+        name=namespace_names,
+        type=type_name,
+        doc="Generated namespaces from CapabilityManifest: tools.calculator(...), files.create(...), http.request(...), flow_state.get_nested(...), channel.send(...).",
+        perspective=["editor", "flow", "tool", "node"],
+        tags=["capability", "sandbox"],
+    )
+
+
+def _capability_templates(language: CapabilityLanguage) -> list[CodeTemplate]:
+    snippets = {
+        "python": (
+            "async def run(args, state):\n"
+            "    calc = await tools.calculator(expression=args[\"expression\"])\n"
+            "    state[\"calculation\"] = calc\n"
+            "    return {\"calculation\": calc}\n"
+        ),
+        "javascript": (
+            "async function run(args, state) {\n"
+            "  const calc = await tools.calculator({expression: args.expression});\n"
+            "  state.calculation = calc;\n"
+            "  return {calculation: calc};\n"
+            "}\n"
+        ),
+        "typescript": (
+            "async function run(args: {expression: string}, state: Record<string, unknown>) {\n"
+            "  const calc = await tools.calculator({expression: args.expression});\n"
+            "  state.calculation = calc;\n"
+            "  return {calculation: calc};\n"
+            "}\n"
+        ),
+        "go": (
+            "package main\n\n"
+            "func run(args map[string]any, state map[string]any) (any, error) {\n"
+            "    calc, err := tools.Calculator(map[string]any{\"expression\": args[\"expression\"]})\n"
+            "    if err != nil {\n"
+            "        return nil, err\n"
+            "    }\n"
+            "    state[\"calculation\"] = calc\n"
+            "    return map[string]any{\"calculation\": calc}, nil\n"
+            "}\n"
+        ),
+        "csharp": (
+            "using System.Collections.Generic;\n"
+            "using System.Threading.Tasks;\n\n"
+            "async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)\n"
+            "{\n"
+            "    var calc = await tools.Calculator(new Dictionary<string, object?> { [\"expression\"] = args[\"expression\"] });\n"
+            "    state[\"calculation\"] = calc;\n"
+            "    return new Dictionary<string, object?> { [\"calculation\"] = calc };\n"
+            "}\n"
+        ),
+    }
+    return [
+        CodeTemplate(
+            id=f"{language}-capability-call",
+            name="Capability call",
+            description="Вызов platform capability из isolated code runner.",
+            code=snippets[language],
+            category="capabilities",
+            node_type="code",
+            tags=["capability", "sandbox"],
+            language=language,
+        )
+    ]
+
+
+def _valid_entrypoint_name(language: CapabilityLanguage, entrypoint: str) -> bool:
+    if language == "python":
+        return entrypoint.isidentifier() and not keyword.iskeyword(entrypoint)
+    if language in {"javascript", "typescript"}:
+        return re.fullmatch(r"[$A-Za-z_][$\w]*", entrypoint) is not None
+    if language == "go":
+        return re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", entrypoint) is not None
+    if language == "csharp":
+        return re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", entrypoint) is not None
+    return False
+
+
+_CSHARP_METHOD_RE = re.compile(
+    r"(?m)^\s*"
+    r"(?:(?:public|private|protected|internal|static|async|virtual|override|sealed|new|partial)\s+)*"
+    r"(?:[A-Za-z_][A-Za-z0-9_<>,\[\]\.?]*\s+)+"
+    r"([A-Za-z_][A-Za-z0-9_]*)\s*\("
+)
+
+
+def _infer_entrypoint(language: CapabilityLanguage, code: str) -> str | None:
+    if language == "python":
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            return None
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                return node.name
+        return None
+    if language in {"javascript", "typescript"}:
+        candidates: list[tuple[int, str]] = []
+        for pattern in (
+            r"(?:export\s+)?(?:async\s+)?function\s+([$A-Za-z_][$\w]*)\s*\(",
+            r"(?:export\s+)?(?:const|let|var)\s+([$A-Za-z_][$\w]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[$A-Za-z_][$\w]*)\s*=>",
+        ):
+            for match in re.finditer(pattern, code):
+                candidates.append((match.start(), match.group(1)))
+        if not candidates:
+            return None
+        return sorted(candidates, key=lambda item: item[0])[0][1]
+    if language == "go":
+        match = re.search(r"func\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", code)
+        return match.group(1) if match else None
+    if language == "csharp":
+        match = _CSHARP_METHOD_RE.search(code)
+        return match.group(1) if match else None
+    return None
+
+
+def _has_entrypoint(language: CapabilityLanguage, code: str, entrypoint: str) -> bool:
+    if language == "python":
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            return False
+        return any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == entrypoint
+            for node in tree.body
+        )
+    if language in {"javascript", "typescript"}:
+        name = re.escape(entrypoint)
+        ident = rf"(?<![$\w]){name}(?![$\w])"
+        return any(
+            re.search(pattern, code) is not None
+            for pattern in (
+                rf"(?:export\s+)?(?:async\s+)?function\s+{name}\s*\(",
+                rf"(?:export\s+)?(?:const|let|var)\s+{name}\s*=",
+                rf"export\s+(?:async\s+)?function\s+{name}\s*\(",
+                rf"export\s+(?:const|let|var)\s+{name}\s*=",
+                rf"export\s*\{{[^}}]*{ident}[^}}]*\}}",
+            )
+        )
+    if language == "go":
+        return re.search(rf"func\s+{re.escape(entrypoint)}\s*\(", code) is not None
+    if language == "csharp":
+        return re.search(
+            rf"(?m)^\s*"
+            rf"(?:(?:public|private|protected|internal|static|async|virtual|override|sealed|new|partial)\s+)*"
+            rf"(?:[A-Za-z_][A-Za-z0-9_<>,\[\]\.?]*\s+)+"
+            rf"{re.escape(entrypoint)}\s*\(",
+            code,
+        ) is not None
+    return False
+
+
+def _entrypoint_error(language: CapabilityLanguage, entrypoint: str) -> str:
+    if language == "python":
+        return f"Entrypoint function not found: async def {entrypoint}(args, state)"
+    if language in {"javascript", "typescript"}:
+        return f"Entrypoint function not found: async function {entrypoint}(args, state)"
+    if language == "csharp":
+        return f"Entrypoint function not found: Task<object?> {entrypoint}(Dictionary<string, object?> args, Dictionary<string, object?> state)"
+    return f"Entrypoint function not found: func {entrypoint}(args map[string]any, state map[string]any) (any, error)"
 
 
 class CodeCompletionsResponse(BaseModel):
@@ -49,6 +266,8 @@ class CodeCompletionsResponse(BaseModel):
     state_fields: list[StateField] = []
     templates: list[CodeTemplate] = []
     platform_tools: list[PlatformToolDoc] = []
+    capability_namespaces: list[CapabilityNamespaceDocumentation] = []
+    capabilities: list[CapabilitySdkMethodDocumentation] = []
     runtime_namespace_extras: list[GlobalVariable] | None = None
 
 
@@ -63,48 +282,31 @@ async def get_code_completions(
     Возвращает данные для autocomplete в редакторе кода.
 
     Args:
-        language: Язык программирования (python, javascript)
+        language: Язык программирования (`python`, `javascript`, `typescript`, `go`, `csharp`)
         perspective: Ракурс (editor, flow, tool, node)
 
     Returns:
         modules: доступные модули для import
-        globals: глобальные переменные (llm, context, etc.)
+        globals: глобальные переменные SDK capability
         builtins: встроенные функции
         module_methods: методы модулей
         state_fields: поля state
         templates: шаблоны кода
     """
-    service = get_documentation_service()
-    platform_tools = await collect_platform_tool_docs(container)
-
-    runtime_extras = None
-    if include_runtime_namespace_extras and language == "python":
-        runtime_extras = build_runtime_namespace_global_variables()
-
-    query = DocumentationQuery(
-        language=language,
-        perspective=perspective,
-        platform_tools=platform_tools,
-        runtime_namespace_extras=runtime_extras,
-    )
-
-    response = service.query(query)
-
-    # Конвертируем module_methods в dict формат для API
-    module_methods = {
-        name: [{"name": m.name, "type": m.type, "doc": m.doc} for m in methods]
-        for name, methods in response.module_methods.items()
-    }
-
+    capability_language = _require_capability_language(language)
+    capability_docs = await _capability_documentation(capability_language)
+    _ = container, perspective, include_runtime_namespace_extras
     return CodeCompletionsResponse(
-        modules=response.modules,
-        globals=response.globals,
-        builtins=response.builtins,
-        module_methods=module_methods,
-        state_fields=response.state_fields,
-        templates=response.templates,
-        platform_tools=response.platform_tools,
-        runtime_namespace_extras=response.runtime_namespace_extras,
+        modules=[],
+        globals=[_capability_global(capability_language)],
+        builtins=[],
+        module_methods={},
+        state_fields=[],
+        templates=_capability_templates(capability_language),
+        platform_tools=[],
+        capability_namespaces=capability_docs.namespaces,
+        capabilities=capability_docs.capabilities,
+        runtime_namespace_extras=None,
     )
 
 
@@ -119,18 +321,9 @@ async def get_code_documentation(
     Полная документация для редактора inline-кода в формате Markdown
     (тот же состав данных, что у /completions).
     """
-    service = get_documentation_service()
-    platform_tools = await collect_platform_tool_docs(container)
-    runtime_extras = None
-    if include_runtime_namespace_extras and language == "python":
-        runtime_extras = build_runtime_namespace_global_variables()
-    query = DocumentationQuery(
-        language=language,
-        perspective=perspective,
-        platform_tools=platform_tools,
-        runtime_namespace_extras=runtime_extras,
-    )
-    body = service.to_markdown(query)
+    capability_language = _require_capability_language(language)
+    _ = container, perspective, include_runtime_namespace_extras
+    body = await _capability_markdown(capability_language)
     return Response(
         content=body,
         media_type="text/markdown; charset=utf-8",
@@ -154,30 +347,14 @@ async def get_code_templates(
     Возвращает список шаблонов кода с фильтрацией.
 
     Args:
-        language: Язык программирования (python, javascript)
+        language: Язык программирования (`python`, `javascript`, `typescript`, `go`, `csharp`)
         category: Фильтр по категории (http, llm, interaction, data, files, state, logic, basic)
         node_type: Тип ноды (code, llm_node и др., см. документацию)
         tags: Теги через запятую (http,api)
     """
-    _ = container
-    service = get_documentation_service()
-
-    categories = [category] if category else None
-    tag_list = tags.split(",") if tags else None
-
-    query = DocumentationQuery(
-        language=language,
-        node_type=node_type,
-        categories=categories,
-        tags=tag_list,
-        include_modules=False,
-        include_globals=False,
-        include_builtins=False,
-        include_state_fields=False,
-    )
-
-    response = service.query(query)
-    return TemplatesResponse(templates=response.templates)
+    capability_language = _require_capability_language(language)
+    _ = container, category, node_type, tags
+    return TemplatesResponse(templates=_capability_templates(capability_language))
 
 
 @router.get("/editor-state")
@@ -393,6 +570,8 @@ class ValidateRequest(BaseModel):
     """Запрос на валидацию кода"""
     code: str
     node_type: str | None = "code"
+    language: str = "python"
+    entrypoint: str | None = None
 
 
 class ValidateResponse(BaseModel):
@@ -458,11 +637,9 @@ def _parse_function_signature(code: str, func_name: str | None = None) -> dict[s
     else:
         by_name = {node.name: node for node in top_level_funcs}
         candidates = []
-        for entry_name in ("run", "execute"):
-            node = by_name.get(entry_name)
-            if node is not None:
-                candidates.append(node)
-                break
+        node = by_name.get("run")
+        if node is not None:
+            candidates.append(node)
         if not candidates and top_level_funcs:
             candidates.append(top_level_funcs[0])
 
@@ -510,7 +687,7 @@ def _parse_function_signature(code: str, func_name: str | None = None) -> dict[s
             "is_async": isinstance(node, ast.AsyncFunctionDef),
         }
 
-    target = func_name or "run/execute/first top-level function"
+    target = func_name or "run/first top-level function"
     raise ValueError(f"Функция не найдена: {target}")
 
 
@@ -564,9 +741,7 @@ async def parse_signature(container: ContainerDep, request: ParseSignatureReques
 
 def _require_execute_node_type(node_type: str) -> str:
     if node_type in ("tool", "function"):
-        raise SafeEvalError(
-            "Тип ноды 'tool'/'function' снят с контракта: укажите type='code' и обновите данные миграцией"
-        )
+        raise ValueError("Node type must be 'code'; tool/function is not a code runner contract")
     return node_type
 
 
@@ -575,6 +750,7 @@ class ExecuteRequest(BaseModel):
     node_type: str = "code"
     node_config: dict[str, Any] = {}
     state: dict[str, Any]
+    entrypoint: str | None = None
     flow_id: str | None = None
     branch_id: str | None = None
 
@@ -594,6 +770,7 @@ class ExecuteResponse(BaseModel):
     output_state: dict[str, Any] | None = None
     diff: list[DiffItem] = []
     error: str | None = None
+    error_payload: dict[str, Any] | None = None
     duration_ms: int = 0
 
 
@@ -683,20 +860,27 @@ async def validate_code(container: ContainerDep, request: ValidateRequest) -> Va
     """
     code = request.code
     _require_execute_node_type(request.node_type or "code")
+    capability_language = _require_capability_language(request.language)
+    entrypoint = request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else None
     warnings = []
 
     if not code or not code.strip():
         return ValidateResponse(valid=False, error="Код пустой")
+    if entrypoint is None:
+        entrypoint = _infer_entrypoint(capability_language, code)
+        if entrypoint is None:
+            return ValidateResponse(valid=False, error="Entrypoint function not found: declare at least one function")
+    if not _valid_entrypoint_name(capability_language, entrypoint):
+        return ValidateResponse(valid=False, error=f"Invalid {capability_language} entrypoint name: {entrypoint!r}")
 
-    runner = container.python_code_runner
+    runner = container.get_code_runner(capability_language)
     valid, error = runner.validate(code)
 
     if not valid:
         return ValidateResponse(valid=False, error=error)
 
-    # Проверяем что код содержит хотя бы одну функцию
-    if not re.search(r"(?:async\s+)?def\s+\w+\s*\(", code):
-        return ValidateResponse(valid=False, error="Функция не найдена в коде")
+    if not _has_entrypoint(capability_language, code, entrypoint):
+        return ValidateResponse(valid=False, error=_entrypoint_error(capability_language, entrypoint))
 
     return ValidateResponse(valid=True, warnings=warnings)
 
@@ -775,13 +959,14 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
             duration_ms=duration_ms
         )
 
-    except SafeEvalError as e:
+    except CodeExecutionRuntimeError as e:
         duration_ms = int((time.time() - start_time) * 1000)
         return ExecuteResponse(
             success=False,
             input_state=input_state_raw,
             error=str(e),
-            duration_ms=duration_ms
+            error_payload=e.payload,
+            duration_ms=duration_ms,
         )
     except Exception as e:
         duration_ms = int((time.time() - start_time) * 1000)
@@ -790,6 +975,7 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
             success=False,
             input_state=input_state_raw,
             error=f"Ошибка выполнения: {e}",
+            error_payload=getattr(e, "payload", None) if isinstance(getattr(e, "payload", None), dict) else None,
             duration_ms=duration_ms
         )
 
@@ -799,8 +985,8 @@ def _validate_node_config(config: dict[str, Any]) -> None:
     node_type = config.get("type")
 
     if node_type == "code":
-        if not config.get("code") and not config.get("tool_id") and not config.get("function"):
-            raise SafeEvalError("code, tool_id или function обязателен для code")
+        if not config.get("code"):
+            raise ValueError("code is required for code node execution")
 
     elif node_type == "external_api":
         if not config.get("url"):
@@ -829,15 +1015,8 @@ async def _build_node_config(request: ExecuteRequest) -> dict[str, Any]:
     """Строит node_config из ExecuteRequest."""
     config = request.node_config.copy()
     config["type"] = _require_execute_node_type(str(request.node_type))
-
-    # Обратная совместимость: если node_config пустой, но есть поля напрямую в request
-    # (старый формат API)
-    if not config and hasattr(request, '__dict__'):
-        request_dict = request.__dict__
-        # Переносим поля из request в config (кроме node_type и state)
-        for key, value in request_dict.items():
-            if key not in ("node_type", "state", "node_config", "flow_id", "branch_id") and value is not None:
-                config[key] = value
+    if request.entrypoint is not None:
+        config["entrypoint"] = request.entrypoint
 
     _validate_node_config(config)
 

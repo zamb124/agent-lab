@@ -52,7 +52,7 @@ flows:
 
   - id: universal_agent
     public: true
-    description: "Серия «Универсальный агент»: общий ассистент с калькулятором, уточнениями и мета-тулом sandbox_codegen; навыки RAG и упор на код"
+    description: "Серия «Универсальный агент»: общий ассистент с калькулятором, уточнениями и мультиязычным sandbox_codegen; навыки RAG и упор на код"
 
   - id: simple_crawler
     public: true
@@ -118,7 +118,7 @@ tools:
 
   - id: sandbox_codegen
     public: true
-    description: "Мета-тул: LLM генерирует inline Python, платформа валидирует и выполняет в sandbox; JSON-ответ с result/trace"
+    description: "Мета-тул: LLM генерирует код на python/javascript/typescript/go/csharp и выполняет его через isolated code-runner с capability-gateway"
 
   - id: search
     public: true

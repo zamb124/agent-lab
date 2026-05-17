@@ -58,7 +58,7 @@ def validate_email(email):
             node_id="phone_formatter",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     formatted = helpers.format_phone(state.phone)
     is_valid = helpers.validate_email(state.email)
     state.formatted_phone = formatted
@@ -109,7 +109,7 @@ class StringHelper:
             node_id="calculator",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     result = utils.Calculator.add(10, 5)
     product = utils.Calculator.multiply(result, 2)
     reversed_name = utils.StringHelper.reverse(state.name)
@@ -169,7 +169,7 @@ def to_percent(n):
             node_id="multi_resource",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     num = state.number
     is_pos = validators.is_positive(num)
     is_even = validators.is_even(num)
@@ -233,7 +233,7 @@ def format_price(price):
                 "discount": {"type": "number"}
             },
             "code": """
-async def execute(args, state):
+async def run(args, state):
     discounted = pricing.calculate_discount(args['price'], args['discount'])
     formatted = pricing.format_price(discounted)
     state.final_price = formatted
@@ -295,7 +295,7 @@ def suffix(s):
             node_id="combined_node",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     formatted = utils.format_fact('hello', 'src')
     state.formatted = formatted
     state.suffixed = extra.suffix(formatted)
@@ -339,7 +339,7 @@ def double(n):
             node_id="inheritor",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     result = math_utils.double(state.value)
     state.doubled = result
     return {'result': result}
@@ -378,7 +378,7 @@ def process(x):
             node_id="override_test",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     result = helper.process(state.input)
     state.output = result
     return {'result': result}
@@ -438,7 +438,7 @@ class TestFILESResource:
             node_id="write_file",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     path = await storage.write('test.txt', 'Hello from resource test!')
     state.file_path = path
     return {'path': path}
@@ -458,7 +458,7 @@ async def execute(args, state):
             node_id="read_file",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     content = await storage.read('test.txt')
     state.file_content = content
     return {'content': content}
@@ -501,7 +501,7 @@ async def execute(args, state):
             node_id="list_files",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     files = await storage.list()
     state.file_count = len(files)
     state.files = files
@@ -544,7 +544,7 @@ async def execute(args, state):
             node_id="check_delete",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     exists_before = await storage.exists('to_delete.txt')
     deleted = await storage.delete('to_delete.txt')
     exists_after = await storage.exists('to_delete.txt')
@@ -590,7 +590,7 @@ async def execute(args, state):
                 "content": {"type": "string"}
             },
             "code": """
-async def execute(args, state):
+async def run(args, state):
     path = await storage.write(args['filename'], args['content'])
     state.saved_path = path
     return {'path': path}
@@ -653,7 +653,7 @@ class TestLLMResource:
             node_id="llm_complete",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     response = await gpt.complete('Say hello in French')
     state.response = response
     return {'response': response}
@@ -689,7 +689,7 @@ async def execute(args, state):
             node_id="llm_chat",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     messages = [
         {'role': 'user', 'content': 'Hi!'},
         {'role': 'assistant', 'content': 'Hello!'},
@@ -732,7 +732,7 @@ async def execute(args, state):
                 "text": {"type": "string"}
             },
             "code": """
-async def execute(args, state):
+async def run(args, state):
     summary = await gpt.complete(f"Summarize: {args['text']}")
     state.summary = summary
     return {'summary': summary}
@@ -775,7 +775,7 @@ class TestResourceHierarchy:
     def _stub_entry_node() -> dict:
         return {
             "type": "code",
-            "code": "async def execute(args, state):\n    return {}\n",
+            "code": "async def run(args, state):\n    return {}\n",
         }
 
     @pytest.mark.asyncio
@@ -800,7 +800,7 @@ def double(x):
             "description": "Doubles a number",
             "args_schema": {"n": {"type": "number"}},
             "code": """
-async def execute(args, state):
+async def run(args, state):
     result = math.double(args['n'])
     state.result = result
     return {'result': result}
@@ -826,7 +826,7 @@ async def execute(args, state):
         tool_with_arith = {
             **tool,
             "code": """
-async def execute(args, state):
+async def run(args, state):
     result = arith.double(args['n'])
     state.result = result
     return {'result': result}
@@ -887,7 +887,7 @@ def triple(x):
             node_id="triple_node",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     result = math.triple(state.input)
     state.output = result
     return {'result': result}
@@ -954,7 +954,7 @@ def compute(x):
             node_id="compute_node",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     result = helper.compute(state.input)
     state.output = result
     return {'result': result}
@@ -995,7 +995,7 @@ def transform(x):
             node_id="transform_node",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     result = utils.transform(state.input)
     state.output = result
     return {'result': result}
@@ -1038,7 +1038,7 @@ def from_node():
             node_id="hierarchy_test",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     # Node resource всегда доступен
     node_val = node_utils.from_node()
     state.node_val = node_val
@@ -1097,7 +1097,7 @@ def shared_hello():
             node_id="use_shared",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     greeting = shared.shared_hello()
     state.greeting = greeting
     return {'greeting': greeting}
@@ -1141,7 +1141,7 @@ async def execute(args, state):
             node_id="use_shared_llm_override",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     text = await gpt.complete('ping')
     state.out = text
     return {'out': text}

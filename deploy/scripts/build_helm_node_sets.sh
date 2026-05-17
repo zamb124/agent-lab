@@ -37,7 +37,7 @@ add_set() {
 }
 
 # ---------- apps ----------
-APPS=(flows frontend crm rag sync scheduler-api office voice browser)
+APPS=(flows frontend crm rag sync scheduler-api office voice browser capability-gateway code-runner-python code-runner-node code-runner-go code-runner-csharp)
 for app in "${APPS[@]}"; do
   add_set "applications.${app}" "$APPS_NODE"
 done
@@ -80,6 +80,11 @@ svc_to_helm_path() {
     office)          echo "applications.office" ;;
     voice)           echo "applications.voice" ;;
     browser)         echo "applications.browser" ;;
+    capability-gateway) echo "applications.capability-gateway" ;;
+    code-runner-python) echo "applications.code-runner-python" ;;
+    code-runner-node) echo "applications.code-runner-node" ;;
+    code-runner-go) echo "applications.code-runner-go" ;;
+    code-runner-csharp) echo "applications.code-runner-csharp" ;;
     flows-worker)    echo "workers.flows-worker" ;;
     scheduler)       echo "workers.scheduler" ;;
     rag-worker)      echo "workers.rag-worker" ;;

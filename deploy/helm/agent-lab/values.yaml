@@ -194,6 +194,76 @@ applications:
       limits:
         cpu: "2"
         memory: 2Gi
+  capability-gateway:
+    nodeName: master
+    enabled: true
+    port: 8016
+    replicas: 1
+    serviceName: capability-gateway
+    command: ["python", "-m", "apps.capability_gateway.main"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  code-runner-python:
+    nodeName: master
+    enabled: true
+    port: 8017
+    replicas: 1
+    serviceName: code-runner-python
+    command: ["python", "-m", "apps.code_runner_python.main"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  code-runner-node:
+    nodeName: master
+    enabled: true
+    port: 8018
+    replicas: 1
+    serviceName: code-runner-node
+    command: ["python", "-m", "apps.code_runner_node.main"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  code-runner-go:
+    nodeName: master
+    enabled: true
+    port: 8019
+    replicas: 1
+    serviceName: code-runner-go
+    command: ["python", "-m", "apps.code_runner_go.main"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  code-runner-csharp:
+    nodeName: master
+    enabled: true
+    port: 8020
+    replicas: 1
+    serviceName: code-runner-csharp
+    command: ["python", "-m", "apps.code_runner_csharp.main"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
 
 workers:
   flows-worker:

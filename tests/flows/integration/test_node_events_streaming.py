@@ -38,7 +38,7 @@ class TestNodeEventsStreaming:
                 "nodes": {
                     "process": {
                         "type": "code",
-                        "code": "async def run(state):\n    state['response'] = 'done'\n    return state",
+                        "code": "async def run(args, state):\n    state['response'] = 'done'\n    return state",
                     },
                 },
                 "edges": [{"from": "process", "to": None}],
@@ -111,15 +111,15 @@ class TestNodeEventsStreaming:
                 "nodes": {
                     "step1": {
                         "type": "code",
-                        "code": "async def run(state):\n    state['step1'] = True\n    return state",
+                        "code": "async def run(args, state):\n    state['step1'] = True\n    return state",
                     },
                     "step2": {
                         "type": "code",
-                        "code": "async def run(state):\n    state['step2'] = True\n    return state",
+                        "code": "async def run(args, state):\n    state['step2'] = True\n    return state",
                     },
                     "step3": {
                         "type": "code",
-                        "code": "async def run(state):\n    state['response'] = 'all done'\n    return state",
+                        "code": "async def run(args, state):\n    state['response'] = 'all done'\n    return state",
                     },
                 },
                 "edges": [
@@ -208,7 +208,7 @@ class TestNodeEventsStreaming:
                 "nodes": {
                     "failing": {
                         "type": "code",
-                        "code": "async def run(state):\n    raise ValueError('Test error')",
+                        "code": "async def run(args, state):\n    raise ValueError('Test error')",
                     },
                 },
                 "edges": [{"from": "failing", "to": None}],

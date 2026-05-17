@@ -259,12 +259,12 @@ class NodeConfig(StrictBaseModel):
     )
 
     # Для code-ноды (inline)
-    code: str | None = Field(default=None, description="Inline Python код")
+    code: str | None = Field(default=None, description="Inline code for isolated language runners")
 
-    # Ресурсы ноды
+    # Декларативные LLM resources ноды
     resources: dict[str, ResourceReference] = Field(
         default_factory=dict,
-        description="Ресурсы ноды (переопределяют flow-level)"
+        description="LLM resources for llm_resource_key/resource islands. Sandbox code uses capabilities instead."
     )
 
     files: list[dict[str, JsonValue]] = Field(

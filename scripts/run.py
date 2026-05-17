@@ -14,6 +14,11 @@
     python scripts/run.py scheduler   # Запуск TaskIQ scheduler
     python scripts/run.py scheduler-api  # Запуск scheduler API
     python scripts/run.py browser       # Browser Runtime (Playwright + CDP)
+    python scripts/run.py capability_gateway # Trusted sandbox capabilities
+    python scripts/run.py code_runner_python # Python sandbox runner
+    python scripts/run.py code_runner_node   # JavaScript/TypeScript sandbox runner
+    python scripts/run.py code_runner_go     # Go sandbox runner
+    python scripts/run.py code_runner_csharp # C# sandbox runner
     python scripts/run.py rag_worker  # Запуск RAG worker
     python scripts/run.py sync_worker # Запуск Sync worker
     python scripts/run.py crm_worker  # Запуск CRM worker
@@ -100,6 +105,31 @@ SERVICES = {
         "type": "uvicorn",
         "app": "apps.voice.main:app",
         "port": "8015",
+    },
+    "capability_gateway": {
+        "type": "uvicorn",
+        "app": "apps.capability_gateway.main:app",
+        "port": "8016",
+    },
+    "code_runner_python": {
+        "type": "uvicorn",
+        "app": "apps.code_runner_python.main:app",
+        "port": "8017",
+    },
+    "code_runner_node": {
+        "type": "uvicorn",
+        "app": "apps.code_runner_node.main:app",
+        "port": "8018",
+    },
+    "code_runner_go": {
+        "type": "uvicorn",
+        "app": "apps.code_runner_go.main:app",
+        "port": "8019",
+    },
+    "code_runner_csharp": {
+        "type": "uvicorn",
+        "app": "apps.code_runner_csharp.main:app",
+        "port": "8020",
     },
 
     # TaskIQ workers

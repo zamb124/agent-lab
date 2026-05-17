@@ -29,7 +29,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    return state"
+                    "code": "async def run(args, state):\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}],
@@ -150,7 +150,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    state['path'] = 'base'\n    return state"
+                    "code": "async def run(args, state):\n    state['path'] = 'base'\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}]
@@ -169,11 +169,11 @@ class TestSkillValidationAndPersistence:
                 "nodes": {
                     "skill_main": {
                         "type": "code",
-                        "code": "async def run(state):\n    state['path'] = 'skill'\n    return state"
+                        "code": "async def run(args, state):\n    state['path'] = 'skill'\n    return state"
                     },
                     "skill_helper": {
                         "type": "code",
-                        "code": "async def run(state):\n    state['helper'] = True\n    return state"
+                        "code": "async def run(args, state):\n    state['helper'] = True\n    return state"
                     }
                 },
                 "edges": [
@@ -215,15 +215,15 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    state['value'] = 10\n    return state"
+                    "code": "async def run(args, state):\n    state['value'] = 10\n    return state"
                 },
                 "branch_a": {
                     "type": "code",
-                    "code": "async def run(state):\n    state['branch'] = 'a'\n    return state"
+                    "code": "async def run(args, state):\n    state['branch'] = 'a'\n    return state"
                 },
                 "branch_b": {
                     "type": "code",
-                    "code": "async def run(state):\n    state['branch'] = 'b'\n    return state"
+                    "code": "async def run(args, state):\n    state['branch'] = 'b'\n    return state"
                 }
             },
             "edges": [
@@ -286,7 +286,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    return state"
+                    "code": "async def run(args, state):\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}],
@@ -346,7 +346,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    return state"
+                    "code": "async def run(args, state):\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}],
@@ -445,7 +445,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    return state"
+                    "code": "async def run(args, state):\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}],
@@ -550,7 +550,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    return state"
+                    "code": "async def run(args, state):\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}]
@@ -569,7 +569,7 @@ class TestSkillValidationAndPersistence:
                 "nodes": {
                     "some_node": {
                         "type": "code",
-                        "code": "async def run(state):\n    return state"
+                        "code": "async def run(args, state):\n    return state"
                     }
                 }
             }
@@ -591,7 +591,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    return state"
+                    "code": "async def run(args, state):\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}]
@@ -609,7 +609,7 @@ class TestSkillValidationAndPersistence:
                 "nodes": {
                     "node_a": {
                         "type": "code",
-                        "code": "async def run(state):\n    return state"
+                        "code": "async def run(args, state):\n    return state"
                     }
                 },
                 "edges": [
@@ -634,7 +634,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    return state"
+                    "code": "async def run(args, state):\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}]
@@ -652,7 +652,7 @@ class TestSkillValidationAndPersistence:
                 "nodes": {
                     "skill_node": {
                         "type": "code",
-                        "code": "async def run(state):\n    return state"
+                        "code": "async def run(args, state):\n    return state"
                     }
                 },
                 "entry": "skill_node",
@@ -672,7 +672,7 @@ class TestSkillValidationAndPersistence:
                 "nodes": {
                     "skill_node": {
                         "type": "code",
-                        "code": "async def run(state):\n    return state"
+                        "code": "async def run(args, state):\n    return state"
                     }
                 }
             }
@@ -700,7 +700,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    return state"
+                    "code": "async def run(args, state):\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}]
@@ -719,7 +719,7 @@ class TestSkillValidationAndPersistence:
                 "nodes": {
                     "code_node": {
                         "type": "code",
-                        "code": """async def run(state):
+                        "code": """async def run(args, state):
     state['result'] = state.get('a', 0) + state.get('b', 0)
     state['variables']['output'] = state['result']
     return state"""
@@ -752,7 +752,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    return state"
+                    "code": "async def run(args, state):\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}]
@@ -776,7 +776,7 @@ class TestSkillValidationAndPersistence:
                             {
                                 "tool_id": "calc_tool",
                                 "description": "Calculator tool",
-                                "code": """async def execute(args, state):
+                                "code": """async def run(args, state):
     a = args.get('a', 0)
     b = args.get('b', 0)
     return {'result': a + b}""",
@@ -829,7 +829,7 @@ class TestSkillValidationAndPersistence:
             "nodes": {
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    return state"
+                    "code": "async def run(args, state):\n    return state"
                 }
             },
             "edges": [{"from": "main", "to": None}]

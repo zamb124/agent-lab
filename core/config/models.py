@@ -216,6 +216,11 @@ class ServerConfig(BaseModel):
     browser_service_url: Optional[str] = None
     provider_litserve_service_url: Optional[str] = None
     voice_service_url: Optional[str] = None
+    capability_gateway_service_url: Optional[str] = None
+    code_runner_python_service_url: Optional[str] = None
+    code_runner_node_service_url: Optional[str] = None
+    code_runner_go_service_url: Optional[str] = None
+    code_runner_csharp_service_url: Optional[str] = None
     platform_public_base_url: Optional[str] = Field(
         default="https://humanitec.ru",
         description="Публичный origin без завершающего слэша для deep link (календарь, Sync join).",
@@ -241,6 +246,11 @@ class ServerConfig(BaseModel):
         "browser": 8009,
         "provider_litserve": 8014,
         "voice": 8015,
+        "capability_gateway": 8016,
+        "code_runner_python": 8017,
+        "code_runner_node": 8018,
+        "code_runner_go": 8019,
+        "code_runner_csharp": 8020,
     }
 
     def get_service_url(self, service: Optional[str] = None) -> str:

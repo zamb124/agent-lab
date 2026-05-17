@@ -491,8 +491,8 @@ async def execute(args: dict, state: dict = None):
         flow_id = f"test_explicit_multi_tools_{unique_id}"
         container = get_container()
 
-        step1_code = "async def execute(args, state): return 'step1_done'"
-        step2_code = "async def execute(args, state): return 'step2_done'"
+        step1_code = "async def run(args, state): return 'step1_done'"
+        step2_code = "async def run(args, state): return 'step2_done'"
 
         flow_config = FlowConfig(
             flow_id=flow_id,
@@ -714,7 +714,7 @@ class TestReactLoopModeStrictAndReminder:
         container = get_container()
 
         calc_code = """
-async def execute(args, state):
+async def run(args, state):
     import ast, operator
     expr = args.get('expr', '0')
     ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul}
@@ -785,7 +785,7 @@ class TestReactLoopModeMaxIterations:
         flow_id = f"test_max_iter_{unique_id}"
         container = get_container()
 
-        loop_code = "async def execute(args, state): return 'loop'"
+        loop_code = "async def run(args, state): return 'loop'"
 
         flow_config = FlowConfig(
             flow_id=flow_id,

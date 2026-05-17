@@ -24,16 +24,14 @@ from apps.flows.src.db import (
 from apps.flows.src.db.mcp_repository import MCPServerRepository
 from apps.flows.src.db.operator_repository import OperatorRepository
 from apps.flows.src.db.scheduled_task_repository import ScheduledTaskRepository
-from apps.flows.src.eval.lara_facade import LaraFacade
 from apps.flows.src.evaluation.service import EvaluationService
 from apps.flows.src.models import TriggerType
 from apps.flows.src.registry.nodes import create_default_node_registry
-from apps.flows.src.resources.resolver import ResourceResolver
-from apps.flows.src.runners.javascript import JavaScriptCodeRunner
-from apps.flows.src.runners.python import PythonCodeRunner
+from apps.flows.src.runners.remote import RemoteCodeRunner
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.services.lara_action_engine import LaraActionEngine
+from apps.flows.src.services.lara_facade import LaraFacade
 from apps.flows.src.services.llm_models_service import LLMModelsService
 from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
 from apps.flows.src.services.resource_loader import ResourceLoader
@@ -46,6 +44,7 @@ from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from apps.flows.src.triggers.registry import TriggerRegistry
 from apps.flows.src.variables import VariablesService
 from apps.scheduler.container import get_scheduler_container
+from core.capabilities import CAPABILITY_LANGUAGE_SET
 from core.clients.a2a_client import A2AClient
 from core.clients.loki_client import LokiClient
 from core.clients.redis_client import RedisClient
@@ -53,7 +52,6 @@ from core.clients.tempo_client import TempoClient
 from core.compiler import GraphCompiler
 from core.config.testing import is_testing
 from core.container import BaseContainer, lazy
-from core.context import get_context
 from core.db.repositories.embed_config_repository import EmbedConfigRepository
 from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.logging import get_logger
@@ -124,13 +122,6 @@ class FlowContainer(BaseContainer):
             repository=self.operator_repository,
             file_repository=self.file_repository,
             redis_client=self.redis_client,
-        )
-
-    @lazy
-    def resource_resolver(self):
-        return ResourceResolver(
-            repository=self.resource_repository,
-            container=self,
         )
 
     # rag_repository наследуется из BaseContainer (core/container/base.py)
@@ -207,29 +198,17 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def python_code_runner(self):
-        """Stateless PythonCodeRunner для валидации кода."""
-        return PythonCodeRunner()
+        """Stateless remote Python runner для валидации кода."""
+        return RemoteCodeRunner("python")
 
     def get_code_runner(
         self,
         language: str = "python",
-        resources: dict[str, object] | None = None,
-        variables: dict[str, object] | None = None,
     ):
         """Возвращает runner для указанного языка."""
-        context = get_context()
-
-        if language == "python":
-            return PythonCodeRunner(
-                context=context,
-                variables=variables,
-                resources=resources,
-                base_tool_class=self.base_tool_class,
-            )
-        elif language == "javascript":
-            return JavaScriptCodeRunner()
-        else:
-            raise ValueError(f"Unsupported language: {language}")
+        if language in CAPABILITY_LANGUAGE_SET:
+            return RemoteCodeRunner(language)
+        raise ValueError(f"Unsupported language: {language}")
 
     @lazy
     def resource_loader(self):

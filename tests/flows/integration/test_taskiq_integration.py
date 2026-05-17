@@ -30,7 +30,6 @@ def require_taskiq_worker(taskiq_worker, container):
     container.use_worker = False
 
 
-from apps.flows.src.tasks.eval_task import execute_inline_code  # noqa: E402
 from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
 from apps.flows.src.tasks.tool_tasks import execute_tool  # noqa: E402
 from core.state import ExecutionState  # noqa: E402
@@ -61,7 +60,7 @@ class TestTaskIQToolExecution:
             "title": "TaskIQ Test Calculator",
             "description": "Calculator for TaskIQ tests",
             "code": """
-async def execute(args, state):
+async def run(args, state):
     a = args.get('a', 0)
     b = args.get('b', 0)
     op = args.get('op', 'add')
@@ -151,7 +150,7 @@ async def execute(args, state):
             "title": "State Tool",
             "description": "Tool that uses state",
             "code": """
-async def execute(args, state):
+async def run(args, state):
     prefix = state.get('prefix', '')
     value = args.get('value', '')
     return f"{prefix}:{value}"
@@ -195,7 +194,7 @@ async def execute(args, state):
             "title": "Multiplier",
             "description": "Multiplies",
             "code": """
-async def execute(args, state):
+async def run(args, state):
     return args.get('x', 0) * 2
 """,
         }
@@ -263,11 +262,11 @@ class TestTaskIQFlowExecution:
             nodes={
                 "init": {
                     "type": "code",
-                    "code": "async def run(state):\n    state['step'] = 'init'\n    return state",
+                    "code": "async def run(args, state):\n    state['step'] = 'init'\n    return state",
                 },
                 "process": {
                     "type": "code",
-                    "code": "async def run(state):\n    state['step'] = 'process'\n    state['response'] = 'Done'\n    return state",
+                    "code": "async def run(args, state):\n    state['step'] = 'process'\n    state['response'] = 'Done'\n    return state",
                 },
             },
             edges=[
@@ -321,7 +320,7 @@ class TestTaskIQInterruptResume:
                 "ask": {
                     "type": "code",
                     "code": """
-async def run(state):
+async def run(args, state):
     if 'name' in state:
         return state
     if state.get('asked_name'):
@@ -335,7 +334,7 @@ async def run(state):
                 "greet": {
                     "type": "code",
                     "code": """
-async def run(state):
+async def run(args, state):
     name = state.get('name', 'Unknown')
     state['response'] = f'Hello, {name}!'
     return state
@@ -430,34 +429,6 @@ async def run(state):
         assert "Alice" in result2.return_value["response"]
 
 
-class TestTaskIQInlineCode:
-    """Тесты inline кода через TaskIQ."""
-
-    @pytest.mark.asyncio
-    async def test_inline_code_via_taskiq_kiq(self, app):
-        """Inline код выполняется через TaskIQ .kiq() + wait_result()."""
-        code = """
-async def run(state):
-    state['computed'] = state.get('x', 0) ** 2
-    return state
-"""
-        # Создаем валидный state
-        state_dict = {
-            "task_id": "test-task",
-            "context_id": "test-context",
-            "user_id": "test-user",
-            "session_id": "test:test-context",
-            "x": 7,
-        }
-
-        task = await execute_inline_code.kiq(code, state_dict)
-
-        result = await task.wait_result()
-
-        assert not result.is_err, f"Task failed: {result.error}"
-        assert result.return_value["computed"] == 49
-
-
 class TestTaskIQAPIIntegration:
     """Тесты интеграции API с TaskIQ."""
 
@@ -474,7 +445,7 @@ class TestTaskIQAPIIntegration:
             nodes={
                 "main": {
                     "type": "code",
-                    "code": "async def run(state):\n    state['response'] = f\"Got: {state.get('content', '')}\"\n    return state",
+                    "code": "async def run(args, state):\n    state['response'] = f\"Got: {state.get('content', '')}\"\n    return state",
                 },
             },
             edges=[{"from": "main", "to": None}],

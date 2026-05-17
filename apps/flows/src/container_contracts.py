@@ -25,9 +25,6 @@ class FlowRuntimeContainer(Protocol):
     def resource_repository(self) -> Any: ...
 
     @property
-    def resource_resolver(self) -> Any: ...
-
-    @property
     def node_repository(self) -> Any: ...
 
     @property
@@ -69,8 +66,6 @@ class FlowRuntimeContainer(Protocol):
     def get_code_runner(
         self,
         language: str = "python",
-        resources: dict[str, object] | None = None,
-        variables: dict[str, object] | None = None,
     ) -> Any: ...
 
     @property

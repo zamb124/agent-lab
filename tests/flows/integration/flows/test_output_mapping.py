@@ -43,7 +43,7 @@ class TestCodeNodeOutputMapping:
             node_id="test_tool",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     return {"status": "ok", "data": {"items": [1, 2, 3]}, "count": 3}
 """,
                 "input_mapping": {},
@@ -64,7 +64,7 @@ async def execute(args, state):
             node_id="test_tool",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     return {"result": "success", "value": 100}
 """,
                 "input_mapping": {},
@@ -85,7 +85,7 @@ async def execute(args, state):
             node_id="test_tool",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     return "Tool executed successfully"
 """,
                 "input_mapping": {},
@@ -104,7 +104,7 @@ async def execute(args, state):
             node_id="test_tool",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     return args['x'] * args['y']
 """,
                 "input_mapping": {"x": 7, "y": 6},
@@ -123,7 +123,7 @@ async def execute(args, state):
             node_id="test_tool",
             config={
                 "code": """
-async def execute(args, state):
+async def run(args, state):
     return [1, 2, 3, 4, 5]
 """,
                 "input_mapping": {},
@@ -242,7 +242,7 @@ class TestOutputMappingEdgeCases:
     async def test_empty_dict_result(self):
         """Пустой dict не меняет state."""
         code = """
-async def run(state):
+async def run(args, state):
     return {}
 """
         node = CodeNode(node_id="test_func", config={"code": code})
@@ -256,7 +256,7 @@ async def run(state):
     async def test_mapping_with_missing_keys(self):
         """Маппинг игнорирует отсутствующие ключи."""
         code = """
-async def run(state):
+async def run(args, state):
     return {"field1": "value1"}
 """
         node = CodeNode(
@@ -276,7 +276,7 @@ async def run(state):
     async def test_nested_dict_in_result(self):
         """Вложенные dict в результате."""
         code = """
-async def run(state):
+async def run(args, state):
     return {
         "user": {"name": "John", "profile": {"age": 25}},
         "metadata": {"timestamp": 12345}
@@ -294,7 +294,7 @@ async def run(state):
     async def test_mapping_nested_dict_as_whole(self):
         """Маппинг вложенного dict целиком."""
         code = """
-async def run(state):
+async def run(args, state):
     return {"data": {"items": [1, 2, 3], "count": 3}}
 """
         node = CodeNode(
@@ -310,7 +310,7 @@ async def run(state):
     async def test_overwrite_existing_field(self):
         """Результат перезаписывает существующие поля state."""
         code = """
-async def run(state):
+async def run(args, state):
     return {"field": "new_value"}
 """
         node = CodeNode(node_id="test_func", config={"code": code})
@@ -324,7 +324,7 @@ async def run(state):
     async def test_bool_result_without_mapping(self):
         """Boolean результат -> state.result."""
         code = """
-async def run(state):
+async def run(args, state):
     return True
 """
         node = CodeNode(node_id="test_func", config={"code": code})
@@ -343,7 +343,7 @@ class TestDataFlowWithOutputMapping:
         """CodeNode с mapping -> CodeNode читает mapped поля."""
         # CodeNode возвращает dict, маппит в другие поля
         func_code = """
-async def run(state):
+async def run(args, state):
     return {"raw_value": 10, "multiplier": 5}
 """
         func_node = CodeNode(
@@ -358,7 +358,7 @@ async def run(state):
         tool_node = CodeNode(
             node_id="multiply",
             config={
-                "code": "async def execute(args, state):\n    return args['x'] * args['y']",
+                "code": "async def run(args, state):\n    return args['x'] * args['y']",
                 "input_mapping": {"x": "@state:input_value", "y": "@state:factor"},
             },
         )
@@ -383,7 +383,7 @@ async def run(state):
         node1 = CodeNode(
             node_id="step1",
             config={
-                "code": "async def execute(args, state):\n    return {'value': args['input'] * 2}",
+                "code": "async def run(args, state):\n    return {'value': args['input'] * 2}",
                 "input_mapping": {"input": 10},
                 "output_mapping": {"value": "step1_result"},
             },
@@ -392,7 +392,7 @@ async def run(state):
         node2 = CodeNode(
             node_id="step2",
             config={
-                "code": "async def execute(args, state):\n    return {'final': args['x'] + 5}",
+                "code": "async def run(args, state):\n    return {'final': args['x'] + 5}",
                 "input_mapping": {"x": "@state:step1_result"},
                 "output_mapping": {"final": "final_result"},
             },
@@ -415,7 +415,7 @@ class TestExecutionStateReturnFromFunction:
     async def test_execution_state_return_merges(self):
         """CodeNode: возврат ExecutionState мержится в state."""
         code = """
-async def run(state):
+async def run(args, state):
     state.modified_field = "modified"
     state.new_field = "new"
     return state
@@ -434,7 +434,7 @@ async def run(state):
     async def test_execution_state_return_ignores_output_mapping(self):
         """CodeNode: при возврате ExecutionState output_mapping игнорируется."""
         code = """
-async def run(state):
+async def run(args, state):
     state.field1 = "value1"
     return state
 """

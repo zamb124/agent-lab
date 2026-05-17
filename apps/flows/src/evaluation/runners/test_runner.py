@@ -9,7 +9,6 @@
 """
 
 import importlib
-import inspect
 import json
 import re
 import time
@@ -29,7 +28,6 @@ from apps.flows.src.models.flow_config import (
     InputType,
     TestTurn,
 )
-from apps.flows.src.runners.python import PythonCodeRunner
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import get_llm
@@ -76,12 +74,12 @@ class TestRunner:
         self._node_repository = node_repository
         self._tool_registry = tool_registry
 
-    def _get_python_runner(self) -> Any:
+    def _get_code_runner(self, language: str) -> Any:
         if self._flow_factory is not None:
             container = self._flow_factory.container
-            return container.get_code_runner(language="python")
+            return container.get_code_runner(language=language)
 
-        return PythonCodeRunner()
+        raise RuntimeError("Evaluation inline code requires FlowContainer-backed remote code runner")
 
     async def run(
         self,
@@ -310,19 +308,13 @@ class TestRunner:
             return input_config.value, None
 
         if input_config.type == InputType.INLINE_CODE:
-            runner = self._get_python_runner()
-            fn = runner.compiler.compile(input_config.value, "generate")
-            sig = inspect.signature(fn)
-            if inspect.iscoroutinefunction(fn):
-                if len(sig.parameters) == 0:
-                    result = await fn()
-                else:
-                    result = await fn(execution_state.model_dump())
-            else:
-                if len(sig.parameters) == 0:
-                    result = fn()
-                else:
-                    result = fn(execution_state.model_dump())
+            runner = self._get_code_runner(input_config.language)
+            result = await runner.execute_tool(
+                input_config.value,
+                {},
+                execution_state,
+                entrypoint=input_config.entrypoint,
+            )
             return str(result), None
 
         return input_config.value, None
@@ -342,12 +334,13 @@ class TestRunner:
             return {"result": 10.0 if result else 0.0}
 
         if check_config.type == CheckType.INLINE_CODE:
-            runner = self._get_python_runner()
-            fn = runner.compiler.compile(check_config.value, "check")
-            if inspect.iscoroutinefunction(fn):
-                result = await fn(state_dict, response)
-            else:
-                result = fn(state_dict, response)
+            runner = self._get_code_runner(check_config.language)
+            result = await runner.execute_tool(
+                check_config.value,
+                {"state": state_dict, "response": response, "dialog": dialog},
+                execution_state,
+                entrypoint=check_config.entrypoint,
+            )
             return self._normalize_check_result(result)
 
         if check_config.type == CheckType.NODE:

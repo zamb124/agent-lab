@@ -1,31 +1,11 @@
-"""Лимиты wall-clock и AST-запрет очевидных вечных циклов в inline Python."""
+"""Лимиты wall-clock для flow/code-node конфигурации."""
 
 import pytest
 
-from apps.flows.src.eval.compiler import PythonCompiler
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
-from core.errors import SafeEvalError
 from core.state import ExecutionState
-
-
-def test_compiler_rejects_while_true() -> None:
-    c = PythonCompiler()
-    with pytest.raises(SafeEvalError) as ei:
-        c.validate("while True:\n    x = 1\n")
-    assert "while" in str(ei.value).lower() or "цикл" in str(ei.value)
-
-
-def test_compiler_allows_while_variable() -> None:
-    c = PythonCompiler()
-    c.validate(
-        "def run(state):\n"
-        "    x = 0\n"
-        "    while x < 3:\n"
-        "        x += 1\n"
-        "    return {}\n"
-    )
 
 
 def test_apply_flow_wall_clock_deadline() -> None:

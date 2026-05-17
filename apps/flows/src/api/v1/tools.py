@@ -28,6 +28,8 @@ class ToolCreateRequest(BaseModel):
     title: str | None = None
     description: str | None = None
     code: str | None = None
+    language: str = "python"
+    entrypoint: str | None = None
     args_schema: JsonDict | None = None
     parameters_schema: JsonDict | None = None
     tags: list[str] | None = None
@@ -41,6 +43,8 @@ class ToolResponse(BaseModel):
     title: str | None
     description: str | None
     code: str | None = None
+    language: str = "python"
+    entrypoint: str | None = None
     args_schema: JsonDict | None = None
     parameters_schema: JsonDict | None = None
     tags: list[str] = Field(default_factory=list)
@@ -73,6 +77,8 @@ async def list_tools(
                 title=t.title,
                 description=t.description,
                 code=t.code,
+                language=t.language,
+                entrypoint=t.entrypoint,
                 args_schema=t.args_schema if t.args_schema else None,
                 parameters_schema=t.parameters_schema,
                 tags=t.tags or ["misc"],
@@ -111,6 +117,8 @@ async def list_all_tools_and_flows(
             title=t.title,
             description=t.description,
             code=t.code,
+            language=t.language,
+            entrypoint=t.entrypoint,
             args_schema=t.args_schema if t.args_schema else None,
             parameters_schema=t.parameters_schema,
             tags=t.tags or ["misc"],
@@ -191,6 +199,8 @@ async def get_tool(
             title=tool.title,
             description=tool.description,
             code=tool.code,
+            language=tool.language,
+            entrypoint=tool.entrypoint,
             args_schema=tool.args_schema if tool.args_schema else None,
             parameters_schema=tool.parameters_schema,
             tags=tool.tags or ["misc"],
@@ -249,6 +259,8 @@ async def create_tool(
         title=request.title,
         description=request.description,
         code=request.code,
+        language=request.language,
+        entrypoint=request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else None,
         parameters_schema=ps,
         args_schema=args_schema,
         tags=request.tags or [],
@@ -262,6 +274,8 @@ async def create_tool(
         title=ref.title,
         description=ref.description,
         code=ref.code,
+        language=ref.language,
+        entrypoint=ref.entrypoint,
         args_schema=ref.args_schema if ref.args_schema else None,
         parameters_schema=ref.parameters_schema,
         tags=ref.tags,

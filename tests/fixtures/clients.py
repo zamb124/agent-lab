@@ -373,10 +373,10 @@ async def flows_client_http(flows_service):
     """
     HTTP клиент для Agents API (реальный HTTP).
 
-    Использует реальный HTTP сервер на порту 8000.
+    Использует реальный HTTP сервер на порту 9001.
     Для E2E тестов всей платформы.
     """
-    async with AsyncClient(base_url="http://localhost:8000") as client:
+    async with AsyncClient(base_url="http://localhost:9001") as client:
         yield client
 
 
@@ -444,4 +444,3 @@ async def all_clients_http(
         "crm": crm_client_http,
         "frontend": frontend_client_http,
     }
-

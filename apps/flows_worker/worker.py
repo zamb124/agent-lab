@@ -146,7 +146,6 @@ register_worker_events(
 )
 
 import apps.flows.src.tasks.company_init_tasks as _company_init_tasks  # noqa: E402
-import apps.flows.src.tasks.eval_task as _eval_task  # noqa: E402
 import apps.flows.src.tasks.flow_tasks as _flow_tasks  # noqa: E402
 import apps.flows.src.tasks.llm_tasks as _llm_tasks  # noqa: E402
 import apps.flows.src.tasks.node_tasks as _node_tasks  # noqa: E402
@@ -155,7 +154,6 @@ import apps.flows.src.tasks.tool_tasks as _tool_tasks  # noqa: E402
 
 _TASK_REGISTRATION_MODULES = (
     _company_init_tasks,
-    _eval_task,
     _flow_tasks,
     _llm_tasks,
     _node_tasks,

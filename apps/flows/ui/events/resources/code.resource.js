@@ -8,20 +8,25 @@
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
+export function buildCodeQueryUrl(path, payload) {
+    const query = payload && typeof payload === 'object' ? payload : {};
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(query)) {
+        if (v === null || v === undefined) continue;
+        params.append(k, String(v));
+    }
+    const qs = params.toString();
+    return `${path}${qs ? `?${qs}` : ''}`;
+}
+
 export const codeCompletionsOp = createAsyncOp({
     name: 'flows/code_completions',
     silent: true,
     restMirror: { method: 'GET', path: '/flows/api/v1/code/completions' },
     request: async ({ payload }) => {
-        const query = payload && typeof payload === 'object' ? payload : {};
-        const params = new URLSearchParams();
-        for (const [k, v] of Object.entries(query)) {
-            if (v === null || v === undefined) continue;
-            params.append(k, String(v));
-        }
         return httpRequest({
             method: 'GET',
-            url: `/flows/api/v1/code/completions${params.toString() ? '?' + params.toString() : ''}`,
+            url: buildCodeQueryUrl('/flows/api/v1/code/completions', payload),
         });
     },
 });
@@ -31,16 +36,9 @@ export const codeDocumentationOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/flows/api/v1/code/documentation' },
     request: async ({ payload }) => {
-        const query = payload && typeof payload === 'object' ? payload : {};
-        const params = new URLSearchParams();
-        for (const [k, v] of Object.entries(query)) {
-            if (v === null || v === undefined) continue;
-            params.append(k, String(v));
-        }
-        const qs = params.toString();
         return httpRequest({
             method: 'GET',
-            url: `/flows/api/v1/code/documentation${qs ? `?${qs}` : ''}`,
+            url: buildCodeQueryUrl('/flows/api/v1/code/documentation', payload),
         });
     },
 });
@@ -50,15 +48,9 @@ export const codeTemplatesOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/flows/api/v1/code/templates' },
     request: async ({ payload }) => {
-        const query = payload && typeof payload === 'object' ? payload : {};
-        const params = new URLSearchParams();
-        for (const [k, v] of Object.entries(query)) {
-            if (v === null || v === undefined) continue;
-            params.append(k, String(v));
-        }
         return httpRequest({
             method: 'GET',
-            url: `/flows/api/v1/code/templates${params.toString() ? '?' + params.toString() : ''}`,
+            url: buildCodeQueryUrl('/flows/api/v1/code/templates', payload),
         });
     },
 });

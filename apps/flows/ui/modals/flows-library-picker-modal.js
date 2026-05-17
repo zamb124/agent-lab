@@ -18,6 +18,12 @@ import { embedAssistantMarkdownToHtml } from '@platform/lib/embed-chat/embed-cha
 import { registryItemIconName, registryItemTitle } from '../_helpers/flows-registry-item-icon.js';
 import { isPlainObject } from '../_helpers/flows-resolvers.js';
 import { isMcpToolRegistryItem } from '../_helpers/flows-mcp-tool-registry.js';
+import {
+    FLOW_CODE_LANGUAGES,
+    flowCodeLanguageLabel,
+    flowCodeLanguageShortLabel,
+    normalizeFlowCodeLanguage,
+} from '../_helpers/flows-code-languages.js';
 import { getNodeTypeMeta } from '../constants/node-icons.js';
 
 function _templatesFromResult(result) {
@@ -53,6 +59,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         _sourceTab: { state: true },
         _activeTag: { state: true },
         _toolCategoryTab: { state: true },
+        _codeLanguage: { state: true },
     };
 
     static styles = [
@@ -100,6 +107,50 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 display: flex;
                 gap: var(--space-1);
                 margin-bottom: var(--space-3);
+            }
+            .code-language-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+                margin: calc(var(--space-2) * -1) 0 var(--space-3);
+            }
+            .language-segment {
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                padding: 2px;
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+            }
+            .language-button {
+                width: 36px;
+                height: 24px;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 0;
+                border-radius: calc(var(--radius-md) - 2px);
+                background: transparent;
+                color: var(--text-tertiary);
+                font-size: 11px;
+                font-weight: var(--font-semibold);
+                line-height: 1;
+                cursor: pointer;
+            }
+            .language-button:hover {
+                color: var(--text-primary);
+                background: var(--glass-tint-medium);
+            }
+            .language-button[active] {
+                color: var(--accent);
+                background: var(--accent-subtle);
+            }
+            .language-button:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 1px;
             }
             .tab {
                 padding: 6px 12px;
@@ -240,6 +291,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         this._sourceTab = 'catalog';
         this._activeTag = '';
         this._toolCategoryTab = 'all';
+        this._codeLanguage = 'python';
         this._toolsAll = this.useOp('flows/tools_all');
         this._codeTemplates = this.useOp('flows/code_templates');
         this._codeParseSignature = this.useOp('flows/code_parse_signature');
@@ -256,15 +308,20 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             this._activeTag = '';
             this._sourceTab = 'catalog';
             this._toolCategoryTab = 'all';
+            this._codeLanguage = 'python';
             this.size = 'full';
             if (this._isCodeNodeTemplates()) {
-                void this._codeTemplates.run({
-                    language: 'python',
-                    node_type: 'tool',
-                });
+                void this._loadCodeTemplates();
             }
             void this._toolsAll.run({ limit: 2000, offset: 0 });
         }
+    }
+
+    _loadCodeTemplates() {
+        return this._codeTemplates.run({
+            language: normalizeFlowCodeLanguage(this._codeLanguage),
+            node_type: 'tool',
+        });
     }
 
     _toolsAllItems() {
@@ -283,7 +340,11 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const list = this._toolsAllItems().filter((t) => t.item_type !== 'flow');
         const tagF = this._activeTag;
         const q = _lower(this._search);
+        const wantedLanguage = normalizeFlowCodeLanguage(this._codeLanguage);
         return list.filter((t) => {
+            if (this._isCodeNodeTemplates() && normalizeFlowCodeLanguage(t.language) !== wantedLanguage) {
+                return false;
+            }
             if (tagF.length > 0) {
                 const tags = _tagsFromItem(t);
                 if (!tags.includes(tagF)) {
@@ -464,6 +525,39 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         `;
     }
 
+    _setCodeLanguage(language) {
+        const normalized = normalizeFlowCodeLanguage(language);
+        if (this._codeLanguage === normalized) {
+            return;
+        }
+        this._codeLanguage = normalized;
+        this._activeTag = '';
+        void this._loadCodeTemplates();
+    }
+
+    _renderCodeLanguageSegment() {
+        if (!this._isCodeNodeTemplates()) {
+            return nothing;
+        }
+        const current = normalizeFlowCodeLanguage(this._codeLanguage);
+        return html`
+            <div class="code-language-row">
+                <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
+                    ${FLOW_CODE_LANGUAGES.map((lang) => html`
+                        <button
+                            type="button"
+                            class="language-button"
+                            ?active=${current === lang.value}
+                            title=${lang.label}
+                            aria-label=${lang.label}
+                            @click=${() => this._setCodeLanguage(lang.value)}
+                        >${flowCodeLanguageShortLabel(lang.value)}</button>
+                    `)}
+                </div>
+            </div>
+        `;
+    }
+
     _renderFilterBar() {
         const isCode = this._isCodeNodeTemplates();
         const tagRow = isCode
@@ -519,6 +613,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 <div class="lib-card-desc">${this._mdDescription(desc)}</div>
                 <div class="lib-card-meta">
                     ${id.length > 0 ? html`<span class="lib-chip">${id}</span>` : null}
+                    ${kindAttr === 'code' && typeof t.language === 'string' && t.language.length > 0
+                        ? html`<span class="lib-chip">${flowCodeLanguageLabel(t.language)}</span>`
+                        : nothing}
                     ${_tagsFromItem(t).map((g) => html`<span class="lib-chip">${g}</span>`)}
                 </div>
             </button>
@@ -559,7 +656,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             return;
         }
         const fn = this.onCommit;
-        const parsed = isPlainObject(t.args_schema)
+        const language = normalizeFlowCodeLanguage(t.language);
+        const parsed = isPlainObject(t.args_schema) || language !== 'python'
             ? null
             : await this._codeParseSignature.run({
                 code: t.code,
@@ -568,7 +666,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (typeof fn === 'function') {
             const cfg = {
                 code: t.code,
-                language: typeof t.language === 'string' && t.language.length > 0 ? t.language : 'python',
+                language,
             };
             const argsSchema = this._templateArgsSchema(t, parsed);
             if (Object.keys(argsSchema).length > 0) {
@@ -597,7 +695,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             const cfg = {
                 tool_id: t.tool_id,
                 code: t.code,
-                language: 'python',
+                language: normalizeFlowCodeLanguage(t.language),
             };
             if (t.args_schema && typeof t.args_schema === 'object') {
                 cfg.args_schema = t.args_schema;
@@ -649,6 +747,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         const rowTools = this._toolRegistryRows();
         return html`
             ${this._renderFilterBar()}
+            ${this._renderCodeLanguageSegment()}
             <div class="tabs">
                 <button
                     type="button"
@@ -687,6 +786,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                             typeof t.description === 'string' ? t.description : '',
                         )}</div>
                         <div class="lib-card-meta">
+                            ${typeof t.language === 'string' && t.language.length > 0
+                                ? html`<span class="lib-chip">${flowCodeLanguageLabel(t.language)}</span>`
+                                : nothing}
                             ${typeof t.id === 'string' && t.id.length > 0
                                 ? html`<span class="lib-chip">${t.id}</span>`
                                 : nothing}

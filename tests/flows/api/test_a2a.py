@@ -1376,7 +1376,7 @@ class TestA2ASkills:
                     "entry": "node1",
                     "nodes": {
                         "node1": {"type": "llm_node", "prompt": "Test prompt"},
-                        "node2": {"type": "code", "code": "async def run(state):\n    state['result'] = 'ok'\n    return state"},
+                        "node2": {"type": "code", "code": "async def run(args, state):\n    state['result'] = 'ok'\n    return state"},
                     },
                     "edges": [
                         {"from": "node1", "to": "node2"},

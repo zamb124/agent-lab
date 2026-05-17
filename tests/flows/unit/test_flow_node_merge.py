@@ -6,7 +6,7 @@ def test_merge_preserves_type_when_incoming_is_only_pos() -> None:
     prev = {
         "formatter": {
             "type": "code",
-            "code": "async def run(state):\n    return state",
+            "code": "async def run(args, state):\n    return state",
         }
     }
     inc = {"formatter": {"pos_x": 12, "pos_y": 34}}

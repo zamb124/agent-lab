@@ -1,8 +1,4 @@
-"""
-Платформенные тулы браузера для ReAct: DuckDuckGo-поиск ссылок и снимок страницы в markdown.
-
-Реализации совпадают с `apps.flows.src.eval.web_snapshot` (MCP `browser`, FileReader).
-"""
+"""Платформенные тулы браузера для ReAct: DuckDuckGo-поиск ссылок и снимок страницы в markdown."""
 
 from __future__ import annotations
 
@@ -10,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from apps.flows.src.eval.web_snapshot import BrowserSnapshotDescribe, DuckDuckGoBrowserSearch
+from apps.flows.src.services.web_snapshot import BrowserSnapshotDescribe, DuckDuckGoBrowserSearch
 from apps.flows.src.tools.decorator import tool
 
 if TYPE_CHECKING:

@@ -5,6 +5,7 @@
 
 import { asString, isPlainObject } from './flows-resolvers.js';
 import { isMcpToolRegistryItem, parseMcpToolIdToNodeConfig } from './flows-mcp-tool-registry.js';
+import { normalizeFlowCodeLanguage } from './flows-code-languages.js';
 
 /**
  * @param {unknown} ref
@@ -157,15 +158,23 @@ export function registryToolItemToNode(t) {
             state_mapping: {},
         };
     }
-    return {
+    const out = {
         node_id: toolId,
         type: 'code',
         name: displayTitle,
         description: typeof t.description === 'string' ? t.description : '',
         code: typeof t.code === 'string' ? t.code : '',
         tool_id: '',
+        language: normalizeFlowCodeLanguage(t.language),
         args_schema: isPlainObject(t.args_schema) ? t.args_schema : {},
     };
+    if (isPlainObject(t.parameters_schema)) {
+        out.parameters_schema = t.parameters_schema;
+    }
+    if (typeof t.entrypoint === 'string' && t.entrypoint.length > 0) {
+        out.entrypoint = t.entrypoint;
+    }
+    return out;
 }
 
 const STRIP_NODE_KEYS = new Set(['position', 'layout']);

@@ -2,7 +2,7 @@
  * flows-code-resource-editor — ресурс code.
  *
  * Поля точно по `CodeResourceConfig`:
- *   - language (CodeLanguage: python | javascript)
+ *   - language (CodeLanguage: python | javascript | typescript | go | csharp)
  *   - code (str)
  *
  * UI — `flows-code-workbench` в режиме resource (тот же chrome, что у code-ноды).
@@ -13,6 +13,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-base-resource-editor.js';
 import '../editors/flows-code-workbench.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
+import { normalizeFlowCodeLanguage } from '../../_helpers/flows-code-languages.js';
 
 export class FlowsCodeResourceEditor extends PlatformElement {
     static properties = {
@@ -55,7 +56,11 @@ export class FlowsCodeResourceEditor extends PlatformElement {
             if (typeof d.language !== 'string' || d.language.length === 0) {
                 throw new Error('flows-code-resource-editor: language required');
             }
-            this._emitConfig({ language: d.language });
+            const patch = { language: normalizeFlowCodeLanguage(d.language) };
+            if (typeof d.code === 'string') {
+                patch.code = d.code;
+            }
+            this._emitConfig(patch);
             return;
         }
         if (d.type === 'args_schema') {
@@ -66,7 +71,7 @@ export class FlowsCodeResourceEditor extends PlatformElement {
 
     render() {
         const cfg = this.resource && typeof this.resource.config === 'object' ? this.resource.config : {};
-        const language = cfg.language === 'javascript' || cfg.language === 'python' ? cfg.language : 'python';
+        const language = normalizeFlowCodeLanguage(cfg.language);
         const code = typeof cfg.code === 'string' ? cfg.code : '';
         return html`
             <flows-base-resource-editor

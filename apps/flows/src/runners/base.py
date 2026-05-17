@@ -24,7 +24,7 @@ class BaseCodeRunner(ABC):
         self,
         code: str,
         state: ExecutionState,
-        func_name: str = "run"
+        func_name: str | None = None
     ) -> Any:
         """
         Выполняет код.
@@ -32,7 +32,7 @@ class BaseCodeRunner(ABC):
         Args:
             code: Исходный код
             state: ExecutionState
-            func_name: Имя функции для вызова
+            func_name: Имя функции для вызова; None = первая функция в source
 
         Returns:
             Результат выполнения (Any)
@@ -45,6 +45,7 @@ class BaseCodeRunner(ABC):
         code: str,
         args: dict[str, Any],
         state: ExecutionState | None = None,
+        entrypoint: str | None = None,
     ) -> Any:
         """
         Выполняет код tool.
@@ -53,6 +54,7 @@ class BaseCodeRunner(ABC):
             code: Исходный код tool
             args: Аргументы вызова
             state: ExecutionState (опционально)
+            entrypoint: Имя функции-точки входа; None = первая функция в source
 
         Returns:
             Результат выполнения (Any)

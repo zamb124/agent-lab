@@ -17,8 +17,6 @@
 from __future__ import annotations
 
 import asyncio
-import importlib
-import inspect
 import json
 import uuid
 from abc import ABC, abstractmethod
@@ -29,6 +27,7 @@ from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.clients.mcp_client import MCPHttpClient
+from apps.flows.src.container_state import get_current_container
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.mock import get_mock_for_node
@@ -37,8 +36,6 @@ from apps.flows.src.models.enums import ChannelType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig
 from apps.flows.src.models.operator_schemas import OperatorTaskStatus
-from apps.flows.src.runners.javascript import JavaScriptCodeRunner
-from apps.flows.src.runners.python import PythonCodeRunner
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
 from apps.flows.src.runtime.llm_resource_override import (
@@ -146,7 +143,7 @@ class BaseNode(ABC):
     ):
         self.node_id = node_id
         self.config = config or {}
-        self.container = container
+        self.container = container or get_current_container()
         self.input_mapping = self.config.get("input_mapping")
         self.output_mapping: dict[str, str] | None = self.config.get("output_mapping")
         self.save_to_messages = self.config.get("save_to_messages", False)
@@ -236,38 +233,6 @@ class BaseNode(ABC):
         """Извлекает node_id из metadata сообщения."""
         metadata = getattr(msg, "metadata", None) or {}
         return metadata.get("node_id")
-
-    async def _resolve_resources(self, state: ExecutionState) -> dict[str, Any]:
-        """
-        Резолвит ресурсы для ноды.
-
-        Иерархия (node > skill > flow): flow/skill из БД по session_flow_id и flow_config_version.
-
-        Returns:
-            Dict[resource_id, wrapper] для использования в namespace
-        """
-        node_resources = self.config.get("resources", {}) or {}
-        container = self.container
-        if container is None:
-            if node_resources:
-                raise RuntimeError(f"Node '{self.node_id}' requires FlowContainer to resolve resources")
-            return {}
-
-        flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
-            state.session_flow_id,
-            state.branch_id,
-            state.flow_config_version,
-        )
-
-        if not flow_resources and not skill_resources and not node_resources:
-            return {}
-
-        return await container.resource_resolver.resolve_for_node(
-            flow_resources=flow_resources,
-            skill_resources=skill_resources,
-            node_resources=node_resources,
-            variables=state.variables,
-        )
 
     # Descriptor для унифицированного вызова: node.run(state) или node.run.kiq(state)
     run = NodeRunDescriptor()
@@ -868,37 +833,13 @@ class LlmNode(BaseNode):
         """
         Создаёт tools из inline конфигов.
 
-        Иерархия resources для tools как у CodeNode: flow → node → tool (правее сильнее).
+        Code tools execute in isolated runners. Platform access goes through
+        capability-gateway, so resources are not injected into tool namespaces.
         """
         container = self.container
         if container is None:
             registry = ToolRegistry()
             return await registry.create_tools(self.tool_refs)
-
-        flow_resources: dict[str, Any] = {}
-        skill_resources: dict[str, Any] = {}
-        if state is not None:
-            fr, sr = await container.flow_factory.get_resource_maps(
-                state.session_flow_id,
-                state.branch_id,
-                state.flow_config_version,
-            )
-            flow_resources = fr or {}
-            skill_resources = dict(sr) if sr else {}
-        node_resources_cfg = self.config.get("resources", {}) or {}
-        merged_node_level = {**flow_resources, **skill_resources, **node_resources_cfg}
-
-        if merged_node_level:
-            enriched_refs = []
-            for ref in self.tool_refs:
-                if isinstance(ref, dict):
-                    tool_resources = ref.get("resources", {}) or {}
-                    merged_resources = {**merged_node_level, **tool_resources}
-                    enriched_ref = {**ref, "resources": merged_resources}
-                    enriched_refs.append(enriched_ref)
-                else:
-                    enriched_refs.append(ref)
-            return await container.tool_registry.create_tools(enriched_refs)
 
         return await container.tool_registry.create_tools(self.tool_refs)
 
@@ -955,39 +896,20 @@ class CodeNode(BaseNode):
         cfg = self.config
 
         self.language = cfg.get("language", "python")
+        raw_entrypoint = cfg.get("entrypoint")
+        self.entrypoint = raw_entrypoint.strip() if isinstance(raw_entrypoint, str) and raw_entrypoint.strip() else None
         self.code = cfg.get("code")
         self.tool_id = cfg.get("tool_id")
         self.args_schema = cfg.get("args_schema")
 
         self._runner = None
 
-        # Для Python можно загрузить из function path
-        if self.language == "python" and self.code is None and cfg.get("function"):
-            self._load_from_function_path(cfg["function"])
-
-    def _load_from_function_path(self, function_path: str):
-        """Загружает код из module.function path."""
-        try:
-            module_path, func_name = function_path.rsplit(".", 1)
-            module = importlib.import_module(module_path)
-            func = getattr(module, func_name)
-            self.code = inspect.getsource(func)
-        except Exception as e:
-            raise ValueError(f"Node '{self.node_id}': failed to load from {function_path}: {e}")
-
-    def _get_runner(self, resources: dict[str, Any] | None = None):
-        """Возвращает runner для текущего языка с ресурсами."""
-        resolved_resources = resources or {}
+    def _get_runner(self):
+        """Возвращает isolated runner для текущего языка."""
         container = self.container
         if container is None:
-            if resolved_resources:
-                raise RuntimeError(f"Code node '{self.node_id}' requires FlowContainer to create code runner")
-            if self.language == "python":
-                return PythonCodeRunner()
-            if self.language == "javascript":
-                return JavaScriptCodeRunner()
-            raise ValueError(f"Unsupported language: {self.language}")
-        return container.get_code_runner(self.language, resources=resolved_resources)
+            raise RuntimeError(f"Code node '{self.node_id}' requires FlowContainer to create remote code runner")
+        return container.get_code_runner(self.language)
 
     async def _run_impl(self, state: ExecutionState, inputs: dict[str, Any]) -> Any:
         """
@@ -997,13 +919,17 @@ class CodeNode(BaseNode):
             raise ValueError(
                 f"Node '{self.node_id}': требуется непустой inline code (tool_id без кода не исполняется)"
             )
+        if self.config.get("resources"):
+            raise ValueError(
+                f"Code node '{self.node_id}': resources are not injected into sandbox code. "
+                "Use capability('tools.call', ...) / Capability('tools.call', ...) or a dedicated platform capability."
+            )
 
         args = self._build_args(inputs)
         logger.info(f"[node:{self.node_id}] execute_tool с args: {list(args.keys())}")
 
-        resources = await self._resolve_resources(state)
-        runner = self._get_runner(resources=resources)
-        return await runner.execute_tool(self.code, args, state)
+        runner = self._get_runner()
+        return await runner.execute_tool(self.code, args, state, entrypoint=self.entrypoint)
 
     def _build_args(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """Формирует args из inputs с учетом defaults из args_schema."""
@@ -1495,8 +1421,8 @@ class HitlNode(BaseNode):
 class ResourceNode(BaseNode):
     """
     Нода-ресурс на графе: позиция на канве и привязка записей resources у ноды.
-    Рантайм не вызывает LLM и не мутирует state; merge ресурсов при использовании
-    остаётся на ResourceResolver у исполняемых нод и tools.
+    Рантайм не вызывает LLM и не мутирует state. LLM resource islands используются
+    только при сборке LLM-конфига; sandbox code не получает resources как namespace.
     """
 
     name = "resource"

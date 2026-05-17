@@ -5,8 +5,8 @@
 
 Покрывается: дедлайн run в state, приоритет wall-clock над Redis, node asyncio.wait_for,
 кламп дедлайна к cap из настроек, отклонение завышенных timeout в FlowConfig/NodeConfig,
-валидация кода (while True) по HTTP, ошибка node timeout в /code/execute, AST в
-вложенных телах, инвариант default_flow_timeout_seconds.
+валидация entrypoint по HTTP, ошибка node timeout в /code/execute,
+инвариант default_flow_timeout_seconds.
 
 Не покрывается тестами (в принципе): чистый CPU-bound бесконечный цикл в том же
 потоке (asyncio wait_for не прерывает), токены отмены без Redis в другом процессе;
@@ -36,7 +36,7 @@ from apps.flows.src.state.cancellation import (
     set_cancellation_token,
 )
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
-from core.errors import FlowWallClockTimeoutError, NodeWallClockTimeoutError, SafeEvalError
+from core.errors import FlowWallClockTimeoutError, NodeWallClockTimeoutError
 
 
 @pytest.mark.asyncio
@@ -147,7 +147,7 @@ async def test_code_node_node_timeout_stops_overlong_await(
 ) -> None:
     code = """
 import asyncio
-async def run(state):
+async def run(args, state):
     await asyncio.sleep(30)
     return state
 """
@@ -178,7 +178,7 @@ async def test_flow_run_aborts_on_expired_deadline_before_node(
     app, make_test_state, unique_id: str
 ) -> None:
     code = """
-async def run(state):
+async def run(args, state):
     state.proof = "must_not_run"
     return state
 """
@@ -273,7 +273,7 @@ def test_node_config_rejects_max_visits_above_graph_cap(app, unique_id: str) -> 
 
 
 @pytest.mark.asyncio
-async def test_http_validate_rejects_trivial_infinite_loop(
+async def test_http_validate_requires_python_entrypoint(
     client, app, unique_id: str
 ) -> None:
     r = await client.post(
@@ -284,19 +284,14 @@ async def test_http_validate_rejects_trivial_infinite_loop(
     body = r.json()
     assert body["valid"] is False
     err = (body.get("error") or "").lower()
-    assert "while" in err or "цикл" in err or "infinite" in err or "safe" in err
+    assert "функция" in err or "function" in err
 
 
 @pytest.mark.asyncio
 async def test_http_execute_node_timeout_surfaces_error(
     client, app, unique_id: str
 ) -> None:
-    code = """
-import asyncio
-async def run(state):
-    await asyncio.sleep(25)
-    return state
-"""
+    code = "async def run(args, state):\n    while True:\n        pass\n"
     r = await client.post(
         "/flows/api/v1/code/execute",
         json={
@@ -323,17 +318,3 @@ async def run(state):
 def test_default_flow_timeout_must_not_exceed_cap_in_valid_settings() -> None:
     s = get_settings()
     assert s.default_flow_timeout_seconds <= s.flow_execution_wall_time_cap_seconds
-
-
-def test_compiler_infinite_loop_class_body_rejected() -> None:
-    from apps.flows.src.eval.compiler import PythonCompiler
-
-    c = PythonCompiler()
-    code = """
-class X:
-    def m(self):
-        while True:
-            pass
-"""
-    with pytest.raises(SafeEvalError):
-        c.validate(code)

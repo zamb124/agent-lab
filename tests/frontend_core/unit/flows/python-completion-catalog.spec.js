@@ -1,8 +1,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { buildCodeQueryUrl } from '../../../../apps/flows/ui/events/resources/code.resource.js';
 import {
     buildGlobalSymbolMap,
+    buildCodeCompletions,
     buildPythonCompletions,
     fetchCompletionCatalog,
+    getCompletionCatalogCacheKey,
     isValidPythonIdentifier,
     normalizeCatalogResponse,
     parseImportCompletion,
@@ -30,6 +33,26 @@ function mockCatalog() {
         },
         state_fields: [{ name: 'messages', type: 'list', description: 'dialog' }],
         platform_tools: [{ tool_id: 'calculator', display_name: 'Calc', description: 'math' }],
+        capability_namespaces: [
+            { name: 'files', type: 'generated namespace', methods: ['create'], capability_names: ['files.create'] },
+            { name: 'tools', type: 'generated namespace', methods: ['calculator'], capability_names: ['tools.calculator'] },
+        ],
+        capabilities: [
+            {
+                capability_name: 'files.create',
+                namespace: 'files',
+                method: 'create',
+                label: 'files.create',
+                title: 'Create file',
+                description: 'Create platform file',
+                signature: 'await files.create(content: string)',
+                insert_text: 'await files.create(content="value")',
+                documentation: '### `files.create`\n\nCreate platform file',
+                tags: ['files'],
+                input_fields: [{ path: 'content', type: 'string', required: true }],
+                output_fields: [{ path: 'file_id', type: 'string', required: true }],
+            },
+        ],
         runtime_namespace_extras: [{ name: 'extra_sym', type: 'function', doc: 'x' }],
     });
 }
@@ -52,6 +75,7 @@ describe('buildGlobalSymbolMap', () => {
         expect(m.has('ask_user')).toBe(true);
         expect(m.has('Встроенные tools')).toBe(false);
         expect(m.has('calculator')).toBe(true);
+        expect(m.has('files')).toBe(true);
         expect(m.has('len')).toBe(true);
         expect(m.has('extra_sym')).toBe(true);
     });
@@ -140,6 +164,19 @@ describe('buildPythonCompletions', () => {
         expect(r.options.some((o) => o.label === 'loads')).toBe(true);
     });
 
+    it('completes capability methods after namespace dot', () => {
+        const docText = 'result = await files.cre';
+        const r = buildPythonCompletions({
+            docText,
+            pos: docText.length,
+            catalog,
+            variableKeys: [],
+            explicit: false,
+        });
+        expect(r).not.toBeNull();
+        expect(r.options.some((o) => o.label === 'create' && o.detail.includes('files.create'))).toBe(true);
+    });
+
     it('returns null when nothing matches non-explicit empty fragment', () => {
         const docText = 'def f():\n    ';
         const r = buildPythonCompletions({
@@ -153,7 +190,108 @@ describe('buildPythonCompletions', () => {
     });
 });
 
+describe('buildCodeCompletions', () => {
+    const catalog = mockCatalog();
+
+    it('uses generic symbols for javascript-like languages', () => {
+        const docText = 'ask';
+        const r = buildCodeCompletions({
+            language: 'typescript',
+            docText,
+            pos: docText.length,
+            catalog,
+            variableKeys: [],
+            explicit: false,
+        });
+        expect(r).not.toBeNull();
+        expect(r.options.some((o) => o.label === 'ask_user')).toBe(true);
+        expect(r.options.some((o) => o.label === 'Встроенные tools')).toBe(false);
+    });
+
+    it('includes capability namespaces in generic symbols', () => {
+        const docText = 'fi';
+        const r = buildCodeCompletions({
+            language: 'typescript',
+            docText,
+            pos: docText.length,
+            catalog,
+            variableKeys: [],
+            explicit: false,
+        });
+        expect(r).not.toBeNull();
+        expect(r.options.some((o) => o.label === 'files')).toBe(true);
+    });
+
+    it('uses capability method names for selected generic language', () => {
+        const docText = 'files.cre';
+        const r = buildCodeCompletions({
+            language: 'typescript',
+            docText,
+            pos: docText.length,
+            catalog,
+            variableKeys: [],
+            explicit: false,
+        });
+        expect(r).not.toBeNull();
+        expect(r.options.some((o) => o.label === 'create' && o.detail.includes('files.create'))).toBe(true);
+    });
+
+    it('uses backend-provided Go/C# method casing', () => {
+        const catalogWithGoMethod = normalizeCatalogResponse({
+            capability_namespaces: [{ name: 'files', type: 'generated namespace' }],
+            capabilities: [
+                {
+                    capability_name: 'files.create',
+                    namespace: 'files',
+                    method: 'Create',
+                    label: 'files.Create',
+                    title: 'Create file',
+                    description: 'Create platform file',
+                    signature: 'files.Create(map[string]any{...})',
+                    insert_text: 'files.Create(map[string]any{})',
+                    documentation: '### `files.Create`',
+                    tags: ['files'],
+                    input_fields: [],
+                    output_fields: [],
+                },
+            ],
+        });
+        const docText = 'files.Cre';
+        const r = buildCodeCompletions({
+            language: 'go',
+            docText,
+            pos: docText.length,
+            catalog: catalogWithGoMethod,
+            variableKeys: [],
+            explicit: false,
+        });
+        expect(r).not.toBeNull();
+        expect(r.options.map((o) => o.label)).toEqual(['Create']);
+    });
+});
+
 describe('fetchCompletionCatalog', () => {
+    it('passes selected language through completion payload and cache key', async () => {
+        const payloads = [];
+        const run = async (payload) => {
+            payloads.push(payload);
+            return mockCatalog();
+        };
+        const goCtx = { language: 'go', perspective: 'node', include_runtime_namespace_extras: true };
+        const tsCtx = { language: 'typescript', perspective: 'node', include_runtime_namespace_extras: true };
+
+        await fetchCompletionCatalog(run, goCtx);
+        await fetchCompletionCatalog(run, goCtx);
+        await fetchCompletionCatalog(run, tsCtx);
+
+        expect(payloads).toEqual([
+            { language: 'go', perspective: 'node', include_runtime_namespace_extras: true },
+            { language: 'typescript', perspective: 'node', include_runtime_namespace_extras: true },
+        ]);
+        expect(getCompletionCatalogCacheKey(goCtx)).toBe('go|node|1');
+        expect(getCompletionCatalogCacheKey(tsCtx)).toBe('typescript|node|1');
+    });
+
     it('reuses cached catalog for same cache key', async () => {
         let calls = 0;
         const run = async () => {
@@ -182,5 +320,18 @@ describe('fetchCompletionCatalog', () => {
         const cat = await fetchCompletionCatalog(run, ctx);
         expect(calls).toBe(2);
         expect(cat.modules.length).toBeGreaterThan(0);
+    });
+});
+
+describe('code resource query URLs', () => {
+    it('serializes selected language into completions request URL', () => {
+        const url = buildCodeQueryUrl('/flows/api/v1/code/completions', {
+            language: 'csharp',
+            perspective: 'node',
+            include_runtime_namespace_extras: true,
+        });
+        expect(url).toBe(
+            '/flows/api/v1/code/completions?language=csharp&perspective=node&include_runtime_namespace_extras=true',
+        );
     });
 });

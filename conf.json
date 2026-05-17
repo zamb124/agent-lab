@@ -10,6 +10,11 @@
     "browser_service_url": "http://localhost:8009",
     "provider_litserve_service_url": "https://humanitec.ru/litserve",
     "voice_service_url": "http://localhost:8015",
+    "capability_gateway_service_url": "http://localhost:8016",
+    "code_runner_python_service_url": "http://localhost:8017",
+    "code_runner_node_service_url": "http://localhost:8018",
+    "code_runner_go_service_url": "http://localhost:8019",
+    "code_runner_csharp_service_url": "http://localhost:8020",
     "platform_public_base_url": "https://humanitec.ru",
     "document_server_dev_upstream_url": "http://localhost:8088"
   },
@@ -630,6 +635,66 @@
       "server": {
         "name": "voice",
         "port": 8015
+      }
+    },
+    "capability_gateway": {
+      "service_name": "capability_gateway",
+      "server": {
+        "name": "capability_gateway",
+        "host": "0.0.0.0",
+        "port": 8016,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": false
+      }
+    },
+    "code_runner_python": {
+      "service_name": "code_runner_python",
+      "server": {
+        "name": "code_runner_python",
+        "host": "0.0.0.0",
+        "port": 8017,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": false
+      }
+    },
+    "code_runner_node": {
+      "service_name": "code_runner_node",
+      "server": {
+        "name": "code_runner_node",
+        "host": "0.0.0.0",
+        "port": 8018,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": false
+      }
+    },
+    "code_runner_go": {
+      "service_name": "code_runner_go",
+      "server": {
+        "name": "code_runner_go",
+        "host": "0.0.0.0",
+        "port": 8019,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": false
+      }
+    },
+    "code_runner_csharp": {
+      "service_name": "code_runner_csharp",
+      "server": {
+        "name": "code_runner_csharp",
+        "host": "0.0.0.0",
+        "port": 8020,
+        "debug": true
+      },
+      "auth": {
+        "permissions_enabled": false
       }
     }
   },

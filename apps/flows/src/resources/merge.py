@@ -1,9 +1,4 @@
-"""
-Карты ресурсов flow/skill/node и типизированное слияние shared config + patch.
-
-Порядок ключей как в ResourceResolver: последующий слой перекрывает предыдущий
-(flow → skill → node).
-"""
+"""Карты LLM-ресурсов flow/skill/node и типизированное слияние shared config + patch."""
 
 from __future__ import annotations
 
@@ -34,10 +29,6 @@ def merge_flow_skill_node_resource_maps(
 MergeConfigFn = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
 
 
-def _shallow_merge_config(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    return {**base, **patch}
-
-
 def _llm_merge_config(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     typed_base = LLMResourceConfig.model_validate(base)
     merged = merge_llm_resource_config_with_patch(typed_base, patch)
@@ -57,13 +48,14 @@ def merge_shared_definition_config_with_patch(
     """
     Сливает shared definition.config с ResourceReference.config (override).
 
-    Для LLM — типизированный patch и deep merge extra_request_body/headers.
-    Для прочих типов — shallow {**base, **patch} с последующим parse_typed_resource_config
-    (строгая схема целевого типа).
+    LLM — единственный runtime resource type. Code/files доступны sandbox-коду
+    через capability-gateway/tools, а не через resources namespace.
     """
     if not patch:
         return dict(base_config)
-    merger = MERGE_SHARED_CONFIG_BY_TYPE.get(resource_type, _shallow_merge_config)
+    merger = MERGE_SHARED_CONFIG_BY_TYPE.get(resource_type)
+    if merger is None:
+        raise ValueError(f"Unsupported resource type: {resource_type}")
     merged = merger(dict(base_config), patch)
     parse_typed_resource_config(resource_type, merged)
     return merged

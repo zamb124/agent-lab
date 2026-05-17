@@ -2,12 +2,12 @@
  * flows-code-editor — обёртка над vendored CodeMirror.
  *
  * Lazy-импортирует `/static/core/assets/codemirror/codemirror-bundle.js` при
- * первом mount. Поддерживает языки `python` / `json` / `text`. Тема
+ * первом mount. Поддерживает языки раннеров, `json` и `text`. Тема
  * переключается по `select(s => s.theme.mode)`.
  *
  * Property API:
  *   - value: string
- *   - language: 'python' | 'json' | 'text'
+ *   - language: 'python' | 'javascript' | 'typescript' | 'go' | 'csharp' | 'json' | 'text'
  *   - readonly: boolean
  *   - placeholder: string (опц.)
  *   - showToolbar: boolean (шапка: полноэкран, подсказка про сохранение)
@@ -28,7 +28,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/glass-button.js';
 import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import {
-    buildPythonCompletions,
+    buildCodeCompletions,
     fetchCompletionCatalog,
 } from '../../_helpers/flows-python-completion-catalog.js';
 import { editorBodyPortalZIndex } from '@platform/lib/utils/modal-z-stack.js';
@@ -498,6 +498,15 @@ export class FlowsCodeEditor extends PlatformElement {
         if (lang === 'python' && this._cm.python) {
             return this._cm.python();
         }
+        if ((lang === 'javascript' || lang === 'typescript') && this._cm.javascript) {
+            return this._cm.javascript({ typescript: lang === 'typescript' });
+        }
+        if (lang === 'go' && this._cm.go) {
+            return this._cm.go();
+        }
+        if (lang === 'csharp' && this._cm.csharp) {
+            return this._cm.csharp();
+        }
         if (lang === 'json' && this._cm.json) {
             return this._cm.json();
         }
@@ -527,7 +536,8 @@ export class FlowsCodeEditor extends PlatformElement {
     }
 
     async _completionSource(ctx) {
-        if (this.language !== 'python') {
+        const language = typeof this.language === 'string' && this.language.length > 0 ? this.language : 'text';
+        if (language === 'json' || language === 'text') {
             return null;
         }
         let catalog;
@@ -542,7 +552,8 @@ export class FlowsCodeEditor extends PlatformElement {
         const variableKeys = Array.isArray(this.completionVariableKeys)
             ? this.completionVariableKeys.filter((k) => typeof k === 'string')
             : [];
-        const built = buildPythonCompletions({
+        const built = buildCodeCompletions({
+            language,
             docText: ctx.state.doc.toString(),
             pos: ctx.pos,
             catalog,

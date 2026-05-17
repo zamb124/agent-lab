@@ -10,6 +10,12 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
 import { asObject } from '../_helpers/flows-resolvers.js';
+import {
+    FLOW_CODE_LANGUAGES,
+    flowCodeLanguageLabel,
+    flowCodeLanguageShortLabel,
+    normalizeFlowCodeLanguage,
+} from '../_helpers/flows-code-languages.js';
 
 function _lower(s) {
     if (typeof s === 'string' && s.length > 0) {
@@ -119,8 +125,8 @@ export class FlowsCodeDocsModal extends PlatformModal {
             }
             .docs-sidebar-top {
                 display: flex;
-                flex-direction: row;
-                justify-content: flex-end;
+                flex-direction: column;
+                justify-content: flex-start;
                 align-items: center;
                 gap: var(--space-2);
                 padding: var(--space-3);
@@ -130,6 +136,41 @@ export class FlowsCodeDocsModal extends PlatformModal {
             .docs-sidebar-search {
                 width: 100%;
                 min-width: 0;
+            }
+            .language-segment {
+                display: grid;
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+                width: 100%;
+                gap: 2px;
+                padding: 2px;
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                box-sizing: border-box;
+            }
+            .language-button {
+                height: 28px;
+                min-width: 0;
+                padding: 0;
+                border: 0;
+                border-radius: calc(var(--radius-md) - 2px);
+                background: transparent;
+                color: var(--text-tertiary);
+                font-size: 11px;
+                font-weight: var(--font-semibold);
+                cursor: pointer;
+            }
+            .language-button:hover {
+                color: var(--text-primary);
+                background: var(--glass-tint-medium);
+            }
+            .language-button[active] {
+                color: var(--accent);
+                background: var(--accent-subtle);
+            }
+            .language-button:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 1px;
             }
             .docs-toc {
                 flex: 1;
@@ -274,12 +315,32 @@ export class FlowsCodeDocsModal extends PlatformModal {
         super.willUpdate(changed);
         if (changed.has('open') && this.open) {
             this._search = '';
-            const lang = typeof this.language === 'string' && this.language.length > 0 ? this.language : 'python';
-            const persp = typeof this.documentationPerspective === 'string' && this.documentationPerspective.length > 0
-                ? this.documentationPerspective
-                : 'editor';
-            void this._docsOp.run({ language: lang, perspective: persp });
+            void this._loadDocumentation();
         }
+    }
+
+    updated(changed) {
+        super.updated?.(changed);
+        if (this.open && (changed.has('language') || changed.has('documentationPerspective'))) {
+            void this._loadDocumentation();
+        }
+    }
+
+    _documentationLanguage() {
+        return normalizeFlowCodeLanguage(this.language);
+    }
+
+    _documentationPerspective() {
+        return typeof this.documentationPerspective === 'string' && this.documentationPerspective.length > 0
+            ? this.documentationPerspective
+            : 'editor';
+    }
+
+    async _loadDocumentation() {
+        await this._docsOp.run({
+            language: this._documentationLanguage(),
+            perspective: this._documentationPerspective(),
+        });
     }
 
     _onSearchInput(e) {
@@ -319,13 +380,35 @@ export class FlowsCodeDocsModal extends PlatformModal {
         return toc.filter((it) => _lower(it.text).indexOf(q) >= 0);
     }
 
+    _setLanguage(language) {
+        this.language = normalizeFlowCodeLanguage(language);
+    }
+
+    _renderLanguageSegment() {
+        const current = this._documentationLanguage();
+        return html`
+            <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
+                ${FLOW_CODE_LANGUAGES.map((lang) => html`
+                    <button
+                        type="button"
+                        class="language-button"
+                        ?active=${current === lang.value}
+                        title=${lang.label}
+                        aria-label=${lang.label}
+                        @click=${() => this._setLanguage(lang.value)}
+                    >${flowCodeLanguageShortLabel(lang.value)}</button>
+                `)}
+            </div>
+        `;
+    }
+
     renderHeader() {
-        return this.t('code_docs_modal.title');
+        return `${this.t('code_docs_modal.title')} · ${flowCodeLanguageLabel(this._documentationLanguage())}`;
     }
 
     renderBody() {
         const result = this._docsOp.lastResult;
-        if (this._docsOp.busy && (result === undefined || result === null)) {
+        if (this._docsOp.busy) {
             return html`<glass-spinner></glass-spinner>`;
         }
         const md = getDocsMarkdown(result);
@@ -336,6 +419,7 @@ export class FlowsCodeDocsModal extends PlatformModal {
             <div class="docs-layout">
                 <aside class="docs-sidebar" aria-label=${this.t('code_docs_modal.toc_aria')}>
                     <div class="docs-sidebar-top">
+                        ${this._renderLanguageSegment()}
                         <div class="docs-sidebar-search">
                             <platform-field
                                 type="string"

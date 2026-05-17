@@ -22,7 +22,6 @@ from typing import Any
 
 from apps.flows.src.constants.execution_limits import get_graph_max_iterations
 from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.eval.safe_eval import compile_function
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.runtime.exceptions import (
     BreakpointInterrupt,
@@ -38,7 +37,6 @@ from core.errors import (
     FlowInfiniteLoopError,
     FlowPrematureCompletionError,
     NodeCallLimitError,
-    SafeEvalError,
 )
 from core.logging import get_logger
 from core.state import ExecutionState
@@ -193,7 +191,7 @@ class Flow:
             f"Flow {self.flow_id!r}: edge not in edges list: {edge!r}"
         )
 
-    def _iter_active_transitions_detailed(
+    async def _iter_active_transitions_detailed(
         self, from_node: str, state: ExecutionState
     ) -> list[tuple[str, bool, int]]:
         """Исходящие активные переходы: (to_node, contributes_to_join, edge_index)."""
@@ -209,7 +207,7 @@ class Flow:
                 if condition is None:
                     active = True
                 else:
-                    active = self._evaluate_condition(condition, state)
+                    active = await self._evaluate_condition(condition, state)
             except Exception as exc:
                 raise EdgeConditionError(edge_idx, from_node, to_node, exc) from exc
             if not active:
@@ -223,13 +221,14 @@ class Flow:
             )
         return out
 
-    def _iter_active_transitions(
+    async def _iter_active_transitions(
         self, from_node: str, state: ExecutionState
     ) -> list[tuple[str, bool]]:
         """Исходящие переходы, для которых условие ребра выполнено: (to_node, contributes_to_join)."""
-        return [(a[0], a[1]) for a in self._iter_active_transitions_detailed(from_node, state)]
+        transitions = await self._iter_active_transitions_detailed(from_node, state)
+        return [(a[0], a[1]) for a in transitions]
 
-    def _first_active_edge_index(
+    async def _first_active_edge_index(
         self, from_node: str, to_node: str, state: ExecutionState
     ) -> int:
         """Первое активное ребро from_node -> to_node по текущему state."""
@@ -241,7 +240,7 @@ class Flow:
             try:
                 if condition is None:
                     return edge_idx
-                if self._evaluate_condition(condition, state):
+                if await self._evaluate_condition(condition, state):
                     return edge_idx
             except Exception as exc:
                 raise EdgeConditionError(edge_idx, from_node, to_node, exc) from exc
@@ -390,12 +389,12 @@ class Flow:
                     return state
 
                 try:
-                    next_nodes, edge_activations = self._collect_next_wave_targets(
+                    next_nodes, edge_activations = await self._collect_next_wave_targets(
                         current_nodes, state
                     )
 
                     if not next_nodes:
-                        self._raise_if_premature_completion(current_nodes, state)
+                        await self._raise_if_premature_completion(current_nodes, state)
                         logger.debug(f"Flow {self.flow_id}: completed")
                         state.current_nodes = []
                         return state
@@ -469,7 +468,7 @@ class Flow:
                 acc.setdefault(target, set()).update(preds)
         merged.join_arrived_preds = {k: sorted(v) for k, v in acc.items()}
 
-    def _collect_next_wave_targets(
+    async def _collect_next_wave_targets(
         self, completed_ids: list[str], state: ExecutionState
     ) -> tuple[set[str], list[tuple[int, str, str]]]:
         """
@@ -485,7 +484,7 @@ class Flow:
         activations: list[tuple[int, str, str]] = []
 
         for pred_id in completed_ids:
-            for target, contributes, edge_idx in self._iter_active_transitions_detailed(
+            for target, contributes, edge_idx in await self._iter_active_transitions_detailed(
                 pred_id, state
             ):
                 policy = self._incoming_policy(target)
@@ -508,7 +507,7 @@ class Flow:
                     immediate.add(target)
                     pending.pop(target, None)
                     for p in sorted(required):
-                        ei = self._first_active_edge_index(p, target, state)
+                        ei = await self._first_active_edge_index(p, target, state)
                         activations.append((ei, p, target))
                     continue
                 # AND-join: ждём остальных предков — edge_executed не эмитим
@@ -534,7 +533,7 @@ class Flow:
             return False
         return all(e.get("condition") is not None for e in structural)
 
-    def _raise_if_premature_completion(
+    async def _raise_if_premature_completion(
         self,
         completed_ids: list[str],
         state: ExecutionState,
@@ -566,7 +565,7 @@ class Flow:
         for node_id in completed_ids:
             if not self._node_has_structural_successor(node_id):
                 continue
-            active = self._iter_active_transitions(node_id, state)
+            active = await self._iter_active_transitions(node_id, state)
             if not active:
                 if self._all_structural_outgoing_edges_are_conditional(node_id):
                     reason = "no_conditional_match"
@@ -656,7 +655,7 @@ class Flow:
             }
         )
 
-    def _find_next_nodes(self, from_node: str, state: ExecutionState) -> list[str]:
+    async def _find_next_nodes(self, from_node: str, state: ExecutionState) -> list[str]:
         """
         Находит следующие ноды по edges.
 
@@ -666,37 +665,37 @@ class Flow:
         """
         seen: set[str] = set()
         ordered: list[str] = []
-        for to_node, _ in self._iter_active_transitions(from_node, state):
+        for to_node, _ in await self._iter_active_transitions(from_node, state):
             if to_node not in seen:
                 seen.add(to_node)
                 ordered.append(to_node)
         return ordered
 
-    def _evaluate_condition(self, condition: Any, state: ExecutionState) -> bool:
+    async def _evaluate_condition(self, condition: Any, state: ExecutionState) -> bool:
         """
         Вычисляет условие перехода.
 
         Поддерживаемые форматы:
         1. Объект с type='simple': {"type": "simple", "variable": "route", "operator": "==", "value": "order"}
-        2. Объект с type='python': {"type": "python", "code": "def check(state): return state.get('route') == 'order'"}
-        3. Legacy строка: "field == value", "field != value", и т.д.
+        2. Объект с type='code': {"type": "code", "language": "javascript", "code": "..."}
+        3. Строка: "field == value", "field != value", и т.д.
         """
         if isinstance(condition, dict):
-            return self._evaluate_condition_object(condition, state)
+            return await self._evaluate_condition_object(condition, state)
 
         return self._evaluate_condition_string(str(condition), state)
 
-    def _evaluate_condition_object(self, condition: dict[str, Any], state: ExecutionState) -> bool:
+    async def _evaluate_condition_object(self, condition: dict[str, Any], state: ExecutionState) -> bool:
         """Вычисляет условие в новом объектном формате."""
         condition_type = condition.get("type")
 
         if condition_type == "simple":
             return self._evaluate_simple_condition(condition, state)
-        if condition_type == "python":
-            return self._evaluate_python_condition(condition.get("code", ""), state)
+        if condition_type == "code":
+            return await self._evaluate_code_condition(condition, state)
 
         raise ValueError(
-            f"Неизвестный type условия ребра: {condition_type!r}, ожидаются 'simple' или 'python'"
+            f"Неизвестный type условия ребра: {condition_type!r}, ожидаются 'simple' или 'code'"
         )
 
     def _evaluate_simple_condition(self, condition: dict[str, Any], state: ExecutionState) -> bool:
@@ -727,31 +726,33 @@ class Flow:
                 f"op={op_str!r} left={left!r} right={right!r}"
             ) from e
 
-    def _evaluate_python_condition(self, code: str, state: ExecutionState) -> bool:
+    async def _evaluate_code_condition(self, condition: dict[str, Any], state: ExecutionState) -> bool:
         """
-        Вычисляет Python условие через SafeEval.
-        Код должен содержать функцию check(state) -> bool.
+        Вычисляет code-condition через isolated remote code runner.
+
+        Контракт тот же, что у code_node/tool: entrypoint `(args, state)`.
+        Если entrypoint не задан, runner вызывает первую функцию в source.
+        Condition исполняется на копии state, поэтому переходы не мутируют runtime state.
         """
-        if not code or "def check" not in code:
-            raise ValueError(
-                "Python-условие ребра: требуется непустой код с функцией check(state)"
-            )
-
-        state_dict = state.model_dump(exclude_none=False)
-
+        if self.container is None:
+            raise RuntimeError("Code edge condition requires FlowContainer")
+        code = condition.get("code")
+        if not isinstance(code, str) or not code.strip():
+            raise ValueError("Code-условие ребра: требуется непустой code")
+        language = condition.get("language", "python")
+        if not isinstance(language, str) or not language.strip():
+            raise ValueError("Code-условие ребра: language должен быть непустой строкой")
+        raw_entrypoint = condition.get("entrypoint")
+        entrypoint = raw_entrypoint.strip() if isinstance(raw_entrypoint, str) and raw_entrypoint.strip() else None
+        condition_state = ExecutionState.model_validate(state.model_dump(exclude_none=False))
+        runner = self.container.get_code_runner(language=language)
         try:
-            check_fn = compile_function(
-                code,
-                "check",
-                variables=state.variables,
-                auto_find=False,
-            )
-            result = check_fn(state_dict)
-            return bool(result)
-        except SafeEvalError as e:
-            raise ValueError(f"Python-условие ребра: ошибка SafeEval: {e}") from e
-        except Exception as e:
-            raise ValueError(f"Python-условие ребра: ошибка выполнения check(state): {e}") from e
+            result = await runner.execute_tool(code, {}, condition_state, entrypoint=entrypoint)
+        except Exception as exc:
+            raise ValueError(
+                f"Code-условие ребра: ошибка выполнения language={language!r}: {exc}"
+            ) from exc
+        return bool(result)
 
     def _evaluate_condition_string(self, condition: str, state: ExecutionState) -> bool:
         """Вычисляет условие в legacy строковом формате."""

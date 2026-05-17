@@ -67,6 +67,31 @@
 - name: SERVER__VOICE_SERVICE_URL
   value: http://{{ $voice.serviceName }}:{{ $voice.port }}
 {{- end }}
+{{- $capabilityGateway := index .Values.applications "capability-gateway" }}
+{{- if and $capabilityGateway $capabilityGateway.enabled }}
+- name: SERVER__CAPABILITY_GATEWAY_SERVICE_URL
+  value: http://{{ $capabilityGateway.serviceName }}:{{ $capabilityGateway.port }}
+{{- end }}
+{{- $codeRunnerPython := index .Values.applications "code-runner-python" }}
+{{- if and $codeRunnerPython $codeRunnerPython.enabled }}
+- name: SERVER__CODE_RUNNER_PYTHON_SERVICE_URL
+  value: http://{{ $codeRunnerPython.serviceName }}:{{ $codeRunnerPython.port }}
+{{- end }}
+{{- $codeRunnerNode := index .Values.applications "code-runner-node" }}
+{{- if and $codeRunnerNode $codeRunnerNode.enabled }}
+- name: SERVER__CODE_RUNNER_NODE_SERVICE_URL
+  value: http://{{ $codeRunnerNode.serviceName }}:{{ $codeRunnerNode.port }}
+{{- end }}
+{{- $codeRunnerGo := index .Values.applications "code-runner-go" }}
+{{- if and $codeRunnerGo $codeRunnerGo.enabled }}
+- name: SERVER__CODE_RUNNER_GO_SERVICE_URL
+  value: http://{{ $codeRunnerGo.serviceName }}:{{ $codeRunnerGo.port }}
+{{- end }}
+{{- $codeRunnerCsharp := index .Values.applications "code-runner-csharp" }}
+{{- if and $codeRunnerCsharp $codeRunnerCsharp.enabled }}
+- name: SERVER__CODE_RUNNER_CSHARP_SERVICE_URL
+  value: http://{{ $codeRunnerCsharp.serviceName }}:{{ $codeRunnerCsharp.port }}
+{{- end }}
 {{- if .Values.litserve.enabled }}
 - name: SERVER__PROVIDER_LITSERVE_SERVICE_URL
   value: http://{{ .Values.litserve.serviceName }}:{{ .Values.litserve.port }}

@@ -22,34 +22,7 @@ from core.models import StrictBaseModel
 class ResourceType(str, Enum):
     """Типы ресурсов."""
 
-    CODE = "code"
-    FILES = "files"
     LLM = "llm"
-
-
-class CodeLanguage(str, Enum):
-    """Языки для code ресурсов."""
-
-    PYTHON = "python"
-    JAVASCRIPT = "javascript"
-
-
-class CodeResourceConfig(StrictBaseModel):
-    """Inline код как ресурс."""
-
-    language: CodeLanguage = Field(default=CodeLanguage.PYTHON)
-    code: str = Field(..., description="Inline код с функциями/классами")
-
-
-class FilesResourceConfig(StrictBaseModel):
-    """Файловое хранилище как ресурс."""
-
-    bucket: str = Field(..., description="S3 bucket")
-    prefix: str = Field(default="", description="Префикс пути")
-    endpoint_url: str | None = Field(default=None, description="S3 endpoint URL (для MinIO)")
-    access_key_id: str | None = Field(default=None, description="S3 access key")
-    secret_access_key: str | None = Field(default=None, description="S3 secret key")
-    region: str = Field(default="us-east-1", description="S3 region")
 
 
 class LLMResourceConfig(LLMCallConfig):
@@ -141,7 +114,7 @@ class LLMResourcePatch(StrictBaseModel):
 
 
 
-ResourceConfigUnion = CodeResourceConfig | FilesResourceConfig | LLMResourceConfig
+ResourceConfigUnion = LLMResourceConfig
 
 
 class ResourceDefinition(StrictBaseModel):
@@ -176,7 +149,7 @@ class ResourceDefinition(StrictBaseModel):
             return [v]
         return v
 
-    def get_typed_config(self) -> CodeResourceConfig | FilesResourceConfig | LLMResourceConfig:
+    def get_typed_config(self) -> LLMResourceConfig:
         """Возвращает типизированный конфиг."""
         return parse_typed_resource_config(self.type, self.config)
 
@@ -185,11 +158,7 @@ def parse_typed_resource_config(
     resource_type: ResourceType,
     config: dict[str, Any],
 ) -> ResourceConfigUnion:
-    """Строгая материализация config по ResourceType (канон для резолвера и провайдеров)."""
-    if resource_type == ResourceType.CODE:
-        return CodeResourceConfig.model_validate(config)
-    if resource_type == ResourceType.FILES:
-        return FilesResourceConfig.model_validate(config)
+    """Строгая материализация config по ResourceType."""
     if resource_type == ResourceType.LLM:
         return LLMResourceConfig.model_validate(config)
     raise ValueError(f"Unknown resource type: {resource_type!r}")
@@ -205,8 +174,8 @@ class ResourceReference(BaseModel):
     3. Reference с override - resource_id + config (ссылка + переопределение)
 
     Примеры:
-    - Inline: {"type": "code", "config": {"language": "python", "code": "..."}}
-    - Reference: {"resource_id": "company_docs"}
+    - Inline: {"type": "llm", "config": {"provider": "openrouter", "model": "..."}}
+    - Reference: {"resource_id": "company_llm"}
     - Override: {"resource_id": "gpt4", "config": {"temperature": 0.3}}
     """
 
@@ -240,9 +209,6 @@ class ResourceReference(BaseModel):
 
 __all__ = [
     "ResourceType",
-    "CodeLanguage",
-    "CodeResourceConfig",
-    "FilesResourceConfig",
     "LLMResourceConfig",
     "LLMResourcePatch",
     "ResourceConfigUnion",

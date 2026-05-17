@@ -294,7 +294,7 @@ class TestMockLLMReasoning:
             code: str = Field(..., min_length=1)
 
         mock = MockLLM()
-        body = {"code": 'async def run(state):\n    return {"ok": true}'}
+        body = {"code": 'async def run(args, state):\n    return {"ok": true}'}
         mock.configure(
             response_queue=[
                 {

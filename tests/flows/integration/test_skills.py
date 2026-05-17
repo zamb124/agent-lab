@@ -60,7 +60,7 @@ class TestFlowConfigWithSkills:
             flow_id="test_flow",
             name="Test Agent",
             entry="main",
-            nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
+            nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
         )
 
@@ -72,7 +72,7 @@ class TestFlowConfigWithSkills:
             flow_id="multi_skill_flow",
             name="Multi Skill Agent",
             entry="main",
-            nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
+            nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             branches={
                 "default": BranchConfig(name="Default", description="Default skill"),
@@ -101,8 +101,8 @@ class TestApplySkill:
             name="Test",
             entry="default_entry",
             nodes={
-                "default_entry": {"type": "code", "code": "async def run(state): return state"},
-                "skill_entry": {"type": "code", "code": "async def run(state): return state"},
+                "default_entry": {"type": "code", "code": "async def run(args, state): return state"},
+                "skill_entry": {"type": "code", "code": "async def run(args, state): return state"},
             },
             edges=[
                 Edge(from_node="default_entry", to_node=None),
@@ -123,7 +123,7 @@ class TestApplySkill:
             flow_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
+            nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             variables={"base_var": "base_value", "shared": "from_flow"},
             branches={
@@ -146,7 +146,7 @@ class TestApplySkill:
             flow_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
+            nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             variables={"base_var": "base_value"},
             branches={
@@ -227,7 +227,7 @@ class TestApplySkill:
             flow_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
+            nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[
                 Edge(from_node="main", to_node="step2"),
                 Edge(from_node="step2", to_node=None),
@@ -252,7 +252,7 @@ class TestApplySkill:
             flow_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
+            nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[
                 Edge(from_node="main", to_node="step2"),
                 Edge(from_node="step2", to_node=None),
@@ -284,7 +284,7 @@ class TestApplySkill:
             flow_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
+            nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
             branches={
                 "known": BranchConfig(name="Known", entry="other"),
@@ -301,7 +301,7 @@ class TestApplySkill:
             flow_id="test",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "code", "code": "async def run(state): return state"}},
+            nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
         )
 
@@ -323,11 +323,11 @@ class TestFlowWithSkills:
             nodes={
                 "default_start": {
                     "type": "code",
-                    "code": "async def run(state): state.path = 'default'; return state",
+                    "code": "async def run(args, state): state.path = 'default'; return state",
                 },
                 "skill_start": {
                     "type": "code",
-                    "code": "async def run(state): state.path = 'skill'; return state",
+                    "code": "async def run(args, state): state.path = 'skill'; return state",
                 },
             },
             edges=[
@@ -395,7 +395,7 @@ class TestFlowWithSkills:
                     "main": {
                         "type": "code",
                         "code": """
-async def run(state):
+async def run(args, state):
     vars = state.get('variables', {})
     state['mode'] = vars.get('mode', 'unknown')
     return state

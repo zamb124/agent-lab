@@ -34,7 +34,7 @@ class TestCodeNodeInAgent:
     async def test_flow_with_inline_tool_node(self):
         """Agent с inline CodeNode."""
         prepare_code = """
-async def execute(args, state):
+async def run(args, state):
     state.value = 10
     state.multiplier = 3
     return state
@@ -45,7 +45,7 @@ async def execute(args, state):
         )
 
         multiply_code = """
-async def execute(args, state):
+async def run(args, state):
     return {'result': args['x'] * args['factor']}
 """
         tool_node = CodeNode(
@@ -60,7 +60,7 @@ async def execute(args, state):
         )
 
         format_code = """
-async def execute(args, state):
+async def run(args, state):
     state.response = f"Результат: {state.result}"
     return state
 """
@@ -103,7 +103,7 @@ async def execute(args, state):
     async def test_flow_with_tool_node_and_variables(self):
         """Agent с CodeNode и переменными из variables."""
         greet_code = """
-async def execute(args, state):
+async def run(args, state):
     return {'greeting': f"Добро пожаловать в {args['company']}, {args['name']}!"}
 """
         tool_node = CodeNode(
@@ -142,7 +142,7 @@ async def execute(args, state):
     async def test_flow_with_conditional_tool_node(self):
         """Agent с условным переходом к CodeNode."""
         classifier_code = """
-async def execute(args, state):
+async def run(args, state):
     content = state.content or ""
     state.needs_calc = "=" in content
     state.expr = content.replace("=", "").strip()
@@ -154,7 +154,7 @@ async def execute(args, state):
         )
 
         calc_code = """
-async def execute(args, state):
+async def run(args, state):
     parts = args['expr'].split('+')
     return {'calc_result': sum(int(p.strip()) for p in parts)}
 """
@@ -167,7 +167,7 @@ async def execute(args, state):
         )
 
         skip_code = """
-async def execute(args, state):
+async def run(args, state):
     state.calc_result = "N/A"
     return state
 """
@@ -225,7 +225,7 @@ class TestCodeNodeFromConfig:
         """create_node создает CodeNode из inline кода."""
         config = {
             "type": "code",
-            "code": "async def execute(args, state):\n    return {'squared': args['a'] ** 2}",
+            "code": "async def run(args, state):\n    return {'squared': args['a'] ** 2}",
             "args_schema": {
                 "a": {"type": "integer", "description": "Число для возведения в квадрат"},
             },
@@ -251,16 +251,16 @@ class TestCodeNodeFromConfig:
             "nodes": {
                 "prepare": {
                     "type": "code",
-                    "code": "async def run(state):\n    state.input_value = 5\n    return state",
+                    "code": "async def run(args, state):\n    state.input_value = 5\n    return state",
                 },
                 "process": {
                     "type": "code",
-                    "code": "async def execute(args, state):\n    return {'processed': args['x'] * 10}",
+                    "code": "async def run(args, state):\n    return {'processed': args['x'] * 10}",
                     "input_mapping": {"x": "@state:input_value"},
                 },
                 "finish": {
                     "type": "code",
-                    "code": "async def run(state):\n    state.response = f\"Processed: {state.processed}\"\n    return state",
+                    "code": "async def run(args, state):\n    state.response = f\"Processed: {state.processed}\"\n    return state",
                 },
             },
             "edges": [
@@ -286,7 +286,7 @@ class TestCodeNodeWithSkillVariables:
     async def test_tool_node_uses_skill_variables(self):
         """CodeNode использует переменные из текущего skill."""
         format_code = """
-async def execute(args, state):
+async def run(args, state):
     return {'formatted_id': f"{args['prefix']}{args['id']}"}
 """
         tool_node = CodeNode(
@@ -329,11 +329,11 @@ class TestCodeNodeChaining:
     async def test_chain_of_tool_nodes(self):
         """Цепочка CodeNode передает данные через state."""
         double_code = """
-async def execute(args, state):
+async def run(args, state):
     return {'doubled': args['x'] * 2}
 """
         add_code = """
-async def execute(args, state):
+async def run(args, state):
     return {'final': args['a'] + args['b']}
 """
         node1 = CodeNode(
@@ -387,10 +387,10 @@ class TestCodeNodeDynamicDataAgent:
         """
         Цепочка CodeNode с @state:, @var: и константами.
         """
-        init_code = "async def execute(args, state):\n    return {'base_value': args['initial']}"
-        multiply_code = "async def execute(args, state):\n    return {'multiplied': args['value'] * args['factor']}"
-        add_const_code = "async def execute(args, state):\n    return {'added': args['value'] + args['const']}"
-        final_code = "async def execute(args, state):\n    return {'final_result': args['current'] + args['original'] + args['bonus']}"
+        init_code = "async def run(args, state):\n    return {'base_value': args['initial']}"
+        multiply_code = "async def run(args, state):\n    return {'multiplied': args['value'] * args['factor']}"
+        add_const_code = "async def run(args, state):\n    return {'added': args['value'] + args['const']}"
+        final_code = "async def run(args, state):\n    return {'final_result': args['current'] + args['original'] + args['bonus']}"
 
         node1 = CodeNode(
             node_id="init_node",
@@ -467,10 +467,10 @@ class TestCodeNodeDynamicDataAgent:
     @pytest.mark.asyncio
     async def test_dynamic_nested_state_modification(self):
         """Тест с вложенными структурами в state."""
-        setup_code = """async def execute(args, state):
+        setup_code = """async def run(args, state):
     return {'user': {'data': {'score': args['initial_score'], 'name': args['name']}}}"""
-        boost_code = "async def execute(args, state):\n    return {'boosted_score': args['score'] + args['boost']}"
-        format_code = "async def execute(args, state):\n    return {'formatted_result': f\"{args['prefix']}{args['name']}: {args['final_score']}\"}"
+        boost_code = "async def run(args, state):\n    return {'boosted_score': args['score'] + args['boost']}"
+        format_code = "async def run(args, state):\n    return {'formatted_result': f\"{args['prefix']}{args['name']}: {args['final_score']}\"}"
 
         node1 = CodeNode(
             node_id="setup_node",
@@ -537,10 +537,10 @@ class TestCodeNodeDynamicDataAgent:
     @pytest.mark.asyncio
     async def test_tool_modifies_state_for_next_tool(self):
         """Тест где каждый tool записывает результат который читает следующий."""
-        extract_code = "async def execute(args, state):\n    return {'extracted_data': {'items': args['raw'].split(','), 'count': len(args['raw'].split(','))}}"
-        transform_code = "async def execute(args, state):\n    return {'transformed_data': [item.strip().upper() for item in args['data']['items']]}"
-        validate_code = "async def execute(args, state):\n    return {'is_valid': len(args['items']) >= args['min_count']}"
-        save_code = "async def execute(args, state):\n    return {'saved_result': {'items': args['items'], 'valid': args['is_valid'], 'source': args['source']}}"
+        extract_code = "async def run(args, state):\n    return {'extracted_data': {'items': args['raw'].split(','), 'count': len(args['raw'].split(','))}}"
+        transform_code = "async def run(args, state):\n    return {'transformed_data': [item.strip().upper() for item in args['data']['items']]}"
+        validate_code = "async def run(args, state):\n    return {'is_valid': len(args['items']) >= args['min_count']}"
+        save_code = "async def run(args, state):\n    return {'saved_result': {'items': args['items'], 'valid': args['is_valid'], 'source': args['source']}}"
 
         node1 = CodeNode(
             node_id="extract_node",
@@ -615,18 +615,18 @@ class TestCodeNodeDynamicDataAgent:
     async def test_mixed_function_and_tool_nodes_data_flow(self):
         """Тест смешанного flow: CodeNode передают данные друг другу."""
         init_code = """
-async def execute(args, state):
+async def run(args, state):
     state.x_value = 7
     state.y_value = 8
     return state
 """
-        multiply_code = "async def execute(args, state):\n    return {'product': args['x'] * args['y']}"
+        multiply_code = "async def run(args, state):\n    return {'product': args['x'] * args['y']}"
         process_code = """
-async def execute(args, state):
+async def run(args, state):
     state.processed_value = state.product + 100
     return state
 """
-        finalize_code = "async def execute(args, state):\n    return {'final_message': f\"Result: {args['value']} (bonus: {args['bonus']})\"}"
+        finalize_code = "async def run(args, state):\n    return {'final_message': f\"Result: {args['value']} (bonus: {args['bonus']})\"}"
 
         init_func = CodeNode(
             node_id="init_func",

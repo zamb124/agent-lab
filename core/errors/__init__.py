@@ -391,6 +391,52 @@ class SafeEvalError(ExecutionError):
     message = "Ошибка безопасного выполнения кода"
 
 
+class CodeExecutionRuntimeError(ExecutionError):
+    """
+    Ошибка исполнения пользовательского кода в isolated code runner.
+    """
+
+    code = "CODE_EXECUTION_RUNTIME_ERROR"
+    message = "Ошибка исполнения пользовательского кода"
+
+    def __init__(
+        self,
+        *,
+        language: str,
+        service: str,
+        stage: str,
+        message: str,
+        exception_type: str,
+        traceback: str | None = None,
+        stdout: str | None = None,
+        stderr: str | None = None,
+        request_id: str | None = None,
+        trace_id: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        payload: Dict[str, Any] = {
+            "language": language,
+            "service": service,
+            "stage": stage,
+            "exception_type": exception_type,
+        }
+        if traceback:
+            payload["traceback"] = traceback
+        if stdout:
+            payload["stdout"] = stdout
+        if stderr:
+            payload["stderr"] = stderr
+        if request_id:
+            payload["request_id"] = request_id
+        if trace_id:
+            payload["trace_id"] = trace_id
+        super().__init__(
+            message=f"{service}/{language}/{stage}: {message}",
+            payload=payload,
+            **kwargs,
+        )
+
+
 class FrozenStateFieldError(SafeEvalError):
     """
     Попытка изменить системное поле ExecutionState из кода ноды или tool.
@@ -593,6 +639,7 @@ __all__ = [
     "FlowPrematureCompletionError",
     "FlowWallClockTimeoutError",
     "NodeWallClockTimeoutError",
+    "CodeExecutionRuntimeError",
     "SafeEvalError",
     "FrozenStateFieldError",
     "ExternalAPIError",
