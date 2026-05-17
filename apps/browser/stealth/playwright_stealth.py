@@ -11,6 +11,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from playwright.async_api import BrowserContext
+from playwright_stealth import Stealth
+
 from apps.browser.engine.types import ContextSignature
 
 
@@ -19,7 +22,7 @@ class StealthPlan:
     version: str
     tier: str
     extra_http_headers: dict[str, str]
-    navigator_languages_override: tuple[str, ...]
+    navigator_languages_override: tuple[str, str]
 
 
 def _accept_language_from_locale(locale: str) -> str:
@@ -71,13 +74,11 @@ def build_stealth_plan(signature: ContextSignature) -> StealthPlan:
     )
 
 
-async def apply_stealth_to_context(context: object, signature: ContextSignature) -> None:
+async def apply_stealth_to_context(context: BrowserContext, signature: ContextSignature) -> None:
     """
     Применить stealth-план к уже созданному BrowserContext ДО открытия страниц.
     """
     plan = build_stealth_plan(signature)
-
-    from playwright_stealth import Stealth  # сторонняя библиотека, init scripts инжектятся внутрь
 
     # 1) init scripts (playwright-stealth)
     stealth = Stealth(
@@ -87,5 +88,4 @@ async def apply_stealth_to_context(context: object, signature: ContextSignature)
     await stealth.apply_stealth_async(context)
 
     # 2) headers (сетевой слой не покрывается js-evasions)
-    await context.set_extra_http_headers(plan.extra_http_headers)  # type: ignore[attr-defined]
-
+    await context.set_extra_http_headers(plan.extra_http_headers)

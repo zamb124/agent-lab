@@ -5,23 +5,25 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+from collections.abc import Awaitable
+from typing import Any, Optional, Protocol
+
+from playwright._impl._errors import is_target_closed_error
 
 from apps.browser.engine.types import ContextSignature
 from apps.browser.stealth.playwright_stealth import apply_stealth_to_context
+
+
+class BrowserContextFactoryBrowser(Protocol):
+    def new_context(self, **kwargs: Any) -> Awaitable[Any]: ...
 
 
 def _playwright_transport_gone(exc: BaseException) -> bool:
     """
     Playwright/CDP уже оборван (движок упал, закрыл сокет): close() не обязан повторно бросать.
     """
-    try:
-        from playwright._impl._errors import is_target_closed_error
-
-        if isinstance(exc, Exception) and is_target_closed_error(exc):
-            return True
-    except Exception:
-        pass
+    if isinstance(exc, Exception) and is_target_closed_error(exc):
+        return True
     msg = str(exc).lower()
     return any(
         part in msg
@@ -99,7 +101,7 @@ class ContextFactory:
 
     async def new_context(
         self,
-        browser: Any,
+        browser: BrowserContextFactoryBrowser,
         endpoint_key: str,
         signature: ContextSignature,
         storage_state: Optional[dict[str, Any]],
@@ -117,10 +119,7 @@ class ContextFactory:
             if storage_state is not None:
                 kwargs["storage_state"] = storage_state
 
-            new_context = getattr(browser, "new_context", None)
-            if not callable(new_context):
-                raise RuntimeError("Движок не поддерживает browser.new_context(...)")
-            context = await new_context(**kwargs)
+            context = await browser.new_context(**kwargs)
             try:
                 setattr(context, "_browser_runtime_shared_context", True)
             except Exception:

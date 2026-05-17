@@ -49,7 +49,7 @@ class SyncChannel(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     created_by_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    pinned_message_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    pinned_message_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     transcribe_voice_messages: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     speech_to_chat_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -142,7 +142,7 @@ class SyncMessage(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    reactions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    reactions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     forwarded_from_channel_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     forwarded_from_channel_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

@@ -8,7 +8,7 @@
 import pytest
 
 from apps.flows.config import get_settings
-from core.clients import RedisClient
+from core.clients.redis_client import RedisClient
 
 
 class TestRedisClient:
@@ -139,5 +139,4 @@ class TestRedisClient:
 
         ping_after = await redis_client.ping()
         assert ping_after is False
-
 

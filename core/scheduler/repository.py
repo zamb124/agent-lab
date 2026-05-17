@@ -170,7 +170,7 @@ class SchedulerTaskRepository:
         next_run_at: Optional[datetime] = None,
         error_message: Optional[str] = None,
     ) -> bool:
-        status_value = status.value if hasattr(status, "value") else str(status)
+        status_value = status.value if isinstance(status, ScheduledTaskStatus) else str(status)
         values: dict[str, object] = {
             "status": status_value,
             "updated_at": datetime.now(timezone.utc),

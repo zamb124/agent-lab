@@ -619,7 +619,7 @@ async def crm_create_note_and_analyze(
     if mentioned_entity_ids:
         analyze_args["mentioned_entity_ids"] = mentioned_entity_ids
 
-    analyzed_raw = await crm_analyze_note_text.run(analyze_args, state)
+    analyzed_raw = await crm_analyze_note_text._run_impl(analyze_args, state)
     analyzed = json.loads(analyzed_raw)
     if not analyzed.get("success"):
         return json.dumps(

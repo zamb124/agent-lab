@@ -47,7 +47,7 @@ from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
 from core.pagination import ListResponse, OffsetPage
 from core.short_links.service import require_platform_public_base_url
-from core.ui_events import publish_ui_event_to_user
+from core.ui_events.dispatcher import publish_ui_event_to_user
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)

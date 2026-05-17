@@ -9,21 +9,21 @@ from fastapi import APIRouter, Query
 
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import ServiceStatus
-from core.clients.service_client import ServiceClientError
+from core.clients.service_client import ServiceClient, ServiceClientError
 from core.logging import get_logger
 from core.pagination import OffsetPage
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/services", tags=["services"])
 
-SERVICES = [
+SERVICES: tuple[dict[str, str], ...] = (
     {"name": "flows", "url": "/flows/api/v1/health"},
     {"name": "crm", "url": "/crm/api/v1/health"},
     {"name": "rag", "url": "/rag/api/health"},
     {"name": "sync", "url": "/sync/api/health"},
     {"name": "office", "url": "/documents/api/health"},
     {"name": "provider_litserve", "url": "/litserve/health"},
-]
+)
 
 _NETWORK_ERRORS = (
     httpx.ConnectError,
@@ -41,7 +41,7 @@ def _service_status_display_url(name: str) -> str:
         return "/litserve"
     return f"/{name}"
 
-async def _check_service(service_client: object, name: str, health_url: str) -> ServiceStatus:
+async def _check_service(service_client: ServiceClient, name: str, health_url: str) -> ServiceStatus:
     display_url = _service_status_display_url(name)
     start = time.time()
     await service_client.get(name, health_url)

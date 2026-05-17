@@ -56,8 +56,8 @@ class STTLitAPI(ls.LitAPI):
         items: list[dict[str, Any]] = x if isinstance(x, list) else [x]
         return self._engine.transcribe_batch(items)
 
-    def unbatch(self, outputs: list[Any]) -> Any:
-        return outputs
+    def unbatch(self, output: list[Any]) -> Any:
+        return output
 
     def encode_response(self, output: Any, **kwargs: Any) -> dict[str, Any]:
         if isinstance(output, list):

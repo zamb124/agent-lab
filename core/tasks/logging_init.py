@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Optional
 
 from core.config.models import LoggingConfig
-from core.logging import setup_logging
+from core.logging.setup import setup_logging
 
 
 def setup_worker_logging_early(

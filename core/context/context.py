@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from core.models.context_models import Context
+    from core.models.identity_models import Company
 
 
 _context: contextvars.ContextVar[Optional["Context"]] = contextvars.ContextVar(
@@ -37,6 +38,23 @@ def get_context() -> Optional["Context"]:
         Текущий контекст или None
     """
     return _context.get()
+
+
+def require_context() -> "Context":
+    """Возвращает текущий контекст или падает, если request/job scope не установлен."""
+    context = get_context()
+    if context is None:
+        raise RuntimeError("Context is required but is not set")
+    return context
+
+
+def require_active_company() -> "Company":
+    """Возвращает активную компанию текущего контекста или падает."""
+    context = require_context()
+    company = context.active_company
+    if company is None:
+        raise RuntimeError("Active company is required but is not set in context")
+    return company
 
 
 def clear_context() -> None:

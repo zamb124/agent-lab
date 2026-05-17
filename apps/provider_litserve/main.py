@@ -8,15 +8,18 @@ import argparse
 import asyncio
 import time
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, cast
 
 import litserve as ls
 import torch
+import uvicorn
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.routing import APIRoute
+from huggingface_hub import scan_cache_dir, snapshot_download
 from litserve.server import response_queue_to_buffer
 from pydantic import BaseModel, Field
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from apps.provider_litserve.config import (
     ProviderLitserveServiceSettings,
@@ -60,6 +63,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 UI_ROOT_PATH = Path(__file__).parent / "ui"
 UI_INDEX_PATH = UI_ROOT_PATH / "index.html"
 CORE_STATIC_PATH = PROJECT_ROOT / "core" / "frontend" / "static"
+
+
+class _ResponseQueueTarget(Protocol):
+    response_queue_id: int
 
 
 class ProviderLitserveModelCreateRequest(BaseModel):
@@ -116,8 +123,6 @@ def _download_model_weights(model_id: str) -> None:
     model = get_model(cfg, model_id=model_id)
     mark_model_status(cfg, model_id=model_id, status="downloading")
     try:
-        from huggingface_hub import snapshot_download
-
         snapshot_download(
             repo_id=model.hf_model_id,
             token=cfg.hf_token,
@@ -135,8 +140,6 @@ def _delete_model_weights(model_id: str) -> None:
     cfg = settings.provider_litserve.infra
     model = get_model(cfg, model_id=model_id)
     try:
-        from huggingface_hub import scan_cache_dir
-
         cache_info = scan_cache_dir()
         strategy = cache_info.delete_revisions(model.hf_model_id)
         strategy.execute()
@@ -152,30 +155,32 @@ class ChatCompletionsLitAPI(ls.LitAPI):
 
     def __init__(self) -> None:
         super().__init__(spec=ls.OpenAISpec())
-        self._device: str = "cpu"
+        self._device: str | None = None
         self._max_new_tokens: int = 4096
         self._hf_token: str | None = None
         self._infra = get_provider_litserve_settings().provider_litserve.infra
 
-    def setup(self, device) -> None:
+    def setup(self, device: object) -> None:
         settings = get_provider_litserve_settings()
         infra = settings.provider_litserve.infra
         self._device = str(device) if device else resolve_torch_device(infra)
         self._hf_token = infra.hf_token
-        try:
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-        except ImportError as exc:
-            raise RuntimeError(
-                "Локальный chat backend: установите зависимости transformers (uv sync --group reranker-model)"
-            ) from exc
         _ = AutoModelForCausalLM
         _ = AutoTokenizer
 
-    def decode_request(self, request):
-        return request.model_dump(exclude_none=True)
+    def decode_request(self, request: Any, **kwargs: Any) -> dict[str, Any]:
+        _ = kwargs
+        if isinstance(request, BaseModel):
+            return request.model_dump(exclude_none=True)
+        if isinstance(request, dict):
+            return request
+        raise HTTPException(status_code=422, detail={"reason": "invalid_chat_request"})
 
-    def predict(self, request):
-        body = dict(request)
+    def predict(self, x: Any, **kwargs: Any):
+        _ = kwargs
+        if not isinstance(x, dict):
+            raise HTTPException(status_code=422, detail={"reason": "invalid_chat_request"})
+        body = x
         requested_model = str(body.get("model", "")).strip()
         allowed_ids = allowed_api_model_ids("llm", self._infra)
         req_lower = requested_model.lower()
@@ -191,6 +196,8 @@ class ChatCompletionsLitAPI(ls.LitAPI):
         hf_model_id = resolve_hf_model_id("llm", requested_model, self._infra)
         if hf_model_id is None:
             raise HTTPException(status_code=422, detail={"reason": "unknown_chat_model", "model": requested_model})
+        if self._device is None:
+            raise RuntimeError("ChatCompletionsLitAPI.setup must initialize device before predict")
         tokenizer, model = ensure_local_causal_lm(
             hf_model_id=hf_model_id,
             device=self._device,
@@ -381,11 +388,11 @@ async def _start_litserver_runtime(app: FastAPI) -> None:
     lit_server.verify_worker_status()
 
     consumer_id = 0
-    lit_server.app.response_queue_id = consumer_id
-    app.response_queue_id = consumer_id
+    cast(_ResponseQueueTarget, cast(Any, lit_server.app)).response_queue_id = consumer_id
+    cast(_ResponseQueueTarget, cast(Any, app)).response_queue_id = consumer_id
     for lit_api in lit_server.litapi_connector:
         if lit_api.spec:
-            lit_api.spec.response_queue_id = consumer_id
+            cast(_ResponseQueueTarget, cast(Any, lit_api.spec)).response_queue_id = consumer_id
 
     task = asyncio.create_task(
         response_queue_to_buffer(
@@ -461,8 +468,6 @@ def main() -> None:
     settings = get_provider_litserve_settings()
     host = args.host if args.host is not None else settings.server.host
     port = args.port if args.port is not None else settings.server.port
-
-    import uvicorn
 
     uvicorn.run(
         "apps.provider_litserve.main:app",

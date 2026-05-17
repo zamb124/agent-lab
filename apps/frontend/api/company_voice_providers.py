@@ -35,6 +35,7 @@ from core.clients.speech_provider_catalog import (
 from core.clients.voice_resolver import invalidate_company_overrides_cache
 from core.config import get_settings
 from core.db.company_voice_provider_secrets import merge_secrets, unset_secrets_sentinel
+from core.db.models.platform import CompanyVoiceProvider
 from core.db.repositories.company_voice_provider_repository import VoiceKind
 from core.logging import get_logger
 from core.models.identity_models import User
@@ -133,12 +134,14 @@ def _reject_vad_path_kind(kind: str) -> None:
 
 
 def _validate_kind(kind: str) -> VoiceKind:
-    if kind not in _VOICE_KINDS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Неизвестный kind: {kind!r}. Допустимы: {', '.join(_VOICE_KINDS)}",
-        )
-    return kind  # type: ignore[return-value]
+    if kind == "stt":
+        return "stt"
+    if kind == "tts":
+        return "tts"
+    raise HTTPException(
+        status_code=400,
+        detail=f"Неизвестный kind: {kind!r}. Допустимы: {', '.join(_VOICE_KINDS)}",
+    )
 
 
 def _validate_provider(kind: VoiceKind, provider: str) -> None:
@@ -202,23 +205,52 @@ def _validate_model_for_voice(
         raise HTTPException(status_code=400, detail=f"Неизвестная litserve модель: {model_value!r}")
 
 
-def _row_to_item(row: object) -> CompanyVoiceProviderItem:
-    provider = row.provider  # type: ignore[attr-defined]
-    raw_sec = getattr(row, "secrets", None)
+def _item_kind(value: str) -> Literal["stt", "tts"]:
+    if value == "stt":
+        return "stt"
+    if value == "tts":
+        return "tts"
+    raise HTTPException(status_code=500, detail=f"Некорректный kind в БД: {value!r}")
+
+
+def _response_format(
+    value: str | None,
+) -> Literal["wav", "mp3", "ogg", "pcm", "lpcm"] | None:
+    if value is None:
+        return None
+    if value == "wav":
+        return "wav"
+    if value == "mp3":
+        return "mp3"
+    if value == "ogg":
+        return "ogg"
+    if value == "pcm":
+        return "pcm"
+    if value == "lpcm":
+        return "lpcm"
+    raise HTTPException(
+        status_code=500,
+        detail=f"Некорректный response_format в БД: {value!r}",
+    )
+
+
+def _row_to_item(row: CompanyVoiceProvider) -> CompanyVoiceProviderItem:
+    provider = row.provider
+    raw_sec = row.secrets
     meta_obj: CompanySecretsMetaDTO | None
     meta_obj = secrets_dict_to_meta(
         secrets=dict(raw_sec) if isinstance(raw_sec, dict) else None,
         provider=provider,
     )
     return CompanyVoiceProviderItem(
-        kind=row.kind,  # type: ignore[attr-defined]
+        kind=_item_kind(row.kind),
         provider=provider,
-        model=row.model,  # type: ignore[attr-defined]
-        voice=row.voice,  # type: ignore[attr-defined]
-        language=row.language,  # type: ignore[attr-defined]
-        sample_rate=row.sample_rate,  # type: ignore[attr-defined]
-        threshold=row.threshold,  # type: ignore[attr-defined]
-        response_format=row.response_format,  # type: ignore[attr-defined]
+        model=row.model,
+        voice=row.voice,
+        language=row.language,
+        sample_rate=row.sample_rate,
+        threshold=row.threshold,
+        response_format=_response_format(row.response_format),
         secrets_meta=meta_obj,
     )
 
@@ -303,8 +335,15 @@ async def upsert_company_voice_provider(
         secrets_arg = unset_secrets_sentinel()
     else:
         try:
+            existing_secrets: dict[str, str] | None = None
+            if existing is not None and existing.secrets:
+                existing_secrets = {
+                    key: value
+                    for key, value in existing.secrets.items()
+                    if isinstance(value, str)
+                }
             merged = merge_secrets(
-                existing=dict(existing.secrets) if existing and existing.secrets else None,  # type: ignore[arg-type]
+                existing=existing_secrets,
                 patch=payload.secrets,
                 allowed_keys=allowed,
             )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.tools.docx_template import _fill_docx_mock, fill_docx_template
+from core.state import ExecutionState
 
 
 def test_fill_docx_template_metadata() -> None:
@@ -22,10 +23,7 @@ def test_fill_docx_mock() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fill_docx_template_no_files(monkeypatch) -> None:
-    monkeypatch.setattr("core.config.testing.is_testing", lambda: False)
-    from core.state import ExecutionState
-
+async def test_fill_docx_template_no_files() -> None:
     state = ExecutionState.create(
         task_id="t1",
         context_id="c1",
@@ -33,7 +31,7 @@ async def test_fill_docx_template_no_files(monkeypatch) -> None:
         session_id="flow:c1",
         files=[],
     )
-    out = await fill_docx_template.run(
+    out = await fill_docx_template._run_impl(
         {"variables": {}, "output_original_name": "out.docx"},
         state,
     )
@@ -42,10 +40,7 @@ async def test_fill_docx_template_no_files(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_fill_docx_template_bad_output_name(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("core.config.testing.is_testing", lambda: False)
-    from core.state import ExecutionState
-
+async def test_fill_docx_template_bad_output_name(tmp_path) -> None:
     p = tmp_path / "t.docx"
     p.write_bytes(b"PK\x03\x04")
     state = ExecutionState.create(
@@ -55,7 +50,7 @@ async def test_fill_docx_template_bad_output_name(tmp_path, monkeypatch) -> None
         session_id="flow:c1",
         files=[{"name": "t.docx", "path": str(p)}],
     )
-    out = await fill_docx_template.run(
+    out = await fill_docx_template._run_impl(
         {
             "variables": {},
             "output_original_name": "bad.txt",

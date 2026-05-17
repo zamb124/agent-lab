@@ -7,6 +7,7 @@ from __future__ import annotations
 from apps.flows.config import get_settings
 from apps.flows.src.container import get_container
 from apps.idle_worker.broker import broker as idle_broker
+from core.clients.payment.factory import PaymentProviderFactory
 from core.logging import get_logger
 from core.payments.service import PaymentService
 from core.payments.sync_service import PaymentSyncService
@@ -29,7 +30,6 @@ async def payment_sync_tick(
     payment_service = PaymentService(company_repository=container.company_repository)
     sync_service = PaymentSyncService(payment_service=payment_service)
 
-    from core.clients.payment.factory import PaymentProviderFactory
     if not PaymentProviderFactory.get_available_providers():
         PaymentProviderFactory.initialize()
     await PaymentProviderFactory.seed_access_tokens(container.shared_storage)

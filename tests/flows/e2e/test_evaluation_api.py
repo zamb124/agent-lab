@@ -107,6 +107,29 @@ async def setup_mock_llm_redis(mock_llm_redis, responses: List[str]):
     await mock_llm_redis(queue)
 
 
+def setup_flow_dialog_mock_llm(
+    mock_llm,
+    *,
+    tester_responses: List[str],
+    flow_responses: List[str],
+    judge_response: str | None = None,
+):
+    """Настраивает очередь для sync_tools: tester -> flow -> ... -> judge."""
+    if len(tester_responses) < len(flow_responses):
+        raise ValueError("tester_responses must cover every flow turn")
+
+    responses: List[str] = []
+    for index, flow_response in enumerate(flow_responses):
+        responses.append(tester_responses[index])
+        responses.append(flow_response)
+
+    responses.extend(tester_responses[len(flow_responses) :])
+    if judge_response is not None:
+        responses.append(judge_response)
+
+    setup_mock_llm(mock_llm, responses)
+
+
 class TestEvaluationFunctionType:
     """Тесты function тест-кейсов."""
 
@@ -760,33 +783,24 @@ class TestAllTestCasesExampleReact:
 class TestFlowTypeEvaluation:
     """Тесты flow_dialog_test: нода-тестер + нода-судья.
 
-    Используем mock_llm_redis потому что invoke_llm.kiq() выполняется в worker.
+    В стандартном режиме suite `sync_tools` исполняет задачи синхронно, поэтому tester,
+    тестируемый flow и judge читают одну локальную очередь MockLLM в порядке вызовов.
     """
 
-    async def test_flow_dialog_test_runs_with_tester_and_judge(self, client, taskiq_worker, mock_llm_redis, mock_llm):
+    async def test_flow_dialog_test_runs_with_tester_and_judge(self, client, mock_llm):
         """Проверяем что flow_dialog_test запускает тестера и судью."""
-        # mock_llm_redis для invoke_llm (тестер, судья)
-        # mock_llm для process_flow_task (flow)
-        await setup_mock_llm_redis(
-            mock_llm_redis,
-            [
-                # Тестер: первое сообщение
-                "Привет! Расскажи о своих возможностях.",
-                # Тестер: второе сообщение
-                "Хорошо. Сколько будет 2 + 2?",
-                # Тестер: завершение
-                "[TEST_COMPLETE] Тест завершён успешно.",
-                # Судья: оценка
-                '{"scores": {"quality": 9, "completeness": 8}, "total_score": 8.5, "passed": true, "feedback": "Отличный диалог"}',
-            ],
-        )
-        setup_mock_llm(
+        setup_flow_dialog_mock_llm(
             mock_llm,
-            [
-                # Agent: ответы
+            tester_responses=[
+                "Привет! Расскажи о своих возможностях.",
+                "Хорошо. Сколько будет 2 + 2?",
+                "[TEST_COMPLETE] Тест завершён успешно.",
+            ],
+            flow_responses=[
                 "Я могу помочь с расчётами и вопросами.",
                 "2 + 2 = 4",
             ],
+            judge_response='{"scores": {"quality": 9, "completeness": 8}, "total_score": 8.5, "passed": true, "feedback": "Отличный диалог"}',
         )
 
         data = await run_evaluation(client, "example_react", "flow_dialog_test", "test_full")
@@ -794,21 +808,18 @@ class TestFlowTypeEvaluation:
         state = get_task_state(data)
         assert state in ("completed", "failed"), f"Agent test не завершился: {state}"
 
-    async def test_flow_dialog_test_dialog_saved(self, client, taskiq_worker, mock_llm_redis, mock_llm, container):
+    async def test_flow_dialog_test_dialog_saved(self, client, mock_llm, container):
         """Проверяем что диалог агента сохраняется в БД."""
-        await setup_mock_llm_redis(
-            mock_llm_redis,
-            [
+        setup_flow_dialog_mock_llm(
+            mock_llm,
+            tester_responses=[
                 "Привет! Как дела?",
                 "[TEST_COMPLETE]",
-                '{"scores": {"quality": 7}, "total_score": 7, "passed": true, "feedback": "OK"}',
             ],
-        )
-        setup_mock_llm(
-            mock_llm,
-            [
+            flow_responses=[
                 "Всё хорошо, спасибо!",
             ],
+            judge_response='{"scores": {"quality": 7}, "total_score": 7, "passed": true, "feedback": "OK"}',
         )
 
         await run_evaluation(client, "example_react", "flow_dialog_test", "test_full")
@@ -822,21 +833,18 @@ class TestFlowTypeEvaluation:
         assert result.test_case_id == "flow_dialog_test"
         assert len(result.dialog) > 0
 
-    async def test_flow_dialog_test_scores_saved(self, client, mock_llm_redis, mock_llm, container):
+    async def test_flow_dialog_test_scores_saved(self, client, mock_llm, container):
         """Проверяем что оценки судьи сохраняются."""
-        await setup_mock_llm_redis(
-            mock_llm_redis,
-            [
+        setup_flow_dialog_mock_llm(
+            mock_llm,
+            tester_responses=[
                 "Привет, проверяю работу",  # Тестер
                 "[TEST_COMPLETE] Тест пройден",  # Тестер завершает
-                '{"scores": {"accuracy": 9, "helpfulness": 8}, "total_score": 8.5, "passed": true, "feedback": "Хорошая работа"}',  # Судья
             ],
-        )
-        setup_mock_llm(
-            mock_llm,
-            [
+            flow_responses=[
                 "Всё работает отлично",  # Agent
             ],
+            judge_response='{"scores": {"accuracy": 9, "helpfulness": 8}, "total_score": 8.5, "passed": true, "feedback": "Хорошая работа"}',
         )
 
         await run_evaluation(client, "example_react", "flow_dialog_test", "test_full")
@@ -851,22 +859,19 @@ class TestFlowTypeEvaluation:
         assert result.judge_feedback is not None
 
     async def test_flow_dialog_test_judge_fail_marks_test_failed(
-        self, client, mock_llm_redis, mock_llm, container
+        self, client, mock_llm, container
     ):
         """Проверяем что если судья ставит passed=false, тест failed."""
-        await setup_mock_llm_redis(
-            mock_llm_redis,
-            [
+        setup_flow_dialog_mock_llm(
+            mock_llm,
+            tester_responses=[
                 "Тестовый вопрос",
                 "[TEST_COMPLETE]",
-                '{"scores": {"quality": 2}, "total_score": 2, "passed": false, "feedback": "Неудовлетворительно"}',
             ],
-        )
-        setup_mock_llm(
-            mock_llm,
-            [
+            flow_responses=[
                 "Плохой ответ",
             ],
+            judge_response='{"scores": {"quality": 2}, "total_score": 2, "passed": false, "feedback": "Неудовлетворительно"}',
         )
 
         data = await run_evaluation(client, "example_react", "flow_dialog_test", "test_full")
@@ -883,31 +888,28 @@ class TestFlowTypeEvaluation:
             "Тест должен быть failed если судья поставил passed=false"
         )
 
-    async def test_flow_dialog_test_max_turns_limit(self, client, mock_llm_redis, mock_llm, container):
+    async def test_flow_dialog_test_max_turns_limit(self, client, mock_llm, container):
         """Проверяем что тест останавливается по max_turns=5 из flow_dialog_test."""
         # Тестер: 1 затравка + 5 итераций без TEST_COMPLETE = 6 вызовов; затем 1 судья.
-        await setup_mock_llm_redis(
-            mock_llm_redis,
-            [
+        setup_flow_dialog_mock_llm(
+            mock_llm,
+            tester_responses=[
                 "Вопрос 1",
                 "Вопрос 2",
                 "Вопрос 3",
                 "Вопрос 4",
                 "Вопрос 5",
                 "Вопрос 6",
-                '{"scores": {"quality": 5}, "total_score": 5, "passed": true, "feedback": "max_turns reached"}',
             ],
-        )
-        # Агент: ровно 5 вызовов flow на 5 итерациях диалога.
-        setup_mock_llm(
-            mock_llm,
-            [
+            # Агент: ровно 5 вызовов flow на 5 итерациях диалога.
+            flow_responses=[
                 "Ответ 1",
                 "Ответ 2",
                 "Ответ 3",
                 "Ответ 4",
                 "Ответ 5",
             ],
+            judge_response='{"scores": {"quality": 5}, "total_score": 5, "passed": true, "feedback": "max_turns reached"}',
         )
 
         data = await run_evaluation(client, "example_react", "flow_dialog_test", "test_full")
@@ -925,21 +927,18 @@ class TestFlowTypeEvaluation:
             f"Диалог должен остановиться ровно на max_turns=5, получено {result.turns_count}"
         )
 
-    async def test_flow_dialog_test_graph_flow(self, client, mock_llm_redis, mock_llm):
+    async def test_flow_dialog_test_graph_flow(self, client, mock_llm):
         """Проверяем evaluation на графовом flow."""
-        await setup_mock_llm_redis(
-            mock_llm_redis,
-            [
+        setup_flow_dialog_mock_llm(
+            mock_llm,
+            tester_responses=[
                 "Хочу сделать заказ",
                 "[TEST_COMPLETE] Заказ оформлен.",
-                '{"scores": {"routing": 10, "response": 9}, "total_score": 9.5, "passed": true, "feedback": "Правильная маршрутизация"}',
             ],
-        )
-        setup_mock_llm(
-            mock_llm,
-            [
+            flow_responses=[
                 "Ваш заказ принят. Номер 12345.",
             ],
+            judge_response='{"scores": {"routing": 10, "response": 9}, "total_score": 9.5, "passed": true, "feedback": "Правильная маршрутизация"}',
         )
 
         data = await run_evaluation(client, "example_graph", "agent_quality_test", "default")
@@ -947,12 +946,12 @@ class TestFlowTypeEvaluation:
         state = get_task_state(data)
         assert state in ("completed", "failed"), f"Graph evaluation test не завершился: {state}"
 
-    async def test_flow_dialog_test_loop_detection(self, client, mock_llm_redis, mock_llm, container):
+    async def test_flow_dialog_test_loop_detection(self, client, mock_llm, container):
         """Проверяем обнаружение зацикливания."""
         # Одинаковые ответы вызовут детекцию зацикливания
-        await setup_mock_llm_redis(
-            mock_llm_redis,
-            [
+        setup_flow_dialog_mock_llm(
+            mock_llm,
+            tester_responses=[
                 "Повтор",
                 "Повтор",
                 "Повтор",
@@ -960,10 +959,7 @@ class TestFlowTypeEvaluation:
                 "Повтор",
                 "Повтор",
             ],
-        )
-        setup_mock_llm(
-            mock_llm,
-            [
+            flow_responses=[
                 "Ответ",
                 "Ответ",
                 "Ответ",

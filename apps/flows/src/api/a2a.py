@@ -30,7 +30,7 @@ from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_TTL_SECONDS,
 )
 from core.logging import get_logger
-from core.ui_events import publish_ui_event_to_user
+from core.ui_events.dispatcher import publish_ui_event_to_user
 from core.utils.tokens import TokenData, TokenType
 
 logger = get_logger(__name__)

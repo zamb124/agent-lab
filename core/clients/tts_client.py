@@ -27,9 +27,11 @@ from typing import TYPE_CHECKING, Optional
 import httpx
 from pydantic import BaseModel, Field
 
+from core.clients.tts_pronunciation.pipeline import get_tts_text_pipeline
 from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.tracing.operation_span import traced_operation
 from core.utils.text_sanitize import sanitize_text_for_speech_backend
 
 if TYPE_CHECKING:
@@ -426,9 +428,6 @@ class PronunciationAwareTTSClient(BaseTTSClient):
         response_format: Optional[str] = None,
         sample_rate: Optional[int] = None,
     ) -> TTSResult:
-        from core.clients.tts_pronunciation.pipeline import get_tts_text_pipeline
-        from core.tracing.operation_span import traced_operation
-
         pipeline = get_tts_text_pipeline()
         original_len = len(text)
         transformed = pipeline.transform(

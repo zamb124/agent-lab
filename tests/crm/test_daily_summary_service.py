@@ -85,14 +85,8 @@ async def test_enqueue_daily_summary_rebuild_deduplicates(monkeypatch):
     )
     service._daily_summary_cache_service.set_revalidating = AsyncMock(side_effect=[True, False])
 
-    import apps.crm_worker.tasks.daily_summary_tasks as summary_tasks_module
-
     kiq_mock = AsyncMock()
-    monkeypatch.setattr(
-        summary_tasks_module,
-        "rebuild_daily_summary_task",
-        SimpleNamespace(kiq=kiq_mock),
-    )
+    monkeypatch.setattr(entity_service_module, "kiq_task_name_with_context", kiq_mock)
 
     first = await service.enqueue_daily_summary_rebuild(date_str="2026-03-28", namespace=None)
     second = await service.enqueue_daily_summary_rebuild(date_str="2026-03-28", namespace=None)

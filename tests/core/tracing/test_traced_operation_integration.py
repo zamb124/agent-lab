@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.tracing import attributes as trace_attributes
+import core.tracing.attributes as trace_attributes
 from core.tracing import setup_tracing
 from core.tracing.config import TracingConfig
 from core.tracing.operation_span import traced_operation

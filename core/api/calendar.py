@@ -5,7 +5,7 @@ API платформенного календаря.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, NoReturn
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,11 +15,11 @@ from pydantic import BaseModel, Field
 from core.calendar.service import CalendarService
 from core.context import get_context
 from core.models import (
-    CalendarAttendee,
     CalendarEvent,
     CalendarEventSource,
-    CalendarEventStatus,
+    CalendarEventUpsertPayload,
     CalendarIntegration,
+    CalendarIntegrationConnectPayload,
     CalendarProvider,
 )
 from core.pagination import ListResponse
@@ -35,40 +35,12 @@ class CalendarListRequest(BaseModel):
     limit: int = Field(default=1000, ge=1, le=5000)
 
 
-class CalendarUpsertRequest(BaseModel):
-    title: str
-    kind: str = "event"
-    source: CalendarEventSource = CalendarEventSource.PLATFORM
-    source_id: str | None = None
-    namespace: str | None = None
-    description: str | None = None
-    location: str | None = None
-    status: CalendarEventStatus = CalendarEventStatus.CONFIRMED
-    timezone: str = "UTC"
-    all_day: bool = False
-    start_at: datetime
-    end_at: datetime
-    attendees: list[CalendarAttendee] = Field(default_factory=list)
-    recurrence_rule: str | None = None
-    recurrence_id: str | None = None
-    series_id: str | None = None
-    deep_link: str | None = None
-    metadata: dict[str, str] = Field(default_factory=dict)
+class CalendarUpsertRequest(CalendarEventUpsertPayload):
+    pass
 
 
-class CalendarConnectIntegrationRequest(BaseModel):
-    provider: CalendarProvider
-    username: str | None = None
-    access_token: str
-    refresh_token: str | None = None
-    expires_at: datetime | None = None
-    scope: str | None = None
-    token_type: str | None = None
-    default_calendar_id: str | None = None
-    sync_enabled: bool = True
-    sync_inbound_enabled: bool = True
-    sync_outbound_enabled: bool = True
-    notifications_enabled: bool = True
+class CalendarConnectIntegrationRequest(CalendarIntegrationConnectPayload):
+    pass
 
 
 class CalendarSyncRequest(BaseModel):
@@ -111,7 +83,7 @@ def _get_calendar_service(request: Request) -> CalendarService:
 CalendarServiceDep = Annotated[CalendarService, Depends(_get_calendar_service)]
 
 
-def _raise_http_for_calendar_service_error(error: Exception) -> None:
+def _raise_http_for_calendar_service_error(error: Exception) -> NoReturn:
     message = str(error)
     if isinstance(error, ValueError):
         status_code = 404 if "not found" in message.lower() else 400
@@ -147,8 +119,8 @@ async def list_calendar_events(payload: CalendarListRequest, service: CalendarSe
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
         )
-    except Exception as error:
-        _raise_http_for_calendar_service_error(error)
+    except Exception as exc:
+        _raise_http_for_calendar_service_error(exc)
     public_integrations = [_to_public_integration(item) for item in integrations]
     return CalendarListResponse(events=events, integrations=public_integrations)
 
@@ -161,12 +133,12 @@ async def create_calendar_event(payload: CalendarUpsertRequest, service: Calenda
     try:
         return await service.upsert_event(
             event_id=None,
-            payload=payload.model_dump(),
+            payload=payload,
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
         )
-    except Exception as error:
-        _raise_http_for_calendar_service_error(error)
+    except Exception as exc:
+        _raise_http_for_calendar_service_error(exc)
 
 
 @router.put("/events/{event_id}", response_model=CalendarEvent)
@@ -177,12 +149,12 @@ async def update_calendar_event(event_id: str, payload: CalendarUpsertRequest, s
     try:
         return await service.upsert_event(
             event_id=event_id,
-            payload=payload.model_dump(),
+            payload=payload,
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
         )
-    except Exception as error:
-        _raise_http_for_calendar_service_error(error)
+    except Exception as exc:
+        _raise_http_for_calendar_service_error(exc)
 
 
 @router.delete("/events/{event_id}")
@@ -196,8 +168,8 @@ async def delete_calendar_event(event_id: str, service: CalendarServiceDep) -> d
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
         )
-    except Exception as error:
-        _raise_http_for_calendar_service_error(error)
+    except Exception as exc:
+        _raise_http_for_calendar_service_error(exc)
     return {"success": True}
 
 
@@ -212,8 +184,8 @@ async def list_calendar_integrations(service: CalendarServiceDep) -> ListRespons
             company_id=ctx.active_company.company_id,
         )
         return ListResponse[CalendarIntegrationPublic](items=[_to_public_integration(item) for item in integrations])
-    except Exception as error:
-        _raise_http_for_calendar_service_error(error)
+    except Exception as exc:
+        _raise_http_for_calendar_service_error(exc)
 
 
 @router.post("/integrations/connect", response_model=CalendarIntegrationPublic)
@@ -228,11 +200,11 @@ async def connect_calendar_integration(
         integration = await service.connect_integration(
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
-            payload=payload.model_dump(),
+            payload=payload,
         )
         return _to_public_integration(integration)
-    except Exception as error:
-        _raise_http_for_calendar_service_error(error)
+    except Exception as exc:
+        _raise_http_for_calendar_service_error(exc)
 
 
 @router.get("/integrations/google/start")
@@ -260,8 +232,8 @@ async def start_google_calendar_oauth(
             redirect_uri=redirect_uri,
             return_path=return_path,
         )
-    except Exception as error:
-        _raise_http_for_calendar_service_error(error)
+    except Exception as exc:
+        _raise_http_for_calendar_service_error(exc)
     return RedirectResponse(url=auth_url)
 
 
@@ -281,8 +253,8 @@ async def complete_google_calendar_oauth(
             state=state,
             code=code,
         )
-    except Exception as error:
-        _raise_http_for_calendar_service_error(error)
+    except Exception as exc:
+        _raise_http_for_calendar_service_error(exc)
     redirect_url = _append_query(
         return_path,
         {
@@ -304,8 +276,8 @@ async def disconnect_calendar_integration(provider: CalendarProvider, service: C
             company_id=ctx.active_company.company_id,
             provider=provider,
         )
-    except Exception as error:
-        _raise_http_for_calendar_service_error(error)
+    except Exception as exc:
+        _raise_http_for_calendar_service_error(exc)
     return {"success": True}
 
 
@@ -322,5 +294,5 @@ async def sync_calendar(payload: CalendarSyncRequest, service: CalendarServiceDe
             end_at=payload.end_at,
             provider=payload.provider,
         )
-    except Exception as error:
-        _raise_http_for_calendar_service_error(error)
+    except Exception as exc:
+        _raise_http_for_calendar_service_error(exc)

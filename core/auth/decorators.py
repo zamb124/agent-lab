@@ -121,8 +121,8 @@ def validate_params(schema: type[BaseModel]):
     def decorator(handler):
         @wraps(handler)
         async def wrapper(request: Request, *args, **kwargs):
+            query_dict = dict(request.query_params)
             try:
-                query_dict = dict(request.query_params)
                 validated = schema.model_validate(query_dict, strict=False)
             except ValidationError as e:
                 logger.error(

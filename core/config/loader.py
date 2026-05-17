@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Union
 
-from core.logging import get_logger
+from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
 _PROJECT_ROOT_ENV = "AGENT_LAB_PROJECT_ROOT"

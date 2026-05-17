@@ -6,15 +6,19 @@
 - Каждый репозиторий знает свою таблицу
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Dict, Generic, List, Optional, Type, TypeVar
+from typing import Generic, TypeVar
+
+from pydantic import BaseModel
 
 from core.context import get_context
 from core.db.storage import Storage
 from core.logging import get_logger
 
 logger = get_logger(__name__)
-T = TypeVar("T")
+T = TypeVar("T", bound=BaseModel)
 
 
 class BaseRepository(ABC, Generic[T]):
@@ -50,7 +54,7 @@ class BaseRepository(ABC, Generic[T]):
             f"Репозиторий {cls.__name__} должен реализовать get_service_url() для работы через HTTP"
         )
 
-    def __init__(self, storage: Storage, model_class: Type[T]):
+    def __init__(self, storage: Storage, model_class: type[T]):
         """
         Args:
             storage: Экземпляр Storage для работы с БД
@@ -59,7 +63,7 @@ class BaseRepository(ABC, Generic[T]):
         self._storage = storage
         self.model_class = model_class
 
-    def _get_key(self, entity_id: str) -> str:
+    def _get_key(self, entity_id: str, /) -> str:
         """
         Формирует базовый ключ для хранения сущности.
 
@@ -105,7 +109,7 @@ class BaseRepository(ABC, Generic[T]):
         return self._get_table_name()
 
     @abstractmethod
-    def _extract_entity_id(self, entity: T) -> str:
+    def _extract_entity_id(self, entity: T, /) -> str:
         """
         Извлекает ID из сущности.
 
@@ -145,7 +149,7 @@ class BaseRepository(ABC, Generic[T]):
         company_identifier = context.active_company.subdomain or context.active_company.company_id
         return f"company:{company_identifier}:{key}"
 
-    def _build_final_prefix(self) -> Optional[str]:
+    def _build_final_prefix(self) -> str | None:
         """
         Формирует финальный префикс для фильтрации с учетом изоляции.
 
@@ -166,7 +170,7 @@ class BaseRepository(ABC, Generic[T]):
         prefix = self._get_prefix()
         return f"company:{company_identifier}:{prefix}"
 
-    async def get(self, entity_id: str) -> Optional[T]:
+    async def get(self, entity_id: str) -> T | None:
         """
         Получает сущность по ID.
 
@@ -235,7 +239,7 @@ class BaseRepository(ABC, Generic[T]):
             final_prefix, table_name, limit, offset
         )
 
-        entities = []
+        entities: list[T] = []
         for key, data in all_data.items():
             try:
                 entity = self.model_class.model_validate_json(data)
@@ -253,7 +257,7 @@ class BaseRepository(ABC, Generic[T]):
         table_name = self._get_table_name()
         return await self._storage._count_by_prefix_and_table(final_prefix, table_name)
 
-    async def get_many(self, entity_ids: List[str]) -> Dict[str, T]:
+    async def get_many(self, entity_ids: list[str]) -> dict[str, T]:
         """
         Получает несколько сущностей по списку ID.
 
@@ -271,7 +275,7 @@ class BaseRepository(ABC, Generic[T]):
 
         all_data = await self._storage.get_many_with_table(final_keys, table_name)
 
-        result = {}
+        result: dict[str, T] = {}
         for i, entity_id in enumerate(entity_ids):
             final_key = final_keys[i]
             if final_key in all_data:

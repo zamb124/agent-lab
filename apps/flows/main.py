@@ -7,7 +7,7 @@ from pathlib import Path
 
 from core.config.loader import load_merged_config
 from core.config.models import LoggingConfig
-from core.logging import setup_logging
+from core.logging.setup import setup_logging
 
 _FLOWS_BOOTSTRAP_MERGED = load_merged_config(service_name="flows", silent=True)
 setup_logging(
@@ -31,9 +31,9 @@ from apps.flows.src.api.v1 import api_v1_router  # noqa: E402
 from apps.flows.src.container import get_container  # noqa: E402
 from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware  # noqa: E402
 from apps.flows.src.realtime import register_flows_ws_commands  # noqa: E402
-from apps.flows.src.services.flows_loader import (
-    load_flows_to_db,  # noqa: E402
-    load_tools_to_db,  # noqa: E402
+from apps.flows.src.services.flows_loader import (  # noqa: E402
+    load_flows_to_db,
+    load_tools_to_db,
 )
 from apps.flows.src.services.landing_bundle_dev_sync import (  # noqa: E402
     sync_landing_public_demo_flows_from_bundles,
@@ -54,7 +54,8 @@ from core.config.testing import is_testing  # noqa: E402
 from core.context import clear_context, set_context  # noqa: E402
 from core.files.writer import FileWriter  # noqa: E402
 from core.logging import get_logger  # noqa: E402
-from core.models.context_models import Context, Language  # noqa: E402
+from core.models.context_models import Context  # noqa: E402
+from core.models.i18n_models import Language  # noqa: E402
 from core.models.identity_models import Company, User  # noqa: E402
 from core.utils.background import run_with_log_context  # noqa: E402
 

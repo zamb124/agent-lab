@@ -9,6 +9,7 @@ from core.clients.stt_client import BaseSTTClient
 from core.clients.voice_resolver import get_stt_client
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
+from core.files.media.youtube import download_audio_from_url
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -138,8 +139,6 @@ class MediaTranscriber:
         """
         if not url or url.strip() == "":
             raise ValueError("url не может быть пустым.")
-
-        from core.files.media.youtube import download_audio_from_url
 
         audio_bytes, audio_file_name, mime_type = await download_audio_from_url(url=url.strip())
         return await self.transcribe_audio(

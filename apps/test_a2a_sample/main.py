@@ -69,10 +69,10 @@ def create_app():
         description="Тестовый агент для интеграционных тестов",
         url=os.getenv("AGENT_URL", "http://localhost:8005"),
         version="1.0.0",
-        capabilities=AgentCapabilities(streaming=True, pushNotifications=False),
-        branches=skills,
-        defaultInputModes=["text/plain"],
-        defaultOutputModes=["text/plain"],
+        capabilities=AgentCapabilities(streaming=True, push_notifications=False),
+        skills=skills,
+        default_input_modes=["text/plain"],
+        default_output_modes=["text/plain"],
     )
 
     app = A2AStarletteApplication(
@@ -94,4 +94,3 @@ app = create_app()
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8005"))
     uvicorn.run(app, host="0.0.0.0", port=port)
-

@@ -90,7 +90,7 @@ class OAuthService:
         amocrm_subdomain: str | None = None,
     ) -> OAuthProviderConfig:
         settings = get_settings()
-        provider_key = provider.value if hasattr(provider, "value") else str(provider)
+        provider_key = provider.value if isinstance(provider, IntegrationProvider) else str(provider)
         p_enum: IntegrationProvider = (
             provider if isinstance(provider, IntegrationProvider) else IntegrationProvider(provider_key)
         )

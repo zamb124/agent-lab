@@ -10,15 +10,18 @@
 
 from __future__ import annotations
 
+import json
 import logging
-import logging.config
 import os
 import sys
 from typing import Any, Optional
 
 import structlog
 
+from core.config import get_settings
+from core.config.testing import is_testing
 from core.logging.contract import LoggingMisconfigured
+from core.logging.loki_handler import LokiHandler
 from core.logging.processors import (
     add_log_level_uppercase,
     add_otel_trace_context,
@@ -32,14 +35,12 @@ from core.logging.processors import (
     truncate_strings,
 )
 
-_INITIALIZED = False
-_INITIALIZED_FOR: tuple[str, str] | None = None
+_initialized = False
+_initialized_for: tuple[str, str] | None = None
 
 
 def _resolve_environment() -> str:
     """local / test / production по ENV."""
-    from core.config.testing import is_testing
-
     if is_testing():
         return "test"
     env = (
@@ -57,8 +58,6 @@ def _resolve_environment() -> str:
 
 
 def _safe_env(name: str) -> str:
-    import os
-
     value = os.environ.get(name)
     return value.strip() if isinstance(value, str) else ""
 
@@ -99,8 +98,6 @@ def _build_processors_chain(
 
 def _build_renderer(format_name: str, console_colors: bool) -> Any:
     if format_name == "json":
-        import json
-
         return structlog.processors.JSONRenderer(
             sort_keys=False,
             serializer=lambda obj, **kwargs: json.dumps(obj, ensure_ascii=False, **kwargs),
@@ -144,11 +141,9 @@ def setup_logging(service_name: str, logging_config=None) -> None:
     это запрет менять формат на лету (тестовая инфраструктура должна
     инициализировать раз).
     """
-    global _INITIALIZED, _INITIALIZED_FOR
+    global _initialized, _initialized_for
 
     if logging_config is None:
-        from core.config import get_settings
-
         logging_config = get_settings().logging
 
     format_name = logging_config.format
@@ -161,14 +156,14 @@ def setup_logging(service_name: str, logging_config=None) -> None:
     if not hasattr(logging, level_name):
         raise LoggingMisconfigured(f"logging.level некорректен: {logging_config.level!r}")
 
-    if _INITIALIZED:
-        if _INITIALIZED_FOR == (service_name, format_name):
+    if _initialized:
+        if _initialized_for == (service_name, format_name):
             return
         if os.getenv("TESTING") == "true" or "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules:
             return
         raise LoggingMisconfigured(
             "setup_logging уже вызывался с другими параметрами: "
-            f"было {_INITIALIZED_FOR}, повторно {(service_name, format_name)}. "
+            f"было {_initialized_for}, повторно {(service_name, format_name)}. "
             "Инициализируйте логирование один раз на процесс."
         )
 
@@ -202,11 +197,9 @@ def setup_logging(service_name: str, logging_config=None) -> None:
     loki_url = getattr(logging_config, "loki_url", None)
     loki_enabled = getattr(logging_config, "loki_enabled", False)
     if loki_url and loki_enabled:
-        from core.logging.loki_handler import LokiHandler
-
         loki_renderer = structlog.processors.JSONRenderer(
             sort_keys=False,
-            serializer=lambda obj, **kw: __import__("json").dumps(obj, ensure_ascii=False, **kw),
+            serializer=lambda obj, **kw: json.dumps(obj, ensure_ascii=False, **kw),
         )
         loki_formatter = structlog.stdlib.ProcessorFormatter(
             processor=loki_renderer,
@@ -238,13 +231,11 @@ def setup_logging(service_name: str, logging_config=None) -> None:
         cache_logger_on_first_use=True,
     )
 
-    _INITIALIZED = True
-    _INITIALIZED_FOR = (service_name, format_name)
+    _initialized = True
+    _initialized_for = (service_name, format_name)
 
 
 def _resolve_service_version() -> Optional[str]:
-    from core.config import get_settings
-
     settings = get_settings()
     server = getattr(settings, "server", None)
     if server is None:
@@ -288,9 +279,9 @@ def _silence_noisy_loggers(custom_levels: dict[str, str]) -> None:
 
 def reset_logging_for_tests() -> None:
     """Сброс состояния — только для unit-тестов фабрик."""
-    global _INITIALIZED, _INITIALIZED_FOR
-    _INITIALIZED = False
-    _INITIALIZED_FOR = None
+    global _initialized, _initialized_for
+    _initialized = False
+    _initialized_for = None
     structlog.reset_defaults()
     structlog.contextvars.clear_contextvars()
     root = logging.getLogger()

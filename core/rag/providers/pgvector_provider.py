@@ -15,6 +15,7 @@ from sqlalchemy import and_, case, delete, func, or_, select, text, tuple_, upda
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from core.config import get_settings
+from core.config.llm_openai_compat import yandex_provider_http_headers
 from core.config.testing import is_testing
 from core.db.models import VectorDocument
 from core.db.utils import get_rowcount
@@ -39,6 +40,33 @@ _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
 )
 
 
+class DeterministicEmbeddingService(EmbeddingService):
+    """Детерминированный embedding-сервис для тестов и локального mock-режима."""
+
+    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        dim = self.get_embedding_dimension()
+        embeddings: List[List[float]] = []
+        for source_text in texts:
+            vector = [0.0] * dim
+            tokens = re.findall(r"[\w]+", source_text.lower(), flags=re.UNICODE)
+            if not tokens:
+                tokens = ["__empty__"]
+
+            def add_feature(feature: str, weight: float = 1.0) -> None:
+                digest = hashlib.sha256(feature.encode("utf-8")).digest()
+                idx = int.from_bytes(digest[:4], "big") % dim
+                sign = 1.0 if digest[4] % 2 == 0 else -1.0
+                vector[idx] += sign * weight
+
+            for token in tokens:
+                add_feature(token)
+            norm = math.sqrt(sum(value * value for value in vector))
+            if norm == 0.0:
+                raise ValueError("Mock embedding norm is zero")
+            embeddings.append([value / norm for value in vector])
+        return embeddings
+
+
 def _normalize_embedding_api_key(raw: Optional[str]) -> str:
     if raw is None:
         return ""
@@ -52,7 +80,6 @@ def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
     key = _normalize_embedding_api_key(config.get("embedding_api_key"))
     if key:
         return key
-    from core.config import get_settings
 
     settings = get_settings()
     if settings.rag.embedding.provider == "provider_litserve":
@@ -105,8 +132,6 @@ class PgVectorProvider(BaseRAGProvider):
 
         db_url = config.get("db_url")
         if not db_url:
-            from core.config import get_settings
-
             settings = get_settings()
             if not settings.database.rag_url:
                 raise ValueError("DATABASE__RAG_URL не настроен")
@@ -152,8 +177,6 @@ class PgVectorProvider(BaseRAGProvider):
         embedding_extra_headers = None
         root_for_yandex_check = (embedding_base_url or "").strip()
         if "llm.api.cloud.yandex.net" in root_for_yandex_check:
-            from core.config.llm_openai_compat import yandex_provider_http_headers
-
             yc = get_settings().llm.yandex
             if yc is None:
                 raise ValueError(
@@ -162,7 +185,16 @@ class PgVectorProvider(BaseRAGProvider):
                 )
             embedding_extra_headers = yandex_provider_http_headers(yc)
 
-        self._embedding_service = EmbeddingService(
+        use_deterministic_embeddings = (
+            is_testing()
+            or os.environ.get("RAG__EMBEDDING__MOCK") == "true"
+            or os.environ.get("PGVECTOR_TEST_MOCK_EMBEDDINGS") == "true"
+        )
+        embedding_service_cls = (
+            DeterministicEmbeddingService if use_deterministic_embeddings else EmbeddingService
+        )
+
+        self._embedding_service = embedding_service_cls(
             api_key=api_key,
             models=[model],
             base_url=embedding_base_url or None,
@@ -171,42 +203,7 @@ class PgVectorProvider(BaseRAGProvider):
             mrl_output_dimension=mrl_output_dimension,
             extra_headers=embedding_extra_headers,
         )
-
-        if (
-            is_testing()
-            or os.environ.get("RAG__EMBEDDING__MOCK") == "true"
-            or os.environ.get("PGVECTOR_TEST_MOCK_EMBEDDINGS") == "true"
-        ):
-
-            async def fake_generate_embeddings(texts: List[str]) -> List[List[float]]:
-                dim = self._embedding_service.get_embedding_dimension()
-                embeddings = []
-                for text in texts:
-                    vector = [0.0] * dim
-                    tokens = re.findall(r"[\w]+", text.lower(), flags=re.UNICODE)
-                    if not tokens:
-                        tokens = ["__empty__"]
-
-                    def add_feature(feature: str, weight: float = 1.0) -> None:
-                        digest = hashlib.sha256(feature.encode("utf-8")).digest()
-                        idx = int.from_bytes(digest[:4], "big") % dim
-                        sign = 1.0 if digest[4] % 2 == 0 else -1.0
-                        vector[idx] += sign * weight
-
-                    for token in tokens:
-                        add_feature(token)
-                    norm = math.sqrt(sum(value * value for value in vector))
-                    if norm == 0.0:
-                        raise ValueError("Mock embedding norm is zero")
-                    embeddings.append([value / norm for value in vector])
-                return embeddings
-
-            async def fake_generate_embedding(t: str) -> List[float]:
-                result = await fake_generate_embeddings([t])
-                return result[0]
-
-            self._embedding_service.generate_embeddings = fake_generate_embeddings
-            self._embedding_service.generate_embedding = fake_generate_embedding
+        if use_deterministic_embeddings:
             logger.info("PgVector провайдер: mock embeddings для тестов")
 
         self._file_reader = FileReader()
@@ -481,9 +478,8 @@ class PgVectorProvider(BaseRAGProvider):
         # crm_reembed_stale_documents_tick / rag_reembed_stale_documents_tick подберут их
         # когда сервис восстановится (ищут embedding_model IS NULL).
         try:
-            embeddings: List[
-                Optional[List[float]]
-            ] = await self._embedding_service.generate_embeddings(chunks)
+            raw_embeddings = await self._embedding_service.generate_embeddings(chunks)
+            embeddings: List[Optional[List[float]]] = list(raw_embeddings)
             embedding_tokens = self._embedding_service.count_tokens(chunks)
             embedding_model: Optional[str] = self.embedding_model_name()
             indexing_runtime["embedding"] = self._embedding_service.runtime_snapshot(
@@ -977,7 +973,7 @@ class PgVectorProvider(BaseRAGProvider):
             result = await session.execute(stmt)
             rows = result.all()
 
-        return self._build_search_results(rows, namespace_id)
+        return self._build_search_results(list(rows), namespace_id)
 
     async def _hybrid_search_rrf(
         self,

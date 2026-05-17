@@ -325,9 +325,12 @@ def resolve_voice_for_company(capability: AICapability) -> Optional[ResolvedVoic
     if capability not in (AICapability.VOICE_STT, AICapability.VOICE_TTS, AICapability.VOICE_VAD):
         raise ValueError(f"resolve_voice_for_company: capability {capability} не voice")
     aip = load_company_ai_providers()
-    ov: Optional[CompanyVoiceOverride] = aip.get_capability_override(capability)
-    if ov is None:
+    ov_raw = aip.get_capability_override(capability)
+    if ov_raw is None:
         return None
+    if not isinstance(ov_raw, CompanyVoiceOverride):
+        raise TypeError(f"resolve_voice_for_company: override {capability.value} должен быть CompanyVoiceOverride")
+    ov = ov_raw
     if ov.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
         if capability == AICapability.VOICE_VAD:
             raise ValueError("voice_vad: custom провайдеры не поддерживаются")

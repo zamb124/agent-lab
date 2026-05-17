@@ -42,7 +42,7 @@ class DocumentStatusRepository:
         document_name: str,
         file_size: Optional[int] = None,
         ttl_seconds: int = 864000,
-        extra_metadata: Optional[dict] = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> DocumentStatusModel:
         """Создаёт или сбрасывает строку статуса в pending (повторная загрузка)."""
         if int(ttl_seconds) < 0:
@@ -238,7 +238,7 @@ class DocumentStatusRepository:
         async with session_factory() as session:
             now = datetime.now(timezone.utc)
 
-            values = {
+            values: dict[str, str | int | datetime] = {
                 "status": status,
                 "updated_at": now,
             }

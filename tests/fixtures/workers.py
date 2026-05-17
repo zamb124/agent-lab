@@ -35,14 +35,16 @@ _SYNC_WORKER_LOCK = "/tmp/platform_test_sync_taskiq_worker.lock"
 _SYNC_WORKER_PID = "/tmp/platform_test_sync_taskiq_worker.pid"
 _CRM_WORKER_LOCK = "/tmp/platform_test_crm_taskiq_worker.lock"
 _CRM_WORKER_PID = "/tmp/platform_test_crm_taskiq_worker.pid"
+_TEST_INFRA_EPOCH_FILE = Path("/tmp/platform_test_infra_epoch")
 
 
-def _clear_taskiq_stream(stream_name: str, redis_url: str) -> None:
+def _reset_taskiq_stream_before_worker_start(stream_name: str, redis_url: str) -> None:
     parsed = urlparse(redis_url)
     if parsed.hostname is None or parsed.port is None:
         raise ValueError(f"Некорректный Redis URL для очистки очереди: {redis_url}")
     db_part = parsed.path.lstrip("/")
     db_index = db_part if db_part != "" else "0"
+
     async def _reset_stream() -> int:
         client = redis_asyncio.Redis(
             host=parsed.hostname,
@@ -71,7 +73,7 @@ def _clear_taskiq_stream(stream_name: str, redis_url: str) -> None:
         return 1
 
     reset_done = asyncio.run(_reset_stream())
-    print(f"🧹 Очистка очереди {stream_name}: reset -> {reset_done}, group=taskiq")
+    print(f"🧹 Подготовка очереди {stream_name}: reset -> {reset_done}, group=taskiq")
 
 
 class SessionWorkerManager:
@@ -139,6 +141,8 @@ class SessionWorkerManager:
         startup_wait: float = 2.0,
         log_file: str = None,
         err_file: str = None,
+        taskiq_stream_name: str | None = None,
+        taskiq_redis_url: str | None = None,
     ):
         """
         Args:
@@ -151,6 +155,8 @@ class SessionWorkerManager:
             startup_wait: Верхняя граница короткой паузы между проверками poll() после Popen (секунды)
             log_file: Путь к файлу stdout логов
             err_file: Путь к файлу stderr логов
+            taskiq_stream_name: Redis Stream очереди TaskIQ, которую надо подготовить перед новым worker
+            taskiq_redis_url: Redis URL broker'а для подготовки TaskIQ stream/group
         """
         self.name = name
         self.lock_file = lock_file
@@ -162,6 +168,8 @@ class SessionWorkerManager:
         self.startup_wait = startup_wait
         self.log_file = log_file or f"/tmp/{name.lower()}_worker.log"
         self.err_file = err_file or f"/tmp/{name.lower()}_worker_err.log"
+        self.taskiq_stream_name = taskiq_stream_name
+        self.taskiq_redis_url = taskiq_redis_url
 
         self.lock = FileLock(self.lock_file, timeout=300)
         self.pid_path = Path(self.pid_file)
@@ -228,7 +236,16 @@ class SessionWorkerManager:
             "DATABASE__FLOWS_URL",
             "MOCK_LLM_REDIS_KEY",
         )
-        payload = "\n".join(f"{k}={env.get(k, '')}" for k in critical_keys)
+        try:
+            test_infra_epoch = _TEST_INFRA_EPOCH_FILE.read_text(
+                encoding="utf-8"
+            ).strip()
+        except OSError:
+            test_infra_epoch = ""
+
+        signature_parts = [f"{k}={env.get(k, '')}" for k in critical_keys]
+        signature_parts.append(f"TEST_INFRA_EPOCH={test_infra_epoch}")
+        payload = "\n".join(signature_parts)
         return hashlib.sha256(payload.encode()).hexdigest()
 
     def _worker_envsig_path(self) -> Path:
@@ -315,6 +332,15 @@ class SessionWorkerManager:
     def _start_worker(self) -> subprocess.Popen:
         """Запускает новый worker процесс."""
         self._cleanup_old_processes()
+        if self.taskiq_stream_name is not None:
+            if self.taskiq_redis_url is None:
+                raise ValueError(
+                    f"{self.name}: taskiq_redis_url обязателен для подготовки очереди"
+                )
+            _reset_taskiq_stream_before_worker_start(
+                self.taskiq_stream_name,
+                self.taskiq_redis_url,
+            )
 
         # Логи: line-buffered + unbuffered python, иначе stderr/stdout воркера долго не попадают в файлы.
         worker_log = open(self.log_file, "w", buffering=1, encoding="utf-8", errors="replace")
@@ -470,6 +496,8 @@ def taskiq_worker():
         ],
         log_file="/tmp/taskiq_worker_test.log",
         err_file="/tmp/taskiq_worker_test_err.log",
+        taskiq_stream_name="flows_worker",
+        taskiq_redis_url="redis://localhost:63792/1",
     )
 
     with manager.start() as worker_process:
@@ -488,9 +516,6 @@ def rag_worker():
     При pytest-xdist используется filelock для синхронизации -
     первый worker запускает RAGWorker, остальные ждут и переиспользуют его.
     """
-    # Один процесс: меньше гонок при нагрузочном прогоне и общей БД/S3.
-    _clear_taskiq_stream("rag", "redis://localhost:63792/1")
-
     manager = SessionWorkerManager(
         name="RAGWorker",
         lock_file=_RAG_WORKER_LOCK,
@@ -513,6 +538,8 @@ def rag_worker():
         ],
         log_file="/tmp/rag_worker_test.log",
         err_file="/tmp/rag_worker_test_err.log",
+        taskiq_stream_name="rag",
+        taskiq_redis_url="redis://localhost:63792/1",
     )
 
     with manager.start() as worker_process:
@@ -586,6 +613,8 @@ def sync_worker():
         ],
         log_file="/tmp/sync_taskiq_worker_test.log",
         err_file="/tmp/sync_taskiq_worker_test_err.log",
+        taskiq_stream_name="sync",
+        taskiq_redis_url="redis://localhost:63792/1",
     )
 
     with manager.start() as worker_process:
@@ -626,6 +655,8 @@ def crm_worker():
         ],
         log_file="/tmp/crm_taskiq_worker_test.log",
         err_file="/tmp/crm_taskiq_worker_test_err.log",
+        taskiq_stream_name="crm",
+        taskiq_redis_url="redis://localhost:63792/1",
     )
 
     with manager.start() as worker_process:

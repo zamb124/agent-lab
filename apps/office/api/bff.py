@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
@@ -59,12 +60,12 @@ from apps.office.services.onlyoffice_jwt import (
 )
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
-from core.context import get_context
+from core.context import Context, get_context
 from core.files.s3_client import S3ClientFactory
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models.i18n_models import Language
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.pagination import OffsetPage
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -76,6 +77,33 @@ _EMPTY_DOCX = Path(__file__).resolve().parent.parent / "templates" / "empty.docx
 _HUMANITEC_PLATFORM_LOGO_PATH = "/static/core/assets/service_logos/frontend_logo.svg"
 
 _CRM_API_V1_PREFIX = "/crm/api/v1"
+
+
+@dataclass(frozen=True)
+class _AuthenticatedOfficeContext:
+    raw: Context
+    active_company: Company
+    user: User
+    active_namespace: str | None
+    language: Language | None
+
+
+def _require_office_context() -> _AuthenticatedOfficeContext:
+    ctx = get_context()
+    if ctx is None:
+        raise HTTPException(status_code=403, detail="Контекст запроса не установлен")
+    if ctx.active_company is None:
+        raise HTTPException(status_code=403, detail="Компания не выбрана")
+    if ctx.user is None:
+        raise HTTPException(status_code=403, detail="Пользователь не авторизован")
+    return _AuthenticatedOfficeContext(
+        raw=ctx,
+        active_company=ctx.active_company,
+        user=ctx.user,
+        active_namespace=ctx.active_namespace,
+        language=ctx.language,
+    )
+
 
 def _http_exception_from_service_client(service: str, exc: ServiceClientError) -> HTTPException:
     msg = str(exc)
@@ -225,7 +253,7 @@ async def _require_explicit_namespace(container: OfficeContainer) -> str:
     `namespace_repository.list()` (тот же механизм, что и в публичном
     `GET /documents/api/v1/namespaces`).
     """
-    ctx = get_context()
+    ctx = _require_office_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
@@ -258,7 +286,7 @@ async def integration_status(container: ContainerDep) -> OfficeIntegrationStatus
 
 @router.get("/namespaces", response_model=OffsetPage[OfficeNamespaceItem])
 async def list_namespaces(container: ContainerDep) -> OffsetPage[OfficeNamespaceItem]:
-    ctx = get_context()
+    ctx = _require_office_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
@@ -275,7 +303,7 @@ async def list_namespaces(container: ContainerDep) -> OffsetPage[OfficeNamespace
 async def list_namespace_templates_proxy(
     container: ContainerDep,
 ) -> OffsetPage[OfficeNamespaceTemplateItem]:
-    ctx = get_context()
+    ctx = _require_office_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
@@ -322,7 +350,7 @@ async def create_namespace_proxy(
     body: OfficeNamespaceCreateRequest,
     container: ContainerDep,
 ) -> OfficeNamespaceCreateResponse:
-    ctx = get_context()
+    ctx = _require_office_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
@@ -357,7 +385,7 @@ async def create_namespace_proxy(
 async def list_company_members_for_catalogs(
     container: ContainerDep,
 ) -> list[dict[str, object]]:
-    ctx = get_context()
+    ctx = _require_office_context()
     if not ctx.active_company:
         raise HTTPException(status_code=403, detail="Компания не выбрана")
     if not ctx.user:
@@ -388,7 +416,7 @@ async def list_company_members_for_catalogs(
 @router.get("/catalogs", response_model=OfficeCatalogListResponse)
 async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     rows = await container.catalog_repository.list_accessible_with_file_counts(
         company_id=ctx.active_company.company_id,
         namespace=namespace,
@@ -417,7 +445,7 @@ async def create_catalog(
     container: ContainerDep,
 ) -> OfficeCatalogDetailResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     cat = await container.catalog_repository.create(
         company_id=ctx.active_company.company_id,
         namespace=namespace,
@@ -442,7 +470,7 @@ async def get_catalog(
     container: ContainerDep,
 ) -> OfficeCatalogDetailResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     allowed = await container.catalog_repository.user_can_access_catalog(
         catalog_id,
         ctx.active_company.company_id,
@@ -476,7 +504,7 @@ async def patch_catalog(
     container: ContainerDep,
 ) -> OfficeCatalogDetailResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     is_owner = await container.catalog_repository.user_is_owner(
         catalog_id,
         ctx.active_company.company_id,
@@ -514,7 +542,7 @@ async def delete_catalog_endpoint(
     container: ContainerDep,
 ) -> Response:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     is_owner = await container.catalog_repository.user_is_owner(
         catalog_id,
         ctx.active_company.company_id,
@@ -541,7 +569,7 @@ async def list_catalog_members(
     container: ContainerDep,
 ) -> OfficeCatalogMembersResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     allowed = await container.catalog_repository.user_can_access_catalog(
         catalog_id,
         ctx.active_company.company_id,
@@ -579,7 +607,7 @@ async def add_catalog_member(
     container: ContainerDep,
 ) -> OfficeCatalogMembersResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     is_owner = await container.catalog_repository.user_is_owner(
         catalog_id,
         ctx.active_company.company_id,
@@ -606,7 +634,7 @@ async def remove_catalog_member(
     container: ContainerDep,
 ) -> Response:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     is_owner = await container.catalog_repository.user_is_owner(
         catalog_id,
         ctx.active_company.company_id,
@@ -636,7 +664,7 @@ async def list_documents(
     catalog_ids: list[str] | None = Query(None),
 ) -> OfficeDocumentListResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     raw: list[str] = []
     if catalog_ids:
         raw.extend(catalog_ids)
@@ -708,8 +736,7 @@ async def upload_document(
     catalog_id: str | None = Form(None),
 ) -> OfficeDocumentCreateResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
-    from core.config import get_settings
+    ctx = _require_office_context()
 
     settings = get_settings()
     if not settings.s3.enabled or not settings.s3.default_bucket:
@@ -767,8 +794,7 @@ async def create_empty_document(
     container: ContainerDep,
 ) -> OfficeDocumentCreateResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
-    from core.config import get_settings
+    ctx = _require_office_context()
 
     settings = get_settings()
     if not settings.s3.enabled or not settings.s3.default_bucket:
@@ -847,7 +873,7 @@ async def rename_document(
     container: ContainerDep,
 ) -> OfficeDocumentRenameResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     row = await container.document_binding_repository.get_for_company(
         binding_id,
         ctx.active_company.company_id,
@@ -872,7 +898,7 @@ async def rename_document(
 @router.delete("/documents/{binding_id}", status_code=204)
 async def delete_document(binding_id: str, container: ContainerDep) -> Response:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     row = await container.document_binding_repository.get_for_company(
         binding_id,
         ctx.active_company.company_id,
@@ -899,7 +925,7 @@ async def editor_config(
     container: ContainerDep,
 ) -> OfficeEditorConfigResponse:
     namespace = await _require_explicit_namespace(container)
-    ctx = get_context()
+    ctx = _require_office_context()
     ok, detail = _integration_configured()
     if not ok:
         raise HTTPException(status_code=503, detail=detail)

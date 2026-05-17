@@ -97,7 +97,6 @@ async def _build_ws_context(websocket: WebSocket, user: User) -> Context:
         user_companies=user_companies,
         channel="ws",
         language=Language.RU,
-        container=container,
     )
 
 router = APIRouter()
@@ -180,17 +179,18 @@ async def _handle_command_frame(
 
     company_id = company_scope
 
+    command_scope_extra: dict[str, Any] = {
+        LOG_WS_REQUEST_ID: request_id,
+        LOG_WS_COMMAND: command_type,
+        "ws.connection_request_id": connection_request_id,
+    }
     scope_token = enter_request_scope(
         request_id=command_request_id,
         trace_id=trace_id,
         service_name=service_name,
         user_id=user.user_id,
         company_id=company_id,
-        **{
-            LOG_WS_REQUEST_ID: request_id,
-            LOG_WS_COMMAND: command_type,
-            "ws.connection_request_id": connection_request_id,
-        },
+        **command_scope_extra,
     )
     context = await _build_ws_context(websocket, user)
     set_context(context)
@@ -246,15 +246,14 @@ async def notifications_endpoint(websocket: WebSocket) -> None:
     connection_request_id = f"ws-conn:{uuid.uuid4().hex}"
     connection_trace_id = f"ws:{uuid.uuid4().hex}"
 
+    connection_scope_extra: dict[str, Any] = {"ws.connection_kind": "notifications"}
     scope_token = enter_request_scope(
         request_id=connection_request_id,
         trace_id=connection_trace_id,
         service_name=service_name,
         user_id=user_id,
         company_id=company_id if isinstance(company_id, str) and company_id else None,
-        **{
-            "ws.connection_kind": "notifications",
-        },
+        **connection_scope_extra,
     )
     logger.info(EVENT_WS_CONNECTED, **{LOG_USER_ID: user_id})
 
@@ -303,5 +302,5 @@ async def notifications_endpoint(websocket: WebSocket) -> None:
 
 
 @router.get("/ws/stats")
-async def websocket_stats() -> dict:
+async def websocket_stats() -> dict[str, Any]:
     return notification_manager.get_stats()

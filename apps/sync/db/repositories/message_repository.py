@@ -3,9 +3,9 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
-from sqlalchemy import and_, func, or_, select, text, tuple_, update
+from sqlalchemy import and_, func, literal, or_, select, text, tuple_, update
 from sqlalchemy import delete as sql_delete
 
 from apps.sync.channel_lane_preview import ChannelLaneSummary, lane_preview_from_content_row
@@ -145,12 +145,14 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
             fetch_limit = limit + 1
 
             if before_sent_at is not None:
+                if before_message_id is None:
+                    raise ValueError("before_message_id обязателен при before_sent_at.")
                 stmt = (
                     select(SyncMessage)
                     .where(
                         *base_conditions,
                         tuple_(SyncMessage.sent_at, SyncMessage.message_id)
-                        < tuple_(before_sent_at, before_message_id),
+                        < tuple_(literal(before_sent_at), literal(before_message_id)),
                     )
                     .order_by(SyncMessage.sent_at.desc(), SyncMessage.message_id.desc())
                     .limit(fetch_limit)
@@ -166,12 +168,14 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                 )
 
             if after_sent_at is not None:
+                if after_message_id is None:
+                    raise ValueError("after_message_id обязателен при after_sent_at.")
                 stmt = (
                     select(SyncMessage)
                     .where(
                         *base_conditions,
                         tuple_(SyncMessage.sent_at, SyncMessage.message_id)
-                        > tuple_(after_sent_at, after_message_id),
+                        > tuple_(literal(after_sent_at), literal(after_message_id)),
                     )
                     .order_by(SyncMessage.sent_at.asc(), SyncMessage.message_id.asc())
                     .limit(fetch_limit)
@@ -332,7 +336,11 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
             )
             await session.commit()
 
-    async def set_message_reactions(self, message_id: str, reactions: list) -> None:
+    async def set_message_reactions(
+        self,
+        message_id: str,
+        reactions: list[dict[str, Any]],
+    ) -> None:
         async with self._db.session() as session:
             await session.execute(
                 update(SyncMessage)

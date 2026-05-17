@@ -7,7 +7,12 @@ from sqlalchemy import delete, select
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncCallSpeechEgressTrack
 
-_SEGMENTS_S3_CURSOR_UNSET = object()
+
+class _SegmentsS3CursorUnset:
+    pass
+
+
+_SEGMENTS_S3_CURSOR_UNSET = _SegmentsS3CursorUnset()
 
 
 class CallSpeechEgressTrackRepository(BaseSyncRepository[SyncCallSpeechEgressTrack]):
@@ -22,12 +27,12 @@ class CallSpeechEgressTrackRepository(BaseSyncRepository[SyncCallSpeechEgressTra
     def id_field(self) -> str:
         return "row_id"
 
-    async def create(self, row: SyncCallSpeechEgressTrack) -> SyncCallSpeechEgressTrack:
+    async def create(self, entity: SyncCallSpeechEgressTrack) -> SyncCallSpeechEgressTrack:
         async with self._db.session() as session:
-            session.add(row)
+            session.add(entity)
             await session.commit()
-            await session.refresh(row)
-            return row
+            await session.refresh(entity)
+            return entity
 
     async def get_by_call_and_track(self, call_id: str, track_sid: str) -> SyncCallSpeechEgressTrack | None:
         async with self._db.session() as session:
@@ -64,14 +69,14 @@ class CallSpeechEgressTrackRepository(BaseSyncRepository[SyncCallSpeechEgressTra
         row_id: str,
         value: int,
         *,
-        last_segment_s3_key: str | None | object = _SEGMENTS_S3_CURSOR_UNSET,
+        last_segment_s3_key: str | None | _SegmentsS3CursorUnset = _SEGMENTS_S3_CURSOR_UNSET,
     ) -> None:
         async with self._db.session() as session:
             ent = await session.get(SyncCallSpeechEgressTrack, row_id)
             if ent is None:
                 raise ValueError(f"Строка speech egress {row_id} не найдена.")
             ent.segments_posted = value
-            if last_segment_s3_key is not _SEGMENTS_S3_CURSOR_UNSET:
+            if not isinstance(last_segment_s3_key, _SegmentsS3CursorUnset):
                 ent.last_segment_s3_key = last_segment_s3_key
             await session.commit()
 

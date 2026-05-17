@@ -45,19 +45,22 @@ from apps.flows.src.files import (
 from apps.flows.src.services.push_notifications import dict_to_config
 from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from apps.flows.src.streaming import Emitter
-from apps.flows.src.streaming.subscriber import EventSubscriber, StreamEvent
+from apps.flows.src.streaming.base import StreamEvent
+from apps.flows.src.streaming.subscriber import EventSubscriber
 from apps.flows.src.utils import extract_json_from_response
-from apps.idle_worker.tasks.push_notification_tasks import (
-    delete_config,
-    get_config,
-    list_configs,
-    send_task_update,
-    set_config,
-)
+from apps.idle_worker.broker import broker as idle_broker
+from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.config.testing import is_testing
 from core.context import set_current_channel
 from core.logging import get_logger
 from core.state import ExecutionState
+from core.tasks.kicker import kiq_task_name_with_context
+from core.tasks.push_notifications import (
+    delete_push_config,
+    get_push_config,
+    list_push_configs,
+    set_push_config,
+)
 
 logger = get_logger(__name__)
 
@@ -710,12 +713,15 @@ class A2AChannel(BaseChannel):
         task = await self._cancel_task_in_state(params.id)
 
         if task:
-            await send_task_update.kiq(
-                task_id=task.id,
-                context_id=task.context_id,
-                state="canceled",
-                message="Task cancelled",
-                is_final=True,
+            await kiq_task_name_with_context(
+                TASK_SEND_TASK_UPDATE,
+                idle_broker,
+                task.id,
+                task.context_id,
+                "canceled",
+                "Task cancelled",
+                True,
+                background_kind="a2a_task",
             )
 
         return task
@@ -732,7 +738,7 @@ class A2AChannel(BaseChannel):
         self, params: TaskPushNotificationConfig, context: Any = None
     ) -> TaskPushNotificationConfig:
         """Установка конфигурации push notification."""
-        data = await set_config(params)
+        data = await set_push_config(params)
         logger.info(f"Set push notification config for task: {params.task_id}")
         return dict_to_config(data)
 
@@ -740,7 +746,7 @@ class A2AChannel(BaseChannel):
         self, params: GetTaskPushNotificationConfigParams, context: Any = None
     ) -> TaskPushNotificationConfig | None:
         """Получение конфигурации push notification."""
-        data = await get_config(params)
+        data = await get_push_config(params)
         logger.info(f"Get push notification config for task: {params.id}")
         return dict_to_config(data) if data else None
 
@@ -748,7 +754,7 @@ class A2AChannel(BaseChannel):
         self, params: ListTaskPushNotificationConfigParams, context: Any = None
     ) -> list[TaskPushNotificationConfig]:
         """Список конфигураций push notification."""
-        configs = await list_configs(params)
+        configs = await list_push_configs(params)
         logger.info(f"List push notification configs for task: {params.id}, found: {len(configs)}")
         return [dict_to_config(data) for data in configs]
 
@@ -756,7 +762,7 @@ class A2AChannel(BaseChannel):
         self, params: DeleteTaskPushNotificationConfigParams, context: Any = None
     ) -> None:
         """Удаление конфигурации push notification."""
-        await delete_config(params)
+        await delete_push_config(params)
         logger.info(
             f"Deleted push notification config: {params.push_notification_config_id} for task: {params.id}"
         )

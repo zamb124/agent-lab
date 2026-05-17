@@ -18,7 +18,7 @@ push-событий: бэкенд кладёт `UIEvent` в Redis-канал
 from __future__ import annotations
 
 from apps.sync.realtime.events import RealtimeEvent
-from core.ui_events import publish_ui_event_to_company, publish_ui_event_to_user
+from core.ui_events.dispatcher import publish_ui_event_to_company, publish_ui_event_to_user
 
 
 async def publish_realtime_events(events: list[RealtimeEvent]) -> None:

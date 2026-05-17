@@ -70,12 +70,18 @@ from apps.crm.services.note_attachment_description import (
 from apps.crm.services.saga import EntityDeletionSaga, SagaStep
 from apps.crm.services.user_person_service import UserPersonService
 from apps.crm.types import JsonObject
+from apps.crm_worker.broker import broker as crm_worker_broker
+from apps.crm_worker.task_names import (
+    CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
+    CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
+)
 from core.clients.a2a_client import A2AClient
 from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Namespace, NamespaceCRMSettings
+from core.tasks.kicker import kiq_task_name_with_context
 
 logger = get_logger(__name__)
 from apps.crm.config import get_crm_settings  # noqa: E402
@@ -2402,8 +2408,6 @@ class EntityService:
 
     async def repair_analysis_draft_via_flow(self, note_id: str) -> AIAnalysisDraftStored:
         """Вызывает CRM flow (ветка draft_repair) и патчит ai_analysis_draft."""
-        from core.config import get_settings
-
         note, draft = await self._load_analysis_draft_from_note(note_id)
         attrs = note.attributes or {}
         summary_raw = attrs.get("ai_analysis_last_error")
@@ -3537,8 +3541,6 @@ class EntityService:
         namespace: str,
     ) -> _AnalyzePipelineState:
         """Вызывает AI agent через A2A API для анализа"""
-        from core.config import get_settings
-
         settings = get_settings()
 
         extractable_entity_types = [et for et in entity_types if et.prompt and et.extractable]
@@ -4823,8 +4825,6 @@ class EntityService:
         if not became_revalidating:
             return False
 
-        from apps.crm_worker.tasks.daily_summary_tasks import rebuild_daily_summary_task
-
         context = get_context()
         if not context:
             raise ValueError("Нет контекста для отправки задачи rebuild_daily_summary")
@@ -4850,7 +4850,9 @@ class EntityService:
             _ = await self._task_repository.create(task_row)
             task_id = task_row.task_id
 
-        _ = await rebuild_daily_summary_task.kiq(
+        _ = await kiq_task_name_with_context(
+            CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
+            crm_worker_broker,
             company_id=company_id,
             date_str=date_str,
             namespace=normalized_namespace,
@@ -4858,6 +4860,7 @@ class EntityService:
             auth_token=context.auth_token,
             user_id=user_id,
             task_id=task_id,
+            background_kind="crm_summary",
         )
         return True
 
@@ -5233,9 +5236,6 @@ class EntityService:
         )
         if not became:
             return False
-        from apps.crm_worker.tasks.daily_summary_tasks import rebuild_period_summary_task
-        from core.context import get_context
-
         context = get_context()
         if not context:
             raise ValueError("Нет контекста для отправки задачи rebuild_period_summary")
@@ -5265,7 +5265,9 @@ class EntityService:
             _ = await self._task_repository.create(task_row)
             task_id = task_row.task_id
 
-        _ = await rebuild_period_summary_task.kiq(
+        _ = await kiq_task_name_with_context(
+            CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
+            crm_worker_broker,
             company_id=company_id,
             date_from=date_from,
             date_to=date_to,
@@ -5274,6 +5276,7 @@ class EntityService:
             auth_token=context.auth_token,
             user_id=user_id,
             task_id=task_id,
+            background_kind="crm_summary",
         )
         return True
 

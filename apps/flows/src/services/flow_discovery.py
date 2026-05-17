@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from apps.flows.config import ExternalFlowConfig
 from apps.flows.src.db.flow_repository import FlowRepository
 from apps.flows.src.models import ExternalAgentStatus, FlowConfig, FlowType
-from core.clients import A2AClient
+from core.clients.a2a_client import A2AClient
 from core.logging import get_logger
 
 logger = get_logger(__name__)

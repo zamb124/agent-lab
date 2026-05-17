@@ -7,15 +7,15 @@ import copy
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, TypedDict
 
+import core.tracing.attributes as trace_attr
 from core.context import get_context
 from core.i18n import t
 from core.logging import get_logger
 from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan, UsageRecord, UsageType
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
-from core.tracing import attributes as trace_attr
 
 if TYPE_CHECKING:
     from core.db.repositories.company_repository import CompanyRepository
@@ -64,6 +64,23 @@ def company_settlement_rules_storage_key(company_id: str) -> str:
 
 def _settlement_rules_document_to_storage_json(doc: SettlementRulesDocument) -> str:
     return json.dumps(doc.model_dump(mode="json"), ensure_ascii=False)
+
+
+class UsageStatsBucket(TypedDict):
+    cost: float
+    calls: int
+
+
+class UserUsageStatsBucket(UsageStatsBucket):
+    user_name: str | None
+
+
+class CompanyUsageStats(TypedDict):
+    total_cost: float
+    total_calls: int
+    by_resource: dict[str, UsageStatsBucket]
+    by_user: dict[str, UserUsageStatsBucket]
+
 
 class BillingService:
     """Сервис биллинга и контроля лимитов"""
@@ -672,7 +689,7 @@ class BillingService:
         logger.debug("Цена %s для %s: %s₽", resource_name, company.company_id, unit)
         return unit
 
-    async def get_company_usage_stats(self, company_id: str) -> Dict[str, Any]:
+    async def get_company_usage_stats(self, company_id: str) -> CompanyUsageStats:
         """Получает статистику использования компании за месяц (оптимизировано)"""
 
         current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -682,14 +699,14 @@ class BillingService:
 
         all_usage_records = await self._usage_repository.list(limit=10000)
 
-        stats = {
+        stats: CompanyUsageStats = {
             "total_cost": 0.0,
             "total_calls": 0,
             "by_resource": {},
-            "by_user": {}
+            "by_user": {},
         }
 
-        user_ids = set()
+        user_ids: set[str] = set()
 
         for record in all_usage_records:
             if record.timestamp < current_month:

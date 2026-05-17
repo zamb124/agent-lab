@@ -15,6 +15,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from pydantic import ValidationError
 
 from core.clients.payment.base_provider import (
     PaymentRequest,
@@ -28,6 +29,7 @@ from core.clients.payment.yoomoney_provider import (
     load_access_token,
     save_access_token,
 )
+from core.config.models import PaymentProviderConfigEntry
 from core.models.identity_models import Company, User
 from core.models.payment_models import (
     PaymentProviderType,
@@ -939,27 +941,27 @@ class TestWebhookEndpoint:
 class TestPaymentProviderFactory:
 
     def test_create_config_yoomoney(self):
-        """Создание YooMoneyConfig из словаря."""
-        config_dict = {
-            "provider_type": "yoomoney",
-            "account_number": "4100999",
-            "notification_secret": "secret123",
-            "enabled": True,
-        }
-        config = PaymentProviderFactory._create_config_object(config_dict)
+        """Создание YooMoneyConfig из строгой записи конфигурации."""
+        config_entry = PaymentProviderConfigEntry(
+            provider_type="yoomoney",
+            account_number="4100999",
+            notification_secret="secret123",
+            enabled=True,
+        )
+        config = PaymentProviderFactory._create_config_object(config_entry)
         assert isinstance(config, YooMoneyConfig)
         assert config.account_number == "4100999"
         assert config.notification_secret == "secret123"
 
     def test_create_config_unknown_type_raises(self):
-        """Неизвестный provider_type бросает ValueError."""
-        with pytest.raises(ValueError, match="Неизвестный тип"):
-            PaymentProviderFactory._create_config_object({"provider_type": "stripe"})
+        """Неизвестный provider_type отсекается строгой моделью конфигурации."""
+        with pytest.raises(ValidationError):
+            PaymentProviderConfigEntry.model_validate({"provider_type": "stripe"})
 
     def test_create_config_missing_type_raises(self):
-        """Отсутствие provider_type бросает ValueError."""
-        with pytest.raises(ValueError, match="provider_type"):
-            PaymentProviderFactory._create_config_object({})
+        """Отсутствие provider_type отсекается строгой моделью конфигурации."""
+        with pytest.raises(ValidationError):
+            PaymentProviderConfigEntry.model_validate({})
 
     def test_get_provider_returns_none_for_missing(self, monkeypatch):
         """get_provider для несуществующего имени возвращает None."""

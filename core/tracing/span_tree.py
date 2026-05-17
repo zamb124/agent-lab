@@ -24,7 +24,7 @@ def _parse_span_start_time(span: Dict[str, Any]) -> datetime:
     return dt
 
 
-def _span_exec_sort_key(span: Dict[str, Any]) -> tuple:
+def _span_exec_sort_key(span: Dict[str, Any]) -> tuple[datetime, str]:
     return (_parse_span_start_time(span), span.get("span_id") or "")
 
 

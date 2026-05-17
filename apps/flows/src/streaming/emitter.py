@@ -5,7 +5,7 @@ Emitter - публикация A2A событий в Redis Pub/Sub.
 import json
 from typing import Any
 
-from core.clients import RedisClient
+from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.state import ExecutionState
 

@@ -34,7 +34,7 @@ class ResourceRegistry(ABC, Generic[T]):
         self._metadata: Dict[str, Dict[str, Any]] = {}
 
     @abstractmethod
-    def register(self, key: str, resource: T, metadata: Dict[str, Any] = None) -> None:
+    def register(self, key: str, resource: T, metadata: Dict[str, Any] | None = None) -> None:
         """
         Регистрирует ресурс в реестре.
 

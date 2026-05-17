@@ -12,9 +12,9 @@ from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from apps.voice.services.voice_usage import record_stt_usage
-from core.clients.speech_override import SpeechOverride
+from core.clients.speech_override import SpeechOverride, SpeechProviderName
 from core.clients.voice_resolver import get_stt_client
-from core.context import get_context
+from core.context import require_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.logging import get_logger
 
@@ -41,7 +41,7 @@ class TranscribeResponse(BaseModel):
 )
 async def transcribe_audio(
     file: UploadFile,
-    provider: str | None = Form(default=None),
+    provider: SpeechProviderName | None = Form(default=None),
     model: str | None = Form(default=None),
     language: str | None = Form(default=None),
 ) -> TranscribeResponse:
@@ -56,13 +56,14 @@ async def transcribe_audio(
     filename = file.filename or "audio.bin"
     content_type = file.content_type or "application/octet-stream"
 
-    ctx = get_context()
-    company_id = ctx.active_company.company_id
-    if company_id == "":
+    ctx = require_context()
+    company = ctx.active_company
+    if company is None or company.company_id == "":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Активная компания не определена в контексте запроса.",
         )
+    company_id = company.company_id
 
     override = SpeechOverride(provider=provider, model=model, language=language)
 
@@ -89,30 +90,29 @@ async def transcribe_audio(
         company_id=company_id,
     )
 
-    if ctx.user is not None:
-        try:
-            audio_seconds = await probe_audio_duration_seconds_from_upload(
-                data=audio_bytes, file_name=filename
-            )
-        except ValueError as exc:
-            logger.warning(
-                "voice.transcribe.stt_usage_skipped",
-                reason=str(exc),
-                company_id=company_id,
-                user_id=ctx.user.user_id,
-                provider=result.provider,
-                size_bytes=len(audio_bytes),
-            )
-        else:
-            await record_stt_usage(
-                user=ctx.user,
-                company=ctx.active_company,
-                provider=result.provider,
-                audio_seconds=audio_seconds,
-                metadata={
-                    "endpoint": "voice.transcribe",
-                    "size_bytes": len(audio_bytes),
-                },
-            )
+    try:
+        audio_seconds = await probe_audio_duration_seconds_from_upload(
+            data=audio_bytes, file_name=filename
+        )
+    except ValueError as exc:
+        logger.warning(
+            "voice.transcribe.stt_usage_skipped",
+            reason=str(exc),
+            company_id=company_id,
+            user_id=ctx.user.user_id,
+            provider=result.provider,
+            size_bytes=len(audio_bytes),
+        )
+    else:
+        await record_stt_usage(
+            user=ctx.user,
+            company=company,
+            provider=result.provider,
+            audio_seconds=audio_seconds,
+            metadata={
+                "endpoint": "voice.transcribe",
+                "size_bytes": len(audio_bytes),
+            },
+        )
 
     return TranscribeResponse(text=result.text, provider=result.provider)

@@ -22,10 +22,12 @@ from core.clients.tts_pronunciation.models import (
     CompiledPronunciation,
     NormalizationConfig,
     PronunciationRule,
+    PronunciationRuleKind,
     PronunciationRuleSet,
 )
 from core.clients.tts_pronunciation.pipeline import get_tts_text_pipeline
 from core.clients.voice_resolver import invalidate_company_overrides_cache
+from core.db.models.platform import CompanyPronunciationRule
 from core.logging import get_logger
 from core.models.identity_models import User
 
@@ -137,19 +139,25 @@ def _ensure_admin(user: User, company_id: str) -> None:
         )
 
 
-def _row_to_dto(row: object) -> PronunciationRuleDTO:
+def _rule_kind(value: str) -> PronunciationRuleKind:
+    if value not in ("alias", "regex", "stress"):
+        raise ValueError(f"Неизвестный kind правила произношения: {value!r}")
+    return value
+
+
+def _row_to_dto(row: CompanyPronunciationRule) -> PronunciationRuleDTO:
     return PronunciationRuleDTO(
-        id=row.id,  # type: ignore[attr-defined]
-        kind=row.kind,  # type: ignore[attr-defined]
-        pattern=row.pattern,  # type: ignore[attr-defined]
-        replacement=row.replacement,  # type: ignore[attr-defined]
-        language=row.language,  # type: ignore[attr-defined]
-        case_sensitive=row.case_sensitive,  # type: ignore[attr-defined]
-        word_boundary=row.word_boundary,  # type: ignore[attr-defined]
-        providers=list(row.providers) if row.providers else None,  # type: ignore[attr-defined]
-        voices=list(row.voices) if row.voices else None,  # type: ignore[attr-defined]
-        enabled=row.enabled,  # type: ignore[attr-defined]
-        note=row.note,  # type: ignore[attr-defined]
+        id=row.id,
+        kind=_rule_kind(row.kind),
+        pattern=row.pattern,
+        replacement=row.replacement,
+        language=row.language,
+        case_sensitive=row.case_sensitive,
+        word_boundary=row.word_boundary,
+        providers=list(row.providers) if row.providers else None,
+        voices=list(row.voices) if row.voices else None,
+        enabled=row.enabled,
+        note=row.note,
     )
 
 
@@ -300,7 +308,7 @@ async def test_company_pronunciation_rules(
     rules = [
         PronunciationRule(
             id=r.id,
-            kind=r.kind,
+            kind=_rule_kind(r.kind),
             pattern=r.pattern,
             replacement=r.replacement,
             language=r.language,

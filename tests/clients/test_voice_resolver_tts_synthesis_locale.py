@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.clients import voice_resolver as vr
+import core.clients.voice_resolver as vr
 from core.config.models import ProviderLitserveTTSModelEntry
 
 

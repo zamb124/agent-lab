@@ -9,12 +9,12 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from apps.sync.dependencies import ContainerDep
+from apps.sync.realtime.context import require_current_user
 from apps.sync.realtime.operations import (
     FilesUploadCompletedPayload,
     FilesUploadCompletedResult,
     op_files_upload_completed,
 )
-from core.context import get_context
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ class _UploadCompletedBody(BaseModel):
 async def upload_completed(
     container: ContainerDep, body: _UploadCompletedBody
 ) -> FilesUploadCompletedResult:
-    user = get_context().user
+    user = require_current_user()
     return await op_files_upload_completed(
         FilesUploadCompletedPayload(file_id=body.file_id),
         user=user,

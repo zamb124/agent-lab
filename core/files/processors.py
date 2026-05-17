@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from urllib.parse import quote
 
-from core.context import get_context
+from core.context import require_active_company
 from core.files.audio_transcode import (
     resolve_ios_transcode_source,
     transcode_audio_bytes_to_m4a_aac,
 )
+from core.files.media.transcriber import MediaTranscriber
 from core.files.models import (
     AudioMetadata,
     AudioTranscriptionStatus,
@@ -422,10 +423,7 @@ class AudioProcessor:
         transcription_provider: Optional[str] = None
 
         if auto_recognize:
-            from core.files.media.transcriber import MediaTranscriber
-
-            ctx = get_context()
-            company_id = ctx.active_company.company_id
+            company_id = require_active_company().company_id
             if company_id == "":
                 raise ValueError(
                     "process_audio_from_bytes: активная компания в контексте обязательна для auto_recognize."
@@ -465,7 +463,12 @@ class AudioProcessor:
         return audio_record
 
     async def get_audio_record(self, audio_id: str) -> Optional[AudioMetadata]:
-        return await self.file_repository.get(audio_id)
+        record = await self.file_repository.get(audio_id)
+        if record is None:
+            return None
+        if isinstance(record, AudioMetadata):
+            return record
+        return AudioMetadata.model_validate(record.model_dump(mode="json"))
 
 _default_file_processor: Optional[FileProcessor] = None
 _default_audio_processor: Optional[AudioProcessor] = None
@@ -531,4 +534,3 @@ async def close_default_audio_processor():
     if _default_audio_processor:
         await _default_audio_processor.close()
         _default_audio_processor = None
-

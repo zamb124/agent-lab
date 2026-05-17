@@ -120,8 +120,9 @@ from core.websocket import register_ws_command_handler
 
 logger = get_logger(__name__)
 
+SyncOperation = Operation[Any, Any]
 
-SYNC_OPERATIONS: dict[str, Operation] = {
+SYNC_OPERATIONS: dict[str, SyncOperation] = {
     # channels
     "sync/channels/list_requested": Operation(
         canonical_type="sync/channels/list_requested",
@@ -358,7 +359,7 @@ SYNC_OPERATIONS: dict[str, Operation] = {
 }
 
 
-def _make_ws_handler(op: Operation):
+def _make_ws_handler(op: SyncOperation):
     """Тонкая обвязка WS-handler'а: validate payload → call op.fn → dump result.
 
     `WsCommandError` пробрасываем как есть — `core.websocket.command_router`

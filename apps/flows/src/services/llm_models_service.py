@@ -7,7 +7,7 @@ import httpx
 from apps.flows.config import get_settings
 from apps.flows.src.db import LLMModelRepository
 from apps.flows.src.models import LLMModel
-from core.clients import SchedulerClient
+from core.clients.scheduler_client import SchedulerClient
 from core.config.llm_openai_compat import (
     yandex_llm_openai_root_from_provider_cfg,
     yandex_provider_http_headers,

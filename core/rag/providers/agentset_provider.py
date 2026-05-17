@@ -75,7 +75,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         """
         slug = kwargs.get("slug") or generate_slug(name, add_hash=True)
 
-        payload = {
+        payload: dict[str, Any] = {
             "name": name,
             "slug": slug
         }
@@ -201,7 +201,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         else:
             encoded_name = document_name
 
-        payload = {
+        payload: dict[str, Any] = {
             "payload": {
                 "type": "FILE",
                 "fileUrl": file_url,
@@ -465,6 +465,17 @@ class AgentsetRAGProvider(BaseRAGProvider):
 
         return documents
 
+    async def list_documents_with_filters(
+        self,
+        namespace_id: str,
+        where: Optional[Dict[str, Any]] = None,
+        limit: int = 100,
+    ) -> List[RAGDocument]:
+        if where:
+            validate_metadata_filters(where)
+            raise ValueError("AgentsetRAGProvider не поддерживает list_documents_with_filters")
+        return await self.list_documents(namespace_id, limit=limit)
+
     async def delete_document(
         self,
         namespace_id: str,
@@ -524,4 +535,3 @@ class AgentsetRAGProvider(BaseRAGProvider):
             )
             for item in results
         ]
-

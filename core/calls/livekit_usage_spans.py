@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 from datetime import datetime
 
+import core.tracing.attributes as trace_attributes
 from core.models.billing_models import UsageType
-from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
 

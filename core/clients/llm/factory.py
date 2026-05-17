@@ -53,6 +53,7 @@ from core.clients.llm.openrouter_free_models import (
     OpenRouterFreeModelRecord,
     parse_openrouter_free_models,
 )
+from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.config.base import BaseSettings
 from core.config.llm_openai_compat import yandex_llm_openai_root_from_provider_cfg
@@ -411,30 +412,30 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
         first = messages[0]
 
         if isinstance(first, str):
-            result: list[Message] = []
+            string_messages: list[Message] = []
             for i, text in enumerate(messages):
                 if not isinstance(text, str):
                     raise ValueError("messages list must contain only strings")
                 role = Role.user if i % 2 == 0 else Role.agent
-                result.append(
+                string_messages.append(
                     Message(
                         message_id=str(uuid.uuid4()),
                         role=role,
                         parts=[Part(root=TextPart(text=text))],
                     )
                 )
-            return result
+            return string_messages
 
         if isinstance(first, Message):
-            result: list[Message] = []
+            typed_messages: list[Message] = []
             for msg in messages:
                 if not isinstance(msg, Message):
                     raise ValueError("messages list must contain only Message objects")
-                result.append(msg)
-            return result
+                typed_messages.append(msg)
+            return typed_messages
 
         if isinstance(first, dict):
-            result: list[Message] = []
+            dict_messages: list[Message] = []
             for msg in messages:
                 if not isinstance(msg, dict):
                     raise ValueError("messages list must contain only dict objects")
@@ -442,14 +443,14 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
                 content = msg.get("content", "")
                 if not isinstance(content, str):
                     raise ValueError("message.content must be string")
-                result.append(
+                dict_messages.append(
                     Message(
                         message_id=str(uuid.uuid4()),
                         role=role,
                         parts=[Part(root=TextPart(text=content))],
                     )
                 )
-            return result
+            return dict_messages
 
     raise ValueError(f"Unsupported messages type: {type(messages)}")
 
@@ -1882,7 +1883,6 @@ def _candidate_from_openrouter_free_record(
 
 async def _read_openrouter_free_records() -> list[OpenRouterFreeModelRecord]:
     global _openrouter_free_pool_redis
-    from core.clients.redis_client import RedisClient
 
     if _openrouter_free_pool_redis is None:
         settings = get_settings()

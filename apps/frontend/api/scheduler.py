@@ -10,6 +10,7 @@ from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
     PlatformScheduledTask,
+    PlatformScheduleFilter,
     ScheduledTaskStatus,
 )
 
@@ -30,8 +31,6 @@ async def list_schedules(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> OffsetPage[PlatformScheduledTask]:
-    from core.scheduler.models import PlatformScheduleFilter
-
     return await container.scheduler_client.list_schedules(
         PlatformScheduleFilter(
             status=status,

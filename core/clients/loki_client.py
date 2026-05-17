@@ -85,7 +85,7 @@ def _parse_entry(ts_ns: str, line: str, stream: dict[str, str]) -> dict[str, Any
     }
 
 
-def _parse_loki_response(body: dict) -> list[dict[str, Any]]:
+def _parse_loki_response(body: dict[str, Any]) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for stream_result in body.get("data", {}).get("result", []):
         stream: dict[str, str] = stream_result.get("stream", {})

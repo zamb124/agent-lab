@@ -23,6 +23,10 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+import apps.provider_litserve.embedding.engines as embedding_engines
+import apps.provider_litserve.llm.local_causal_lm as local_causal_lm
+import apps.provider_litserve.main as provider_litserve_main
+import apps.provider_litserve.reranker.engines as reranker_engines
 from apps.provider_litserve.main import ChatCompletionsLitAPI
 from apps.provider_litserve.openai_server_contracts import (
     build_provider_litserve_v1_models_response,
@@ -68,6 +72,7 @@ def fake_sentence_transformers(monkeypatch: pytest.MonkeyPatch) -> None:
     mod = types.ModuleType("sentence_transformers")
     mod.SentenceTransformer = _SentenceTransformer
     monkeypatch.setitem(sys.modules, "sentence_transformers", mod)
+    monkeypatch.setattr(embedding_engines, "SentenceTransformer", _SentenceTransformer)
 
 
 @pytest.fixture
@@ -314,6 +319,7 @@ def fake_flag_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
     mod = types.ModuleType("FlagEmbedding")
     mod.FlagLLMReranker = _FlagLLMReranker
     monkeypatch.setitem(sys.modules, "FlagEmbedding", mod)
+    monkeypatch.setattr(reranker_engines, "FlagLLMReranker", _FlagLLMReranker)
 
 
 @pytest.mark.asyncio
@@ -353,7 +359,16 @@ def test_chat_completions_litapi_predict_local_model_response(monkeypatch: pytes
         def __exit__(self, exc_type, exc_val, exc_tb):
             return None
 
-    fake_torch = types.SimpleNamespace(no_grad=lambda: _FakeNoGrad())
+    fake_torch = types.SimpleNamespace(
+        no_grad=lambda: _FakeNoGrad(),
+        float16="torch.float16",
+        bfloat16="torch.bfloat16",
+        float32="torch.float32",
+        cuda=types.SimpleNamespace(
+            is_available=lambda: False,
+            is_bf16_supported=lambda: False,
+        ),
+    )
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
 
     class _FakeInputs(dict):
@@ -398,6 +413,11 @@ def test_chat_completions_litapi_predict_local_model_response(monkeypatch: pytes
         AutoModelForCausalLM=_Model,
     )
     monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setattr(local_causal_lm, "torch", fake_torch)
+    monkeypatch.setattr(local_causal_lm, "AutoTokenizer", _Tokenizer)
+    monkeypatch.setattr(local_causal_lm, "AutoModelForCausalLM", _Model)
+    monkeypatch.setattr(provider_litserve_main, "torch", fake_torch)
+    local_causal_lm.reset_local_causal_lm_cache_for_tests()
 
     settings = types.SimpleNamespace(
         provider_litserve=types.SimpleNamespace(

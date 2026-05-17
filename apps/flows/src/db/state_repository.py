@@ -325,8 +325,8 @@ class DatabaseStateRepository(BaseStateRepository):
         if self._storage.session_factory is None:
             raise RuntimeError("Storage не подключен")
 
-        conditions = []
-        params = {}
+        conditions: list[str] = []
+        params: dict[str, object] = {}
         param_idx = 1
 
         # Добавляем tenant фильтр если не global
@@ -373,7 +373,8 @@ class DatabaseStateRepository(BaseStateRepository):
         async with self._storage.get_session() as session:
             count_query = text(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")
             count_result = await session.execute(count_query, params)
-            total = count_result.scalar()
+            total_raw = count_result.scalar_one()
+            total = int(total_raw)
 
             query = text(f"""
                 SELECT key, value, created_at, updated_at FROM {table}
@@ -387,22 +388,27 @@ class DatabaseStateRepository(BaseStateRepository):
             result = await session.execute(query, query_params)
             rows = result.mappings().all()
 
-            sessions = []
+            sessions: list[SessionConfig] = []
             for row in rows:
-                raw_id = row["key"]
+                raw_id = str(row["key"])
                 raw_data = row["value"]
                 if isinstance(raw_data, str):
                     raw_data = json.loads(raw_data)
+                if not isinstance(raw_data, dict):
+                    raise ValueError("state row value must be a JSON object")
 
                 # Извлекаем state.data (так как храним StateData)
                 state_data = raw_data.get("data", raw_data)
+                if not isinstance(state_data, dict):
+                    raise ValueError("state row data must be a JSON object")
 
                 # Убираем tenant prefix из session_id
                 session_id = raw_id
                 if tenant_prefix and session_id.startswith(tenant_prefix):
                     session_id = session_id[len(tenant_prefix):]
 
-                user_id_from_state = state_data.get("user_id", "")
+                user_id_value = state_data.get("user_id", "")
+                user_id_from_state = user_id_value if isinstance(user_id_value, str) else ""
 
                 session_parts = session_id.split(":") if ":" in session_id else [session_id]
 

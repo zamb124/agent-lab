@@ -18,6 +18,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Optional
 
+from playwright.async_api import async_playwright
+
 from apps.browser.engine.cdp_url_normalize import normalize_playwright_cdp_connect_url
 
 
@@ -74,8 +76,6 @@ class CDPConnectionPool:
     async def start(self) -> None:
         async with self._lock:
             if self._playwright is None:
-                from playwright.async_api import async_playwright
-
                 self._playwright = await async_playwright().start()
 
     async def acquire_browser(self, endpoint_key: str, cdp_url: str) -> Any:

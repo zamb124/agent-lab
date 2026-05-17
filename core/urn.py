@@ -16,13 +16,33 @@ URN обеспечивает:
 4. Валидацию на этапе парсинга
 """
 
-from typing import Literal, Union
+from typing import Literal, Self, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Типы ресурсов платформы
 URNNamespace = Literal["iman"]
 URNType = Literal["agent", "node", "tool", "branch", "variable"]
+
+
+def _parse_urn_type(value: str) -> URNType:
+    if value == "skill":
+        return "branch"
+    if value == "agent":
+        return "agent"
+    if value == "node":
+        return "node"
+    if value == "tool":
+        return "tool"
+    if value == "branch":
+        return "branch"
+    if value == "variable":
+        return "variable"
+    valid_types = ("agent", "node", "tool", "branch", "variable")
+    raise ValueError(
+        f"Неизвестный тип ресурса: '{value}'. "
+        f"Допустимые значения: {', '.join(valid_types)}"
+    )
 
 
 class URN(BaseModel):
@@ -75,16 +95,9 @@ class URN(BaseModel):
         if namespace != "iman":
             raise ValueError(f"Namespace должен быть 'iman', получено: '{namespace}'")
 
-        valid_types = ["agent", "node", "tool", "branch", "variable"]
-        if resource_type == "skill":
-            resource_type = "branch"
-        if resource_type not in valid_types:
-            raise ValueError(
-                f"Неизвестный тип ресурса: '{resource_type}'. "
-                f"Допустимые значения: {', '.join(valid_types)}"
-            )
+        parsed_type = _parse_urn_type(resource_type)
 
-        return cls(namespace=namespace, type=resource_type, id=resource_id)
+        return cls(namespace=namespace, type=parsed_type, id=resource_id)
 
     @classmethod
     def from_string_or_urn(cls, value: Union[str, "URN"]) -> "URN":
@@ -142,7 +155,13 @@ class AgentURN(URN):
     - urn:iman:agent:docs_processor
     """
 
-    type: Literal["agent"] = Field(default="agent", description="Тип: agent")
+    type: URNType = Field(default="agent", description="Тип: agent")
+
+    @model_validator(mode="after")
+    def _validate_agent_type(self) -> Self:
+        if self.type != "agent":
+            raise ValueError("AgentURN.type must be 'agent'")
+        return self
 
     @classmethod
     def create(cls, flow_id: str) -> "AgentURN":
@@ -171,7 +190,13 @@ class NodeURN(URN):
     - urn:iman:node:validator
     """
 
-    type: Literal["node"] = Field(default="node", description="Тип: node")
+    type: URNType = Field(default="node", description="Тип: node")
+
+    @model_validator(mode="after")
+    def _validate_node_type(self) -> Self:
+        if self.type != "node":
+            raise ValueError("NodeURN.type must be 'node'")
+        return self
 
     @classmethod
     def create(cls, node_id: str) -> "NodeURN":
@@ -200,7 +225,13 @@ class ToolURN(URN):
     - urn:iman:tool:search_web
     """
 
-    type: Literal["tool"] = Field(default="tool", description="Тип: tool")
+    type: URNType = Field(default="tool", description="Тип: tool")
+
+    @model_validator(mode="after")
+    def _validate_tool_type(self) -> Self:
+        if self.type != "tool":
+            raise ValueError("ToolURN.type must be 'tool'")
+        return self
 
     @classmethod
     def create(cls, tool_id: str) -> "ToolURN":
@@ -229,7 +260,13 @@ class BranchURN(URN):
     - urn:iman:branch:order_tracking
     """
 
-    type: Literal["branch"] = Field(default="branch", description="Тип: branch")
+    type: URNType = Field(default="branch", description="Тип: branch")
+
+    @model_validator(mode="after")
+    def _validate_branch_type(self) -> Self:
+        if self.type != "branch":
+            raise ValueError("BranchURN.type must be 'branch'")
+        return self
 
     @classmethod
     def create(cls, branch_id: str) -> "BranchURN":
@@ -258,7 +295,13 @@ class VariableURN(URN):
     - urn:iman:variable:config.database.host
     """
 
-    type: Literal["variable"] = Field(default="variable", description="Тип: variable")
+    type: URNType = Field(default="variable", description="Тип: variable")
+
+    @model_validator(mode="after")
+    def _validate_variable_type(self) -> Self:
+        if self.type != "variable":
+            raise ValueError("VariableURN.type must be 'variable'")
+        return self
 
     @classmethod
     def create(cls, variable_name: str) -> "VariableURN":

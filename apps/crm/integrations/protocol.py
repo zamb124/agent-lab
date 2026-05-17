@@ -4,12 +4,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Protocol, runtime_checkable
 
 from apps.crm.types import JsonObject
 from core.integrations.guided_integration_error import OAuthErrorLocale
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
+
+IntegrationProgressFn = Callable[[str, int], Awaitable[None]]
 
 
 @runtime_checkable
@@ -45,9 +48,19 @@ class NamespaceIntegrationConnector(Protocol):
         """URL OAuth для подключения (открыть в браузере)."""
         ...
 
-    async def sync_entities(self, namespace_name: str) -> dict[str, int]: ...
+    async def sync_entities(
+        self,
+        namespace_name: str,
+        *,
+        on_progress: IntegrationProgressFn | None = None,
+    ) -> dict[str, int]: ...
 
-    async def sync_custom_field_catalog(self, namespace_name: str) -> dict[str, int]: ...
+    async def sync_custom_field_catalog(
+        self,
+        namespace_name: str,
+        *,
+        on_progress: IntegrationProgressFn | None = None,
+    ) -> dict[str, int]: ...
 
     async def on_credential_saved(self, credential: IntegrationCredential) -> None:
         """После сохранения OAuth credential: метаданные namespace (без секретов)."""

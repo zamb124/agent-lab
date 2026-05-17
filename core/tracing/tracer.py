@@ -13,14 +13,15 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Mapping, Optional, Protocol, cast
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanKind, Status, StatusCode
 
+import core.tracing.attributes as attr
+from core.config import get_settings
+from core.context import get_context
 from core.logging import get_logger
-
-from . import attributes as attr
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -31,6 +32,16 @@ if TYPE_CHECKING:
     from .repository import SpanRepository
 
 logger = get_logger(__name__)
+
+
+class _SpanParentContext(Protocol):
+    span_id: int
+
+
+class _ReadableSpan(Protocol):
+    parent: _SpanParentContext | None
+    status: Status
+    attributes: Mapping[str, Any] | None
 
 # При закрытии async generators (GeneratorExit) OpenTelemetry пытается detach
 # контекст который был создан в другом async контексте. Это безопасно игнорировать.
@@ -56,8 +67,6 @@ def set_tracing_service_name(name: str) -> None:
 def _resolve_tracing_service_name() -> str:
     if _process_tracing_service_name:
         return _process_tracing_service_name
-    from core.config import get_settings
-
     return get_settings().server.name
 
 
@@ -112,17 +121,18 @@ class PlatformTracer:
         ctx = span.get_span_context()
         trace_id = format(ctx.trace_id, "032x")
         span_id = format(ctx.span_id, "016x")
+        readable_span = cast(_ReadableSpan, cast(Any, span))
 
-        parent_ctx = span.parent
+        parent_ctx = readable_span.parent
         parent_span_id = format(parent_ctx.span_id, "016x") if parent_ctx else None
 
         status = "OK"
         status_message = None
-        if span.status.status_code == StatusCode.ERROR:
+        if readable_span.status.status_code == StatusCode.ERROR:
             status = "ERROR"
-            status_message = span.status.description
+            status_message = readable_span.status.description
 
-        all_attrs = dict(span.attributes) if span.attributes else {}
+        all_attrs = dict(readable_span.attributes) if readable_span.attributes else {}
         if extra_attrs:
             all_attrs.update(extra_attrs)
 
@@ -142,7 +152,6 @@ class PlatformTracer:
 
         company_id: Optional[str] = None
         namespace: Optional[str] = None
-        from core.context import get_context
 
         app_ctx = get_context()
         if app_ctx:
@@ -527,7 +536,7 @@ class PlatformTracer:
             tools: Список tools schemas
             response_format: Structured output schema (json_schema)
         """
-        request_data = {
+        request_data: dict[str, Any] = {
             "messages": messages,
             "tools": tools or [],
         }
@@ -767,4 +776,3 @@ class PlatformTracer:
         span.set_attribute(attr.ATTR_ERROR_MESSAGE, str(error))
         span.set_attribute(attr.ATTR_ERROR_TYPE, type(error).__name__)
         span.record_exception(error)
-

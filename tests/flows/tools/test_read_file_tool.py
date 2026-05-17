@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.tools.files import _read_file_mock, read_file
+from core.state import ExecutionState
 
 
 def test_read_file_tool_metadata() -> None:
@@ -26,10 +27,7 @@ async def test_read_file_mock_with_state(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_file_integration_txt(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("core.config.testing.is_testing", lambda: False)
-    from core.state import ExecutionState
-
+async def test_read_file_integration_txt(tmp_path) -> None:
     f = tmp_path / "a.txt"
     f.write_text("hello", encoding="utf-8")
     state = ExecutionState.create(
@@ -39,7 +37,7 @@ async def test_read_file_integration_txt(tmp_path, monkeypatch) -> None:
         session_id="flow:c1",
         files=[{"name": "a.txt", "path": str(f), "mime_type": "text/plain"}],
     )
-    result = await read_file.run(
+    result = await read_file._run_impl(
         {"file_name": "a.txt", "include_asset_bytes": False},
         state,
     )

@@ -50,7 +50,7 @@ class TestSGRWithStructuredOutput:
     """
 
     @pytest.mark.asyncio
-    async def test_sgr_full_flow_tool_function_exit(self, mock_llm_with_queue):
+    async def test_sgr_full_flow_tool_function_exit(self, app, mock_llm_with_queue):
         """
         Полный SGR flow: AgentSO -> tool1 -> AgentSO -> tool2(function) -> AgentSO -> done(exit).
 
@@ -151,6 +151,7 @@ async def run(state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            container=app.state.container,
         )
 
         # Запускаем flow
@@ -167,7 +168,7 @@ async def run(state):
         assert result.execution_log == ["Data fetched successfully", "Data processed"]
 
     @pytest.mark.asyncio
-    async def test_sgr_with_remote_flow(self, mock_llm_with_queue, test_a2a_sample):
+    async def test_sgr_with_remote_flow(self, app, mock_llm_with_queue, test_a2a_sample):
         """
         SGR flow с RemoteFlowNode.
 
@@ -250,6 +251,7 @@ async def run(state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            container=app.state.container,
         )
 
         state = make_state(content="Start remote flow")
@@ -265,7 +267,7 @@ async def run(state):
         assert len(result.remote_result) > 0
 
     @pytest.mark.asyncio
-    async def test_sgr_loop_with_counter(self, mock_llm_with_queue):
+    async def test_sgr_loop_with_counter(self, app, mock_llm_with_queue):
         """
         SGR с циклом: AgentSO вызывает action несколько раз пока не достигнет условия.
 
@@ -336,6 +338,7 @@ async def run(state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            container=app.state.container,
         )
 
         # Начальный state с counter и history
@@ -348,7 +351,7 @@ async def run(state):
         assert "Counter=3" in result.response
 
     @pytest.mark.asyncio
-    async def test_sgr_conditional_branching(self, mock_llm_with_queue):
+    async def test_sgr_conditional_branching(self, app, mock_llm_with_queue):
         """
         SGR с условным ветвлением: AgentSO выбирает путь на основе данных.
 
@@ -433,6 +436,7 @@ async def run(state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            container=app.state.container,
         )
 
         state = make_state(content="URGENT: Fix critical bug")
@@ -444,7 +448,7 @@ async def run(state):
         assert "FAST" in result.response
 
     @pytest.mark.asyncio
-    async def test_sgr_all_node_types(self, mock_llm_with_queue, test_a2a_sample):
+    async def test_sgr_all_node_types(self, app, mock_llm_with_queue, test_a2a_sample):
         """
         Полный тест SGR со ВСЕМИ типами нод:
         1. LlmNode (agent_so) - координатор с SO
@@ -558,6 +562,7 @@ async def run(state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            container=app.state.container,
         )
 
         state = make_state(content="Execute all steps")
@@ -587,7 +592,7 @@ async def run(state):
         assert result.steps_executed["tool3_response"] is not None
 
     @pytest.mark.asyncio
-    async def test_sgr_error_recovery(self, mock_llm_with_queue):
+    async def test_sgr_error_recovery(self, app, mock_llm_with_queue):
         """
         SGR с восстановлением после ошибки.
 
@@ -675,6 +680,7 @@ async def run(state):
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
+            container=app.state.container,
         )
 
         state = make_state(content="Start risky flow")

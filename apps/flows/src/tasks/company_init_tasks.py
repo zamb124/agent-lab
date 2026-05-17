@@ -12,6 +12,7 @@ from apps.flows.src.services.mcp_sync import (
     sync_auto_mcp_servers_for_company,
 )
 from apps.flows.src.services.operator_demo_queue import ensure_example_hitl_queue
+from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
 from apps.flows_worker.broker import broker
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
@@ -22,7 +23,7 @@ logger = get_logger(__name__)
 
 
 @broker.task(
-    task_name="init_company_resources",
+    task_name=TASK_INIT_COMPANY_RESOURCES,
     retry_on_error=True,
     max_retries=3,
     queue_name="flows_worker"

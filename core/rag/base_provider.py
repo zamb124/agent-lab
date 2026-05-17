@@ -388,6 +388,10 @@ class BaseRAGProvider(ABC):
 
         return results
 
+    async def delete_orphan_company_chunks(self, *, limit: int) -> int:
+        """Удаляет chunks без company_id, если backend хранит tenant-aware chunks."""
+        raise NotImplementedError(f"{self.provider_name} не поддерживает orphan chunks cleanup")
+
     async def close(self):
         """Закрывает соединения"""
         pass
@@ -397,4 +401,3 @@ class BaseRAGProvider(ABC):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
-

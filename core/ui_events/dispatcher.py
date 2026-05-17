@@ -22,11 +22,14 @@ from typing import Optional
 
 from core.context import get_context
 from core.logging import get_log_context, get_logger
-from core.ui_events.contract import UIEvent, UIEventMeta, UIEventTarget
+from core.ui_events.contract import (
+    UIEvent,
+    UIEventMeta,
+    UIEventTarget,
+)
+from core.websocket.manager import notification_manager
 
 logger = get_logger(__name__)
-
-UI_EVENTS_REDIS_CHANNEL = "platform:ui_events"
 
 
 def _envelope(event: UIEvent, target: UIEventTarget) -> str:
@@ -61,8 +64,6 @@ def _resolve_request_id() -> Optional[str]:
 
 async def publish_ui_event(event: UIEvent, target: UIEventTarget) -> None:
     """Опубликовать UIEvent в Redis Pub/Sub. Менеджер WS форвардит в сокеты."""
-    from core.websocket.manager import notification_manager  # local import: цикл
-
     if event.meta and not event.meta.trace_id:
         trace_id = _resolve_trace_id()
         if trace_id:

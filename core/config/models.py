@@ -19,6 +19,7 @@ from pydantic import (
 
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.rag_indexing_schema import IndexProfileConfig
+from core.utils.tts_input_steps import TTS_INPUT_STEP_IDS
 
 
 class DemoAuthConfig(BaseModel):
@@ -496,6 +497,14 @@ class STTProvidersConfig(BaseModel):
     sber: SberSTTBackendConfig = Field(default_factory=SberSTTBackendConfig)
 
 
+class TTSPronunciationConfig(BaseModel):
+    """Настройки TTS pronunciation shaping."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ssml_subset_enabled: bool = False
+
+
 class TTSProvidersConfig(BaseModel):
     """Унифицированный конфиг TTS для voice/flows/eval."""
 
@@ -511,6 +520,7 @@ class TTSProvidersConfig(BaseModel):
     default_sample_rate: int = Field(default=24000, gt=0)
     chunk_max_chars: int = Field(default=100, ge=1)
     lookahead_tokens: int = Field(default=20, ge=0)
+    pronunciation: TTSPronunciationConfig = Field(default_factory=TTSPronunciationConfig)
     litserve: LitserveSpeechBackendConfig = Field(default_factory=LitserveSpeechBackendConfig)
     cloud_ru: CloudRuTTSBackendConfig = Field(default_factory=CloudRuTTSBackendConfig)
     yandex: YandexTTSBackendConfig = Field(default_factory=YandexTTSBackendConfig)
@@ -703,15 +713,19 @@ class ProxyConfig(BaseModel):
 class PaymentProviderConfigEntry(BaseModel):
     """Конфигурация одного платежного провайдера (для env-override через Pydantic)"""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
-    provider_type: str = "yoomoney"
+    provider_type: Literal["yoomoney", "yukassa"]
     enabled: bool = True
     account_number: Optional[str] = None
     notification_secret: Optional[str] = None
     quickpay_url: str = "https://yoomoney.ru/quickpay/confirm.xml"
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
+    access_token: Optional[str] = None
+    api_url: Optional[str] = None
+    shop_id: Optional[str] = None
+    secret_key: Optional[str] = None
 
 
 class PaymentProvidersConfig(BaseModel):
@@ -1051,8 +1065,6 @@ class ProviderLitserveTTSModelEntry(BaseModel):
 
     @model_validator(mode="after")
     def tts_input_steps_must_be_registered(self) -> Self:
-        from core.utils.tts_input_steps import TTS_INPUT_STEP_IDS
-
         unknown = [s for s in self.tts_input_steps if s not in TTS_INPUT_STEP_IDS]
         if unknown:
             allowed = ", ".join(sorted(TTS_INPUT_STEP_IDS))

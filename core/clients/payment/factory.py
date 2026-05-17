@@ -5,7 +5,7 @@
 АДАПТИРОВАНО: убраны try-except блоки
 """
 
-from typing import Dict, Optional
+from typing import Any
 
 from core.clients.payment.base_provider import BasePaymentProvider
 from core.clients.payment.yoomoney_provider import (
@@ -16,14 +16,15 @@ from core.clients.payment.yoomoney_provider import (
 )
 from core.clients.payment.yukassa_provider import YuKassaConfig, YuKassaProvider
 from core.config import get_settings
+from core.config.models import PaymentProviderConfigEntry
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 class PaymentProviderFactory:
     """Фабрика для управления платежными провайдерами"""
 
-    _providers: Dict[str, BasePaymentProvider] = {}
-    _configs: Dict[str, any] = {}
+    _providers: dict[str, BasePaymentProvider] = {}
+    _configs: dict[str, PaymentProviderConfigEntry] = {}
 
     @classmethod
     def initialize(cls):
@@ -61,10 +62,9 @@ class PaymentProviderFactory:
             logger.warning("Не инициализировано ни одного платежного провайдера")
 
     @classmethod
-    def _create_config_object(cls, config_dict):
+    def _create_config_object(cls, config_entry: PaymentProviderConfigEntry) -> YooMoneyConfig | YuKassaConfig:
         """Создает объект конфигурации из словаря или Pydantic-модели"""
-        if hasattr(config_dict, "model_dump"):
-            config_dict = config_dict.model_dump(exclude_none=False)
+        config_dict = config_entry.model_dump(exclude_none=True)
 
         provider_type = config_dict.get("provider_type")
 
@@ -79,20 +79,17 @@ class PaymentProviderFactory:
             raise ValueError(f"Неизвестный тип провайдера: {provider_type}")
 
     @classmethod
-    def _create_provider(cls, provider_name: str, config) -> BasePaymentProvider:
+    def _create_provider(cls, provider_name: str, config: YooMoneyConfig | YuKassaConfig) -> BasePaymentProvider:
         """Создает экземпляр провайдера по типу"""
 
-        provider_type = config.provider_type
-
-        if provider_type == "yoomoney":
+        if isinstance(config, YooMoneyConfig):
             return YooMoneyProvider(config)
-        elif provider_type == "yukassa":
+        if isinstance(config, YuKassaConfig):
             return YuKassaProvider(config)
-        else:
-            raise ValueError(f"Неизвестный тип провайдера: {provider_type}")
+        raise ValueError(f"Неизвестный тип провайдера: {config.provider_type}")
 
     @classmethod
-    def get_provider(cls, provider_name: str) -> Optional[BasePaymentProvider]:
+    def get_provider(cls, provider_name: str) -> BasePaymentProvider | None:
         """Получает провайдер по имени"""
         provider = cls._providers.get(provider_name)
         if not provider:
@@ -100,12 +97,12 @@ class PaymentProviderFactory:
         return provider
 
     @classmethod
-    def get_available_providers(cls) -> Dict[str, BasePaymentProvider]:
+    def get_available_providers(cls) -> dict[str, BasePaymentProvider]:
         """Возвращает все доступные провайдеры"""
         return cls._providers.copy()
 
     @classmethod
-    def get_default_provider(cls) -> Optional[BasePaymentProvider]:
+    def get_default_provider(cls) -> BasePaymentProvider | None:
         """Возвращает дефолтный провайдер"""
         settings = get_settings()
 
@@ -120,7 +117,7 @@ class PaymentProviderFactory:
         return None
 
     @classmethod
-    def list_providers(cls) -> list:
+    def list_providers(cls) -> list[dict[str, object]]:
         """Возвращает список доступных провайдеров с метаданными"""
         return [
             {
@@ -149,7 +146,7 @@ class PaymentProviderFactory:
             logger.info("YooMoney access_token загружен из конфига в storage (истекает %s)", token_data.expires_at)
 
     @classmethod
-    def get_provider_for_company(cls, company) -> Optional[BasePaymentProvider]:
+    def get_provider_for_company(cls, company: Any) -> BasePaymentProvider | None:
         """
         Получает провайдер для компании.
 
@@ -171,4 +168,3 @@ class PaymentProviderFactory:
                 return provider
 
         return cls.get_default_provider()
-

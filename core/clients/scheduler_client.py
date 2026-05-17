@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from core.clients.service_client import ServiceClient
 from core.pagination import OffsetPage
 from core.scheduler.models import (
@@ -17,7 +15,7 @@ from core.scheduler.models import (
 class SchedulerClient:
     """Типизированный клиент scheduler control-plane."""
 
-    def __init__(self, service_client: Optional[ServiceClient] = None) -> None:
+    def __init__(self, service_client: ServiceClient | None = None) -> None:
         self._service_client = service_client or ServiceClient()
 
     async def create_schedule(self, request: PlatformScheduleCreateRequest) -> PlatformScheduledTask:
@@ -35,13 +33,7 @@ class SchedulerClient:
             "/scheduler/api/v1/schedules",
             params=params,
         )
-        items = [PlatformScheduledTask.model_validate(item) for item in response["items"]]
-        return OffsetPage[PlatformScheduledTask](
-            items=items,
-            total=response["total"],
-            limit=response["limit"],
-            offset=response["offset"],
-        )
+        return OffsetPage[PlatformScheduledTask].model_validate(response)
 
     async def get_schedule(self, schedule_task_id: str) -> PlatformScheduledTask:
         response = await self._service_client.get(

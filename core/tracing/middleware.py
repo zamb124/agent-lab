@@ -2,7 +2,7 @@
 TracingMiddleware для автоматического создания spans для HTTP запросов.
 """
 
-from typing import Callable
+from collections.abc import Awaitable, Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -23,7 +23,7 @@ class TracingMiddleware(BaseHTTPMiddleware):
     Создает root span для каждого запроса с данными из Context.
     """
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         if not is_tracing_enabled():
             return await call_next(request)
 
@@ -57,4 +57,3 @@ class TracingMiddleware(BaseHTTPMiddleware):
             if response.status_code >= 400:
                 span.set_attribute("error", True)
             return response
-

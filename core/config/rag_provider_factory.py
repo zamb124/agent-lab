@@ -2,9 +2,6 @@
 RAG-провайдер из Pydantic ``BaseSettings``: выбор ключа, ``model_dump`` записи,
 эмбеддинги для pgvector (с учётом per-company override), инстанцирование класса провайдера.
 
-Импорты из ``core.rag.providers`` / ``core.rag.embedding_runtime`` только внутри функций,
-чтобы не зациклиться с ``core.rag.__init__``.
-
 CleanFirst: легаси singleton ``_default_rag_provider`` / ``get_default_rag_provider`` /
 ``reset_default_rag_provider_cache`` удалены — везде используется ``get_rag_provider(...)``
 напрямую с per-request кэшем по содержимому bundle.
@@ -14,12 +11,16 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional, cast
 
 from core.company_ai.resolver import resolve_embedding_for_company
 from core.config.base import BaseSettings, get_settings
+from core.config.models import LLMConfig, ProviderLitserveConfig
 from core.context import get_context
-from core.logging import get_logger
+from core.logging.logger import get_logger
+from core.rag.embedding_runtime import build_rag_embedding_runtime_dict
+from core.rag.providers.agentset_provider import AgentsetRAGProvider
+from core.rag.providers.pgvector_provider import PgVectorProvider
 
 if TYPE_CHECKING:
     from core.rag.base_provider import BaseRAGProvider
@@ -32,9 +33,6 @@ _provider_instances_cache: dict[str, Any] = {}
 def _providers() -> dict[str, type[Any]]:
     global _providers_cache
     if _providers_cache is None:
-        from core.rag.providers.agentset_provider import AgentsetRAGProvider
-        from core.rag.providers.pgvector_provider import PgVectorProvider
-
         _providers_cache = {
             "agentset": AgentsetRAGProvider,
             "pgvector": PgVectorProvider,
@@ -66,8 +64,6 @@ def resolve_rag_provider_bundle(
     provider_config = dict(rag.providers[key].model_dump())
     embedding_runtime: Any | None = None
     if key == "pgvector":
-        from core.config.models import LLMConfig, ProviderLitserveConfig
-
         llm = getattr(settings, "llm", None) or LLMConfig()
         pls = getattr(settings, "provider_litserve", None) or ProviderLitserveConfig()
         emb = rag.embedding
@@ -76,19 +72,18 @@ def resolve_rag_provider_bundle(
             if ctx is not None and ctx.active_company is not None:
                 resolved = resolve_embedding_for_company()
                 if resolved is not None:
-                    emb_copy = rag.embedding.model_copy(deep=True)
-                    emb_copy.provider = (
-                        "provider_litserve"
-                        if resolved.provider == "provider_litserve"
-                        else (
-                            "openrouter" if resolved.provider == "openrouter" else resolved.provider
+                    if resolved.provider == "provider_litserve":
+                        provider: Literal["provider_litserve", "openrouter"] = "provider_litserve"
+                    elif resolved.provider == "openrouter":
+                        provider = "openrouter"
+                    else:
+                        raise ValueError(
+                            f"embedding provider {resolved.provider!r} не поддерживается RAG pgvector"
                         )
-                    )
+                    emb_copy = rag.embedding.model_copy(deep=True, update={"provider": provider})
                     if resolved.base_url:
                         emb_copy.api.base_url = resolved.base_url
                     emb = emb_copy
-
-        from core.rag.embedding_runtime import build_rag_embedding_runtime_dict
 
         embedding_runtime = build_rag_embedding_runtime_dict(emb, llm, pls)
     return ResolvedRagProvider(
@@ -101,7 +96,7 @@ def resolve_rag_provider_bundle(
 def _bundle_cache_key(bundle: ResolvedRagProvider) -> str:
     embedding_runtime: Any = bundle.embedding_runtime
     if embedding_runtime is not None and is_dataclass(embedding_runtime):
-        embedding_runtime = asdict(embedding_runtime)
+        embedding_runtime = asdict(cast(Any, embedding_runtime))
     payload = {
         "provider_key": bundle.provider_key,
         "provider_config": bundle.provider_config,

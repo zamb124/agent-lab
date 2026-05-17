@@ -980,6 +980,14 @@ class StartDailySummaryRequest(BaseModel):
     reason: str = Field(default="manual")
 
 
+class DailySummaryRequest(BaseModel):
+    """Получение cached/SWR дневной сводки через /entities/daily-summary."""
+
+    date: str = Field(..., min_length=1, description="Дата в формате YYYY-MM-DD")
+    namespace: str | None = Field(default=None, description="Пространство назначения")
+    force_rebuild: bool = Field(default=False)
+
+
 class StartPeriodSummaryRequest(BaseModel):
     """Запуск пересчёта сводки за период через /tasks/period-summary."""
 
@@ -987,3 +995,12 @@ class StartPeriodSummaryRequest(BaseModel):
     date_from: str = Field(..., description="Начало периода YYYY-MM-DD")
     date_to: str = Field(..., description="Конец периода YYYY-MM-DD")
     reason: str = Field(default="manual")
+
+
+class PeriodSummaryRequest(BaseModel):
+    """Получение cached/SWR сводки за период через /entities/period-summary."""
+
+    date_from: str = Field(..., min_length=1, description="Начало периода YYYY-MM-DD")
+    date_to: str = Field(..., min_length=1, description="Конец периода YYYY-MM-DD")
+    namespace: str | None = Field(default=None, description="Пространство назначения")
+    force_rebuild: bool = Field(default=False)

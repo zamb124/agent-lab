@@ -9,6 +9,7 @@ from typing import Any
 from apps.flows.config import get_settings
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
+from apps.flows.src.tasks.task_names import TASK_EXECUTE_SCHEDULED
 from apps.flows_worker.broker import broker
 from apps.scheduler.container import get_scheduler_container
 from core.context import Context, set_context
@@ -22,7 +23,7 @@ from core.websocket.publisher import Notification, NotificationType, notify_user
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="execute_scheduled_task", queue_name="flows_worker")
+@broker.task(task_name=TASK_EXECUTE_SCHEDULED, queue_name="flows_worker")
 async def execute_scheduled_task(
     scheduled_task_id: str,
     flow_id: str,

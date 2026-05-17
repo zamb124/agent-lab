@@ -25,6 +25,7 @@ from fastapi import APIRouter, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.browser.api.control import (
+    ContextSignatureBody,
     ControlClickBody,
     ControlFillBody,
     ControlNavigateBody,
@@ -52,6 +53,7 @@ from core.tracing.operation_span import traced_operation
 router = APIRouter(prefix="/mcp", tags=["browser-mcp"])
 
 MCP_PROTOCOL_VERSION = "2024-11-05"
+AntiBotTier = Literal["white", "gray", "black"]
 
 
 class JsonRpcRequest(BaseModel):
@@ -335,6 +337,34 @@ def _mcp_tool_trace_attributes(*, tool_name: str, arguments: dict[str, Any]) -> 
     return out
 
 
+def _parse_interaction_profile(value: object) -> InteractionProfileName:
+    if value == "off":
+        return "off"
+    if value == "fast":
+        return "fast"
+    if value == "human":
+        return "human"
+    raise ValueError("interaction_profile должен быть одним из: off, fast, human")
+
+
+def _parse_anti_bot_tier(value: object) -> AntiBotTier:
+    if value == "white":
+        return "white"
+    if value == "gray":
+        return "gray"
+    if value == "black":
+        return "black"
+    raise ValueError("anti_bot_tier должен быть одним из: white, gray, black")
+
+
+def _optional_str(value: object, *, field: str) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    raise ValueError(f"{field} должен быть строкой или null")
+
+
 async def _tool_call(
     *,
     tool_name: str,
@@ -354,21 +384,27 @@ async def _tool_call(
         ctx_page_mode = ctx.get("page_mode", page_mode)
         if ctx_page_mode != page_mode:
             raise ValueError("context.page_mode должен совпадать с page_mode")
-        profile_name = ctx.get("interaction_profile", args.interaction_profile)
-        if not isinstance(profile_name, str):
-            raise ValueError("interaction_profile должен быть строкой")
+        profile_name = _parse_interaction_profile(
+            ctx.get("interaction_profile", args.interaction_profile)
+        )
         get_interaction_profile(profile_name)
         seed_value = ctx.get("interaction_seed", args.interaction_seed)
         if seed_value is not None and not isinstance(seed_value, int):
             raise ValueError("interaction_seed должен быть целым числом")
+        shared_storage_key = _optional_str(
+            ctx.get("shared_storage_key", args.shared_storage_key),
+            field="shared_storage_key",
+        )
+        user_agent = _optional_str(ctx.get("user_agent"), field="user_agent")
+        anti_bot_tier = _parse_anti_bot_tier(ctx.get("anti_bot_tier", args.anti_bot_tier))
         sig = ContextSignature(
             proxy_policy=str(ctx.get("proxy_policy", args.proxy_policy)),
-            shared_storage_key=ctx.get("shared_storage_key", args.shared_storage_key),
-            anti_bot_tier=str(ctx.get("anti_bot_tier", args.anti_bot_tier)),
+            shared_storage_key=shared_storage_key,
+            anti_bot_tier=anti_bot_tier,
             stealth_init_version=str(ctx.get("stealth_init_version", "v1")),
             locale=str(ctx.get("locale", "en-US")),
             timezone_id=str(ctx.get("timezone_id", "UTC")),
-            user_agent=ctx.get("user_agent"),
+            user_agent=user_agent,
             page_mode=page_mode,
             permissions_fingerprint=str(ctx.get("permissions_fingerprint", "default")),
         )
@@ -385,19 +421,19 @@ async def _tool_call(
                 endpoint_key=endpoint_key,
                 session_mode=args.session_mode,
                 restore_state_key=args.restore_state_key,
-                context={
-                    "proxy_policy": sig.proxy_policy,
-                    "shared_storage_key": sig.shared_storage_key,
-                    "anti_bot_tier": sig.anti_bot_tier,
-                    "stealth_init_version": sig.stealth_init_version,
-                    "locale": sig.locale,
-                    "timezone_id": sig.timezone_id,
-                    "user_agent": sig.user_agent,
-                    "page_mode": sig.page_mode,
-                    "permissions_fingerprint": sig.permissions_fingerprint,
-                    "interaction_profile": profile_name,
-                    "interaction_seed": seed_value,
-                },
+                context=ContextSignatureBody(
+                    proxy_policy=sig.proxy_policy,
+                    shared_storage_key=sig.shared_storage_key,
+                    anti_bot_tier=anti_bot_tier,
+                    stealth_init_version=sig.stealth_init_version,
+                    locale=sig.locale,
+                    timezone_id=sig.timezone_id,
+                    user_agent=sig.user_agent,
+                    page_mode=sig.page_mode,
+                    permissions_fingerprint=sig.permissions_fingerprint,
+                    interaction_profile=profile_name,
+                    interaction_seed=seed_value,
+                ),
             ),
             container=container,
         )
@@ -585,4 +621,3 @@ async def mcp_jsonrpc(
 
     err = _error(-32601, f"Method not found: {method}")
     return JsonRpcResponse(id=req_id, error=err).model_dump(exclude_none=True)
-

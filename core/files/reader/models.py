@@ -7,6 +7,8 @@ from typing import Any, List, Mapping, Optional
 
 from pydantic import BaseModel, Field
 
+from core.files.file_ref import file_id_from_download_url
+
 
 class FileReadKind(StrEnum):
     TEXT = "text"
@@ -82,8 +84,6 @@ def merge_file_ref_read_options(
     finfo: Mapping[str, Any],
     opts: ReadOptions,
 ) -> ReadOptions:
-    from core.files.file_ref import file_id_from_download_url
-
     if isinstance(opts.source_file_id, str) and opts.source_file_id.strip():
         return opts
     fid = finfo.get("file_id")

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Protocol
+
+from core.db.repositories.company_repository import CompanyRepository
+from core.db.repositories.subdomain_repository import SubdomainRepository
+from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
 from core.models.identity_models import Company, User
 
@@ -14,7 +19,13 @@ SYSTEM_ADMIN_EMAIL = "zambas124@yandex.ru"
 ADMIN_ROLE = "admin"
 
 
-async def ensure_system_company_exists(container: object) -> Company:
+class SystemBootstrapContainer(Protocol):
+    company_repository: CompanyRepository
+    subdomain_repository: SubdomainRepository
+    user_repository: UserRepository
+
+
+async def ensure_system_company_exists(container: SystemBootstrapContainer) -> Company:
     """Гарантирует наличие system-компании в shared storage."""
     company = await container.company_repository.get(SYSTEM_COMPANY_ID)
     if company is None:
@@ -41,7 +52,7 @@ async def ensure_system_company_exists(container: object) -> Company:
 
 
 async def ensure_system_admin_membership(
-    container: object,
+    container: SystemBootstrapContainer,
     *,
     user_email: str = SYSTEM_ADMIN_EMAIL,
 ) -> tuple[Company, User | None]:

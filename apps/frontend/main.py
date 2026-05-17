@@ -15,6 +15,7 @@ from fastapi.responses import (
     Response,
 )
 from fastapi.staticfiles import StaticFiles
+from starlette.routing import Route
 
 from apps.frontend.api.ai_providers import router as ai_providers_router
 from apps.frontend.api.api_keys import router as api_keys_router
@@ -52,6 +53,9 @@ from apps.frontend.services.flow_preview_guest_html import (
     build_flow_preview_unavailable_html,
 )
 from core.app.factory import create_service_app
+from core.clients.payment import PaymentProviderFactory
+from core.clients.voice_resolver import invalidate_platform_pronunciation_cache
+from core.config import get_settings
 from core.config.testing import is_testing
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.flow_preview_handoff import (
@@ -127,9 +131,7 @@ def _get_platform_public_base_url() -> str:
     return base_url.rstrip("/")
 
 def _build_sitemap_xml(base_url: str) -> str:
-    from datetime import datetime, timezone
-
-    lastmod = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    lastmod = datetime.now(UTC).strftime("%Y-%m-%d")
     og_image_loc = f"{base_url}/static/frontend/assets/images/main_img.png"
     paths_with_preview_image: frozenset[str] = frozenset(
         (
@@ -210,7 +212,6 @@ def _build_llms_txt(base_url: str) -> str:
 
 async def _seed_platform_pronunciation_rules(container) -> None:
     """Засевает платформенные правила произношения при первом старте (идемпотентно)."""
-    from core.config import get_settings
     if not getattr(get_settings().voice.tts, "pronunciation_seed_enabled", True):
         return
     repo = container.platform_pronunciation_rule_repository
@@ -235,7 +236,6 @@ async def _seed_platform_pronunciation_rules(container) -> None:
                 case_sensitive=False,
                 note="Платформенное правило (seed)",
             )
-    from core.clients.voice_resolver import invalidate_platform_pronunciation_cache
     invalidate_platform_pronunciation_cache()
     logger.info("frontend.pronunciation_seed_applied")
 
@@ -252,7 +252,6 @@ async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> Non
     await container.redis_client.connect()
     logger.info("frontend.redis.connected")
 
-    from core.clients.payment import PaymentProviderFactory
     PaymentProviderFactory.initialize()
     await PaymentProviderFactory.seed_access_tokens(container.shared_storage)
     logger.info("Платежные провайдеры инициализированы")
@@ -334,7 +333,7 @@ if ui_path.exists():
 # (он возвращает {"service": "core", "version": "1.0.0", "status": "running"})
 # Заменим его на SPA fallback ниже
 for route in list(app.routes):
-    if hasattr(route, 'path') and route.path == "/":
+    if isinstance(route, Route) and route.path == "/":
         app.routes.remove(route)
 
 @app.get("/api/health")
@@ -553,4 +552,3 @@ if __name__ == "__main__":
         port=settings.server.port,
         reload=settings.server.debug,
     )
-

@@ -8,13 +8,15 @@
 import json
 import secrets
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Dict, Optional, Type
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from sqlalchemy import text
 
 from core.auth.utils import compare_passwords
 from core.config import get_settings
+from core.config.models import AuthProviderConfig
 from core.identity.base_provider import BaseAuthProvider
 from core.identity.providers.apple import AppleProvider
 from core.identity.providers.github import GithubProvider
@@ -66,7 +68,7 @@ class AuthService:
         """Инициализирует доступные провайдеры на основе конфигурации"""
         settings = get_settings()
 
-        provider_classes: Dict[AuthProvider, Type[BaseAuthProvider]] = {
+        provider_classes: dict[AuthProvider, Callable[[AuthProviderConfig], BaseAuthProvider]] = {
             AuthProvider.YANDEX: YandexProvider,
             AuthProvider.GOOGLE: GoogleProvider,
             AuthProvider.GITHUB: GithubProvider,
@@ -95,6 +97,10 @@ class AuthService:
         """Возвращает список доступных провайдеров"""
         return list(self._providers.keys())
 
+    @property
+    def storage_configured(self) -> bool:
+        return self._storage is not None
+
     def get_provider(self, provider_name: AuthProvider) -> Optional[BaseAuthProvider]:
         """Получает провайдер по имени"""
         return self._providers.get(provider_name)
@@ -103,8 +109,8 @@ class AuthService:
         self,
         provider_name: AuthProvider,
         redirect_uri: str,
-        original_host: str = None,
-        return_path: str = None,
+        original_host: str | None = None,
+        return_path: str | None = None,
     ) -> str:
         """
         Начинает процесс авторизации.
@@ -275,8 +281,8 @@ class AuthService:
         state: str,
         provider: AuthProvider,
         redirect_uri: str,
-        original_host: str = None,
-        return_path: str = None,
+        original_host: str | None = None,
+        return_path: str | None = None,
     ):
         """Сохраняет временное состояние авторизации"""
         state_data = {
@@ -290,7 +296,7 @@ class AuthService:
         key = f"auth_state:{state}"
         await self._storage.set(key, json.dumps(state_data), ttl=600)
 
-    async def _get_auth_state(self, state: str) -> Optional[Dict]:
+    async def _get_auth_state(self, state: str) -> Optional[dict[str, Any]]:
         """Получает временное состояние авторизации"""
         if not state:
             return None
@@ -299,7 +305,10 @@ class AuthService:
         data = await self._storage.get(key)
 
         if data:
-            return json.loads(data)
+            parsed = json.loads(data)
+            if not isinstance(parsed, dict):
+                raise ValueError("auth_state payload must be a JSON object")
+            return parsed
         return None
 
     async def _cleanup_auth_state(self, state: str):
@@ -435,9 +444,13 @@ class AuthService:
 
     async def _get_user(self, user_id: str) -> Optional[User]:
         """Получает пользователя по ID"""
-        return await self.user_repository.get(user_id)
+        return await self._user_repository.get(user_id)
 
-    async def get_user_provider_info(self, user_id: str, provider: AuthProvider) -> Optional[dict]:
+    async def get_user_provider_info(
+        self,
+        user_id: str,
+        provider: AuthProvider,
+    ) -> Optional[dict[str, Any]]:
         """Получает информацию о провайдере пользователя"""
         providers_key = f"user_providers:{user_id}"
         providers_data = await self._storage.get(providers_key)
@@ -446,13 +459,16 @@ class AuthService:
             return None
 
         providers = json.loads(providers_data)
+        if not isinstance(providers, dict):
+            raise ValueError("user providers payload must be a JSON object")
         for provider_user_id, info in providers.items():
-            if info.get("provider_name") == provider.value:
+            _ = provider_user_id
+            if isinstance(info, dict) and info.get("provider_name") == provider.value:
                 return info
 
         return None
 
-    async def get_all_user_providers_info(self, user_id: str) -> Optional[dict]:
+    async def get_all_user_providers_info(self, user_id: str) -> Optional[dict[str, Any]]:
         """Получает информацию о всех провайдерах пользователя"""
         providers_key = f"user_providers:{user_id}"
         providers_data = await self._storage.get(providers_key)
@@ -460,7 +476,10 @@ class AuthService:
         if not providers_data:
             return None
 
-        return json.loads(providers_data)
+        providers = json.loads(providers_data)
+        if not isinstance(providers, dict):
+            raise ValueError("user providers payload must be a JSON object")
+        return providers
 
     async def _create_session(
         self, user: User, provider: AuthProvider, access_token: str, refresh_token: Optional[str]

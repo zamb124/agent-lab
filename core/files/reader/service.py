@@ -4,24 +4,46 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import importlib
 import mimetypes
+import re
 import shutil
 import subprocess
 import tempfile
 import uuid
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from email import policy
+from email.parser import BytesParser
 from io import BytesIO
 from pathlib import Path
-from typing import Protocol, TypeIs, cast
+from typing import Any, Protocol, TypeIs, cast
+
+import ebooklib
+import extract_msg
+import fitz as pymupdf
+import olefile
+import trafilatura
+import xlrd
+from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
+from bs4 import BeautifulSoup
+from charset_normalizer import from_bytes
+from ebooklib import epub
+from odf import opendocument as odf_opendocument
+from odf import teletype as odf_teletype
+from odf import text as odf_text
+from pptx import Presentation as raw_presentation
+from striprtf.striprtf import rtf_to_text
+from unstructured.partition.auto import partition as raw_partition
 
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_VISION
+from core.clients.llm.factory import get_vision_llm
 from core.context import get_context
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.file_ref import FileRef, file_id_from_download_url, normalize_file_ref
+from core.files.media.transcriber import MediaTranscriber
 from core.files.models import FileRecord, FileResponse
+from core.files.processors import get_default_file_processor
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import (
     FileReadKind,
@@ -33,7 +55,11 @@ from core.files.reader.models import (
     ReadPage,
     merge_file_ref_read_options,
 )
+from core.files.s3_client import S3ClientFactory
 from core.files.types import FileCategory, extensions_for
+from core.http import get_httpx_client
+from core.models.billing_models import UsageType
+from core.tracing.operation_span import traced_operation
 
 SourceInput = Path | str | bytes
 
@@ -213,8 +239,6 @@ async def _read_local_file_bytes(path: Path) -> bytes:
 
 
 async def _read_http_bytes(url: str) -> bytes:
-    from core.http import get_httpx_client
-
     async with get_httpx_client(timeout=120.0) as client:
         response = await client.get(url)
     _ = response.raise_for_status()
@@ -235,9 +259,6 @@ def _s3_error_code(exc: Exception) -> str | None:
 
 
 async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
-    from core.files.processors import get_default_file_processor
-    from core.files.s3_client import S3ClientFactory
-
     proc = await get_default_file_processor()
     record = await proc.get_file_record(file_id)
     if record is None:
@@ -377,14 +398,12 @@ def _extract_text_from_ole_word_stream(raw: bytes) -> str | None:
     а вытаскивает читаемые ASCII/UTF-16 строки длиной >= 4 символов.
     Используется когда antiword не справляется (формат Word 95 / минимальные .doc).
     """
-    import re
+    typed_olefile = cast(_OleFileModule, cast(Any, olefile))
 
-    olefile = cast(_OleFileModule, cast(object, importlib.import_module("olefile")))
-
-    if not olefile.isOleFile(BytesIO(raw)):
+    if not typed_olefile.isOleFile(BytesIO(raw)):
         return None
     try:
-        ole = olefile.OleFileIO(BytesIO(raw))
+        ole = typed_olefile.OleFileIO(BytesIO(raw))
     except Exception:
         return None
     try:
@@ -613,12 +632,6 @@ async def _read_image_impl(
     mime: str,
     opts: ReadOptions,
 ) -> FileReadResult:
-    from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
-
-    from core.clients.llm.factory import get_vision_llm
-    from core.models.billing_models import UsageType
-    from core.tracing.operation_span import traced_operation
-
     b64 = base64.b64encode(raw).decode("utf-8")
     if opts.vision_prompt is not None:
         stripped = opts.vision_prompt.strip()
@@ -687,8 +700,6 @@ def _read_html_sync(
 ) -> FileReadResult:
     """HTML: trafilatura для контентных страниц + BeautifulSoup fallback для простой/частичной разметки."""
     del opts
-    import trafilatura
-
     html = _decode_text_bytes(raw, file_name)
     try:
         extracted = trafilatura.extract(
@@ -703,8 +714,6 @@ def _read_html_sync(
         extracted = None
     # Fallback на BeautifulSoup для простой/частичной HTML-разметки
     if extracted is None or extracted.strip() == "":
-        from bs4 import BeautifulSoup
-
         soup = BeautifulSoup(html, "html.parser")
         for tag in soup(["script", "style", "noscript"]):
             tag.decompose()
@@ -738,8 +747,6 @@ def _decode_text_bytes(raw: bytes, file_name: str) -> str:
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
-        from charset_normalizer import from_bytes
-
         best = from_bytes(raw).best()
         if best is None:
             raise FileReadError(f"Не удалось определить кодировку текстового файла: {file_name}")
@@ -772,8 +779,6 @@ def _read_xls_sync(
     opts: ReadOptions,
 ) -> FileReadResult:
     del opts
-    import xlrd
-
     book = xlrd.open_workbook(file_contents=raw)
     pages: list[ReadPage] = []
     for sheet_idx in range(book.nsheets):
@@ -862,7 +867,7 @@ def _read_pdf_sync(
     mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
-    fitz = cast(_FitzModule, cast(object, importlib.import_module("fitz")))
+    fitz = cast(_FitzModule, cast(Any, pymupdf))
 
     warnings: list[str] = []
     doc = fitz.open(stream=raw, filetype="pdf")
@@ -931,8 +936,6 @@ def _read_unstructured_sync(
     opts: ReadOptions,
 ) -> FileReadResult:
     del opts
-    from unstructured.partition.auto import partition as raw_partition
-
     partition = cast(_UnstructuredPartition, raw_partition)
 
     warnings: list[str] = []
@@ -996,8 +999,6 @@ def _read_pptx_sync(
 ) -> FileReadResult:
     """PowerPoint .pptx через python-pptx; одна страница на слайд."""
     del opts
-    from pptx import Presentation as raw_presentation
-
     presentation = cast(_PptxPresentationFactory, raw_presentation)
     try:
         prs = presentation(BytesIO(raw))
@@ -1064,9 +1065,6 @@ def _read_rtf_sync(
 ) -> FileReadResult:
     """RTF через striprtf (чисто Python, без зависимостей)."""
     del opts
-    rtf_module = importlib.import_module("striprtf.striprtf")
-    rtf_to_text = cast(Callable[..., str], getattr(rtf_module, "rtf_to_text"))
-
     try:
         rtf_text = raw.decode("utf-8", errors="replace")
         text = rtf_to_text(rtf_text, errors="ignore")
@@ -1092,11 +1090,11 @@ def _read_odt_sync(
 ) -> FileReadResult:
     """OpenDocument Text .odt через odfpy (ZIP+XML)."""
     del opts
-    teletype = cast(_OdfTeletypeModule, cast(object, importlib.import_module("odf.teletype")))
-    odf_text = cast(_OdfTextModule, cast(object, importlib.import_module("odf.text")))
+    teletype = cast(_OdfTeletypeModule, cast(Any, odf_teletype))
+    odf_text_module = cast(_OdfTextModule, cast(Any, odf_text))
     opendocument = cast(
         _OdfOpenDocumentModule,
-        cast(object, importlib.import_module("odf.opendocument")),
+        cast(Any, odf_opendocument),
     )
 
     try:
@@ -1104,11 +1102,11 @@ def _read_odt_sync(
     except Exception as exc:
         raise FileReadError(f"Не удалось открыть ODT: {file_name}") from exc
     parts: list[str] = []
-    for elem in doc.getElementsByType(odf_text.P):
+    for elem in doc.getElementsByType(odf_text_module.P):
         s = teletype.extractText(elem)
         if s.strip():
             parts.append(s)
-    for elem in doc.getElementsByType(odf_text.H):
+    for elem in doc.getElementsByType(odf_text_module.H):
         s = teletype.extractText(elem)
         if s.strip():
             parts.append(s)
@@ -1133,11 +1131,8 @@ def _read_epub_sync(
 ) -> FileReadResult:
     """EPUB через EbookLib + BeautifulSoup; одна страница на главу."""
     del opts
-    import tempfile
-
-    from bs4 import BeautifulSoup
-    ebooklib = cast(_EbooklibModule, cast(object, importlib.import_module("ebooklib")))
-    epub = cast(_EpubModule, cast(object, importlib.import_module("ebooklib.epub")))
+    typed_ebooklib = cast(_EbooklibModule, cast(Any, ebooklib))
+    typed_epub = cast(_EpubModule, cast(Any, epub))
 
     # ebooklib читает только с диска, поэтому пишем во временный файл
     with tempfile.NamedTemporaryFile(suffix=".epub", delete=False) as tmp:
@@ -1145,11 +1140,11 @@ def _read_epub_sync(
         tmp_path = tmp.name
     try:
         try:
-            book = epub.read_epub(tmp_path)
+            book = typed_epub.read_epub(tmp_path)
         except Exception as exc:
             raise FileReadError(f"Не удалось открыть EPUB: {file_name}") from exc
         pages: list[ReadPage] = []
-        for idx, item in enumerate(book.get_items_of_type(ebooklib.ITEM_DOCUMENT)):
+        for idx, item in enumerate(book.get_items_of_type(typed_ebooklib.ITEM_DOCUMENT)):
             soup = BeautifulSoup(item.get_content(), "html.parser")
             text = soup.get_text(separator="\n", strip=True)
             if text:
@@ -1183,16 +1178,14 @@ def _read_msg_sync(
 ) -> FileReadResult:
     """Outlook .msg через extract-msg (чисто Python)."""
     del opts
-    import tempfile
-
-    extract_msg = cast(_ExtractMsgModule, cast(object, importlib.import_module("extract_msg")))
+    typed_extract_msg = cast(_ExtractMsgModule, cast(Any, extract_msg))
 
     with tempfile.NamedTemporaryFile(suffix=".msg", delete=False) as tmp:
         _ = tmp.write(raw)
         tmp_path = tmp.name
     try:
         try:
-            msg = extract_msg.openMsg(tmp_path)
+            msg = typed_extract_msg.openMsg(tmp_path)
         except Exception as exc:
             raise FileReadError(f"Не удалось открыть MSG: {file_name}") from exc
         try:
@@ -1241,9 +1234,6 @@ def _read_eml_sync(
 ) -> FileReadResult:
     """RFC 822 .eml через встроенный stdlib email модуль."""
     del opts
-    from email import policy
-    from email.parser import BytesParser
-
     try:
         msg = BytesParser(policy=policy.default).parsebytes(raw)
     except Exception as exc:
@@ -1269,8 +1259,6 @@ def _read_eml_sync(
                 ctype = part.get_content_type()
                 if ctype == "text/html":
                     try:
-                        from bs4 import BeautifulSoup
-
                         html = (
                             _payload_to_text(cast(object, part.get_content()))
                             if hasattr(part, "get_content")
@@ -1320,8 +1308,6 @@ async def _read_audio_impl(
     mime: str,
     opts: ReadOptions,
 ) -> FileReadResult:
-    from core.files.media.transcriber import MediaTranscriber
-
     company_id = _resolve_transcription_company_id(opts)
     transcriber = MediaTranscriber(company_id=company_id)
     transcription = await transcriber.transcribe_audio(
@@ -1346,8 +1332,6 @@ async def _read_video_impl(
     mime: str,
     opts: ReadOptions,
 ) -> FileReadResult:
-    from core.files.media.transcriber import MediaTranscriber
-
     company_id = _resolve_transcription_company_id(opts)
     transcriber = MediaTranscriber(company_id=company_id)
     transcription = await transcriber.transcribe_video(

@@ -14,15 +14,36 @@ from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.tools.agent_session_tools import reason
 from apps.flows.tools.math_tools import calculator
 from core.state import ExecutionState
 
 
+class _BillingService:
+    async def company_may_incur_billable_operation_charge(self, company_id: str) -> bool:
+        _ = company_id
+        return True
+
+    async def require_balance_for_billable_operation(
+        self,
+        company_id: str,
+        user_id: str,
+        *,
+        operation_code: str,
+        notification_service: str,
+    ) -> None:
+        _ = company_id, user_id, operation_code, notification_service
+
+
+class _RuntimeContainer:
+    billing_service = _BillingService()
+
+
 async def run_agent_to_completion(runner, input_data, state):
     """Helper: запускает агента до завершения, собирает события."""
     events = []
-    async for event in runner.run(input_data, state):
+    async for event in runner.run(input_data, state, InMemoryEmitter(state)):
         events.append(event)
     return events, state
 
@@ -113,6 +134,7 @@ class TestReasonToolExecution:
             tools=[reason, calculator],
             llm=None,
             prompt="You are a helpful assistant.",
+            container=_RuntimeContainer(),
         )
 
     @pytest.mark.asyncio
@@ -179,6 +201,7 @@ class TestAgentWithoutReasonWorks:
             tools=[calculator],
             llm=None,
             prompt="You are a helpful assistant.",
+            container=_RuntimeContainer(),
         )
 
     @pytest.mark.asyncio

@@ -135,7 +135,10 @@ class RAGRepository:
         if extra_headers is not None:
             kwargs["headers"] = extra_headers
 
-        return await client.post("rag", path, **kwargs)
+        response = await client.post("rag", path, **kwargs)
+        if not isinstance(response, dict):
+            raise ValueError("RAGRepository.search_namespace response must be JSON object")
+        return response
 
     async def list_documents(
         self,

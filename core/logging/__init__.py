@@ -14,8 +14,6 @@
 
 from __future__ import annotations
 
-import structlog
-
 from core.logging.context import (
     LogContextScope,
     bind_log_context,
@@ -31,6 +29,7 @@ from core.logging.contract import (
     LoggingMisconfigured,
     LogRecordPayload,
 )
+from core.logging.logger import get_logger
 from core.logging.scope import (
     LogContractViolation,
     RequestLogScope,
@@ -40,28 +39,6 @@ from core.logging.scope import (
     get_log_scope,
     get_log_scope_requires_user,
 )
-from core.logging.setup import reset_logging_for_tests, setup_logging
-
-
-def get_logger(name: str) -> structlog.stdlib.BoundLogger:
-    """
-    Единственный способ получить логгер во всех сервисах и в core.
-
-    Возвращает structlog BoundLogger, совместимый с уровнем stdlib (info,
-    debug, warning, error, exception, critical). Поддерживает kwargs для
-    структурированных полей::
-
-        logger.info("entity.created", entity_id=eid, kind="note")
-
-    Запрещено в платформе:
-    - logging.getLogger(__name__) в apps/** (CI ловит)
-    - print(...) в apps/** и core/** (кроме scripts/)
-    - logger.info(f"... {value} ...") вместо kwargs
-    """
-    if not isinstance(name, str) or not name.strip():
-        raise ValueError("get_logger требует непустое строковое имя (обычно __name__)")
-    return structlog.stdlib.get_logger(name)
-
 
 __all__ = [
     "LogContextScope",
@@ -79,8 +56,6 @@ __all__ = [
     "get_log_scope",
     "get_log_scope_requires_user",
     "get_logger",
-    "reset_logging_for_tests",
     "restore_log_context",
-    "setup_logging",
     "unbind_log_context",
 ]

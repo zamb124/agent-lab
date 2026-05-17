@@ -5,6 +5,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List
 
+from core.docs.data.state_fields import STATE_FIELDS
 from core.docs.models import (
     CodeTemplate,
     DocumentationQuery,
@@ -46,5 +47,4 @@ class BaseDocProvider(ABC):
 
     def get_state_fields(self, query: DocumentationQuery) -> List[StateField]:
         """Поля state - общие для всех языков."""
-        from core.docs.data.state_fields import STATE_FIELDS
         return [StateField(**f) for f in STATE_FIELDS]

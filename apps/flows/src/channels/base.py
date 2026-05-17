@@ -7,7 +7,6 @@ BaseChannel - абстрактный базовый класс для канал
 
 from __future__ import annotations
 
-import importlib
 import json
 import uuid
 from abc import ABC, abstractmethod
@@ -52,9 +51,13 @@ from apps.flows.src.state.cancellation import (
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
+from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.triggers.output_actions import OutputActionExecutor
 from apps.flows.src.triggers.trigger_type_contract import effective_output_actions_for_trigger
 from apps.flows.src.utils import extract_json_from_response
+from apps.flows_worker.broker import broker as flows_broker
+from apps.idle_worker.broker import broker as idle_broker
+from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
 from core.billing.exceptions import BillingBalanceBlockedError
@@ -64,6 +67,7 @@ from core.logging.attributes import LOG_SESSION_AGENT
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt, interrupt_to_response_dict
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
+from core.tasks.kicker import kiq_task_name_with_context
 from core.tracing import get_tracer
 from core.tracing.provider import is_tracing_enabled
 
@@ -424,11 +428,11 @@ class BaseChannel(ABC):
             trace_context_data = trace_ctx.to_dict()
 
         broker_url = get_settings().tasks.broker_url
-        flow_tasks_module = importlib.import_module("apps.flows.src.tasks.flow_tasks")
-        process_flow_task = getattr(flow_tasks_module, "process_flow_task")
         logger.info("flow.create_task.broker", broker_url=broker_url)
         logger.debug(f"[create_task] Kicking task_id={params.task_id} for flow_id={self.flow_id}")
-        await process_flow_task.kiq(
+        await kiq_task_name_with_context(
+            TASK_PROCESS_FLOW,
+            flows_broker,
             flow_id=self.flow_id,
             session_id=params.session_id,
             user_id=params.user_id,
@@ -442,6 +446,7 @@ class BaseChannel(ABC):
             files=params.files_data,
             context_data=context_data,
             trace_context=trace_context_data,
+            background_kind="flow_task",
         )
         logger.debug(f"[create_task] Task kicked to TaskIQ: task_id={params.task_id}")
 
@@ -795,9 +800,16 @@ class BaseChannel(ABC):
         self, task_id: str, context_id: str, state: str, message: str
     ) -> None:
         """Отправляет push notification через TaskIQ."""
-        push_tasks_module = importlib.import_module("apps.idle_worker.tasks.push_notification_tasks")
-        send_task_update = getattr(push_tasks_module, "send_task_update")
-        await send_task_update.kiq(task_id, context_id, state, message, True)
+        await kiq_task_name_with_context(
+            TASK_SEND_TASK_UPDATE,
+            idle_broker,
+            task_id,
+            context_id,
+            state,
+            message,
+            True,
+            background_kind="a2a_task",
+        )
 
     # === Общая реализация on_get_task ===
 

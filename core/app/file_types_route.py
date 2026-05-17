@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from core.files.types import ALL_CATEGORIES, FILE_TYPE_REGISTRY
 
 
-def _build_cached_payload() -> dict:
+def _build_cached_payload() -> dict[str, object]:
     return {
         "categories": [c.value for c in ALL_CATEGORIES],
         "registry": [

@@ -138,8 +138,10 @@ class BaseAuthProvider(ABC):
 
         return True
 
-    def _build_auth_params(self, state: str, redirect_uri: str) -> dict:
+    def _build_auth_params(self, state: str, redirect_uri: str) -> dict[str, str]:
         """Формирует базовые параметры для URL авторизации"""
+        if not self.client_id:
+            raise ValueError(f"client_id не настроен для {self.provider_name.value}")
         return {
             "client_id": self.client_id,
             "redirect_uri": redirect_uri,
@@ -148,8 +150,12 @@ class BaseAuthProvider(ABC):
             "state": state,
         }
 
-    def _build_token_data(self, code: str, redirect_uri: str) -> dict:
+    def _build_token_data(self, code: str, redirect_uri: str) -> dict[str, str]:
         """Формирует данные для обмена кода на токен"""
+        if not self.client_id:
+            raise ValueError(f"client_id не настроен для {self.provider_name.value}")
+        if not self.client_secret:
+            raise ValueError(f"client_secret не настроен для {self.provider_name.value}")
         return {
             "grant_type": "authorization_code",
             "code": code,
@@ -157,4 +163,3 @@ class BaseAuthProvider(ABC):
             "client_id": self.client_id,
             "client_secret": self.client_secret,
         }
-

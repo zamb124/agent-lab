@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, List, Optional
 import httpx
 import tiktoken
 
+from core.billing import get_billing_service
 from core.company_ai.resolver import (
     COST_ORIGIN_COMPANY,
     COST_ORIGIN_PLATFORM,
@@ -91,7 +92,6 @@ class RerankerHTTPClient:
     def _get_billing_service(self) -> "BillingService":
         if self.billing_service:
             return self.billing_service
-        from core.billing import get_billing_service
 
         return get_billing_service()
 

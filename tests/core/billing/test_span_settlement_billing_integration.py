@@ -191,7 +191,7 @@ async def test_legacy_settlement_uses_composite_and_old_key(frontend_container, 
     )
     await frontend_container.company_repository.set(company)
 
-    from core.tracing import attributes as trace_attr
+    import core.tracing.attributes as trace_attr
 
     span_id = f"spL_{unique_id}"
     span_dict = {
@@ -261,7 +261,7 @@ async def test_settle_span_charge_missing_resource_name_raises(
 async def test_settle_span_charge_missing_company_id_raises(
     frontend_container, unique_id: str, system_user_id: str
 ) -> None:
-    from core.tracing import attributes as trace_attr
+    import core.tracing.attributes as trace_attr
 
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     billing = frontend_container.billing_service
@@ -347,7 +347,7 @@ async def test_settle_pending_legacy_second_run_zero_without_double_usage(
         current_month_spent=0.0,
     )
     await frontend_container.company_repository.set(company)
-    from core.tracing import attributes as trace_attr
+    import core.tracing.attributes as trace_attr
 
     span_dict = {
         "span_id": f"sp8_{unique_id}",

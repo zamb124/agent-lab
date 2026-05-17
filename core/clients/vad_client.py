@@ -18,7 +18,9 @@ import struct
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
+import torch
 from pydantic import BaseModel, Field
+from silero_vad import get_speech_timestamps, load_silero_vad
 
 from core.http import get_httpx_client
 from core.logging import get_logger
@@ -161,16 +163,6 @@ class LocalSileroVADClient(BaseVADClient):
     def _ensure_loaded(self) -> None:
         if self._model is not None:
             return
-        try:
-            from silero_vad import (  # pyright: ignore[reportMissingImports]
-                get_speech_timestamps,
-                load_silero_vad,
-            )
-        except ImportError as exc:
-            raise RuntimeError(
-                "VAD silero_local: установите пакет `silero-vad` "
-                "(uv add silero-vad --group rag)."
-            ) from exc
         self._model = load_silero_vad()
         self._get_speech_ts = get_speech_timestamps
 
@@ -197,8 +189,6 @@ class LocalSileroVADClient(BaseVADClient):
             return []
         samples = struct.unpack(f"<{n_samples}h", audio_bytes[: n_samples * 2])
         floats = [s / 32768.0 for s in samples]
-
-        import torch  # pyright: ignore[reportMissingImports]
 
         tensor = torch.tensor(floats, dtype=torch.float32)
         timestamps = self._get_speech_ts(
@@ -251,8 +241,6 @@ class LocalSileroVADClient(BaseVADClient):
 
         samples = struct.unpack(f"<{expected_samples}h", audio_bytes)
         floats = [s / 32768.0 for s in samples]
-
-        import torch  # pyright: ignore[reportMissingImports]
 
         tensor = torch.tensor(floats, dtype=torch.float32)
         with torch.no_grad():

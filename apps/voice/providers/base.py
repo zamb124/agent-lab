@@ -19,6 +19,10 @@ class BaseVADProvider(ABC):
     def reset_state(self) -> None:
         """Сбросить внутреннее состояние модели (после тишины/barge-in)."""
 
+    def consume_preroll(self) -> bytes:
+        """Забрать pre-roll PCM, если конкретный VAD его накапливает."""
+        return b""
+
     async def close(self) -> None:
         """Освободить ресурсы. По умолчанию — ничего не делает."""
 

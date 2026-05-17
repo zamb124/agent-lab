@@ -4,11 +4,11 @@
 
 import pytest
 
-from core.errors import SafeEvalError
 from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import CodeNode, create_node
 from apps.flows.src.tools.code_tool import CodeTool
+from core.errors import SafeEvalError
 from core.state import ExecutionState
 
 

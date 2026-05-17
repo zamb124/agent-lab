@@ -98,8 +98,6 @@ def _build_automaton(
     for rule in rules:
         if case_sensitive_subset is not None and rule.case_sensitive != case_sensitive_subset:
             continue
-        if not rule.enabled if hasattr(rule, "enabled") else False:
-            continue
         if rule.is_stress and not capabilities_stress:
             continue
         if rule.providers is not None and provider not in rule.providers:

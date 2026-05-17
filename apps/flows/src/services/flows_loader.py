@@ -34,8 +34,10 @@ from apps.flows.src.tools.json_schema_parameters import (
     call_parameters_to_parameters_schema,
     pydantic_model_to_parameters_schema,
 )
+from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.context import get_context
-from core.files import FileReader, ReadOptions, get_default_file_processor
+from core.files.processors import get_default_file_processor
+from core.files.reader import FileReader, ReadOptions
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -1136,110 +1138,123 @@ async def load_tools_to_db(
     Returns:
         Список загруженных tool_id
     """
+    tool_attrs: list[tuple[str, str, Any]] = []
     if modules is None:
-        modules = ["apps.flows.tools", "apps.flows.src.tools.base"]
+        for module_path, attr_name in BUILTIN_TOOL_SPECS:
+            module = importlib.import_module(module_path)
+            tool_attrs.append((module_path, attr_name, getattr(module, attr_name)))
+        base_module = importlib.import_module("apps.flows.src.tools.base")
+        for attr_name in dir(base_module):
+            tool_attrs.append(("apps.flows.src.tools.base", attr_name, getattr(base_module, attr_name)))
+    else:
+        for module_path in modules:
+            module = importlib.import_module(module_path)
+            for attr_name in dir(module):
+                tool_attrs.append((module_path, attr_name, getattr(module, attr_name)))
 
-    loaded = []
+    loaded: list[str] = []
+    loaded_ids: set[str] = set()
 
-    for module_path in modules:
-        module = importlib.import_module(module_path)
-
-        for attr_name in dir(module):
-            attr = getattr(module, attr_name)
-
-            # FunctionTool (декоратор @tool) - инстанс, не класс
-            if isinstance(attr, FunctionTool):
-                tool_instance = attr
-                tool_id = tool_instance.name
-
-                # Извлекаем код функции БЕЗ декоратора
-                full_source = tool_instance.get_source_code()
-                # Убираем декоратор @tool(...) - ищем начало функции
-                lines = full_source.split("\n")
-                func_start = 0
-                for i, line in enumerate(lines):
-                    stripped = line.lstrip()
-                    if stripped.startswith("async def ") or stripped.startswith("def "):
-                        func_start = i
-                        break
-                source_code = strip_forbidden_platform_import_lines("\n".join(lines[func_start:]))
-
-                if tool_instance.args_schema is not None:
-                    args_schema_dict = _call_parameters_from_pydantic_model(tool_instance.args_schema)
-                    parameters_schema_full = pydantic_model_to_parameters_schema(
-                        tool_instance.args_schema
-                    )
-                else:
-                    args_schema_dict = tool_instance.call_parameters
-                    parameters_schema_full = (
-                        call_parameters_to_parameters_schema(args_schema_dict)
-                        if args_schema_dict
-                        else None
-                    )
-
-                # mock_response
-                mock_map = None
-                if tool_instance.mock_response is not None:
-                    if callable(tool_instance.mock_response):
-                        mock_map = {"default_response": "callable_mock"}
-                    else:
-                        mock_map = {"default_response": tool_instance.mock_response}
-
-                tool_ref = ToolReference(
-                    tool_id=tool_id,
-                    title=tool_id,
-                    description=tool_instance.description,
-                    code=source_code,
-                    parameters_schema=parameters_schema_full,
-                    args_schema=args_schema_dict,
-                    mock_map=mock_map,
-                    tags=tool_instance.tags,
-                    react_role=tool_instance.react_role,
-                )
-
-                await tool_repository.set(tool_ref)
-                loaded.append(tool_id)
-                logger.info(f"  {tool_id}: FunctionTool")
+    for _, _, attr in tool_attrs:
+        # FunctionTool (декоратор @tool) - инстанс, не класс
+        if isinstance(attr, FunctionTool):
+            tool_instance = attr
+            tool_id = tool_instance.name
+            if tool_id in loaded_ids:
                 continue
 
-            # BaseTool класс
-            if isinstance(attr, type) and issubclass(attr, BaseTool) and attr is not BaseTool:
-                tool_class = attr
-                tool_id = tool_class.name
+            # Извлекаем код функции БЕЗ декоратора
+            full_source = tool_instance.get_source_code()
+            # Убираем декоратор @tool(...) - ищем начало функции
+            lines = full_source.split("\n")
+            func_start = 0
+            for i, line in enumerate(lines):
+                stripped = line.lstrip()
+                if stripped.startswith("async def ") or stripped.startswith("def "):
+                    func_start = i
+                    break
+            source_code = strip_forbidden_platform_import_lines("\n".join(lines[func_start:]))
 
-                # Извлекаем исходный код класса
-                source_code = inspect.getsource(tool_class)
-
-                args_schema_dict: dict[str, CallParameter] = {}
-                parameters_schema_full = None
-                if tool_class.args_schema:
-                    args_schema_dict = _call_parameters_from_pydantic_model(tool_class.args_schema)
-                    parameters_schema_full = pydantic_model_to_parameters_schema(
-                        tool_class.args_schema
-                    )
-
-                mock_map = None
-                if hasattr(tool_class, "mock_response"):
-                    mock_map = {"default_response": tool_class.mock_response}
-
-                tags = getattr(tool_class, "tags", [])
-                react_role = getattr(tool_class, "react_role", ReactToolRole.STANDARD)
-
-                tool_ref = ToolReference(
-                    tool_id=tool_id,
-                    title=tool_class.__name__,
-                    description=tool_class.description,
-                    code=source_code,
-                    parameters_schema=parameters_schema_full,
-                    args_schema=args_schema_dict,
-                    mock_map=mock_map,
-                    tags=tags,
-                    react_role=react_role,
+            if tool_instance.args_schema is not None:
+                args_schema_dict = _call_parameters_from_pydantic_model(tool_instance.args_schema)
+                parameters_schema_full = pydantic_model_to_parameters_schema(
+                    tool_instance.args_schema
+                )
+            else:
+                args_schema_dict = tool_instance.call_parameters
+                parameters_schema_full = (
+                    call_parameters_to_parameters_schema(args_schema_dict)
+                    if args_schema_dict
+                    else None
                 )
 
-                await tool_repository.set(tool_ref)
-                loaded.append(tool_id)
-                logger.info(f"  {tool_id}: {tool_class.__name__}")
+            # mock_response
+            mock_map = None
+            if tool_instance.mock_response is not None:
+                if callable(tool_instance.mock_response):
+                    mock_map = {"default_response": "callable_mock"}
+                else:
+                    mock_map = {"default_response": tool_instance.mock_response}
+
+            tool_ref = ToolReference(
+                tool_id=tool_id,
+                title=tool_id,
+                description=tool_instance.description,
+                code=source_code,
+                parameters_schema=parameters_schema_full,
+                args_schema=args_schema_dict,
+                mock_map=mock_map,
+                tags=tool_instance.tags,
+                react_role=tool_instance.react_role,
+            )
+
+            await tool_repository.set(tool_ref)
+            loaded.append(tool_id)
+            loaded_ids.add(tool_id)
+            logger.info(f"  {tool_id}: FunctionTool")
+            continue
+
+        # BaseTool класс
+        if isinstance(attr, type) and issubclass(attr, BaseTool) and attr is not BaseTool:
+            tool_class = attr
+            tool_id = tool_class.name
+            if tool_id in loaded_ids:
+                continue
+
+            # Извлекаем исходный код класса
+            source_code = inspect.getsource(tool_class)
+
+            args_schema_dict: dict[str, CallParameter] = {}
+            parameters_schema_full = None
+            if tool_class.args_schema:
+                args_schema_dict = _call_parameters_from_pydantic_model(tool_class.args_schema)
+                parameters_schema_full = pydantic_model_to_parameters_schema(
+                    tool_class.args_schema
+                )
+
+            mock_map = None
+            if hasattr(tool_class, "mock_response"):
+                mock_map = {"default_response": tool_class.mock_response}
+
+            tags = getattr(tool_class, "tags", [])
+            react_role = getattr(tool_class, "react_role", ReactToolRole.STANDARD)
+
+            tool_ref = ToolReference(
+                tool_id=tool_id,
+                title=tool_class.__name__,
+                description=tool_class.description,
+                code=source_code,
+                parameters_schema=parameters_schema_full,
+                args_schema=args_schema_dict,
+                mock_map=mock_map,
+                tags=tags,
+                react_role=react_role,
+            )
+
+            await tool_repository.set(tool_ref)
+            loaded.append(tool_id)
+            loaded_ids.add(tool_id)
+            logger.info(f"  {tool_id}: {tool_class.__name__}")
 
     logger.info(f"Загружено {len(loaded)} tools в БД")
     return loaded

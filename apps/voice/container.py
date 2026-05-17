@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from apps.voice.config import get_voice_settings
 from apps.voice.providers.base import (
     BaseSTTProvider,
     BaseVADProvider,
@@ -44,8 +45,6 @@ class VoiceContainer(BaseContainer):
 
     @lazy
     def settings(self):
-        from apps.voice.config import get_voice_settings
-
         return get_voice_settings()
 
     async def create_vad_provider(

@@ -210,8 +210,7 @@ async def accept_invite(
     # Уже участник: не расходуем одноразовый токен; активная компания и JWT
     # совпадают с компанией приглашения (тот же перевыпуск, что host-wins в middleware).
     if user.user_id in company.members:
-        existing_roles = company.members[user.user_id]
-        roles_list = existing_roles if isinstance(existing_roles, list) else [existing_roles]
+        roles_list = list(company.members[user.user_id])
         logger.info(
             f"Пользователь {user.user_id} уже участник компании {company.company_id}"
         )

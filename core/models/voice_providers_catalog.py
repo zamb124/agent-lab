@@ -20,6 +20,7 @@ from core.clients.speech_provider_catalog import (
     cloud_ru_stt_model_ids,
     cloud_ru_tts_model_ids,
 )
+from core.config.models import SILERO_V5_RU_SPEAKERS_BY_BUNDLE
 
 
 class TtsLitserveVoiceHint(BaseModel):
@@ -60,8 +61,6 @@ class VoiceProvidersCatalogDTO(BaseModel):
 def build_voice_providers_catalog_dto(pls_settings: object) -> VoiceProvidersCatalogDTO:
     """Собирает каталог: статические allowlist из speech_provider_catalog, Litserve из conf."""
 
-    from core.config.models import SILERO_V5_RU_SPEAKERS_BY_BUNDLE
-
     def _nested_models(pls_any: object, name: str) -> list[object]:
         infra = getattr(pls_any, "infra", None)
         if infra is not None:
@@ -77,11 +76,12 @@ def build_voice_providers_catalog_dto(pls_settings: object) -> VoiceProvidersCat
         "sber": [["client_id"], ["client_secret"], ["scope"]],
     }
 
-    def _pull_ids(getter: object, field: str = "api_model_id") -> list[str]:
-        items = getter
+    def _pull_ids(items: list[object], field: str = "api_model_id") -> list[str]:
         ident: list[str] = []
         for entry in items:
-            v = getattr(entry, field)
+            v = getattr(entry, field, None)
+            if v is None:
+                continue
             ident.append(str(v))
         return ident
 
@@ -90,14 +90,18 @@ def build_voice_providers_catalog_dto(pls_settings: object) -> VoiceProvidersCat
     tts_models = _nested_models(pls_any, "tts_models")
     voice_hints: list[TtsLitserveVoiceHint] = []
     for tts in tts_models:
+        api_model_id = getattr(tts, "api_model_id", None)
+        if api_model_id is None:
+            continue
         bundle_raw = getattr(tts, "silero_bundle", None)
         bundle = str(bundle_raw).strip().lower() if bundle_raw is not None else ""
         allowed = SILERO_V5_RU_SPEAKERS_BY_BUNDLE.get(bundle, frozenset())
         voice_ids = sorted(allowed) if allowed else []
+        voice = getattr(tts, "voice", None)
         voice_hints.append(
             TtsLitserveVoiceHint(
-                api_model_id=str(tts.api_model_id),
-                default_voice=tts.voice if hasattr(tts, "voice") else None,
+                api_model_id=str(api_model_id),
+                default_voice=voice if isinstance(voice, str) else None,
                 voice_ids=voice_ids,
             )
         )

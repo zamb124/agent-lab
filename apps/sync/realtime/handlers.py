@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -34,7 +34,7 @@ from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.channels import ChannelRead, ChannelType, ChannelUpdate
 from apps.sync.models.common import UserBrief
 from apps.sync.models.git import GitResourceRefRead
-from apps.sync.models.meetings import CallRecordingRead
+from apps.sync.models.meetings import CallRecordingRead, RecordingStatus
 from apps.sync.models.messages import (
     MessageContentModel,
     MessageContentType,
@@ -44,9 +44,22 @@ from apps.sync.models.messages import (
     TextPlainContent,
 )
 from apps.sync.models.threads import ThreadRead
+from apps.sync.realtime.broker import broker as sync_worker_broker
+from apps.sync.realtime.context import resolve_company_id
+from apps.sync.realtime.events import (
+    RealtimeEvent,
+    event_message_created,
+    event_message_updated,
+)
 from apps.sync.realtime.notification_tasks import (
     deliver_channel_message_notification,
     deliver_sync_mention_notification,
+)
+from apps.sync.realtime.publish_events import publish_realtime_events
+from apps.sync.realtime.task_names import (
+    SYNC_FINALIZE_RECORDING_TASK_NAME,
+    SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME,
+    SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
 )
 from apps.sync.sender_display import sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
@@ -54,11 +67,34 @@ from core.calls.livekit_usage_spans import trace_livekit_egress_composite_usage
 from core.config import get_settings
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.db.repositories.user_repository import UserRepository
-from core.files.models import AudioAttachmentContent, AudioTranscriptionStatus, VideoAttachmentContent
+from core.files.models import (
+    AudioAttachmentContent,
+    AudioTranscriptionStatus,
+    VideoAttachmentContent,
+)
 from core.logging import get_logger
 from core.models.identity_models import Namespace
+from core.tasks.kicker import kiq_task_name_with_context
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
+
+
+def _recording_status(value: str) -> RecordingStatus:
+    if value == "requested":
+        return "requested"
+    if value == "recording":
+        return "recording"
+    if value == "uploaded":
+        return "uploaded"
+    if value == "failed":
+        return "failed"
+    raise ValueError(f"Unknown recording status: {value!r}")
+
+
+if TYPE_CHECKING:
+    from apps.sync.container import SyncContainer
+    from core.models.identity_models import User
 
 
 async def _channel_recipient_user_ids(
@@ -84,9 +120,13 @@ async def _maybe_start_speech_to_chat_poll(
         raise ValueError(f"Канал {channel_id} не найден.")
     if not ch.speech_to_chat_enabled:
         return
-    from apps.sync.realtime.tasks import sync_speech_to_chat_poll_task
-
-    await sync_speech_to_chat_poll_task.kiq(call_id=call_id, company_id=company_id)
+    await kiq_task_name_with_context(
+        SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME,
+        sync_worker_broker,
+        call_id=call_id,
+        company_id=company_id,
+        background_kind="sync_call",
+    )
 
 
 def _normalize_s3_egress_endpoint(endpoint_url: str | None) -> str | None:
@@ -128,7 +168,7 @@ def _recording_read_from_entity(recording: SyncCallRecording) -> CallRecordingRe
         channel_id=recording.channel_id,
         namespace=recording.namespace,
         started_by_user_id=recording.started_by_user_id,
-        status=recording.status,
+        status=_recording_status(recording.status),
         provider_job_id=recording.provider_job_id,
         raw_file_id=recording.raw_file_id,
         started_at=recording.started_at,
@@ -197,6 +237,8 @@ async def _stop_and_finalize_recording(
     if updated_recording is None:
         raise RuntimeError("Запись пропала после обновления.")
     if call.livekit_room_name is not None and call.livekit_room_name != "":
+        if recording.started_by_user_id is None:
+            raise RuntimeError("Recording started_by_user_id is required for egress billing trace")
         await trace_livekit_egress_composite_usage(
             company_id=company_id,
             user_id=recording.started_by_user_id,
@@ -207,12 +249,13 @@ async def _stop_and_finalize_recording(
             started_at=recording.started_at,
             ended_at=updated_recording.ended_at,
         )
-    from apps.sync.realtime.tasks import sync_finalize_recording_task
-
-    await sync_finalize_recording_task.kiq(
+    await kiq_task_name_with_context(
+        SYNC_FINALIZE_RECORDING_TASK_NAME,
+        sync_worker_broker,
         recording_id=updated_recording.recording_id,
         company_id=company_id,
         actor_user_id=actor_user_id,
+        background_kind="sync_call",
     )
     return _recording_read_from_entity(updated_recording)
 
@@ -230,23 +273,24 @@ def _notification_preview_from_message(message: MessageRead) -> str:
 
 async def _enqueue_channel_message_notifications(
     *,
-    payload,
+    channel_id: str,
+    body: MessageCreate,
     message: MessageRead,
     company_id: str,
     actor_user_id: str,
     channels: ChannelRepository,
 ) -> None:
-    entity = await channels.get(payload.channel_id)
+    entity = await channels.get(channel_id)
     if entity is None:
-        raise ValueError(f"Канал {payload.channel_id} не найден.")
+        raise ValueError(f"Канал {channel_id} не найден.")
     preview = _notification_preview_from_message(message)
     if entity.type == ChannelType.DIRECT.value:
         title = message.sender.display_name
     else:
         title = entity.name or "Канал"
-    member_ids = await channels.list_member_user_ids(payload.channel_id, company_id=company_id)
+    member_ids = await channels.list_member_user_ids(channel_id, company_id=company_id)
     mentioned: set[str] = set(message.mentioned_user_ids or [])
-    is_root_lane = payload.body.thread_id is None
+    is_root_lane = body.thread_id is None
 
     for uid in member_ids:
         if uid == actor_user_id:
@@ -254,7 +298,7 @@ async def _enqueue_channel_message_notifications(
         if uid in mentioned:
             await deliver_sync_mention_notification.kiq(
                 recipient_user_id=uid,
-                channel_id=payload.channel_id,
+                channel_id=channel_id,
                 company_id=company_id,
                 message_id=message.id,
                 sender_display_name=message.sender.display_name,
@@ -264,7 +308,7 @@ async def _enqueue_channel_message_notifications(
         elif is_root_lane:
             await deliver_channel_message_notification.kiq(
                 recipient_user_id=uid,
-                channel_id=payload.channel_id,
+                channel_id=channel_id,
                 company_id=company_id,
                 message_id=message.id,
                 sender_display_name=message.sender.display_name,
@@ -750,6 +794,107 @@ async def _send_message(
         forwarded_from_channel_name=forwarded_from_channel_name,
     )
     return await _message_read_from_db(row, messages, user_repository)
+
+
+async def send_message_with_side_effects(
+    *,
+    channel_id: str,
+    body: MessageCreate,
+    user: "User",
+    container: "SyncContainer",
+) -> MessageRead:
+    company_id = resolve_company_id(user)
+    await _ensure_actor_may_send_to_channel(
+        channel_id=channel_id,
+        company_id=company_id,
+        actor_user_id=user.user_id,
+        body=body,
+        channels=container.channel_repository,
+        calls=container.call_repository,
+    )
+    normalized_body = await _normalize_message_create_mentions(
+        body,
+        channel_id=channel_id,
+        company_id=company_id,
+        actor_user_id=user.user_id,
+        channels=container.channel_repository,
+    )
+    message = await _send_message(
+        channel_id,
+        normalized_body,
+        actor_user_id=user.user_id,
+        company_id=company_id,
+        messages=container.message_repository,
+        user_repository=container.user_repository,
+    )
+    await _enqueue_channel_message_notifications(
+        channel_id=channel_id,
+        body=normalized_body,
+        message=message,
+        company_id=company_id,
+        actor_user_id=user.user_id,
+        channels=container.channel_repository,
+    )
+    recipients = await _channel_recipient_user_ids(
+        container.channel_repository, channel_id, company_id
+    )
+    created_event = event_message_created(
+        message, company_id=company_id, recipient_user_ids=recipients
+    )
+    if body.local_id is not None and body.local_id != "":
+        created_event.payload["local_id"] = body.local_id
+    events: list[RealtimeEvent] = [created_event]
+
+    channel_entity = await container.channel_repository.get(channel_id)
+    if channel_entity is None:
+        raise WsCommandError("not_found", f"Канал {channel_id} не найден.")
+    if channel_entity.transcribe_voice_messages:
+        audio_idx = _find_first_audio_content_index(normalized_body.contents)
+        if audio_idx is not None:
+            block = normalized_body.contents[audio_idx]
+            if isinstance(block.data, AudioAttachmentContent):
+                if (
+                    block.data.transcription_status == AudioTranscriptionStatus.IDLE
+                    and not block.data.source_speech_to_chat
+                ):
+                    processing_contents = _set_audio_transcription_state(
+                        list(message.contents),
+                        status=AudioTranscriptionStatus.PROCESSING,
+                        transcription_text=None,
+                        transcription_error=None,
+                    )
+                    edited_at = datetime.now(tz=UTC)
+                    await container.message_repository.replace_message_contents(
+                        message.id, processing_contents, edited_at
+                    )
+                    proc_entity = await container.message_repository.get_by_id_for_company(
+                        message.id, company_id
+                    )
+                    if proc_entity is None:
+                        raise WsCommandError(
+                            "internal", "Сообщение пропало после запуска авто-транскрипции."
+                        )
+                    message = await _message_read_from_db(
+                        proc_entity, container.message_repository, container.user_repository
+                    )
+                    events.append(
+                        event_message_updated(
+                            message,
+                            company_id=company_id,
+                            recipient_user_ids=recipients,
+                        ),
+                    )
+                    await kiq_task_name_with_context(
+                        SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
+                        sync_worker_broker,
+                        channel_id=channel_id,
+                        message_id=message.id,
+                        company_id=company_id,
+                        actor_user_id=user.user_id,
+                        background_kind="sync_transcribe",
+                    )
+    await publish_realtime_events(events)
+    return message
 
 
 async def _create_thread(

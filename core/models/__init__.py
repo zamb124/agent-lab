@@ -15,8 +15,10 @@ from core.models.calendar_models import (
     CalendarEvent,
     CalendarEventSource,
     CalendarEventStatus,
+    CalendarEventUpsertPayload,
     CalendarExternalRef,
     CalendarIntegration,
+    CalendarIntegrationConnectPayload,
     CalendarIntegrationCredentials,
     CalendarIntegrationSettings,
     CalendarProvider,
@@ -56,8 +58,9 @@ __all__ = [
     "CalendarAttendee",
     "CalendarExternalRef",
     "CalendarEvent",
+    "CalendarEventUpsertPayload",
     "CalendarIntegrationCredentials",
     "CalendarIntegrationSettings",
     "CalendarIntegration",
+    "CalendarIntegrationConnectPayload",
 ]
-

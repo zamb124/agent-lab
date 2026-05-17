@@ -10,6 +10,7 @@ from apps.crm.container import get_crm_container
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm_worker.broker import broker
+from apps.crm_worker.task_names import CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN_TASK_NAME
 from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
 from core.config import get_settings
 from core.logging import get_logger
@@ -67,7 +68,7 @@ async def _journal_terminal_markdown(
     )
 
 
-@broker.task
+@broker.task(task_name=CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN_TASK_NAME, queue_name="crm")
 async def format_note_description_markdown_task(
     note_id: str,
     company_id: str,

@@ -28,7 +28,7 @@ from core.websocket import notification_manager
 
 logger = get_logger(__name__)
 
-_HOOKS_REGISTERED = False
+_hooks_registered = False
 
 
 async def _on_connect(user_id: str, company_id: str | None, was_first: bool) -> None:
@@ -70,10 +70,10 @@ async def _on_disconnect(user_id: str, company_id: str | None, was_last: bool) -
 
 def register_presence_hooks() -> None:
     """Идемпотентная регистрация. Повторный вызов — no-op."""
-    global _HOOKS_REGISTERED
-    if _HOOKS_REGISTERED:
+    global _hooks_registered
+    if _hooks_registered:
         return
     notification_manager.register_connect_hook(_on_connect)
     notification_manager.register_disconnect_hook(_on_disconnect)
-    _HOOKS_REGISTERED = True
+    _hooks_registered = True
     logger.info("Sync presence hooks зарегистрированы в core.websocket.notification_manager")

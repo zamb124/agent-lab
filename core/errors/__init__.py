@@ -141,7 +141,7 @@ class CyclicDependencyError(ConfigError):
     code = "CYCLIC_DEPENDENCY"
     message = "Обнаружена циклическая зависимость в графе"
 
-    def __init__(self, cycle_path: list, **kwargs):
+    def __init__(self, cycle_path: list[str], **kwargs):
         super().__init__(
             message=f"Циклическая зависимость: {' -> '.join(cycle_path)}",
             payload={"cycle_path": cycle_path},
@@ -160,7 +160,7 @@ class NodeConflictError(ConfigError):
     code = "NODE_CONFLICT"
     message = "Конфликт нод между ветками"
 
-    def __init__(self, node_id: str, branches: list, **kwargs):
+    def __init__(self, node_id: str, branches: list[str], **kwargs):
         super().__init__(
             message=f"Нода '{node_id}' конфликтует между ветками: {', '.join(branches)}",
             payload={"node_id": node_id, "branches": branches},
@@ -495,8 +495,8 @@ class PermissionDeniedError(SecurityError):
         self,
         resource_type: str,
         resource_id: str,
-        required_groups: list,
-        user_groups: list,
+        required_groups: list[str],
+        user_groups: list[str],
         **kwargs
     ):
         super().__init__(

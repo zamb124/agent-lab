@@ -9,7 +9,8 @@ from typing import Any, AsyncGenerator, Dict, Optional
 
 from opentelemetry.trace import Span
 
-from . import attributes as attr
+import core.tracing.attributes as attr
+
 from .context import TraceContext
 from .tracer import get_tracer
 

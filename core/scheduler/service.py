@@ -39,7 +39,7 @@ class SchedulerService:
 
     @staticmethod
     def _status_value(status: ScheduledTaskStatus | str) -> str:
-        return status.value if hasattr(status, "value") else str(status)
+        return status.value if isinstance(status, ScheduledTaskStatus) else str(status)
 
     def _calculate_next_run_at(
         self,
@@ -90,11 +90,15 @@ class SchedulerService:
     async def _create_schedule(self, task: PlatformScheduledTask) -> str:
         source = get_schedule_source(self._redis_url)
         await source.startup()
-        broker = self._broker_for_queue(task.queue_name)
+        queue_name = task.queue_name
+        if not queue_name:
+            raise ValueError(f"queue_name is required for scheduled task: {task.task_name}")
+        labels = {"queue_name": queue_name}
+        broker = self._broker_for_queue(queue_name)
         kicker = AsyncKicker(
             task_name=task.task_name,
             broker=broker,
-            labels=self._build_task_labels(task),
+            labels=labels,
         )
 
         if task.schedule_type == PlatformScheduleType.CRON:
@@ -262,8 +266,11 @@ class SchedulerService:
         task = await self.get(company_id, schedule_task_id)
         if task.status not in (ScheduledTaskStatus.PENDING, ScheduledTaskStatus.PAUSED):
             raise ValueError(f"cannot run-now task with status={self._status_value(task.status)}")
-        broker = self._broker_for_queue(task.queue_name)
-        labels = self._build_task_labels(task)
+        queue_name = task.queue_name
+        if not queue_name:
+            raise ValueError(f"queue_name is required for scheduled task: {task.task_name}")
+        labels = {"queue_name": queue_name}
+        broker = self._broker_for_queue(queue_name)
         labels.update(build_log_labels(background_kind="sched"))
         kicker = AsyncKicker(
             task_name=task.task_name,

@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import BillingSubscription, BillingUsage, ChangePlanRequest
 from core.clients.payment import PaymentProviderFactory
+from core.context import set_context
 from core.logging import get_logger
 from core.models.billing_models import TariffPlan
 from core.models.payment_models import CreatePaymentRequest, TransactionResponse
@@ -39,12 +40,11 @@ async def get_usage_stats(request: Request, container: ContainerDep):
 
     company = request.state.company
 
-    from core.context import set_context
     if hasattr(request.state, "context"):
         set_context(request.state.context)
 
     stats = await container.billing_service.get_company_usage_stats(company.company_id)
-    return BillingUsage(**stats)
+    return BillingUsage.model_validate(stats)
 
 @router.patch("/plan")
 async def change_plan(

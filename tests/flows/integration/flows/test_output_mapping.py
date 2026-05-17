@@ -140,7 +140,7 @@ class TestLlmNodeOutputMapping:
     """Тесты output_mapping для LlmNode (без structured output)."""
 
     @pytest.mark.asyncio
-    async def test_response_without_mapping(self, mock_llm_with_queue):
+    async def test_response_without_mapping(self, app, mock_llm_with_queue):
         """LlmNode: response без output_mapping -> state.response."""
         # Настраиваем MockLLM
         mock_llm_with_queue([{"type": "text", "content": "Hello! How can I help?"}])
@@ -148,6 +148,7 @@ class TestLlmNodeOutputMapping:
         node = LlmNode(
             node_id="test_agent",
             config={"prompt": "You are a helpful assistant"},
+            container=app.state.container,
         )
 
         state = make_state(content="Hello")
@@ -157,7 +158,7 @@ class TestLlmNodeOutputMapping:
         assert "Hello" in result.response or len(result.response) > 0
 
     @pytest.mark.asyncio
-    async def test_response_with_mapping(self, mock_llm_with_queue):
+    async def test_response_with_mapping(self, app, mock_llm_with_queue):
         """LlmNode: response с output_mapping -> маппинг."""
         # Настраиваем MockLLM
         mock_llm_with_queue([{"type": "text", "content": "Mock response"}])
@@ -168,6 +169,7 @@ class TestLlmNodeOutputMapping:
                 "prompt": "You are a helpful assistant",
                 "output_mapping": {"response": "agent_answer"},
             },
+            container=app.state.container,
         )
 
         state = make_state(content="Hello")
@@ -180,7 +182,7 @@ class TestLlmNodeStructuredOutput:
     """Тесты structured output для LlmNode."""
 
     @pytest.mark.asyncio
-    async def test_structured_output_without_mapping(self, mock_llm_with_queue):
+    async def test_structured_output_without_mapping(self, app, mock_llm_with_queue):
         """LlmNode: structured output без mapping -> поля напрямую."""
         # Настраиваем MockLLM с structured output ответом
         mock_llm_with_queue([{"type": "structured_output", "data": {"name": "John", "age": 25}}])
@@ -196,6 +198,7 @@ class TestLlmNodeStructuredOutput:
                     "required": ["name", "age"],
                 },
             },
+            container=app.state.container,
         )
 
         state = make_state(content="My name is John and I am 25 years old")
@@ -205,7 +208,7 @@ class TestLlmNodeStructuredOutput:
         assert result.age == 25
 
     @pytest.mark.asyncio
-    async def test_structured_output_with_mapping(self, mock_llm_with_queue):
+    async def test_structured_output_with_mapping(self, app, mock_llm_with_queue):
         """LlmNode: structured output с mapping -> маппинг полей."""
         # Настраиваем MockLLM с structured output ответом
         mock_llm_with_queue([{"type": "structured_output", "data": {"name": "Alice", "score": 95}}])
@@ -222,6 +225,7 @@ class TestLlmNodeStructuredOutput:
                 },
                 "output_mapping": {"name": "user_name", "score": "user_score"},
             },
+            container=app.state.container,
         )
 
         state = make_state(content="Extract info")

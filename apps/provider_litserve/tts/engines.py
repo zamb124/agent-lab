@@ -18,6 +18,7 @@ from typing import Any
 
 import numpy as np
 import torch
+from silero import silero_tts
 
 from apps.provider_litserve.model_registry import find_tts_entry
 from apps.provider_litserve.runtime_models import (
@@ -209,12 +210,6 @@ class LocalTTSEngine:
         key = self._cache_key(entry)
         if key in self._models:
             return self._models[key]
-        try:
-            from silero import silero_tts
-        except ImportError as exc:
-            raise RuntimeError(
-                "TTS: установите зависимость silero (uv add silero --group rag)"
-            ) from exc
 
         logger.info(
             "Загрузка Silero TTS: api=%s bundle=%s lang=%s device=%s",
@@ -224,11 +219,14 @@ class LocalTTSEngine:
             self._device,
         )
         started = time.monotonic()
-        model, _example = silero_tts(
+        silero_result = silero_tts(
             language=entry.silero_language,
             speaker=entry.silero_bundle,
             device=self._torch_device(),
         )
+        if not isinstance(silero_result, tuple) or len(silero_result) < 2:
+            raise RuntimeError("silero_tts вернул некорректный результат")
+        model = silero_result[0]
         self._models[key] = model
         logger.info(
             "Silero TTS %s загружен за %.2fs",

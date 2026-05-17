@@ -82,7 +82,7 @@ class VarResolver:
 
         visited = set() if _visited is None else set(_visited)
 
-        def replace_var(match: re.Match) -> str:
+        def replace_var(match: re.Match[str]) -> str:
             ref_path = match.group(1)
             resolved = cls.resolve_ref(f"@var:{ref_path}", variables, visited)
             return str(resolved)
@@ -486,7 +486,7 @@ class VariableResolver:
                         continue
 
                     expr = text[expr_start:i]
-                    default = None
+                    default = ""
                     has_default = False
 
                     if i < len(text) and text[i] == '|':
@@ -613,7 +613,7 @@ class VariableResolver:
 
                     if j > i + 1:
                         expr = text[i+1:j]
-                        default = None
+                        default = ""
                         has_default = False
 
                         if j < len(text) and text[j] == '|':
@@ -682,4 +682,6 @@ def set_state_in_context(state: Dict[str, Any]) -> None:
         state: State агента для установки в контекст
     """
     context = get_context()
+    if context is None:
+        raise RuntimeError("Нельзя установить state: контекст запроса не установлен")
     context.state = state

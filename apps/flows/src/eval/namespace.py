@@ -66,7 +66,7 @@ from core.clients.pravo import PravoClient, PravoClientError
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.context import get_context
-from core.files import DocxTemplateError, DocxTemplater
+from core.files.docx_template import DocxTemplateError, DocxTemplater
 from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
 from core.files.writer import FileWriteError, FileWriter

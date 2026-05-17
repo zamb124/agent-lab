@@ -34,7 +34,7 @@ class UsageType(str, Enum):
 class UsageRecord(BaseModel):
     """Запись об использовании ресурсов"""
 
-    model_config = ConfigDict(storage_prefix="usage")
+    model_config = ConfigDict(json_schema_extra={"storage_prefix": "usage"})
 
     usage_id: str = Field(
         title="ID записи",
@@ -90,4 +90,3 @@ DEFAULT_TARIFF_PRICES = {
 # Для обратной совместимости
 TARIFF_PRICES = DEFAULT_TARIFF_PRICES
 TARIFF_LIMITS = {}
-

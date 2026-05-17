@@ -11,7 +11,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 
-from core.clients import RedisClient
+from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 
 from .base import BaseSubscriber, StreamEvent
@@ -116,17 +116,6 @@ class EventSubscriber(BaseSubscriber):
         timeout: float = 300.0,
         ready_event: asyncio.Event | None = None,
     ) -> list[StreamEvent]:
-        events: list[StreamEvent] = []
-        async for event in self.subscribe(task_id, timeout=timeout, ready_event=ready_event):
-            events.append(event)
-        return events
-
-    async def collect(
-        self,
-        task_id: str,
-        timeout: float = 300.0,
-        ready_event: asyncio.Event | None = None,
-    ) -> list[StreamEvent]:
         """
         Собирает все события до финального.
 
@@ -139,7 +128,7 @@ class EventSubscriber(BaseSubscriber):
             Список всех событий
         """
         events: list[StreamEvent] = []
-        async for event in self.subscribe(task_id, timeout, ready_event=ready_event):
+        async for event in self.subscribe(task_id, timeout=timeout, ready_event=ready_event):
             events.append(event)
         return events
 

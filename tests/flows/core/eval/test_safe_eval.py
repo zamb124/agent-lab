@@ -9,8 +9,8 @@ import pytest
 from apps.flows.src.eval.safe_eval import compile_function, safe_eval
 from apps.flows.src.eval.state_utils import deep_copy_state, get_nested, merge_state, set_nested
 from apps.flows.src.eval.wrappers import SafeContext
-from core.errors import SafeEvalError
 from core.context import Context, User
+from core.errors import SafeEvalError
 from core.state import ExecutionState
 
 

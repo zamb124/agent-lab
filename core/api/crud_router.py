@@ -4,7 +4,9 @@
 """
 
 import inspect
-from typing import Annotated, Any, Callable, Dict, List, TypeVar
+from collections.abc import Awaitable, Callable, Sequence
+from enum import Enum
+from typing import Annotated, Any, Dict, Generic, List, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -22,7 +24,7 @@ EXCLUDED_METHODS = {
     '_build_final_key', 'get_service_url'
 }
 
-class CRUDRouterGenerator:
+class CRUDRouterGenerator(Generic[T]):
     """
     Генератор роутеров для репозиториев.
 
@@ -35,12 +37,12 @@ class CRUDRouterGenerator:
         self,
         repository: BaseRepository[T],
         prefix: str,
-        tags: List[str],
-        repository_dependency: Callable
+        tags: Sequence[str | Enum],
+        repository_dependency: Callable[..., BaseRepository[T]],
     ):
         self._repository = repository
         self._prefix = prefix
-        self._tags = tags
+        self._tags = list(tags)
         self._repository_dependency = repository_dependency
         self._model_class = repository.model_class
 
@@ -48,22 +50,21 @@ class CRUDRouterGenerator:
         """Генерирует FastAPI роутер с эндпоинтами для всех методов репозитория"""
         router = APIRouter(prefix=self._prefix, tags=self._tags)
 
-        RepositoryDep = Annotated[BaseRepository[T], Depends(self._repository_dependency)]
-
         # Стандартные CRUD эндпоинты (оптимизированные)
-        self._add_standard_crud(router, RepositoryDep)
+        self._add_standard_crud(router)
 
         # Динамические эндпоинты для всех остальных методов
-        self._add_dynamic_methods(router, RepositoryDep)
+        self._add_dynamic_methods(router)
 
         return router
 
-    def _add_standard_crud(self, router: APIRouter, RepositoryDep):
+    def _add_standard_crud(self, router: APIRouter) -> None:
         """Добавляет стандартные CRUD эндпоинты"""
+        repository_dependency = self._repository_dependency
 
         @router.get("", response_model=ListResponse[Dict[str, Any]])
         async def list_entities(
-            repository: RepositoryDep,
+            repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
             limit: int = Query(100, ge=1, le=1000),
             offset: int = Query(0, ge=0)
         ):
@@ -72,7 +73,10 @@ class CRUDRouterGenerator:
             return ListResponse[Dict[str, Any]](items=[entity.model_dump() for entity in entities])
 
         @router.get("/{entity_id}", response_model=Dict[str, Any])
-        async def get_entity(entity_id: str, repository: RepositoryDep):
+        async def get_entity(
+            entity_id: str,
+            repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
+        ):
             """Получить сущность по ID"""
             entity = await repository.get(entity_id)
             if not entity:
@@ -80,7 +84,10 @@ class CRUDRouterGenerator:
             return entity.model_dump()
 
         @router.post("", response_model=Dict[str, Any])
-        async def create_or_update_entity(entity_data: Dict[str, Any], repository: RepositoryDep):
+        async def create_or_update_entity(
+            entity_data: Dict[str, Any],
+            repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
+        ):
             """Создать или обновить сущность"""
             try:
                 entity = self._model_class.model_validate(entity_data)
@@ -93,7 +100,10 @@ class CRUDRouterGenerator:
             return entity.model_dump()
 
         @router.delete("/{entity_id}")
-        async def delete_entity(entity_id: str, repository: RepositoryDep):
+        async def delete_entity(
+            entity_id: str,
+            repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
+        ):
             """Удалить сущность по ID"""
             success = await repository.delete(entity_id)
             if not success:
@@ -101,18 +111,21 @@ class CRUDRouterGenerator:
             return {"success": True, "entity_id": entity_id}
 
         @router.post("/many", response_model=Dict[str, Dict[str, Any]])
-        async def get_many_entities(entity_ids: List[str], repository: RepositoryDep):
+        async def get_many_entities(
+            entity_ids: List[str],
+            repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
+        ):
             """Получить несколько сущностей по ID"""
             if not entity_ids:
                 return {}
             entities = await repository.get_many(entity_ids)
             return {eid: entity.model_dump() for eid, entity in entities.items()}
 
-    def _add_dynamic_methods(self, router: APIRouter, RepositoryDep):
+    def _add_dynamic_methods(self, router: APIRouter) -> None:
         """Добавляет эндпоинты для всех кастомных методов репозитория"""
 
         # Находим все публичные async методы
-        for name, method in inspect.getmembers(self.repository, predicate=inspect.ismethod):
+        for name, method in inspect.getmembers(self._repository, predicate=inspect.ismethod):
             if name.startswith('_') or name in EXCLUDED_METHODS:
                 continue
 
@@ -124,16 +137,16 @@ class CRUDRouterGenerator:
             if not inspect.iscoroutinefunction(method):
                 continue
 
-            self._add_method_endpoint(router, name, method, RepositoryDep)
+            self._add_method_endpoint(router, name, method)
 
     def _add_method_endpoint(
         self,
         router: APIRouter,
         method_name: str,
-        method: Callable,
-        RepositoryDep
-    ):
+        method: Callable[..., Awaitable[Any]],
+    ) -> None:
         """Создает эндпоинт для конкретного метода репозитория"""
+        repository_dependency = self._repository_dependency
 
         # Получаем сигнатуру метода для документации
         sig = inspect.signature(method)
@@ -143,7 +156,7 @@ class CRUDRouterGenerator:
 
         async def method_handler(
             payload: Dict[str, Any],
-            repository: RepositoryDep
+            repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
         ):
             """Универсальный обработчик для метода репозитория"""
             args = payload.get("args", [])

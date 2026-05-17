@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
+import core.tracing.attributes as trace_attr
 from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.billing.settlement_rules import resolve_matched_rules
-from core.tracing import attributes as trace_attr
 
 
 def _span(operation_name: str, attrs: dict | None = None) -> dict:

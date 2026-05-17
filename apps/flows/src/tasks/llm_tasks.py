@@ -8,6 +8,8 @@ from typing import Any
 
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
 
+import core.tracing.attributes as trace_attributes
+from apps.flows.src.tasks.task_names import TASK_INVOKE_LLM
 from apps.flows_worker.broker import broker
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
@@ -16,13 +18,12 @@ from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.models.context_models import Context
-from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="invoke_llm", queue_name="flows_worker")
+@broker.task(task_name=TASK_INVOKE_LLM, queue_name="flows_worker")
 async def invoke_llm(
     messages: list[dict[str, str]],
     tools: list[dict[str, Any]] | None = None,

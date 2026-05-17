@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import and_, select
 
+import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMEntity, CRMTask
 from apps.crm.db.repositories.task_repository import CRM_TASK_TERMINAL_STATUSES
@@ -22,11 +23,14 @@ from apps.crm.services.namespace_notification_recipients import (
 )
 from apps.crm.services.task_service import ALL_NAMESPACES_TASK_KEY
 from apps.crm_worker.broker import broker
+from apps.crm_worker.task_names import (
+    CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
+    CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
+)
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import User
-from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 from core.utils.tokens import TokenType, get_token_service
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -170,7 +174,7 @@ async def _snapshot_crm_task_if_present(
     )
 
 
-@broker.task(task_name="crm_rebuild_daily_summary", queue_name="crm")
+@broker.task(task_name=CRM_REBUILD_DAILY_SUMMARY_TASK_NAME, queue_name="crm")
 async def rebuild_daily_summary_task(
     company_id: str,
     date_str: str,
@@ -281,7 +285,7 @@ async def rebuild_daily_summary_task(
     return state
 
 
-@broker.task(task_name="crm_rebuild_period_summary", queue_name="crm")
+@broker.task(task_name=CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME, queue_name="crm")
 async def rebuild_period_summary_task(
     company_id: str,
     date_from: str,

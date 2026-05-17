@@ -63,6 +63,7 @@ class TestCancellationBetweenNodes:
                 ],
             },
             variables={},
+            container=container,
         )
 
         state = ExecutionState(
@@ -130,6 +131,7 @@ class TestCancellationBetweenNodes:
                 ],
             },
             variables={},
+            container=container,
         )
 
         state = ExecutionState(
@@ -227,6 +229,7 @@ class TestCancellationInReactLoop:
                 ],
             },
             variables={},
+            container=container,
         )
 
         mock_llm_with_queue([

@@ -10,11 +10,15 @@ Storage - key-value storage для всех сущностей платформ�
 """
 
 import json
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from types import TracebackType
+from typing import Optional, TypedDict, cast
 
-from sqlalchemy import Column, DateTime, MetaData, String, Table, delete, select, text
+from sqlalchemy import Column, DateTime, MetaData, String, Table, delete, select
+from sqlalchemy import func as sa_func
 from sqlalchemy.dialects.postgresql import JSONB, insert
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from core.db.database import get_session_factory
 from core.db.models import (
@@ -34,17 +38,25 @@ from core.db.models import (
 )
 from core.db.utils import get_rowcount
 from core.logging import get_logger
+from core.models.context_models import Context
 
 logger = get_logger(__name__)
-TABLE_MODELS = {
-    "storage": StorageModel,
-    "users": UsersModel,
-    "variables": VariablesModel,
-    "usage": UsageModel,
-    "namespaces": NamespacesModel,
+
+
+class TableRoute(TypedDict):
+    table: str
+    company_specific: bool
+
+
+KNOWN_STORAGE_TABLES: Mapping[str, Table] = {
+    "storage": cast(Table, StorageModel.__table__),
+    "users": cast(Table, UsersModel.__table__),
+    "variables": cast(Table, VariablesModel.__table__),
+    "usage": cast(Table, UsageModel.__table__),
+    "namespaces": cast(Table, NamespacesModel.__table__),
 }
 
-TABLE_ROUTING = {
+TABLE_ROUTING: Mapping[str, TableRoute] = {
     "user:": {"table": "users", "company_specific": False},
     "user_providers:": {"table": "users", "company_specific": False},
     "auth_session:": {"table": "users", "company_specific": False},
@@ -55,25 +67,46 @@ TABLE_ROUTING = {
     "_default": {"table": "storage", "company_specific": False},
 }
 
+ContextGetter = Callable[[], Context | None]
+
+
+def _encode_storage_value(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value)
+
+
+def _row_key(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError("Storage key column must be str")
+    return value
+
 
 class _SessionContextManager:
     """Асинхронный контекстный менеджер для сессий БД"""
 
     def __init__(self, storage: "Storage"):
         self._storage = storage
-        self._session = None
+        self._session: AsyncSession | None = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> AsyncSession:
         if self._storage.session_factory is None:
             self._storage.session_factory = await get_session_factory(self._storage.db_url)
             logger.debug("Session factory инициализирован в Storage")
 
-        self._session = self._storage.session_factory()
+        session_factory = self._storage.session_factory
+        self._session = session_factory()
         return await self._session.__aenter__()
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._session:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        if self._session is not None:
             return await self._session.__aexit__(exc_type, exc_val, exc_tb)
+        return None
 
 
 class Storage:
@@ -85,14 +118,18 @@ class Storage:
         get_context_func: Функция для получения контекста (опционально)
     """
 
-    def __init__(self, db_url: Optional[str] = None, get_context_func=None):
-        self.session_factory = None
-        self.db_url = db_url
-        self.get_context_func = get_context_func
-        self._table_cache = {}
+    def __init__(
+        self,
+        db_url: Optional[str] = None,
+        get_context_func: ContextGetter | None = None,
+    ):
+        self.session_factory: async_sessionmaker[AsyncSession] | None = None
+        self.db_url: str | None = db_url
+        self.get_context_func: ContextGetter | None = get_context_func
+        self._table_cache: dict[str, Table] = {}
         self._metadata = MetaData()
 
-    def get_session(self):
+    def get_session(self) -> _SessionContextManager:
         """Возвращает асинхронный контекстный менеджер для сессии БД"""
         return _SessionContextManager(self)
 
@@ -128,21 +165,22 @@ class Storage:
             return f"{company_id}_{table_name}"
         return table_name
 
-    def _get_table_model(self, table_name: str):
-        """Возвращает SQLAlchemy модель таблицы."""
+    def _get_table(self, table_name: str) -> Table:
+        """Возвращает SQLAlchemy Table для key-value хранилища."""
         if table_name in self._table_cache:
             return self._table_cache[table_name]
 
-        if table_name in TABLE_MODELS:
-            model = TABLE_MODELS[table_name]
-            self._table_cache[table_name] = model
-            return model
+        known_table = KNOWN_STORAGE_TABLES.get(table_name)
+        if known_table is not None:
+            self._table_cache[table_name] = known_table
+            return known_table
 
         table = Table(
             table_name,
             self._metadata,
             Column("key", String, primary_key=True, index=True),
             Column("value", JSONB, nullable=False),
+            Column("expired_at", DateTime(timezone=True)),
             Column("created_at", DateTime(timezone=True)),
             Column("updated_at", DateTime(timezone=True)),
             extend_existing=True,
@@ -181,7 +219,12 @@ class Storage:
 
         return key, None
 
-    async def get(self, key: str, db_session=None, force_global: bool = False) -> Optional[str]:
+    async def get(
+        self,
+        key: str,
+        db_session: AsyncSession | None = None,
+        force_global: bool = False,
+    ) -> Optional[str]:
         """
         Получает значение по ключу.
 
@@ -202,25 +245,20 @@ class Storage:
         async with self.get_session() as session:
             return await self._get_with_session(final_key, table_name, session)
 
-    async def _get_with_session(self, key: str, table_name: str, session) -> Optional[str]:
+    async def _get_with_session(
+        self,
+        key: str,
+        table_name: str,
+        session: AsyncSession,
+    ) -> Optional[str]:
         """Получает значение с использованием переданной сессии"""
-        model = self._get_table_model(table_name)
+        table = self._get_table(table_name)
 
-        if model in TABLE_MODELS.values():
-            result = await session.execute(select(model.value).where(model.key == key))
-        else:
-            query = text(f"SELECT value FROM {table_name} WHERE key = :key")
-            result = await session.execute(query, {"key": key})
+        result = await session.execute(select(table.c["value"]).where(table.c["key"] == key))
 
         row = result.first()
         if row:
-            value = row.value if hasattr(row, "value") else row[0]
-            if isinstance(value, dict):
-                return json.dumps(value)
-            elif isinstance(value, str):
-                return value
-            else:
-                return json.dumps(value)
+            return _encode_storage_value(cast(object, row[0]))
         return None
 
     async def set(
@@ -228,7 +266,7 @@ class Storage:
         key: str,
         value: str,
         ttl: Optional[int] = None,
-        db_session=None,
+        db_session: AsyncSession | None = None,
         force_global: bool = False,
     ) -> bool:
         """
@@ -257,7 +295,12 @@ class Storage:
             return result
 
     async def _set_with_session(
-        self, key: str, value: str, ttl: Optional[int], table_name: str, session
+        self,
+        key: str,
+        value: str,
+        ttl: Optional[int],
+        table_name: str,
+        session: AsyncSession,
     ) -> bool:
         """Сохраняет значение с использованием переданной сессии"""
         json_value = json.loads(value)
@@ -280,48 +323,33 @@ class Storage:
             else:
                 expired_at = datetime.now(timezone.utc) + timedelta(days=5)
 
-        model = self._get_table_model(table_name)
-
-        if model in TABLE_MODELS.values():
-            # Используем правильный синтаксис для ON CONFLICT с primary key
-            now = datetime.now(timezone.utc)
-            stmt = insert(model).values(
-                key=key, value=json_value, expired_at=expired_at, updated_at=now
-            )
-            # Для primary key используем index_elements - это работает для primary key
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["key"],
-                set_=dict(
-                    value=stmt.excluded.value,
-                    updated_at=now,
-                    expired_at=stmt.excluded.expired_at,
-                ),
-            )
-            await session.execute(stmt)
-        else:
-            query = text(f"""
-                INSERT INTO {table_name} (key, value, expired_at, created_at, updated_at)
-                VALUES (:key, :value, :expired_at, :created_at, :updated_at)
-                ON CONFLICT (key) DO UPDATE SET
-                    value = EXCLUDED.value,
-                    updated_at = EXCLUDED.updated_at,
-                    expired_at = EXCLUDED.expired_at
-            """)
-            now = datetime.now(timezone.utc)
-            await session.execute(
-                query,
-                {
-                    "key": key,
-                    "value": json.dumps(json_value),
-                    "expired_at": expired_at,
-                    "created_at": now,
-                    "updated_at": now,
-                },
-            )
+        table = self._get_table(table_name)
+        now = datetime.now(timezone.utc)
+        stmt = insert(table).values(
+            key=key,
+            value=json_value,
+            expired_at=expired_at,
+            created_at=now,
+            updated_at=now,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["key"],
+            set_=dict(
+                value=stmt.excluded["value"],
+                updated_at=now,
+                expired_at=stmt.excluded["expired_at"],
+            ),
+        )
+        await session.execute(stmt)
 
         return True
 
-    async def delete(self, key: str, db_session=None, force_global: bool = False) -> bool:
+    async def delete(
+        self,
+        key: str,
+        db_session: AsyncSession | None = None,
+        force_global: bool = False,
+    ) -> bool:
         """
         Удаляет значение по ключу.
 
@@ -345,15 +373,16 @@ class Storage:
             await session.flush()  # Убеждаемся что изменения видны
             return result
 
-    async def _delete_with_session(self, key: str, table_name: str, session) -> bool:
+    async def _delete_with_session(
+        self,
+        key: str,
+        table_name: str,
+        session: AsyncSession,
+    ) -> bool:
         """Удаляет значение с использованием переданной сессии"""
-        model = self._get_table_model(table_name)
+        table = self._get_table(table_name)
 
-        if model in TABLE_MODELS.values():
-            result = await session.execute(delete(model).where(model.key == key))
-        else:
-            query = text(f"DELETE FROM {table_name} WHERE key = :key")
-            result = await session.execute(query, {"key": key})
+        result = await session.execute(delete(table).where(table.c["key"] == key))
 
         deleted = get_rowcount(result) > 0
         if deleted:
@@ -362,7 +391,7 @@ class Storage:
 
     async def list_by_prefix(
         self, prefix: str, limit: int = 100, force_global: bool = False
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Получает список ключей по префиксу.
 
@@ -378,19 +407,11 @@ class Storage:
         table_name = self._get_table_name(prefix, company_id)
 
         async with self.get_session() as session:
-            model = self._get_table_model(table_name)
-
-            if model in TABLE_MODELS.values():
-                result = await session.execute(
-                    select(model.key).where(model.key.like(f"{final_prefix}%")).limit(limit)
-                )
-                return [row.key for row in result]
-            else:
-                query = text(f"SELECT key FROM {table_name} WHERE key LIKE :prefix LIMIT :limit")
-                result = await session.execute(
-                    query, {"prefix": f"{final_prefix}%", "limit": limit}
-                )
-                return [row[0] for row in result]
+            table = self._get_table(table_name)
+            result = await session.execute(
+                select(table.c["key"]).where(table.c["key"].like(f"{final_prefix}%")).limit(limit)
+            )
+            return [_row_key(cast(object, row[0])) for row in result]
 
     async def get_all_by_prefix(
         self, prefix: str, limit: int = 1000, force_global: bool = False
@@ -411,37 +432,21 @@ class Storage:
         table_name = self._get_table_name(prefix, company_id)
 
         async with self.get_session() as session:
-            model = self._get_table_model(table_name)
+            table = self._get_table(table_name)
+            result = await session.execute(
+                select(table.c["key"], table.c["value"])
+                .where(table.c["key"].like(f"{final_prefix}%"))
+                .limit(limit)
+            )
 
-            if model in TABLE_MODELS.values():
-                result = await session.execute(
-                    select(model.key, model.value)
-                    .where(model.key.like(f"{final_prefix}%"))
-                    .limit(limit)
-                )
-            else:
-                query = text(
-                    f"SELECT key, value FROM {table_name} WHERE key LIKE :prefix LIMIT :limit"
-                )
-                result = await session.execute(
-                    query, {"prefix": f"{final_prefix}%", "limit": limit}
-                )
-
-            data = {}
+            data: dict[str, str] = {}
             for row in result:
-                key = row.key if hasattr(row, "key") else row[0]
-                value = row.value if hasattr(row, "value") else row[1]
-
-                if isinstance(value, dict):
-                    data[key] = json.dumps(value)
-                elif isinstance(value, str):
-                    data[key] = value
-                else:
-                    data[key] = json.dumps(value)
+                key = _row_key(cast(object, row[0]))
+                data[key] = _encode_storage_value(cast(object, row[1]))
 
             return data
 
-    async def get_many(self, keys: List[str], force_global: bool = False) -> dict[str, str]:
+    async def get_many(self, keys: list[str], force_global: bool = False) -> dict[str, str]:
         """
         Получает множество значений по списку ключей за один запрос.
 
@@ -455,8 +460,8 @@ class Storage:
         if not keys:
             return {}
 
-        final_keys = []
-        key_mapping = {}
+        final_keys: list[str] = []
+        key_mapping: dict[str, str] = {}
         for key in keys:
             final_key, _ = self._get_company_key(key, force_global)
             final_keys.append(final_key)
@@ -465,31 +470,16 @@ class Storage:
         table_name = self._get_table_name(keys[0], None)
 
         async with self.get_session() as session:
-            model = self._get_table_model(table_name)
+            table = self._get_table(table_name)
+            result = await session.execute(
+                select(table.c["key"], table.c["value"]).where(table.c["key"].in_(final_keys))
+            )
 
-            if model in TABLE_MODELS.values():
-                result = await session.execute(
-                    select(model.key, model.value).where(model.key.in_(final_keys))
-                )
-            else:
-                placeholders = ",".join([f":key{i}" for i in range(len(final_keys))])
-                query = text(f"SELECT key, value FROM {table_name} WHERE key IN ({placeholders})")
-                params = {f"key{i}": k for i, k in enumerate(final_keys)}
-                result = await session.execute(query, params)
-
-            data = {}
+            data: dict[str, str] = {}
             for row in result:
-                final_key = row.key if hasattr(row, "key") else row[0]
-                value = row.value if hasattr(row, "value") else row[1]
-
+                final_key = _row_key(cast(object, row[0]))
                 original_key = key_mapping.get(final_key, final_key)
-
-                if isinstance(value, dict):
-                    data[original_key] = json.dumps(value)
-                elif isinstance(value, str):
-                    data[original_key] = value
-                else:
-                    data[original_key] = json.dumps(value)
+                data[original_key] = _encode_storage_value(cast(object, row[1]))
 
             return data
 
@@ -567,57 +557,33 @@ class Storage:
         if offset < 0:
             raise ValueError("offset должен быть >= 0")
         async with self.get_session() as session:
-            model = self._get_table_model(table_name)
+            table = self._get_table(table_name)
+            result = await session.execute(
+                select(table.c["key"], table.c["value"])
+                .where(table.c["key"].like(f"{prefix}%"))
+                .order_by(table.c["updated_at"].desc())
+                .offset(offset)
+                .limit(limit)
+            )
 
-            if model in TABLE_MODELS.values():
-                result = await session.execute(
-                    select(model.key, model.value)
-                    .where(model.key.like(f"{prefix}%"))
-                    .order_by(model.updated_at.desc())
-                    .offset(offset)
-                    .limit(limit)
-                )
-            else:
-                query = text(
-                    f"SELECT key, value FROM {table_name} WHERE key LIKE :prefix "
-                    "ORDER BY updated_at DESC LIMIT :limit OFFSET :offset"
-                )
-                result = await session.execute(
-                    query, {"prefix": f"{prefix}%", "limit": limit, "offset": offset}
-                )
-
-            data = {}
+            data: dict[str, str] = {}
             for row in result:
-                key = row.key if hasattr(row, "key") else row[0]
-                value = row.value if hasattr(row, "value") else row[1]
-
-                if isinstance(value, dict):
-                    data[key] = json.dumps(value)
-                elif isinstance(value, str):
-                    data[key] = value
-                else:
-                    data[key] = json.dumps(value)
+                key = _row_key(cast(object, row[0]))
+                data[key] = _encode_storage_value(cast(object, row[1]))
 
             return data
 
     async def _count_by_prefix_and_table(self, prefix: str, table_name: str) -> int:
         """Считает количество записей по префиксу в таблице. Используется BaseRepository."""
         async with self.get_session() as session:
-            model = self._get_table_model(table_name)
-            if model in TABLE_MODELS.values():
-                from sqlalchemy import func as sa_func
+            table = self._get_table(table_name)
+            result = await session.execute(
+                select(sa_func.count()).where(table.c["key"].like(f"{prefix}%"))
+            )
+            count = result.scalar_one()
+            return int(count)
 
-                result = await session.execute(
-                    select(sa_func.count()).where(model.key.like(f"{prefix}%"))
-                )
-            else:
-                result = await session.execute(
-                    text(f"SELECT COUNT(*) FROM {table_name} WHERE key LIKE :prefix"),
-                    {"prefix": f"{prefix}%"},
-                )
-            return result.scalar() or 0
-
-    async def get_many_with_table(self, keys: List[str], table_name: str) -> dict[str, str]:
+    async def get_many_with_table(self, keys: list[str], table_name: str) -> dict[str, str]:
         """
         Низкоуровневый метод для получения нескольких значений из конкретной таблицы.
         Используется BaseRepository.
@@ -633,35 +599,21 @@ class Storage:
             return {}
 
         async with self.get_session() as session:
-            model = self._get_table_model(table_name)
+            table = self._get_table(table_name)
+            result = await session.execute(
+                select(table.c["key"], table.c["value"]).where(table.c["key"].in_(keys))
+            )
 
-            if model in TABLE_MODELS.values():
-                result = await session.execute(
-                    select(model.key, model.value).where(model.key.in_(keys))
-                )
-            else:
-                placeholders = ",".join([f":key{i}" for i in range(len(keys))])
-                query = text(f"SELECT key, value FROM {table_name} WHERE key IN ({placeholders})")
-                params = {f"key{i}": k for i, k in enumerate(keys)}
-                result = await session.execute(query, params)
-
-            data = {}
+            data: dict[str, str] = {}
             for row in result:
-                key = row.key if hasattr(row, "key") else row[0]
-                value = row.value if hasattr(row, "value") else row[1]
-
-                if isinstance(value, dict):
-                    data[key] = json.dumps(value)
-                elif isinstance(value, str):
-                    data[key] = value
-                else:
-                    data[key] = json.dumps(value)
+                key = _row_key(cast(object, row[0]))
+                data[key] = _encode_storage_value(cast(object, row[1]))
 
             return data
 
     async def _list_keys_by_prefix_and_table(
         self, prefix: str, table_name: str, limit: int = 10000
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Низкоуровневый метод для получения списка ключей по префиксу из конкретной таблицы.
         Используется для массового удаления данных компании.
@@ -675,14 +627,8 @@ class Storage:
             Список ключей
         """
         async with self.get_session() as session:
-            model = self._get_table_model(table_name)
-
-            if model in TABLE_MODELS.values():
-                result = await session.execute(
-                    select(model.key).where(model.key.like(f"{prefix}%")).limit(limit)
-                )
-                return [row.key for row in result]
-            else:
-                query = text(f"SELECT key FROM {table_name} WHERE key LIKE :prefix LIMIT :limit")
-                result = await session.execute(query, {"prefix": f"{prefix}%", "limit": limit})
-                return [row[0] for row in result]
+            table = self._get_table(table_name)
+            result = await session.execute(
+                select(table.c["key"]).where(table.c["key"].like(f"{prefix}%")).limit(limit)
+            )
+            return [_row_key(cast(object, row[0])) for row in result]

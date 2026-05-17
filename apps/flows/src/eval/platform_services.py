@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.clients.mcp_client import get_mcp_client as build_mcp_client
-from apps.flows.src.container import get_container
+from apps.flows.src.container_state import require_current_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.services.flow_speech_resolve import (
     load_flow_speech_layers_from_context_metadata,
@@ -22,8 +22,8 @@ from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.voice_resolver import get_stt_client, get_tts_client
 from core.context import get_context
-from core.files import S3ClientFactory
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
+from core.files.s3_client import S3ClientFactory
 from core.integrations.models import IntegrationProvider
 from core.logging import get_logger
 from core.state.interrupt import OAuthInterrupt
@@ -42,19 +42,19 @@ if TYPE_CHECKING:
 
 
 def get_operator_handoff_service() -> "OperatorHandoffService":
-    return get_container().operator_handoff_service
+    return require_current_container().operator_handoff_service
 
 
 def get_schedule_service() -> "ScheduleService":
-    return get_container().schedule_service
+    return require_current_container().schedule_service
 
 
 def get_oauth_service() -> Any:
-    return get_container().oauth_service
+    return require_current_container().oauth_service
 
 
 def get_lara_facade() -> "LaraFacade":
-    return get_container().lara_facade
+    return require_current_container().lara_facade
 
 
 _SPEECH_PROVIDERS = frozenset({"litserve", "cloud_ru", "yandex", "sber", "mock"})
@@ -83,7 +83,7 @@ def get_code_runner(
     variables: dict[str, Any] | None = None,
 ) -> Any:
     """PythonCodeRunner (или runner для `language`) без доступа к `FlowContainer` из namespace."""
-    return get_container().get_code_runner(
+    return require_current_container().get_code_runner(
         language=language,
         resources=resources,
         variables=variables,
@@ -110,7 +110,7 @@ async def get_mcp_client(
     """Вернуть MCP-клиент по `server_id` для inline-кода (без доступа к контейнеру)."""
     if not isinstance(server_id, str) or server_id.strip() == "":
         raise ValueError("server_id обязателен")
-    config = await get_container().mcp_server_repository.get(server_id.strip())
+    config = await require_current_container().mcp_server_repository.get(server_id.strip())
     if config is None:
         raise ValueError(f"MCP server not found: {server_id}")
     variables: dict[str, Any] = {}
@@ -140,7 +140,7 @@ async def call_mcp_tool(
 
 async def get_file_bytes(file_id: str) -> bytes:
     """Скачивает содержимое файла по ID из хранилища платформы (FileRepository + S3)."""
-    container = get_container()
+    container = require_current_container()
     record = await container.file_repository.get(file_id)
     if record is None:
         raise ValueError(f"Файл {file_id} не найден в хранилище")
@@ -183,7 +183,7 @@ async def transcribe_audio(
         raise ValueError("transcribe_audio: нужен Context с active_company.")
     company_id = ctx.active_company.company_id
 
-    container = get_container()
+    container = require_current_container()
     record = await container.file_processor.get_file_record(file_id.strip())
     if record is None:
         raise ValueError(f"transcribe_audio: файл {file_id!r} не найден.")
@@ -291,7 +291,7 @@ async def synthesize_speech(
     ext = result.response_format if result.response_format else "wav"
     name = file_name if file_name and file_name.strip() else f"tts_{uuid.uuid4().hex[:12]}.{ext}"
 
-    container = get_container()
+    container = require_current_container()
     record = await container.file_processor.persist_uploaded_file(
         data=result.audio_bytes,
         original_name=name,

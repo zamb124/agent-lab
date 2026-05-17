@@ -15,7 +15,7 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 from apps.flows.config import get_settings
-from core.clients import RedisClient
+from core.clients.redis_client import RedisClient
 from core.errors import FlowWallClockTimeoutError
 from core.logging import get_logger
 

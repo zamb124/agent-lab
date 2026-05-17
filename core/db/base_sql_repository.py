@@ -3,7 +3,7 @@
 """
 
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import asyncpg
@@ -28,7 +28,7 @@ class BaseSQLRepository(ABC):
 
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
-        self._pool: Optional["asyncpg.Pool"] = None
+        self._pool: asyncpg.Pool | None = None
 
     async def connect(self) -> None:
         """Создать connection pool"""
@@ -49,35 +49,31 @@ class BaseSQLRepository(ABC):
             self._pool = None
             logger.info(f"{self.__class__.__name__}: соединение закрыто")
 
-    def _ensure_connected(self) -> None:
+    def _connected_pool(self) -> "asyncpg.Pool":
         """Проверяет что pool инициализирован"""
         if not self._pool:
             raise RuntimeError(
                 f"{self.__class__.__name__} не подключен к БД. "
                 f"Вызовите connect() перед использованием."
             )
+        return self._pool
 
     async def execute(self, query: str, *args: Any) -> str:
         """Выполняет SQL запрос"""
-        self._ensure_connected()
-        async with self._pool.acquire() as conn:
+        async with self._connected_pool().acquire() as conn:
             return await conn.execute(query, *args)
 
-    async def fetch(self, query: str, *args: Any) -> list:
+    async def fetch(self, query: str, *args: Any) -> list[Any]:
         """Выполняет SELECT и возвращает все строки"""
-        self._ensure_connected()
-        async with self._pool.acquire() as conn:
+        async with self._connected_pool().acquire() as conn:
             return await conn.fetch(query, *args)
 
-    async def fetchrow(self, query: str, *args: Any) -> Optional[Any]:
+    async def fetchrow(self, query: str, *args: Any) -> Any | None:
         """Выполняет SELECT и возвращает одну строку"""
-        self._ensure_connected()
-        async with self._pool.acquire() as conn:
+        async with self._connected_pool().acquire() as conn:
             return await conn.fetchrow(query, *args)
 
-    async def fetchval(self, query: str, *args: Any) -> Optional[Any]:
+    async def fetchval(self, query: str, *args: Any) -> Any | None:
         """Выполняет SELECT и возвращает одно значение"""
-        self._ensure_connected()
-        async with self._pool.acquire() as conn:
+        async with self._connected_pool().acquire() as conn:
             return await conn.fetchval(query, *args)
-

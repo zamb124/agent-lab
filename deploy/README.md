@@ -77,7 +77,7 @@ MicroK8s cluster
 
 ### Состав приложений: Helm и `cluster-health.sh`
 
-Канон процессов локально — **[`scripts/run.py`](../scripts/run.py)** и **[`apps/app_runtime_targets.py`](../apps/app_runtime_targets.py)**. В Kubernetes тот же набор задаётся **`deploy/helm/agent-lab/values.yaml`** (`applications`, `workers`, `litserve`, внешние блоки).
+Канон процессов локально — **[`scripts/run.py`](../scripts/run.py)** с прямыми entrypoint-ами сервисов и воркеров. В Kubernetes тот же набор задаётся **`deploy/helm/agent-lab/values.yaml`** (`applications`, `workers`, `litserve`, внешние блоки).
 
 | Зона | Источник | Проверка после деплоя |
 |------|----------|------------------------|

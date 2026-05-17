@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any, cast
 
 import tiktoken
 from chonkie import (
@@ -17,6 +17,7 @@ from chonkie import (
     TokenChunker,
 )
 from chonkie.refinery import OverlapRefinery
+from chonkie.types import Chunk
 
 from core.rag.parsed_document import ParsedDocument
 from core.rag_indexing_schema import IndexProfileSplitConfig
@@ -28,7 +29,7 @@ def split_plain_text_fixed_tokens(
     text_content: str,
     chunk_size: int,
     chunk_overlap: int,
-) -> List[str]:
+) -> list[str]:
     """
     Нарезка по токенам cl100k_base (исторический путь PgVectorProvider._chunk_text).
 
@@ -36,7 +37,7 @@ def split_plain_text_fixed_tokens(
     """
     tokenizer = tiktoken.get_encoding(_ENCODING_NAME)
     tokens = tokenizer.encode(text_content)
-    chunks: List[str] = []
+    chunks: list[str] = []
     start = 0
     while start < len(tokens):
         end = start + chunk_size
@@ -47,12 +48,12 @@ def split_plain_text_fixed_tokens(
     return chunks
 
 
-def _chunker_to_texts(chunker: Any, text: str) -> List[str]:
-    parts = chunker(text)
+def _chunker_to_texts(chunker: Any, text: str) -> list[str]:
+    parts = cast(list[Chunk], chunker(text))
     return [c.text for c in parts]
 
 
-def split_parsed_document(parsed: ParsedDocument, split_config: IndexProfileSplitConfig) -> List[str]:
+def split_parsed_document(parsed: ParsedDocument, split_config: IndexProfileSplitConfig) -> list[str]:
     """
     Единая точка нарезки по профилю.
 
@@ -72,16 +73,18 @@ def split_parsed_document(parsed: ParsedDocument, split_config: IndexProfileSpli
 
     if strategy == "semantic":
         chunker = SemanticChunker(
-            tokenizer=_ENCODING_NAME,
             chunk_size=split_config.chunk_size,
         )
-        parts = chunker(raw)
+        parts = cast(list[Chunk], chunker(raw))
         if split_config.chunk_overlap <= 0:
             return [c.text for c in parts]
-        refined = OverlapRefinery(
-            tokenizer=_ENCODING_NAME,
-            context_size=split_config.chunk_overlap,
-        )(parts)
+        refined = cast(
+            list[Chunk],
+            OverlapRefinery(
+                tokenizer=_ENCODING_NAME,
+                context_size=split_config.chunk_overlap,
+            )(parts),
+        )
         return [c.text for c in refined]
 
     if strategy == "recursive":
@@ -138,7 +141,7 @@ def split_parsed_document(parsed: ParsedDocument, split_config: IndexProfileSpli
     raise ValueError(f"Неизвестная split.strategy: {strategy!r}")
 
 
-def _split_structure(parsed: ParsedDocument, split_config: IndexProfileSplitConfig) -> List[str]:
+def _split_structure(parsed: ParsedDocument, split_config: IndexProfileSplitConfig) -> list[str]:
     blocks = parsed.blocks
     if not blocks:
         chunker = TokenChunker(
@@ -153,12 +156,12 @@ def _split_structure(parsed: ParsedDocument, split_config: IndexProfileSplitConf
         chunk_size=split_config.chunk_size,
         chunk_overlap=split_config.chunk_overlap,
     )
-    out: List[str] = []
+    out: list[str] = []
     for block in blocks:
         fragment = block.text.strip()
         if not fragment:
             continue
-        out.extend(c.text for c in chunker(fragment))
+        out.extend(_chunker_to_texts(chunker, fragment))
     if not out:
         return _chunker_to_texts(chunker, parsed.canonical_text)
     return out

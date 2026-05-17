@@ -51,6 +51,7 @@ from core.logging.attributes import (
     LOG_TASK_RETRY,
 )
 from core.logging.scope import _ScopeToken
+from core.tasks.kicker import build_log_labels
 
 _LABEL_TRACE_ID = "trace_id"
 _LABEL_USER_ID = "user_id"
@@ -114,8 +115,6 @@ class LoggingMiddleware(TaskiqMiddleware):
         return message
 
     async def pre_execute(self, message: TaskiqMessage) -> TaskiqMessage:
-        from core.tasks.kicker import build_log_labels
-
         labels = dict(message.labels or {})
         if (
             not _label_present(labels, _LABEL_REQUEST_ID)
@@ -144,19 +143,20 @@ class LoggingMiddleware(TaskiqMiddleware):
         trace_id = self._require_label(labels, _LABEL_TRACE_ID, message)
         service_name = self._service_or_default(labels)
 
+        scope_extra: dict[str, Any] = {
+            LOG_NAMESPACE: self._optional_label(labels, _LABEL_NAMESPACE),
+            LOG_SESSION_ID: self._optional_label(labels, _LABEL_SESSION_ID),
+            LOG_TASK_ID: message.task_id,
+            LOG_TASK_NAME: message.task_name,
+            LOG_TASK_QUEUE: self._queue_name,
+        }
         token = enter_request_scope(
             request_id=request_id,
             trace_id=trace_id,
             service_name=service_name,
             user_id=self._optional_label(labels, _LABEL_USER_ID),
             company_id=self._optional_label(labels, _LABEL_COMPANY_ID),
-            **{
-                LOG_NAMESPACE: self._optional_label(labels, _LABEL_NAMESPACE),
-                LOG_SESSION_ID: self._optional_label(labels, _LABEL_SESSION_ID),
-                LOG_TASK_ID: message.task_id,
-                LOG_TASK_NAME: message.task_name,
-                LOG_TASK_QUEUE: self._queue_name,
-            },
+            **scope_extra,
         )
         message.labels[_START_TIME_LABEL] = str(time.perf_counter())
         message.labels[_SCOPE_TOKEN_LABEL] = id(token)

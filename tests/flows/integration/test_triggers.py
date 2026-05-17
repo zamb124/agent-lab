@@ -968,7 +968,7 @@ class TestTelegramTriggerHandler:
         )
         await container.flow_repository.set(agent)
 
-        handler = TelegramTriggerHandler(base_url="http://test")
+        handler = TelegramTriggerHandler(base_url="http://test", container=container)
 
         # Разрешенный пользователь
 
@@ -1018,7 +1018,7 @@ class TestTelegramTriggerHandler:
         )
         await container.flow_repository.set(agent)
 
-        handler = TelegramTriggerHandler(base_url="http://test")
+        handler = TelegramTriggerHandler(base_url="http://test", container=container)
 
         # Неразрешенная команда
         payload_wrong = {
@@ -1037,21 +1037,21 @@ class TestTelegramTriggerHandler:
 
         await container.flow_repository.delete(flow_id)
 
-    def test_handler_generates_webhook_url(self):
+    def test_handler_generates_webhook_url(self, container):
         """TelegramTriggerHandler генерирует правильный webhook URL."""
         from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 
-        handler = TelegramTriggerHandler(base_url="https://example.com")
+        handler = TelegramTriggerHandler(base_url="https://example.com", container=container)
 
         url = handler.generate_webhook_url("my_agent", "my_trigger")
 
         assert url == "https://example.com/flows/api/v1/triggers/telegram/my_agent/my_trigger"
 
-    def test_handler_verify_secret_token(self):
+    def test_handler_verify_secret_token(self, container):
         """TelegramTriggerHandler верифицирует secret_token."""
         from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 
-        handler = TelegramTriggerHandler(base_url="http://test")
+        handler = TelegramTriggerHandler(base_url="http://test", container=container)
 
         trigger = TriggerConfig(
             trigger_id="test",
@@ -1646,11 +1646,11 @@ class TestOutputActionExecutor:
         assert evaluate_output_action_condition("@state:has_file == false", state) is True
 
     @pytest.mark.asyncio
-    async def test_resolve_mapping(self):
+    async def test_resolve_mapping(self, container):
         """Резолвинг маппинга."""
-        from apps.flows.src.triggers.executor import OutputActionExecutor
+        from apps.flows.src.triggers import OutputActionExecutor
 
-        executor = OutputActionExecutor()
+        executor = OutputActionExecutor(container=container)
 
         state = {
             "response": "Hello world",

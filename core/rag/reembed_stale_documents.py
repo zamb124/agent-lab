@@ -11,7 +11,7 @@ NULL ``company_id`` строки в reembed НЕ попадают (SQL-филь�
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, List, Protocol, Tuple
+from typing import Dict, List, Tuple
 
 from core.billing import get_billing_service
 from core.config import get_settings
@@ -23,31 +23,9 @@ from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
-from core.rag.services.embedding_service import EmbeddingService
+from core.rag.providers.pgvector_provider import PgVectorProvider
 
 logger = get_logger(__name__)
-
-
-class _StaleReembedProvider(Protocol):
-    """Контракт pgvector-провайдера для оркестратора (приватный)."""
-
-    @property
-    def embedding_service(self) -> EmbeddingService: ...
-
-    def embedding_model_name(self) -> str: ...
-
-    async def fetch_stale_chunks_for_reembed(
-        self,
-        *,
-        limit: int,
-        target_embedding_model: str,
-    ) -> List[Tuple[str, str, str]]: ...
-
-    async def write_reembed_chunk_embeddings(
-        self,
-        doc_embeddings: List[Tuple[str, List[float]]],
-        target_embedding_model: str,
-    ) -> int: ...
 
 
 async def execute_reembed_tick(
@@ -77,7 +55,10 @@ async def execute_reembed_tick(
             "by_company_written": {},
         }
 
-    provider: _StaleReembedProvider = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    provider_raw = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    if not isinstance(provider_raw, PgVectorProvider):
+        raise TypeError("execute_reembed_tick требует pgvector RAG provider")
+    provider = provider_raw
     target_model = provider.embedding_model_name()
     batch_size = reembed_cfg.reembed_batch_size
 
@@ -112,7 +93,7 @@ async def execute_reembed_tick(
 
 async def _run_reembed_round(
     *,
-    provider: _StaleReembedProvider,
+    provider: PgVectorProvider,
     company_repository: CompanyRepository,
     user_repository: UserRepository,
     batch_size: int,

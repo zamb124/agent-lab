@@ -15,18 +15,20 @@ from __future__ import annotations
 
 import datetime
 import ssl
+from collections.abc import Callable
 from email.utils import parsedate_to_datetime
-from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+import botocore.compat as bc
 
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 _clock_patch_applied: bool = False
-_original_get_current_datetime: Optional[object] = None
+_original_get_current_datetime: Callable[[bool], datetime.datetime] | None = None
 
-def _read_date_header(req: Request) -> Optional[str]:
+def _read_date_header(req: Request) -> str | None:
     ctx = ssl.create_default_context()
     try:
         with urlopen(req, timeout=8, context=ctx) as resp:
@@ -36,7 +38,7 @@ def _read_date_header(req: Request) -> Optional[str]:
     except (URLError, OSError, TimeoutError):
         return None
 
-def _http_date_for_endpoint(base_url: str) -> Optional[str]:
+def _http_date_for_endpoint(base_url: str) -> str | None:
     b = base_url.strip().rstrip("/")
     attempts: list[tuple[str, str]] = [
         (f"{b}/minio/health/live", "GET"),
@@ -54,14 +56,12 @@ def _apply_process_wide_offset(offset: datetime.timedelta) -> None:
     if _clock_patch_applied:
         return
 
-    import botocore.compat as bc
-
     _original_get_current_datetime = bc.get_current_datetime
 
     def _patched_get_current_datetime(remove_tzinfo: bool = True) -> datetime.datetime:
         if _original_get_current_datetime is None:
             raise RuntimeError("s3_sigv4_clock: потерян оригинал get_current_datetime")
-        base = _original_get_current_datetime(remove_tzinfo=remove_tzinfo)
+        base = _original_get_current_datetime(remove_tzinfo)
         return base + offset
 
     bc.get_current_datetime = _patched_get_current_datetime

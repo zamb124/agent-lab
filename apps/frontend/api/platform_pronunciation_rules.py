@@ -17,7 +17,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.frontend.dependencies import ContainerDep
+from core.clients.tts_pronunciation.models import PronunciationRuleKind
 from core.clients.voice_resolver import invalidate_platform_pronunciation_cache
+from core.db.models.platform import PlatformPronunciationRule
 from core.logging import get_logger
 from core.models.identity_models import User
 
@@ -108,19 +110,25 @@ def _require_superadmin(request: Request) -> User:
     return user
 
 
-def _row_to_dto(row: object) -> PlatformPronunciationRuleDTO:
+def _rule_kind(value: str) -> PronunciationRuleKind:
+    if value not in ("alias", "regex", "stress"):
+        raise ValueError(f"Неизвестный kind правила произношения: {value!r}")
+    return value
+
+
+def _row_to_dto(row: PlatformPronunciationRule) -> PlatformPronunciationRuleDTO:
     return PlatformPronunciationRuleDTO(
-        id=row.id,  # type: ignore[attr-defined]
-        kind=row.kind,  # type: ignore[attr-defined]
-        pattern=row.pattern,  # type: ignore[attr-defined]
-        replacement=row.replacement,  # type: ignore[attr-defined]
-        language=row.language,  # type: ignore[attr-defined]
-        case_sensitive=row.case_sensitive,  # type: ignore[attr-defined]
-        word_boundary=row.word_boundary,  # type: ignore[attr-defined]
-        providers=list(row.providers) if row.providers else None,  # type: ignore[attr-defined]
-        voices=list(row.voices) if row.voices else None,  # type: ignore[attr-defined]
-        enabled=row.enabled,  # type: ignore[attr-defined]
-        note=row.note,  # type: ignore[attr-defined]
+        id=row.id,
+        kind=_rule_kind(row.kind),
+        pattern=row.pattern,
+        replacement=row.replacement,
+        language=row.language,
+        case_sensitive=row.case_sensitive,
+        word_boundary=row.word_boundary,
+        providers=list(row.providers) if row.providers else None,
+        voices=list(row.voices) if row.voices else None,
+        enabled=row.enabled,
+        note=row.note,
     )
 
 

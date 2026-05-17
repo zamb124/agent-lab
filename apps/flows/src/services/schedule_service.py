@@ -4,7 +4,7 @@ import datetime
 import uuid
 from typing import Any
 
-from core.clients import SchedulerClient
+from core.clients.scheduler_client import SchedulerClient
 from core.context import get_context
 from core.logging import get_logger
 from core.scheduler.models import (
@@ -272,7 +272,7 @@ class ScheduleService:
             context = get_context()
             if context is None or context.active_company is None:
                 raise ValueError("company context is required for scheduler service")
-            tasks = await self._scheduler_service.list(
+            task_items = await self._scheduler_service.list(
                 company_id=context.active_company.company_id,
                 filters=PlatformScheduleFilter(
                     status=status,
@@ -283,7 +283,7 @@ class ScheduleService:
                 ),
             )
         else:
-            tasks = await self._scheduler_client.list_schedules(
+            tasks_page = await self._scheduler_client.list_schedules(
                 PlatformScheduleFilter(
                     status=status,
                     target_service="flows",
@@ -292,8 +292,9 @@ class ScheduleService:
                     offset=0,
                 )
             )
+            task_items = tasks_page.items
         filtered = []
-        for item in tasks.items:
+        for item in task_items:
             item_session = item.payload.get("session_id")
             if item_session == session_id:
                 filtered.append(self._map_task(item))

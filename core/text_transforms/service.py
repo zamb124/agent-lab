@@ -8,6 +8,7 @@ from typing import Any
 from a2a.types import Message, Part, Role, TextPart
 from a2a.utils.message import get_message_text
 
+import core.tracing.attributes as trace_attributes
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm.factory import get_llm
@@ -20,7 +21,6 @@ from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
 from core.text_transforms.chunking import split_text_into_markdown_chunks
 from core.text_transforms.format_markdown_response import validate_format_markdown_response
 from core.text_transforms.routing import should_use_litserve_format_markdown_http
-from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
 _MARKDOWN_TO_MD_SYSTEM = (
@@ -72,7 +72,7 @@ class TextTransformService:
         sys_text = instruction.strip() if instruction is not None and instruction.strip() else _DEFAULT_SUMMARY_INSTRUCTION
         messages: list[Message] = [
             Message(
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
                 role=Role.user,
                 parts=[Part(root=TextPart(text=sys_text + "\n\n" + stripped))],
             ),
@@ -129,7 +129,7 @@ class TextTransformService:
                 f"This is part {i + 1} of {total}. Convert only the following text to Markdown:\n\n{chunk}"
             )
             msg = Message(
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
                 role=Role.user,
                 parts=[
                     Part(root=TextPart(text=_MARKDOWN_TO_MD_SYSTEM + "\n\n" + user_prompt)),

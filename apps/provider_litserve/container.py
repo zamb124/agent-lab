@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from core.config import get_settings
 from core.container import BaseContainer
 from core.logging import get_logger
 
@@ -18,8 +19,6 @@ _provider_litserve_container: Optional[ProviderLitserveContainer] = None
 def get_provider_litserve_container() -> ProviderLitserveContainer:
     global _provider_litserve_container
     if _provider_litserve_container is None:
-        from core.config import get_settings
-
         settings = get_settings()
         if not settings.database.shared_url:
             raise ValueError("database.shared_url не задан")

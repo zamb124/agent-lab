@@ -32,6 +32,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import ColumnElement
 
+import core.tracing.attributes as trace_attributes
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import SemanticTextIndexStatus
@@ -44,7 +45,6 @@ from core.rag import RAGRepository
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.post_retrieval_rerank import apply_rerank_after_retrieve
 from core.rag.providers.pgvector_provider import PgVectorProvider
-from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)

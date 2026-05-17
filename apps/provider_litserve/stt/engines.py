@@ -26,8 +26,16 @@ import time
 import wave
 from typing import Any
 
+import soundfile as sf
 import torch  # pyright: ignore[reportMissingImports]
 from fastapi import HTTPException  # pyright: ignore[reportMissingImports]
+from transformers import (
+    AutoModel,
+    AutoModelForCTC,
+    AutoModelForSpeechSeq2Seq,
+    AutoProcessor,
+    pipeline,
+)
 
 from apps.provider_litserve.model_registry import find_stt_entry
 from apps.provider_litserve.runtime_models import (
@@ -84,24 +92,17 @@ def parse_stt_body(raw: Any, *, default_api_model_id: str) -> dict[str, Any]:
 def _decode_audio_to_floats(audio_bytes: bytes) -> tuple[list[float], int]:
     """Универсальный декод: пробуем soundfile (mp3/wav/ogg/flac), иначе PCM-16 16kHz.
 
-    ``soundfile`` лежит в опциональной группе ``rag`` (ставится только в
-    litserve-pod), поэтому импорт ленивый и помечен ``type: ignore``,
-    чтобы статический анализатор IDE не ругался.
+    ``soundfile`` лежит в группе ``rag`` и является обязательной зависимостью
+    provider_litserve.
     """
     try:
-        import soundfile as sf  # type: ignore[import-not-found]
-    except ImportError:
-        sf = None
-
-    if sf is not None:
-        try:
-            buf = io.BytesIO(audio_bytes)
-            data, sr = sf.read(buf, dtype="float32", always_2d=False)
-            if data.ndim == 2:
-                data = data.mean(axis=1)
-            return data.tolist(), int(sr)
-        except (RuntimeError, ValueError):
-            pass
+        buf = io.BytesIO(audio_bytes)
+        data, sr = sf.read(buf, dtype="float32", always_2d=False)
+        if data.ndim == 2:
+            data = data.mean(axis=1)
+        return data.tolist(), int(sr)
+    except (RuntimeError, ValueError):
+        pass
 
     n_samples = len(audio_bytes) // 2
     if n_samples == 0:
@@ -144,12 +145,6 @@ class _GigaAMAdapter(_BaseSTTAdapter):
     backend = "gigaam"
 
     def load(self, hf_model_id: str, revision: str | None) -> Any:
-        try:
-            from transformers import AutoModel  # type: ignore[import-not-found]
-        except ImportError as exc:
-            raise RuntimeError(
-                "STT gigaam: установите transformers (uv sync --group rag)"
-            ) from exc
         _require_cuda_when_selected(self._device)
         logger.info("STT gigaam: загрузка hf=%s revision=%s device=%s", hf_model_id, revision, self._device)
         started = time.monotonic()
@@ -183,15 +178,6 @@ class _HuggingfaceCTCAdapter(_BaseSTTAdapter):
     backend = "huggingface_ctc"
 
     def load(self, hf_model_id: str, revision: str | None) -> tuple[Any, Any]:
-        try:
-            from transformers import (  # type: ignore[import-not-found]
-                AutoModelForCTC,
-                AutoProcessor,
-            )
-        except ImportError as exc:
-            raise RuntimeError(
-                "STT huggingface_ctc: установите transformers (uv sync --group rag)"
-            ) from exc
         _require_cuda_when_selected(self._device)
         logger.info(
             "STT huggingface_ctc: загрузка hf=%s revision=%s device=%s",
@@ -228,16 +214,6 @@ class _WhisperAdapter(_BaseSTTAdapter):
     backend = "whisper"
 
     def load(self, hf_model_id: str, revision: str | None) -> Any:
-        try:
-            from transformers import (  # type: ignore[import-not-found]
-                AutoModelForSpeechSeq2Seq,
-                AutoProcessor,
-                pipeline,
-            )
-        except ImportError as exc:
-            raise RuntimeError(
-                "STT whisper: установите transformers (uv sync --group rag)"
-            ) from exc
         _require_cuda_when_selected(self._device)
         logger.info("STT whisper: загрузка hf=%s revision=%s device=%s", hf_model_id, revision, self._device)
         started = time.monotonic()

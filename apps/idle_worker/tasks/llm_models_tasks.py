@@ -1,17 +1,25 @@
 """TaskIQ задачи синхронизации LLM моделей."""
 
+from typing import TypedDict
+
 from apps.flows.src.container import get_container
 from apps.idle_worker.broker import broker as idle_broker
-from core.context import Context, set_context
+from core.context import Context, clear_context, set_context
 from core.identity.system_bootstrap import (
     SYSTEM_ADMIN_EMAIL,
     ensure_system_admin_membership,
 )
 from core.logging import get_logger
+from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
+
+
+class LLMModelsSyncTaskResult(TypedDict):
+    providers: dict[str, int]
+    total: int
 
 
 async def _build_scheduler_auth_context(container, trace_id: str, session_id: str) -> Context:
@@ -32,7 +40,7 @@ async def _build_scheduler_auth_context(container, trace_id: str, session_id: st
         host="system",
         session_id=session_id,
         channel="system",
-        language="ru",
+        language=Language.RU,
         active_company=Company(company_id=company.company_id, name=company.name, subdomain=company.subdomain),
         user_companies=[],
         trace_id=trace_id,
@@ -45,7 +53,7 @@ async def sync_llm_models_task(
     scheduler_task_id: str | None = None,
     company_id: str | None = None,
     system_task: str | None = None,
-) -> dict[str, int]:
+) -> LLMModelsSyncTaskResult:
     """Синхронизирует модели от всех настроенных LLM провайдеров."""
     container = get_container()
 
@@ -63,5 +71,4 @@ async def sync_llm_models_task(
         logger.info("LLM models sync completed: %s total=%s", result, total_synced)
         return {"providers": result, "total": total_synced}
     finally:
-        from core.context import clear_context
         clear_context()

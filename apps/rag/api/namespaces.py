@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from apps.rag.config import get_rag_settings
 from core.billing.exceptions import BillingBalanceBlockedError
-from core.context import get_context
+from core.context import require_active_company
 from core.logging import get_logger
 from core.models.identity_models import Namespace
 from core.pagination import OffsetPage
@@ -38,8 +38,7 @@ async def list_namespaces(
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[Namespace]:
     try:
-        context = get_context()
-        company_id = context.active_company.company_id
+        company_id = require_active_company().company_id
 
         namespace_repo = container.namespace_repository
         namespaces, total = await asyncio.gather(
@@ -76,8 +75,7 @@ async def create_namespace(
         Созданный namespace
     """
     try:
-        context = get_context()
-        company_id = context.active_company.company_id
+        company_id = require_active_company().company_id
 
         settings = get_rag_settings()
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
@@ -125,8 +123,7 @@ async def delete_namespace(
         Результат операции
     """
     try:
-        context = get_context()
-        company_id = context.active_company.company_id
+        company_id = require_active_company().company_id
 
         settings = get_rag_settings()
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
@@ -155,5 +152,4 @@ async def delete_namespace(
     except Exception as e:
         logger.error(f"Ошибка удаления namespace: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete namespace: {str(e)}")
-
 

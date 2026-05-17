@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from core.company_ai import CapabilityLiteral
+
 
 class ApiKey(BaseModel):
     """API ключ компании"""
@@ -101,7 +103,7 @@ class CustomProviderCreate(BaseModel):
     extra_request_headers: Optional[Dict[str, str]] = None
     extra_request_body: Optional[Dict[str, Any]] = None
     rerank_path: Optional[str] = None
-    capabilities: List[str] = Field(default_factory=list)
+    capabilities: List[CapabilityLiteral] = Field(default_factory=list)
     model_by_capability: Dict[str, str] = Field(default_factory=dict)
 
 
@@ -114,7 +116,7 @@ class CustomProviderUpdate(BaseModel):
     extra_request_headers: Optional[Dict[str, str]] = None
     extra_request_body: Optional[Dict[str, Any]] = None
     rerank_path: Optional[str] = None
-    capabilities: Optional[List[str]] = None
+    capabilities: Optional[List[CapabilityLiteral]] = None
     model_by_capability: Optional[Dict[str, str]] = None
 
 
@@ -135,12 +137,21 @@ class BillingSubscription(BaseModel):
     billing_period_start: datetime
 
 
+class BillingUsageResourceBucket(BaseModel):
+    cost: float
+    calls: int
+
+
+class BillingUsageUserBucket(BillingUsageResourceBucket):
+    user_name: Optional[str] = None
+
+
 class BillingUsage(BaseModel):
     """Статистика использования"""
     total_cost: float
     total_calls: int
-    by_resource: Dict[str, Dict[str, float]]
-    by_user: Dict[str, Dict[str, Any]]
+    by_resource: Dict[str, BillingUsageResourceBucket]
+    by_user: Dict[str, BillingUsageUserBucket]
 
 
 class ChangePlanRequest(BaseModel):
@@ -247,4 +258,3 @@ class PlatformBillingBalanceGrantResponse(BaseModel):
     company_id: str
     amount: float
     balance: float
-

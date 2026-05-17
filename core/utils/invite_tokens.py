@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
+import redis.asyncio as aioredis
 from pydantic import BaseModel, Field
 
 from core.config import get_settings
@@ -38,9 +39,10 @@ class InviteTokenService:
 
     def __init__(self) -> None:
         settings = get_settings()
-        self._secret = settings.auth.jwt_secret_key
-        if not self._secret:
+        secret = settings.auth.jwt_secret_key
+        if not secret:
             raise ValueError("JWT secret key не настроен (auth.jwt_secret_key)")
+        self._secret = secret
         self._algorithm = "HS256"
 
     def create(self, company_id: str, role: str, *, invited_by: str) -> tuple[str, str]:
@@ -116,11 +118,6 @@ async def burn_invite_token(jti: str, ttl_seconds: int) -> bool:
         True — токен успешно записан (ещё не использовался)
         False — токен уже был использован ранее
     """
-    try:
-        import redis.asyncio as aioredis
-    except ImportError as exc:
-        raise RuntimeError("redis не установлен") from exc
-
     settings = get_settings()
     key = f"{INVITE_REDIS_KEY_PREFIX}{jti}"
 
@@ -138,11 +135,6 @@ async def burn_invite_token(jti: str, ttl_seconds: int) -> bool:
 
 async def invite_jti_already_used(jti: str) -> bool:
     """True, если jti отмечен использованным в Redis (одноразовый инвайт израсходован)."""
-    try:
-        import redis.asyncio as aioredis
-    except ImportError as exc:
-        raise RuntimeError("redis не установлен") from exc
-
     settings = get_settings()
     key = f"{INVITE_REDIS_KEY_PREFIX}{jti}"
     client = aioredis.from_url(

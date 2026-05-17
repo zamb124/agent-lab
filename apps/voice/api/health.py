@@ -8,6 +8,7 @@
 """
 
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter
 
@@ -20,7 +21,7 @@ health_router = APIRouter(prefix="/health", tags=["voice"])
     "/providers",
     summary="Deployment-default STT/TTS/VAD провайдеры",
 )
-async def health_providers() -> dict:
+async def health_providers() -> dict[str, Any]:
     container = get_voice_container()
 
     cfg_status = "ready"

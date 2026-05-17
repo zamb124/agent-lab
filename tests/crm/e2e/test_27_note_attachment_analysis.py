@@ -23,6 +23,8 @@ import time as _time
 
 import pytest
 
+from apps.crm.config import get_crm_settings
+
 
 async def _analyze_note_task(crm_client, headers, note_id, *, fail_on_failed=True, **kwargs):
     """Запускает анализ и ждёт завершения. Возвращает (task_row, note_draft)."""
@@ -102,6 +104,11 @@ class TestResolveNoteText:
     Несколько upload + чтение файлов из MinIO часто превышают глобальные 5s
     на теле теста — отдельный лимит только для этого класса.
     """
+
+    @pytest.fixture(autouse=True)
+    def _disable_background_markdown_format(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        settings = get_crm_settings()
+        monkeypatch.setattr(settings, "note_attachment_markdown_format_enabled", False)
 
     @pytest.mark.asyncio
     async def test_description_without_attachments(

@@ -7,6 +7,7 @@ from typing import Any
 
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
+from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows_worker.broker import broker
 from core.context import Context, set_context
 from core.logging import get_logger
@@ -15,7 +16,7 @@ from core.tracing.context import set_current_trace_context
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="process_flow_task", queue_name="flows_worker")
+@broker.task(task_name=TASK_PROCESS_FLOW, queue_name="flows_worker")
 async def process_flow_task(
     flow_id: str,
     session_id: str,

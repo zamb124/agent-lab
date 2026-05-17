@@ -12,6 +12,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from core.config import get_settings
 from core.http.egress_route_preference import (
     egress_prefer_proxy_delete,
     egress_prefer_proxy_get,
@@ -53,15 +54,11 @@ class ProxyStrategy(Enum):
 
 
 def _platform_proxy_active() -> bool:
-    from core.config import get_settings
-
     p = get_settings().proxy
     return bool(p.enabled and p.proxies)
 
 
 def _retry_http_statuses_for_smart() -> frozenset[int]:
-    from core.config import get_settings
-
     s = set(HTTP_STATUS_RETRY_VIA_PROXY)
     if get_settings().proxy.retry_http_401_via_proxy:
         s.add(401)
@@ -303,12 +300,15 @@ class SmartProxyClient:
 
     MAX_PROXY_RETRIES = 3
 
-    def __init__(self, timeout: float = 30.0, use_proxy: bool = False, **kwargs: object):
+    def __init__(self, timeout: float = 30.0, use_proxy: bool = False, **kwargs: Any):
         self.timeout = timeout
         self.use_proxy = use_proxy
         self.kwargs = kwargs
         self._client: Optional[httpx.AsyncClient] = None
         self._settings = None
+        self._strategy = ProxyStrategy.DIRECT_FIRST
+        self._proxy_attempts = 3
+        self._direct_attempts = 2
 
     async def __aenter__(self):
         return self
@@ -325,8 +325,6 @@ class SmartProxyClient:
 
     def _get_settings(self):
         if self._settings is None:
-            from core.config import get_settings
-
             self._settings = get_settings()
         return self._settings
 
@@ -371,7 +369,7 @@ class SmartProxyClient:
             return False
 
     async def _request_via_proxy_rotation(
-        self, http_method: str, url: str, **kwargs: object
+        self, http_method: str, url: str, **kwargs: Any
     ) -> httpx.Response:
         settings = self._get_settings()
 
@@ -402,8 +400,9 @@ class SmartProxyClient:
                 else:
                     logger.error("All proxy attempts failed for %s", url)
                     raise
+        raise RuntimeError("proxy rotation exited without response")
 
-    async def _request_with_retry(self, method: str, url: str, **kwargs: object) -> httpx.Response:
+    async def _request_with_retry(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         http_method = method.upper()
         strategy = getattr(self, "_strategy", ProxyStrategy.DIRECT_FIRST)
 
@@ -469,32 +468,32 @@ class SmartProxyClient:
 
         return await self._request_via_proxy_rotation(http_method, url, **kwargs)
 
-    async def get(self, url: str, **kwargs: object) -> httpx.Response:
+    async def get(self, url: str, **kwargs: Any) -> httpx.Response:
         return await self._request_with_retry("get", url, **kwargs)
 
-    async def post(self, url: str, **kwargs: object) -> httpx.Response:
+    async def post(self, url: str, **kwargs: Any) -> httpx.Response:
         return await self._request_with_retry("post", url, **kwargs)
 
-    async def put(self, url: str, **kwargs: object) -> httpx.Response:
+    async def put(self, url: str, **kwargs: Any) -> httpx.Response:
         return await self._request_with_retry("put", url, **kwargs)
 
-    async def delete(self, url: str, **kwargs: object) -> httpx.Response:
+    async def delete(self, url: str, **kwargs: Any) -> httpx.Response:
         return await self._request_with_retry("delete", url, **kwargs)
 
-    async def patch(self, url: str, **kwargs: object) -> httpx.Response:
+    async def patch(self, url: str, **kwargs: Any) -> httpx.Response:
         return await self._request_with_retry("patch", url, **kwargs)
 
-    async def request(self, method: str, url: str, **kwargs: object) -> httpx.Response:
+    async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         return await self._request_with_retry(method.lower(), url, **kwargs)
 
-    def stream(self, method: str, url: str, **kwargs: object):
+    def stream(self, method: str, url: str, **kwargs: Any):
         return _StreamContextManager(self, method, url, **kwargs)
 
 
 class _StreamContextManager:
     """Context manager для streaming запросов с retry прокси"""
 
-    def __init__(self, smart_client: SmartProxyClient, method: str, url: str, **kwargs: object):
+    def __init__(self, smart_client: SmartProxyClient, method: str, url: str, **kwargs: Any):
         self._smart_client = smart_client
         self._method = method
         self._url = url
@@ -676,7 +675,7 @@ def get_httpx_client(
     strategy: ProxyStrategy = ProxyStrategy.DIRECT_FIRST,
     proxy_attempts: int = 3,
     direct_attempts: int = 2,
-    **kwargs: object,
+    **kwargs: Any,
 ) -> SmartProxyClient:
     """
     Создает HTTP клиент с настраиваемой стратегией прокси.

@@ -4,12 +4,13 @@ WORKERS ?= 5
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 600
 PYTEST_MAX_WORKER_RESTART ?= 0
 RUN_UI_IN_TEST ?= 0
+DOCKER_COMPOSE_PULL ?= never
 
 # E2E UI (pytest + Playwright) и старый каталог browser — не гонять в unit/cov без инфраструктуры
 _PYTEST_IGNORE_UI := --ignore=tests/frontend/browser --ignore=tests/ui
 
 test-up:
-	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
+	docker-compose -f docker-compose-test.yaml up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
 	@echo "Ожидание готовности сервисов (postgres, redis, minio, onlyoffice, provider_litserve, test-a2a-agent, livekit, livekit-egress, livekit-cli, loki, tempo, alloy, grafana)..."
 	@sleep 7
 	@echo "Сброс тестовой БД (TRUNCATE managed таблиц + Redis FLUSHDB)..."
@@ -83,16 +84,22 @@ test: test-frontend-core test-up
 	phase1_rc=0; \
 	phase2_rc=0; \
 	phase3_rc=0; \
+	rm -f .pytest_cache/v/cache/lastfailed; \
 	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 		$(_PYTEST_IGNORE_UI) \
 		-m "not integration"; \
 	phase1_rc=$$?; \
-	echo ""; \
-	echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="; \
-	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ --lf \
-		$(_PYTEST_IGNORE_UI) \
-		-m "not integration" -v; \
-	phase2_rc=$$?; \
+	if [ $$phase1_rc -ne 0 ]; then \
+		echo ""; \
+		echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="; \
+		uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ --lf -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+			$(_PYTEST_IGNORE_UI) \
+			-m "not integration" -v; \
+		phase2_rc=$$?; \
+	else \
+		echo ""; \
+		echo "=== 2/3 Перезапуск упавших тестов пропущен: первая фаза зелёная ==="; \
+	fi; \
 	if [ "$(RUN_UI_IN_TEST)" = "1" ]; then \
 		echo ""; \
 		echo "=== 3/3 Запуск E2E UI (pytest tests/ui/e2e) ==="; \
@@ -109,14 +116,20 @@ test-all: test-frontend-core test-up
 	phase1_rc=0; \
 	phase2_rc=0; \
 	phase3_rc=0; \
+	rm -f .pytest_cache/v/cache/lastfailed; \
 	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
 		$(_PYTEST_IGNORE_UI); \
 	phase1_rc=$$?; \
-	echo ""; \
-	echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="; \
-	uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ --lf \
-		$(_PYTEST_IGNORE_UI) -v; \
-	phase2_rc=$$?; \
+	if [ $$phase1_rc -ne 0 ]; then \
+		echo ""; \
+		echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="; \
+		uv run python -c "import subprocess,sys; r=subprocess.run(sys.argv[1:], timeout=$(PYTEST_COMMAND_TIMEOUT_SECONDS)); raise SystemExit(r.returncode)" uv run pytest tests/ --lf -n 1 --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART) \
+			$(_PYTEST_IGNORE_UI) -v; \
+		phase2_rc=$$?; \
+	else \
+		echo ""; \
+		echo "=== 2/3 Перезапуск упавших тестов пропущен: первая фаза зелёная ==="; \
+	fi; \
 	echo ""; \
 	echo "=== 3/3 Запуск E2E UI (pytest tests/ui/e2e) ==="; \
 	uv run pytest tests/ui/e2e -v --timeout=180; \

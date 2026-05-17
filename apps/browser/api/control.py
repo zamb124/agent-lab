@@ -22,6 +22,7 @@ from apps.browser.engine.types import (
 )
 from apps.browser.interaction.human_interaction import HumanInteraction, InteractionRng
 from apps.browser.interaction.interaction_profiles import (
+    InteractionProfile,
     InteractionProfileName,
     get_interaction_profile,
 )
@@ -543,14 +544,15 @@ async def control_observe(
         # без зависимости от Playwright accessibility API и без тяжёлых «сырьевых» деревьев.
         ax = await dom_accessibility_tree_dict_from_page(page)
         snap_text, refs = build_interactive_snapshot_with_refs(ax)
-        payload["snapshot"] = {
+        snapshot: dict[str, Any] = {
             "schema": "browser.control.snapshot.v1",
             "mode": "interactive",
             "text": snap_text,
         }
+        payload["snapshot"] = snapshot
         runtime.observe_store.update_refs(session_id, refs)
         # if body.include_snapshot_refs:
-        payload["snapshot"]["refs"] = refs
+        snapshot["refs"] = refs
 
         event_path = _write_session_event(
             runtime=runtime,
@@ -652,7 +654,10 @@ def _locator_from_ref(page: Any, refs: dict[str, dict[str, object]], raw_ref: st
     return loc
 
 
-def _interaction_for_session(runtime: Any, session_id: str) -> tuple[HumanInteraction, object, InteractionRng]:
+def _interaction_for_session(
+    runtime: Any,
+    session_id: str,
+) -> tuple[HumanInteraction, InteractionProfile, InteractionRng]:
     try:
         profile_name = runtime.observe_store.get_interaction_profile(session_id)
         profile = get_interaction_profile(profile_name)

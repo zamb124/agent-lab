@@ -9,25 +9,19 @@
 - apps/crm_worker/broker.py - для CRM задач
 """
 
+from collections.abc import Awaitable, Callable
 from typing import Optional
 
+import redis.asyncio as redis
+from redis.exceptions import ResponseError as RedisResponseError
 from taskiq import TaskiqScheduler, TaskiqState
 from taskiq.events import TaskiqEvents
 from taskiq.middlewares.simple_retry_middleware import SimpleRetryMiddleware
 from taskiq_redis import ListRedisScheduleSource, RedisAsyncResultBackend, RedisStreamBroker
 
-try:
-    import redis.asyncio as redis
-    from redis.exceptions import ResponseError as RedisResponseError
-
-    REDIS_AVAILABLE = True
-except ImportError:
-    REDIS_AVAILABLE = False
-    redis = None
-    RedisResponseError = None  # type: ignore[misc, assignment]
-
 from core.config import get_settings
-from core.logging import get_logger, setup_logging
+from core.logging import get_logger
+from core.logging.setup import setup_logging
 from core.tasks.logging_middleware import build_logging_middleware
 from core.tasks.session_lock import session_lock_middleware
 
@@ -66,10 +60,6 @@ def create_broker(
 
     result_backend = RedisAsyncResultBackend(redis_url=broker_url, result_ex_time=3600)
 
-    broker_kwargs = {"url": broker_url}
-    if queue_name:
-        broker_kwargs["queue_name"] = queue_name
-
     # Порядок middleware (TaskIQ receiver):
     # - pre_execute: по порядку регистрации — Logging → SessionLock → SimpleRetry (без pre_execute).
     # - on_error: в обратном порядке — SimpleRetry первым (решение о повторной kiq), затем SessionLock
@@ -81,7 +71,7 @@ def create_broker(
     )
 
     broker = (
-        RedisStreamBroker(**broker_kwargs)
+        RedisStreamBroker(url=broker_url, queue_name=effective_queue)
         .with_result_backend(result_backend)
         .with_middlewares(
             build_logging_middleware(
@@ -115,7 +105,7 @@ def create_scheduler(broker: RedisStreamBroker) -> TaskiqScheduler:
     return scheduler
 
 
-def create_stale_tasks_recovery(queue_name: str = "taskiq"):
+def create_stale_tasks_recovery(queue_name: str = "taskiq") -> Callable[[], Awaitable[None]]:
     """
     Возвращает функцию для восстановления зависших задач.
 
@@ -131,10 +121,6 @@ def create_stale_tasks_recovery(queue_name: str = "taskiq"):
         Задача в pending дольше 2 минут считается осиротевшей: XAUTOCLAIM
         переназначает её текущему consumer.
         """
-        if not REDIS_AVAILABLE:
-            logger.warning("task.stale_recover_skipped", reason="redis_unavailable", queue=queue_name)
-            return
-
         settings = get_settings()
         broker_url = settings.tasks.broker_url
 
@@ -146,8 +132,7 @@ def create_stale_tasks_recovery(queue_name: str = "taskiq"):
                 consumers = await r.xinfo_consumers(queue_name, queue_name)
             except Exception as exc:
                 if (
-                    RedisResponseError is not None
-                    and isinstance(exc, RedisResponseError)
+                    isinstance(exc, RedisResponseError)
                     and "NOGROUP" in str(exc).upper()
                 ):
                     logger.info(
@@ -201,8 +186,8 @@ def create_stale_tasks_recovery(queue_name: str = "taskiq"):
 
 def register_worker_events(
     broker: RedisStreamBroker,
-    startup_handler,
-    shutdown_handler,
+    startup_handler: Callable[[TaskiqState], Awaitable[None]],
+    shutdown_handler: Callable[[TaskiqState], Awaitable[None]],
     *,
     service_name: str,
 ) -> None:
@@ -229,5 +214,3 @@ def register_worker_events(
     broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)(shutdown_handler)
 
     logger.info("task.worker_events_registered", service=service_name)
-
-

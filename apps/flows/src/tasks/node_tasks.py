@@ -10,6 +10,7 @@ from typing import Any
 
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.nodes import create_node
+from apps.flows.src.tasks.task_names import TASK_EXECUTE_NODE
 from apps.flows_worker.broker import broker
 from core.logging import get_logger
 from core.state import ExecutionState
@@ -17,7 +18,7 @@ from core.state import ExecutionState
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="execute_node", queue_name="flows_worker")
+@broker.task(task_name=TASK_EXECUTE_NODE, queue_name="flows_worker")
 async def execute_node(
     node_id: str,
     node_config: dict[str, Any],

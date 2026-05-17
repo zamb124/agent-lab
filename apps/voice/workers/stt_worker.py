@@ -199,11 +199,9 @@ async def run_stt_worker(
             speech_frames_in_window = 0
             last_partial_at_frame = 0
             last_partial_preview = ""
-            consume_preroll = getattr(vad_provider, "consume_preroll", None)
-            if callable(consume_preroll):
-                preroll = consume_preroll()
-                if preroll:
-                    await stt_provider.push_audio(preroll)
+            preroll = vad_provider.consume_preroll()
+            if preroll:
+                await stt_provider.push_audio(preroll)
             if on_vad_state is not None:
                 await on_vad_state(session, "started")
 

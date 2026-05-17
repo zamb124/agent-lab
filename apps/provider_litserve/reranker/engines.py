@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 import torch
 from fastapi import HTTPException
+from FlagEmbedding import FlagLLMReranker
 from pydantic import ValidationError
 
 from apps.provider_litserve.openai_server_contracts import (
@@ -68,12 +69,6 @@ class LocalRerankerEngine:
     def _ensure_model(self, hf_model_id: str) -> Any:
         if hf_model_id in self._models:
             return self._models[hf_model_id]
-        try:
-            from FlagEmbedding import FlagLLMReranker
-        except ImportError as e:
-            raise RuntimeError(
-                "backend=flagllm: установите группу зависимостей uv sync --group reranker-model"
-            ) from e
         cuda = self._device.startswith("cuda")
         _require_cuda_when_selected(self._device)
         bf16 = self._cfg.use_bf16 and cuda

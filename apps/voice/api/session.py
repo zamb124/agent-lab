@@ -25,7 +25,11 @@ from apps.voice.services.voice_client_channel import VoiceClientChannel
 from apps.voice.services.voice_session import VoiceSession
 from apps.voice.workers.stt_worker import run_stt_worker
 from apps.voice.workers.ws_receiver import run_ws_receiver
-from core.clients.speech_override import SpeechOverride
+from core.clients.speech_override import (
+    SpeechOverride,
+    SpeechOverrideProviderName,
+    SpeechProviderName,
+)
 from core.clients.voice_resolver import get_tts_streamer
 from core.logging import get_logger
 from core.utils.background import run_with_log_context
@@ -38,6 +42,28 @@ router = APIRouter(
 )
 
 _HEARTBEAT_INTERVAL_S = 30.0
+
+
+def _speech_provider_name(value: str | None) -> SpeechProviderName | None:
+    if value is None:
+        return None
+    if value == "litserve":
+        return "litserve"
+    if value == "cloud_ru":
+        return "cloud_ru"
+    if value == "yandex":
+        return "yandex"
+    if value == "sber":
+        return "sber"
+    if value == "mock":
+        return "mock"
+    raise ValueError(f"Unsupported speech provider: {value!r}")
+
+
+def _speech_override_provider_name(value: str | None) -> SpeechOverrideProviderName | None:
+    if value == "silero_local":
+        return "silero_local"
+    return _speech_provider_name(value)
 
 
 @router.websocket("/{session_id}")
@@ -84,20 +110,28 @@ async def voice_session(
     session = VoiceSession(session_id=session_id)
     channel = VoiceClientChannel(websocket, session_id=session_id)
 
+    try:
+        stt_provider = _speech_provider_name(stt_provider_name)
+        tts_provider = _speech_provider_name(tts_provider_name)
+        vad_provider_name_resolved = _speech_override_provider_name(vad_provider_name)
+    except ValueError:
+        await websocket.close(code=1008)
+        return
+
     stt_override = SpeechOverride(
-        provider=stt_provider_name,
+        provider=stt_provider,
         model=stt_model,
         language=language,
     )
     tts_override = SpeechOverride(
-        provider=tts_provider_name,
+        provider=tts_provider,
         model=tts_model,
         voice=tts_voice_q,
         language=language,
         sample_rate=tts_sample_rate,
     )
     vad_override = SpeechOverride(
-        provider=vad_provider_name,
+        provider=vad_provider_name_resolved,
         sample_rate=vad_sample_rate,
         threshold=vad_threshold,
     )

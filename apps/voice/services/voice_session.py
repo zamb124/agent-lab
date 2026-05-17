@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Union
+from typing import Any, Union
 
 from core.logging import get_logger
 
@@ -54,7 +54,7 @@ class VoiceSession:
         self.synthesis_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=synthesis_size)
 
         self._active = True
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: list[asyncio.Task[Any]] = []
         self._bytes_sent: int = 0
         self._bytes_received: int = 0
         self._pcm_chunk_count: int = 0
@@ -101,7 +101,7 @@ class VoiceSession:
     def bytes_received(self) -> int:
         return self._bytes_received
 
-    def add_task(self, task: asyncio.Task) -> None:
+    def add_task(self, task: asyncio.Task[Any]) -> None:
         self._tasks.append(task)
 
     async def enqueue_mic_finalize(self, req: MicFinalizeRequest) -> None:
@@ -160,7 +160,7 @@ class VoiceSession:
         return removed
 
     @staticmethod
-    def _drain_simple_queue(q: asyncio.Queue) -> int:
+    def _drain_simple_queue(q: asyncio.Queue[Any]) -> int:
         removed = 0
         while not q.empty():
             try:

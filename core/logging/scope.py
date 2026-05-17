@@ -188,19 +188,25 @@ class RequestLogScope:
         requires_user: bool = False,
         **extra: Any,
     ) -> None:
-        self._args = dict(
-            request_id=request_id,
-            trace_id=trace_id,
-            service_name=service_name,
-            user_id=user_id,
-            company_id=company_id,
-            requires_user=requires_user,
-            **extra,
-        )
+        self._request_id = request_id
+        self._trace_id = trace_id
+        self._service_name = service_name
+        self._user_id = user_id
+        self._company_id = company_id
+        self._requires_user = requires_user
+        self._extra = extra
         self._token: _ScopeToken | None = None
 
     def __enter__(self) -> "RequestLogScope":
-        self._token = enter_request_scope(**self._args)
+        self._token = enter_request_scope(
+            request_id=self._request_id,
+            trace_id=self._trace_id,
+            service_name=self._service_name,
+            user_id=self._user_id,
+            company_id=self._company_id,
+            requires_user=self._requires_user,
+            **self._extra,
+        )
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

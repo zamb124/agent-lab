@@ -4,6 +4,7 @@ from urllib.parse import quote
 
 import pytest
 
+import core.files.s3_client as s3_client_module
 from core.files.processors import FileProcessor
 
 
@@ -41,8 +42,6 @@ class _FakeS3Client:
 async def test_process_file_from_bytes_encodes_unicode_metadata_for_s3(monkeypatch) -> None:
     repo = _FakeFileRepository()
     s3 = _FakeS3Client()
-
-    from core.files import s3_client as s3_client_module
 
     monkeypatch.setattr(s3_client_module.S3ClientFactory, "create_default_client", lambda: s3)
     monkeypatch.setattr(s3_client_module.S3ClientFactory, "create_client_for_bucket", lambda _bucket: s3)

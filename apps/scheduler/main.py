@@ -1,6 +1,7 @@
 """FastAPI entrypoint для scheduler control-plane."""
 
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import FastAPI
 
@@ -100,7 +101,7 @@ async def _ensure_idle_interval_schedule(
     config_enabled: bool,
     task_name: str,
     interval_seconds: int,
-    payload: dict,
+    payload: dict[str, Any],
     log_label: str,
     run_now_on_start: bool = False,
 ) -> None:

@@ -10,6 +10,7 @@ from typing import Any, List, Optional
 from sqlalchemy import DateTime, cast, select
 
 from core.db.base_repository import BaseRepository
+from core.db.models.platform import Usage
 from core.db.storage import Storage
 from core.logging import get_logger
 from core.models.billing_models import UsageRecord
@@ -72,8 +73,6 @@ class UsageRepository(BaseRepository[UsageRecord]):
         """
         Все компании: выборка из таблицы usage по полям JSON value (только админ API system).
         """
-        from core.db.models.platform import Usage
-
         if limit < 1 or limit > ADMIN_USAGE_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_USAGE_MAX_LIMIT}")
         if offset < 0:
@@ -112,8 +111,6 @@ class UsageRepository(BaseRepository[UsageRecord]):
         q: Optional[str] = None,
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> List[str]:
-        from core.db.models.platform import Usage
-
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         col = Usage.value["usage_type"].astext
@@ -132,8 +129,6 @@ class UsageRepository(BaseRepository[UsageRecord]):
         q: Optional[str] = None,
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> List[str]:
-        from core.db.models.platform import Usage
-
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         col = Usage.value["resource_name"].astext
@@ -145,4 +140,3 @@ class UsageRepository(BaseRepository[UsageRecord]):
             stmt = stmt.distinct().order_by(col.asc()).limit(limit)
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0]]
-

@@ -9,7 +9,7 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -68,7 +68,7 @@ class PushSubscriptionRepository:
         self,
         user_id: str,
         endpoint: str,
-        keys: dict,
+        keys: dict[str, Any],
         platform: str = "unknown",
         user_agent: Optional[str] = None,
     ) -> PushSubscription:

@@ -16,7 +16,7 @@ import redis.asyncio as redis
 from apps.sync.realtime.presence_hooks import _on_connect, _on_disconnect
 from apps.sync.ws_presence import is_user_sync_ws_online
 from core.config import get_settings
-from core.ui_events.dispatcher import UI_EVENTS_REDIS_CHANNEL
+from core.ui_events import UI_EVENTS_REDIS_CHANNEL
 
 
 async def _wait_presence_event(channel_pubsub, timeout: float = 10.0) -> dict:

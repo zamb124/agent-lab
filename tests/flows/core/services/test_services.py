@@ -12,7 +12,7 @@ from apps.flows.src.container import get_container
 from apps.flows.src.models import ExternalAgentStatus, FlowConfig, FlowType
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
-from core.clients import A2AClient
+from core.clients.a2a_client import A2AClient
 from core.db.repositories import Variable
 
 
@@ -574,4 +574,3 @@ class TestFlowDiscoveryService:
         assert discovery_service._generate_flow_id("http://my-agent.local:9000") == "my_agent_local_9000"
         assert discovery_service._generate_flow_id("http://192.168.1.100:8080") == "192_168_1_100_8080"
         assert discovery_service._generate_flow_id("http://simple-host") == "simple_host_80"
-

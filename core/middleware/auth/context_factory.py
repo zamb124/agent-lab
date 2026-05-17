@@ -2,7 +2,7 @@
 Фабрика для создания Context.
 """
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import HTTPException, Request
 
@@ -10,7 +10,7 @@ from core.context import clear_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
-from core.models.identity_models import AuthProvider, Company, User, UserStatus
+from core.models.identity_models import Company, User, UserStatus
 from core.utils.tokens import TokenData
 
 logger = get_logger(__name__)
@@ -74,9 +74,6 @@ class ContextFactory:
             company_id = company.company_id if company else "system"
             user = User(
                 user_id="anonymous",
-                provider=AuthProvider.YANDEX,
-                provider_user_id="anonymous",
-                email="",
                 name="Anonymous",
                 status=UserStatus.ACTIVE,
                 groups=["guest"],
@@ -84,9 +81,12 @@ class ContextFactory:
                 active_company_id=company_id,
             )
 
-        user_companies = await self._get_user_companies(user) if user else []
+        if user is None:
+            raise HTTPException(status_code=401, detail="User not found")
 
-        metadata = {
+        user_companies = await self._get_user_companies(user)
+
+        metadata: dict[str, Any] = {
             "context_type": context_type,
             "authenticated": user is not None,
         }
@@ -121,7 +121,6 @@ class ContextFactory:
             metadata=metadata,
             auth_token=auth_token,
             trace_id=trace_id,
-            container=self.container,
         )
 
     async def _create_anonymous_context(
@@ -136,9 +135,6 @@ class ContextFactory:
 
         anonymous_user = User(
             user_id="anonymous",
-            provider=AuthProvider.YANDEX,
-            provider_user_id="anonymous",
-            email="",
             name="Anonymous",
             status=UserStatus.ACTIVE,
             groups=["guest"],
@@ -171,7 +167,6 @@ class ContextFactory:
             language=language,
             metadata={"anonymous": True},
             trace_id=trace_id,
-            container=self.container,
         )
 
     async def _resolve_active_namespace(
@@ -182,7 +177,7 @@ class ContextFactory:
         user_companies: List[Company],
         language: Language,
         host: str,
-        metadata: dict,
+        metadata: dict[str, Any],
         token_data: Optional[TokenData],
         auth_token: Optional[str],
         trace_id: Optional[str],
@@ -207,7 +202,6 @@ class ContextFactory:
             metadata=metadata,
             auth_token=auth_token,
             trace_id=trace_id,
-            container=self.container,
         )
         set_context(preliminary)
         try:

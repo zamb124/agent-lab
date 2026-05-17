@@ -130,7 +130,7 @@ async def execute(args, state):
             {"type": "tool_call", "tool": "ask_user", "args": {"question": "Какой у вас номер заказа?"}},
         ])
 
-        flow = await Flow.from_config(main_agent_config)
+        flow = await Flow.from_config(main_agent_config, container=app.state.container)
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -160,7 +160,7 @@ async def execute(args, state):
             "Готово! Ваш заказ отправлен.",
         ])
 
-        flow = await Flow.from_config(main_agent_config)
+        flow = await Flow.from_config(main_agent_config, container=app.state.container)
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -265,7 +265,7 @@ async def execute(args, state):
             "Данные собраны успешно!",
         ])
 
-        flow = await Flow.from_config(main_flow_with_subagent)
+        flow = await Flow.from_config(main_flow_with_subagent, container=app.state.container)
 
         state = ExecutionState(
             task_id="test-task",
@@ -436,7 +436,7 @@ async def execute(args, state):
             "Обработка завершена. Файл test.jpg обработан.",
         ])
 
-        flow = await Flow.from_config(agent_with_file_tool)
+        flow = await Flow.from_config(agent_with_file_tool, container=app.state.container)
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",

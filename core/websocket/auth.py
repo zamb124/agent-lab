@@ -8,14 +8,13 @@ from fastapi import WebSocket
 
 from core.logging import get_logger
 from core.models.identity_models import User
+from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
 
 
 async def get_user_from_websocket(websocket: WebSocket) -> Optional[User]:
     """Извлечь пользователя из cookie auth_token; вернуть None при отсутствии/невалидности."""
-    from core.utils.tokens import get_token_service
-
     auth_token = websocket.cookies.get("auth_token")
     if not auth_token:
         logger.debug("WebSocket: no auth_token cookie")
@@ -30,7 +29,7 @@ async def get_user_from_websocket(websocket: WebSocket) -> Optional[User]:
     return User(
         user_id=token_data.user_id,
         name=token_data.user_id,
-        email="",
+        emails=[],
         companies={},
         active_company_id=token_data.company_id or "default",
     )

@@ -21,16 +21,20 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from typing import Any, Dict, Optional, Set, Tuple
+from collections.abc import Awaitable, Callable
+from typing import Any, Optional
 
 import redis.asyncio as aioredis
 from fastapi import WebSocket
 
 from core.config import get_settings
 from core.logging import enter_request_scope, exit_request_scope, get_logger
-from core.ui_events.dispatcher import UI_EVENTS_REDIS_CHANNEL
+from core.ui_events.contract import UI_EVENTS_REDIS_CHANNEL
 
 logger = get_logger(__name__)
+
+ConnectionHook = Callable[[str, str | None, bool], Awaitable[None]]
+JsonObject = dict[str, Any]
 
 
 class NotificationManager:
@@ -43,30 +47,35 @@ class NotificationManager:
     """
 
     def __init__(self) -> None:
-        self._connections: Dict[str, Set[WebSocket]] = {}
-        self._socket_meta: Dict[WebSocket, Tuple[str, Optional[str]]] = {}
+        self._connections: dict[str, set[WebSocket]] = {}
+        self._socket_meta: dict[WebSocket, tuple[str, str | None]] = {}
         self._connection_lock = asyncio.Lock()
-        self._redis_task: Optional[asyncio.Task] = None
-        self._redis_client: Optional[aioredis.Redis] = None
+        self._redis_task: asyncio.Task[None] | None = None
+        self._redis_client: aioredis.Redis | None = None
         self._redis_pubsub: Optional[Any] = None
-        self._connect_hooks: list = []
-        self._disconnect_hooks: list = []
+        self._connect_hooks: list[ConnectionHook] = []
+        self._disconnect_hooks: list[ConnectionHook] = []
 
-    def register_connect_hook(self, hook) -> None:
+    def register_connect_hook(self, hook: ConnectionHook) -> None:
         """Hook вида `async def hook(user_id: str, company_id: str | None,
         was_first_connection: bool) -> None`."""
         if not callable(hook):
             raise TypeError("connect hook must be callable")
         self._connect_hooks.append(hook)
 
-    def register_disconnect_hook(self, hook) -> None:
+    def register_disconnect_hook(self, hook: ConnectionHook) -> None:
         """Hook вида `async def hook(user_id: str, company_id: str | None,
         was_last_connection: bool) -> None`."""
         if not callable(hook):
             raise TypeError("disconnect hook must be callable")
         self._disconnect_hooks.append(hook)
 
-    async def connect(self, websocket: WebSocket, user_id: str, company_id: Optional[str] = None) -> None:
+    async def connect(
+        self,
+        websocket: WebSocket,
+        user_id: str,
+        company_id: str | None = None,
+    ) -> None:
         async with self._connection_lock:
             existing = self._connections.get(user_id)
             was_first_connection = not existing
@@ -86,7 +95,7 @@ class NotificationManager:
 
     async def disconnect(self, websocket: WebSocket, user_id: str) -> None:
         was_last_connection = False
-        company_id: Optional[str] = None
+        company_id: str | None = None
         async with self._connection_lock:
             meta = self._socket_meta.pop(websocket, None)
             if meta is not None:
@@ -122,11 +131,9 @@ class NotificationManager:
             return
         await client.publish(UI_EVENTS_REDIS_CHANNEL, envelope_json)
 
-    async def _ensure_publisher_client(self) -> Optional[aioredis.Redis]:
+    async def _ensure_publisher_client(self) -> aioredis.Redis | None:
         if self._redis_client is not None:
             return self._redis_client
-        from core.config import get_settings
-
         settings = get_settings()
         redis_url = getattr(settings.database, "redis_url", None)
         if not redis_url:
@@ -135,8 +142,13 @@ class NotificationManager:
         logger.info("Redis publisher client lazy-initialized for UI events")
         return self._redis_client
 
-    async def _send_event_to_sockets(self, sockets: Set[WebSocket], event_text: str, label: str) -> None:
-        dead: Set[WebSocket] = set()
+    async def _send_event_to_sockets(
+        self,
+        sockets: set[WebSocket],
+        event_text: str,
+        label: str,
+    ) -> None:
+        dead: set[WebSocket] = set()
         for ws in list(sockets):
             try:
                 await ws.send_text(event_text)
@@ -155,7 +167,7 @@ class NotificationManager:
                             if not bucket:
                                 self._connections.pop(uid, None)
 
-    async def _deliver_envelope(self, envelope: dict) -> None:
+    async def _deliver_envelope(self, envelope: JsonObject) -> None:
         target = envelope.get("target") or {}
         event = envelope.get("event")
         if not isinstance(event, dict) or "type" not in event:
@@ -194,7 +206,7 @@ class NotificationManager:
                 return
 
             if company_id:
-                matched: Set[WebSocket] = set()
+                matched: set[WebSocket] = set()
                 for ws, (uid, cid) in self._socket_meta.items():
                     if cid == company_id:
                         matched.add(ws)
@@ -202,7 +214,7 @@ class NotificationManager:
                 return
 
             if broadcast:
-                all_sockets: Set[WebSocket] = set(self._socket_meta.keys())
+                all_sockets: set[WebSocket] = set(self._socket_meta.keys())
                 await self._send_event_to_sockets(all_sockets, event_text, "broadcast")
                 return
 
@@ -298,10 +310,17 @@ class NotificationManager:
                     continue
                 if message.get("type") != "message":
                     continue
+                data = message.get("data")
+                if not isinstance(data, (str, bytes, bytearray)):
+                    logger.warning("ui_event.redis_message_data_invalid")
+                    continue
                 try:
-                    envelope = json.loads(message["data"])
+                    envelope = json.loads(data)
                 except json.JSONDecodeError as exc:
                     logger.error("Failed to parse UI envelope: %s", exc)
+                    continue
+                if not isinstance(envelope, dict):
+                    logger.warning("ui_event.redis_message_envelope_invalid")
                     continue
                 try:
                     await self._deliver_envelope(envelope)
@@ -312,7 +331,7 @@ class NotificationManager:
         finally:
             self._redis_pubsub = None
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> dict[str, int | bool]:
         return {
             "active_users": len(self._connections),
             "total_connections": sum(len(s) for s in self._connections.values()),

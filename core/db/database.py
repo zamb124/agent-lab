@@ -29,8 +29,11 @@ def _require_shared_db_url() -> str:
         raise ValueError("database.shared_url не задан")
     return u
 
-_engines: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
-_session_factories: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+_engines: weakref.WeakValueDictionary[tuple[int, str], AsyncEngine] = weakref.WeakValueDictionary()
+_session_factories: weakref.WeakValueDictionary[
+    tuple[int, str],
+    async_sessionmaker[AsyncSession],
+] = weakref.WeakValueDictionary()
 
 def _get_loop_id() -> int:
     """Получает ID текущего event loop для кэширования"""
@@ -85,7 +88,7 @@ async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
     _engines[cache_key] = engine
     return engine
 
-async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmaker:
+async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmaker[AsyncSession]:
     """
     Лениво создает session factory для текущего event loop и URL БД.
 
@@ -171,13 +174,16 @@ async def close_db():
     """Закрывает соединения с БД для текущего event loop"""
     loop_id = _get_loop_id()
 
-    engine = _engines.get(loop_id)
-    if engine is not None:
+    keys = [key for key in list(_engines.keys()) if key[0] == loop_id]
+    for key in keys:
+        engine = _engines.get(key)
+        if engine is None:
+            continue
         logger.info(f"Закрываем engine для event loop {loop_id}")
         await engine.dispose()
         logger.debug(f"Engine закрыт (loop {loop_id})")
 
-        _engines.pop(loop_id, None)
-        _session_factories.pop(loop_id, None)
+        _engines.pop(key, None)
+        _session_factories.pop(key, None)
+    if keys:
         logger.info(f"Соединения с БД закрыты (loop {loop_id})")
-

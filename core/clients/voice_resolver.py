@@ -59,6 +59,7 @@ from core.clients.tts_pronunciation.models import (
     CompiledPronunciation,
     NormalizationConfig,
     PronunciationRule,
+    PronunciationRuleKind,
     PronunciationRuleSet,
 )
 from core.clients.tts_streaming import BaseTTSStreamer, BatchBackedTTSStreamer
@@ -68,6 +69,7 @@ from core.clients.vad_client import (
 )
 from core.config import get_settings
 from core.config.models import ProviderLitserveTTSModelEntry
+from core.db.models.platform import CompanyPronunciationRule, PlatformPronunciationRule
 from core.db.repositories.company_voice_provider_repository import (
     CompanyVoiceProviderRepository,
     VoiceKind,
@@ -154,7 +156,7 @@ def _coerce_company_voice_secrets(raw: object | None) -> Optional[dict[str, str]
 def _get_repo() -> CompanyVoiceProviderRepository:
     settings = get_settings()
     db_url = settings.database.shared_url
-    if db_url == "":
+    if not db_url:
         raise ValueError(
             "voice_resolver: settings.database.shared_url не задан — "
             "невозможно прочитать company_voice_providers."
@@ -474,19 +476,27 @@ def _get_pronunciation_repo() -> tuple[PlatformPronunciationRuleRepository, Comp
     )
 
 
-def _db_row_to_pronunciation_rule(row: object) -> PronunciationRule:
+def _pronunciation_rule_kind(value: str) -> PronunciationRuleKind:
+    if value not in ("alias", "regex", "stress"):
+        raise ValueError(f"voice_resolver: неизвестный kind правила произношения: {value!r}")
+    return value
+
+
+def _db_row_to_pronunciation_rule(
+    row: PlatformPronunciationRule | CompanyPronunciationRule,
+) -> PronunciationRule:
     return PronunciationRule(
-        id=row.id,  # type: ignore[attr-defined]
-        kind=row.kind,  # type: ignore[attr-defined]
-        pattern=row.pattern,  # type: ignore[attr-defined]
-        replacement=row.replacement,  # type: ignore[attr-defined]
-        language=row.language,  # type: ignore[attr-defined]
-        case_sensitive=row.case_sensitive,  # type: ignore[attr-defined]
-        word_boundary=row.word_boundary,  # type: ignore[attr-defined]
-        providers=list(row.providers) if row.providers else None,  # type: ignore[attr-defined]
-        voices=list(row.voices) if row.voices else None,  # type: ignore[attr-defined]
-        enabled=row.enabled,  # type: ignore[attr-defined]
-        note=row.note,  # type: ignore[attr-defined]
+        id=row.id,
+        kind=_pronunciation_rule_kind(row.kind),
+        pattern=row.pattern,
+        replacement=row.replacement,
+        language=row.language,
+        case_sensitive=row.case_sensitive,
+        word_boundary=row.word_boundary,
+        providers=list(row.providers) if row.providers else None,
+        voices=list(row.voices) if row.voices else None,
+        enabled=row.enabled,
+        note=row.note,
     )
 
 
@@ -505,9 +515,7 @@ async def _load_platform_pronunciation() -> CompiledPronunciation:
     rule_set = PronunciationRuleSet(rules=rules, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(
         rule_set,
-        ssml_subset_enabled=get_settings().voice.tts.pronunciation.ssml_subset_enabled
-        if hasattr(get_settings().voice.tts, "pronunciation")
-        else False,
+        ssml_subset_enabled=get_settings().voice.tts.pronunciation.ssml_subset_enabled,
     )
     _pronunciation_platform_cache = (now, compiled)
     return compiled

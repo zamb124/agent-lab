@@ -26,7 +26,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from taskiq import AsyncTaskiqDecoratedTask
+from taskiq import AsyncBroker, AsyncTaskiqDecoratedTask
 from taskiq.kicker import AsyncKicker
 
 from core.config import get_settings
@@ -90,7 +90,7 @@ def build_log_labels(
 
 
 async def kiq_with_context(
-    task: AsyncTaskiqDecoratedTask,
+    task: AsyncTaskiqDecoratedTask[..., Any],
     *args: Any,
     override_request_id: str | None = None,
     override_trace_id: str | None = None,
@@ -116,15 +116,68 @@ async def kiq_with_context(
     return await task.kicker().with_labels(**labels).kiq(*args, **kwargs)
 
 
-def kicker_with_log_labels(
-    task: AsyncTaskiqDecoratedTask,
+def kicker_for_task_name_with_log_labels(
+    task_name: str,
+    broker: AsyncBroker,
     *,
     override_request_id: str | None = None,
     override_trace_id: str | None = None,
     service_name: str | None = None,
     background_kind: str | None = None,
     extra_labels: dict[str, str] | None = None,
-) -> AsyncKicker:
+) -> AsyncKicker[..., Any]:
+    """Вернуть AsyncKicker для task-name contract без импорта worker implementation."""
+    if not isinstance(task_name, str) or not task_name.strip():
+        raise ValueError("kicker_for_task_name_with_log_labels: task_name пустой")
+    labels = build_log_labels(
+        override_request_id=override_request_id,
+        override_trace_id=override_trace_id,
+        service_name=service_name,
+        background_kind=background_kind,
+    )
+    if extra_labels:
+        for key, value in extra_labels.items():
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"kicker_for_task_name_with_log_labels: label {key!r} должен быть непустой строкой"
+                )
+            labels[key] = value.strip()
+    return AsyncKicker(task_name.strip(), broker, labels)
+
+
+async def kiq_task_name_with_context(
+    task_name: str,
+    broker: AsyncBroker,
+    *args: Any,
+    override_request_id: str | None = None,
+    override_trace_id: str | None = None,
+    service_name: str | None = None,
+    background_kind: str | None = None,
+    extra_labels: dict[str, str] | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Поставить TaskIQ задачу по имени, не импортируя модуль-исполнитель."""
+    kicker = kicker_for_task_name_with_log_labels(
+        task_name,
+        broker,
+        override_request_id=override_request_id,
+        override_trace_id=override_trace_id,
+        service_name=service_name,
+        background_kind=background_kind,
+        extra_labels=extra_labels,
+    )
+    return await kicker.kiq(*args, **kwargs)
+
+
+def kicker_with_log_labels(
+    task: AsyncTaskiqDecoratedTask[..., Any],
+    *,
+    override_request_id: str | None = None,
+    override_trace_id: str | None = None,
+    service_name: str | None = None,
+    background_kind: str | None = None,
+    extra_labels: dict[str, str] | None = None,
+) -> AsyncKicker[..., Any]:
     """
     Вернуть AsyncKicker уже с прикреплёнными log-labels.
 
@@ -170,6 +223,8 @@ def _resolve_id(
 
 __all__ = [
     "build_log_labels",
+    "kicker_for_task_name_with_log_labels",
     "kicker_with_log_labels",
+    "kiq_task_name_with_context",
     "kiq_with_context",
 ]

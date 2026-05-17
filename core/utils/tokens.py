@@ -41,11 +41,12 @@ class TokenService:
 
     def __init__(self):
         settings = get_settings()
-        self.secret_key = settings.auth.jwt_secret_key
+        secret_key = settings.auth.jwt_secret_key
 
-        if not self.secret_key:
+        if not secret_key:
             raise ValueError("JWT secret key не настроен в конфигурации (auth.jwt_secret_key)")
 
+        self.secret_key = secret_key
         self.algorithm = 'HS256'
 
     def create_token(

@@ -19,14 +19,15 @@ from typing import Any
 
 from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 
-try:
-    import redis.asyncio as redis
-    REDIS_AVAILABLE = True
-except ImportError:
-    REDIS_AVAILABLE = False
-    redis = None
-
+from core.config import get_settings
 from core.logging import get_logger
+
+try:
+    import redis.asyncio as redis_async
+except ImportError:
+    redis_async = None
+
+_redis_available = redis_async is not None
 
 logger = get_logger(__name__)
 
@@ -48,17 +49,17 @@ class SessionLockMiddleware(TaskiqMiddleware):
     """
 
     def __init__(self):
+        super().__init__()
         self._redis_client = None
         self._locks_held: set[str] = set()
 
     async def _get_redis(self):
         """Получить Redis клиент (lazy initialization)"""
-        if not REDIS_AVAILABLE:
+        if not _redis_available or redis_async is None:
             raise RuntimeError("redis не установлен")
         if self._redis_client is None:
-            from core.config import get_settings
             settings = get_settings()
-            self._redis_client = redis.from_url(
+            self._redis_client = redis_async.from_url(
                 settings.database.redis_url,
                 decode_responses=True,
             )

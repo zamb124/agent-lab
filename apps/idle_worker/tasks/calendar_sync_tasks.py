@@ -46,7 +46,7 @@ class _TickStats:
     notifications_sent: int = 0
 
 
-def _classify_failure(error: Exception) -> str:
+def _classify_failure(error: BaseException) -> str:
     if isinstance(error, CalendarReauthRequiredError):
         return "auth"
     if isinstance(error, httpx.HTTPStatusError):
@@ -256,7 +256,7 @@ async def calendar_sync_tick(
 
     for index, outcome in enumerate(results):
         integration = integrations[index]
-        if isinstance(outcome, Exception):
+        if isinstance(outcome, BaseException):
             stats.integrations_failed += 1
             failure_kind = _classify_failure(outcome)
             if failure_kind == "auth":

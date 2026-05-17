@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 
+from apps.browser.interaction.interaction_profiles import InteractionProfileName
+
 
 class ControlObserveStore:
     """
@@ -20,7 +22,7 @@ class ControlObserveStore:
 
     def __init__(self) -> None:
         self._last_refs: dict[str, dict[str, dict[str, object]]] = {}
-        self._interaction_profile: dict[str, str] = {}
+        self._interaction_profile: dict[str, InteractionProfileName] = {}
         self._interaction_seed: dict[str, int] = {}
         self._interaction_step: dict[str, int] = {}
 
@@ -41,7 +43,7 @@ class ControlObserveStore:
         self,
         session_id: str,
         *,
-        profile: str,
+        profile: InteractionProfileName,
         seed: int | None,
     ) -> None:
         if not session_id:
@@ -52,7 +54,7 @@ class ControlObserveStore:
         self._interaction_seed[session_id] = seed if seed is not None else self._seed_from_session_id(session_id)
         self._interaction_step[session_id] = 0
 
-    def get_interaction_profile(self, session_id: str) -> str:
+    def get_interaction_profile(self, session_id: str) -> InteractionProfileName:
         p = self._interaction_profile.get(session_id)
         if p is None:
             raise KeyError(f"Нет interaction_profile для session_id={session_id}")
@@ -82,4 +84,3 @@ class ControlObserveStore:
         if refs is None:
             raise KeyError(f"Нет refs для session_id={session_id}")
         return refs
-

@@ -28,6 +28,7 @@ from abc import ABC, abstractmethod
 from typing import AsyncIterator
 
 from core.clients.tts_client import BaseTTSClient
+from core.clients.voice_chunker import VoiceChunker
 from core.utils.text_sanitize import sanitize_text_for_speech_backend
 
 
@@ -54,7 +55,7 @@ class BaseTTSStreamer(ABC):
         """Синтезировать один готовый кусок текста → аудиобайты."""
 
     @abstractmethod
-    async def astream(
+    def astream(
         self,
         text_stream: AsyncIterator[str],
     ) -> AsyncIterator[bytes]:
@@ -125,8 +126,6 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
         self,
         text_stream: AsyncIterator[str],
     ) -> AsyncIterator[bytes]:
-        from core.clients.voice_chunker import VoiceChunker
-
         chunker = VoiceChunker(
             chunk_max_chars=self._chunk_max_chars,
             min_words=self._min_words,

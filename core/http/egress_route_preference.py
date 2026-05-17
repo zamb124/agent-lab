@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlparse
 
+from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.logging import get_logger
 
@@ -23,8 +24,6 @@ _redis: Any = None
 def _redis_client() -> Any:
     global _redis
     if _redis is None:
-        from core.clients.redis_client import RedisClient
-
         _redis = RedisClient(get_settings().database.redis_url)
     return _redis
 

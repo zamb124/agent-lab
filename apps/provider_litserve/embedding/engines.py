@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from fastapi import HTTPException
 from pydantic import ValidationError
+from sentence_transformers import SentenceTransformer
 
 from apps.provider_litserve.openai_server_contracts import (
     OpenAIEmbeddingsRequest,
@@ -58,12 +59,6 @@ class LocalEmbeddingEngine:
     def _ensure_model(self, hf_model_id: str) -> Any:
         if hf_model_id in self._models:
             return self._models[hf_model_id]
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError as e:
-            raise RuntimeError(
-                "Локальный эмбеддер: установите зависимости (uv sync --group reranker-model)"
-            ) from e
         _require_cuda_when_selected(self._device)
         use_bf16 = (
             self._cfg.embedding_use_bf16

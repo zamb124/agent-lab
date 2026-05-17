@@ -13,6 +13,51 @@ from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from core.state import ExecutionState
 
 
+class _RedisClient:
+    async def publish(self, channel: str, payload: str) -> None:
+        _ = channel, payload
+
+
+class _BillingService:
+    async def company_may_incur_billable_operation_charge(self, company_id: str) -> bool:
+        _ = company_id
+        return True
+
+    async def require_balance_for_billable_operation(
+        self,
+        company_id: str,
+        user_id: str,
+        *,
+        operation_code: str,
+        notification_service: str,
+    ) -> None:
+        _ = company_id, user_id, operation_code, notification_service
+
+
+class _FlowFactory:
+    async def get_resource_maps(
+        self,
+        flow_id: str | None,
+        branch_id: str,
+        flow_config_version: str | None,
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        _ = flow_id, branch_id, flow_config_version
+        return {}, {}
+
+
+class _ResourceRepository:
+    async def get(self, resource_id: str) -> None:
+        _ = resource_id
+        return None
+
+
+class _RuntimeContainer:
+    redis_client = _RedisClient()
+    billing_service = _BillingService()
+    flow_factory = _FlowFactory()
+    resource_repository = _ResourceRepository()
+
+
 @pytest.fixture
 def simple_node_config():
     """Конфигурация простой ноды."""
@@ -83,7 +128,7 @@ class TestNodeAsToolWrapperMock:
     @pytest.mark.asyncio
     async def test_mock_disabled_calls_real_node(self, simple_node_config, mock_llm):
         """Mock выключен - вызывается реальная нода."""
-        wrapper = NodeAsToolWrapper(node_config=simple_node_config)
+        wrapper = NodeAsToolWrapper(node_config=simple_node_config, container=_RuntimeContainer())
 
         state = ExecutionState(
             task_id="test-task",
@@ -107,7 +152,7 @@ class TestNodeAsToolWrapperMock:
     @pytest.mark.asyncio
     async def test_no_mock_for_this_node_calls_real(self, simple_node_config, mock_llm):
         """Нет mock для этой ноды - вызывается реальная."""
-        wrapper = NodeAsToolWrapper(node_config=simple_node_config)
+        wrapper = NodeAsToolWrapper(node_config=simple_node_config, container=_RuntimeContainer())
 
         state = ExecutionState(
             task_id="test-task",

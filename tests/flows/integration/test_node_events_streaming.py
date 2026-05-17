@@ -30,18 +30,21 @@ class TestNodeEventsStreaming:
         context_id = f"ctx-{uuid.uuid4()}"
 
         # Создаём агент с одной function нодой
-        agent = await Flow.from_config({
-            "id": "test_node_events_agent",
-            "name": "Test Node Events",
-            "entry": "process",
-            "nodes": {
-                "process": {
-                    "type": "code",
-                    "code": "async def run(state):\n    state['response'] = 'done'\n    return state",
+        agent = await Flow.from_config(
+            {
+                "id": "test_node_events_agent",
+                "name": "Test Node Events",
+                "entry": "process",
+                "nodes": {
+                    "process": {
+                        "type": "code",
+                        "code": "async def run(state):\n    state['response'] = 'done'\n    return state",
+                    },
                 },
+                "edges": [{"from": "process", "to": None}],
             },
-            "edges": [{"from": "process", "to": None}],
-        })
+            container=container,
+        )
 
         state = ExecutionState.create(
             task_id=task_id,
@@ -100,30 +103,33 @@ class TestNodeEventsStreaming:
         context_id = f"ctx-{uuid.uuid4()}"
 
         # Агент с тремя function нодами
-        agent = await Flow.from_config({
-            "id": "test_multi_node_agent",
-            "name": "Test Multi Node",
-            "entry": "step1",
-            "nodes": {
-                "step1": {
-                    "type": "code",
-                    "code": "async def run(state):\n    state['step1'] = True\n    return state",
+        agent = await Flow.from_config(
+            {
+                "id": "test_multi_node_agent",
+                "name": "Test Multi Node",
+                "entry": "step1",
+                "nodes": {
+                    "step1": {
+                        "type": "code",
+                        "code": "async def run(state):\n    state['step1'] = True\n    return state",
+                    },
+                    "step2": {
+                        "type": "code",
+                        "code": "async def run(state):\n    state['step2'] = True\n    return state",
+                    },
+                    "step3": {
+                        "type": "code",
+                        "code": "async def run(state):\n    state['response'] = 'all done'\n    return state",
+                    },
                 },
-                "step2": {
-                    "type": "code",
-                    "code": "async def run(state):\n    state['step2'] = True\n    return state",
-                },
-                "step3": {
-                    "type": "code",
-                    "code": "async def run(state):\n    state['response'] = 'all done'\n    return state",
-                },
+                "edges": [
+                    {"from": "step1", "to": "step2"},
+                    {"from": "step2", "to": "step3"},
+                    {"from": "step3", "to": None},
+                ],
             },
-            "edges": [
-                {"from": "step1", "to": "step2"},
-                {"from": "step2", "to": "step3"},
-                {"from": "step3", "to": None},
-            ],
-        })
+            container=container,
+        )
 
         state = ExecutionState.create(
             task_id=task_id,
@@ -194,18 +200,21 @@ class TestNodeEventsStreaming:
         context_id = f"ctx-{uuid.uuid4()}"
 
         # Агент с нодой которая падает
-        agent = await Flow.from_config({
-            "id": "test_error_node_agent",
-            "name": "Test Error Node",
-            "entry": "failing",
-            "nodes": {
-                "failing": {
-                    "type": "code",
-                    "code": "async def run(state):\n    raise ValueError('Test error')",
+        agent = await Flow.from_config(
+            {
+                "id": "test_error_node_agent",
+                "name": "Test Error Node",
+                "entry": "failing",
+                "nodes": {
+                    "failing": {
+                        "type": "code",
+                        "code": "async def run(state):\n    raise ValueError('Test error')",
+                    },
                 },
+                "edges": [{"from": "failing", "to": None}],
             },
-            "edges": [{"from": "failing", "to": None}],
-        })
+            container=container,
+        )
 
         state = ExecutionState.create(
             task_id=task_id,
@@ -253,4 +262,3 @@ class TestNodeEventsStreaming:
 
         finally:
             await redis_client.close()
-

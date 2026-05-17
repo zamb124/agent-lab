@@ -222,6 +222,13 @@ class PaymentService:
             await self._save_notification(notification)
             return
 
+        transaction_id = verification_result.transaction_id
+        amount = verification_result.amount
+        if transaction_id is None or transaction_id == "":
+            raise ValueError("Payment webhook missing transaction_id")
+        if amount is None:
+            raise ValueError("Payment webhook missing amount")
+
         if await self._is_notification_duplicate(verification_result.external_payment_id):
             logger.warning(
                 "payments.notification_duplicate",
@@ -231,17 +238,17 @@ class PaymentService:
 
         await self._save_notification(notification)
 
-        transaction = await self.get_transaction(verification_result.transaction_id)
+        transaction = await self.get_transaction(transaction_id)
 
         if not transaction:
             # Попытка извлечь company_id из label (формат: company_id:txn_xxx)
-            label_parts = verification_result.transaction_id.split(":", 1)
+            label_parts = transaction_id.split(":", 1)
 
             if len(label_parts) == 2:
                 company_id_from_label = label_parts[0]
                 logger.warning(
                     "payments.transaction_recovered_from_label",
-                    transaction_id=verification_result.transaction_id,
+                    transaction_id=transaction_id,
                     company_id=company_id_from_label,
                 )
 
@@ -256,10 +263,10 @@ class PaymentService:
                 provider_type = provider_type_map.get(provider_name, PaymentProviderType.YOOMONEY)
 
                 transaction = Transaction(
-                    transaction_id=verification_result.transaction_id,
+                    transaction_id=transaction_id,
                     company_id=company_id_from_label,
                     user_id="system_recovery",  # Неизвестен - помечаем как восстановление
-                    amount=verification_result.amount,
+                    amount=amount,
                     status=PaymentStatus.SUCCESS,
                     payment_provider=provider_type,
                     external_payment_id=verification_result.external_payment_id,
@@ -271,7 +278,7 @@ class PaymentService:
 
                 await self._update_company_balance(
                     company_id_from_label,
-                    verification_result.amount,
+                    amount,
                 )
 
                 notification.processed = True
@@ -285,9 +292,9 @@ class PaymentService:
             else:
                 logger.error(
                     "payments.transaction_not_found",
-                    transaction_id=verification_result.transaction_id,
+                    transaction_id=transaction_id,
                 )
-                raise ValueError(f"Transaction {verification_result.transaction_id} not found")
+                raise ValueError(f"Transaction {transaction_id} not found")
 
         if transaction.status != PaymentStatus.PENDING:
             logger.warning(
@@ -417,7 +424,7 @@ class PaymentService:
             force_global=True
         )
 
-    async def _is_notification_duplicate(self, external_payment_id: str) -> bool:
+    async def _is_notification_duplicate(self, external_payment_id: str | None) -> bool:
         """Проверяет не было ли уже обработано это уведомление"""
 
         if not external_payment_id:
@@ -459,4 +466,3 @@ class PaymentService:
             balance_after=round(company.balance, 2),
             delta=round(amount, 2),
         )
-

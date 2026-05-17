@@ -16,7 +16,10 @@ from core.errors import (
     CyclicDependencyError,
     InvalidGraphError,
 )
+from core.logging import get_logger
 from core.models import StrictBaseModel
+
+logger = get_logger(__name__)
 
 
 class CompiledEdge(StrictBaseModel):
@@ -308,8 +311,6 @@ class GraphCompiler:
         # Ноды могут быть доступны как tools, не только через edges
         # Поэтому недостижимые ноды это предупреждение, не ошибка
         if unreachable:
-            from core.logging import get_logger
-            logger = get_logger(__name__)
             logger.warning(
                 f"Ноды не достижимы через edges от entry '{entry}': {', '.join(unreachable)}. "
                 f"Если они используются как tools - это нормально."

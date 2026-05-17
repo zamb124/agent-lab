@@ -10,18 +10,12 @@ WebSocket-менеджер форвардит его в подключённые
 """
 
 from core.ui_events.contract import (
+    UI_EVENTS_REDIS_CHANNEL,
     CoreUIEventTypes,
     UIEvent,
     UIEventMeta,
     UIEventTarget,
     assert_ui_event_type,
-)
-from core.ui_events.dispatcher import (
-    UI_EVENTS_REDIS_CHANNEL,
-    publish_ui_event,
-    publish_ui_event_broadcast,
-    publish_ui_event_to_company,
-    publish_ui_event_to_user,
 )
 
 __all__ = [
@@ -30,9 +24,5 @@ __all__ = [
     "UIEventTarget",
     "CoreUIEventTypes",
     "assert_ui_event_type",
-    "publish_ui_event",
-    "publish_ui_event_to_user",
-    "publish_ui_event_to_company",
-    "publish_ui_event_broadcast",
     "UI_EVENTS_REDIS_CHANNEL",
 ]

@@ -4,9 +4,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
 from apps.crm.scheduled_task_constants import CRM_GENERATE_NAMESPACE_SUGGESTS_TASK_NAME
-from apps.crm_worker.broker import broker, get_crm_container
+from apps.crm_worker.broker import broker
 from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
 from core.logging import get_logger
 

@@ -40,7 +40,7 @@ def _bytes_to_hex(val: Any) -> str:
         return val.lower()
 
 
-def _parse_otlp_attribute_value(value: dict) -> Any:
+def _parse_otlp_attribute_value(value: dict[str, Any]) -> Any:
     if "stringValue" in value:
         return value["stringValue"]
     if "intValue" in value:
@@ -57,7 +57,7 @@ def _parse_otlp_attribute_value(value: dict) -> Any:
     return None
 
 
-def _parse_otlp_attributes(attrs: list[dict]) -> dict[str, Any]:
+def _parse_otlp_attributes(attrs: list[dict[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for attr in attrs:
         key = attr.get("key", "")
@@ -83,7 +83,7 @@ def _ns_to_iso(ns_str: Any) -> str | None:
         return None
 
 
-def _normalize_status(status: dict | None) -> str:
+def _normalize_status(status: dict[str, Any] | None) -> str:
     if not status:
         return "UNSET"
     code = status.get("code", 0)
@@ -92,7 +92,7 @@ def _normalize_status(status: dict | None) -> str:
     return _STATUS_CODE_MAP.get(int(code), "UNSET")
 
 
-def parse_otlp_trace(body: dict) -> list[dict[str, Any]]:
+def parse_otlp_trace(body: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Парсит тело ответа Tempo GET /api/traces/{traceID} (OTLP JSON) в список
     span-словарей, совместимых с build_span_tree и platform-trace-viewer.

@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, InstrumentedAttribute
 
+from core.config import get_settings
 from core.context import get_context
 from core.db.utils import get_rowcount
 from core.logging import get_logger
@@ -56,8 +57,6 @@ class CRMDatabase:
         """Singleton для CRM database"""
         if cls._instance is None:
             if db_url is None:
-                from core.config import get_settings
-
                 db_url = get_settings().database.crm_url
                 if not db_url:
                     raise ValueError("database.crm_url не задан")

@@ -16,4 +16,4 @@ def get_rowcount(result: Result[Any]) -> int:
 
     # Если это не CursorResult (например, при использовании asyncpg напрямую через text()),
     # пробуем получить атрибут через cast, так как в рантайме он там часто есть.
-    return int(cast(CursorResult, result).rowcount or 0)
+    return int(cast(CursorResult[Any], result).rowcount or 0)

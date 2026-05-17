@@ -6,14 +6,16 @@ TriggerExecutor - запуск агента при срабатывании тр
 
 """
 
-import importlib
 import uuid
 from typing import Any
 
 from apps.flows.src.models import TriggerConfig
+from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.triggers.input_mapper import InputMapper
+from apps.flows_worker.broker import broker as flows_broker
 from core.context import Context, User, get_context
 from core.logging import get_logger
+from core.tasks.kicker import kiq_task_name_with_context
 
 logger = get_logger(__name__)
 
@@ -100,11 +102,6 @@ class TriggerExecutor:
             },
         )
 
-
-        # Запускаем через TaskIQ
-        flow_tasks_module = importlib.import_module("apps.flows.src.tasks.flow_tasks")
-        process_flow_task = getattr(flow_tasks_module, "process_flow_task")
-
         final_metadata = {
             "trigger_id": trigger_id,
             "trigger_type": trigger_type,
@@ -112,7 +109,9 @@ class TriggerExecutor:
             **(metadata or {}),
         }
 
-        await process_flow_task.kiq(
+        await kiq_task_name_with_context(
+            TASK_PROCESS_FLOW,
+            flows_broker,
             flow_id=flow_id,
             session_id=session_id,
             user_id=effective_user_id,
@@ -126,6 +125,7 @@ class TriggerExecutor:
             files=None,
             context_data=context.to_dict(),
             trace_context=None,
+            background_kind="trigger",
         )
 
         logger.info(f"Trigger execution started: task_id={task_id}")

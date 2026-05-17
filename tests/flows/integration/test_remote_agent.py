@@ -3,6 +3,8 @@
 Используется реальный HTTP сервер.
 """
 
+import json
+
 import pytest
 from aiohttp import web
 
@@ -84,11 +86,12 @@ class TestRemoteFlowNode:
         assert node.branch_id == "default"
 
     @pytest.mark.asyncio
-    async def test_remote_flow_node_execution(self, remote_flow_server):
+    async def test_remote_flow_node_execution(self, remote_flow_server, container):
         """Выполнение RemoteFlowNode."""
         node = RemoteFlowNode(
             node_id="remote",
             config={"url": remote_flow_server},
+            container=container,
         )
 
         state = ExecutionState(
@@ -104,11 +107,12 @@ class TestRemoteFlowNode:
         assert result["remote_status"] == "completed"
 
     @pytest.mark.asyncio
-    async def test_remote_flow_node_preserves_state(self, remote_flow_server):
+    async def test_remote_flow_node_preserves_state(self, remote_flow_server, container):
         """RemoteFlowNode сохраняет существующие поля state."""
         node = RemoteFlowNode(
             node_id="remote",
             config={"url": remote_flow_server},
+            container=container,
         )
 
         state = ExecutionState(
@@ -173,7 +177,7 @@ class TestFlowWithRemoteAgent:
         await runner.cleanup()
 
     @pytest.mark.asyncio
-    async def test_flow_with_single_remote_node(self, remote_flow_server):
+    async def test_flow_with_single_remote_node(self, remote_flow_server, container):
         """Agent с одной remote нодой."""
         config = FlowConfig(
             flow_id="remote_flow",
@@ -198,7 +202,8 @@ class TestFlowWithRemoteAgent:
                 "nodes": config.nodes,
                 "edges": config.edges
             },
-            variables={}
+            variables={},
+            container=container,
         )
 
         state = ExecutionState(
@@ -213,7 +218,7 @@ class TestFlowWithRemoteAgent:
         assert result["response"] == "Processed: Hello remote"
 
     @pytest.mark.asyncio
-    async def test_flow_with_inline_then_remote(self, remote_flow_server):
+    async def test_flow_with_inline_then_remote(self, remote_flow_server, container):
         """Agent: inline function → remote agent."""
         config = FlowConfig(
             flow_id="mixed_flow",
@@ -248,7 +253,8 @@ async def run(state):
                 "nodes": config.nodes,
                 "edges": config.edges
             },
-            variables={}
+            variables={},
+            container=container,
         )
 
         state = ExecutionState(
@@ -264,7 +270,7 @@ async def run(state):
         assert result["response"] == "Processed: HELLO"
 
     @pytest.mark.asyncio
-    async def test_flow_remote_then_inline(self, remote_flow_server):
+    async def test_flow_remote_then_inline(self, remote_flow_server, container):
         """Agent: remote agent → inline function."""
         config = FlowConfig(
             flow_id="remote_first_flow",
@@ -299,7 +305,8 @@ async def run(state):
                 "nodes": config.nodes,
                 "edges": config.edges
             },
-            variables={}
+            variables={},
+            container=container,
         )
 
         state = ExecutionState(
@@ -362,12 +369,13 @@ class TestRemoteAgentInputMapping:
         await runner.cleanup()
 
     @pytest.mark.asyncio
-    async def test_input_mapping_content_default(self, mock_a2a_server_with_logging):
+    async def test_input_mapping_content_default(self, mock_a2a_server_with_logging, container):
         """По умолчанию берётся state['content']."""
         server = mock_a2a_server_with_logging
         node = RemoteFlowNode(
             node_id="remote",
             config={"url": server["url"]},
+            container=container,
         )
 
         state = ExecutionState(
@@ -384,7 +392,7 @@ class TestRemoteAgentInputMapping:
         assert server["received"][0] == "default content"
 
     @pytest.mark.asyncio
-    async def test_input_mapping_state_field(self, mock_a2a_server_with_logging):
+    async def test_input_mapping_state_field(self, mock_a2a_server_with_logging, container):
         """input_mapping с @state:field берёт указанное поле."""
         server = mock_a2a_server_with_logging
         node = RemoteFlowNode(
@@ -392,7 +400,8 @@ class TestRemoteAgentInputMapping:
             config={
                 "url": server["url"],
                 "input_mapping": {"content": "@state:my_query"}
-            }
+            },
+            container=container,
         )
 
         state = ExecutionState(
@@ -409,7 +418,7 @@ class TestRemoteAgentInputMapping:
         assert server["received"][0] == "custom field value"
 
     @pytest.mark.asyncio
-    async def test_input_mapping_state_field_json(self, mock_a2a_server_with_logging):
+    async def test_input_mapping_state_field_json(self, mock_a2a_server_with_logging, container):
         """Если поле не строка - сериализуется в JSON."""
         server = mock_a2a_server_with_logging
         node = RemoteFlowNode(
@@ -417,7 +426,8 @@ class TestRemoteAgentInputMapping:
             config={
                 "url": server["url"],
                 "input_mapping": {"content": "@state:data"}
-            }
+            },
+            container=container,
         )
 
         state = ExecutionState(
@@ -431,12 +441,11 @@ class TestRemoteAgentInputMapping:
         await node.run(state)
 
         assert len(server["received"]) == 1
-        import json
         received_data = json.loads(server["received"][0])
         assert received_data == {"key": "value", "num": 42}
 
     @pytest.mark.asyncio
-    async def test_flow_with_input_mapping(self, mock_a2a_server_with_logging):
+    async def test_flow_with_input_mapping(self, mock_a2a_server_with_logging, container):
         """Agent где function пишет в state, а remote_flow читает через input_mapping."""
         server = mock_a2a_server_with_logging
 
@@ -475,7 +484,8 @@ async def run(state):
                 "nodes": config.nodes,
                 "edges": config.edges
             },
-            variables={}
+            variables={},
+            container=container,
         )
 
         state = ExecutionState(
@@ -491,4 +501,3 @@ async def run(state):
         assert len(server["received"]) == 1
         assert server["received"][0] == "Query from function node"
         assert result["response"] == "Received: Query from function node"
-

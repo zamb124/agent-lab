@@ -2,7 +2,7 @@
 Web Push Service для отправки push-уведомлений
 """
 import json
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pywebpush import WebPushException, webpush
 
@@ -23,7 +23,7 @@ class WebPushService:
     ):
         self.vapid_private_key = vapid_private_key
         self.vapid_public_key = vapid_public_key
-        self.vapid_claims = {"sub": f"mailto:{vapid_email}"}
+        self.vapid_claims: dict[str, str | int] = {"sub": f"mailto:{vapid_email}"}
         self._initialized = bool(vapid_private_key and vapid_public_key)
 
     @property
@@ -39,7 +39,7 @@ class WebPushService:
         url: Optional[str] = None,
         tag: Optional[str] = None,
         priority: str = "normal",
-        data: Optional[dict] = None
+        data: dict[str, Any] | None = None,
     ) -> bool:
         """
         Отправить push-уведомление на устройство
@@ -94,7 +94,7 @@ class WebPushService:
         url: Optional[str] = None,
         tag: Optional[str] = None,
         priority: str = "normal",
-        data: Optional[dict] = None
+        data: dict[str, Any] | None = None,
     ) -> List[str]:
         """
         Отправить push на все устройства пользователя

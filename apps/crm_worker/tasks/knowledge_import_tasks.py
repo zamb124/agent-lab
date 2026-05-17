@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
 from apps.crm.models.api import NoteProcessingConfig
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
@@ -20,14 +21,64 @@ from apps.crm.services.knowledge_import_text_redis import (
     get_pending_import_text,
 )
 from apps.crm_worker.broker import broker
+from apps.crm_worker.task_names import CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME
 from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
 from core.logging import get_logger
-from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 from core.utils.knowledge_text_split import split_knowledge_text
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
+
+
+def _optional_payload_str(data: dict[str, object], key: str) -> str | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped if stripped else None
+    raise ValueError(f"data.{key} должен быть строкой")
+
+
+def _payload_str_list(data: dict[str, object], key: str) -> list[str]:
+    value = data.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"data.{key} должен быть списком строк")
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise ValueError(f"data.{key} должен быть списком строк")
+        stripped = item.strip()
+        if stripped:
+            result.append(stripped)
+    return result
+
+
+def _optional_payload_str_list(data: dict[str, object], key: str) -> list[str] | None:
+    if data.get(key) is None:
+        return None
+    return _payload_str_list(data, key)
+
+
+def _payload_int(data: dict[str, object], key: str, *, default: int) -> int:
+    value = data.get(key)
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"data.{key} должен быть целым числом")
+    return value
+
+
+def _payload_bool(data: dict[str, object], key: str, *, default: bool) -> bool:
+    value = data.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise ValueError(f"data.{key} должен быть boolean")
+    return value
 
 
 async def _notify_task_user(
@@ -70,7 +121,7 @@ async def _notify_task_user(
 
 
 # Без broker retry: многоэтапный импорт и WS; broker retry без идемпотентности по чанкам даёт дубли сущностей/UI.
-@broker.task
+@broker.task(task_name=CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME, queue_name="crm")
 async def run_knowledge_import_task(
     task_id: str,
     company_id: str,
@@ -83,7 +134,9 @@ async def run_knowledge_import_task(
     if row is None:
         raise ValueError(f"Задача не найдена: {task_id}")
 
-    data = row.data
+    if not isinstance(row.data, dict):
+        raise ValueError("task.data должен быть JSON object")
+    data: dict[str, object] = row.data
     used_redis = data.get("source_text_sha256") is not None
     await _set_crm_context(
         company_id,
@@ -107,16 +160,11 @@ async def run_knowledge_import_task(
             pending = await get_pending_import_text(task_id)
             if pending and str(pending).strip():
                 parts.append(str(pending).strip())
-        single_id = str(data.get("source_file_id") or "").strip()
-        if single_id:
+        single_id = _optional_payload_str(data, "source_file_id")
+        if single_id is not None:
             parts.append((await load_text_from_stored_file_id(single_id)).strip())
-        multi_ids = data.get("source_file_ids") or []
-        if not isinstance(multi_ids, list):
-            multi_ids = []
-        for fid in multi_ids:
-            s = str(fid).strip()
-            if s:
-                parts.append((await load_text_from_stored_file_id(s)).strip())
+        for fid in _payload_str_list(data, "source_file_ids"):
+            parts.append((await load_text_from_stored_file_id(fid)).strip())
         text = "\n\n---\n\n".join(p for p in parts if p)
         if not text.strip():
             raise ValueError("Собранный текст импорта пуст")
@@ -136,8 +184,8 @@ async def run_knowledge_import_task(
 
         chunks = split_knowledge_text(
             text,
-            chunk_max_chars=int(data.get("chunk_max_chars") or 50_000),
-            split_by_headings=bool(data.get("split_by_headings")),
+            chunk_max_chars=_payload_int(data, "chunk_max_chars", default=50_000),
+            split_by_headings=_payload_bool(data, "split_by_headings", default=False),
         )
         total_chunks = len(chunks)
 
@@ -266,7 +314,7 @@ async def run_knowledge_import_task(
             if mode == "graph":
                 pipeline = container.note_processing_service
                 graph_config = NoteProcessingConfig(
-                    extract_entity_types=data.get("extract_entity_types"),
+                    extract_entity_types=_optional_payload_str_list(data, "extract_entity_types"),
                 )
 
                 for idx, note_id in enumerate(import_note_ids):

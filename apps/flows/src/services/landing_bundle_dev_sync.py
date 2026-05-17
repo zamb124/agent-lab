@@ -15,7 +15,8 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.services.flows_loader import FlowsLoader
 from core.context import clear_context, set_context
 from core.logging import get_logger
-from core.models.context_models import Context, Language
+from core.models.context_models import Context
+from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 
 logger = get_logger(__name__)

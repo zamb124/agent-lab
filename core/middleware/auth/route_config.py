@@ -494,7 +494,11 @@ DELETING_COMPANY_ALLOWED_PATHS = [
 class RouteMatcher:
     """Матчер маршрутов"""
 
-    def __init__(self, rules: List[RouteRule] = None, skip_paths: List[str] = None):
+    def __init__(
+        self,
+        rules: List[RouteRule] | None = None,
+        skip_paths: List[str] | None = None,
+    ):
         self.rules = rules or ROUTE_RULES
         self.skip_paths = skip_paths or SKIP_PATHS
 

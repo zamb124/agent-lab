@@ -31,7 +31,9 @@ project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-import apps.flows_worker.worker  # noqa: E402, F401
+import apps.flows_worker.worker as _flows_worker_module  # noqa: E402
+
+_WORKER_MODULE = _flows_worker_module
 
 if __name__ == "__main__":
     # Для дебага в PyCharm: принудительная привязка дебаггера

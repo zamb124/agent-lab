@@ -6,17 +6,20 @@ import asyncio
 import contextlib
 import hashlib
 import math
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
 import aiohttp
 import redis.asyncio as redis_async
-from livekit.api import ListParticipantsRequest, LiveKitAPI, TrackSource, TrackType
+from livekit.api import LiveKitAPI
 from livekit.api.twirp_client import TwirpError, TwirpErrorCode
+from livekit.protocol.models import TrackSource, TrackType
+from livekit.protocol.room import ListParticipantsRequest
 
 from apps.sync.container import get_sync_container
 from apps.sync.db.models import SyncCallSpeechEgressTrack
@@ -26,7 +29,7 @@ from apps.sync.models.messages import (
     MessageContentType,
     MessageCreate,
 )
-from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
+from apps.sync.realtime.handlers import send_message_with_side_effects
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_segmented_usage
 from core.config import get_settings
@@ -79,7 +82,8 @@ async def _stc_poll_lock_renew_loop(
     try:
         while True:
             await asyncio.sleep(interval_sec)
-            extended = await r.eval(
+            redis_eval = cast(Callable[..., Awaitable[Any]], r.eval)
+            extended = await redis_eval(
                 _SPEECH_TO_CHAT_POLL_LOCK_EXTEND_LUA,
                 1,
                 lock_key,
@@ -407,13 +411,17 @@ async def _post_segment_file_as_message(
         mentioned_user_ids=None,
         call_id=call_id,
     )
-    send_payload = MessagesSendPayload(channel_id=row.channel_id, body=body)
     user = User(
         user_id=row.participant_identity,
         name=row.participant_identity,
         active_company_id=row.company_id,
     )
-    await op_messages_send(send_payload, user=user, container=get_sync_container())
+    await send_message_with_side_effects(
+        channel_id=row.channel_id,
+        body=body,
+        user=user,
+        container=get_sync_container(),
+    )
 
 
 async def process_new_files_for_egress_row(
@@ -615,7 +623,8 @@ async def run_speech_to_chat_poll_cycle(
             renew_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await renew_task
-        await r.eval(_SPEECH_TO_CHAT_POLL_LOCK_RELEASE_LUA, 1, lock_key, token)
+        redis_eval = cast(Callable[..., Awaitable[Any]], r.eval)
+        await redis_eval(_SPEECH_TO_CHAT_POLL_LOCK_RELEASE_LUA, 1, lock_key, token)
         await r.aclose()
 
 

@@ -6,6 +6,8 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from core.config import get_settings
+
 
 class OfficeDatabase:
     """Engine и фабрика сессий для platform_office."""
@@ -29,8 +31,6 @@ class OfficeDatabase:
     def get_instance(cls, db_url: Optional[str] = None) -> "OfficeDatabase":
         if cls._instance is None:
             if db_url is None:
-                from core.config import get_settings
-
                 settings = get_settings()
                 db_url = settings.database.office_url
                 if not db_url:

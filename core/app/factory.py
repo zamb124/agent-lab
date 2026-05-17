@@ -23,13 +23,12 @@
 
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Tuple, Type, TypeVar
+from typing import Any, Awaitable, Callable, TypeVar
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic_settings import BaseSettings as PydanticBaseSettings
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from core.api.auth import router as core_auth_router
@@ -37,17 +36,27 @@ from core.api.calendar import router as core_calendar_router
 from core.api.companies import router as core_companies_router
 from core.api.integrations import router as core_integrations_router
 from core.api.team import router as core_team_router
+from core.app.file_types_route import register_platform_file_types_route
 from core.app.health_payload import build_health_payload
 from core.app.i18n_routes import register_platform_i18n_routes
 from core.app.pwa_routes import register_platform_pwa_routes
+from core.billing import set_billing_service
+from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro
+from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
+from core.billing.exceptions import BillingBalanceBlockedError
+from core.config import BaseSettings as PlatformBaseSettings
 from core.config import set_settings
 from core.config.loader import get_project_root, load_merged_config
 from core.config.testing import is_testing
+from core.container.base import BaseContainer
+from core.files.api import build_file_api_router
+from core.files.processors import initialize_default_processors
+from core.frontend.documentation_mount import mount_documentation_static
 from core.logging import (
     SystemLogScope,
     get_logger,
-    setup_logging,
 )
+from core.logging.setup import setup_logging
 from core.middleware.access_log import AccessLogMiddleware
 from core.middleware.auth import AuthMiddleware
 from core.middleware.deployment_headers import DeploymentHeadersMiddleware
@@ -64,20 +73,21 @@ from core.push.router import router as push_router
 from core.push.service import init_web_push_service
 from core.tracing import setup_tracing
 from core.tracing.tracer import set_span_repository, set_tracing_service_name
+from core.utils.background import run_with_log_context
 from core.websocket.manager import notification_manager
 from core.websocket.router import router as ws_router
 
 logger = get_logger(__name__)
 
-SettingsT = TypeVar("SettingsT", bound=PydanticBaseSettings)
-ContainerT = TypeVar("ContainerT")
+SettingsT = TypeVar("SettingsT", bound=PlatformBaseSettings)
+ContainerT = TypeVar("ContainerT", bound=BaseContainer)
 ServiceStartupHook = Callable[[FastAPI, ContainerT, SettingsT], Awaitable[None]]
 ServiceShutdownHook = Callable[[FastAPI, ContainerT], Awaitable[None]]
 
 
 def load_service_settings(
-    service_name: str, settings_class: Type[PydanticBaseSettings]
-) -> Tuple[Any, Path]:
+    service_name: str, settings_class: type[SettingsT]
+) -> tuple[SettingsT, Path]:
     """
     Загружает настройки сервиса (merge без логов до setup_logging).
 
@@ -107,13 +117,13 @@ def create_service_app(
     on_shutdown: ServiceShutdownHook[ContainerT] | None = None,
     cors_origins: list[str] | None = None,
     cors_allow_origin_regex: str | None = None,
-    extra_middlewares: list[tuple[type[object], dict[str, object]]] | None = None,
+    extra_middlewares: list[tuple[type[Any], dict[str, Any]]] | None = None,
     static_mounts: list[tuple[str, str, str]] | None = None,
     extra_state: dict[str, object] | None = None,
     title: str | None = None,
     description: str | None = None,
     version: str = "1.0.0",
-    api_version: str = "v1",  # None - без /api/, "v1" - /api/v1
+    api_version: str | None = "v1",  # None - без /api/, "v1" - /api/v1
     docs_url: str = "/docs",
     redoc_url: str = "/redoc",
     openapi_url: str = "/openapi.json",
@@ -193,18 +203,12 @@ def create_service_app(
         logger.info("Notification manager запущен")
 
         # Инициализация глобального BillingService
-        from core.billing import set_billing_service
-
         set_billing_service(container.billing_service)
         logger.info("BillingService инициализирован")
 
         # Инициализация курса USD/RUB от ЦБ РФ: один запрос при старте,
         # затем фоновое обновление каждые 5 минут.
         # Fallback при недоступности ЦБ — billing.usd_to_rub_rate из конфига.
-        from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro
-        from core.billing.cbr_rate_provider import refresh_rate_once as _cbr_refresh_once
-        from core.utils.background import run_with_log_context
-
         _cbr_fallback = settings.billing.usd_to_rub_rate
         if is_testing():
             logger.info(
@@ -220,8 +224,6 @@ def create_service_app(
             )
             logger.info("billing.cbr_rate.loop_scheduled")
 
-        from core.files.processors import initialize_default_processors
-
         if hasattr(container, "file_repository"):
             initialize_default_processors(container.file_repository)
             logger.info(
@@ -230,6 +232,10 @@ def create_service_app(
 
         # Инициализация WebPushService
         if settings.push.enabled:
+            if not settings.push.vapid_private_key or not settings.push.vapid_public_key:
+                raise ValueError(
+                    "push.enabled=true требует push.vapid_private_key и push.vapid_public_key"
+                )
             init_web_push_service(
                 vapid_private_key=settings.push.vapid_private_key,
                 vapid_public_key=settings.push.vapid_public_key,
@@ -289,8 +295,6 @@ def create_service_app(
 
     app.state.container = container
     app.state.settings = settings
-
-    from core.billing.exceptions import BillingBalanceBlockedError
 
     @app.exception_handler(BillingBalanceBlockedError)
     async def _billing_balance_blocked_handler(
@@ -404,8 +408,6 @@ def create_service_app(
     # Файловый роутер (upload/download/metadata) — единообразный контракт для всех сервисов.
     # Даже когда S3 выключен, upload должен отвечать 503, а не 404.
     files_api_prefix = f"/{url_route_segment}/api/{api_version or 'v1'}"
-    from core.files.api import build_file_api_router
-
     _file_router = build_file_api_router(
         get_file_repo=lambda: container.file_repository,
         service_api_prefix=files_api_prefix,
@@ -469,8 +471,6 @@ def create_service_app(
                 app.mount(mount_path, StaticFiles(directory=directory), name=name)
 
     if mount_repo_documentation:
-        from core.frontend.documentation_mount import mount_documentation_static
-
         mount_documentation_static(
             app,
             project_root,
@@ -486,8 +486,6 @@ def create_service_app(
 
     register_platform_i18n_routes(app, project_root)
     logger.info("I18n: GET /api/i18n/{locale}")
-
-    from core.app.file_types_route import register_platform_file_types_route
 
     register_platform_file_types_route(app)
     logger.info("FileTypes: GET /api/platform/file-types")

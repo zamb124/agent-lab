@@ -34,7 +34,7 @@ YOOMONEY_TOKEN_STORAGE_KEY = "yoomoney:access_token"
 YOOMONEY_OAUTH_AUTHORIZE_URL = "https://yoomoney.ru/oauth/authorize"
 YOOMONEY_OAUTH_TOKEN_URL = "https://yoomoney.ru/oauth/token"
 
-class YooMoneyConfig(PaymentProviderConfig):
+class YooMoneyConfig(PaymentProviderConfig[Literal["yoomoney"]]):
     """Конфигурация YooMoney провайдера"""
     provider_type: Literal["yoomoney"] = "yoomoney"
     account_number: str = Field(description="Номер кошелька YooMoney")
@@ -294,4 +294,3 @@ class YooMoneyProvider(BasePaymentProvider):
                     break
 
         return found
-

@@ -49,42 +49,42 @@ SERVICES = {
     # FastAPI сервисы (uvicorn)
     "flows": {
         "type": "uvicorn",
-        "app": "apps.app_runtime_targets:flows_app",
+        "app": "apps.flows.main:app",
         "port": "8001",
     },
     "frontend": {
         "type": "uvicorn",
-        "app": "apps.app_runtime_targets:frontend_app",
+        "app": "apps.frontend.main:app",
         "port": "8002",
     },
     "crm": {
         "type": "uvicorn",
-        "app": "apps.app_runtime_targets:crm_app",
+        "app": "apps.crm.main:app",
         "port": "8003",
     },
     "rag": {
         "type": "uvicorn",
-        "app": "apps.app_runtime_targets:rag_app",
+        "app": "apps.rag.main:app",
         "port": "8004",
     },
     "sync": {
         "type": "uvicorn",
-        "app": "apps.app_runtime_targets:sync_app",
+        "app": "apps.sync.main:app",
         "port": "8005",
     },
     "office": {
         "type": "uvicorn",
-        "app": "apps.app_runtime_targets:office_app",
+        "app": "apps.office.main:app",
         "port": "8008",
     },
     "scheduler-api": {
         "type": "uvicorn",
-        "app": "apps.app_runtime_targets:scheduler_app",
+        "app": "apps.scheduler.main:app",
         "port": "8006",
     },
     "browser": {
         "type": "uvicorn",
-        "app": "apps.app_runtime_targets:browser_app",
+        "app": "apps.browser.main:app",
         "port": "8009",
         "env": {
             "BROWSER__CDP_URL": "http://127.0.0.1:9222",
@@ -98,41 +98,41 @@ SERVICES = {
 
     "voice": {
         "type": "uvicorn",
-        "app": "apps.app_runtime_targets:voice_app",
+        "app": "apps.voice.main:app",
         "port": "8015",
     },
 
     # TaskIQ workers
     "flows_worker": {
         "type": "taskiq-worker",
-        "worker_app": "apps.app_runtime_targets:flows_taskiq_worker_app",
+        "worker_app": "apps.flows_worker.worker:worker_app",
         "workers": "1",
     },
     "rag_worker": {
         "type": "taskiq-worker",
-        "worker_app": "apps.app_runtime_targets:rag_taskiq_worker_app",
+        "worker_app": "apps.rag_worker.worker:worker_app",
         "workers": "1",
     },
     "sync_worker": {
         "type": "taskiq-worker",
-        "worker_app": "apps.app_runtime_targets:sync_taskiq_worker_app",
+        "worker_app": "apps.sync_worker.worker:worker_app",
         "workers": "1",
     },
     "crm_worker": {
         "type": "taskiq-worker",
-        "worker_app": "apps.app_runtime_targets:crm_taskiq_worker_app",
+        "worker_app": "apps.crm_worker.worker:worker_app",
         "workers": "1",
     },
     "idle_worker": {
         "type": "taskiq-worker",
-        "worker_app": "apps.app_runtime_targets:idle_taskiq_worker_app",
+        "worker_app": "apps.idle_worker.worker:worker_app",
         "workers": "1",
     },
 
     # TaskIQ scheduler
     "scheduler": {
         "type": "taskiq-scheduler",
-        "scheduler": "apps.app_runtime_targets:platform_scheduler",
+        "scheduler": "apps.scheduler.scheduler:scheduler",
     },
 }
 

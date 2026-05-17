@@ -8,7 +8,9 @@ import uuid
 
 import pytest
 
-from apps.flows.src.models import ResourceReference
+from apps.flows.src.models import ResourceDefinition, ResourceReference
+from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
+from apps.flows.src.resources.wrappers import FilesResource
 from apps.flows.src.runtime.nodes import CodeNode, LlmNode
 from core.state import ExecutionState
 
@@ -33,7 +35,7 @@ class TestCodeResourceWithCodeNode:
     """
 
     @pytest.mark.asyncio
-    async def test_code_resource_functions_available(self):
+    async def test_code_resource_functions_available(self, container):
         """
         Функции из code resource доступны в CodeNode.
         """
@@ -66,7 +68,8 @@ async def execute(args, state):
                 "resources": {
                     "helpers": ResourceReference.model_validate(code_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state(phone="89161234567", email="test@example.com")
@@ -76,7 +79,7 @@ async def execute(args, state):
         assert result.email_valid is True
 
     @pytest.mark.asyncio
-    async def test_code_resource_class_available(self):
+    async def test_code_resource_class_available(self, container):
         """
         Классы из code resource доступны в CodeNode.
         """
@@ -118,7 +121,8 @@ async def execute(args, state):
                 "resources": {
                     "utils": ResourceReference.model_validate(code_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state(name="Hello")
@@ -129,7 +133,7 @@ async def execute(args, state):
         assert result.reversed_name == "olleH"
 
     @pytest.mark.asyncio
-    async def test_multiple_code_resources(self):
+    async def test_multiple_code_resources(self, container):
         """
         Несколько code resources доступны в CodeNode.
         """
@@ -183,7 +187,8 @@ async def execute(args, state):
                     "validators": ResourceReference.model_validate(validators),
                     "formatters": ResourceReference.model_validate(formatters),
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state(number=42)
@@ -201,7 +206,7 @@ class TestCodeResourceWithLlmNode:
     """
 
     @pytest.mark.asyncio
-    async def test_code_resource_in_react_tool(self, mock_llm_with_queue):
+    async def test_code_resource_in_react_tool(self, mock_llm_with_queue, container):
         """
         Code resource доступен в inline tool LlmNode.
         """
@@ -249,7 +254,8 @@ async def execute(args, state):
                 "resources": {
                     "pricing": ResourceReference.model_validate(code_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state(content="Apply 20% discount to $100")
@@ -264,7 +270,7 @@ class TestCombinedResourcesWithNodes:
     """
 
     @pytest.mark.asyncio
-    async def test_multiple_resources_in_code_node(self):
+    async def test_multiple_resources_in_code_node(self, container):
         fmt = {
             "type": "code",
             "config": {
@@ -299,7 +305,8 @@ async def execute(args, state):
                     "utils": ResourceReference.model_validate(fmt),
                     "extra": ResourceReference.model_validate(suffix),
                 }
-            }
+            },
+            container=container,
         )
         state = make_state()
         result = await node.run(state)
@@ -313,7 +320,7 @@ class TestResourceInheritance:
     """
 
     @pytest.mark.asyncio
-    async def test_flow_resources_available_in_code_node(self):
+    async def test_flow_resources_available_in_code_node(self, container):
         """
         Ресурсы уровня flow доступны в CodeNode через state.
         """
@@ -340,7 +347,8 @@ async def execute(args, state):
                 "resources": {
                     "math_utils": ResourceReference.model_validate(code_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state(value=21)
@@ -349,7 +357,7 @@ async def execute(args, state):
         assert result.doubled == 42
 
     @pytest.mark.asyncio
-    async def test_node_resource_overrides_agent_resource(self):
+    async def test_node_resource_overrides_agent_resource(self, container):
         """
         Ресурс ноды переопределяет ресурс агента с тем же именем.
         """
@@ -378,7 +386,8 @@ async def execute(args, state):
                 "resources": {
                     "helper": ResourceReference.model_validate(node_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state(input=5)
@@ -412,7 +421,7 @@ class TestFILESResource:
         return f"test_resources/{uuid.uuid4().hex[:8]}"
 
     @pytest.mark.asyncio
-    async def test_files_resource_write_read(self, unique_prefix):
+    async def test_files_resource_write_read(self, unique_prefix, container):
         """
         FILES resource: запись и чтение файла.
         """
@@ -437,7 +446,8 @@ async def execute(args, state):
                 "resources": {
                     "storage": ResourceReference.model_validate(files_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state()
@@ -456,7 +466,8 @@ async def execute(args, state):
                 "resources": {
                     "storage": ResourceReference.model_validate(files_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state2 = make_state()
@@ -465,7 +476,7 @@ async def execute(args, state):
         assert read_result.file_content == 'Hello from resource test!'
 
     @pytest.mark.asyncio
-    async def test_files_resource_list(self, unique_prefix):
+    async def test_files_resource_list(self, unique_prefix, container):
         """
         FILES resource: список файлов.
         """
@@ -478,7 +489,6 @@ async def execute(args, state):
         }
 
         # Создаём несколько файлов
-        from apps.flows.src.resources.wrappers import FilesResource
         storage = FilesResource(
             prefix=unique_prefix,
             **self.MINIO_CONFIG
@@ -500,7 +510,8 @@ async def execute(args, state):
                 "resources": {
                     "storage": ResourceReference.model_validate(files_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state()
@@ -509,7 +520,7 @@ async def execute(args, state):
         assert result.file_count >= 2
 
     @pytest.mark.asyncio
-    async def test_files_resource_exists_delete(self, unique_prefix):
+    async def test_files_resource_exists_delete(self, unique_prefix, container):
         """
         FILES resource: проверка существования и удаление.
         """
@@ -522,7 +533,6 @@ async def execute(args, state):
         }
 
         # Создаём файл напрямую
-        from apps.flows.src.resources.wrappers import FilesResource
         storage = FilesResource(
             prefix=unique_prefix,
             **self.MINIO_CONFIG
@@ -547,7 +557,8 @@ async def execute(args, state):
                 "resources": {
                     "storage": ResourceReference.model_validate(files_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state()
@@ -558,7 +569,7 @@ async def execute(args, state):
         assert result.gone is True
 
     @pytest.mark.asyncio
-    async def test_files_resource_in_react_tool(self, mock_llm_with_queue, unique_prefix):
+    async def test_files_resource_in_react_tool(self, mock_llm_with_queue, unique_prefix, container):
         """
         FILES resource доступен в inline tool LlmNode.
         """
@@ -599,7 +610,8 @@ async def execute(args, state):
                 "resources": {
                     "storage": ResourceReference.model_validate(files_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state(content="Save a note")
@@ -625,7 +637,7 @@ class TestLLMResource:
     """
 
     @pytest.mark.asyncio
-    async def test_llm_resource_complete(self, mock_llm):
+    async def test_llm_resource_complete(self, mock_llm, container):
         """
         LLM resource: генерация текста по промпту.
         """
@@ -649,7 +661,8 @@ async def execute(args, state):
                 "resources": {
                     "gpt": ResourceReference.model_validate(llm_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state()
@@ -660,7 +673,7 @@ async def execute(args, state):
         assert len(result.response) > 0
 
     @pytest.mark.asyncio
-    async def test_llm_resource_chat(self, mock_llm):
+    async def test_llm_resource_chat(self, mock_llm, container):
         """
         LLM resource: чат с историей сообщений.
         """
@@ -689,7 +702,8 @@ async def execute(args, state):
                 "resources": {
                     "gpt": ResourceReference.model_validate(llm_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state()
@@ -698,7 +712,7 @@ async def execute(args, state):
         assert result.chat_response is not None
 
     @pytest.mark.asyncio
-    async def test_llm_resource_in_react_tool(self, mock_llm_with_queue):
+    async def test_llm_resource_in_react_tool(self, mock_llm_with_queue, container):
         """
         LLM resource доступен в inline tool LlmNode.
         """
@@ -738,7 +752,8 @@ async def execute(args, state):
                 "resources": {
                     "gpt": ResourceReference.model_validate(llm_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state(content="Summarize this text")
@@ -797,8 +812,6 @@ async def execute(args, state):
             {"type": "text", "content": "Done"},
         ])
 
-        from apps.flows.src.models.flow_config import Edge, FlowConfig
-
         flow_id = "test_res_hierarchy_llm"
         fc = FlowConfig(
             flow_id=flow_id,
@@ -825,7 +838,8 @@ async def execute(args, state):
             config={
                 "prompt": "Calculate",
                 "tools": [tool_with_arith],
-            }
+            },
+            container=container,
         )
 
         state = make_state(
@@ -853,8 +867,6 @@ def triple(x):
             }
         }
 
-        from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
-
         flow_id = "test_res_hierarchy_skill"
         fc = FlowConfig(
             flow_id=flow_id,
@@ -880,7 +892,8 @@ async def execute(args, state):
     state.output = result
     return {'result': result}
 """,
-            }
+            },
+            container=container,
         )
 
         state = make_state(
@@ -920,8 +933,6 @@ def compute(x):
             }
         }
 
-        from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
-
         flow_id = "test_res_hierarchy_override"
         fc = FlowConfig(
             flow_id=flow_id,
@@ -948,7 +959,8 @@ async def execute(args, state):
     state.output = result
     return {'result': result}
 """,
-            }
+            },
+            container=container,
         )
 
         state = make_state(
@@ -963,7 +975,7 @@ async def execute(args, state):
         assert result.output == 105
 
     @pytest.mark.asyncio
-    async def test_node_overrides_skill_resource(self):
+    async def test_node_overrides_skill_resource(self, container):
         """
         Node resource переопределяет skill resource.
         """
@@ -991,7 +1003,8 @@ async def execute(args, state):
                 "resources": {
                     "utils": ResourceReference.model_validate(node_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state(input=7)
@@ -1001,7 +1014,7 @@ async def execute(args, state):
         assert result.output == 7000
 
     @pytest.mark.asyncio
-    async def test_full_hierarchy_inheritance(self):
+    async def test_full_hierarchy_inheritance(self, container):
         """
         Полная иерархия: agent -> skill -> node.
         Разные ресурсы на каждом уровне.
@@ -1034,7 +1047,8 @@ async def execute(args, state):
                 "resources": {
                     "node_utils": ResourceReference.model_validate(node_resource)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state()
@@ -1057,8 +1071,6 @@ class TestSharedResources:
         """
         Resource загружается из БД по resource_id.
         """
-        from apps.flows.src.models import ResourceDefinition
-
         # Создаём shared resource в БД
         shared_resource = ResourceDefinition(
             resource_id=f"shared_utils_{uuid.uuid4().hex[:8]}",
@@ -1071,7 +1083,7 @@ class TestSharedResources:
 def shared_hello():
     return 'Hello from shared resource!'
 """
-            }
+            },
         )
 
         await container.resource_repository.set(shared_resource)
@@ -1093,7 +1105,8 @@ async def execute(args, state):
                 "resources": {
                     "shared": ResourceReference.model_validate(resource_ref)
                 }
-            }
+            },
+            container=container,
         )
 
         state = make_state()
@@ -1106,8 +1119,6 @@ async def execute(args, state):
         """
         Shared LLM resource с patch temperature (config merge).
         """
-        from apps.flows.src.models import ResourceDefinition
-
         shared_resource = ResourceDefinition(
             resource_id=f"shared_llm_{uuid.uuid4().hex[:8]}",
             type="llm",
@@ -1139,6 +1150,7 @@ async def execute(args, state):
                     "gpt": ResourceReference.model_validate(resource_ref)
                 },
             },
+            container=container,
         )
 
         state = make_state()

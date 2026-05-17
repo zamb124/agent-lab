@@ -318,14 +318,18 @@ class TelegramTriggerHandler(BaseTriggerHandler):
 
         cq = payload.get("callback_query")
         if isinstance(cq, dict) and cq:
-            from_user_raw = cq.get("from")
-            from_user: dict[str, Any] = from_user_raw if isinstance(from_user_raw, dict) else {}
+            callback_from_raw = cq.get("from")
+            callback_from: dict[str, Any] = (
+                callback_from_raw if isinstance(callback_from_raw, dict) else {}
+            )
             msg_raw = cq.get("message")
             msg: dict[str, Any] = msg_raw if isinstance(msg_raw, dict) else {}
-            chat_raw = msg.get("chat")
-            chat: dict[str, Any] = chat_raw if isinstance(chat_raw, dict) else {}
-            user_id = from_user.get("id")
-            chat_id = chat.get("id")
+            callback_chat_raw = msg.get("chat")
+            callback_chat: dict[str, Any] = (
+                callback_chat_raw if isinstance(callback_chat_raw, dict) else {}
+            )
+            user_id = callback_from.get("id")
+            chat_id = callback_chat.get("id")
             data = cq.get("data")
             data_str = data if isinstance(data, str) else ""
 

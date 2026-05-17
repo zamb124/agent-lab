@@ -10,19 +10,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
 import redis.asyncio as redis_async
 from google.protobuf.json_format import MessageToDict
 
+import core.tracing.attributes as trace_attributes
 from apps.sync.container import get_sync_container
 from apps.sync.db.models import SyncCallRecording, SyncFile
 from apps.sync.message_read_helpers import message_read_from_entity
-from apps.sync.models.meetings import CallRecordingRead
+from apps.sync.models.meetings import CallRecordingRead, RecordingStatus
 from apps.sync.models.messages import (
     SYNC_MESSAGE_TEXT_MAX_CHARS,
     CallTranscriptContent,
@@ -36,6 +38,14 @@ from apps.sync.realtime.broker import broker
 from apps.sync.realtime.events import event_call_recording_failed, event_message_updated
 from apps.sync.realtime.operations import MessagesSendPayload, op_messages_send
 from apps.sync.realtime.publish_events import publish_realtime_events
+from apps.sync.realtime.speech_to_chat_workflow import run_speech_to_chat_poll_cycle
+from apps.sync.realtime.task_names import (
+    SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME,
+    SYNC_FINALIZE_RECORDING_TASK_NAME,
+    SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME,
+    SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
+    SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME,
+)
 from apps.sync.sender_display import guest_display_name_from_sender_id, sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
 from core.config import get_settings
@@ -52,11 +62,22 @@ from core.files.s3_client import S3ClientFactory
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models.identity_models import User
-from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
+
+
+def _recording_status(value: str) -> RecordingStatus:
+    if value == "requested":
+        return "requested"
+    if value == "recording":
+        return "recording"
+    if value == "uploaded":
+        return "uploaded"
+    if value == "failed":
+        return "failed"
+    raise ValueError(f"Unknown recording status: {value!r}")
 
 
 _TRANSCRIBE_AUDIO_LOCK_RELEASE_LUA = """
@@ -277,7 +298,7 @@ def _recording_read_from_entity(recording: SyncCallRecording) -> CallRecordingRe
         channel_id=recording.channel_id,
         namespace=recording.namespace,
         started_by_user_id=recording.started_by_user_id,
-        status=recording.status,  # type: ignore[arg-type]
+        status=_recording_status(recording.status),
         provider_job_id=recording.provider_job_id,
         raw_file_id=recording.raw_file_id,
         raw_file_storage_url=None,
@@ -515,7 +536,7 @@ async def _register_platform_file_record_for_call_recording(
     return content_length
 
 
-@broker.task
+@broker.task(task_name=SYNC_FINALIZE_RECORDING_TASK_NAME, queue_name="sync")
 async def sync_finalize_recording_task(recording_id: str, company_id: str, actor_user_id: str) -> None:
     logger.info(
         "sync_finalize_recording_task start: recording_id=%s company_id=%s actor=%s",
@@ -843,11 +864,12 @@ async def transcribe_audio_message_core(
                 str(exc),
             )
     finally:
-        await r.eval(_TRANSCRIBE_AUDIO_LOCK_RELEASE_LUA, 1, lock_key, token)
+        redis_eval = cast(Callable[..., Awaitable[Any]], r.eval)
+        await redis_eval(_TRANSCRIBE_AUDIO_LOCK_RELEASE_LUA, 1, lock_key, token)
         await r.aclose()
 
 
-@broker.task
+@broker.task(task_name=SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME, queue_name="sync")
 async def sync_transcribe_audio_message_task(
     *,
     channel_id: str,
@@ -1008,7 +1030,7 @@ async def transcribe_video_message_core(
         )
 
 
-@broker.task
+@broker.task(task_name=SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME, queue_name="sync")
 async def sync_transcribe_video_message_task(
     *,
     channel_id: str,
@@ -1024,7 +1046,7 @@ async def sync_transcribe_video_message_task(
     )
 
 
-@broker.task
+@broker.task(task_name=SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME, queue_name="sync")
 async def sync_aggregate_call_transcript_task(
     *,
     channel_id: str,
@@ -1173,7 +1195,7 @@ def _speech_to_chat_poll_sleep_seconds(*, is_continuation: bool) -> float:
     return float(stc.poll_interval_seconds if is_continuation else stc.poll_initial_delay_seconds)
 
 
-@broker.task
+@broker.task(task_name=SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME, queue_name="sync")
 async def sync_speech_to_chat_poll_task(
     *,
     call_id: str,
@@ -1190,8 +1212,6 @@ async def sync_speech_to_chat_poll_task(
         await asyncio.sleep(delay_override_seconds)
     else:
         await asyncio.sleep(_speech_to_chat_poll_sleep_seconds(is_continuation=is_continuation))
-    from apps.sync.realtime.speech_to_chat_workflow import run_speech_to_chat_poll_cycle
-
     container = get_sync_container()
     call_row = await container.call_repository.get_call(call_id, company_id)
     if call_row is None:

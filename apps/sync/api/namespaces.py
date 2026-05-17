@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.sync.dependencies import ContainerDep
-from core.context import get_context
+from apps.sync.realtime.context import require_current_user
 from core.logging import get_logger
 from core.models.identity_models import NamespaceSyncSettings
 from core.pagination import OffsetPage
@@ -88,7 +88,7 @@ async def update_namespace_sync_settings(
     Создание namespace выполняется CRM. 404, если namespace не существует
     в shared `NamespaceRepository` для текущей компании.
     """
-    _ = get_context().user
+    _ = require_current_user()
     namespace_repo = container.namespace_repository
     existing = await namespace_repo.get(namespace_name)
     if existing is None:

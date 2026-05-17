@@ -15,6 +15,7 @@ import zlib
 from typing import Callable
 
 import structlog
+from opentelemetry import trace as otel_trace
 from structlog.types import EventDict, WrappedLogger
 
 from core.context import get_context
@@ -47,11 +48,6 @@ def add_otel_trace_context(_logger: WrappedLogger, _method: str, event_dict: Eve
     Ничего не пишет, если активного спана нет — fallback на trace_id из
     core.context делает другой процессор (add_platform_context).
     """
-    try:
-        from opentelemetry import trace as otel_trace
-    except ImportError:
-        return event_dict
-
     span = otel_trace.get_current_span()
     if span is None:
         return event_dict

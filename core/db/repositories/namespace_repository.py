@@ -3,8 +3,9 @@
 is_global=False - namespace изолированы по компаниям через BaseRepository.
 """
 
-from typing import List
+from __future__ import annotations
 
+from core.context import require_active_company
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
 from core.models.identity_models import Namespace
@@ -37,7 +38,7 @@ class NamespaceRepository(BaseRepository[Namespace]):
         """ID = name"""
         return entity.name
 
-    async def list(self, *, limit: int, offset: int = 0) -> List[Namespace]:
+    async def list(self, *, limit: int, offset: int = 0) -> list[Namespace]:
         """
         Возвращает страницу namespace компании.
         Если пусто и offset=0 — создает default.
@@ -49,16 +50,13 @@ class NamespaceRepository(BaseRepository[Namespace]):
 
         return namespaces
 
-    async def list_by_company(self, company_id: str, *, limit: int = 200, offset: int = 0) -> List[Namespace]:
+    async def list_by_company(self, company_id: str, *, limit: int = 200, offset: int = 0) -> list[Namespace]:
         """Алиас — компания берется из контекста."""
         return await self.list(limit=limit, offset=offset)
 
     async def _create_default(self) -> Namespace:
         """Создает default namespace для текущей компании"""
-        from core.context import get_context
-
-        context = get_context()
-        company_id = context.active_company.company_id
+        company_id = require_active_company().company_id
 
         namespace = Namespace(
             name="default",

@@ -12,7 +12,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from core.context import get_context
+from core.config import get_settings
+from core.context import require_active_company
 from core.db.utils import get_rowcount
 from core.logging import get_logger
 
@@ -47,8 +48,6 @@ class SyncDatabase:
         """Singleton для Sync database"""
         if cls._instance is None:
             if db_url is None:
-                from core.config import get_settings
-
                 settings = get_settings()
                 db_url = settings.database.sync_url
                 if not db_url:
@@ -78,8 +77,7 @@ class BaseSyncRepository(ABC, Generic[T]):
 
     def _get_company_id(self) -> str:
         """Получает company_id из контекста. Middleware гарантирует наличие."""
-        context = get_context()
-        return context.active_company.company_id
+        return require_active_company().company_id
 
     @property
     @abstractmethod

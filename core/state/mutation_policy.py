@@ -9,10 +9,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Iterator
-
-if TYPE_CHECKING:
-    from core.state.execution_state import ExecutionState
+from typing import Any, Iterator
 
 from core.errors import FrozenStateFieldError
 
@@ -120,22 +117,14 @@ def forbid_frozen_update_key(key: str, *, reason: str = "update") -> None:
         raise FrozenStateFieldError(field=key, reason=reason)
 
 
-def snapshot_frozen_fields(state: ExecutionState) -> dict[str, Any]:
-    from core.state.execution_state import ExecutionState as ES
-
-    if not isinstance(state, ES):
-        return {}
+def snapshot_frozen_fields(state: object) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for k in FROZEN_STATE_SNAPSHOT_FIELDS:
         out[k] = deepcopy(getattr(state, k, None))
     return out
 
 
-def assert_frozen_fields_unchanged(state: ExecutionState, snapshot: dict[str, Any]) -> None:
-    from core.state.execution_state import ExecutionState as ES
-
-    if not isinstance(state, ES):
-        return
+def assert_frozen_fields_unchanged(state: object, snapshot: dict[str, Any]) -> None:
     for k, old_val in snapshot.items():
         new_val = getattr(state, k, None)
         if old_val != new_val:

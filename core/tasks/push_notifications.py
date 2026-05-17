@@ -14,7 +14,7 @@ from a2a.types import (
     TaskPushNotificationConfig,
 )
 
-from core.clients import RedisClient
+from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.http import get_httpx_client
 from core.logging import get_logger

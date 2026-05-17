@@ -17,7 +17,9 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 # Импортируем scheduler для регистрации tasks
-import apps.scheduler.scheduler  # noqa: E402, F401
+import apps.scheduler.scheduler as _scheduler_module  # noqa: E402
+
+_SCHEDULER_MODULE = _scheduler_module
 
 if __name__ == "__main__":
     original_argv = sys.argv.copy()
@@ -29,4 +31,3 @@ if __name__ == "__main__":
         runpy.run_module("taskiq", run_name="__main__", alter_sys=True)
     finally:
         sys.argv = original_argv
-

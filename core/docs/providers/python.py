@@ -4,6 +4,10 @@ Python провайдер документации.
 
 from typing import Dict, List
 
+from core.docs.data.python.globals import GLOBALS
+from core.docs.data.python.modules import COMMON_MODULES, MODULE_METHODS
+from core.docs.data.python.templates import CODE_TEMPLATES, FUNCTION_TEMPLATES
+from core.docs.data.state_fields import STATE_FIELDS
 from core.docs.models import (
     CodeTemplate,
     DocumentationQuery,
@@ -22,13 +26,10 @@ class PythonDocProvider(BaseDocProvider):
 
     def get_modules(self, query: DocumentationQuery) -> List[str]:
         """Список доступных модулей."""
-        from core.docs.data.python.modules import COMMON_MODULES
         return sorted(COMMON_MODULES)
 
     def get_module_methods(self, query: DocumentationQuery) -> Dict[str, List[ModuleMethod]]:
         """Методы модулей с фильтрацией."""
-        from core.docs.data.python.modules import MODULE_METHODS
-
         result = {}
         for module_name, methods in MODULE_METHODS.items():
             result[module_name] = [
@@ -43,8 +44,6 @@ class PythonDocProvider(BaseDocProvider):
 
     def get_globals(self, query: DocumentationQuery) -> List[GlobalVariable]:
         """Глобальные переменные с фильтрацией по perspective и tags."""
-        from core.docs.data.python.globals import GLOBALS
-
         result = []
         for g in GLOBALS:
             # Фильтрация по perspective
@@ -74,8 +73,6 @@ class PythonDocProvider(BaseDocProvider):
 
     def get_templates(self, query: DocumentationQuery) -> List[CodeTemplate]:
         """Шаблоны кода с фильтрацией."""
-        from core.docs.data.python.templates import CODE_TEMPLATES, FUNCTION_TEMPLATES
-
         # Выбор источника по node_type
         if query.node_type == "function":
             source = FUNCTION_TEMPLATES
@@ -111,5 +108,4 @@ class PythonDocProvider(BaseDocProvider):
 
     def get_state_fields(self, query: DocumentationQuery) -> List[StateField]:
         """Поля state."""
-        from core.docs.data.state_fields import STATE_FIELDS
         return [StateField(**f) for f in STATE_FIELDS]

@@ -11,8 +11,12 @@ import asyncio
 
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import pool
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from core.config.loader import get_project_root
+from core.db.migration_manifest import expected_migration_registry_names
+from core.db.service_registry import get_all_services, get_service_by_name
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -30,9 +34,6 @@ def _make_alembic_config(script_location: str, db_url: str) -> Config | None:
     return cfg
 
 def _assert_full_registry() -> None:
-    from core.db.migration_manifest import expected_migration_registry_names
-    from core.db.service_registry import get_all_services
-
     expected = expected_migration_registry_names()
     names = {s.name for s in get_all_services()}
     missing = expected - names
@@ -56,11 +57,6 @@ async def run_migrations_async(service: str | None = None) -> None:
     Args:
         service: если задано — только это дерево; иначе все сервисы из реестра.
     """
-    from sqlalchemy import pool
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    from core.db.service_registry import get_all_services
-
     _assert_full_registry()
 
     services = get_all_services()
@@ -92,11 +88,6 @@ def _run_upgrade(sync_conn, cfg: Config) -> None:
     command.upgrade(cfg, "head")
 
 async def run_downgrade_async(service: str, revision: str) -> None:
-    from sqlalchemy import pool
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    from core.db.service_registry import get_service_by_name
-
     _assert_full_registry()
     svc = get_service_by_name(service)
     db_url = svc.get_db_url()
@@ -114,11 +105,6 @@ def _run_downgrade(sync_conn: object, cfg: Config, revision: str) -> None:
     command.downgrade(cfg, revision)
 
 async def run_current_async(service: str) -> None:
-    from sqlalchemy import pool
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    from core.db.service_registry import get_service_by_name
-
     _assert_full_registry()
     svc = get_service_by_name(service)
     db_url = svc.get_db_url()
@@ -136,8 +122,6 @@ def _run_current(sync_conn: object, cfg: Config) -> None:
     command.current(cfg)
 
 def run_history(service: str) -> None:
-    from core.db.service_registry import get_service_by_name
-
     _assert_full_registry()
     svc = get_service_by_name(service)
     db_url = svc.get_db_url()
@@ -147,8 +131,6 @@ def run_history(service: str) -> None:
     command.history(cfg)
 
 def run_heads(service: str) -> None:
-    from core.db.service_registry import get_service_by_name
-
     _assert_full_registry()
     svc = get_service_by_name(service)
     db_url = svc.get_db_url()
@@ -158,8 +140,6 @@ def run_heads(service: str) -> None:
     command.heads(cfg)
 
 def run_revision(service: str, message: str, *, autogenerate: bool) -> None:
-    from core.db.service_registry import get_service_by_name
-
     _assert_full_registry()
     svc = get_service_by_name(service)
     db_url = svc.get_db_url()

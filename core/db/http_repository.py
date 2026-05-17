@@ -7,11 +7,15 @@ HTTP прокси для удаленных репозиториев.
 ЛЮБОЙ метод репозитория автоматически проксируется через HTTP.
 """
 
-from typing import Any, Callable, Generic, Type, TypeVar
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
 
 from core.context import get_context
+from core.db.base_repository import BaseRepository
 from core.http import get_httpx_client
 from core.logging import get_logger
 
@@ -28,8 +32,8 @@ class HTTPRepositoryProxy(Generic[T]):
 
     def __init__(
         self,
-        repository_class: Type,
-        model_class: Type[T]
+        repository_class: type[BaseRepository[T]],
+        model_class: type[T],
     ):
         """
         Args:
@@ -50,7 +54,7 @@ class HTTPRepositoryProxy(Generic[T]):
         self,
         method: str,
         path: str = "",
-        **kwargs
+        **kwargs: Any,
     ) -> Any:
         """
         Выполняет HTTP запрос к API сервиса-владельца.
@@ -81,7 +85,7 @@ class HTTPRepositoryProxy(Generic[T]):
                 return response.json()
             return None
 
-    def __getattr__(self, name: str) -> Callable:
+    def __getattr__(self, name: str) -> Callable[..., Any]:
         """
         Перехватывает вызовы любых методов и проксирует через HTTP.
 
@@ -93,7 +97,7 @@ class HTTPRepositoryProxy(Generic[T]):
         if name.startswith('_'):
             raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
 
-        async def proxy_method(*args, **kwargs) -> Any:
+        async def proxy_method(*args: Any, **kwargs: Any) -> Any:
             # Собираем все аргументы в payload
             payload = {
                 "args": list(args),
@@ -128,7 +132,7 @@ class HTTPRepositoryProxy(Generic[T]):
 
     # Стандартные методы для обратной совместимости (оптимизированные пути)
 
-    async def get(self, entity_id: str):
+    async def get(self, entity_id: str) -> T | None:
         """GET /{entity_id}"""
         try:
             data = await self._request("GET", f"/{entity_id}")
@@ -138,7 +142,7 @@ class HTTPRepositoryProxy(Generic[T]):
                 return None
             raise
 
-    async def set(self, entity) -> bool:
+    async def set(self, entity: T) -> bool:
         """POST /"""
         entity_data = entity.model_dump(mode="json") if hasattr(entity, 'model_dump') else entity
         await self._request("POST", "", json=entity_data)
@@ -154,12 +158,12 @@ class HTTPRepositoryProxy(Generic[T]):
                 return False
             raise
 
-    async def list(self, *, limit: int, offset: int = 0):
+    async def list(self, *, limit: int, offset: int = 0) -> list[T]:
         """GET /?limit={limit}&offset={offset}"""
         data = await self._request("GET", "", params={"limit": limit, "offset": offset})
         return self._deserialize_result(data) if data else []
 
-    async def get_many(self, entity_ids: list):
+    async def get_many(self, entity_ids: list[str]) -> dict[str, T]:
         """POST /many"""
         if not entity_ids:
             return {}

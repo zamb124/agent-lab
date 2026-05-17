@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -43,6 +44,7 @@ _TEST_POSTGRES_HOSTS = {"localhost", "127.0.0.1"}
 # Defaults совпадают с tests/fixtures/test_database_env.py.
 _DEFAULT_POSTGRES_DSN = "postgresql://platform_user:admin@localhost:54322"
 _DEFAULT_REDIS_HOST = "localhost"
+_TEST_INFRA_EPOCH_FILE = Path("/tmp/platform_test_infra_epoch")
 
 
 def _load_database_names() -> list[str]:
@@ -244,6 +246,7 @@ async def _main() -> int:
     for db in (0, 1):
         await _flush_redis(redis_host, redis_port, db)
 
+    _TEST_INFRA_EPOCH_FILE.write_text(datetime.now(UTC).isoformat(), encoding="utf-8")
     print("db_test_reset: готово")
     return 0
 

@@ -23,16 +23,20 @@ from core.utils.tokens import TokenService, get_token_service
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/companies", tags=["public", "companies"])
 
+
 class CheckSlugRequest(BaseModel):
     slug: str
+
 
 class CheckSlugResponse(BaseModel):
     available: bool
     slug: str
 
+
 class CreateCompanyRequest(BaseModel):
     name: str
     slug: str
+
 
 class CreateCompanyResponse(BaseModel):
     company_id: str
@@ -40,19 +44,37 @@ class CreateCompanyResponse(BaseModel):
     subdomain: str
     redirect_url: str
 
+
 class SystemAccessRequest(BaseModel):
     role: str
 
+
 _SYSTEM_ASSIGNABLE_ROLES: tuple[str, ...] = ("admin", "developer", "viewer")
+
+
+def _service_json_object(response: object, *, service: str, path: str) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        raise RuntimeError(f"{service} {path} вернул не JSON object")
+    result: dict[str, Any] = {}
+    for key, value in response.items():
+        if not isinstance(key, str):
+            raise RuntimeError(f"{service} {path} вернул JSON object с нестроковым ключом")
+        result[key] = value
+    return result
+
 
 def _require_authenticated_user(request: Request) -> User:
     if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
     return request.state.user
 
+
 def _ensure_user_is_system_member(user: User) -> None:
     if SYSTEM_COMPANY_ID not in user.companies:
-        raise HTTPException(status_code=403, detail="Доступно только для участников компании system")
+        raise HTTPException(
+            status_code=403, detail="Доступно только для участников компании system"
+        )
+
 
 @router.post("/check-slug", response_model=CheckSlugResponse)
 async def check_slug(request: CheckSlugRequest, container: ContainerDep):
@@ -75,16 +97,12 @@ async def check_slug(request: CheckSlugRequest, container: ContainerDep):
     subdomain_repo = container.subdomain_repository
     company_id = await subdomain_repo.get_company_id(slug)
 
-    return CheckSlugResponse(
-        available=company_id is None,
-        slug=slug
-    )
+    return CheckSlugResponse(available=company_id is None, slug=slug)
+
 
 @router.post("", response_model=CreateCompanyResponse)
 async def create_company(
-    request_data: CreateCompanyRequest,
-    request: Request,
-    container: ContainerDep
+    request_data: CreateCompanyRequest, request: Request, container: ContainerDep
 ):
     """
     Создание новой компании
@@ -99,7 +117,7 @@ async def create_company(
     """
     settings = get_settings()
 
-    if not hasattr(request.state, 'user') or not request.state.user:
+    if not hasattr(request.state, "user") or not request.state.user:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
 
     user = request.state.user
@@ -174,14 +192,14 @@ async def create_company(
     # Инициализировать агенты и тулы для новой компании
     try:
         service_client = container.service_client
-        init_response = await service_client.post(
-            "flows",
-            "/flows/api/v1/company/init",
-            json={
-                "company_id": company_id,
-                "company_name": name,
-                "subdomain": slug
-            }
+        init_response = _service_json_object(
+            await service_client.post(
+                "flows",
+                "/flows/api/v1/company/init",
+                json={"company_id": company_id, "company_name": name, "subdomain": slug},
+            ),
+            service="flows",
+            path="/flows/api/v1/company/init",
         )
 
         logger.info(
@@ -190,8 +208,7 @@ async def create_company(
         )
     except Exception as e:
         logger.error(
-            f"Не удалось запустить инициализацию агентов для {company_id}: {e}",
-            exc_info=True
+            f"Не удалось запустить инициализацию агентов для {company_id}: {e}", exc_info=True
         )
         # НЕ падаем - компания уже создана
 
@@ -200,17 +217,15 @@ async def create_company(
         service_client = container.service_client
 
         # Создаем пространство с названием компании
-        space_response = await service_client.post(
-            "sync",
-            "/sync/api/v1/spaces/",
-            json={
-                "name": name,
-                "description": f"Пространство компании {name}"
-            },
-            headers={
-                "X-Company-Id": company_id,
-                "X-User-Id": user.user_id
-            }
+        space_response = _service_json_object(
+            await service_client.post(
+                "sync",
+                "/sync/api/v1/spaces/",
+                json={"name": name, "description": f"Пространство компании {name}"},
+                headers={"X-Company-Id": company_id, "X-User-Id": user.user_id},
+            ),
+            service="sync",
+            path="/sync/api/v1/spaces/",
         )
         space_id = space_response["id"]
         logger.info(
@@ -220,19 +235,15 @@ async def create_company(
         )
 
         # Создаем канал с названием компании в этом пространстве
-        channel_response = await service_client.post(
-            "sync",
-            "/sync/api/v1/channels/",
-            json={
-                "space_id": space_id,
-                "type": "topic",
-                "name": name,
-                "is_private": False
-            },
-            headers={
-                "X-Company-Id": company_id,
-                "X-User-Id": user.user_id
-            }
+        channel_response = _service_json_object(
+            await service_client.post(
+                "sync",
+                "/sync/api/v1/channels/",
+                json={"space_id": space_id, "type": "topic", "name": name, "is_private": False},
+                headers={"X-Company-Id": company_id, "X-User-Id": user.user_id},
+            ),
+            service="sync",
+            path="/sync/api/v1/channels/",
         )
         channel_id = channel_response["id"]
         logger.info(
@@ -244,16 +255,11 @@ async def create_company(
 
     except Exception as e:
         logger.error(
-            f"Не удалось создать пространство/канал в sync для {company_id}: {e}",
-            exc_info=True
+            f"Не удалось создать пространство/канал в sync для {company_id}: {e}", exc_info=True
         )
         # НЕ падаем - компания уже создана
 
-    redirect_url = build_url(
-        request.headers.get("host", ""),
-        "/dashboard",
-        slug
-    )
+    redirect_url = build_url(request.headers.get("host", ""), "/dashboard", slug)
     logger.info("frontend.company_create_redirect", redirect_url=redirect_url)
 
     # Перевыпускаем токен с company_id
@@ -265,12 +271,14 @@ async def create_company(
     cookie_domain = get_cookie_domain(request.headers.get("host", ""))
     is_production = settings.server.env == "production"
 
-    response = JSONResponse(content={
-        "company_id": company.company_id,
-        "name": company.name,
-        "subdomain": company.subdomain,
-        "redirect_url": redirect_url
-    })
+    response = JSONResponse(
+        content={
+            "company_id": company.company_id,
+            "name": company.name,
+            "subdomain": company.subdomain,
+            "redirect_url": redirect_url,
+        }
+    )
 
     response.set_cookie(
         key="auth_token",
@@ -284,8 +292,12 @@ async def create_company(
 
     return response
 
-@router.get("/me", response_model=ListResponse[dict])
-async def get_my_companies(request: Request, container: ContainerDep) -> ListResponse[dict]:
+
+@router.get("/me", response_model=ListResponse[dict[str, Any]])
+async def get_my_companies(
+    request: Request,
+    container: ContainerDep,
+) -> ListResponse[dict[str, Any]]:
     """
     Получить список компаний текущего пользователя
 
@@ -309,6 +321,7 @@ async def get_my_companies(request: Request, container: ContainerDep) -> ListRes
         company_repository=container.company_repository,
     )
 
+
 @router.post("/{company_id}/system-access")
 async def enter_company_as_system_member(
     company_id: str,
@@ -323,7 +336,9 @@ async def enter_company_as_system_member(
     if not target_company_id:
         raise HTTPException(status_code=422, detail="company_id не может быть пустым")
     if target_company_id == SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=400, detail="Нельзя изменять доступ к компании system через этот endpoint")
+        raise HTTPException(
+            status_code=400, detail="Нельзя изменять доступ к компании system через этот endpoint"
+        )
 
     role = payload.role.strip()
     if role not in _SYSTEM_ASSIGNABLE_ROLES:
@@ -358,6 +373,7 @@ async def enter_company_as_system_member(
         "roles": user.companies[target_company_id],
     }
 
+
 @router.delete("/{company_id}/system-access")
 async def leave_company_as_system_member(
     company_id: str,
@@ -371,7 +387,9 @@ async def leave_company_as_system_member(
     if not target_company_id:
         raise HTTPException(status_code=422, detail="company_id не может быть пустым")
     if target_company_id == SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=400, detail="Нельзя выйти из компании system через этот endpoint")
+        raise HTTPException(
+            status_code=400, detail="Нельзя выйти из компании system через этот endpoint"
+        )
 
     company_repo = container.company_repository
     user_repo = container.user_repository
@@ -421,4 +439,3 @@ async def leave_company_as_system_member(
             max_age=TokenService.SESSION_EXPIRES,
         )
     return response
-

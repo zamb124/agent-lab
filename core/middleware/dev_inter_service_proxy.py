@@ -367,7 +367,7 @@ class DevInterServiceWsProxyMiddleware:
             await send({"type": "websocket.close", "code": 1011})
             return
 
-        accept_msg: dict = {"type": "websocket.accept"}
+        accept_msg: dict[str, object] = {"type": "websocket.accept"}
         if upstream.subprotocol:
             accept_msg["subprotocol"] = upstream.subprotocol
         await send(accept_msg)

@@ -5,7 +5,7 @@
 
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any
 
 from core.clients.payment.factory import PaymentProviderFactory
 from core.logging import get_logger
@@ -20,7 +20,7 @@ class PaymentSyncService:
     def __init__(self, payment_service: PaymentService):
         self._payment_service = payment_service
 
-    async def sync_pending_transactions(self, company_id: str) -> Dict[str, Any]:
+    async def sync_pending_transactions(self, company_id: str) -> dict[str, Any]:
         """
         Синхронизирует pending транзакции компании с провайдерами.
         Проверяет через API провайдера не пропустили ли webhook.
@@ -52,16 +52,13 @@ class PaymentSyncService:
 
         logger.info(f"Компания {company_id}: найдено {len(pending_transactions)} pending транзакций для синхронизации")
 
-        stats = {
-            "total_pending": len(pending_transactions),
-            "checked": 0,
-            "found": 0,
-            "updated": 0,
-            "by_provider": {}
-        }
+        checked = 0
+        found = 0
+        updated = 0
+        by_provider_stats: dict[str, dict[str, int]] = {}
 
         # Группируем по провайдерам
-        by_provider = {}
+        by_provider: dict[str, list[Any]] = {}
         for txn in pending_transactions:
             provider_type = txn.payment_provider.value
             if provider_type not in by_provider:
@@ -83,10 +80,6 @@ class PaymentSyncService:
                 logger.warning(f"Провайдер {provider_type} не найден")
                 continue
 
-            if not hasattr(provider, 'sync_pending_transactions'):
-                logger.warning(f"Провайдер {provider_type} не поддерживает синхронизацию")
-                continue
-
             try:
                 txn_dicts = [
                     {
@@ -100,10 +93,12 @@ class PaymentSyncService:
                 found_operations = await provider.sync_pending_transactions(
                     txn_dicts, storage=self._payment_service._storage,
                 )
+                if not found_operations:
+                    logger.debug("Провайдер %s не вернул pending-операций для синхронизации", provider_type)
 
-                stats["checked"] += len(transactions)
-                stats["found"] += len(found_operations)
-                stats["by_provider"][provider_type] = {
+                checked += len(transactions)
+                found += len(found_operations)
+                by_provider_stats[provider_type] = {
                     "checked": len(transactions),
                     "found": len(found_operations)
                 }
@@ -132,7 +127,7 @@ class PaymentSyncService:
                             transaction.amount
                         )
 
-                        stats["updated"] += 1
+                        updated += 1
 
                         logger.info(
                             "payments.transaction_synced",
@@ -145,13 +140,19 @@ class PaymentSyncService:
                 logger.error(f"Ошибка синхронизации с провайдером {provider_type}: {e}", exc_info=True)
 
         logger.info(
-            f"Синхронизация завершена: проверено={stats['checked']}, "
-            f"найдено={stats['found']}, обновлено={stats['updated']}"
+            f"Синхронизация завершена: проверено={checked}, "
+            f"найдено={found}, обновлено={updated}"
         )
 
-        return stats
+        return {
+            "total_pending": len(pending_transactions),
+            "checked": checked,
+            "found": found,
+            "updated": updated,
+            "by_provider": by_provider_stats,
+        }
 
-    async def sync_all_companies(self) -> Dict[str, Any]:
+    async def sync_all_companies(self) -> dict[str, Any]:
         """
         Синхронизирует pending транзакции всех компаний.
         Запускается периодически (например, раз в час).
@@ -222,4 +223,3 @@ class PaymentSyncService:
             logger.debug(f"Синхронизация: проверено {total_stats['companies_checked']} компаний, pending транзакций нет")
 
         return total_stats
-

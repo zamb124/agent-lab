@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from sqlalchemy import Boolean, and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
+import core.tracing.attributes as trace_attr
+from core.db.models import Spans
 from core.logging import get_logger
-
-from . import attributes as trace_attr
 
 if TYPE_CHECKING:
     from core.db import Storage
@@ -103,8 +103,6 @@ class SpanRepository:
         self._storage = storage
 
     async def save_span(self, span_data: Dict[str, Any]) -> None:
-        from core.db.models import Spans
-
         attrs: Dict[str, Any] = dict(span_data.get("attributes") or {})
 
         domain_pairs = [
@@ -172,8 +170,6 @@ class SpanRepository:
             await session.commit()
 
     async def get_span_by_id(self, span_id: str) -> Optional[Dict[str, Any]]:
-        from core.db.models import Spans
-
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.span_id == span_id)
             result = await session.execute(stmt)
@@ -197,8 +193,6 @@ class SpanRepository:
         Список spans сервиса (фильтры по компании, операции, типу события).
         Сортировка: start_time DESC, span_id DESC. Курсор — непрозрачная строка из ответа.
         """
-        from core.db.models import Spans
-
         if limit < 1:
             raise ValueError("limit должен быть >= 1")
 
@@ -246,8 +240,6 @@ class SpanRepository:
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Хронология событий по сущности (чат, заметка, документ и т.д.)."""
-        from core.db.models import Spans
-
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(
                 Spans.company_id == company_id,
@@ -262,8 +254,6 @@ class SpanRepository:
             return [self._serialize_span(row) for row in rows]
 
     async def get_trace(self, trace_id: str) -> List[Dict[str, Any]]:
-        from core.db.models import Spans
-
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.trace_id == trace_id).order_by(Spans.start_time.asc())
             result = await session.execute(stmt)
@@ -271,8 +261,6 @@ class SpanRepository:
             return [self._serialize_span(row) for row in rows]
 
     async def get_spans_by_task(self, task_id: str) -> List[Dict[str, Any]]:
-        from core.db.models import Spans
-
         async with self._storage.get_session() as session:
             stmt = (
                 select(Spans)
@@ -288,8 +276,6 @@ class SpanRepository:
         session_agent: str,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        from core.db.models import Spans
-
         async with self._storage.get_session() as session:
             stmt = (
                 select(Spans)
@@ -308,8 +294,6 @@ class SpanRepository:
         to_time: Optional[datetime] = None,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        from core.db.models import Spans
-
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.user_id == user_id)
             if from_time:
@@ -328,8 +312,6 @@ class SpanRepository:
         to_time: Optional[datetime] = None,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        from core.db.models import Spans
-
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(
                 _json_text_eq(Spans.attributes, trace_attr.ATTR_FLOW_ID, flow_id)
@@ -363,8 +345,6 @@ class SpanRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> Tuple[List[Dict[str, Any]], int]:
-        from core.db.models import Spans
-
         async with self._storage.get_session() as session:
             stmt = select(Spans)
             count_stmt = select(func.count()).select_from(Spans)
@@ -425,8 +405,6 @@ class SpanRepository:
         limit: int = 50,
         cursor: Optional[str] = None,
     ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-        from core.db.models import Spans
-
         if limit < 1:
             raise ValueError("limit должен быть >= 1")
         if limit > ADMIN_SPANS_MAX_LIMIT:
@@ -504,8 +482,6 @@ class SpanRepository:
         Spans с platform.billing.resource_name и platform.billing.pending_settlement=true
         за полуинтервал [from_time, to_time), по возрастанию start_time (для джобы списания).
         """
-        from core.db.models import Spans
-
         if limit < 1:
             raise ValueError("limit должен быть >= 1")
         if from_time.tzinfo is None or to_time.tzinfo is None:
@@ -537,8 +513,6 @@ class SpanRepository:
     async def admin_facet_distinct_company_ids(
         self, *, q: Optional[str] = None, limit: int = ADMIN_FACETS_MAX_LIMIT
     ) -> List[str]:
-        from core.db.models import Spans
-
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)
@@ -555,8 +529,6 @@ class SpanRepository:
         Список distinct company_id, для которых есть spans, для пересечения
         с каталогом компаний (поиск по name/subdomain, не только по id в трейсах).
         """
-        from core.db.models import Spans
-
         if max_ids < 1 or max_ids > 50_000:
             raise ValueError("max_ids должен быть от 1 до 50000")
         async with self._storage.get_session() as session:
@@ -578,8 +550,6 @@ class SpanRepository:
         namespace: Optional[str] = None,
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> List[str]:
-        from core.db.models import Spans
-
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)
@@ -608,8 +578,6 @@ class SpanRepository:
         Список distinct user_id, для которых есть spans (с опциональным сужением),
         для пересечения с каталогом пользователей (поиск по email/имени).
         """
-        from core.db.models import Spans
-
         if max_ids < 1 or max_ids > 50_000:
             raise ValueError("max_ids должен быть от 1 до 50000")
         scope_co = _admin_facet_scope_company(company_id)
@@ -632,8 +600,6 @@ class SpanRepository:
         namespace: Optional[str] = None,
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> List[str]:
-        from core.db.models import Spans
-
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)
@@ -659,8 +625,6 @@ class SpanRepository:
         namespace: Optional[str] = None,
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> List[str]:
-        from core.db.models import Spans
-
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)
@@ -685,8 +649,6 @@ class SpanRepository:
         company_id: Optional[str] = None,
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> List[str]:
-        from core.db.models import Spans
-
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)
@@ -709,8 +671,6 @@ class SpanRepository:
         namespace: Optional[str] = None,
         limit: int = ADMIN_FACETS_MAX_LIMIT,
     ) -> List[str]:
-        from core.db.models import Spans
-
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         frag = _facet_query_fragment(q)

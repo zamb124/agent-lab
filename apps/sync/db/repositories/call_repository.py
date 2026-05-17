@@ -75,7 +75,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         started_at: Optional[datetime] = None,
         ended_at: Optional[datetime] = None,
     ) -> None:
-        values: dict = {"status": status}
+        values: dict[str, object] = {"status": status}
         if started_at is not None:
             values["started_at"] = started_at
         if ended_at is not None:
@@ -111,7 +111,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         joined_at: Optional[datetime] = None,
         left_at: Optional[datetime] = None,
     ) -> None:
-        values: dict = {"status": status}
+        values: dict[str, object] = {"status": status}
         if joined_at is not None:
             values["joined_at"] = joined_at
         if left_at is not None:
@@ -227,7 +227,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         row = await self.get_link_for_company(link_token, company_id)
         if row.calendar_event_id is None:
             raise ValueError("Ссылка не привязана к событию календаря.")
-        values: dict = {}
+        values: dict[str, object] = {}
         if title is not None:
             values["title"] = title
         if scheduled_start_at is not None:

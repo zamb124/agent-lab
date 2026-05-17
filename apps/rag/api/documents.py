@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.rag.config import get_rag_settings
 from apps.rag_worker.tasks.indexing_tasks import index_rag_document_s3_task
-from core.context import get_context
+from core.context import require_active_company, require_context
 from core.files.models import FileResponse
 from core.files.processors import FileProcessor
 from core.logging import get_logger
@@ -73,8 +73,8 @@ async def ingest_text(
     validate_rag_user_metadata(request.metadata)
     text = validate_ingest_text_body(request.text)
 
-    context = get_context()
-    company_id = context.active_company.company_id
+    context = require_context()
+    company_id = require_active_company().company_id
     user_id = context.user.user_id
 
     merged_meta: Dict[str, Any] = dict(request.metadata)
@@ -148,7 +148,6 @@ async def list_documents(
 
     items = all_documents[:limit]
 
-    from core.pagination import OffsetPage
     return OffsetPage[RAGDocument](
         items=items,
         total=len(items),
@@ -176,8 +175,8 @@ async def upload_document(
     metadata_dict: Dict[str, Any] = json.loads(metadata) if metadata else {}
     file_data = await file.read()
 
-    context = get_context()
-    company_id = context.active_company.company_id
+    context = require_context()
+    company_id = require_active_company().company_id
     user_id = context.user.user_id
 
     processor = FileProcessor(file_repository=container.file_repository)

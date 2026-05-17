@@ -20,6 +20,7 @@ from typing import Any
 
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
 
+import core.tracing.attributes as trace_attributes
 from apps.flows.src.models import NodeConfig, TestCaseConfig
 from apps.flows.src.models.flow_config import (
     CheckConfig,
@@ -36,7 +37,6 @@ from core.context import get_context
 from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.state import ExecutionState
-from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
 logger = get_logger(__name__)

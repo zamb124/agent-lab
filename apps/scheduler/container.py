@@ -4,20 +4,21 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from apps.crm_worker.broker import broker as crm_broker
+from apps.flows_worker.broker import broker as flows_broker
+from apps.idle_worker.broker import broker as idle_broker
+from apps.rag_worker.broker import broker as rag_broker
+from apps.scheduler.config import get_scheduler_settings
+from apps.sync.realtime.broker import broker as sync_broker
 from core.container import BaseContainer, lazy
 from core.logging import get_logger
+from core.scheduler import SchedulerService, SchedulerTaskRepository
 
 logger = get_logger(__name__)
 
 
 def scheduler_broker_for_queue(queue_name: str) -> Any:
     """Брокер TaskIQ для AsyncKicker: задача должна быть зарегистрирована на этом брокере."""
-    from apps.crm_worker.broker import broker as crm_broker
-    from apps.flows_worker.broker import broker as flows_broker
-    from apps.idle_worker.broker import broker as idle_broker
-    from apps.rag_worker.broker import broker as rag_broker
-    from apps.sync.realtime.broker import broker as sync_broker
-
     mapping: dict[str, Any] = {
         "flows_worker": flows_broker,
         "idle": idle_broker,
@@ -35,9 +36,6 @@ class SchedulerContainer(BaseContainer):
 
     @lazy
     def scheduler_task_repository(self):
-        from apps.scheduler.config import get_scheduler_settings
-        from core.scheduler import SchedulerTaskRepository
-
         settings = get_scheduler_settings()
         if not settings.database.shared_url:
             raise ValueError("database.shared_url is required for scheduler repository")
@@ -45,9 +43,6 @@ class SchedulerContainer(BaseContainer):
 
     @lazy
     def scheduler_service(self):
-        from apps.scheduler.config import get_scheduler_settings
-        from core.scheduler import SchedulerService
-
         settings = get_scheduler_settings()
         return SchedulerService(
             repository=self.scheduler_task_repository,
@@ -62,8 +57,6 @@ _scheduler_container: Optional[SchedulerContainer] = None
 def get_scheduler_container() -> SchedulerContainer:
     global _scheduler_container
     if _scheduler_container is None:
-        from apps.scheduler.config import get_scheduler_settings
-
         settings = get_scheduler_settings()
         if not settings.database.shared_url:
             raise ValueError("database.shared_url is required")

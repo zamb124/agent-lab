@@ -27,11 +27,16 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from apps.voice.services.voice_usage import record_tts_usage
-from core.clients.speech_override import SpeechOverride
+from core.clients.speech_override import (
+    SpeechOverride,
+    SpeechProviderName,
+    SpeechResponseFormat,
+)
 from core.clients.tts_client import TTSLitserveHttpError
 from core.clients.tts_streaming import BaseTTSStreamer
 from core.clients.voice_resolver import get_tts_streamer
-from core.context import get_context
+from core.context import require_context
+from core.files.media.wav_merge import merge_wav_s16le_mono_files
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -51,11 +56,11 @@ class SynthesizeRequest(BaseModel):
     text: str = Field(min_length=1, description="Текст для озвучивания.")
     voice: Optional[str] = Field(default=None, description="Override голоса.")
     language: Optional[str] = Field(default=None, description="Override языка.")
-    response_format: Optional[str] = Field(
+    response_format: SpeechResponseFormat | None = Field(
         default=None,
         description="Формат аудио (wav/mp3/ogg/pcm/lpcm).",
     )
-    provider: Optional[str] = Field(default=None, description="Override провайдера.")
+    provider: SpeechProviderName | None = Field(default=None, description="Override провайдера.")
     model: Optional[str] = Field(default=None, description="Override модели.")
 
 
@@ -79,13 +84,14 @@ class SynthesizeRequest(BaseModel):
     },
 )
 async def synthesize(body: SynthesizeRequest) -> StreamingResponse:
-    ctx = get_context()
-    company_id = ctx.active_company.company_id
-    if company_id == "":
+    ctx = require_context()
+    company = ctx.active_company
+    if company is None or company.company_id == "":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Активная компания не определена в контексте запроса.",
         )
+    company_id = company.company_id
 
     override = SpeechOverride(
         provider=body.provider,
@@ -204,8 +210,6 @@ async def _synthesize_audio_chunks(
         and raw_chunks[0][8:12] == b"WAVE"
     )
     if use_wav_merge:
-        from core.files.media.wav_merge import merge_wav_s16le_mono_files
-
         yield merge_wav_s16le_mono_files(raw_chunks)
         return
     for part in raw_chunks:
@@ -240,34 +244,28 @@ async def _record_usage_after_stream(
                 company_id=company_id,
             )
 
-        ctx = get_context()
+        ctx = require_context()
         user = ctx.user
-        if user is None:
-            logger.info(
-                "voice.synthesize.usage_skipped_no_user",
-                company_id=company_id,
-                provider=tts_streamer.provider,
-                char_count=len(text),
-                total_audio_bytes=total_bytes,
-            )
-        else:
-            await record_tts_usage(
-                user=user,
-                company=ctx.active_company,
-                provider=tts_streamer.provider,
-                char_count=len(text),
-                metadata={
-                    "endpoint": "voice.synthesize",
-                    "total_audio_bytes": total_bytes,
-                },
-            )
-            logger.info(
-                "voice.synthesize.completed",
-                company_id=company_id,
-                provider=tts_streamer.provider,
-                char_count=len(text),
-                total_audio_bytes=total_bytes,
-            )
+        company = ctx.active_company
+        if company is None:
+            raise RuntimeError("voice.synthesize usage requires active company in context")
+        await record_tts_usage(
+            user=user,
+            company=company,
+            provider=tts_streamer.provider,
+            char_count=len(text),
+            metadata={
+                "endpoint": "voice.synthesize",
+                "total_audio_bytes": total_bytes,
+            },
+        )
+        logger.info(
+            "voice.synthesize.completed",
+            company_id=company_id,
+            provider=tts_streamer.provider,
+            char_count=len(text),
+            total_audio_bytes=total_bytes,
+        )
 
 
 __all__ = ["synthesize_router", "SynthesizeRequest"]

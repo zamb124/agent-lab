@@ -11,8 +11,10 @@ middleware (AuthMiddleware, бизнес-handler'ы) только дополня
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
+from typing import Any
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -69,16 +71,17 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
         request.state.trace_id = trace_id
 
+        scope_extra: dict[str, Any] = {
+            LOG_HTTP_METHOD: method,
+            LOG_HTTP_PATH: path,
+            LOG_HTTP_USER_AGENT: user_agent,
+            LOG_HTTP_CLIENT_IP: client_host,
+        }
         scope_token = enter_request_scope(
             request_id=request_id,
             trace_id=trace_id,
             service_name=self._service_name,
-            **{
-                LOG_HTTP_METHOD: method,
-                LOG_HTTP_PATH: path,
-                LOG_HTTP_USER_AGENT: user_agent,
-                LOG_HTTP_CLIENT_IP: client_host,
-            },
+            **scope_extra,
         )
 
         start = time.perf_counter()
@@ -161,8 +164,6 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _level_for_status(status_code: int, path: str) -> int:
-        import logging
-
         if status_code >= 500:
             return logging.ERROR
         if status_code in (401, 404) and path.startswith(("/openapi", "/docs", "/static")):
@@ -182,8 +183,8 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
         request_size: int | None,
         response_size: int | None,
         request_id: str,
-    ) -> dict:
-        fields: dict = {
+    ) -> dict[str, Any]:
+        fields: dict[str, Any] = {
             LOG_HTTP_METHOD: method,
             LOG_HTTP_ROUTE: route,
             LOG_HTTP_PATH: path,

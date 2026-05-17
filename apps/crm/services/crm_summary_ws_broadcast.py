@@ -16,7 +16,7 @@ from apps.crm.services.namespace_notification_recipients import (
 )
 from apps.crm.types import JsonObject
 from core.logging import get_logger
-from core.ui_events import publish_ui_event_to_user
+from core.ui_events.dispatcher import publish_ui_event_to_user
 
 if TYPE_CHECKING:
     from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository

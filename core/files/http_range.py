@@ -10,6 +10,7 @@ from __future__ import annotations
 
 class RangeNotSatisfiableError(Exception):
     def __init__(self, total_size: int) -> None:
+        super().__init__(f"Range not satisfiable for object size {total_size}")
         self.total_size = total_size
 
 

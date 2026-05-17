@@ -6,7 +6,7 @@ import pytest
 
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import CodeNode
-from apps.flows.src.streaming import Emitter
+from apps.flows.src.streaming import BaseEmitter
 from core.state import ExecutionState
 
 
@@ -48,7 +48,7 @@ async def test_flow_emits_edge_executed_linear(
     ) -> None:
         calls.append((edge_index, from_node, to_node))
 
-    monkeypatch.setattr(Emitter, "emit_edge_executed", capture, raising=True)
+    monkeypatch.setattr(BaseEmitter, "emit_edge_executed", capture, raising=True)
 
     await flow.run(state_task)
     ab_idx = 0
@@ -89,7 +89,7 @@ async def test_flow_emits_two_edges_parallel(
     ) -> None:
         calls.append((edge_index, from_node, to_node))
 
-    monkeypatch.setattr(Emitter, "emit_edge_executed", capture, raising=True)
+    monkeypatch.setattr(BaseEmitter, "emit_edge_executed", capture, raising=True)
     await flow.run(state)
     ab = (0, "a", "b")
     ac = (1, "a", "c")
@@ -141,7 +141,7 @@ async def test_flow_emits_both_edges_on_and_join(
     ) -> None:
         calls.append((edge_index, from_node, to_node))
 
-    monkeypatch.setattr(Emitter, "emit_edge_executed", capture, raising=True)
+    monkeypatch.setattr(BaseEmitter, "emit_edge_executed", capture, raising=True)
     await flow.run(state_task)
     to3_from_0 = [c for c in calls if c[1] == "0" and c[2] == "3"]
     to3_from_2 = [c for c in calls if c[1] == "2" and c[2] == "3"]
@@ -190,7 +190,7 @@ async def test_flow_emits_edge_error_on_python_condition_failure(
     ) -> None:
         err_calls.append((edge_index, from_node, to_node, error))
 
-    monkeypatch.setattr(Emitter, "emit_edge_error", capture_error, raising=True)
+    monkeypatch.setattr(BaseEmitter, "emit_edge_error", capture_error, raising=True)
 
     with pytest.raises(ValueError, match="Python-условие ребра"):
         await flow.run(state)

@@ -32,7 +32,7 @@ def test_retry_http_statuses_includes_401_when_proxy_setting_enabled(
 ) -> None:
     gs = MagicMock()
     gs.proxy.retry_http_401_via_proxy = True
-    monkeypatch.setattr("core.config.get_settings", lambda: gs)
+    monkeypatch.setattr("core.http.client.get_settings", lambda: gs)
     assert 401 in _retry_http_statuses_for_smart()
 
 

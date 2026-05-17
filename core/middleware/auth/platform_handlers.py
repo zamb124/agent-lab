@@ -3,14 +3,16 @@
 """
 
 import json
-from typing import Optional, Tuple
+from typing import Any, Optional
 
 from fastapi import HTTPException, Request
 
 from core.logging import get_logger
-from core.models.identity_models import AuthProvider, Company, User, UserStatus
+from core.models.identity_models import Company, User, UserStatus
 
 logger = get_logger(__name__)
+
+
 class PlatformHandler:
     """Базовый обработчик платформы"""
 
@@ -37,10 +39,17 @@ class PlatformHandler:
 
         return company
 
+    async def create_user_from_request(
+        self, request: Request, company: Company
+    ) -> tuple[User, dict[str, Any]]:
+        raise NotImplementedError
+
 class TelegramHandler(PlatformHandler):
     """Обработчик Telegram webhook"""
 
-    async def create_user_from_request(self, request: Request, company: Company) -> Tuple[User, dict]:
+    async def create_user_from_request(
+        self, request: Request, company: Company
+    ) -> tuple[User, dict[str, Any]]:
         """Создает пользователя из Telegram webhook данных"""
         body = await request.body()
         data = json.loads(body)
@@ -55,14 +64,12 @@ class TelegramHandler(PlatformHandler):
 
         user = User(
             user_id=f"telegram_{telegram_user_id}",
-            provider=AuthProvider.YANDEX,
-            provider_user_id=telegram_user_id,
-            email="",
             name=full_name,
             status=UserStatus.ACTIVE,
             groups=["user"],
             companies={company.company_id: ["user"]},
             active_company_id=company.company_id,
+            messengers={"telegram": username} if username else {},
         )
 
         metadata = {
@@ -77,7 +84,9 @@ class TelegramHandler(PlatformHandler):
 class WhatsAppHandler(PlatformHandler):
     """Обработчик WhatsApp webhook"""
 
-    async def create_user_from_request(self, request: Request, company: Company) -> Tuple[User, dict]:
+    async def create_user_from_request(
+        self, request: Request, company: Company
+    ) -> tuple[User, dict[str, Any]]:
         """Создает пользователя из WhatsApp webhook данных"""
         body = await request.body()
         data = json.loads(body)
@@ -99,14 +108,13 @@ class WhatsAppHandler(PlatformHandler):
 
         user = User(
             user_id=f"whatsapp_{phone_number}",
-            provider=AuthProvider.YANDEX,
-            provider_user_id=phone_number,
-            email="",
             name=profile_name,
             status=UserStatus.ACTIVE,
             groups=["user"],
             companies={company.company_id: ["user"]},
             active_company_id=company.company_id,
+            phones=[phone_number] if phone_number != "unknown" else [],
+            messengers={"whatsapp": phone_number} if phone_number != "unknown" else {},
         )
 
         metadata = {
@@ -126,4 +134,3 @@ def get_platform_handler(platform: str, container) -> Optional[PlatformHandler]:
     if handler_class:
         return handler_class(container)
     return None
-

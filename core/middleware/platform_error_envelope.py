@@ -45,7 +45,10 @@ class PlatformHttpErrorEnvelopeMiddleware(BaseHTTPMiddleware):
 
         body = b""
         try:
-            async for chunk in response.body_iterator:
+            body_iterator = getattr(response, "body_iterator", None)
+            if body_iterator is None:
+                return response
+            async for chunk in body_iterator:
                 body += chunk
         except Exception:
             _LOGGER.warning(

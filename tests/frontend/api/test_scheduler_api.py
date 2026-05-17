@@ -23,6 +23,7 @@ from core.config.models import (
     BillingConfig,
     BillingSpanSettlementConfig,
     CalendarSyncConfig,
+    LLMConfig,
     PaymentProvidersConfig,
     RAGConfig,
 )
@@ -226,6 +227,7 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
             cron="*/1 * * * *",
         )
         billing = BillingConfig()
+        llm = LLMConfig()
         payment_providers = PaymentProvidersConfig()
         rag = RAGConfig()
 
@@ -300,6 +302,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             cron="*/1 * * * *",
         )
         billing = BillingConfig()
+        llm = LLMConfig()
         payment_providers = PaymentProvidersConfig()
         rag = RAGConfig()
 
@@ -366,6 +369,7 @@ async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() ->
                 cron="*/5 * * * *",
             )
         )
+        llm = LLMConfig()
         payment_providers = PaymentProvidersConfig()
         rag = RAGConfig()
 

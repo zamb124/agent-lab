@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from google.auth.transport.requests import Request as AuthRequest
 from google.oauth2 import service_account as sa
 
 from core.http import get_httpx_client
@@ -103,11 +104,12 @@ class GoogleDocsClient:
         if self._static_token:
             return {"Authorization": f"Bearer {self._static_token}"}
 
-        if not self._credentials.valid:
-            from google.auth.transport.requests import Request as AuthRequest
-
-            self._credentials.refresh(AuthRequest())
-        return {"Authorization": f"Bearer {self._credentials.token}"}
+        credentials = self._credentials
+        if credentials is None:
+            raise RuntimeError("GoogleDocsClient credentials are not configured")
+        if not credentials.valid:
+            credentials.refresh(AuthRequest())
+        return {"Authorization": f"Bearer {credentials.token}"}
 
     async def _request(
         self,

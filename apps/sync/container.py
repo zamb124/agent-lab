@@ -7,6 +7,16 @@ SyncContainer - DI контейнер для Sync сервиса.
 
 from typing import Optional
 
+from apps.sync.db.base import SyncDatabase
+from apps.sync.db.repositories.call_repository import CallRepository
+from apps.sync.db.repositories.call_speech_egress_repository import CallSpeechEgressTrackRepository
+from apps.sync.db.repositories.channel_repository import ChannelRepository
+from apps.sync.db.repositories.file_repository import SyncFileRepository
+from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
+from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
+from apps.sync.db.repositories.message_repository import MessageRepository
+from apps.sync.db.repositories.thread_repository import ThreadRepository
+from core.config import get_settings
 from core.container import BaseContainer, lazy
 from core.logging import get_logger
 
@@ -32,52 +42,40 @@ class SyncContainer(BaseContainer):
 
     @lazy
     def sync_db(self):
-        from apps.sync.db.base import SyncDatabase
         return SyncDatabase(self._sync_db_url)
 
     # === Репозитории (sync_db - реляционные) ===
 
     @lazy
     def channel_repository(self):
-        from apps.sync.db.repositories.channel_repository import ChannelRepository
         return ChannelRepository(db=self.sync_db)
 
     @lazy
     def thread_repository(self):
-        from apps.sync.db.repositories.thread_repository import ThreadRepository
         return ThreadRepository(db=self.sync_db)
 
     @lazy
     def message_repository(self):
-        from apps.sync.db.repositories.message_repository import MessageRepository
         return MessageRepository(db=self.sync_db)
 
     @lazy
     def sync_file_repository(self):
-        from apps.sync.db.repositories.file_repository import SyncFileRepository
         return SyncFileRepository(db=self.sync_db)
 
     @lazy
     def git_resource_ref_repository(self):
-        from apps.sync.db.repositories.git_resource_ref_repository import GitResourceRefRepository
         return GitResourceRefRepository(db=self.sync_db)
 
     @lazy
     def call_repository(self):
-        from apps.sync.db.repositories.call_repository import CallRepository
         return CallRepository(db=self.sync_db)
 
     @lazy
     def call_recording_repository(self):
-        from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
         return CallRecordingRepository(db=self.sync_db)
 
     @lazy
     def call_speech_egress_track_repository(self):
-        from apps.sync.db.repositories.call_speech_egress_repository import (
-            CallSpeechEgressTrackRepository,
-        )
-
         return CallSpeechEgressTrackRepository(db=self.sync_db)
 
 # === Глобальный контейнер ===
@@ -88,7 +86,6 @@ def get_sync_container() -> SyncContainer:
     """Получает контейнер (создает при первом вызове)"""
     global _sync_container
     if _sync_container is None:
-        from core.config import get_settings
         settings = get_settings()
 
         if not settings.database.sync_url:

@@ -132,7 +132,7 @@ class A2AClient:
         task_id = str(uuid.uuid4())
         session_id = session_id or str(uuid.uuid4())
 
-        payload = {
+        payload: dict[str, Any] = {
             "jsonrpc": "2.0",
             "id": task_id,
             "method": "message/send",

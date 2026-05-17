@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import importlib
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -16,10 +15,13 @@ from apps.flows.src.models.operator_schemas import OperatorTaskStatus
 from apps.flows.src.services.operator_tasks_broadcast import publish_operator_tasks_refresh
 from apps.flows.src.state.persistence import create_initial_state
 from apps.flows.src.streaming.emitter import Emitter
+from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
+from apps.flows_worker.broker import broker as flows_broker
 from core.context import get_context
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
+from core.tasks.kicker import kiq_task_name_with_context
 
 logger = get_logger(__name__)
 
@@ -305,13 +307,12 @@ class OperatorHandoffService:
         )
         await publish_operator_tasks_refresh(self._repo, task.queue_id)
 
-        flow_tasks_module = importlib.import_module("apps.flows.src.tasks.flow_tasks")
-        process_flow_task = getattr(flow_tasks_module, "process_flow_task")
-
         tid = task.a2a_task_id if task.a2a_task_id else ""
         cid = task.context_id if task.context_id else task.session_id.split(":", 1)[-1]
 
-        await process_flow_task.kiq(
+        await kiq_task_name_with_context(
+            TASK_PROCESS_FLOW,
+            flows_broker,
             flow_id=task.flow_id,
             session_id=task.session_id,
             user_id=task.end_user_id,
@@ -325,6 +326,7 @@ class OperatorHandoffService:
             files=[],
             context_data=ctx_dict,
             trace_context=None,
+            background_kind="operator_handoff",
         )
         logger.info("Operator handoff completed, process_flow_task kicked: task_id=%s", task_id)
 

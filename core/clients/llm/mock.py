@@ -306,17 +306,8 @@ class MockLLM:
             return {"content": self._default_response, "reasoning": None, "tool_calls": None}
 
         last_message = messages[-1]
-        if hasattr(last_message, "parts"):
-            content_str = get_message_text(last_message)
-        else:
-            content_str = ""
-            for part in last_message.get("parts", []):
-                if isinstance(part, dict):
-                    root = part.get("root", part)
-                    if isinstance(root, dict) and "text" in root:
-                        content_str += root["text"]
-
-        metadata = last_message.metadata if hasattr(last_message, "metadata") else last_message.get("metadata") or {}
+        content_str = get_message_text(last_message)
+        metadata = last_message.metadata or {}
         if metadata and metadata.get("tool_call_id"):
             for key, response in self._responses.items():
                 if key.lower() in content_str.lower():
@@ -399,10 +390,10 @@ class MockLLM:
                 is_last_reasoning_overall = is_last_reasoning_chunk and not content and not tool_calls
 
                 yield TaskArtifactUpdateEvent(
-                    contextId=context_id,
-                    taskId=task_id,
+                    context_id=context_id,
+                    task_id=task_id,
                     artifact=Artifact(
-                        artifactId=reasoning_artifact_id,
+                        artifact_id=reasoning_artifact_id,
                         name="reasoning",
                         parts=[Part(root=TextPart(text=chunk))]
                     ),
@@ -424,10 +415,10 @@ class MockLLM:
                 is_last = is_last_content and not tool_calls
 
                 yield TaskArtifactUpdateEvent(
-                    contextId=context_id,
-                    taskId=task_id,
+                    context_id=context_id,
+                    task_id=task_id,
                     artifact=Artifact(
-                        artifactId=artifact_id, parts=[Part(root=TextPart(text=chunk))]
+                        artifact_id=artifact_id, parts=[Part(root=TextPart(text=chunk))]
                     ),
                     append=True,
                     last_chunk=is_last,
@@ -445,8 +436,8 @@ class MockLLM:
                 metadata={"tool_calls": tool_calls, "usage": usage_data},
             )
             yield TaskStatusUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
+                context_id=context_id,
+                task_id=task_id,
                 status=TaskStatus(state=TaskState.working, message=message),
                 final=False,
             )
@@ -454,8 +445,8 @@ class MockLLM:
             if final_message:
                 final_message.metadata = {"usage": usage_data}
             yield TaskStatusUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
+                context_id=context_id,
+                task_id=task_id,
                 status=TaskStatus(
                     state=TaskState.working,
                     message=final_message,
@@ -472,8 +463,8 @@ class MockLLM:
                     parts=[Part(root=TextPart(text=content))],
                 )
             yield TaskStatusUpdateEvent(
-                contextId=context_id,
-                taskId=task_id,
+                context_id=context_id,
+                task_id=task_id,
                 status=TaskStatus(state=TaskState.completed, message=final_message),
                 final=False,
             )
@@ -595,8 +586,9 @@ class MockLLM:
                     and event.artifact.parts
                 ):
                     for part in event.artifact.parts:
-                        if hasattr(part, "root") and hasattr(part.root, "text"):
-                            content_parts.append(part.root.text)
+                        root = part.root
+                        if isinstance(root, TextPart):
+                            content_parts.append(root.text)
             if isinstance(event, TaskStatusUpdateEvent) and event.status:
                 if event.status.message:
                     txt = get_message_text(event.status.message)
@@ -619,7 +611,7 @@ class MockLLM:
             return response_model.model_validate(data)
 
         return Message(
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
             role=Role.agent,
             parts=[Part(root=TextPart(text=content))],
             metadata={"tool_calls": tool_calls} if tool_calls else None,
@@ -693,7 +685,7 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
     if isinstance(messages, str):
         return [
             Message(
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
                 role=Role.user,
                 parts=[Part(root=TextPart(text=messages))],
             )
@@ -707,9 +699,9 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
         content = messages.get("content", "")
         return [
             Message(
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
                 role=role,
-                parts=[Part(root=TextPart(text=content))],
+                parts=[Part(root=TextPart(text=str(content)))],
             )
         ]
 
@@ -717,34 +709,37 @@ def _normalize_messages(messages: MessageInput) -> List[Message]:
         if not messages:
             return []
 
-        first = messages[0]
+        items: list[Any] = messages
+        first = items[0]
 
         if isinstance(first, str):
             result = []
-            for i, text in enumerate(messages):
+            for i, text in enumerate(items):
                 role = Role.user if i % 2 == 0 else Role.agent
                 result.append(
                     Message(
-                        messageId=str(uuid.uuid4()),
+                        message_id=str(uuid.uuid4()),
                         role=role,
-                        parts=[Part(root=TextPart(text=text))],
+                        parts=[Part(root=TextPart(text=str(text)))],
                     )
                 )
             return result
 
         if isinstance(first, Message):
-            return messages
+            return [item for item in items if isinstance(item, Message)]
 
         if isinstance(first, dict):
             result = []
-            for msg in messages:
+            for msg in items:
+                if not isinstance(msg, dict):
+                    raise ValueError("Mixed message list is not supported")
                 role = Role.user if msg.get("role", "user") == "user" else Role.agent
                 content = msg.get("content", "")
                 result.append(
                     Message(
-                        messageId=str(uuid.uuid4()),
+                        message_id=str(uuid.uuid4()),
                         role=role,
-                        parts=[Part(root=TextPart(text=content))],
+                        parts=[Part(root=TextPart(text=str(content)))],
                     )
                 )
             return result

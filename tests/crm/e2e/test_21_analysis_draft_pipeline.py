@@ -6,7 +6,9 @@ E2E: черновик AI analyze на сервере — draft_version, PATCH д
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -17,8 +19,6 @@ from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresErr
 
 async def _apply_note(crm_client, headers: dict, note_id: str):
     """Применяет черновик анализа заметки через /tasks/note-analyze с mode=apply."""
-    import asyncio
-    import time
     start = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",
         json={"note_id": note_id, "mode": "apply"},
@@ -48,8 +48,6 @@ async def _analyze_note(
 
     Возвращает (task_row, ai_analysis_draft).
     """
-    import asyncio
-    import time
     body = {"note_id": note_id, "check_duplicates": False, **extra}
     start = await crm_client.post(
         "/crm/api/v1/tasks/note-analyze",

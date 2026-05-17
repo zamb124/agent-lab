@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.tracing import attributes as attr
+import core.tracing.attributes as attr
 from core.tracing.tracer import PlatformTracer
 
 

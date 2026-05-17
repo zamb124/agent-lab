@@ -10,7 +10,7 @@ import re
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from core.context import get_context
 from core.logging import get_logger
@@ -212,7 +212,9 @@ class TranslationManager:
 
         return translations
 
-    def _extract_nested_translations(self, data: dict, result: dict, prefix: str = ""):
+    def _extract_nested_translations(
+        self, data: dict[str, Any], result: dict[str, str], prefix: str = ""
+    ) -> None:
         """Рекурсивно извлекает переводы из вложенной структуры"""
         for key, value in data.items():
             full_key = f"{prefix}.{key}" if prefix else key
@@ -274,9 +276,8 @@ class TranslationManager:
                     # Ищем поля с аннотациями
                     for field_node in node.body:
                         if isinstance(field_node, ast.AnnAssign) and field_node.value:
-                            field_name = (
-                                field_node.target.id if hasattr(field_node.target, "id") else None
-                            )
+                            target = field_node.target
+                            field_name = target.id if isinstance(target, ast.Name) else None
 
                             if field_name and isinstance(field_node.value, ast.Call):
                                 # Извлекаем параметры Field()
@@ -315,7 +316,7 @@ class TranslationManager:
 
     def _extract_field_params(self, call_node: ast.Call) -> Dict[str, str]:
         """Извлекает параметры из вызова Field()"""
-        params = {}
+        params: dict[str, str] = {}
 
         if isinstance(call_node.func, ast.Name) and call_node.func.id == "Field":
             # Извлекаем keyword arguments
@@ -433,7 +434,7 @@ class TranslationManager:
     async def _update_modular_translations(self, lang_dir: Path, language: Language):
         """Обновляет переводы в модульной структуре"""
         # Группируем ключи по модулям
-        modules_data = {}
+        modules_data: dict[str, dict[str, str]] = {}
 
         for key, translation_key in self._discovered_keys.items():
             # Определяем модуль по ключу
@@ -477,7 +478,10 @@ class TranslationManager:
             # Загружаем существующий модуль
             if file_path.exists():
                 with open(file_path, "r", encoding="utf-8") as f:
-                    module_data = json.load(f)
+                    loaded_module = json.load(f)
+                if not isinstance(loaded_module, dict):
+                    raise ValueError(f"i18n module must be JSON object: {file_path}")
+                module_data: dict[str, Any] = loaded_module
             else:
                 module_data = {}
 
@@ -503,7 +507,10 @@ class TranslationManager:
         # Загружаем существующий файл или создаем новый
         if file_path.exists():
             with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                loaded = json.load(f)
+            if not isinstance(loaded, dict):
+                raise ValueError(f"i18n translations file must be JSON object: {file_path}")
+            data: dict[str, Any] = loaded
         else:
             data = {
                 "meta": {
@@ -533,7 +540,7 @@ class TranslationManager:
             data["meta"]["last_updated"] = datetime.now().isoformat()
 
             # Подсчитываем статистику
-            all_translations = {}
+            all_translations: dict[str, str] = {}
             self._extract_nested_translations(data, all_translations)
             all_translations = {
                 k: v for k, v in all_translations.items() if not k.startswith("meta.")
@@ -561,7 +568,7 @@ class TranslationManager:
                 total=total_keys,
             )
 
-    def _key_exists_in_data(self, key: str, data: dict) -> bool:
+    def _key_exists_in_data(self, key: str, data: dict[str, Any]) -> bool:
         """Проверяет существование ключа в данных"""
         keys = key.split(".")
         current = data
@@ -574,7 +581,7 @@ class TranslationManager:
 
         return True
 
-    def _set_nested_key(self, data: dict, key: str, value: str):
+    def _set_nested_key(self, data: dict[str, Any], key: str, value: str) -> None:
         """Устанавливает значение по вложенному ключу"""
         keys = key.split(".")
         current = data

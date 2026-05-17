@@ -3,8 +3,10 @@
 Поддерживает резолюцию @var:key ссылок.
 """
 
+from __future__ import annotations
+
 import re
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any
 
 from core.db.repositories.variable_repository import Variable
 from core.logging import get_logger
@@ -17,7 +19,7 @@ logger = get_logger(__name__)
 class VariablesService:
     """Управление переменными компании с поддержкой ссылок @var:key"""
 
-    def __init__(self, variable_repository: "VariableRepository"):
+    def __init__(self, variable_repository: VariableRepository):
         """
         Args:
             variable_repository: Репозиторий для работы с переменными
@@ -29,8 +31,8 @@ class VariablesService:
         key: str,
         value: str,
         is_secret: bool = False,
-        groups: list = None,
-        description: str = None
+        groups: list[str] | None = None,
+        description: str | None = None,
     ) -> bool:
         """
         Сохраняет переменную компании.
@@ -57,7 +59,7 @@ class VariablesService:
         logger.info(f"Переменная сохранена: {key} (secret={is_secret}, groups={groups})")
         return result
 
-    async def get_var(self, key: str) -> Optional[str]:
+    async def get_var(self, key: str) -> str | None:
         """
         Получает переменную компании.
 
@@ -76,11 +78,11 @@ class VariablesService:
         """Удаляет переменную компании"""
         return await self._variable_repository.delete(key)
 
-    async def list_vars(self) -> Dict[str, Any]:
+    async def list_vars(self) -> dict[str, Any]:
         """Получает все переменные компании"""
         all_variables = await self._variable_repository.get_variables()
 
-        result = {}
+        result: dict[str, Any] = {}
         for key, variable in all_variables.items():
             result[key] = {
                 "value": variable.value if not variable.secret else "***",
@@ -94,7 +96,7 @@ class VariablesService:
     async def resolve_variables(
         self,
         text: str,
-        context_vars: Optional[Dict[str, str]] = None
+        context_vars: dict[str, str] | None = None
     ) -> str:
         """
         Резолвит @var:key ссылки в тексте.
@@ -114,7 +116,7 @@ class VariablesService:
             variables_map = {**variables_map, **context_vars}
         return VarResolver.resolve_text(text, variables_map)
 
-    async def get_all_resolved_vars(self) -> Dict[str, str]:
+    async def get_all_resolved_vars(self) -> dict[str, str]:
         """
         Получает все переменные компании с разрешенными ссылками.
 
@@ -123,7 +125,7 @@ class VariablesService:
         """
         all_vars = await self.list_vars()
 
-        resolved = {}
+        resolved: dict[str, str] = {}
         for key, var_data in all_vars.items():
             if var_data.get("secret"):
                 resolved[key] = "***"
@@ -146,12 +148,12 @@ class VariablesService:
         variables_map = await self.get_company_variables_map()
         return VarResolver.resolve_deep(value, variables_map)
 
-    async def get_company_variables_map(self) -> Dict[str, Any]:
+    async def get_company_variables_map(self) -> dict[str, Any]:
         """Возвращает словарь переменных компании в формате key -> value."""
         all_variables = await self._variable_repository.get_variables()
         return {key: variable.value for key, variable in all_variables.items()}
 
-    def extract_variable_keys(self, value: Any) -> Set[str]:
+    def extract_variable_keys(self, value: Any) -> set[str]:
         """
         Извлекает все ключи переменных из значения.
 
@@ -161,7 +163,7 @@ class VariablesService:
         Returns:
             Множество ключей переменных
         """
-        keys = set()
+        keys: set[str] = set()
 
         if isinstance(value, str):
             if value.startswith("@var:"):
@@ -192,7 +194,7 @@ class VariablesService:
         Returns:
             True если тег добавлен
         """
-        variable = await self.variable_repository.get(var_key)
+        variable = await self._variable_repository.get(var_key)
 
         if not variable:
             logger.debug(f"Переменная {var_key} не найдена, пропускаем добавление тега {tag}")
@@ -210,7 +212,7 @@ class VariablesService:
     async def tag_variables_for_entity(
         self,
         entity_name: str,
-        data_sources: List[Any]
+        data_sources: list[Any],
     ) -> int:
         """
         Добавляет теги к переменным используемым в сущности (агент/flow).

@@ -11,7 +11,7 @@ from __future__ import annotations
 from apps.crm.db.models import CRMTask
 from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.models.api import TaskResponse
-from core.ui_events import publish_ui_event_to_user
+from core.ui_events.dispatcher import publish_ui_event_to_user
 
 
 async def broadcast_crm_task_updated_for_user(*, user_id: str, row: CRMTask) -> None:

@@ -14,10 +14,14 @@ import aioboto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from core.config import get_settings
+from core.config import S3BucketConfig, get_settings
+from core.context import get_context
+from core.files.s3_sigv4_clock import ensure_sigv4_clock_aligned_with_endpoint
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
 class S3Client:
     """
     Асинхронный клиент для работы с S3-совместимыми хранилищами.
@@ -600,7 +604,7 @@ class S3ClientFactory:
 
     @staticmethod
     def create_client(
-        bucket_config: Dict[str, Any],
+        bucket_config: S3BucketConfig,
         physical_bucket_name: str,
         *,
         bucket_config_key: str,
@@ -624,8 +628,6 @@ class S3ClientFactory:
 
         if not bucket_config.secret_access_key:
             raise ValueError(f"secret_access_key не настроен для bucket {bucket_config_key}")
-
-        from core.files.s3_sigv4_clock import ensure_sigv4_clock_aligned_with_endpoint
 
         ensure_sigv4_clock_aligned_with_endpoint(bucket_config.endpoint_url)
 
@@ -709,11 +711,7 @@ async def get_default_s3_client() -> Optional[S3Client]:
         async with lock:
             if _default_s3_client is None:
                 settings = get_settings()
-                if (
-                    hasattr(settings, "s3")
-                    and settings.s3.enabled
-                    and settings.s3.default_bucket
-                ):
+                if settings.s3.enabled and settings.s3.default_bucket:
                     _default_s3_client = S3ClientFactory.create_client_for_bucket(
                         settings.s3.default_bucket
                     )
@@ -770,9 +768,9 @@ def build_s3_key_from_context(relative_path: str) -> str:
         >>> build_s3_key_from_context("rag/ns1/doc.pdf")
         "system/rag/ns1/doc.pdf"
     """
-    from core.context import get_context
-
     context = get_context()
+    if context is None:
+        raise ValueError("Контекст не найден для построения S3 ключа")
     if not context.active_company:
         raise ValueError("Компания не найдена в контексте для построения S3 ключа")
 
@@ -781,4 +779,3 @@ def build_s3_key_from_context(relative_path: str) -> str:
         raise ValueError(f"Company subdomain и company_id пусты: {context.active_company}")
 
     return build_s3_key_for_company(company_slug, relative_path)
-

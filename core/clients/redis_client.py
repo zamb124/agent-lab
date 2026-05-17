@@ -93,19 +93,26 @@ class RedisClient:
 
             return False
 
+    def _require_client(self) -> Any:
+        if self._client is None:
+            raise RuntimeError("Redis client not connected after retries")
+        return self._client
+
     async def get(self, key: str) -> Optional[str]:
         """Получает значение по ключу с auto-reconnect"""
         if not await self._ensure_connected():
             return None
+        client = self._require_client()
 
         try:
-            return await self._client.get(key)
+            return await client.get(key)
         except Exception as e:
             logger.warning(f"Get failed for key {key}: {e}")
             # Одна попытка после переподключения
             if await self._ensure_connected():
                 try:
-                    return await self._client.get(key)
+                    client = self._require_client()
+                    return await client.get(key)
                 except Exception:
                     pass
             return None
@@ -114,7 +121,7 @@ class RedisClient:
         """Атомарно возвращает значение и удаляет ключ (Redis GETDEL / fallback Lua)."""
         if not await self._ensure_connected():
             return None
-        client = self._client
+        client = self._require_client()
         try:
             getter = getattr(client, "getdel", None)
             if callable(getter):
@@ -125,7 +132,8 @@ class RedisClient:
         lua = "local v = redis.call('GET', KEYS[1]); if v then redis.call('DEL', KEYS[1]) end; return v"
         try:
             if await self._ensure_connected():
-                return await self._client.eval(lua, 1, key)
+                client = self._require_client()
+                return await client.eval(lua, 1, key)
         except Exception as e:
             logger.warning(f"getdel lua failed for key {key}: {e}")
         return None
@@ -137,26 +145,30 @@ class RedisClient:
 
         for attempt in range(2):
             try:
-                await self._client.set(key, value, ex=ttl)
+                client = self._require_client()
+                await client.set(key, value, ex=ttl)
                 return True
             except Exception as e:
                 if attempt == 0 and await self._ensure_connected():
                     continue
                 logger.warning(f"Set failed for key {key}: {e}")
                 return False
+        return False
 
     async def set_nx(self, key: str, value: str, ttl_seconds: int) -> bool:
         """SET key value NX EX ttl — True только если ключ раньше отсутствовал."""
         if not await self._ensure_connected():
             return False
         try:
-            ok = await self._client.set(key, value, nx=True, ex=ttl_seconds)
+            client = self._require_client()
+            ok = await client.set(key, value, nx=True, ex=ttl_seconds)
             return bool(ok)
         except Exception as e:
             logger.warning(f"set_nx failed for key {key}: {e}")
             if await self._ensure_connected():
                 try:
-                    ok = await self._client.set(key, value, nx=True, ex=ttl_seconds)
+                    client = self._require_client()
+                    ok = await client.set(key, value, nx=True, ex=ttl_seconds)
                     return bool(ok)
                 except Exception as e2:
                     logger.warning(f"set_nx retry failed for key {key}: {e2}")
@@ -167,7 +179,8 @@ class RedisClient:
         if not await self._ensure_connected():
             return False
         try:
-            await self._client.setex(key, seconds, value)
+            client = self._require_client()
+            await client.setex(key, seconds, value)
             return True
         except Exception as e:
             logger.warning(f"RedisClient: ошибка установки ключа {key} с TTL: {e}")
@@ -178,7 +191,8 @@ class RedisClient:
         if not await self._ensure_connected():
             return 0
         try:
-            return await self._client.delete(*keys)
+            client = self._require_client()
+            return await client.delete(*keys)
         except Exception as e:
             logger.warning(f"RedisClient: ошибка удаления ключей: {e}")
             return 0
@@ -187,14 +201,16 @@ class RedisClient:
         """Выполняет Lua-скрипт (атомарные read-modify-write на стороне Redis)."""
         if not await self._ensure_connected():
             raise RuntimeError("Redis client not connected after retries")
-        return await self._client.eval(script, numkeys, *keys_and_args)
+        client = self._require_client()
+        return await client.eval(script, numkeys, *keys_and_args)
 
     async def rpush(self, key: str, *values: str) -> int:
         """Добавляет значения в конец списка (RPUSH)."""
         if not await self._ensure_connected():
             return 0
         try:
-            return await self._client.rpush(key, *values)
+            client = self._require_client()
+            return await client.rpush(key, *values)
         except Exception as e:
             logger.warning(f"RedisClient: ошибка RPUSH в {key}: {e}")
             return 0
@@ -204,7 +220,8 @@ class RedisClient:
         if not await self._ensure_connected():
             return []
         try:
-            return await self._client.lrange(key, start, end)
+            client = self._require_client()
+            return await client.lrange(key, start, end)
         except Exception as e:
             logger.warning(f"RedisClient: ошибка LRANGE из {key}: {e}")
             return []
@@ -227,7 +244,8 @@ class RedisClient:
         # Попытка публикации с одним retry
         for attempt in range(2):
             try:
-                return await self._client.publish(channel, message)
+                client = self._require_client()
+                return await client.publish(channel, message)
             except Exception as e:
                 if attempt == 0:
                     logger.warning(f"Publish failed, reconnecting: {e}")
@@ -235,6 +253,7 @@ class RedisClient:
                         continue
                 logger.error(f"Publish failed after retry: {e}")
                 raise
+        raise RuntimeError("Redis publish retry loop exited without result")
 
     async def subscribe(
         self,
@@ -261,7 +280,8 @@ class RedisClient:
         if not await self._ensure_connected():
             raise RuntimeError("Redis client not connected")
 
-        pubsub = self._client.pubsub()
+        client = self._require_client()
+        pubsub = client.pubsub()
 
         try:
             await pubsub.subscribe(channel)
@@ -297,7 +317,8 @@ class RedisClient:
                         try:
                             await pubsub.unsubscribe(channel)
                             await pubsub.aclose()
-                            pubsub = self._client.pubsub()
+                            client = self._require_client()
+                            pubsub = client.pubsub()
                             await pubsub.subscribe(channel)
                             logger.info(f"Resubscribed to {channel}")
                         except Exception as resub_error:
@@ -311,4 +332,3 @@ class RedisClient:
                 await pubsub.aclose()
             except Exception:
                 pass
-

@@ -77,6 +77,27 @@ class CalendarEvent(StrictBaseModel):
     updated_at: datetime
 
 
+class CalendarEventUpsertPayload(StrictBaseModel):
+    title: str
+    kind: str = "event"
+    source: CalendarEventSource = CalendarEventSource.PLATFORM
+    source_id: Optional[str] = None
+    namespace: Optional[str] = None
+    description: Optional[str] = None
+    location: Optional[str] = None
+    status: CalendarEventStatus = CalendarEventStatus.CONFIRMED
+    timezone: str = "UTC"
+    all_day: bool = False
+    start_at: datetime
+    end_at: datetime
+    attendees: list[CalendarAttendee] = Field(default_factory=list)
+    recurrence_rule: Optional[str] = None
+    recurrence_id: Optional[str] = None
+    series_id: Optional[str] = None
+    deep_link: Optional[str] = None
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
 class CalendarIntegrationCredentials(StrictBaseModel):
     username: Optional[str] = None
     access_token: str
@@ -103,3 +124,18 @@ class CalendarIntegration(StrictBaseModel):
     settings: CalendarIntegrationSettings = Field(default_factory=CalendarIntegrationSettings)
     created_at: datetime
     updated_at: datetime
+
+
+class CalendarIntegrationConnectPayload(StrictBaseModel):
+    provider: CalendarProvider
+    username: Optional[str] = None
+    access_token: str
+    refresh_token: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    scope: Optional[str] = None
+    token_type: Optional[str] = None
+    default_calendar_id: Optional[str] = None
+    sync_enabled: bool = True
+    sync_inbound_enabled: bool = True
+    sync_outbound_enabled: bool = True
+    notifications_enabled: bool = True

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Literal, Union
+from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -97,7 +97,7 @@ class CustomToolResponseContent(BaseModel):
     """Ответ внешнего инструмента или AI-агента."""
 
     tool_name: str = Field(description="Имя инструмента, сформировавшего ответ.")
-    response_data: dict = Field(
+    response_data: dict[str, Any] = Field(
         description="Произвольные данные ответа инструмента.",
     )
 
@@ -290,4 +290,4 @@ class MessageContentRow(BaseModel):
     message_id: str = Field(description="Идентификатор сообщения.")
     type: str = Field(description="Тип блока контента.")
     order: int = Field(description="Порядок блока.")
-    data: dict = Field(description="JSON-данные блока.")
+    data: dict[str, Any] = Field(description="JSON-данные блока.")

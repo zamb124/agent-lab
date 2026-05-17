@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import BaseSettings
+from core.config import set_settings as core_set_settings
 from core.config.loader import load_merged_config
 
 
@@ -90,8 +91,6 @@ _office_settings: Optional[OfficeSettings] = None
 def get_office_settings() -> OfficeSettings:
     global _office_settings
     if _office_settings is None:
-        from core.config import set_settings as core_set_settings
-
         merged = load_merged_config(service_name="office", silent=True)
         server_block = dict(merged.get("server") or {})
         server_block.setdefault("name", "documents")

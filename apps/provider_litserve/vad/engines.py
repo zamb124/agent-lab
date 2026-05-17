@@ -13,6 +13,9 @@ import struct
 import time
 from typing import Any
 
+import torch
+from silero_vad import get_speech_timestamps, load_silero_vad
+
 from apps.provider_litserve.model_registry import find_vad_entry
 from apps.provider_litserve.runtime_models import (
     allowed_api_model_ids,
@@ -64,6 +67,7 @@ class LocalVADEngine:
     def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
         self._cfg = cfg
         self._models: dict[str, tuple[Any, Any]] = {}
+        self._device = "cpu"
 
     def setup(self, device: str | None) -> None:
         self._device = device or "cpu"
@@ -85,12 +89,6 @@ class LocalVADEngine:
     def _ensure_model(self, entry: ProviderLitserveVADModelEntry) -> tuple[Any, Any]:
         if entry.api_model_id in self._models:
             return self._models[entry.api_model_id]
-        try:
-            from silero_vad import get_speech_timestamps, load_silero_vad
-        except ImportError as exc:
-            raise RuntimeError(
-                "VAD: установите silero-vad (uv add silero-vad --group rag)"
-            ) from exc
 
         logger.info(
             "Загрузка VAD-модели: api=%s hf=%s", entry.api_model_id, entry.hf_model_id
@@ -130,7 +128,6 @@ class LocalVADEngine:
         samples = struct.unpack(f"<{n_samples}h", audio_bytes[: n_samples * 2])
         floats = [s / 32768.0 for s in samples]
 
-        import torch
         tensor = torch.tensor(floats, dtype=torch.float32)
         timestamps = get_speech_ts(
             tensor,

@@ -17,6 +17,8 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from core.config import get_settings
+from core.db.migration_manifest import load_migration_manifest
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -58,9 +60,6 @@ async def ensure_postgres_service_databases_async(
     Args:
         reference_shared_url: если задан (например в pytest), подставляется вместо get_settings().database.shared_url.
     """
-    from core.config import get_settings
-    from core.db.migration_manifest import load_migration_manifest
-
     manifest = load_migration_manifest()
     postgres_cfg = manifest.get("postgres")
     if not postgres_cfg:

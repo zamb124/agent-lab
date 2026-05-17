@@ -18,7 +18,7 @@ from core.config import get_settings
 from core.identity import AuthService
 from core.logging import get_logger
 from core.models import AuthProvider, AuthRequest
-from core.utils.domain import build_url, get_cookie_domain
+from core.utils.domain import build_url, get_cookie_domain, get_host_with_port, is_local
 from core.utils.tokens import TokenService, get_token_service
 
 logger = get_logger(__name__)
@@ -165,8 +165,8 @@ async def start_auth(
     request: Request,
     provider_name: str,
     auth_service: AuthServiceDep,
-    redirect_uri: str = None,
-    return_path: str = None,
+    redirect_uri: str | None = None,
+    return_path: str | None = None,
 ):
     """
     Начинает процесс авторизации с выбранным провайдером.
@@ -179,8 +179,6 @@ async def start_auth(
     Returns:
         JSON с auth_url для редиректа на стороне клиента
     """
-    from core.utils.domain import get_host_with_port, is_local
-
     get_settings()
 
     try:
@@ -301,24 +299,29 @@ async def _complete_oauth_callback(
     if not result.success:
         logger.error(f"Ошибка завершения авторизации: {result.error_message}")
         raise HTTPException(status_code=400, detail=result.error_message)
+    if result.user is None or result.session is None or result.token is None:
+        raise HTTPException(status_code=500, detail="Некорректный результат авторизации")
+    user = result.user
+    session = result.session
+    token = result.token
 
     target_host = original_host or request.headers.get("host", "")
     if return_path:
         if not return_path.startswith("/"):
             raise HTTPException(status_code=400, detail="Некорректный return_path")
         redirect_url = build_url(target_host, return_path)
-    elif not result.user.companies or len(result.user.companies) == 0:
+    elif not user.companies or len(user.companies) == 0:
         redirect_url = build_url(target_host, "/select-company?action=create")
-    elif len(result.user.companies) == 1:
-        company_id = list(result.user.companies.keys())[0]
+    elif len(user.companies) == 1:
+        company_id = list(user.companies.keys())[0]
         company = await auth_service._company_repository.get(company_id)
         if not company or not company.subdomain:
             redirect_url = build_url(target_host, "/select-company?action=create")
         else:
             redirect_url = build_url(target_host, "/dashboard?post_login=1", company.subdomain)
     else:
-        active_company_id = result.user.active_company_id
-        if active_company_id and active_company_id in result.user.companies:
+        active_company_id = user.active_company_id
+        if active_company_id and active_company_id in user.companies:
             company = await auth_service._company_repository.get(active_company_id)
             if company and company.subdomain:
                 redirect_url = build_url(target_host, "/dashboard?post_login=1", company.subdomain)
@@ -332,12 +335,12 @@ async def _complete_oauth_callback(
 
     cookie_domain = get_cookie_domain(target_host)
 
-    logger.info(f"Устанавливаем cookies: session_id={result.session.session_id}, auth_token={result.token[:8]}..., domain={cookie_domain}, secure={is_production}")
+    logger.info(f"Устанавливаем cookies: session_id={session.session_id}, auth_token={token[:8]}..., domain={cookie_domain}, secure={is_production}")
 
     cookie_max_age = TokenService.SESSION_EXPIRES
     response.set_cookie(
         key="session_id",
-        value=result.session.session_id,
+        value=session.session_id,
         domain=cookie_domain,
         httponly=True,
         secure=is_production,
@@ -346,7 +349,7 @@ async def _complete_oauth_callback(
     )
     response.set_cookie(
         key="auth_token",
-        value=result.token,
+        value=token,
         domain=cookie_domain,
         httponly=False,
         secure=is_production,
@@ -354,7 +357,7 @@ async def _complete_oauth_callback(
         max_age=cookie_max_age,
     )
 
-    logger.info(f"Успешная авторизация пользователя {result.user.user_id}")
+    logger.info(f"Успешная авторизация пользователя {user.user_id}")
     return response
 
 @router.get("/callback/{provider_name}")
@@ -364,7 +367,7 @@ async def auth_callback(
     code: str,
     state: str,
     auth_service: AuthServiceDep,
-    error: str = None,
+    error: str | None = None,
     user: Optional[str] = None,
 ):
     """Callback после OAuth (query); Apple при scope name/email шлёт POST form_post."""
@@ -631,7 +634,7 @@ async def grafana_auth_check(request: Request):
 async def auth_status(auth_service: AuthServiceDep):
     """Возвращает статус системы авторизации"""
     return {
-        "auth_enabled": auth_service.storage is not None,
+        "auth_enabled": auth_service.storage_configured,
         "available_providers": [
             p.value for p in auth_service.get_available_providers()
         ],

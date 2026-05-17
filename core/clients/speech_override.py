@@ -21,13 +21,11 @@ per-company-настройку и deployment-default. Используется �
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-if TYPE_CHECKING:
-    from core.clients.tts_pronunciation.models import PronunciationRule
-
+from core.clients.tts_pronunciation.models import PronunciationRule
 
 SpeechProviderName = Literal["litserve", "cloud_ru", "yandex", "sber", "mock"]
 """Каноничный набор имён провайдеров речи. Любое имя вне списка — фейл."""
@@ -125,8 +123,6 @@ class SpeechOverride(BaseModel):
 
 
 def _rebuild_with_pronunciation_rule() -> None:
-    from core.clients.tts_pronunciation.models import PronunciationRule  # noqa: F401
-
     SpeechOverride.model_rebuild()
 
 

@@ -10,6 +10,7 @@
 
 import os
 from contextlib import contextmanager
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -42,8 +43,34 @@ from core.clients.llm.factory import (  # noqa: E402
     _resolve_var,
     get_llm,
 )
+from core.pagination import OffsetPage  # noqa: E402
+from core.scheduler.models import PlatformScheduledTask  # noqa: E402
 from core.state import ExecutionState  # noqa: E402
 from core.variables import VariableResolutionError  # noqa: E402
+
+
+def _expected_get_llm_kwargs(**overrides: object) -> dict[str, object]:
+    expected: dict[str, object] = {
+        "model_name": None,
+        "temperature": None,
+        "provider": None,
+        "api_key": None,
+        "base_url": None,
+        "folder_id": None,
+        "max_tokens": None,
+        "state": None,
+        "top_p": None,
+        "top_k": None,
+        "frequency_penalty": None,
+        "presence_penalty": None,
+        "seed": None,
+        "reasoning_effort": None,
+        "extra_request_body": None,
+        "extra_request_headers": None,
+        "fallback_models": None,
+    }
+    expected.update(overrides)
+    return expected
 
 
 class TestResolveVar:
@@ -307,7 +334,7 @@ class TestLlmNodeLLMConfig:
             type=NodeType.LLM_NODE,
             name="Test Node",
             prompt="Test prompt",
-            llm_override=NodeLLMOverride(
+            llm=NodeLLMOverride(
                 model="gpt-4-turbo",
                 temperature=0.5,
                 provider="bothub",
@@ -334,7 +361,7 @@ class TestLlmNodeLLMConfig:
 
             node._get_llm(state)
 
-            mock_get_llm.assert_called_once_with(
+            mock_get_llm.assert_called_once_with(**_expected_get_llm_kwargs(
                 model_name="gpt-4-turbo",
                 temperature=0.5,
                 provider="bothub",
@@ -343,7 +370,7 @@ class TestLlmNodeLLMConfig:
                 folder_id=None,
                 max_tokens=None,
                 state=state,
-            )
+            ))
 
     @pytest.mark.asyncio
     async def test_llm_node_passes_llm_config_dict(self):
@@ -376,7 +403,7 @@ class TestLlmNodeLLMConfig:
 
             node._get_llm(state)
 
-            mock_get_llm.assert_called_once_with(
+            mock_get_llm.assert_called_once_with(**_expected_get_llm_kwargs(
                 model_name="claude-3",
                 temperature=0.7,
                 provider="openrouter",
@@ -385,15 +412,21 @@ class TestLlmNodeLLMConfig:
                 folder_id=None,
                 max_tokens=None,
                 state=state,
-            )
+            ))
 
 
 class TestLLMModelsServiceSchedulerIdempotency:
     @staticmethod
-    def _schedule_model(payload: dict):
-        from core.scheduler.models import PlatformScheduledTask
-
+    def _schedule_model(payload: dict[str, Any]) -> PlatformScheduledTask:
         return PlatformScheduledTask.model_validate(payload)
+
+    def _schedule_page(self, *tasks: PlatformScheduledTask) -> OffsetPage[PlatformScheduledTask]:
+        return OffsetPage[PlatformScheduledTask](
+            items=list(tasks),
+            total=len(tasks),
+            limit=500,
+            offset=0,
+        )
 
     @pytest.mark.asyncio
     async def test_start_background_sync_reuses_existing_pending_schedule(self):
@@ -401,7 +434,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
 
         repository = MagicMock()
         scheduler_client = AsyncMock()
-        scheduler_client.list_schedules.return_value = [
+        scheduler_client.list_schedules.return_value = self._schedule_page(
             self._schedule_model(
                 {
                     "id": "existing-task",
@@ -425,7 +458,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                     "error_message": None,
                 }
             )
-        ]
+        )
         service = LLMModelsService(repository, scheduler_client)
 
         await service.start_background_sync(interval=60)
@@ -439,7 +472,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
 
         repository = MagicMock()
         scheduler_client = AsyncMock()
-        scheduler_client.list_schedules.return_value = [
+        scheduler_client.list_schedules.return_value = self._schedule_page(
             self._schedule_model(
                 {
                     "id": "paused-task",
@@ -463,7 +496,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                     "error_message": None,
                 }
             )
-        ]
+        )
         scheduler_client.resume_schedule.return_value = self._schedule_model(
             {
                 "id": "paused-task",
@@ -500,7 +533,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
 
         repository = MagicMock()
         scheduler_client = AsyncMock()
-        scheduler_client.list_schedules.return_value = [
+        scheduler_client.list_schedules.return_value = self._schedule_page(
             self._schedule_model(
                 {
                     "id": "task-1",
@@ -547,7 +580,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                     "error_message": None,
                 }
             ),
-        ]
+        )
         service = LLMModelsService(repository, scheduler_client)
 
         with pytest.raises(ValueError, match="multiple LLM sync schedules"):
@@ -1025,12 +1058,12 @@ class TestGetLLMYandex:
                 )
                 mock_settings.return_value.provider_litserve = MagicMock()
 
-                client = get_llm(
+                client = cast(LLMClient, get_llm(
                     model_name="gpt://stale/yandexgpt-5.1/latest",
                     api_key="user-key",
                     provider="yandex",
                     base_url="https://llm.api.cloud.yandex.net/v1",
-                )
+                ))
                 assert client.default_headers["x-folder-id"] == "platform-folder"
                 assert client.model == "gpt://platform-folder/yandexgpt-5.1/latest"
 

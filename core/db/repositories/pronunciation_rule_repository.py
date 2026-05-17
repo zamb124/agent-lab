@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from core.db.database import get_session_factory
 from core.db.models.platform import CompanyPronunciationRule, PlatformPronunciationRule
@@ -171,8 +171,6 @@ class CompanyPronunciationRuleRepository:
             raise ValueError("company_id не может быть пустым.")
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
-            from sqlalchemy import func
-
             result = await session.execute(
                 select(func.count()).where(CompanyPronunciationRule.company_id == company_id)
             )

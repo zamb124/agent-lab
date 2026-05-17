@@ -9,8 +9,9 @@
 """
 
 import mimetypes
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import httpx
@@ -18,16 +19,23 @@ from botocore.exceptions import ClientError
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 
+from core.config import get_settings
+from core.context import get_context, require_active_company, require_context
 from core.files.audio_transcode import AudioTranscodeError
+from core.files.checksum import compute_content_checksum_sha256
 from core.files.http_range import RangeNotSatisfiableError
 from core.files.models import FileReadPreviewResponse, FileRecord, FileResponse
 from core.files.processors import FileProcessor
-from core.files.reader.service import FileReadError
+from core.files.reader.exceptions import FileReadError
 from core.files.s3_client import S3ClientFactory
 from core.files.streaming import stream_s3_file
+from core.http import get_httpx_client
 from core.logging import get_logger
 
 from .read_preview import build_stored_file_text_preview
+
+if TYPE_CHECKING:
+    from core.files.file_repository import FileRepository
 
 logger = get_logger(__name__)
 _DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -45,7 +53,7 @@ def _is_http_url(url: str) -> bool:
     return parsed.scheme in ("http", "https")
 
 def build_file_api_router(
-    get_file_repo: Callable,
+    get_file_repo: Callable[[], "FileRepository"],
     service_api_prefix: str,
     max_upload_bytes: int = _DEFAULT_MAX_UPLOAD_BYTES,
 ) -> APIRouter:
@@ -64,7 +72,6 @@ def build_file_api_router(
 
     @router.post("/", response_model=FileResponse, summary="Загрузить файл")
     async def upload_file(file: UploadFile = File(...)) -> FileResponse:
-        from core.config import get_settings
         settings = get_settings()
         if not settings.s3.enabled or not settings.s3.default_bucket:
             raise HTTPException(
@@ -88,11 +95,9 @@ def build_file_api_router(
         else:
             content_type = "application/octet-stream"
 
-        from core.context import get_context
-        context = get_context()
-        company_id = context.active_company.company_id
+        context = require_context()
+        company_id = require_active_company().company_id
         user_id = context.user.user_id
-        from core.files.checksum import compute_content_checksum_sha256
 
         checksum = compute_content_checksum_sha256(data)
 
@@ -132,7 +137,6 @@ def build_file_api_router(
 
         is_public = getattr(file_record, "is_public", True)
         if not is_public:
-            from core.context import get_context
             ctx = get_context()
             company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
             file_company_id = getattr(file_record, "company_id", None)
@@ -188,8 +192,6 @@ def build_file_api_router(
         if not _is_http_url(storage_url):
             raise HTTPException(status_code=404, detail="Источник файла не поддерживается для скачивания.")
 
-        from core.http import get_httpx_client
-
         try:
             async with get_httpx_client(timeout=120.0) as client:
                 upstream_response = await client.get(storage_url)
@@ -237,8 +239,6 @@ def build_file_api_router(
 
         is_public = getattr(file_record, "is_public", True)
         if not is_public:
-            from core.context import get_context
-
             ctx = get_context()
             company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
             file_company_id = getattr(file_record, "company_id", None)
@@ -265,7 +265,6 @@ def build_file_api_router(
 
         is_public = getattr(file_record, "is_public", True)
         if not is_public:
-            from core.context import get_context
             ctx = get_context()
             company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
             file_company_id = getattr(file_record, "company_id", None)

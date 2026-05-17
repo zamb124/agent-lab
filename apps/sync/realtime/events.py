@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -55,7 +55,7 @@ class RealtimeEvent(BaseModel):
 
     type: EventType
     channel_id: str | None = Field(default=None, description="Канал события, если применимо.")
-    payload: dict = Field(description="Сериализованный payload события.")
+    payload: dict[str, Any] = Field(description="Сериализованный payload события.")
     company_id: str = Field(description="Компания-получатель (изоляция между тенантами).")
     recipient_user_ids: list[str] | None = Field(
         default=None,
@@ -233,7 +233,7 @@ def event_message_deleted(
 def event_message_reaction_changed(
     channel_id: str,
     message_id: str,
-    reactions: list,
+    reactions: list[dict[str, Any]],
     *,
     company_id: str,
     recipient_user_ids: list[str],
@@ -280,7 +280,7 @@ def event_call_incoming(
 def event_call_signal(
     call_id: str,
     signal_type: SignalType,
-    data: dict,
+    data: dict[str, Any],
     *,
     company_id: str,
     recipient_user_ids: list[str],

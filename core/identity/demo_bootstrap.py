@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from typing import Protocol
 
 from core.auth.utils import hash_password
-from core.clients import ServiceClient
-from core.clients.service_client import ServiceClientError
+from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
 from core.context import clear_context, set_context
 from core.logging import get_logger
-from core.models.context_models import Context, Language
+from core.models.context_models import Context
+from core.models.i18n_models import Language
 from core.models.identity_models import Company, User, UserStatus
 from core.utils.tokens import get_token_service
 
@@ -19,11 +20,38 @@ logger = get_logger(__name__)
 DEMO_OWNER_ROLES = ["owner", "admin"]
 
 
+class _CompanyRepository(Protocol):
+    async def get(self, entity_id: str) -> Company | None:
+        ...
+
+    async def set(self, entity: Company) -> bool:
+        ...
+
+
+class _UserRepository(Protocol):
+    async def list(self, *, limit: int, offset: int = 0) -> list[User]:
+        ...
+
+    async def set(self, entity: User) -> bool:
+        ...
+
+
+class _SubdomainRepository(Protocol):
+    async def set_mapping(self, subdomain: str, company_id: str) -> bool:
+        ...
+
+
+class DemoBootstrapContainer(Protocol):
+    company_repository: _CompanyRepository
+    user_repository: _UserRepository
+    subdomain_repository: _SubdomainRepository
+
+
 def _normalize_email(value: str) -> str:
     return value.strip().lower()
 
 
-async def ensure_demo_company_and_user(container: object) -> None:
+async def ensure_demo_company_and_user(container: DemoBootstrapContainer) -> None:
     """
     Создаёт или обновляет компанию и пользователя из settings.auth.demo.
     Не вызывать при login_enabled=False.
@@ -160,6 +188,8 @@ async def ensure_demo_company_and_user(container: object) -> None:
                 "subdomain": subdomain,
             },
         )
+        if not isinstance(init_response, dict):
+            raise ValueError("flows company/init response must be JSON object")
         logger.info(
             "Demo bootstrap: flows company/init для %s: task_id=%s",
             company_id,

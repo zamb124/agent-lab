@@ -17,6 +17,8 @@ from apps.crm.container import CRMContainer, get_crm_container
 from core.app import create_service_app
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
+from core.integrations.models import IntegrationCredential
+from core.integrations.oauth_service import set_oauth_credential_saved_hook
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
@@ -26,9 +28,6 @@ logger = get_logger(__name__)
 
 async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSettings) -> None:
     """Кастомная логика при старте"""
-    from core.integrations.models import IntegrationCredential
-    from core.integrations.oauth_service import set_oauth_credential_saved_hook
-
     set_context(
         Context(
             user=User(user_id="system", name="System"),

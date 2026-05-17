@@ -17,7 +17,7 @@ from core.clients.payment.base_provider import (
 from core.logging import get_logger
 
 logger = get_logger(__name__)
-class YuKassaConfig(PaymentProviderConfig):
+class YuKassaConfig(PaymentProviderConfig[Literal["yukassa"]]):
     """Конфигурация ЮKassa провайдера"""
     provider_type: Literal["yukassa"] = "yukassa"
     shop_id: str = Field(default="", description="ID магазина в ЮKassa")
@@ -65,4 +65,3 @@ class YuKassaProvider(BasePaymentProvider):
         """Заглушка: возврат не реализован"""
         logger.error("ЮKassa провайдер не реализован")
         return False
-

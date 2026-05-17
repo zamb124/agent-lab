@@ -12,7 +12,7 @@ from core.config import get_settings
 from core.identity.auth_service import AuthService
 from core.logging import get_logger
 from core.models.identity_models import AuthProvider, AuthRequest
-from core.utils.domain import build_url, get_cookie_domain
+from core.utils.domain import build_url, get_cookie_domain, is_local
 from core.utils.tokens import TokenService
 
 logger = get_logger(__name__)
@@ -24,20 +24,21 @@ async def auth_callback(
     container: ContainerDep,
     code: str = Query(...),
     state: str = Query(...),
-    provider: str = Query(None),
+    provider: str | None = Query(default=None),
     apple_oauth_user_json: Optional[str] = Query(None, alias="user"),
 ):
     """Callback после OAuth авторизации"""
-    from core.utils.domain import is_local
-
     auth_service: AuthService = container.auth_service
 
     auth_state = await auth_service._get_auth_state(state)
     if not auth_state:
         raise HTTPException(status_code=400, detail="Недействительный state")
 
-    if not provider:
-        provider = auth_state.get("provider")
+    if provider is None:
+        provider_raw = auth_state.get("provider")
+        if not isinstance(provider_raw, str) or not provider_raw:
+            raise HTTPException(status_code=400, detail="Провайдер отсутствует в state")
+        provider = provider_raw
 
     try:
         provider_enum = AuthProvider(provider.lower())
@@ -45,13 +46,28 @@ async def auth_callback(
         raise HTTPException(status_code=400, detail=f"Неизвестный провайдер: {provider}")
 
     # Получаем оригинальный хост из state (субдомен откуда пользователь пришел)
-    original_host = auth_state.get("original_host")
+    original_host_raw = auth_state.get("original_host")
+    original_host = (
+        original_host_raw
+        if isinstance(original_host_raw, str) and original_host_raw
+        else None
+    )
 
     # Опциональный путь для возврата после авторизации (напр. /join?token=...)
-    return_path = auth_state.get("return_path")
+    return_path_raw = auth_state.get("return_path")
+    return_path = (
+        return_path_raw
+        if isinstance(return_path_raw, str) and return_path_raw
+        else None
+    )
 
     # redirect_uri должен совпадать с тем что был при start_auth (на базовом домене)
-    redirect_uri = auth_state.get("redirect_uri")
+    redirect_uri_raw = auth_state.get("redirect_uri")
+    redirect_uri = (
+        redirect_uri_raw
+        if isinstance(redirect_uri_raw, str) and redirect_uri_raw
+        else None
+    )
 
     auth_request = AuthRequest(
         provider=provider_enum,
@@ -65,18 +81,20 @@ async def auth_callback(
 
     if not result.success:
         return RedirectResponse(url=f"/?error={result.error_message}")
+    if result.user is None or result.token is None:
+        raise HTTPException(status_code=500, detail="OAuth result is missing user or token")
 
     settings = get_settings()
     is_production = settings.server.env == "production"
 
     user = result.user
+    token = result.token
 
     # Используем оригинальный хост для редиректа (если был субдомен)
     target_host = original_host or request.headers.get("host", "localhost:8002")
 
     # Если был запрошен возврат на конкретный путь — используем его
     if return_path:
-        from core.utils.domain import is_local
         scheme = "http" if is_local(target_host) else "https"
         # Допускаем только пути (начинаются с /), не внешние URL
         if return_path.startswith("/"):
@@ -110,7 +128,7 @@ async def auth_callback(
 
     response.set_cookie(
         key="auth_token",
-        value=result.token,
+        value=token,
         domain=cookie_domain,
         httponly=True,
         secure=is_production,
@@ -119,4 +137,3 @@ async def auth_callback(
     )
 
     return response
-

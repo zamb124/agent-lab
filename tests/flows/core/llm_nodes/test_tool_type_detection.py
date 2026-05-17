@@ -16,11 +16,38 @@ from apps.flows.src.models import NodeConfig, ReactConfig, ReactLoopMode
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMOverride
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.tools.agent_session_tools import final_answer, reason
 from apps.flows.tools.finish_tool import finish
 from apps.flows.tools.math_tools import calculator
 from core.state import ExecutionState
+
+
+class _BillingService:
+    async def company_may_incur_billable_operation_charge(self, company_id: str) -> bool:
+        _ = company_id
+        return True
+
+    async def require_balance_for_billable_operation(
+        self,
+        company_id: str,
+        user_id: str,
+        *,
+        operation_code: str,
+        notification_service: str,
+    ) -> None:
+        _ = company_id, user_id, operation_code, notification_service
+
+
+class _RuntimeContainer:
+    billing_service = _BillingService()
+
+
+async def _run_reminder_agent(runner: LlmNodeRunner, state: ExecutionState) -> None:
+    runner.container = _RuntimeContainer()
+    async for _ in runner.run({"content": "test"}, state, InMemoryEmitter(state)):
+        pass
 
 
 class CustomReasonTool(BaseTool):
@@ -396,8 +423,7 @@ class TestReminderWithToolNames:
             session_id="test-agent:test-context",
             messages=[]
         )
-        async for _ in runner.run({"content": "test"}, state):
-            pass
+        await _run_reminder_agent(runner, state)
 
         messages = state.messages
         [
@@ -441,8 +467,7 @@ class TestReminderWithToolNames:
             session_id="test-agent:test-context",
             messages=[]
         )
-        async for _ in runner.run({"content": "test"}, state):
-            pass
+        await _run_reminder_agent(runner, state)
 
         messages = state.messages
         reminder_with_reason = False
@@ -494,8 +519,7 @@ class TestReminderWithToolNames:
             session_id="test-agent:test-context",
             messages=[]
         )
-        async for _ in runner.run({"content": "test"}, state):
-            pass
+        await _run_reminder_agent(runner, state)
 
         messages = state.messages
         found_complete_in_reminder = False
@@ -547,8 +571,7 @@ class TestReminderWithToolNames:
             session_id="test-agent:test-context",
             messages=[]
         )
-        async for _ in runner.run({"content": "test"}, state):
-            pass
+        await _run_reminder_agent(runner, state)
 
         messages = state.messages
         found_my_think_in_reminder = False

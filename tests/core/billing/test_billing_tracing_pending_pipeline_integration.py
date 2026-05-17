@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import core.tracing.attributes as trace_attr
 from core.billing.settlement_rules import (
     SettlementApplicationMode,
     SettlementRule,
@@ -16,7 +17,6 @@ from core.billing.settlement_rules import (
     SettlementRulesDocument,
 )
 from core.billing.span_billing_settlement import SpanBillingSettlement
-from core.tracing import attributes as trace_attr
 
 pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
 

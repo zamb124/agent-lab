@@ -6,13 +6,14 @@ import html
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from apps.frontend.dependencies import ContainerDep
 from core.clients.service_client import ServiceClientError
+from core.config import get_settings
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.models.embed_models import (
@@ -28,6 +29,20 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/embed/configs", tags=["embed_configs"])
 
 _EMBED_CODE_SESSION_TOKEN_TTL_SECONDS = 300
+
+
+def _service_json_object(response: object, *, service: str, path: str) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        raise HTTPException(status_code=502, detail=f"{service} {path} вернул не JSON object")
+    result: dict[str, Any] = {}
+    for key, value in response.items():
+        if not isinstance(key, str):
+            raise HTTPException(
+                status_code=502,
+                detail=f"{service} {path} вернул JSON object с нестроковым ключом",
+            )
+        result[key] = value
+    return result
 
 
 def _build_embed_integration_snippets(
@@ -304,8 +319,11 @@ async def create_embed_config(
         raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
 
     try:
-        agent = await container.service_client.get(
-            "flows", f"/flows/api/v1/flows/{request_data.flow_id}"
+        agent_path = f"/flows/api/v1/flows/{request_data.flow_id}"
+        agent = _service_json_object(
+            await container.service_client.get("flows", agent_path),
+            service="flows",
+            path=agent_path,
         )
     except ServiceClientError as e:
         if "404" in str(e):
@@ -322,7 +340,10 @@ async def create_embed_config(
     if agent.get("type") == "external":
         branch_id = "default"
     else:
-        branches = agent.get("branches", {})
+        branches_raw = agent.get("branches", {})
+        if not isinstance(branches_raw, dict):
+            raise HTTPException(status_code=502, detail="flows вернул некорректный branches")
+        branches = branches_raw
         if branches:
             if branch_id not in branches:
                 raise HTTPException(
@@ -575,8 +596,6 @@ async def get_embed_code(
             detail="Для кода виджета с голосом выберите активную компанию",
         )
 
-    # Определяем base URL
-    from core.config import get_settings
     settings = get_settings()
 
     # Канонический Web Component путь
@@ -692,4 +711,3 @@ async def issue_embed_session_token(
         flow_id=config.flow_id,
         branch_id=config.branch_id,
     )
-

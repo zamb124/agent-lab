@@ -301,26 +301,29 @@ class AuthMiddleware(BaseHTTPMiddleware):
         trace_id: str,
     ):
         """Обрабатывает webhook запросы"""
-        handler = get_platform_handler(rule.channel, container)
+        platform = rule.channel
+        if platform is None:
+            raise HTTPException(status_code=400, detail="Webhook platform is not configured")
+        handler = get_platform_handler(platform, container)
         if not handler:
-            raise HTTPException(status_code=400, detail=f"Unknown platform: {rule.channel}")
+            raise HTTPException(status_code=400, detail=f"Unknown platform: {platform}")
 
-        company = await handler.extract_company_from_webhook_path(request.url.path, rule.channel)
+        company = await handler.extract_company_from_webhook_path(request.url.path, platform)
 
         # GET для WhatsApp верификации - анонимный контекст
-        if rule.channel == "whatsapp" and request.method == "GET":
+        if platform == "whatsapp" and request.method == "GET":
             return await context_factory.create(request, "anonymous", company, trace_id=trace_id)
 
         user, metadata = await handler.create_user_from_request(request, company)
 
         context = await context_factory.create(
-            request, "webhook", company, user, platform=rule.channel, trace_id=trace_id
+            request, "webhook", company, user, platform=platform, trace_id=trace_id
         )
         context.metadata.update(metadata)
 
         logger.info(
             "auth.webhook_context_resolved",
-            platform=rule.channel,
+            platform=platform,
             company_id=company.company_id if company else None,
         )
         return context
@@ -447,4 +450,3 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
             user.active_company_id = company.company_id
             await container.user_repository.set(user)
-

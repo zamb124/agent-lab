@@ -12,6 +12,7 @@ from typing import Any
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.state.interrupt_manager import InterruptManager
+from apps.flows.src.tasks.task_names import TASK_EXECUTE_TOOL
 from apps.flows_worker.broker import broker
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
@@ -22,7 +23,7 @@ from core.state.interrupt import interrupt_to_response_dict
 logger = get_logger(__name__)
 
 
-@broker.task(task_name="execute_tool", queue_name="flows_worker")
+@broker.task(task_name=TASK_EXECUTE_TOOL, queue_name="flows_worker")
 async def execute_tool(
     tool_id_or_config: Any,
     args: dict[str, Any],

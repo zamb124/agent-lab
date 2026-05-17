@@ -14,6 +14,7 @@ from collections.abc import Awaitable
 from typing import Any
 from urllib.parse import urlparse
 
+from apps.flows.src.eval.platform_services import call_mcp_tool
 from core.files.reader import FileReader
 
 _DUCKDUCKGO_SESSION_CREATE: dict[str, Any] = {
@@ -96,11 +97,7 @@ async def _mcp_json(
     tool_name: str,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
-    platform_services = __import__(
-        "apps.flows.src.eval.platform_services",
-        fromlist=["call_mcp_tool"],
-    )
-    result = await platform_services.call_mcp_tool(
+    result = await call_mcp_tool(
         server_id=server_id,
         tool_name=tool_name,
         arguments=arguments,

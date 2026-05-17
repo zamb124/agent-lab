@@ -6,13 +6,15 @@ from typing import Any
 
 from livekit.api import (
     AccessToken,
-    AudioCodec,
-    CreateRoomRequest,
-    DeleteRoomRequest,
+    LiveKitAPI,
+    VideoGrants,
+)
+from livekit.protocol.egress import (
+    EgressInfo,
     EncodedFileOutput,
     EncodedFileType,
     EncodingOptions,
-    LiveKitAPI,
+    ListEgressRequest,
     RoomCompositeEgressRequest,
     S3Upload,
     SegmentedFileOutput,
@@ -20,16 +22,16 @@ from livekit.api import (
     SegmentedFileSuffix,
     StopEgressRequest,
     TrackCompositeEgressRequest,
-    VideoGrants,
 )
-from livekit.protocol.egress import EgressInfo, ListEgressRequest
+from livekit.protocol.models import AudioCodec
+from livekit.protocol.room import CreateRoomRequest, DeleteRoomRequest
 
+import core.tracing.attributes as trace_attributes
 from core.billing import get_billing_service
 from core.billing.service import (
     BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS,
     BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM,
 )
-from core.tracing import attributes as trace_attributes
 from core.tracing.operation_span import traced_operation
 
 

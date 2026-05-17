@@ -4,7 +4,11 @@ import asyncio
 import re
 import tempfile
 from pathlib import Path
+from typing import Any, cast
 
+import yt_dlp
+
+from core.http import get_httpx_client
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -20,10 +24,8 @@ def is_youtube_url(url: str) -> bool:
 
 def _download_audio_sync(url: str, output_dir: str) -> tuple[bytes, str, str]:
     """Синхронно скачивает аудио через yt-dlp в указанную директорию."""
-    import yt_dlp
-
     output_template = str(Path(output_dir) / "%(title).100B.%(ext)s")
-    ydl_opts = {
+    ydl_opts: dict[str, Any] = {
         "format": "bestaudio/best",
         "outtmpl": output_template,
         "postprocessors": [
@@ -39,11 +41,12 @@ def _download_audio_sync(url: str, output_dir: str) -> tuple[bytes, str, str]:
         "socket_timeout": 30,
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    with yt_dlp.YoutubeDL(cast(Any, ydl_opts)) as ydl:
         info = ydl.extract_info(url, download=True)
         if info is None:
             raise RuntimeError(f"yt-dlp не вернул информацию о видео: {url}")
-        title = info.get("title", "audio")
+        title_raw = info.get("title")
+        title = title_raw if isinstance(title_raw, str) and title_raw else "audio"
 
     mp3_files = list(Path(output_dir).glob("*.mp3"))
     if len(mp3_files) == 0:
@@ -101,8 +104,6 @@ def _looks_like_video_platform_url(url: str) -> bool:
 
 async def _download_direct_media(url: str) -> tuple[bytes, str, str]:
     """Скачивает медиафайл по прямой ссылке через httpx."""
-    from core.http import get_httpx_client
-
     async with get_httpx_client(timeout=120.0) as client:
         response = await client.get(url)
     response.raise_for_status()

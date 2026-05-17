@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from apps.sync.dependencies import ContainerDep
 from apps.sync.models.common import PaginationResponse
 from apps.sync.models.messages import MessageCreate, MessageEdit, MessageRead
+from apps.sync.realtime.context import require_current_user
 from apps.sync.realtime.operations import (
     MessagesDeletePayload,
     MessagesEditPayload,
@@ -34,7 +35,6 @@ from apps.sync.realtime.operations import (
     op_messages_transcribe_call,
     op_messages_transcribe_video,
 )
-from core.context import get_context
 
 router = APIRouter()
 MESSAGES_DEFAULT_LIMIT = 20
@@ -67,7 +67,7 @@ async def list_messages(
     container: ContainerDep,
     pagination: _MessagePaginationRequest = Depends(),
 ) -> PaginationResponse[MessageRead]:
-    user = get_context().user
+    user = require_current_user()
     limit = pagination.limit
     if "limit" not in request.query_params:
         limit = MESSAGES_DEFAULT_LIMIT
@@ -92,7 +92,7 @@ async def list_messages(
 async def send_message(
     container: ContainerDep, channel_id: str, body: MessageCreate
 ) -> MessageRead:
-    user = get_context().user
+    user = require_current_user()
     return await op_messages_send(
         MessagesSendPayload(channel_id=channel_id, body=body),
         user=user,
@@ -107,7 +107,7 @@ async def edit_message(
     message_id: str,
     body: MessageEdit,
 ) -> MessageRead:
-    user = get_context().user
+    user = require_current_user()
     return await op_messages_edit(
         MessagesEditPayload(channel_id=channel_id, message_id=message_id, body=body),
         user=user,
@@ -119,7 +119,7 @@ async def edit_message(
 async def delete_message(
     container: ContainerDep, channel_id: str, message_id: str
 ) -> dict[str, str]:
-    user = get_context().user
+    user = require_current_user()
     return await op_messages_delete(
         MessagesDeletePayload(channel_id=channel_id, message_id=message_id),
         user=user,
@@ -134,7 +134,7 @@ async def forward_message(
     message_id: str,
     body: MessageForwardBody,
 ) -> MessageRead:
-    user = get_context().user
+    user = require_current_user()
     return await op_messages_forward(
         MessagesForwardPayload(
             from_channel_id=channel_id,
@@ -154,7 +154,7 @@ async def react_message(
     message_id: str,
     body: MessageReactBody,
 ) -> MessageRead:
-    user = get_context().user
+    user = require_current_user()
     return await op_messages_react(
         MessagesReactPayload(
             channel_id=channel_id, message_id=message_id, emoji=body.emoji
@@ -175,7 +175,7 @@ async def mark_message_read(
     `sync_channel_members.last_read_at` — для обнуления unread-счётчика
     используется `POST /channels/{channel_id}/read` (op_channels_mark_read).
     """
-    user = get_context().user
+    user = require_current_user()
     await op_messages_mark_read(
         MessagesMarkReadPayload(channel_id=channel_id, message_id=message_id),
         user=user,
@@ -187,8 +187,8 @@ async def mark_message_read(
 @router.post("/{channel_id}/pins")
 async def pin_message(
     container: ContainerDep, channel_id: str, body: MessagePinBody
-) -> dict:
-    user = get_context().user
+) -> dict[str, object]:
+    user = require_current_user()
     result = await op_messages_pin(
         MessagesPinPayload(
             channel_id=channel_id, message_id=body.message_id, action=body.action
@@ -205,7 +205,7 @@ async def transcribe_audio_message(
     channel_id: str,
     message_id: str,
 ) -> MessageRead:
-    user = get_context().user
+    user = require_current_user()
     return await op_messages_transcribe_audio(
         MessagesTranscribeAudioPayload(channel_id=channel_id, message_id=message_id),
         user=user,
@@ -219,7 +219,7 @@ async def transcribe_video_message(
     channel_id: str,
     message_id: str,
 ) -> MessageRead:
-    user = get_context().user
+    user = require_current_user()
     return await op_messages_transcribe_video(
         MessagesTranscribeVideoPayload(channel_id=channel_id, message_id=message_id),
         user=user,
@@ -233,7 +233,7 @@ async def transcribe_call_session(
     channel_id: str,
     call_id: str,
 ) -> dict[str, str]:
-    user = get_context().user
+    user = require_current_user()
     result = await op_messages_transcribe_call(
         MessagesTranscribeCallPayload(channel_id=channel_id, call_id=call_id),
         user=user,

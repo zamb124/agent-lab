@@ -184,6 +184,26 @@ def _voice_override_to_public(
     }
 
 
+def _llm_override_for_capability(
+    aip: CompanyAIProviders,
+    capability: AICapability,
+) -> CompanyLLMOverride | None:
+    override = aip.get_capability_override(capability)
+    if override is None or isinstance(override, CompanyLLMOverride):
+        return override
+    raise TypeError(f"{capability.value} ожидает CompanyLLMOverride")
+
+
+def _voice_override_for_capability(
+    aip: CompanyAIProviders,
+    capability: AICapability,
+) -> CompanyVoiceOverride | None:
+    override = aip.get_capability_override(capability)
+    if override is None or isinstance(override, CompanyVoiceOverride):
+        return override
+    raise TypeError(f"{capability.value} ожидает CompanyVoiceOverride")
+
+
 def _provider_catalog(aip: CompanyAIProviders) -> dict[str, Any]:
     """Каталог провайдеров для UI селектора (per capability)."""
     catalog: dict[str, list[dict[str, Any]]] = {}
@@ -283,11 +303,11 @@ def _build_voice_override(payload: AIProvidersCapabilityUpdate) -> CompanyVoiceO
 def _public_capabilities(aip: CompanyAIProviders) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for cap in _LLM_CAPABILITIES:
-        items.append(_llm_override_to_public(cap, aip.get_capability_override(cap)))
+        items.append(_llm_override_to_public(cap, _llm_override_for_capability(aip, cap)))
     items.append(_embedding_override_to_public(aip.embedding))
     items.append(_rerank_override_to_public(aip.rerank))
     for cap in _VOICE_CAPABILITIES:
-        items.append(_voice_override_to_public(cap, aip.get_capability_override(cap)))
+        items.append(_voice_override_to_public(cap, _voice_override_for_capability(aip, cap)))
     return items
 
 

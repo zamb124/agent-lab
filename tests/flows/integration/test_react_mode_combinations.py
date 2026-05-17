@@ -12,8 +12,15 @@
 """
 
 
+from a2a.types import TaskArtifactUpdateEvent
+
 from apps.flows.src.container import get_container
-from apps.flows.src.models import FlowConfig
+from apps.flows.src.models import FlowConfig, ReactLoopMode
+from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, ReactConfig
+from apps.flows.src.models.tool_reference import CallParameter
+from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.tools.code_tool import CodeTool
 from core.state import ExecutionState
 
 # ============================================================================
@@ -1173,17 +1180,8 @@ class TestExplicitModeStreaming:
 
         Ожидание: текстовые артефакты первого ответа НЕ должны быть в событиях.
         """
-        from a2a.types import TaskArtifactUpdateEvent
-
-        from apps.flows.src.models import ReactLoopMode
-        from apps.flows.src.models.enums import ReactToolRole
-        from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, ReactConfig
-        from apps.flows.src.models.tool_reference import CallParameter
-        from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-        from apps.flows.src.tools.code_tool import CodeTool
-
         flow_id = f"explicit_streaming_{unique_id}"
-        get_container()
+        container = get_container()
 
         finish_tool = CodeTool(
             tool_id="finish",
@@ -1217,6 +1215,7 @@ class TestExplicitModeStreaming:
             tools=[finish_tool],
             llm=None,
             prompt="Отвечай через finish.",
+            container=container,
         )
 
         state = ExecutionState(
@@ -1252,13 +1251,8 @@ class TestExplicitModeStreaming:
 
         Контрольный тест: AUTO режим работает как раньше.
         """
-        from a2a.types import TaskArtifactUpdateEvent
-
-        from apps.flows.src.models import ReactLoopMode
-        from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, ReactConfig
-        from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
-
         flow_id = f"auto_streaming_{unique_id}"
+        container = get_container()
 
         node_config = NodeConfig(
             node_id=flow_id,
@@ -1281,6 +1275,7 @@ class TestExplicitModeStreaming:
             tools=[],
             llm=None,
             prompt="Отвечай как хочешь.",
+            container=container,
         )
 
         state = ExecutionState(
@@ -1306,4 +1301,3 @@ class TestExplicitModeStreaming:
         )
 
         assert state["response"] == "Текстовый ответ"
-

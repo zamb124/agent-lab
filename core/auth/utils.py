@@ -56,7 +56,7 @@ def get_token_info(
 
 
 def generate_access_token(
-    user: dict,
+    user: dict[str, object],
     session_id: str,
     jwt_secret: str,
     jwt_algorithm: str,

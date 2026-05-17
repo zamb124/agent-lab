@@ -11,6 +11,7 @@ from apps.crm.db.repositories.task_repository import CRM_TASK_TERMINAL_STATUSES
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm_worker.broker import broker
+from apps.crm_worker.task_names import CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME
 from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
 from core.logging import get_logger
 
@@ -103,7 +104,7 @@ async def _journal_completed(
     )
 
 
-@broker.task
+@broker.task(task_name=CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME, queue_name="crm")
 async def repair_note_analysis_draft_task(
     note_id: str,
     company_id: str,

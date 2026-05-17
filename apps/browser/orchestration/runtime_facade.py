@@ -16,6 +16,7 @@ from apps.browser.engine.session_store import SessionStateStore
 from apps.browser.engine.types import BrowserRuntimeSettingsView
 from apps.browser.observe.observe_store import ControlObserveStore
 from apps.browser.observe.session_artifacts import ControlSessionArtifactsWriter
+from apps.browser.orchestration.control_adapter_factory import build_browser_control_adapter
 
 
 class BrowserRuntimeFacade:
@@ -78,10 +79,6 @@ class BrowserRuntimeFacade:
     @property
     def control_adapter(self) -> BrowserControlAdapter:
         if self._control_adapter is None:
-            from apps.browser.orchestration.control_adapter_factory import (
-                build_browser_control_adapter,
-            )
-
             self._control_adapter = build_browser_control_adapter(
                 backend=self.settings.control_backend,
                 facade=self,

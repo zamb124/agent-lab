@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from apps.browser.config import get_browser_settings, settings_to_runtime_view
+from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 from core.container import BaseContainer, lazy
 from core.logging import get_logger
 
@@ -36,9 +38,6 @@ class BrowserContainer(BaseContainer):
 
     @lazy
     def browser_runtime(self):
-        from apps.browser.config import get_browser_settings, settings_to_runtime_view
-        from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
-
         return BrowserRuntimeFacade(settings_to_runtime_view(get_browser_settings()))
 
 
@@ -48,8 +47,6 @@ _browser_container: Optional[BrowserContainer] = None
 def get_browser_container() -> BrowserContainer:
     global _browser_container
     if _browser_container is None:
-        from apps.browser.config import get_browser_settings
-
         settings = get_browser_settings()
         if not settings.database.shared_url:
             raise ValueError("database.shared_url is required для сервиса browser")

@@ -8,7 +8,7 @@ from typing import Any
 
 from botocore.exceptions import ClientError
 
-from core.files import S3Client, get_default_s3_client
+from core.files.s3_client import S3Client, get_default_s3_client
 from core.logging import get_logger
 
 logger = get_logger(__name__)

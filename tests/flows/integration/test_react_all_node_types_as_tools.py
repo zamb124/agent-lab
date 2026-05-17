@@ -8,6 +8,9 @@
 - Проверяем state после каждой итерации
 """
 
+import time
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from apps.flows.src.container import get_container
@@ -103,7 +106,8 @@ async def execute(args, state):
             config={
                 "prompt": "Execute steps in order.",
                 "tools": [tool1, tool2, tool3],
-            }
+            },
+            container=get_container(),
         )
 
         state = make_state(content="Run pipeline")
@@ -189,7 +193,8 @@ async def execute(args, state):
             config={
                 "prompt": "Process list.",
                 "tools": [init_tool, append_tool, sum_tool],
-            }
+            },
+            container=get_container(),
         )
 
         state = make_state(content="Process list")
@@ -264,7 +269,8 @@ async def execute(args, state):
 
         llm_node = LlmNode(
             node_id="param_tester",
-            config={"prompt": "Test.", "tools": [tool]}
+            config={"prompt": "Test.", "tools": [tool]},
+            container=get_container(),
         )
 
         state = make_state(content="Test params")
@@ -372,7 +378,8 @@ async def execute(args, state):
             config={
                 "prompt": "Use skills.",
                 "tools": [math_tool, text_tool],
-            }
+            },
+            container=container,
         )
 
         state = make_state(content="Use skills")
@@ -417,7 +424,11 @@ async def execute(args, state):
             {"type": "text", "content": "Done"},
         ])
 
-        react = LlmNode("test", config={"prompt": "Use tool.", "tools": [tool]})
+        react = LlmNode(
+            "test",
+            config={"prompt": "Use tool.", "tools": [tool]},
+            container=get_container(),
+        )
         result = await react.run(make_state(content="test"))
 
         assert result.code_executed is True, "CODE должен изменить state"
@@ -455,7 +466,11 @@ async def execute(args, state):
             {"type": "text", "content": "All done"},
         ])
 
-        react = LlmNode("main", config={"prompt": "Use subagent.", "tools": [subagent_tool]})
+        react = LlmNode(
+            "main",
+            config={"prompt": "Use subagent.", "tools": [subagent_tool]},
+            container=get_container(),
+        )
         result = await react.run(make_state(content="test"))
 
         assert result.helper_flag is True, "LLM_NODE subagent должен изменить state"
@@ -509,7 +524,11 @@ async def execute(args, state):
             {"type": "text", "content": "Done"},
         ])
 
-        react = LlmNode("main", config={"prompt": "Use skill.", "tools": [tool]})
+        react = LlmNode(
+            "main",
+            config={"prompt": "Use skill.", "tools": [tool]},
+            container=container,
+        )
         result = await react.run(make_state(content="test"))
 
         assert result.skill_executed is True, "AGENT skill должен изменить state"
@@ -520,8 +539,6 @@ async def execute(args, state):
     @pytest.mark.asyncio
     async def test_external_api_node_as_tool_modifies_state(self, mock_llm_with_queue):
         """EXTERNAL_API как tool изменяет state."""
-        from unittest.mock import AsyncMock, patch
-
         tool = {
             "tool_id": "api_tool",
             "type": "external_api",
@@ -544,7 +561,11 @@ async def execute(args, state):
                 "api_data": "from_api",
             }
 
-            react = LlmNode("main", config={"prompt": "Use API.", "tools": [tool]})
+            react = LlmNode(
+                "main",
+                config={"prompt": "Use API.", "tools": [tool]},
+                container=get_container(),
+            )
             result = await react.run(make_state(content="test"))
 
             # API был вызван
@@ -554,8 +575,6 @@ async def execute(args, state):
     @pytest.mark.asyncio
     async def test_remote_flow_node_as_tool_modifies_state(self, mock_llm_with_queue):
         """REMOTE_FLOW (A2A) как tool изменяет state."""
-        from unittest.mock import AsyncMock, patch
-
         tool = {
             "tool_id": "remote_tool",
             "type": "remote_flow",
@@ -577,7 +596,11 @@ async def execute(args, state):
                 "remote_response": "pong",
             }
 
-            react = LlmNode("main", config={"prompt": "Use remote.", "tools": [tool]})
+            react = LlmNode(
+                "main",
+                config={"prompt": "Use remote.", "tools": [tool]},
+                container=get_container(),
+            )
             result = await react.run(make_state(content="test"))
 
             assert mock_remote.called, "REMOTE_FLOW должен быть вызван"
@@ -586,8 +609,6 @@ async def execute(args, state):
     @pytest.mark.asyncio
     async def test_mcp_node_as_tool_modifies_state(self, mock_llm_with_queue):
         """MCP как tool изменяет state."""
-        from unittest.mock import AsyncMock, patch
-
         tool = {
             "tool_id": "mcp_tool",
             "type": "mcp",
@@ -610,7 +631,11 @@ async def execute(args, state):
                 "mcp_output": "mcp_result",
             }
 
-            react = LlmNode("main", config={"prompt": "Use MCP.", "tools": [tool]})
+            react = LlmNode(
+                "main",
+                config={"prompt": "Use MCP.", "tools": [tool]},
+                container=get_container(),
+            )
             result = await react.run(make_state(content="test"))
 
             assert mock_mcp.called, "MCP должен быть вызван"
@@ -931,7 +956,8 @@ async def execute(args, state):
             config={
                 "prompt": "Execute tools.",
                 "tools": [tool1, tool2, tool3],
-            }
+            },
+            container=get_container(),
         )
 
         state = make_state(content="Run parallel")
@@ -966,8 +992,6 @@ async def execute(args, state):
         Если бы последовательно - 0.3 сек минимум.
         Параллельно - ~0.1 сек.
         """
-        import time
-
         # 3 tools, каждый спит 0.1 сек
         tool0 = {
             "tool_id": "sleep_tool_0",
@@ -1025,7 +1049,8 @@ async def execute(args, state):
 
         llm_node = LlmNode(
             node_id="timing_test",
-            config={"prompt": "Run.", "tools": tools}
+            config={"prompt": "Run.", "tools": tools},
+            container=get_container(),
         )
 
         state = make_state(content="test")
@@ -1092,7 +1117,8 @@ async def execute(args, state):
 
         llm_node = LlmNode(
             node_id="merge_test",
-            config={"prompt": "Write.", "tools": [tool1, tool2]}
+            config={"prompt": "Write.", "tools": [tool1, tool2]},
+            container=get_container(),
         )
 
         result = await llm_node.run(make_state(content="test"))

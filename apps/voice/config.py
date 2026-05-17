@@ -13,6 +13,7 @@ from typing import Optional
 from pydantic import Field
 
 from core.config import BaseSettings
+from core.config.loader import load_merged_config
 from core.config.models import (
     VoiceBargeInSettings,
     VoiceQueueSettings,
@@ -32,8 +33,6 @@ _voice_settings: Optional[VoiceServiceSettings] = None
 def get_voice_settings() -> VoiceServiceSettings:
     global _voice_settings
     if _voice_settings is None:
-        from core.config.loader import load_merged_config
-
         merged_config = load_merged_config(service_name="voice", silent=True)
         _voice_settings = VoiceServiceSettings(**merged_config)
     return _voice_settings

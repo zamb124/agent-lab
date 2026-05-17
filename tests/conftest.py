@@ -971,8 +971,66 @@ def sync_tools(request, monkeypatch):
     if request.node.get_closest_marker("real_taskiq"):
         yield
         return
+    import apps.crm.services.entity_service as crm_entity_service_module
+    import apps.crm.services.task_service as crm_task_service_module
+    import apps.crm_worker.tasks.analysis_tasks as crm_analysis_tasks
+    import apps.crm_worker.tasks.daily_summary_tasks as crm_daily_summary_tasks
+    import apps.crm_worker.tasks.draft_repair_tasks as crm_draft_repair_tasks
+    import apps.crm_worker.tasks.knowledge_import_tasks as crm_knowledge_import_tasks
+    import apps.crm_worker.tasks.namespace_integration_tasks as crm_namespace_integration_tasks
+    import apps.crm_worker.tasks.note_markdown_tasks as crm_note_markdown_tasks
+    import apps.flows.src.channels.a2a as flows_a2a_channel_module
+    import apps.flows.src.channels.base as flows_base_channel_module
+    import apps.flows.src.services.operator_handoff_service as flows_operator_handoff_module
+    import apps.flows.src.triggers.executor as flows_trigger_executor_module
     import apps.idle_worker.tasks.push_notification_tasks as push_notification_tasks
-    from apps.flows.src.tasks import flow_tasks, tool_tasks
+    import apps.sync.realtime.handlers as sync_handlers_module
+    import apps.sync.realtime.operations as sync_operations_module
+    import apps.sync.realtime.tasks as sync_realtime_tasks
+    import core.tasks.kicker as task_kicker_module
+    from apps.crm_worker.task_names import (
+        CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN_TASK_NAME,
+        CRM_PROCESS_NOTE_TASK_NAME,
+        CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
+        CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
+        CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME,
+        CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME,
+        CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME,
+    )
+    from apps.flows.src.tasks import (
+        company_init_tasks,
+        flow_tasks,
+        llm_tasks,
+        node_tasks,
+        scheduled_tasks,
+        tool_tasks,
+    )
+    from apps.flows.src.tasks.task_names import (
+        TASK_EXECUTE_NODE,
+        TASK_EXECUTE_SCHEDULED,
+        TASK_EXECUTE_TOOL,
+        TASK_INIT_COMPANY_RESOURCES,
+        TASK_INVOKE_LLM,
+        TASK_PROCESS_FLOW,
+    )
+    from apps.idle_worker.tasks.task_names import (
+        TASK_PUSH_CONFIG_DELETE,
+        TASK_PUSH_CONFIG_GET,
+        TASK_PUSH_CONFIG_LIST,
+        TASK_PUSH_CONFIG_SET,
+        TASK_PUSH_NOTIFICATION_SEND,
+        TASK_SEND_TASK_COMPLETED,
+        TASK_SEND_TASK_FAILED,
+        TASK_SEND_TASK_INPUT_REQUIRED,
+        TASK_SEND_TASK_UPDATE,
+    )
+    from apps.sync.realtime.task_names import (
+        SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME,
+        SYNC_FINALIZE_RECORDING_TASK_NAME,
+        SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME,
+        SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
+        SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME,
+    )
 
     class SyncTaskResult:
         """Имитация результата TaskIQ task."""
@@ -1029,6 +1087,12 @@ def sync_tools(request, monkeypatch):
             if saved_context:
                 set_context(saved_context)
 
+    async def _sync_call(task_func, *args, **kwargs):
+        try:
+            return SyncTaskResult(await task_func(*args, **kwargs))
+        except Exception as e:
+            return SyncTaskResult(error=e)
+
     async def sync_send_task_update_kiq(task_id, context_id, state, message=None, is_final=False):
         """Выполняет send_task_update синхронно."""
         result = await push_notification_tasks.send_task_update(
@@ -1045,11 +1109,85 @@ def sync_tools(request, monkeypatch):
             # В реальном TaskIQ ретраи обрабатывают ошибки, здесь просто игнорируем
             return SyncTaskResult({"success": False})
 
+    task_name_handlers = {
+        TASK_PROCESS_FLOW: sync_agent_kiq,
+        TASK_EXECUTE_TOOL: sync_tool_kiq,
+        TASK_EXECUTE_NODE: node_tasks.execute_node,
+        TASK_EXECUTE_SCHEDULED: scheduled_tasks.execute_scheduled_task,
+        TASK_INVOKE_LLM: llm_tasks.invoke_llm,
+        TASK_INIT_COMPANY_RESOURCES: company_init_tasks.init_company_resources,
+        TASK_SEND_TASK_UPDATE: sync_send_task_update_kiq,
+        TASK_SEND_TASK_COMPLETED: push_notification_tasks.send_task_completed,
+        TASK_SEND_TASK_FAILED: push_notification_tasks.send_task_failed,
+        TASK_SEND_TASK_INPUT_REQUIRED: push_notification_tasks.send_task_input_required,
+        TASK_PUSH_NOTIFICATION_SEND: sync_send_webhook_kiq,
+        TASK_PUSH_CONFIG_SET: push_notification_tasks.set_config,
+        TASK_PUSH_CONFIG_GET: push_notification_tasks.get_config,
+        TASK_PUSH_CONFIG_LIST: push_notification_tasks.list_configs,
+        TASK_PUSH_CONFIG_DELETE: push_notification_tasks.delete_config,
+        CRM_PROCESS_NOTE_TASK_NAME: crm_analysis_tasks.process_note_task,
+        CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME: crm_draft_repair_tasks.repair_note_analysis_draft_task,
+        CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN_TASK_NAME: crm_note_markdown_tasks.format_note_description_markdown_task,
+        CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME: crm_knowledge_import_tasks.run_knowledge_import_task,
+        CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME: crm_namespace_integration_tasks.run_namespace_integration_job,
+        CRM_REBUILD_DAILY_SUMMARY_TASK_NAME: crm_daily_summary_tasks.rebuild_daily_summary_task,
+        CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME: crm_daily_summary_tasks.rebuild_period_summary_task,
+        SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME: sync_realtime_tasks.sync_transcribe_audio_message_task,
+        SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME: sync_realtime_tasks.sync_transcribe_video_message_task,
+        SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME: sync_realtime_tasks.sync_aggregate_call_transcript_task,
+        SYNC_FINALIZE_RECORDING_TASK_NAME: sync_realtime_tasks.sync_finalize_recording_task,
+        SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME: sync_realtime_tasks.sync_speech_to_chat_poll_task,
+    }
+
+    async def sync_task_name_kiq(
+        task_name,
+        broker,
+        *args,
+        override_request_id=None,
+        override_trace_id=None,
+        service_name=None,
+        background_kind=None,
+        extra_labels=None,
+        **kwargs,
+    ):
+        _ = (
+            broker,
+            override_request_id,
+            override_trace_id,
+            service_name,
+            background_kind,
+            extra_labels,
+        )
+        handler = task_name_handlers.get(task_name)
+        if handler is None:
+            return SyncTaskResult(error=AssertionError(f"Неизвестный TaskIQ task-name: {task_name!r}"))
+        if handler is sync_agent_kiq:
+            return await sync_agent_kiq(**kwargs)
+        if handler is sync_tool_kiq:
+            return await sync_tool_kiq(*args, **kwargs)
+        if handler is sync_send_task_update_kiq:
+            return await sync_send_task_update_kiq(*args, **kwargs)
+        if handler is sync_send_webhook_kiq:
+            return await sync_send_webhook_kiq(*args, **kwargs)
+        return await _sync_call(handler, *args, **kwargs)
+
     # Патчим kiq методы
     monkeypatch.setattr(tool_tasks.execute_tool, "kiq", sync_tool_kiq)
     monkeypatch.setattr(flow_tasks.process_flow_task, "kiq", sync_agent_kiq)
     monkeypatch.setattr(push_notification_tasks.send_task_update, "kiq", sync_send_task_update_kiq)
     monkeypatch.setattr(push_notification_tasks.send_webhook, "kiq", sync_send_webhook_kiq)
+    for module in (
+        task_kicker_module,
+        flows_base_channel_module,
+        flows_a2a_channel_module,
+        flows_operator_handoff_module,
+        flows_trigger_executor_module,
+        crm_task_service_module,
+        crm_entity_service_module,
+        sync_operations_module,
+        sync_handlers_module,
+    ):
+        monkeypatch.setattr(module, "kiq_task_name_with_context", sync_task_name_kiq)
 
     yield None
 

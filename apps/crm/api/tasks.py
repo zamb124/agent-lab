@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from apps.crm.db.models import CRMTask
 from apps.crm.dependencies import ContainerDep
 from apps.crm.models.api import (
+    NoteProcessingConfig,
     StartDailySummaryRequest,
     StartKnowledgeImportRequest,
     StartNoteAnalyzeRequest,
@@ -21,6 +22,7 @@ from apps.crm.models.api import (
     TaskResponse,
 )
 from apps.crm.services.task_service import ActiveTaskExistsError
+from core.context import get_context
 from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -80,9 +82,6 @@ async def start_note_analyze(
     container: ContainerDep,
 ) -> TaskResponse:
     """Запустить анализ заметки. Возвращает 202 с task_id для отслеживания прогресса через WebSocket."""
-    from apps.crm.models.api import NoteProcessingConfig
-    from core.context import get_context
-
     note = await container.entity_service.get_entity(body.note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Заметка не найдена")

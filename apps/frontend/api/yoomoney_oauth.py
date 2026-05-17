@@ -18,6 +18,7 @@ from core.clients.payment.yoomoney_provider import (
     YooMoneyProvider,
     save_access_token,
 )
+from core.config import get_settings
 from core.http import request_public_oauth
 from core.logging import get_logger
 from core.utils.domain import PRIMARY_DOMAIN
@@ -34,7 +35,6 @@ def _get_yoomoney_provider() -> YooMoneyProvider:
 
 def _build_callback_url(request: Request) -> str:
     """Формирует абсолютный URL для OAuth callback на apex-домене."""
-    from core.config import get_settings
     settings = get_settings()
 
     if settings.server.env == "local":

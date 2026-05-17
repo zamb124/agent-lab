@@ -2,6 +2,7 @@ from .channel_config import ChannelNodeConfig, OutputAction
 from .enums import (
     ChannelType,
     CodeMode,
+    MergeMode,
     ReactToolRole,
     SessionStatus,
     TestTargetType,
@@ -27,7 +28,6 @@ from .flow_config import (
     FlowVariableConfig,
     InputConfig,
     InputType,
-    MergeMode,
     Permission,
     TestCaseConfig,
     TestTarget,

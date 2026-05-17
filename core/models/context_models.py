@@ -79,6 +79,12 @@ class Context(BaseModel):
         title="Конфигурация агента",
         description="FlowConfig для текущего запроса",
     )
+    state: Optional[Dict[str, Any]] = Field(
+        default=None,
+        title="Runtime state",
+        description="Текущее runtime-состояние выполнения; не сериализуется между процессами.",
+        exclude=True,
+    )
     auth_token: Optional[str] = Field(
         default=None,
         title="JWT токен",
@@ -131,11 +137,13 @@ class Context(BaseModel):
             Восстановленный Context
         """
         user_data = data.get("user")
+        if user_data is None:
+            raise ValueError("Context.user is required")
         active_company_data = data.get("active_company")
         user_companies_data = data.get("user_companies", [])
 
         return cls(
-            user=User.model_validate(user_data) if user_data else None,
+            user=User.model_validate(user_data),
             active_company=Company.model_validate(active_company_data) if active_company_data else None,
             user_companies=[Company.model_validate(c) for c in user_companies_data],
             session_id=data.get("session_id"),
@@ -150,4 +158,3 @@ class Context(BaseModel):
             active_namespace=data.get("active_namespace", "default"),
             auth_token=data.get("auth_token"),
         )
-

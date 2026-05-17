@@ -4,8 +4,9 @@
 
 from typing import Self
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings as PydanticBaseSettings
+from pydantic_settings import SettingsConfigDict
 
 from core.config.loader import load_merged_config
 from core.config.models import (
@@ -35,7 +36,7 @@ from core.config.models import (
     WhatsAppConfig,
     WorkerConfig,
 )
-from core.logging import get_logger
+from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
 class BaseSettings(PydanticBaseSettings):
@@ -108,7 +109,7 @@ class BaseSettings(PydanticBaseSettings):
             )
         return self
 
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_file=[".env"],
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
@@ -157,4 +158,3 @@ class _SettingsProxy:
         return str(get_settings())
 
 settings = _SettingsProxy()
-

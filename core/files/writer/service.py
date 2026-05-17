@@ -6,9 +6,10 @@ import base64
 import binascii
 import mimetypes
 import re
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, ClassVar, List, Optional, Tuple
+from typing import Any, ClassVar
 
 import markdown
 from docx import Document
@@ -23,13 +24,12 @@ from reportlab.lib.units import inch
 from reportlab.platypus import Image as RLImage
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from core.context import get_context
+from core.context import require_active_company, require_context
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.models import FileMetadata
 from core.files.processors import FileProcessor
 from core.files.types import ext_to_category, ext_to_mime
 from core.files.writer.content_kind import (
-    ContentKind,
     SourceContent,
     classify_content,
     normalize_str_content,
@@ -37,7 +37,7 @@ from core.files.writer.content_kind import (
 from core.files.writer.exceptions import FileWriteError
 from core.files.writer.image_fetch import fetch_url_bytes
 from core.files.writer.md_parse import flatten_markdown_segments, parse_gfm_table
-from core.files.writer.models import ContentMode, FileWriteResult, WriteOptions
+from core.files.writer.models import ContentKind, ContentMode, FileWriteResult, WriteOptions
 from core.files.writer.pdf_unicode_font import register_pdf_unicode_font
 from core.files.writer.persist import write_bytes_via_processor
 
@@ -49,8 +49,8 @@ class FileWriter:
     Явная пара file_processor + download_url_prefix в конструкторе переопределяет процессные дефолты.
     """
 
-    _process_file_processor: ClassVar[Optional[FileProcessor]] = None
-    _process_download_url_prefix: ClassVar[Optional[str]] = None
+    _process_file_processor: ClassVar[FileProcessor | None] = None
+    _process_download_url_prefix: ClassVar[str | None] = None
 
     @classmethod
     def configure_process_upload(
@@ -68,10 +68,10 @@ class FileWriter:
 
     def __init__(
         self,
-        options: Optional[WriteOptions] = None,
+        options: WriteOptions | None = None,
         *,
-        file_processor: Optional[FileProcessor] = None,
-        download_url_prefix: Optional[str] = None,
+        file_processor: FileProcessor | None = None,
+        download_url_prefix: str | None = None,
     ) -> None:
         self._default_options = options or WriteOptions()
         if file_processor is None and download_url_prefix is None:
@@ -86,7 +86,7 @@ class FileWriter:
             fp = file_processor
             prefix_raw = download_url_prefix
         self._file_processor = fp
-        self._download_url_prefix: Optional[str] = (
+        self._download_url_prefix: str | None = (
             prefix_raw.rstrip("/") if prefix_raw else None
         )
 
@@ -96,7 +96,7 @@ class FileWriter:
         *,
         file_processor: FileProcessor,
         download_url_prefix: str,
-        options: Optional[WriteOptions] = None,
+        options: WriteOptions | None = None,
     ) -> FileWriter:
         """Экземпляр с возможностью await write(...) для данного процессора и префикса URL."""
         return cls(
@@ -105,11 +105,11 @@ class FileWriter:
             download_url_prefix=download_url_prefix,
         )
 
-    def _opts(self, override: Optional[WriteOptions]) -> WriteOptions:
+    def _opts(self, override: WriteOptions | None) -> WriteOptions:
         return override if override is not None else self._default_options
 
-    def _fetcher(self, opts: WriteOptions) -> Callable[[str], Tuple[bytes, Optional[str]]]:
-        def inner(url: str) -> Tuple[bytes, Optional[str]]:
+    def _fetcher(self, opts: WriteOptions) -> Callable[[str], tuple[bytes, str | None]]:
+        def inner(url: str) -> tuple[bytes, str | None]:
             return fetch_url_bytes(
                 url,
                 max_bytes=opts.max_image_bytes,
@@ -124,7 +124,7 @@ class FileWriter:
         original_name: str,
         *,
         content_mode: ContentMode = "auto",
-        options: Optional[WriteOptions] = None,
+        options: WriteOptions | None = None,
     ) -> FileWriteResult:
         opts = self._opts(options)
         name = (original_name or "").strip()
@@ -171,16 +171,15 @@ class FileWriter:
                 "write: нет привязки к хранилищу — вызовите FileWriter.configure_process_upload(...) "
                 "при старте процесса или FileWriter.bind_for_upload(...) для экземпляра"
             )
-        ctx = get_context()
-        if ctx.active_company is None:
-            raise FileWriteError("Нет активной компании в контексте запроса")
+        ctx = require_context()
+        active_company = require_active_company()
         return await write_bytes_via_processor(
             data=built.data,
             mime_type=built.mime_type,
             original_name=original_name,
             file_processor=self._file_processor,
             uploaded_by=ctx.user.user_id,
-            company_id=ctx.active_company.company_id,
+            company_id=active_company.company_id,
             download_url_prefix=self._download_url_prefix,
             content_sha256_hex=built.checksum_sha256_hex,
             public=public,
@@ -219,7 +218,7 @@ class FileWriter:
         content: SourceContent,
         original_name: str,
         content_mode: ContentMode = "auto",
-        options: Optional[WriteOptions] = None,
+        options: WriteOptions | None = None,
         public: bool = True,
     ) -> FileMetadata:
         if options is not None:
@@ -412,7 +411,7 @@ class FileWriter:
             fontSize=10,
             leading=12,
         )
-        story: List = []
+        story: list[Any] = []
         max_w = opts.pdf_max_image_width_pt
 
         segments = flatten_markdown_segments(md_text)
@@ -473,7 +472,7 @@ def _escape_reportlab_text(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _pad_table_rows(grid: List[List[str]]) -> List[List[str]]:
+def _pad_table_rows(grid: list[list[str]]) -> list[list[str]]:
     if not grid:
         return grid
     n = max(len(r) for r in grid)
@@ -488,7 +487,7 @@ _IMG_SRC_RE = re.compile(
 
 def _embed_http_images_in_html(
     html: str,
-    fetch: Callable[[str], Tuple[bytes, Optional[str]]],
+    fetch: Callable[[str], tuple[bytes, str | None]],
 ) -> str:
     def repl(m: re.Match[str]) -> str:
         prefix, quote, src = m.group(1), m.group(2), m.group(3)

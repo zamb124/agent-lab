@@ -4,7 +4,7 @@
 Используют JSON-RPC формат с кастомными кодами ошибок.
 """
 
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,12 +26,12 @@ class PermissionDeniedA2AError(BaseModel):
     model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
-        ser_json_by_alias=True,
+        serialize_by_alias=True,
     )
 
     code: Literal[-32008] = Field(default=-32008, description="Код ошибки")
     message: str = Field(default="Permission denied", description="Сообщение об ошибке")
-    data: Optional[Dict[str, Any]] = Field(
+    data: dict[str, Any] | None = Field(
         default=None,
         description="Дополнительные данные (resource type, resource id)",
     )
@@ -73,13 +73,12 @@ class PermissionDeniedA2AError(BaseModel):
             },
         )
 
-    def to_json_rpc_error(self) -> Dict[str, Any]:
+    def to_json_rpc_error(self) -> dict[str, Any]:
         """Возвращает ошибку в формате JSON-RPC."""
-        error = {
+        error: dict[str, Any] = {
             "code": self.code,
             "message": self.message,
         }
         if self.data:
             error["data"] = self.data
         return error
-

@@ -15,8 +15,8 @@ from apps.scheduler.main import (
 )
 from core.scheduler.models import (
     PlatformScheduleCreateRequest,
-    PlatformScheduleFilter,
     PlatformScheduledTask,
+    PlatformScheduleFilter,
     PlatformScheduleType,
     ScheduledTaskStatus,
 )

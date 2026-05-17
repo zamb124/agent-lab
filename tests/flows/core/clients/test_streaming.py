@@ -9,6 +9,7 @@ import uuid
 
 import pytest
 from a2a.types import (
+    Artifact,
     Message,
     Part,
     Role,
@@ -20,7 +21,11 @@ from a2a.types import (
 )
 from a2a.utils.message import new_agent_text_message
 
+from apps.flows.config import get_settings
+from apps.flows.src.streaming import Emitter, EventSubscriber
 from apps.flows.src.streaming.subscriber import TERMINAL_STATES, is_final_event
+from core.clients.redis_client import RedisClient
+from core.state import ExecutionState
 
 
 class TestIsFinalEvent:
@@ -102,8 +107,6 @@ class TestIsFinalEvent:
 
     def test_artifact_update_is_not_final(self):
         """TaskArtifactUpdateEvent никогда не финальное."""
-        from a2a.types import Artifact
-
         artifact = Artifact(
             artifactId="test-id",
             parts=[Part(root=TextPart(text="test"))],
@@ -134,9 +137,6 @@ class TestStreamingWithToolCalls:
     @pytest.fixture
     def redis_client(self):
         """Создает Redis клиент для тестов."""
-        from apps.flows.config import get_settings
-        from core.clients import RedisClient
-
         settings = get_settings()
         return RedisClient(settings.database.redis_url)
 
@@ -152,11 +152,6 @@ class TestStreamingWithToolCalls:
 
         Подписчик должен дождаться completed, а не прекратить на working.
         """
-        from a2a.types import Artifact
-
-        from apps.flows.src.streaming import Emitter, EventSubscriber
-        from core.state import ExecutionState
-
         await redis_client.connect()
 
         task_id = "test-tool-call-flow"
@@ -249,4 +244,3 @@ class TestStreamingWithToolCalls:
             assert collected_events[3].final is True
         finally:
             await redis_client.close()
-

@@ -4,9 +4,13 @@ API для работы с entities.
 Единый endpoint для всех типов entities.
 """
 
+import csv
+import io
+import json as json_lib
 from typing import Annotated, cast
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from starlette.responses import Response
 
 from apps.crm.api.tasks import active_task_conflict
@@ -25,6 +29,7 @@ from apps.crm.models.api import (
     BulkErrorItem,
     BulkUpdateRequest,
     BulkUpdateResponse,
+    DailySummaryRequest,
     EntityCreate,
     EntityMergeRequest,
     EntityMergeResponse,
@@ -34,6 +39,7 @@ from apps.crm.models.api import (
     EntityUpdate,
     NoteAnalysisDraftRepairQueuedResponse,
     NoteMarkdownFormatQueuedResponse,
+    PeriodSummaryRequest,
     SearchMentionsRequest,
 )
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
@@ -41,7 +47,7 @@ from apps.crm.services.entity_response_enrichment import build_entity_responses_
 from apps.crm.services.entity_service import DraftVersionConflictError, SchemaValidationError
 from apps.crm.services.task_service import ActiveTaskExistsError
 from apps.crm.types import JsonObject
-from core.clients import ServiceClient
+from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.i18n.service import t
 from core.pagination import CursorPage
@@ -372,12 +378,6 @@ async def export_entities(
     limit: Annotated[int, Query(le=_EXPORT_MAX_ROWS)] = 5000,
 ):
     """Streaming export сущностей постраничными чанками (не материализует весь список в памяти)."""
-    import csv
-    import io
-    import json as json_lib
-
-    from fastapi.responses import StreamingResponse
-
     filters_arg: JsonObject | None = None
     filter_field_types: dict[str, str] = {}
     if status:
@@ -758,42 +758,29 @@ async def list_entities(
 
 @router.post("/daily-summary")
 async def get_daily_summary(
-    request: JsonObject,
+    request: DailySummaryRequest,
     container: ContainerDep,
 ):
     """Получить AI саммари заметок за день"""
-    date_raw = request.get("date")
-    if not isinstance(date_raw, str) or not date_raw:
-        raise HTTPException(status_code=400, detail="date is required")
-    namespace_raw = request.get("namespace")
-    namespace = namespace_raw if isinstance(namespace_raw, str) else None
-    force_rebuild = request.get("force_rebuild") is True
     summary = await container.entity_service.get_daily_summary_cached(
-        date_str=date_raw,
-        namespace=namespace,
-        force_rebuild=force_rebuild,
+        date_str=request.date,
+        namespace=request.namespace,
+        force_rebuild=request.force_rebuild,
     )
     return summary
 
 
 @router.post("/period-summary")
 async def get_period_summary(
-    request: JsonObject,
+    request: PeriodSummaryRequest,
     container: ContainerDep,
 ):
     """Сводка заметок за диапазон дат (merge дневных сводок)."""
-    date_from_raw = request.get("date_from")
-    date_to_raw = request.get("date_to")
-    if not isinstance(date_from_raw, str) or not isinstance(date_to_raw, str):
-        raise HTTPException(status_code=400, detail="date_from and date_to are required")
-    namespace_raw = request.get("namespace")
-    namespace = namespace_raw if isinstance(namespace_raw, str) else None
-    force_rebuild = request.get("force_rebuild") is True
     summary: dict[str, object] = await container.entity_service.get_period_summary_cached(
-        date_from=date_from_raw,
-        date_to=date_to_raw,
-        namespace=namespace,
-        force_rebuild=force_rebuild,
+        date_from=request.date_from,
+        date_to=request.date_to,
+        namespace=request.namespace,
+        force_rebuild=request.force_rebuild,
     )
     ctx = get_context()
     if summary.get("period_truncated") is True and ctx and ctx.user:

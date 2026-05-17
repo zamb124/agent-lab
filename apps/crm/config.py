@@ -7,6 +7,8 @@
 from pydantic import Field
 
 from core.config import BaseSettings
+from core.config import set_settings as core_set_settings
+from core.config.loader import load_merged_config
 
 
 class CRMSettings(BaseSettings):
@@ -106,9 +108,6 @@ def get_crm_settings() -> CRMSettings:
     """
     global _crm_settings
     if _crm_settings is None:
-        from core.config import set_settings as core_set_settings
-        from core.config.loader import load_merged_config
-
         merged_config = load_merged_config(service_name="crm", silent=True)
         _crm_settings = CRMSettings.model_validate(merged_config)
         core_set_settings(_crm_settings)

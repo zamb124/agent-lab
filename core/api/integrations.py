@@ -9,7 +9,8 @@ Endpoints (в приложении под префиксом /{server.name}, н�
 
 from __future__ import annotations
 
-from typing import Any, Callable, Coroutine, Optional
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -35,10 +36,10 @@ router = APIRouter(prefix="/api/v1/integrations", tags=["integrations"])
 
 # Реестр callback для resume flow после OAuth.
 # Регистрируется из apps/ при старте сервиса (apps/flows/main.py).
-_flow_resume_handler: Optional[Callable[..., Coroutine]] = None
+_flow_resume_handler: Callable[..., Coroutine[Any, Any, Any]] | None = None
 
 
-def set_flow_resume_handler(handler: Callable[..., Coroutine]) -> None:
+def set_flow_resume_handler(handler: Callable[..., Coroutine[Any, Any, Any]]) -> None:
     """Регистрирует обработчик resume flow (вызывается из apps при старте)."""
     global _flow_resume_handler
     _flow_resume_handler = handler
@@ -97,10 +98,10 @@ async def delete_credential(
 @router.get("/oauth/callback", response_model=None)
 async def oauth_callback(
     request: Request,
-    state: Optional[str] = Query(default=None),
-    code: Optional[str] = Query(default=None),
-    error: Optional[str] = Query(default=None),
-    referer: Optional[str] = Query(default=None),
+    state: str | None = Query(default=None),
+    code: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    referer: str | None = Query(default=None),
 ) -> HTMLResponse | JSONResponse | RedirectResponse:
     """
     Универсальный OAuth callback.

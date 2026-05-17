@@ -16,7 +16,13 @@ from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 from apps.sync.db.models import SyncCall, SyncCallParticipant
 from apps.sync.db.repositories.call_repository import CallRepository
 from apps.sync.db.repositories.channel_repository import ChannelRepository
-from apps.sync.models.calls import CallParticipantRead, CallRead
+from apps.sync.models.calls import (
+    CallMode,
+    CallParticipantRead,
+    CallRead,
+    CallStatus,
+    ParticipantStatus,
+)
 from apps.sync.models.channels import ChannelType
 from apps.sync.realtime.commands import (
     CallAcceptPayload,
@@ -33,7 +39,9 @@ from apps.sync.realtime.events import (
     event_call_participant_joined,
     event_call_participant_left,
 )
+from apps.sync.realtime.speech_to_chat_workflow import stop_speech_egresses_for_call_room
 from core.calls.livekit_client import LiveKitClient
+from core.calls.livekit_usage_spans import trace_livekit_room_session_usage
 from core.config import get_settings
 from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
@@ -56,13 +64,43 @@ async def _call_event_recipients(
 P2P_MAX = 0
 
 
+def _call_mode(value: str) -> CallMode:
+    if value == "p2p":
+        return "p2p"
+    if value == "sfu":
+        return "sfu"
+    raise ValueError(f"Unknown call mode: {value!r}")
+
+
+def _call_status(value: str) -> CallStatus:
+    if value == "ringing":
+        return "ringing"
+    if value == "active":
+        return "active"
+    if value == "ended":
+        return "ended"
+    raise ValueError(f"Unknown call status: {value!r}")
+
+
+def _participant_status(value: str) -> ParticipantStatus:
+    if value == "invited":
+        return "invited"
+    if value == "joined":
+        return "joined"
+    if value == "declined":
+        return "declined"
+    if value == "left":
+        return "left"
+    raise ValueError(f"Unknown participant status: {value!r}")
+
+
 def _call_read_from_entities(call: SyncCall, participants: list[SyncCallParticipant]) -> CallRead:
     return CallRead(
         call_id=call.call_id,
         channel_id=call.channel_id,
-        mode=call.mode,
+        mode=_call_mode(call.mode),
         call_type="video",
-        status=call.status,
+        status=_call_status(call.status),
         livekit_room_name=call.livekit_room_name,
         started_at=call.started_at,
         ended_at=call.ended_at,
@@ -71,7 +109,7 @@ def _call_read_from_entities(call: SyncCall, participants: list[SyncCallParticip
         participants=[
             CallParticipantRead(
                 user_id=p.user_id,
-                status=p.status,
+                status=_participant_status(p.status),
                 joined_at=p.joined_at,
                 left_at=p.left_at,
             )
@@ -288,10 +326,6 @@ async def handle_call_hangup(
     if active_count == 0:
         await calls.update_call_status(payload.call_id, "ended", ended_at=now)
         if call.mode == "sfu" and call.livekit_room_name:
-            from apps.sync.realtime.speech_to_chat_workflow import (
-                stop_speech_egresses_for_call_room,
-            )
-
             await stop_speech_egresses_for_call_room(
                 call_id=payload.call_id,
                 company_id=cmd.company_id,
@@ -330,8 +364,6 @@ async def handle_call_hangup(
             and ended_call.livekit_room_name is not None
             and ended_call.livekit_room_name != ""
         ):
-            from core.calls.livekit_usage_spans import trace_livekit_room_session_usage
-
             await trace_livekit_room_session_usage(
                 company_id=cmd.company_id,
                 user_id=ended_call.created_by_user_id,

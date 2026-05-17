@@ -1,9 +1,17 @@
 """DI контейнер."""
 
+from __future__ import annotations
+
+from typing import cast
 
 from apps.flows.config import get_settings
 from apps.flows.src.channels.factory import get_channel as build_channel
 from apps.flows.src.channels.registry import create_default_channel_registry
+from apps.flows.src.container_state import (
+    get_current_container,
+    reset_current_container,
+    set_current_container,
+)
 from apps.flows.src.db import (
     DatabaseStateRepository,
     EvaluationRepository,
@@ -38,7 +46,10 @@ from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from apps.flows.src.triggers.registry import TriggerRegistry
 from apps.flows.src.variables import VariablesService
 from apps.scheduler.container import get_scheduler_container
-from core.clients import A2AClient, LokiClient, RedisClient, TempoClient
+from core.clients.a2a_client import A2AClient
+from core.clients.loki_client import LokiClient
+from core.clients.redis_client import RedisClient
+from core.clients.tempo_client import TempoClient
 from core.compiler import GraphCompiler
 from core.config.testing import is_testing
 from core.container import BaseContainer, lazy
@@ -288,32 +299,29 @@ class FlowContainer(BaseContainer):
         return build_channel(name, flow_id, container=self)
 
 
-_container: FlowContainer | None = None
-
-
 def get_container() -> FlowContainer:
-    """Получает контейнер (создает при первом вызове)"""
-    global _container
-    if _container is None:
+    """Получает контейнер (создает при первом вызове)."""
+    current = get_current_container()
+    if current is None:
         settings = get_settings()
-        _container = FlowContainer(
+        container = FlowContainer(
             db_url=settings.database.flows_url,
-            shared_db_url=settings.database.shared_url
+            shared_db_url=settings.database.shared_url,
         )
         # В тестах по умолчанию без воркера
         if is_testing():
-            _container.use_worker = False
+            container.use_worker = False
+        set_current_container(container)
         logger.info("FlowContainer создан")
-    return _container
+        return container
+    return cast(FlowContainer, current)
 
 
 def set_container(container: FlowContainer) -> None:
-    """Устанавливает контейнер (для тестов)"""
-    global _container
-    _container = container
+    """Устанавливает контейнер (для тестов)."""
+    set_current_container(container)
 
 
 def reset_container() -> None:
-    """Сбрасывает контейнер"""
-    global _container
-    _container = None
+    """Сбрасывает контейнер."""
+    reset_current_container()

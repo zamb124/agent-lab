@@ -1,12 +1,7 @@
-"""Единый медиа-пайплайн: транскрипция аудио/видео, извлечение дорожек, YouTube."""
+"""Медиа-пайплайны файлов: аудио, видео, STT и WAV-утилиты.
 
-from core.files.media.audio_extract import extract_audio_from_video
-from core.files.media.chunked_stt import transcribe_audio_with_chunking
-from core.files.media.transcriber import MediaTranscriber, TranscriptionResult
+Импортируй конкретные модули `core.files.media.*`, чтобы простые WAV-утилиты
+не запускали STT и voice resolver.
+"""
 
-__all__ = [
-    "MediaTranscriber",
-    "TranscriptionResult",
-    "extract_audio_from_video",
-    "transcribe_audio_with_chunking",
-]
+__all__: list[str] = []

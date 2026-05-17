@@ -16,6 +16,7 @@ import threading
 from typing import Any
 
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from core.logging import get_logger
 
@@ -57,7 +58,6 @@ def ensure_local_causal_lm(
     with _cache_lock:
         if cache_key in _models and cache_key in _tokenizers:
             return _tokenizers[cache_key], _models[cache_key]
-        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         if device.strip().lower().startswith("cuda") and not torch.cuda.is_available():
             raise RuntimeError(
@@ -79,8 +79,8 @@ def ensure_local_causal_lm(
             device=device,
             dtype=str(dt),
         )
-        tokenizer = AutoTokenizer.from_pretrained(cache_key, token=hf_token)
-        model = AutoModelForCausalLM.from_pretrained(cache_key, **load_kw)
+        tokenizer: Any = AutoTokenizer.from_pretrained(cache_key, token=hf_token)
+        model: Any = AutoModelForCausalLM.from_pretrained(cache_key, **load_kw)
         model.to(device)
         _tokenizers[cache_key] = tokenizer
         _models[cache_key] = model

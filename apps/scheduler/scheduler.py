@@ -5,27 +5,27 @@
 """
 
 from apps.scheduler.config import get_scheduler_settings
-from core.logging import setup_logging
+from core.logging.setup import setup_logging
 
 settings = get_scheduler_settings()
 setup_logging(service_name="scheduler", logging_config=settings.logging)
 
 # Импорты модулей с @broker.task — регистрируют задачи на брокерах до create_scheduler и проверки.
-import apps.crm_worker.tasks.daily_summary_tasks  # noqa: F401, E402
-import apps.crm_worker.tasks.reembed_tasks  # noqa: F401, E402
-import apps.crm_worker.tasks.scheduled_integration_sync_tasks  # noqa: F401, E402
-import apps.crm_worker.tasks.suggest_tasks  # noqa: F401, E402
-import apps.flows.src.tasks.eval_task  # noqa: F401, E402
-import apps.flows.src.tasks.flow_tasks  # noqa: F401, E402
-import apps.flows.src.tasks.llm_tasks  # noqa: F401, E402
-import apps.flows.src.tasks.scheduled_tasks  # noqa: F401, E402
-import apps.flows.src.tasks.tool_tasks  # noqa: F401, E402
-import apps.idle_worker.tasks.calendar_sync_tasks  # noqa: F401, E402
-import apps.idle_worker.tasks.llm_models_tasks  # noqa: F401, E402
-import apps.idle_worker.tasks.openrouter_free_models_tasks  # noqa: F401, E402
-import apps.idle_worker.tasks.push_notification_tasks  # noqa: F401, E402
-import apps.idle_worker.tasks.span_billing_settlement_tasks  # noqa: F401, E402
-import apps.rag_worker.tasks.maintenance_tasks  # noqa: F401, E402
+import apps.crm_worker.tasks.daily_summary_tasks as _crm_daily_summary_tasks  # noqa: E402
+import apps.crm_worker.tasks.reembed_tasks as _crm_reembed_tasks  # noqa: E402
+import apps.crm_worker.tasks.scheduled_integration_sync_tasks as _crm_scheduled_integration_sync_tasks  # noqa: E402
+import apps.crm_worker.tasks.suggest_tasks as _crm_suggest_tasks  # noqa: E402
+import apps.flows.src.tasks.eval_task as _flows_eval_task  # noqa: E402
+import apps.flows.src.tasks.flow_tasks as _flows_flow_tasks  # noqa: E402
+import apps.flows.src.tasks.llm_tasks as _flows_llm_tasks  # noqa: E402
+import apps.flows.src.tasks.scheduled_tasks as _flows_scheduled_tasks  # noqa: E402
+import apps.flows.src.tasks.tool_tasks as _flows_tool_tasks  # noqa: E402
+import apps.idle_worker.tasks.calendar_sync_tasks as _idle_calendar_sync_tasks  # noqa: E402
+import apps.idle_worker.tasks.llm_models_tasks as _idle_llm_models_tasks  # noqa: E402
+import apps.idle_worker.tasks.openrouter_free_models_tasks as _idle_openrouter_free_models_tasks  # noqa: E402
+import apps.idle_worker.tasks.push_notification_tasks as _idle_push_notification_tasks  # noqa: E402
+import apps.idle_worker.tasks.span_billing_settlement_tasks as _idle_span_billing_settlement_tasks  # noqa: E402
+import apps.rag_worker.tasks.maintenance_tasks as _rag_maintenance_tasks  # noqa: E402
 from apps.crm.scheduled_integration_constants import (  # noqa: E402
     SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC_TASK_NAME,
 )
@@ -37,6 +37,24 @@ from apps.crm.scheduled_task_constants import (  # noqa: E402
 from apps.scheduler.dispatch import (  # noqa: E402
     create_scheduler,
     require_tasks_registered_for_scheduler,
+)
+
+_TASK_REGISTRATION_MODULES = (
+    _crm_daily_summary_tasks,
+    _crm_reembed_tasks,
+    _crm_scheduled_integration_sync_tasks,
+    _crm_suggest_tasks,
+    _flows_eval_task,
+    _flows_flow_tasks,
+    _flows_llm_tasks,
+    _flows_scheduled_tasks,
+    _flows_tool_tasks,
+    _idle_calendar_sync_tasks,
+    _idle_llm_models_tasks,
+    _idle_openrouter_free_models_tasks,
+    _idle_push_notification_tasks,
+    _idle_span_billing_settlement_tasks,
+    _rag_maintenance_tasks,
 )
 
 _FLOWS_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (

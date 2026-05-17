@@ -2,8 +2,11 @@
 
 from typing import Optional
 
+from apps.rag.config import get_rag_settings
 from core.container import BaseContainer, lazy
+from core.db.repositories.document_status_repository import DocumentStatusRepository
 from core.logging import get_logger
+from core.rag.factory import get_rag_provider
 
 logger = get_logger(__name__)
 
@@ -14,16 +17,11 @@ class RAGContainer(BaseContainer):
     @lazy
     def document_status_repository(self):
         """Получает репозиторий статусов документов"""
-        from core.db.repositories.document_status_repository import DocumentStatusRepository
-        return DocumentStatusRepository(self.db_url)
+        return DocumentStatusRepository(self.required_db_url)
 
-    @lazy
+    @property
     def rag_provider(self):
         """Активный RAG-провайдер (``rag.default_provider``)."""
-        from core.rag.factory import get_rag_provider
-
-        from .config import get_rag_settings
-
         settings = get_rag_settings()
         return get_rag_provider(settings=settings)
 
@@ -35,7 +33,6 @@ def get_rag_container() -> RAGContainer:
     """Получает контейнер (создает при первом вызове)"""
     global _container
     if _container is None:
-        from .config import get_rag_settings
         settings = get_rag_settings()
         _container = RAGContainer(
             db_url=settings.database.rag_url,
@@ -55,4 +52,3 @@ def reset_rag_container() -> None:
     """Сбрасывает контейнер"""
     global _container
     _container = None
-

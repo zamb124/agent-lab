@@ -120,6 +120,8 @@ class PravoClient:
             h = self.extract_legislation_document_hash(source_url)
             url = self.legislation_document_api_url(h)
         else:
+            if document_hash is None:
+                raise ValueError("Нужен document_hash или source_url")
             h = self.extract_legislation_document_hash(document_hash)
             url = self.legislation_document_api_url(h)
 

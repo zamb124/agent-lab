@@ -6,6 +6,7 @@ ValidationError из воркера TaskIQ при передаче в API час
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from typing import TypedDict
 from typing import cast as type_cast
 
@@ -46,8 +47,8 @@ def _as_json_object_list(value: object) -> list[TaskiqValidationError] | None:
     return items
 
 
-def format_validation_for_taskiq(exc_errors: list[TaskiqValidationError]) -> str:
-    return PREFIX + json.dumps(exc_errors, default=str)
+def format_validation_for_taskiq(exc_errors: Sequence[Mapping[str, object]]) -> str:
+    return PREFIX + json.dumps(list(exc_errors), default=str)
 
 
 def parse_validation_from_task_message(message: str) -> list[TaskiqValidationError] | None:

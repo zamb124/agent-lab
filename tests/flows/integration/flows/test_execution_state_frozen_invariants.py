@@ -16,6 +16,7 @@ from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
 from apps.flows.src.runtime.nodes import CodeNode, LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.src.tools.code_tool import CodeTool
 from core.errors import FrozenStateFieldError, ToolExecutionError
 from core.state import ExecutionState
@@ -32,6 +33,63 @@ USER_FORGE_GUARD_FIELDS: tuple[str, ...] = (
     "branch_id",
     "flow_config_version",
 )
+
+
+class _RedisClient:
+    async def publish(self, channel: str, payload: str) -> None:
+        _ = channel, payload
+
+
+class _BillingService:
+    async def company_may_incur_billable_operation_charge(self, company_id: str) -> bool:
+        _ = company_id
+        return True
+
+    async def require_balance_for_billable_operation(
+        self,
+        company_id: str,
+        user_id: str,
+        *,
+        operation_code: str,
+        notification_service: str,
+    ) -> None:
+        _ = company_id, user_id, operation_code, notification_service
+
+
+class _RuntimeContainer:
+    redis_client = _RedisClient()
+    billing_service = _BillingService()
+    flow_repository = object()
+    flow_factory = object()
+    state_manager = object()
+    variables_service = object()
+    resource_repository = object()
+    resource_resolver = object()
+    node_repository = object()
+    tool_repository = object()
+    tool_registry = object()
+    mcp_server_repository = object()
+    channel_registry = object()
+    operator_repository = object()
+    operator_handoff_service = object()
+    a2a_client = object()
+    flow_discovery = object()
+    file_processor = object()
+    evaluation_service = object()
+    base_tool_class = object()
+    schedule_service = object()
+    oauth_service = object()
+    lara_facade = object()
+    file_repository = object()
+
+    def get_code_runner(
+        self,
+        language: str = "python",
+        resources: dict[str, object] | None = None,
+        variables: dict[str, object] | None = None,
+    ) -> object:
+        _ = language, resources, variables
+        raise AssertionError("Code runner is not used by these tests")
 
 
 def frozen_snapshot(state: ExecutionState) -> dict[str, Any]:
@@ -78,7 +136,9 @@ def make_state(unique_id: str, **extra: Any) -> ExecutionState:
 async def _consume_runner(
     runner: LlmNodeRunner, state: ExecutionState, content: str = "run"
 ) -> None:
-    async for _ in runner.run({"content": content}, state):
+    if runner.container is None:
+        runner.container = _RuntimeContainer()
+    async for _ in runner.run({"content": content}, state, InMemoryEmitter(state)):
         pass
 
 
@@ -155,6 +215,7 @@ class TestLlmNodeStructuredOutputFrozenFields:
                     "additionalProperties": True,
                 },
             },
+            container=_RuntimeContainer(),
         )
 
         snap = make_state(unique_id, user_groups=["g_keep"])
@@ -184,6 +245,7 @@ class TestLlmNodeStructuredOutputFrozenFields:
                     "additionalProperties": False,
                 },
             },
+            container=_RuntimeContainer(),
         )
 
         snap = make_state(unique_id)
@@ -242,6 +304,7 @@ async def execute(args, state):
             tools=[t_a, t_b],
             llm=None,
             prompt="Call tools.",
+            container=_RuntimeContainer(),
         )
 
         state = make_state(unique_id, user_groups=["ug1"])
@@ -298,6 +361,7 @@ async def execute(args, state):
             tools=[t_ok, t_evil],
             llm=None,
             prompt="Tools.",
+            container=_RuntimeContainer(),
         )
 
         state = make_state(unique_id)

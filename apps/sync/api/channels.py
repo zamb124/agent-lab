@@ -12,6 +12,7 @@ from apps.sync.models.channels import (
     ChannelRead,
     ChannelUpdate,
 )
+from apps.sync.realtime.context import require_current_user
 from apps.sync.realtime.operations import (
     ChannelsAddMemberPayload,
     ChannelsListMembersPayload,
@@ -29,7 +30,6 @@ from apps.sync.realtime.operations import (
     op_channels_typing,
     op_channels_update,
 )
-from core.context import get_context
 from core.pagination import ListResponse, OffsetPage
 
 router = APIRouter()
@@ -47,7 +47,7 @@ async def list_channels(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[ChannelRead]:
-    user = get_context().user
+    user = require_current_user()
     result = await op_channels_list(
         ChannelsListPayload(namespace=namespace, limit=limit, offset=offset),
         user=user,
@@ -60,7 +60,7 @@ async def list_channels(
 
 @router.post("/", status_code=201, response_model=ChannelRead)
 async def create_channel(container: ContainerDep, body: ChannelCreate) -> ChannelRead:
-    user = get_context().user
+    user = require_current_user()
     return await op_channels_create(body, user=user, container=container)
 
 
@@ -68,7 +68,7 @@ async def create_channel(container: ContainerDep, body: ChannelCreate) -> Channe
 async def update_channel(
     container: ContainerDep, channel_id: str, body: ChannelUpdate
 ) -> ChannelRead:
-    user = get_context().user
+    user = require_current_user()
     return await op_channels_update(
         ChannelsUpdatePayload(channel_id=channel_id, body=body),
         user=user,
@@ -82,7 +82,7 @@ async def patch_channel_notification_settings(
     body: ChannelNotificationSettingsUpdate,
     container: ContainerDep,
 ) -> ChannelRead:
-    user = get_context().user
+    user = require_current_user()
     return await op_channels_notification_settings_update(
         ChannelsNotificationSettingsUpdatePayload(
             channel_id=channel_id, notifications_muted=body.notifications_muted
@@ -94,7 +94,7 @@ async def patch_channel_notification_settings(
 
 @router.post("/{channel_id}/read", status_code=204)
 async def mark_channel_read(container: ContainerDep, channel_id: str) -> None:
-    user = get_context().user
+    user = require_current_user()
     await op_channels_mark_read(
         ChannelsMarkReadPayload(channel_id=channel_id),
         user=user,
@@ -106,7 +106,7 @@ async def mark_channel_read(container: ContainerDep, channel_id: str) -> None:
 async def typing_channel(
     container: ContainerDep, channel_id: str, body: _TypingBody
 ) -> None:
-    user = get_context().user
+    user = require_current_user()
     await op_channels_typing(
         ChannelsTypingPayload(
             channel_id=channel_id, typing=body.typing, thread_id=body.thread_id
@@ -120,7 +120,7 @@ async def typing_channel(
 async def list_channel_members(
     channel_id: str, container: ContainerDep
 ) -> ListResponse[ChannelMemberRead]:
-    user = get_context().user
+    user = require_current_user()
     result = await op_channels_list_members(
         ChannelsListMembersPayload(channel_id=channel_id),
         user=user,
@@ -133,7 +133,7 @@ async def list_channel_members(
 async def add_member(
     channel_id: str, body: ChannelMemberAdd, container: ContainerDep
 ) -> ChannelMemberRead:
-    user = get_context().user
+    user = require_current_user()
     return await op_channels_add_member(
         ChannelsAddMemberPayload(
             channel_id=channel_id, user_id=body.user_id, role=body.role

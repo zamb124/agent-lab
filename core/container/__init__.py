@@ -6,11 +6,11 @@ Container - Dependency Injection контейнер.
 
 Пример:
     from core.container import BaseContainer, lazy
+    from my_module import MyService
 
     class MyContainer(BaseContainer):
         @lazy
         def my_service(self):
-            from my_module import MyService
             return MyService(repository=self.my_repository)
 """
 
@@ -20,4 +20,3 @@ __all__ = [
     "BaseContainer",
     "lazy",
 ]
-

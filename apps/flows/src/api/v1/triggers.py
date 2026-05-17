@@ -33,7 +33,8 @@ from apps.flows.src.triggers.verify_draft import verify_trigger_draft as run_ver
 from apps.flows.src.triggers.webhook_inbound import check_webhook_rate_limit, client_ip_allowed
 from core.context import get_context, set_context
 from core.logging import get_logger
-from core.models.context_models import Context, Language
+from core.models.context_models import Context
+from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.variables.resolver import VariableResolutionError
 
