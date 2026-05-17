@@ -726,6 +726,7 @@ make test-frontend-core-browser
 11. Никаких локальных `escapeHtml` / `EMAIL_RE` / `_digitsOnly` / `hash*31` / `formatFileSize` циклов / `Intl.*('ru-RU', ...)` / `toLocale*('ru-RU')`. Используй `core/frontend/static/lib/utils/` (см. раздел «Utility canon»).
 12. Никакого своего multipart-upload `createAsyncOp` — только `createMultipartFileUploadOp({ name, url, extraFields? })` из [`@platform/lib/events/index.js`](core/frontend/static/lib/events/factories/_multipart-upload.js).
 13. Никаких свободных префиксов localStorage (`humanitec.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')` из [`@platform/lib/utils/storage-keys.js`](core/frontend/static/lib/utils/storage-keys.js).
+14. В flows LLM editor fallback-модель настраивается тем же полным редактором, что основная LLM-модель. `fallback_models` — ordered array полноценных `LLMCallConfig`; `string[]` и урезанный UI запрещены.
 
 Если что-то из этого нельзя выполнить — задача **не закрыта**. Возвращаюсь к канону, при необходимости — к правке `.cursor/rules/`.
 

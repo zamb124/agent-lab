@@ -7,7 +7,9 @@ alwaysApply: true
 ## Язык
 
 Отвечай на русском. Без эмодзи в коде, комментариях, логах.
-ТЫ ВСЕГДА ПРОГОНЯЕШЬ basedpyright и ruff после измненений ВСЕГДВ ВСЕГДА ВСЕГДА!!!
+
+После любых Python-правок обязательны: `uv run ruff check .`, `uv run basedpyright core apps`. После архитектурного рефакторинга — дополнительно `uv run python analyze_imports.py` и целевой/полный тестовый прогон.
+
 ## Стек
 
 Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нативный EventBus + фабрики (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`).
@@ -41,7 +43,7 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нати
 1. **Никаких фолбеков.** Не получилось — `raise`. Запрещены `return None`/`= []`/тихий `pass` вместо ошибки.
 2. **Никаких лишних `try-except`.** Допустимо только для IO/внешних сервисов (HTTP, БД, Redis). Бизнес-логика — без `try`. Ловишь — пробрасывай через `raise ... from e`.
 3. **Никаких проглоченных исключений.** Голый `except: pass` запрещён. Каждый `except` либо пробрасывает, либо логирует и `raise`.
-4. **Никаких локальных импортов.** Импорты в начале файла (stdlib → third-party → local). Исключение — неразрешимая циклическая зависимость.
+4. **Никаких локальных импортов в `core/` и `apps/`.** Импорты в начале файла (stdlib → third-party → local). Цикл чинится архитектурой: выделить contracts/models, разорвать слой, передать зависимость через контейнер. Локальный импорт как «временный фикс» запрещён.
 5. **Никаких мета-комментариев.** «Отрефакторил», «обновил логику» запрещено. Комментарий объясняет ПОЧЕМУ, а не ЧТО.
 6. **Никаких бессмысленных имён.** `new_`, `old_`, `temp_`, `data`, `result` без контекста — нельзя.
 7. **Никаких неявных фолбеков в значениях.** `x = value or "default"`, `getattr(obj, "field", fallback)` — запрещены. Нет — `raise`.
@@ -55,6 +57,13 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нати
 8. **Никаких голых типов.** Полные аннотации публичных API (`dict[str, Any]`, `list[str]`, не голые `dict`/`list`). Доменные модели — Pydantic/`dataclass`, не сырые словари.
 9. **Никакого дублирования функционала.** Перед реализацией — проверь что нет уже похожего. Дубль запрещён.
 10. **`platform_services` / песочница тулов.** Кастомный код в `apps/flows/tools/` и inline Python — только узкие функции из `platform_services` и явный `namespace`. **`get_container`** и полный DI в теле тула — запрещены. Платформа регистрирует `get_code_runner`/`get_llm`/codegen helpers через `register_sandbox_codegen_namespace` — это не приглашение обходить фасады. Детали → **`eval.mdc`**.
+
+## Типизация и import-gate
+
+- `basedpyright core apps` должен иметь `errorCount == 0`. Новые `reportAny`/`reportUnknown*`/`reportMissingParameterType` в затронутом коде не принимаются как «потом».
+- Публичные функции, методы сервисов, репозитории, API payload/response, factories и runtime-узлы — с явными типами. `Any` допустим только на границе JSON/внешнего API и сразу валидируется Pydantic/узким нормализатором.
+- Одна доменная сущность — одна модель. Не плодить «почти такие же» Pydantic-классы; общий контракт выносится в `core/` или сервисный `models/`, слой-специфичные patch/request модели допускаются только если форма реально другая.
+- Проверка локальных импортов: `uv run python analyze_imports.py`. Ожидание для `core/` + `apps/`: `Total local imports: 0`.
 
 ## Границы `core/` ↔ `apps/`
 

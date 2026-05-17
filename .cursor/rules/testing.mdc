@@ -18,6 +18,20 @@ alwaysApply: false
 
 Запрещено мокать: `StateRepository`, `FlowFactory`, `ToolRegistry`, `BaseChannel`, `S3Client`, любые внутренние компоненты.
 
+## Статические gate перед тестами
+
+После Python-правок:
+
+```bash
+uv run ruff check .
+uv run basedpyright core apps
+uv run python analyze_imports.py
+```
+
+Условия готовности: ruff зелёный, basedpyright `errorCount == 0`, `analyze_imports.py` печатает `Total local imports: 0`. Новые warnings basedpyright в затронутом коде чинятся сразу, а не скрываются `type: ignore`.
+
+После узкой правки — целевой `pytest`. После рефакторинга архитектуры/DI/runtime/тест-инфры — `make test`. Если просили coverage или менялись тестовые gate/оркестрация — `make test-cov`.
+
 ## Архитектурные запреты
 
 ### Глобальное состояние — только через фикстуры и `monkeypatch`
@@ -229,6 +243,9 @@ make test WORKERS=2 2>&1 | tee logs/make-test.log
 
 ## Чеклист перед коммитом
 
+- [ ] `uv run ruff check .`
+- [ ] `uv run basedpyright core apps`
+- [ ] `uv run python analyze_imports.py` → `Total local imports: 0`
 - [ ] `uv run pytest tests/` или целевой набор зелёный
 - [ ] Стиль/инварианты, `unique_id` во всех ключах — см. `testing_invariants.mdc`
 - [ ] Нет своих фикстур для сервисов/клиентов/воркеров

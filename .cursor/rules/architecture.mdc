@@ -113,6 +113,16 @@ async def list_items(container: ContainerDep):
 - `apps/frontend/api/embed_configs.py` — flows container напрямую (монолит).
 - WebSocket route handlers — контейнер через `get_<svc>_container()` внутри handler'ов команд (FastAPI `Depends()` ограничен на WS).
 
+### Циклы импортов и composition root
+
+Контейнер сервиса — нормальный composition root. Он собирает репозитории, сервисы, runtime-зависимости и допускает знание о конкретных реализациях. Остальные модули не используют контейнер как глобальный service locator.
+
+- Импорты в `core/` и `apps/` — только на уровне файла. `if TYPE_CHECKING` допустим только на уровне файла для аннотаций.
+- Цикл `models ↔ runtime`, `state ↔ runtime`, `service ↔ api`, `core ↔ apps` чинится перестройкой слоёв: contracts/enums/Pydantic-типы — ниже, orchestration — выше.
+- Запрещены helper-модули, которые только скрывают цикл и копируют поля между двумя одинаковыми моделями. Если контракт один — модель одна.
+- Runtime получает зависимости через явные аргументы/контейнер на верхнем уровне исполнения. Ноды, модели, валидаторы и state не импортируют контейнер.
+- Локальный импорт внутри функции — архитектурная ошибка, не «оптимизация старта». Новый такой импорт допускается только после обновления rule с объяснённой невозможностью другого решения.
+
 ### Известные нарушения `core/ → apps/`
 
 Требуют архитектурной проработки: `core/scheduler/scheduler.py` (импорт `apps.*_worker` брокеров), `core/api/integrations.py::_resume_flow` (импорт `process_flow_task` из flows), `core/clients/llm/factory.py::get_mock_for_llm` (тестовый путь).
