@@ -6,8 +6,9 @@
  * патчей по верному backend-контракту.
  */
 
-import { fixture, fixtureCleanup, html, expect, elementUpdated } from '../helpers/render.js';
+import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout, waitUntil } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
+import { installFetchMock } from '../helpers/fake-fetch.js';
 import { registerFactory, collectFactories } from '@platform/lib/events/index.js';
 
 import { editorResource, editorBulkDeleteOp } from '../../../../apps/flows/ui/events/resources/editor.resource.js';
@@ -60,12 +61,26 @@ const FACTORIES = [
 function bootstrap() {
     for (const f of FACTORIES) registerFactory(f);
     const collected = collectFactories(FACTORIES);
-    return bootstrapTestBus({ slices: collected.slices });
+    const effects = collected.effects.filter((effect) => (
+        effect.__factoryName === 'flows/code_validate'
+        || effect.__factoryName === 'flows/code_editor_state'
+    ));
+    return bootstrapTestBus({ slices: collected.slices, effects });
 }
 
 describe('node editors — top-level NodeConfig contract', () => {
-    beforeEach(() => { resetPlatformState(); bootstrap(); });
-    afterEach(() => fixtureCleanup());
+    let fetchMock;
+    beforeEach(() => {
+        resetPlatformState();
+        bootstrap();
+        fetchMock = installFetchMock();
+        fetchMock.respondJson('POST', (url) => url.endsWith('/flows/api/v1/code/validate'), { valid: true, warnings: [] });
+        fetchMock.respondJson('GET', (url) => url.includes('/flows/api/v1/code/editor-state'), { variables: {} });
+    });
+    afterEach(() => {
+        fetchMock.uninstall();
+        fixtureCleanup();
+    });
 
     it('flows-llm-node-editor рендерит секции', async () => {
         const node = { node_id: 'a', type: 'llm_node', name: 'A', prompt: 'hi', tools: [] };
@@ -130,13 +145,42 @@ describe('node editors — top-level NodeConfig contract', () => {
         await elementUpdated(workbench);
         const buttons = Array.from(workbench.shadowRoot.querySelectorAll('.language-button'));
         expect(buttons.length).to.equal(5);
-        const tsButton = buttons.find((button) => button.textContent.trim() === 'TS');
+        const tsButton = buttons.find((button) => button.getAttribute('aria-label') === 'TypeScript');
         expect(tsButton).to.not.be.undefined;
+        expect(tsButton.querySelector('flows-code-language-icon[language="typescript"]')).to.not.be.null;
         tsButton.click();
         await elementUpdated(workbench);
         expect(last.patch).to.have.property('language', 'typescript');
         expect(last.patch.code).to.include('async function run');
         expect(last.patch).to.have.property('tool_id', null);
+    });
+
+    it('flows-llm-node-editor — выбранный code tool сохраняет language для иконки на ноде', async () => {
+        const node = { node_id: 'a', type: 'llm_node', name: 'A', prompt: 'hi', tools: [] };
+        const el = await fixture(html`
+            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+            </flows-llm-node-editor>
+        `);
+        await elementUpdated(el);
+        let last = null;
+        el.addEventListener('change', (e) => { last = e.detail; });
+        el.openModal = (kind, props) => {
+            expect(kind).to.equal('flows.tool_picker');
+            props.onPick({
+                kind: 'tool',
+                tool_id: 'ts_tool',
+                item: {
+                    tool_id: 'ts_tool',
+                    language: 'typescript',
+                    code: 'async function run(args, state) { return {}; }',
+                },
+            });
+        };
+
+        el._onPickTool();
+
+        expect(last.patch.tools).to.deep.equal([{ tool_id: 'ts_tool', language: 'typescript' }]);
     });
 
     it('flows-code-workbench — прокидывает выбранный язык в completionContext', async () => {
@@ -165,6 +209,35 @@ describe('node editors — top-level NodeConfig contract', () => {
             perspective: 'node',
             include_runtime_namespace_extras: true,
         });
+    });
+
+    it('flows-code-workbench — debounce-валидация отправляет language и kind', async () => {
+        const workbench = await fixture(html`
+            <flows-code-workbench
+                .variant=${'resource'}
+                .language=${'typescript'}
+                .code=${'async function run(args, state) { return {}; }'}
+                .completionFlowId=${'flow-a'}
+                .completionBranchId=${'draft'}
+            ></flows-code-workbench>
+        `);
+        await elementUpdated(workbench);
+        await aTimeout(720);
+        await waitUntil(
+            () => fetchMock.calls.some((call) => call.method === 'POST' && call.url.endsWith('/flows/api/v1/code/validate')),
+            'code validation request',
+        );
+        const call = fetchMock.calls.find((item) => item.method === 'POST' && item.url.endsWith('/flows/api/v1/code/validate'));
+        const body = JSON.parse(call.init.body);
+        expect(body).to.deep.include({
+            language: 'typescript',
+            kind: 'tool',
+            node_type: 'tool',
+            flow_id: 'flow-a',
+            branch_id: 'draft',
+        });
+        const status = workbench.shadowRoot.querySelector('.code-validation-status[data-state="valid"]');
+        expect(status).to.not.be.null;
     });
 
     it('flows-channel-node-editor — поля channel/action', async () => {

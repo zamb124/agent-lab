@@ -31,6 +31,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
 import '@platform/lib/components/prompt-editor.js';
+import '../common/flows-code-language-icon.js';
 import '../editors/flows-llm-config-editor.js';
 import '../editors/flows-json-field-editor.js';
 import '@platform/lib/components/glass-button.js';
@@ -39,7 +40,12 @@ import '@platform/lib/components/platform-switch.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { resolveResourceForPanel } from '../../_helpers/flows-branch-resource.js';
 import { getNodeTypeMeta } from '../../constants/node-icons.js';
-import { getToolRefVisualMeta, getToolLabel, normalizeToolRef as normalizeVisualToolRef } from '../../_helpers/flows-tool-visual.js';
+import {
+    getToolRefVisualMeta,
+    getToolLabel,
+    inferToolRefLanguage,
+    normalizeToolRef as normalizeVisualToolRef,
+} from '../../_helpers/flows-tool-visual.js';
 import { normalizeToolRef } from '../../_helpers/flows-tool-ref.js';
 import { sanitizeToolName } from '@platform/lib/utils/sanitize-tool-name.js';
 
@@ -156,6 +162,8 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 cursor: pointer;
             }
             .chip .chip-label { min-width: 0; }
+            .chip platform-icon,
+            .chip flows-code-language-icon { flex-shrink: 0; }
             .chip button {
                 background: none; border: none; padding: 0; margin: 0;
                 color: var(--accent); cursor: pointer;
@@ -606,7 +614,18 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 if (kind === 'flow') {
                     tools.push({ type: 'flow', tool_id: toolId });
                 } else {
-                    tools.push({ tool_id: toolId });
+                    const ref = { tool_id: toolId };
+                    const item = isPlainObject(detail.item) ? detail.item : null;
+                    if (
+                        item !== null
+                        && typeof item.code === 'string'
+                        && item.code.length > 0
+                        && typeof item.language === 'string'
+                        && item.language.length > 0
+                    ) {
+                        ref.language = item.language;
+                    }
+                    tools.push(ref);
                 }
                 this._emitPatch({ tools });
             },
@@ -920,9 +939,14 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                         ${tools.map((t) => {
                             const vm = this._toolChipVisualMeta(t);
                             const tid = this._toolEntryId(t);
+                            const rawLanguage = inferToolRefLanguage(t);
+                            const hasLanguageIcon = rawLanguage.length > 0;
+                            const chipIcon = hasLanguageIcon
+                                ? html`<flows-code-language-icon language=${rawLanguage} size="16"></flows-code-language-icon>`
+                                : html`<platform-icon name=${vm.icon} size="14"></platform-icon>`;
                             return html`
                             <span class="chip" @click=${() => this._onEditTool(t)}>
-                                <platform-icon name=${vm.icon} size="14"></platform-icon>
+                                ${chipIcon}
                                 <span class="chip-label">${getToolLabel(t)}</span>
                                 <button type="button" @click=${(e) => { e.stopPropagation(); this._onRemoveTool(tid); }}>×</button>
                             </span>

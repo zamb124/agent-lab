@@ -189,21 +189,32 @@ function _ensureContextBucket(state, contextId) {
     };
 }
 
-/** Один bubble ассистента на `taskId` на всём жизненном цикле (стрим → completed).
- * Нельзя фильтровать `streaming !== false`: после `flows/chat/completed` у сообщения
- * `streaming: false`; повторный терминальный `status-update` иначе не находит строку
- * и создаёт второго ассистента (дубль в UI).
+/** Активный bubble ассистента для `taskId`.
+ * Resume после interrupt/breakpoint сохраняет тот же backend `taskId`, поэтому
+ * внутри одного task может быть несколько assistant-bubble. Live-события всегда
+ * пишутся в последний bubble этого task; повторный terminal frame для завершённого
+ * хода не создаёт дубль.
  */
 function _findOrCreateAssistantMessage(messages, taskId) {
     if (!Array.isArray(messages)) return { messages: [], message: null };
-    const idx = messages.findIndex(
-        (m) => m && m.role === 'assistant' && m.taskId === taskId,
-    );
+    let idx = -1;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const m = messages[i];
+        if (m && m.role === 'assistant' && m.taskId === taskId) {
+            idx = i;
+            break;
+        }
+    }
     if (idx >= 0) {
         return { messages, message: messages[idx], idx };
     }
-    const message = {
-        id: `assistant_${taskId}`,
+    const message = _newAssistantMessage(taskId, `assistant_${taskId}`);
+    return { messages: [...messages, message], message, idx: messages.length };
+}
+
+function _newAssistantMessage(taskId, id) {
+    return {
+        id,
         role: 'assistant',
         content: '',
         reasoning: '',
@@ -218,21 +229,54 @@ function _findOrCreateAssistantMessage(messages, taskId) {
         breakpoint: null,
         operatorReplies: [],
     };
-    return { messages: [...messages, message], message, idx: messages.length };
+}
+
+function _assistantMessageIdForAppend(messages, taskId) {
+    if (!Array.isArray(messages)) {
+        return `assistant_${taskId}`;
+    }
+    let count = 0;
+    for (const m of messages) {
+        if (m && m.role === 'assistant' && m.taskId === taskId) {
+            count += 1;
+        }
+    }
+    if (count === 0) {
+        return `assistant_${taskId}`;
+    }
+    return `assistant_${taskId}_${count + 1}`;
+}
+
+function _hasResumeBoundary(message) {
+    if (!message || message.role !== 'assistant') {
+        return false;
+    }
+    return message.inputRequired != null || message.breakpoint != null;
 }
 
 function _ensurePlaceholderAssistant(messages, taskId) {
     if (!Array.isArray(messages) || typeof taskId !== 'string' || taskId.length === 0) {
         return messages;
     }
-    const has = messages.some(
-        (m) => m && m.role === 'assistant' && m.taskId === taskId,
-    );
-    if (has) {
+    let lastIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const m = messages[i];
+        if (m && m.role === 'assistant' && m.taskId === taskId) {
+            lastIdx = i;
+            break;
+        }
+    }
+    if (lastIdx < 0) {
+        const { messages: withAssistant } = _findOrCreateAssistantMessage(messages, taskId);
+        return withAssistant;
+    }
+    if (!_hasResumeBoundary(messages[lastIdx])) {
         return messages;
     }
-    const { messages: withAssistant } = _findOrCreateAssistantMessage(messages, taskId);
-    return withAssistant;
+    return [
+        ...messages,
+        _newAssistantMessage(taskId, _assistantMessageIdForAppend(messages, taskId)),
+    ];
 }
 
 function _replaceMessage(messages, idx, updater) {

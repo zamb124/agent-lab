@@ -19,7 +19,10 @@ from pathlib import Path
 from core.capabilities import (
     CodeExecutionRequest,
     CodeExecutionResponse,
+    CodeValidationRequest,
+    CodeValidationResponse,
     code_execution_failed_response,
+    code_validation_failed_response,
 )
 from core.config import get_settings
 from core.tracing.operation_span import traced_operation
@@ -85,6 +88,62 @@ class _PythonWorker:
             except Exception as exc:
                 await self._restart()
                 return code_execution_failed_response(
+                    request,
+                    service=SERVICE_NAME,
+                    stage="response_parse",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                    stdout=line.decode("utf-8", errors="replace"),
+                )
+
+    async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
+        async with self._lock:
+            process = await self._ensure_process()
+            assert process.stdin is not None
+            assert process.stdout is not None
+            payload = request.model_dump_json().encode("utf-8") + b"\n"
+            try:
+                process.stdin.write(payload)
+                await process.stdin.drain()
+                line = await asyncio.wait_for(
+                    process.stdout.readline(),
+                    timeout=float(request.wall_time_limit_seconds),
+                )
+            except TimeoutError as exc:
+                await self._restart()
+                return code_validation_failed_response(
+                    request,
+                    service=SERVICE_NAME,
+                    stage="timeout",
+                    message="python sandbox validation exceeded wall time limit",
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+            except Exception as exc:
+                await self._restart()
+                return code_validation_failed_response(
+                    request,
+                    service=SERVICE_NAME,
+                    stage="worker_ipc",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+            if not line:
+                await self._restart()
+                return code_validation_failed_response(
+                    request,
+                    service=SERVICE_NAME,
+                    stage="worker_ipc",
+                    message="python sandbox worker exited without validation response",
+                    exception_type="PythonSandboxWorkerExited",
+                )
+            try:
+                return CodeValidationResponse.model_validate_json(line.decode("utf-8"))
+            except Exception as exc:
+                await self._restart()
+                return code_validation_failed_response(
                     request,
                     service=SERVICE_NAME,
                     stage="response_parse",
@@ -161,6 +220,38 @@ class PythonSandboxExecutor:
                     traceback_text="".join(traceback.format_exception(exc)),
                 )
 
+    async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
+        if request.language != "python":
+            return self._failed_validation_response(
+                request=request,
+                stage="validation",
+                message=f"code-runner-python cannot validate language={request.language}",
+                exception_type="UnsupportedLanguageError",
+            )
+
+        async with traced_operation(
+            "code_runner_python.validate",
+            event_type="code_runner.validate",
+            operation_category="code_runner",
+            extra_attributes={
+                "platform.code_runner.language": request.language,
+                "platform.code_runner.kind": request.kind,
+                "platform.code_runner.entrypoint": request.entrypoint or "<first_function>",
+                "platform.code_runner.runtime": "warm_worker_pool",
+            },
+        ):
+            try:
+                worker = await self._select_worker()
+                return await worker.validate(request)
+            except Exception as exc:
+                return self._failed_validation_response(
+                    request=request,
+                    stage="runtime",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+
     async def _select_worker(self) -> _PythonWorker:
         async with self._pool_lock:
             if not self._workers:
@@ -192,6 +283,28 @@ class PythonSandboxExecutor:
         stderr: str | None = None,
     ) -> CodeExecutionResponse:
         return code_execution_failed_response(
+            request,
+            service=SERVICE_NAME,
+            stage=stage,
+            message=message,
+            exception_type=exception_type,
+            traceback_text=traceback_text,
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    def _failed_validation_response(
+        self,
+        *,
+        request: CodeValidationRequest,
+        stage: str,
+        message: str,
+        exception_type: str,
+        traceback_text: str | None = None,
+        stdout: str | None = None,
+        stderr: str | None = None,
+    ) -> CodeValidationResponse:
+        return code_validation_failed_response(
             request,
             service=SERVICE_NAME,
             stage=stage,
@@ -486,6 +599,58 @@ class PythonSandboxExecutor:
                 return hashlib.sha256(key_payload.encode("utf-8")).hexdigest()
 
 
+            def validate_request(request):
+                stage = "bootstrap"
+                try:
+                    source = str(request.get("code") or "")
+                    stage = "parse"
+                    tree = ast.parse(source)
+                    entrypoint_name = request.get("entrypoint")
+                    if not entrypoint_name:
+                        for node in tree.body:
+                            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                                entrypoint_name = node.name
+                                break
+                    if not entrypoint_name:
+                        raise RuntimeError("Entrypoint function not found: declare at least one function")
+                    has_entrypoint = any(
+                        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == entrypoint_name
+                        for node in tree.body
+                    )
+                    if not has_entrypoint:
+                        raise RuntimeError(f"Entrypoint not found: {{entrypoint_name}}")
+
+                    key = artifact_key(request)
+                    compiled = compiled_cache.get(key)
+                    if compiled is None:
+                        stage = "compile"
+                        compiled = compile(
+                            source,
+                            f"<sandbox:{{key}}>",
+                            "exec",
+                            flags=__future__.annotations.compiler_flag,
+                            dont_inherit=True,
+                        )
+                        compiled_cache[key] = compiled
+                    return {{"valid": True, "warnings": []}}
+                except BaseException as exc:
+                    context = request.get("context", {{}}) if isinstance(request, dict) else {{}}
+                    return {{
+                        "valid": False,
+                        "error": {{
+                            "language": request.get("language", "python") if isinstance(request, dict) else "python",
+                            "service": {json.dumps(SERVICE_NAME)},
+                            "stage": stage,
+                            "message": str(exc),
+                            "exception_type": type(exc).__name__,
+                            "traceback": "".join(traceback.format_exception(exc)),
+                            "request_id": context.get("request_id"),
+                            "trace_id": context.get("trace_id"),
+                        }},
+                        "warnings": [],
+                    }}
+
+
             def call_entrypoint(entrypoint, args, state):
                 if current_request.get("kind") != "tool":
                     return entrypoint(args, state)
@@ -516,6 +681,8 @@ class PythonSandboxExecutor:
                 real_stderr = sys.stderr
                 try:
                     current_request = json.loads(raw_line)
+                    if "args" not in current_request and "state" not in current_request:
+                        return json.dumps(validate_request(current_request), ensure_ascii=False, separators=(",", ":"))
                     state = _wrap_attr(dict(current_request["state"]))
                     current_request["state"] = state
                     args = _wrap_attr(dict(current_request["args"]))

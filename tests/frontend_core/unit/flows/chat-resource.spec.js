@@ -255,6 +255,31 @@ describe('flows/chat extraReducer: push-события', () => {
         expect(assistant.inputRequired.resultMetadata.handoff).toBe(true);
     });
 
+    it('resume после input_required с тем же task_id пишет ответ в новый bubble', () => {
+        const { bus, getState } = setup();
+        bus.dispatch('flows/chat/input_required', {
+            task_id: 'tsk1',
+            context_id: 'ctx1',
+            result_metadata: { platform_interrupt: { question: 'Name?' } },
+        });
+        bus.dispatch('flows/chat/user_message_added', {
+            contextId: 'ctx1',
+            message: { id: 'u2', role: 'user', content: 'John' },
+        });
+        bus.dispatch('flows/chat/task_started', { task_id: 'tsk1', context_id: 'ctx1' });
+        bus.dispatch('flows/chat/content_chunk', { task_id: 'tsk1', text: 'Hello John' });
+        bus.dispatch('flows/chat/completed', { task_id: 'tsk1', context_id: 'ctx1', content: 'Hello John' });
+
+        const msgs = getState().flowsChat.messagesByContextId.ctx1.messages;
+        const assistants = msgs.filter((m) => m && m.role === 'assistant' && m.taskId === 'tsk1');
+        expect(assistants.length).toBe(2);
+        expect(assistants[0].inputRequired).toBeTruthy();
+        expect(assistants[0].content).toBe('');
+        expect(assistants[1].inputRequired).toBeNull();
+        expect(assistants[1].content).toBe('Hello John');
+        expect(assistants[1].id).not.toBe(assistants[0].id);
+    });
+
     it('operator_reply добавляет отдельное сообщение operator', () => {
         const { bus, getState } = setup();
         bus.dispatch('flows/chat/operator_reply', { task_id: 'tsk1', text: 'hi from op' });

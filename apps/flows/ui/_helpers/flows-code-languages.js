@@ -7,6 +7,7 @@ export const FLOW_CODE_LANGUAGES = Object.freeze([
         value: 'python',
         label: 'Python',
         shortLabel: 'Py',
+        icon: 'python',
         cmLanguage: 'python',
         entrypoint: 'run',
         starter: `async def run(args, state):
@@ -20,6 +21,7 @@ export const FLOW_CODE_LANGUAGES = Object.freeze([
         value: 'javascript',
         label: 'JavaScript',
         shortLabel: 'JS',
+        icon: 'javascript',
         cmLanguage: 'javascript',
         entrypoint: 'run',
         starter: `async function run(args, state) {
@@ -35,6 +37,7 @@ export const FLOW_CODE_LANGUAGES = Object.freeze([
         value: 'typescript',
         label: 'TypeScript',
         shortLabel: 'TS',
+        icon: 'typescript',
         cmLanguage: 'typescript',
         entrypoint: 'run',
         starter: `async function run(args: Record<string, unknown>, state: Record<string, unknown>) {
@@ -50,6 +53,7 @@ export const FLOW_CODE_LANGUAGES = Object.freeze([
         value: 'go',
         label: 'Go',
         shortLabel: 'Go',
+        icon: 'go',
         cmLanguage: 'go',
         entrypoint: 'run',
         starter: `package main
@@ -69,6 +73,7 @@ func check(args map[string]any, state map[string]any) (any, error) {
         value: 'csharp',
         label: 'C#',
         shortLabel: 'C#',
+        icon: 'csharp',
         cmLanguage: 'csharp',
         entrypoint: 'run',
         starter: `using System.Collections.Generic;
@@ -118,6 +123,10 @@ export function flowCodeLanguageLabel(value) {
 
 export function flowCodeLanguageShortLabel(value) {
     return flowCodeLanguageMeta(value).shortLabel;
+}
+
+export function flowCodeLanguageIconName(value) {
+    return flowCodeLanguageMeta(value).icon;
 }
 
 export function flowCodeMirrorLanguage(value) {

@@ -1,6 +1,7 @@
 """FastAPI entrypoint code-runner-csharp."""
 
 from apps.code_runner_csharp.api.v1.execute import router as execute_router
+from apps.code_runner_csharp.api.v1.validate import router as validate_router
 from apps.code_runner_csharp.config import (
     CodeRunnerCsharpSettings,
     get_code_runner_csharp_settings,
@@ -12,7 +13,7 @@ app = create_service_app(
     service_name="code_runner_csharp",
     settings_class=CodeRunnerCsharpSettings,
     get_container=get_code_runner_csharp_container,
-    routers=[execute_router],
+    routers=[execute_router, validate_router],
     repository_names=[],
     cors_origins=["*"],
     title="Platform C# Code Runner",

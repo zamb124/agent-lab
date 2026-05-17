@@ -4,6 +4,7 @@
 
 import { getNodeTypeMeta } from '../constants/node-icons.js';
 import { isPlainObject } from './flows-resolvers.js';
+import { isFlowCodeLanguage, normalizeFlowCodeLanguage } from './flows-code-languages.js';
 
 /**
  * Число чипов в одном ряду карточки ноды (ширина карточки 200px,
@@ -18,6 +19,15 @@ export const MAX_CHIP_ROWS = 3;
 export const MAX_CHIPS_SHOWN = CHIPS_PER_ROW * MAX_CHIP_ROWS;
 
 const MCP_CODE_MODE = 'mcp_tool';
+const CODE_NODE_META = getNodeTypeMeta('code');
+const DEFAULT_TOOL_META = Object.freeze({ icon: 'tool', category: 'core' });
+const LANGUAGE_PATTERNS = Object.freeze([
+    ['python', /(^|[_:\-\s])(python|py)(?=$|[_:\-\s])/],
+    ['javascript', /(^|[_:\-\s])(javascript|js)(?=$|[_:\-\s])/],
+    ['typescript', /(^|[_:\-\s])(typescript|ts)(?=$|[_:\-\s])/],
+    ['go', /(^|[_:\-\s])(golang|go)(?=$|[_:\-\s])/],
+    ['csharp', /(^|[_:\-\s])(csharp|c_sharp|c-sharp|cs)(?=$|[_:\-\s])/],
+]);
 
 /**
  * Читаемое имя тула из ToolReference (name > title > tool_id).
@@ -59,10 +69,13 @@ export function normalizeToolRef(raw) {
  */
 export function getToolRefVisualMeta(ref) {
     if (!isPlainObject(ref)) {
-        return getNodeTypeMeta('code');
+        return DEFAULT_TOOL_META;
     }
     const t = ref.type;
     if (typeof t === 'string' && t.length > 0) {
+        if (t === 'tool') {
+            return DEFAULT_TOOL_META;
+        }
         return getNodeTypeMeta(t);
     }
     const toolIdForVisual = ref.tool_id;
@@ -87,10 +100,44 @@ export function getToolRefVisualMeta(ref) {
         const hasPrompt = typeof ref.prompt === 'string' && ref.prompt.trim().length > 0;
         const isLlmShape = t === 'llm_node' || hasPrompt || (Array.isArray(ref.tools) && ref.tools.length > 0);
         if (!isLlmShape) {
-            return getNodeTypeMeta('code');
+            return CODE_NODE_META;
         }
     }
-    return getNodeTypeMeta('code');
+    return DEFAULT_TOOL_META;
+}
+
+export function isCodeToolVisualMeta(meta) {
+    return isPlainObject(meta)
+        && meta.icon === CODE_NODE_META.icon
+        && meta.category === CODE_NODE_META.category;
+}
+
+export function inferToolRefLanguage(ref) {
+    if (!isPlainObject(ref)) return '';
+    if (typeof ref.language === 'string' && isFlowCodeLanguage(ref.language)) {
+        return normalizeFlowCodeLanguage(ref.language);
+    }
+    const pieces = [];
+    for (const key of ['tool_id', 'name', 'title']) {
+        const value = ref[key];
+        if (typeof value === 'string' && value.length > 0) {
+            pieces.push(value.toLowerCase());
+        }
+    }
+    if (Array.isArray(ref.tags)) {
+        for (const tag of ref.tags) {
+            if (typeof tag === 'string' && tag.length > 0) {
+                pieces.push(tag.toLowerCase());
+            }
+        }
+    }
+    const joined = pieces.join(' ');
+    for (const [language, pattern] of LANGUAGE_PATTERNS) {
+        if (pattern.test(joined)) {
+            return language;
+        }
+    }
+    return '';
 }
 
 /**

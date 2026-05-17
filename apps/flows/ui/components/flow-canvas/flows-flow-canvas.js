@@ -30,7 +30,7 @@
 
 import { html, css, svg } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/components/platform-icon.js';
+import { resolveUiIconFile } from '@platform/lib/utils/file-icons.js';
 import { getNodeTypeMeta } from '../../constants/node-icons.js';
 import { renderEdgeLabel } from './flows-edge-label.js';
 import './flows-canvas-context-menu.js';
@@ -59,8 +59,10 @@ import {
     normalizedLlmToolsForCanvas,
     getToolRefVisualMeta,
     getToolLabel,
+    inferToolRefLanguage,
     MAX_CHIPS_SHOWN,
 } from '../../_helpers/flows-tool-visual.js';
+import { flowCodeLanguageIconName, flowCodeLanguageShortLabel } from '../../_helpers/flows-code-languages.js';
 import { getBlankCodeNodeConfig } from '../../_helpers/code-node-defaults.js';
 import { getBlankExternalApiNodeConfig } from '../../_helpers/flows-external-api-defaults.js';
 const NODE_RADIUS = 12;
@@ -175,6 +177,43 @@ export class FlowsFlowCanvas extends PlatformElement {
             .node-icon-wrap[data-cat="integrations"] { background: var(--info-bg); color: var(--info); }
             .node-icon-wrap[data-cat="flow"]         { background: var(--accent-secondary-subtle); color: var(--accent-secondary); }
             .node-icon-wrap[data-cat="hitl"]         { background: var(--warning-bg); color: var(--warning); }
+            .node-icon-wrap[data-language-icon] {
+                background: var(--glass-solid);
+                border: 1px solid var(--glass-border-subtle);
+                box-sizing: border-box;
+            }
+            .canvas-icon {
+                width: var(--canvas-icon-size, 16px);
+                height: var(--canvas-icon-size, 16px);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex: 0 0 auto;
+                line-height: 1;
+            }
+            .canvas-icon-img {
+                width: 100%;
+                height: 100%;
+                display: block;
+                object-fit: contain;
+            }
+            .canvas-icon-img[data-failed] {
+                display: none;
+            }
+            .canvas-icon-fallback {
+                width: 100%;
+                height: 100%;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                color: currentColor;
+                font-size: 11px;
+                font-weight: var(--font-bold);
+                letter-spacing: 0;
+            }
+            .canvas-icon-img[data-failed] + .canvas-icon-fallback {
+                display: inline-flex;
+            }
             .node-card-content {
                 display: flex; align-items: center; gap: var(--space-2);
                 padding: var(--space-2) var(--space-3);
@@ -267,6 +306,18 @@ export class FlowsFlowCanvas extends PlatformElement {
             .node-tool-chip[data-cat="hitl"]:hover {
                 box-shadow: 0 2px 8px color-mix(in srgb, var(--warning) 26%, transparent),
                             inset 0 1px 0 rgba(255, 255, 255, 0.12);
+            }
+            .node-tool-chip[data-language-icon] {
+                background: var(--glass-solid);
+                color: inherit;
+            }
+            .node-tool-chip[data-language-icon] .canvas-icon {
+                width: 24px;
+                height: 24px;
+            }
+            .node-tool-chip[data-language-icon] .canvas-icon-img {
+                width: 24px;
+                height: 24px;
             }
             .node-tools-more {
                 font-size: var(--text-xs);
@@ -541,6 +592,46 @@ export class FlowsFlowCanvas extends PlatformElement {
     _viewBox() {
         const vb = this._state().viewBox;
         return isPlainObject(vb) ? vb : { x: 0, y: 0, w: 1600, h: 1000 };
+    }
+
+    _iconAssetSrc(name) {
+        const file = resolveUiIconFile(name);
+        return `/static/core/assets/icons/${encodeURIComponent(file)}.svg`;
+    }
+
+    _iconFallbackLabel(name) {
+        if (name === 'python') return 'Py';
+        if (name === 'javascript') return 'JS';
+        if (name === 'typescript') return 'TS';
+        if (name === 'go') return 'Go';
+        if (name === 'csharp') return 'C#';
+        if (name === 'code') return '<>';
+        if (name === 'tool') return 'T';
+        return '';
+    }
+
+    _onCanvasIconError(event) {
+        const target = event.currentTarget;
+        if (target instanceof HTMLImageElement) {
+            target.dataset.failed = 'true';
+        }
+    }
+
+    _renderCanvasIcon(name, size, fallbackLabel = '') {
+        const iconName = typeof name === 'string' && name.length > 0 ? name : 'tool';
+        const label = fallbackLabel.length > 0 ? fallbackLabel : this._iconFallbackLabel(iconName);
+        return html`
+            <span class="canvas-icon" style=${`--canvas-icon-size: ${size}px`}>
+                <img
+                    class="canvas-icon-img"
+                    src=${this._iconAssetSrc(iconName)}
+                    alt=""
+                    draggable="false"
+                    @error=${this._onCanvasIconError}
+                >
+                <span class="canvas-icon-fallback">${label}</span>
+            </span>
+        `;
     }
 
     _portCoords(node, side) {
@@ -1624,6 +1715,14 @@ export class FlowsFlowCanvas extends PlatformElement {
         const visibleTools = canvasTools.slice(0, maxShown);
         const moreTools = canvasTools.length - visibleTools.length;
         const meta = getNodeTypeMeta(node.type);
+        const isCodeNode = node.type === 'code';
+        const nodeIcon = isCodeNode
+            ? this._renderCanvasIcon(
+                flowCodeLanguageIconName(node.language),
+                28,
+                flowCodeLanguageShortLabel(node.language),
+            )
+            : this._renderCanvasIcon(meta.icon, 18);
         const state = this._state();
         const multi = asArray(state.multiSelection);
         const isSelected = state.selectedNodeId === id;
@@ -1648,8 +1747,12 @@ export class FlowsFlowCanvas extends PlatformElement {
                 @drop=${(ev) => this._onNodeCardDrop(ev, id)}
             >
                 <div class="node-card-main">
-                    <div class="node-icon-wrap" data-cat=${meta.category}>
-                        <platform-icon name=${meta.icon} size="18"></platform-icon>
+                    <div
+                        class="node-icon-wrap"
+                        data-cat=${meta.category}
+                        ?data-language-icon=${isCodeNode}
+                    >
+                        ${nodeIcon}
                     </div>
                     <div class="node-meta">
                         <div class="node-name">${typeof node.name === 'string' && node.name.length > 0 ? node.name : id}</div>
@@ -1662,18 +1765,28 @@ export class FlowsFlowCanvas extends PlatformElement {
                             const tm = getToolRefVisualMeta(ref);
                             const tid = ref.tool_id;
                             const label = getToolLabel(ref);
+                            const inferredLanguage = inferToolRefLanguage(ref);
+                            const isLanguageTool = inferredLanguage.length > 0;
+                            const chipIcon = isLanguageTool
+                                ? this._renderCanvasIcon(
+                                    flowCodeLanguageIconName(inferredLanguage),
+                                    24,
+                                    flowCodeLanguageShortLabel(inferredLanguage),
+                                )
+                                : this._renderCanvasIcon(tm.icon, 14);
                             return html`
                                 <button
                                     type="button"
                                     class="node-tool-chip"
                                     data-cat=${tm.category}
+                                    ?data-language-icon=${isLanguageTool}
                                     title=${label}
                                     @pointerdown=${(e) => {
                                         e.stopPropagation();
                                         this._editor.selectNode({ nodeId: id, openToolId: tid });
                                     }}
                                 >
-                                    <platform-icon name=${tm.icon} size="14"></platform-icon>
+                                    ${chipIcon}
                                 </button>
                             `;
                         })}

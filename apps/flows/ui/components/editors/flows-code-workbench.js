@@ -8,7 +8,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './flows-code-editor.js';
-import '@platform/lib/components/glass-button.js';
+import '../common/flows-code-language-icon.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -16,7 +16,6 @@ import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import {
     FLOW_CODE_LANGUAGES,
     flowCodeLanguageOptions,
-    flowCodeLanguageShortLabel,
     flowCodeMirrorLanguage,
     isKnownStarterCode,
     normalizeFlowCodeLanguage,
@@ -46,6 +45,8 @@ export class FlowsCodeWorkbench extends PlatformElement {
         _schemaInvalid: { state: true },
         _schemaError: { state: true },
         _editorStateVarKeys: { state: true },
+        _codeValidationStatus: { state: true },
+        _codeValidationMessage: { state: true },
     };
 
     static styles = [
@@ -75,6 +76,31 @@ export class FlowsCodeWorkbench extends PlatformElement {
                 align-items: center;
                 gap: var(--space-1);
                 flex-shrink: 0;
+            }
+            .toolbar-icon-button {
+                width: 28px;
+                height: 28px;
+                padding: 0;
+                margin: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-tertiary);
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+                border-radius: var(--radius-full, 999px);
+                cursor: pointer;
+                transition:
+                    color var(--duration-fast, 0.2s) ease,
+                    background var(--duration-fast, 0.2s) ease,
+                    border-color var(--duration-fast, 0.2s) ease;
+            }
+            .toolbar-icon-button:hover,
+            .toolbar-icon-button:focus-visible {
+                color: var(--text-primary);
+                background: rgba(255, 255, 255, 0.1);
+                border-color: var(--border-default, rgba(255, 255, 255, 0.14));
+                outline: none;
             }
             .language-segment {
                 display: inline-flex;
@@ -115,30 +141,45 @@ export class FlowsCodeWorkbench extends PlatformElement {
                 outline: 2px solid var(--accent);
                 outline-offset: 1px;
             }
+            .language-button flows-code-language-icon {
+                pointer-events: none;
+            }
             .execute-tool-hint-trigger {
-                width: 28px;
-                height: 28px;
-                padding: 0;
-                margin: 0;
+                cursor: help;
+            }
+            .code-validation-status {
                 display: inline-flex;
                 align-items: center;
-                justify-content: center;
-                color: var(--text-tertiary);
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+                gap: 5px;
+                min-width: 28px;
+                max-width: 220px;
+                height: 28px;
+                padding: 0 9px;
+                box-sizing: border-box;
                 border-radius: var(--radius-full, 999px);
-                cursor: help;
-                transition:
-                    color var(--duration-fast, 0.2s) ease,
-                    background var(--duration-fast, 0.2s) ease,
-                    border-color var(--duration-fast, 0.2s) ease;
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                line-height: 1;
+                white-space: nowrap;
             }
-            .execute-tool-hint-trigger:hover,
-            .execute-tool-hint-trigger:focus-visible {
-                color: var(--text-primary);
-                background: rgba(255, 255, 255, 0.1);
-                border-color: var(--border-default, rgba(255, 255, 255, 0.14));
-                outline: none;
+            .code-validation-status[data-state='pending'] {
+                color: var(--text-secondary);
+            }
+            .code-validation-status[data-state='valid'] {
+                color: var(--success);
+                background: var(--success-bg);
+                border-color: var(--success-border);
+            }
+            .code-validation-status[data-state='invalid'] {
+                color: var(--error);
+                background: var(--error-bg);
+                border-color: var(--error-border);
+            }
+            .code-validation-text {
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             .main-tabs {
                 display: flex;
@@ -204,9 +245,16 @@ export class FlowsCodeWorkbench extends PlatformElement {
         this._schemaInvalid = false;
         this._schemaError = '';
         this._editorStateVarKeys = [];
+        this._codeValidationStatus = 'idle';
+        this._codeValidationMessage = '';
         /** @type {number} */
         this._editorStateFetchSeq = 0;
+        /** @type {number} */
+        this._codeValidationTimer = 0;
+        /** @type {number} */
+        this._codeValidationSeq = 0;
         this._codeEditorStateOp = this.useOp('flows/code_editor_state');
+        this._codeValidateOp = this.useOp('flows/code_validate');
     }
 
     willUpdate(changed) {
@@ -215,6 +263,8 @@ export class FlowsCodeWorkbench extends PlatformElement {
             this._mainTab = 'code';
             this._schemaInvalid = false;
             this._schemaError = '';
+            this._codeValidationStatus = 'idle';
+            this._codeValidationMessage = '';
         }
         if (changed.has('completionFlowId') || changed.has('completionBranchId')) {
             this._editorStateVarKeys = [];
@@ -225,6 +275,17 @@ export class FlowsCodeWorkbench extends PlatformElement {
         super.updated?.(changed);
         if (changed.has('completionFlowId') || changed.has('completionBranchId')) {
             void this._syncEditorStateVariableKeys();
+        }
+        if (changed.has('code') || changed.has('language') || changed.has('variant') || changed.has('scopeKey')) {
+            this._scheduleCodeValidation();
+        }
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (this._codeValidationTimer) {
+            window.clearTimeout(this._codeValidationTimer);
+            this._codeValidationTimer = 0;
         }
     }
 
@@ -242,6 +303,77 @@ export class FlowsCodeWorkbench extends PlatformElement {
             perspective: this._documentationPerspectiveResolved(),
             include_runtime_namespace_extras: true,
         };
+    }
+
+    _validationKind() {
+        return this.variant === 'resource' ? 'tool' : 'node';
+    }
+
+    _validationPayload() {
+        const code = typeof this.code === 'string' ? this.code : '';
+        const payload = {
+            code,
+            language: this._normalizedLanguage(),
+            kind: this._validationKind(),
+            node_type: this._validationKind() === 'tool' ? 'tool' : 'code',
+        };
+        if (typeof this.completionFlowId === 'string' && this.completionFlowId.trim().length > 0) {
+            payload.flow_id = this.completionFlowId.trim();
+        }
+        if (typeof this.completionBranchId === 'string' && this.completionBranchId.trim().length > 0) {
+            payload.branch_id = this.completionBranchId.trim();
+        }
+        return payload;
+    }
+
+    _scheduleCodeValidation() {
+        const code = typeof this.code === 'string' ? this.code : '';
+        if (this._codeValidationTimer) {
+            window.clearTimeout(this._codeValidationTimer);
+            this._codeValidationTimer = 0;
+        }
+        if (code.trim().length === 0) {
+            this._codeValidationSeq += 1;
+            this._codeValidationStatus = 'idle';
+            this._codeValidationMessage = '';
+            return;
+        }
+        this._codeValidationStatus = 'pending';
+        this._codeValidationMessage = this.t('code_workbench.validation_checking');
+        this._codeValidationTimer = window.setTimeout(() => {
+            this._codeValidationTimer = 0;
+            void this._runCodeValidation();
+        }, 650);
+    }
+
+    async _runCodeValidation() {
+        const seq = this._codeValidationSeq + 1;
+        this._codeValidationSeq = seq;
+        const payload = this._validationPayload();
+        let result;
+        try {
+            result = await this._codeValidateOp.run(payload);
+        } catch (err) {
+            if (seq !== this._codeValidationSeq) {
+                return;
+            }
+            this._codeValidationStatus = 'invalid';
+            this._codeValidationMessage = err instanceof Error ? err.message : String(err);
+            return;
+        }
+        if (seq !== this._codeValidationSeq) {
+            return;
+        }
+        if (!result || typeof result !== 'object' || result.valid !== true) {
+            const message = result && typeof result === 'object' && typeof result.error === 'string'
+                ? result.error
+                : this.t('code_workbench.validation_invalid');
+            this._codeValidationStatus = 'invalid';
+            this._codeValidationMessage = message;
+            return;
+        }
+        this._codeValidationStatus = 'valid';
+        this._codeValidationMessage = this.t('code_workbench.validation_valid');
     }
 
     _effectiveCompletionVariableKeys() {
@@ -394,9 +526,38 @@ export class FlowsCodeWorkbench extends PlatformElement {
                         title=${lang.label}
                         aria-label=${lang.label}
                         @click=${() => this._emitLanguageChange(lang.value)}
-                    >${flowCodeLanguageShortLabel(lang.value)}</button>
+                    >
+                        <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
+                    </button>
                 `)}
             </div>
+        `;
+    }
+
+    _renderValidationStatus() {
+        const status = this._codeValidationStatus;
+        if (status === 'idle') {
+            return '';
+        }
+        let iconName = 'circle';
+        let label = this._codeValidationMessage;
+        if (status === 'pending') {
+            iconName = 'circle';
+            label = this.t('code_workbench.validation_checking');
+        } else if (status === 'valid') {
+            iconName = 'check';
+            label = this.t('code_workbench.validation_valid');
+        } else if (status === 'invalid') {
+            iconName = 'alert-triangle';
+            if (typeof label !== 'string' || label.length === 0) {
+                label = this.t('code_workbench.validation_invalid');
+            }
+        }
+        return html`
+            <span class="code-validation-status" data-state=${status} title=${label}>
+                <platform-icon name=${iconName} size="14"></platform-icon>
+                <span class="code-validation-text">${label}</span>
+            </span>
         `;
     }
 
@@ -426,16 +587,28 @@ export class FlowsCodeWorkbench extends PlatformElement {
                     </button>
                 </div>
                 ${this._renderLanguageSegment()}
+                ${this._renderValidationStatus()}
                 <div class="toolbar-start-actions">
-                    <glass-button size="sm" variant="ghost" @click=${this._openDocs}>
-                        ${this.t('code_node_editor.docs')}
-                    </glass-button>
+                    <button
+                        type="button"
+                        class="toolbar-icon-button"
+                        title=${this.t('code_node_editor.docs')}
+                        aria-label=${this.t('code_node_editor.docs')}
+                        @click=${this._openDocs}
+                    >
+                        <platform-icon name="book-open" size="16"></platform-icon>
+                    </button>
                     <platform-help-hint
                         .text=${this.t('code_node_editor.execute_tool_hint')}
                         .label=${hintLabel}
                         placement="bottom"
                     >
-                        <button type="button" class="execute-tool-hint-trigger" aria-label=${hintLabel}>
+                        <button
+                            type="button"
+                            class="toolbar-icon-button execute-tool-hint-trigger"
+                            aria-label=${hintLabel}
+                            title=${hintLabel}
+                        >
                             <platform-icon name="info" size="16"></platform-icon>
                         </button>
                     </platform-help-hint>

@@ -29,6 +29,7 @@ from core.capabilities import (
     CapabilityLanguage,
     CapabilityNamespaceDocumentation,
     CapabilitySdkMethodDocumentation,
+    CodeExecutionKind,
 )
 from core.clients.service_client import ServiceClient
 from core.context import get_context
@@ -46,6 +47,13 @@ router = APIRouter(tags=["code"])
 logger = get_logger(__name__)
 
 CAPABILITY_DOCUMENTATION_PATH = "/capability-gateway/api/v1/capabilities/documentation"
+CODE_RUNNER_SERVICE_BY_LANGUAGE = {
+    "python": "code_runner_python",
+    "javascript": "code_runner_node",
+    "typescript": "code_runner_node",
+    "go": "code_runner_go",
+    "csharp": "code_runner_csharp",
+}
 
 
 def _require_capability_language(language: str) -> CapabilityLanguage:
@@ -100,6 +108,51 @@ def _capability_global(language: CapabilityLanguage) -> GlobalVariable:
         perspective=["editor", "flow", "tool", "node"],
         tags=["capability", "sandbox"],
     )
+
+
+def _runtime_globals() -> list[GlobalVariable]:
+    return [
+        GlobalVariable(
+            name="args",
+            type="runtime entrypoint input",
+            doc="Arguments passed into the code entrypoint.",
+            perspective=["editor", "flow", "tool", "node"],
+            tags=["runtime", "entrypoint"],
+        ),
+        GlobalVariable(
+            name="state",
+            type="mutable execution state",
+            doc="Flow execution state shared across nodes. User code may write node results here.",
+            perspective=["editor", "flow", "tool", "node"],
+            tags=["runtime", "state"],
+        ),
+        GlobalVariable(
+            name="variables",
+            type="resolved flow variables",
+            doc="Resolved flow variables, equivalent to state.variables.",
+            perspective=["editor", "flow", "tool", "node"],
+            tags=["runtime", "variables"],
+        ),
+    ]
+
+
+def _execution_state_fields() -> list[StateField]:
+    return [
+        StateField(name="content", type="string", description="Input message content."),
+        StateField(name="response", type="string", description="Agent response text."),
+        StateField(name="result", type="any", description="Last node or tool result."),
+        StateField(name="validation", type="object", description="Node validation payload."),
+        StateField(name="messages", type="array", description="Conversation message history."),
+        StateField(name="variables", type="object", description="Resolved flow variables."),
+        StateField(name="files", type="array", description="Attached files available to the flow."),
+        StateField(name="triggers", type="object", description="Trigger runtime payloads by trigger id."),
+        StateField(name="tool_results", type="object", description="Results produced by tools."),
+        StateField(name="node_history", type="object", description="Runtime node call history."),
+        StateField(name="current_nodes", type="array", description="Current graph nodes being executed."),
+        StateField(name="branch_id", type="string", description="Current flow branch id."),
+        StateField(name="session_id", type="string", description="Runtime session id."),
+        StateField(name="flow_config_version", type="string", description="Flow config version snapshot."),
+    ]
 
 
 def _capability_templates(language: CapabilityLanguage) -> list[CodeTemplate]:
@@ -298,10 +351,10 @@ async def get_code_completions(
     _ = container, perspective, include_runtime_namespace_extras
     return CodeCompletionsResponse(
         modules=[],
-        globals=[_capability_global(capability_language)],
+        globals=[*_runtime_globals(), _capability_global(capability_language)],
         builtins=[],
         module_methods={},
-        state_fields=[],
+        state_fields=_execution_state_fields(),
         templates=_capability_templates(capability_language),
         platform_tools=[],
         capability_namespaces=capability_docs.namespaces,
@@ -570,8 +623,11 @@ class ValidateRequest(BaseModel):
     """Запрос на валидацию кода"""
     code: str
     node_type: str | None = "code"
+    kind: str | None = None
     language: str = "python"
     entrypoint: str | None = None
+    flow_id: str | None = None
+    branch_id: str | None = None
 
 
 class ValidateResponse(BaseModel):
@@ -579,6 +635,9 @@ class ValidateResponse(BaseModel):
     valid: bool
     error: str | None = None
     warnings: list[str] = []
+    stage: str | None = None
+    service: str | None = None
+    exception_type: str | None = None
 
 
 class ParseSignatureRequest(BaseModel):
@@ -745,6 +804,16 @@ def _require_execute_node_type(node_type: str) -> str:
     return node_type
 
 
+def _require_validation_kind(request: ValidateRequest) -> CodeExecutionKind:
+    raw = request.kind if isinstance(request.kind, str) and request.kind.strip() else request.node_type
+    raw_kind = raw.strip() if isinstance(raw, str) and raw.strip() else "code"
+    if raw_kind in ("tool", "function", "resource"):
+        return "tool"
+    if raw_kind in ("code", "node"):
+        return "node"
+    raise HTTPException(status_code=400, detail=f"Unsupported code validation kind: {raw_kind}")
+
+
 class ExecuteRequest(BaseModel):
     """Запрос на выполнение ноды."""
     node_type: str = "code"
@@ -859,28 +928,67 @@ async def validate_code(container: ContainerDep, request: ValidateRequest) -> Va
     Валидирует код без выполнения.
     """
     code = request.code
-    _require_execute_node_type(request.node_type or "code")
+    validation_kind = _require_validation_kind(request)
     capability_language = _require_capability_language(request.language)
     entrypoint = request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else None
+    entrypoint_for_validation = entrypoint
     warnings = []
 
     if not code or not code.strip():
         return ValidateResponse(valid=False, error="Код пустой")
-    if entrypoint is None:
-        entrypoint = _infer_entrypoint(capability_language, code)
-        if entrypoint is None:
-            return ValidateResponse(valid=False, error="Entrypoint function not found: declare at least one function")
-    if not _valid_entrypoint_name(capability_language, entrypoint):
-        return ValidateResponse(valid=False, error=f"Invalid {capability_language} entrypoint name: {entrypoint!r}")
+    if entrypoint_for_validation is None:
+        entrypoint_for_validation = _infer_entrypoint(capability_language, code)
+    if entrypoint_for_validation is not None and not _valid_entrypoint_name(capability_language, entrypoint_for_validation):
+        return ValidateResponse(valid=False, error=f"Invalid {capability_language} entrypoint name: {entrypoint_for_validation!r}")
 
     runner = container.get_code_runner(capability_language)
-    valid, error = runner.validate(code)
 
-    if not valid:
-        return ValidateResponse(valid=False, error=error)
-
-    if not _has_entrypoint(capability_language, code, entrypoint):
-        return ValidateResponse(valid=False, error=_entrypoint_error(capability_language, entrypoint))
+    validate_remote = getattr(runner, "validate_remote", None)
+    if callable(validate_remote):
+        try:
+            validation = await validate_remote(
+                code=code,
+                entrypoint=entrypoint_for_validation,
+                kind=validation_kind,
+                flow_id=request.flow_id,
+                branch_id=request.branch_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "code.validation_remote_failed",
+                language=capability_language,
+                kind=validation_kind,
+                exception_type=type(exc).__name__,
+            )
+            return ValidateResponse(
+                valid=False,
+                error=str(exc),
+                stage="service",
+                service=CODE_RUNNER_SERVICE_BY_LANGUAGE[capability_language],
+                exception_type=type(exc).__name__,
+                warnings=warnings,
+            )
+        if not validation.valid:
+            validation_error = validation.error
+            if validation_error is None:
+                return ValidateResponse(valid=False, error="Code runner validation failed", warnings=validation.warnings)
+            return ValidateResponse(
+                valid=False,
+                error=validation_error.message,
+                warnings=validation.warnings,
+                stage=validation_error.stage,
+                service=validation_error.service,
+                exception_type=validation_error.exception_type,
+            )
+        warnings.extend(validation.warnings)
+    else:
+        valid, error = runner.validate(code)
+        if not valid:
+            return ValidateResponse(valid=False, error=error)
+        if entrypoint_for_validation is None:
+            return ValidateResponse(valid=False, error="Entrypoint function not found: declare at least one function")
+        if not _has_entrypoint(capability_language, code, entrypoint_for_validation):
+            return ValidateResponse(valid=False, error=_entrypoint_error(capability_language, entrypoint_for_validation))
 
     return ValidateResponse(valid=True, warnings=warnings)
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ast
 import importlib
+import json
 from pathlib import Path
+from typing import cast
 from uuid import uuid4
 
 import pytest
@@ -17,13 +19,33 @@ from core.capabilities import (
     CapabilityExecutionTokenClaims,
     CapabilityLanguage,
     CapabilityManifest,
+    CodeExecutionKind,
     CodeExecutionRequest,
+    CodeValidationRequest,
+    JsonObject,
     execution_token_exp,
     issue_execution_token,
 )
 
 pytestmark = pytest.mark.timeout(180)
 TOOLS_PACKAGE_ROOT = Path(__file__).resolve().parents[2] / "apps" / "flows" / "tools"
+BUNDLES_ROOT = Path(__file__).resolve().parents[2] / "apps" / "flows" / "bundles"
+
+RUNNER_BY_LANGUAGE: dict[CapabilityLanguage, tuple[str, str]] = {
+    "python": ("code_runner_python", "/code-runner-python/api/v1/execute"),
+    "javascript": ("code_runner_node", "/code-runner-node/api/v1/execute"),
+    "typescript": ("code_runner_node", "/code-runner-node/api/v1/execute"),
+    "go": ("code_runner_go", "/code-runner-go/api/v1/execute"),
+    "csharp": ("code_runner_csharp", "/code-runner-csharp/api/v1/execute"),
+}
+
+RUNNER_VALIDATE_BY_LANGUAGE: dict[CapabilityLanguage, tuple[str, str]] = {
+    "python": ("code_runner_python", "/code-runner-python/api/v1/validate"),
+    "javascript": ("code_runner_node", "/code-runner-node/api/v1/validate"),
+    "typescript": ("code_runner_node", "/code-runner-node/api/v1/validate"),
+    "go": ("code_runner_go", "/code-runner-go/api/v1/validate"),
+    "csharp": ("code_runner_csharp", "/code-runner-csharp/api/v1/validate"),
+}
 
 
 def _documented_builtin_tool_ids() -> set[str]:
@@ -186,19 +208,81 @@ def _request(
     code: str,
     *,
     entrypoint: str | None = None,
+    kind: CodeExecutionKind = "node",
+    args: JsonObject | None = None,
+    state: JsonObject | None = None,
 ) -> dict[str, object]:
     request = CodeExecutionRequest(
-        kind="node",
+        kind=kind,
         language=language,
         code=code,
         entrypoint=entrypoint,
         wall_time_limit_seconds=30,
-        args={"x": 41},
-        state={},
+        args=args or {"x": 41},
+        state=state or {},
         context=_execution_context(),
         capability_manifest=CapabilityManifest(version="test", capabilities=[]),
     )
     return request.model_dump(mode="json")
+
+
+def _validation_request(
+    language: CapabilityLanguage,
+    code: str,
+    *,
+    entrypoint: str | None = None,
+    kind: CodeExecutionKind = "node",
+) -> dict[str, object]:
+    request = CodeValidationRequest(
+        kind=kind,
+        language=language,
+        code=code,
+        entrypoint=entrypoint,
+        wall_time_limit_seconds=30,
+        context=_execution_context(),
+        capability_manifest=CapabilityManifest(version="test", capabilities=[]),
+    )
+    return request.model_dump(mode="json")
+
+
+def _walk_inline_code_tools(value: object) -> list[dict[str, object]]:
+    found: list[dict[str, object]] = []
+    if isinstance(value, dict):
+        if isinstance(value.get("tool_id"), str) and isinstance(value.get("code"), str):
+            found.append(value)
+        for child in value.values():
+            found.extend(_walk_inline_code_tools(child))
+    elif isinstance(value, list):
+        for child in value:
+            found.extend(_walk_inline_code_tools(child))
+    return found
+
+
+def _bundle_inline_code_tools(*relative_paths: str) -> dict[str, dict[str, object]]:
+    tools: dict[str, dict[str, object]] = {}
+    for relative_path in relative_paths:
+        payload = json.loads((BUNDLES_ROOT / relative_path).read_text(encoding="utf-8"))
+        for tool in _walk_inline_code_tools(payload):
+            tool_id = tool.get("tool_id")
+            if isinstance(tool_id, str):
+                tools[tool_id] = tool
+    return tools
+
+
+def _bundle_tool_args(tool_id: str) -> JsonObject:
+    samples: dict[str, JsonObject] = {
+        "format_greeting": {"name": "Ada", "style": "formal"},
+        "react_profile_card_js": {"name": "Ada", "role": "admin"},
+        "react_priority_summary_ts": {"topic": "Billing", "priority": 9},
+        "react_order_score_go": {"amount": 1500},
+        "react_status_card_csharp": {"status": "open"},
+        "graph_extract_topic_python": {"text": "hello graph route"},
+        "graph_route_note_js": {"note": "custom note"},
+        "graph_escalation_hint_ts": {"severity": 9},
+        "graph_order_reference_go": {"number": "42"},
+        "graph_reply_footer_csharp": {"channel": "chat"},
+    }
+    return samples[tool_id]
 
 
 @pytest.mark.asyncio
@@ -406,6 +490,110 @@ async def test_python_node_typescript_and_go_runners_execute_real_code(sandbox_s
 
 
 @pytest.mark.asyncio
+async def test_runners_validate_code_without_user_execution(sandbox_services) -> None:
+    valid_cases = [
+        (
+            "python",
+            "raise RuntimeError('must not run during validation')\n\n"
+            "async def run(args, state):\n"
+            "    return {'ok': True}\n",
+        ),
+        (
+            "javascript",
+            "throw new Error('must not run during validation');\n\n"
+            "async function run(args, state) {\n"
+            "  return {ok: true};\n"
+            "}\n",
+        ),
+        (
+            "typescript",
+            "type Args = { ok: boolean };\n"
+            "async function run(args: Args, state: Record<string, unknown>) {\n"
+            "  return {ok: args.ok};\n"
+            "}\n",
+        ),
+        (
+            "go",
+            "package main\n\n"
+            "func Run(args map[string]any, state map[string]any) (any, error) {\n"
+            "    return map[string]any{\"ok\": true}, nil\n"
+            "}\n",
+        ),
+        (
+            "csharp",
+            "using System.Collections.Generic;\n"
+            "using System.Threading.Tasks;\n\n"
+            "Task<object?> Run(Dictionary<string, object?> args, Dictionary<string, object?> state)\n"
+            "{\n"
+            "    return Task.FromResult<object?>(new Dictionary<string, object?> { [\"ok\"] = true });\n"
+            "}\n",
+        ),
+    ]
+    async with AsyncClient(timeout=60.0) as client:
+        for language, code in valid_cases:
+            capability_language = cast(CapabilityLanguage, language)
+            service_name, path = RUNNER_VALIDATE_BY_LANGUAGE[capability_language]
+            response = await client.post(
+                f"{sandbox_services[service_name]}{path}",
+                json=_validation_request(capability_language, code),
+                headers={"X-Request-Id": "test-request-id", "X-Trace-Id": "test-trace-id"},
+            )
+            response.raise_for_status()
+            body = response.json()
+            assert body["valid"] is True, {language: body}
+
+        service_name, path = RUNNER_VALIDATE_BY_LANGUAGE["typescript"]
+        response = await client.post(
+            f"{sandbox_services[service_name]}{path}",
+            json=_validation_request("typescript", "async function run(args: {x: number}) {\n"),
+            headers={"X-Request-Id": "test-request-id", "X-Trace-Id": "test-trace-id"},
+        )
+        response.raise_for_status()
+        body = response.json()
+        assert body["valid"] is False
+        assert body["error"]["service"] == "code_runner_node"
+        assert body["error"]["stage"] == "compile"
+
+
+@pytest.mark.asyncio
+async def test_flows_code_validate_go_uses_sandbox_runner(
+    flows_client_http,
+    auth_headers_system,
+) -> None:
+    response = await flows_client_http.post(
+        "/flows/api/v1/code/validate",
+        json={
+            "language": "go",
+            "node_type": "code",
+            "code": (
+                "package main\n\n"
+                "func ScoreOrder(args map[string]any, state map[string]any) (any, error) {\n"
+                "    amount := 0.0\n"
+                "    if raw, ok := args[\"amount\"].(float64); ok {\n"
+                "        amount = raw\n"
+                "    }\n"
+                "    tier := \"standard\"\n"
+                "    if amount >= 10000 {\n"
+                "        tier = \"enterprise\"\n"
+                "    } else if amount >= 1000 {\n"
+                "        tier = \"priority\"\n"
+                "    }\n"
+                "    state[\"react_order_tier\"] = tier\n"
+                "    return map[string]any{\"language\": \"go\", \"amount\": amount, \"tier\": tier}, nil\n"
+                "}\n"
+            ),
+        },
+        headers=auth_headers_system,
+        timeout=120.0,
+    )
+    response.raise_for_status()
+    body = response.json()
+    assert body["valid"] is True, body
+    assert body["service"] is None
+    assert body["exception_type"] is None
+
+
+@pytest.mark.asyncio
 async def test_python_runner_does_not_evaluate_annotations_at_load(sandbox_services) -> None:
     payload = _request(
         "python",
@@ -424,6 +612,59 @@ async def test_python_runner_does_not_evaluate_annotations_at_load(sandbox_servi
     assert body["status"] == "completed", body
     assert body["result"] == {"ok": 42}
     assert body["state"] == {"value": 42}
+
+
+@pytest.mark.asyncio
+async def test_example_bundles_inline_code_tools_execute_on_declared_languages(
+    sandbox_services,
+) -> None:
+    expected_tool_ids = {
+        "format_greeting",
+        "react_profile_card_js",
+        "react_priority_summary_ts",
+        "react_order_score_go",
+        "react_status_card_csharp",
+        "graph_extract_topic_python",
+        "graph_route_note_js",
+        "graph_escalation_hint_ts",
+        "graph_order_reference_go",
+        "graph_reply_footer_csharp",
+    }
+    tools = _bundle_inline_code_tools(
+        "example_react/nodes.json",
+        "example_graph/flow.json",
+    )
+    assert set(tools) >= expected_tool_ids
+
+    async with AsyncClient(timeout=120.0) as client:
+        for tool_id in sorted(expected_tool_ids):
+            tool = tools[tool_id]
+            language = tool.get("language")
+            code = tool.get("code")
+            assert language in RUNNER_BY_LANGUAGE
+            assert isinstance(code, str)
+            capability_language = cast(CapabilityLanguage, language)
+            service_name, path = RUNNER_BY_LANGUAGE[capability_language]
+            payload = _request(
+                capability_language,
+                code,
+                kind="tool",
+                args=_bundle_tool_args(tool_id),
+                state=cast(
+                    JsonObject,
+                    {"content": "hello from bundle", "route": "general", "user_name": "Ada"},
+                ),
+            )
+            response = await client.post(
+                f"{sandbox_services[service_name]}{path}",
+                json=payload,
+                headers={"X-Request-Id": "test-request-id", "X-Trace-Id": "test-trace-id"},
+            )
+            response.raise_for_status()
+            body = response.json()
+            assert body["status"] == "completed", {tool_id: body}
+            if tool_id != "format_greeting":
+                assert body["result"]["language"] == language
 
 
 @pytest.mark.asyncio

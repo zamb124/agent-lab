@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
 import tempfile
 import textwrap
 import traceback
@@ -19,7 +18,14 @@ from pathlib import Path
 from core.capabilities import (
     CodeExecutionRequest,
     CodeExecutionResponse,
+    CodeValidationRequest,
+    CodeValidationResponse,
     code_execution_failed_response,
+    code_validation_failed_response,
+)
+from core.capabilities.runtime_executables import (
+    resolve_runtime_executable,
+    runtime_executable_required_message,
 )
 from core.config import get_settings
 from core.tracing.operation_span import traced_operation
@@ -27,6 +33,7 @@ from core.tracing.operation_span import traced_operation
 CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 SERVICE_NAME = "code_runner_node"
 WORKER_POOL_ENV = "CODE_RUNNER_NODE_WORKERS"
+NODE_BIN_ENV = "CODE_RUNNER_NODE_BIN"
 
 
 class _NodeWorker:
@@ -85,6 +92,61 @@ class _NodeWorker:
             except Exception as exc:
                 await self._restart()
                 return code_execution_failed_response(
+                    request,
+                    service=SERVICE_NAME,
+                    stage="response_parse",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                    stdout=line.decode("utf-8", errors="replace"),
+                )
+
+    async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
+        async with self._lock:
+            process = await self._ensure_process()
+            assert process.stdin is not None
+            assert process.stdout is not None
+            try:
+                process.stdin.write(request.model_dump_json().encode("utf-8") + b"\n")
+                await process.stdin.drain()
+                line = await asyncio.wait_for(
+                    process.stdout.readline(),
+                    timeout=float(request.wall_time_limit_seconds),
+                )
+            except TimeoutError as exc:
+                await self._restart()
+                return code_validation_failed_response(
+                    request,
+                    service=SERVICE_NAME,
+                    stage="timeout",
+                    message="node sandbox validation exceeded wall time limit",
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+            except Exception as exc:
+                await self._restart()
+                return code_validation_failed_response(
+                    request,
+                    service=SERVICE_NAME,
+                    stage="worker_ipc",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+            if not line:
+                await self._restart()
+                return code_validation_failed_response(
+                    request,
+                    service=SERVICE_NAME,
+                    stage="worker_ipc",
+                    message="node sandbox worker exited without validation response",
+                    exception_type="NodeSandboxWorkerExited",
+                )
+            try:
+                return CodeValidationResponse.model_validate_json(line.decode("utf-8"))
+            except Exception as exc:
+                await self._restart()
+                return code_validation_failed_response(
                     request,
                     service=SERVICE_NAME,
                     stage="response_parse",
@@ -159,12 +221,49 @@ class NodeSandboxExecutor:
                     traceback_text="".join(traceback.format_exception(exc)),
                 )
 
+    async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
+        if request.language not in ("javascript", "typescript"):
+            return self._failed_validation_response(
+                request=request,
+                stage="validation",
+                message=f"code-runner-node cannot validate language={request.language}",
+                exception_type="UnsupportedLanguageError",
+            )
+
+        async with traced_operation(
+            "code_runner_node.validate",
+            event_type="code_runner.validate",
+            operation_category="code_runner",
+            extra_attributes={
+                "platform.code_runner.language": request.language,
+                "platform.code_runner.kind": request.kind,
+                "platform.code_runner.entrypoint": request.entrypoint or "<first_function>",
+                "platform.code_runner.runtime": "warm_worker_pool",
+            },
+        ):
+            try:
+                worker = await self._select_worker()
+                return await worker.validate(request)
+            except Exception as exc:
+                return self._failed_validation_response(
+                    request=request,
+                    stage="runtime",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+
     async def _select_worker(self) -> _NodeWorker:
         async with self._pool_lock:
             if not self._workers:
-                node_bin = shutil.which("node")
+                node_bin = resolve_runtime_executable("node", override_env=NODE_BIN_ENV)
                 if node_bin is None:
-                    raise RuntimeError("node executable is required for code-runner-node")
+                    raise RuntimeError(
+                        runtime_executable_required_message(
+                            "node",
+                            override_env=NODE_BIN_ENV,
+                        )
+                    )
                 gateway_url = get_settings().server.get_service_url("capability_gateway")
                 count = self._worker_count()
                 self._workers = [
@@ -193,6 +292,28 @@ class NodeSandboxExecutor:
         stderr: str | None = None,
     ) -> CodeExecutionResponse:
         return code_execution_failed_response(
+            request,
+            service=SERVICE_NAME,
+            stage=stage,
+            message=message,
+            exception_type=exception_type,
+            traceback_text=traceback_text,
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    def _failed_validation_response(
+        self,
+        *,
+        request: CodeValidationRequest,
+        stage: str,
+        message: str,
+        exception_type: str,
+        traceback_text: str | None = None,
+        stdout: str | None = None,
+        stderr: str | None = None,
+    ) -> CodeValidationResponse:
+        return code_validation_failed_response(
             request,
             service=SERVICE_NAME,
             stage=stage,
@@ -238,6 +359,17 @@ class NodeSandboxExecutor:
               return candidates[0]?.name ?? null;
             }}
 
+            function hasEntrypoint(source, entrypointName) {{
+              const escaped = entrypointName.replace(/[.*+?^${{}}()|[\\]\\\\]/g, '\\\\$&');
+              const ident = `(?<![$\\\\w])${{escaped}}(?![$\\\\w])`;
+              const patterns = [
+                new RegExp(`(?:export\\\\s+)?(?:async\\\\s+)?function\\\\s+${{escaped}}\\\\s*\\\\(`),
+                new RegExp(`(?:export\\\\s+)?(?:const|let|var)\\\\s+${{escaped}}\\\\s*=`),
+                new RegExp(`export\\\\s*\\\\{{[^}}]*${{ident}}[^}}]*\\\\}}`),
+              ];
+              return patterns.some((pattern) => pattern.test(source));
+            }}
+
             function normalizeSource(request, entrypointName) {{
               let source = String(request.code ?? '');
               if (request.language === 'typescript') {{
@@ -259,6 +391,49 @@ class NodeSandboxExecutor:
                   manifestVersion,
                 }}))
                 .digest('hex');
+            }}
+
+            function validationFailure(request, stage, error) {{
+              return {{
+                valid: false,
+                error: {{
+                  language: request.language ?? 'javascript',
+                  service: {json.dumps(SERVICE_NAME)},
+                  stage,
+                  message: error?.message ?? String(error),
+                  exception_type: error?.name ?? 'Error',
+                  traceback: error?.stack ?? String(error),
+                  request_id: request.context?.request_id ?? null,
+                  trace_id: request.context?.trace_id ?? null,
+                }},
+                warnings: [],
+              }};
+            }}
+
+            function validateOne(request) {{
+              let stage = 'bootstrap';
+              try {{
+                const sourceForInference = String(request.code ?? '');
+                const entrypointName = request.entrypoint || inferEntrypoint(sourceForInference);
+                if (!entrypointName) {{
+                  throw new Error('Entrypoint function not found: declare at least one function');
+                }}
+                if (!hasEntrypoint(sourceForInference, entrypointName)) {{
+                  throw new Error(`Entrypoint function not found: ${{entrypointName}}`);
+                }}
+
+                stage = 'compile';
+                const key = artifactKey(request, entrypointName);
+                let script = scriptCache.get(key);
+                if (!script) {{
+                  const normalized = normalizeSource(request, entrypointName);
+                  script = new vm.Script(normalized, {{ filename: `<sandbox:${{key}}>` }});
+                  scriptCache.set(key, script);
+                }}
+                return {{ valid: true, warnings: [] }};
+              }} catch (error) {{
+                return validationFailure(request, stage, error);
+              }}
             }}
 
             function makeConsole(logs) {{
@@ -315,6 +490,9 @@ class NodeSandboxExecutor:
               const logs = [];
               let stage = 'bootstrap';
               try {{
+                if (!Object.hasOwn(request, 'args') && !Object.hasOwn(request, 'state')) {{
+                  return validateOne(request);
+                }}
                 const sourceForInference = String(request.code ?? '');
                 const entrypointName = request.entrypoint || inferEntrypoint(sourceForInference);
                 if (!entrypointName) {{

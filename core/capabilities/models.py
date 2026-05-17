@@ -182,6 +182,20 @@ class CodeExecutionRequest(BaseModel):
     capability_manifest: CapabilityManifest
 
 
+class CodeValidationRequest(BaseModel):
+    """Запрос на compile/build валидацию пользовательского кода в language runner."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    kind: CodeExecutionKind
+    language: CapabilityLanguage
+    code: str = Field(..., min_length=1)
+    entrypoint: str | None = Field(default=None, min_length=1)
+    wall_time_limit_seconds: int = Field(..., gt=0)
+    context: CapabilityExecutionContext
+    capability_manifest: CapabilityManifest
+
+
 class CodeExecutionLogRecord(BaseModel):
     """Лог, собранный внутри sandbox runner."""
 
@@ -221,3 +235,13 @@ class CodeExecutionResponse(BaseModel):
     interrupt: CapabilityInterruptEnvelope | None = None
     error: CodeExecutionErrorEnvelope | None = None
     logs: list[CodeExecutionLogRecord] = Field(default_factory=list)
+
+
+class CodeValidationResponse(BaseModel):
+    """Ответ language runner после compile/build валидации без выполнения кода."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    valid: bool
+    error: CodeExecutionErrorEnvelope | None = None
+    warnings: list[str] = Field(default_factory=list)

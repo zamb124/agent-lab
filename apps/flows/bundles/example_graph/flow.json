@@ -51,7 +51,93 @@
         "provider": "openrouter"
       },
       "prompt": "Ты отвечаешь на общие вопросы.",
-      "tools": []
+      "tools": [
+        {
+          "tool_id": "graph_extract_topic_python",
+          "type": "code",
+          "language": "python",
+          "description": "Python tool: извлекает короткую тему из сообщения и сохраняет её в state.graph_topic",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "Текст сообщения"
+              }
+            },
+            "required": []
+          },
+          "code": "async def extract_topic(args, state):\n    text = str(args.get('text') or state.get('content') or '')\n    words = [part.strip('.,!?;:') for part in text.split() if part.strip('.,!?;:')]\n    topic = ' '.join(words[:6]) if words else 'general'\n    state['graph_topic'] = topic\n    return {'language': 'python', 'topic': topic}\n"
+        },
+        {
+          "tool_id": "graph_route_note_js",
+          "type": "code",
+          "language": "javascript",
+          "description": "JavaScript tool: формирует заметку по текущему маршруту графа",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "note": {
+                "type": "string",
+                "description": "Дополнительная заметка"
+              }
+            },
+            "required": []
+          },
+          "code": "async function makeRouteNote(args, state) {\n  const route = String(state.route ?? 'general');\n  const note = String(args.note ?? `route:${route}`);\n  state.graph_route_note = note;\n  return {language: 'javascript', route, note};\n}\n"
+        },
+        {
+          "tool_id": "graph_escalation_hint_ts",
+          "type": "code",
+          "language": "typescript",
+          "description": "TypeScript tool: оценивает нужен ли оператор по severity",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "severity": {
+                "type": "number",
+                "description": "Оценка критичности от 0 до 10"
+              }
+            },
+            "required": []
+          },
+          "code": "async function buildEscalationHint(args: { severity?: number }, state: Record<string, unknown>) {\n  const severity = Number(args.severity ?? 0);\n  const needsOperator = severity >= 8;\n  state.graph_needs_operator = needsOperator;\n  return {language: 'typescript', severity, needs_operator: needsOperator};\n}\n"
+        },
+        {
+          "tool_id": "graph_order_reference_go",
+          "type": "code",
+          "language": "go",
+          "description": "Go tool: нормализует номер заказа для графового сценария",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "number": {
+                "type": "string",
+                "description": "Номер заказа без префикса"
+              }
+            },
+            "required": []
+          },
+          "code": "package main\n\nfunc NormalizeOrderReference(args map[string]any, state map[string]any) (any, error) {\n    number := \"unknown\"\n    if raw, ok := args[\"number\"].(string); ok && raw != \"\" {\n        number = raw\n    }\n    reference := \"ORD-\" + number\n    state[\"graph_order_reference\"] = reference\n    return map[string]any{\"language\": \"go\", \"reference\": reference}, nil\n}\n"
+        },
+        {
+          "tool_id": "graph_reply_footer_csharp",
+          "type": "code",
+          "language": "csharp",
+          "description": "C# tool: добавляет короткий footer к ответу графового flow",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "channel": {
+                "type": "string",
+                "description": "Канал ответа"
+              }
+            },
+            "required": []
+          },
+          "code": "using System.Collections.Generic;\nusing System.Threading.Tasks;\n\nTask<object?> BuildFooter(Dictionary<string, object?> args, Dictionary<string, object?> state)\n{\n    var channel = args.TryGetValue(\"channel\", out var raw) && raw is not null ? raw.ToString() : \"chat\";\n    var footer = \"Ответ подготовлен для \" + channel;\n    state[\"graph_reply_footer\"] = footer;\n    return Task.FromResult<object?>(new Dictionary<string, object?> { [\"language\"] = \"csharp\", [\"footer\"] = footer });\n}\n"
+        }
+      ]
     },
     "cat_fact_api": {
       "type": "external_api",

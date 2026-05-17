@@ -28,6 +28,15 @@ describe('flows-code-editor scroll sizing', () => {
         fixtureCleanup();
     });
 
+    it('codemirror bundle exposes all isolated runner language modes', async () => {
+        const cm = await import('/static/core/assets/codemirror/codemirror-bundle.js');
+        expect(cm.python).to.be.a('function');
+        expect(cm.javascript).to.be.a('function');
+        expect(cm.go).to.be.a('function');
+        expect(cm.csharp).to.be.a('function');
+        expect(cm.json).to.be.a('function');
+    });
+
     it('не раздувает ширину контейнера на длинной JSON-строке и даёт вертикальный скролл', async () => {
         const longText = 'x'.repeat(6000);
         const json = JSON.stringify({ attributes: { 'platform.llm.request': longText } }, null, 2);

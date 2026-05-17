@@ -25,7 +25,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/components/glass-button.js';
+import '@platform/lib/components/platform-icon.js';
 import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import {
     buildCodeCompletions,
@@ -205,11 +205,37 @@ export class FlowsCodeEditor extends PlatformElement {
                 display: flex;
                 flex-wrap: nowrap;
                 align-items: center;
-                gap: var(--space-2);
+                gap: var(--space-1);
             }
             .hint {
                 font-size: var(--text-xs);
                 color: var(--text-tertiary);
+            }
+            .editor-icon-button {
+                width: 32px;
+                height: 32px;
+                padding: 0;
+                margin: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                color: var(--text-secondary);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-full, 999px);
+                cursor: pointer;
+                flex: 0 0 auto;
+                transition:
+                    color var(--duration-fast, 0.2s) ease,
+                    background var(--duration-fast, 0.2s) ease,
+                    border-color var(--duration-fast, 0.2s) ease;
+            }
+            .editor-icon-button:hover,
+            .editor-icon-button:focus-visible {
+                color: var(--text-primary);
+                background: var(--glass-solid-medium);
+                border-color: var(--glass-border-medium);
+                outline: none;
             }
             .editor-root {
                 display: flex;
@@ -587,18 +613,25 @@ export class FlowsCodeEditor extends PlatformElement {
                                 <slot name="toolbar-start"></slot>
                             </div>
                             <div class="editor-header-trailing">
-                                <div class="hint">${this.t('code_editor.save')}</div>
                                 <div class="header-actions">
-                                    <glass-button
-                                        size="sm"
-                                        variant="ghost"
+                                    <button
+                                        type="button"
+                                        class="editor-icon-button"
+                                        title=${this.t('editor_header.save')}
+                                        aria-label=${this.t('editor_header.save')}
                                         @click=${this._onSaveFromToolbar}
                                     >
-                                        ${this.t('editor_header.save')}
-                                    </glass-button>
-                                    <glass-button size="sm" variant="secondary" @click=${this._toggleFullscreen}>
-                                        ${fsLabel}
-                                    </glass-button>
+                                        <platform-icon name="save" size="16"></platform-icon>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="editor-icon-button"
+                                        title=${fsLabel}
+                                        aria-label=${fsLabel}
+                                        @click=${this._toggleFullscreen}
+                                    >
+                                        <platform-icon name=${this.fullscreen ? 'minimize' : 'fullscreen'} size="16"></platform-icon>
+                                    </button>
                                 </div>
                             </div>
                         </div>

@@ -78,6 +78,9 @@ describe('buildGlobalSymbolMap', () => {
         expect(m.has('files')).toBe(true);
         expect(m.has('len')).toBe(true);
         expect(m.has('extra_sym')).toBe(true);
+        expect(m.has('args')).toBe(true);
+        expect(m.has('state')).toBe(true);
+        expect(m.has('variables')).toBe(true);
     });
 
     it('uses markdown info renderer when documentation text is non-empty', () => {
@@ -136,6 +139,31 @@ describe('buildPythonCompletions', () => {
         });
         expect(r).not.toBeNull();
         expect(r.options.some((o) => o.label === 'messages')).toBe(true);
+    });
+
+    it('completes runtime globals and default state fields without backend state metadata', () => {
+        const emptyCatalog = normalizeCatalogResponse({});
+        const runtimeDoc = 'sta';
+        const runtime = buildPythonCompletions({
+            docText: runtimeDoc,
+            pos: runtimeDoc.length,
+            catalog: emptyCatalog,
+            variableKeys: [],
+            explicit: false,
+        });
+        expect(runtime).not.toBeNull();
+        expect(runtime.options.some((o) => o.label === 'state')).toBe(true);
+
+        const stateDoc = 'state.var';
+        const stateFields = buildPythonCompletions({
+            docText: stateDoc,
+            pos: stateDoc.length,
+            catalog: emptyCatalog,
+            variableKeys: [],
+            explicit: false,
+        });
+        expect(stateFields).not.toBeNull();
+        expect(stateFields.options.some((o) => o.label === 'variables')).toBe(true);
     });
 
     it('completes variable keys under state.variables.', () => {
@@ -206,6 +234,34 @@ describe('buildCodeCompletions', () => {
         expect(r).not.toBeNull();
         expect(r.options.some((o) => o.label === 'ask_user')).toBe(true);
         expect(r.options.some((o) => o.label === 'Встроенные tools')).toBe(false);
+    });
+
+    it('suggests runtime symbols for generic languages', () => {
+        const docText = 'sta';
+        const r = buildCodeCompletions({
+            language: 'typescript',
+            docText,
+            pos: docText.length,
+            catalog: normalizeCatalogResponse({}),
+            variableKeys: [],
+            explicit: false,
+        });
+        expect(r).not.toBeNull();
+        expect(r.options.some((o) => o.label === 'state')).toBe(true);
+    });
+
+    it('completes default state fields for generic languages', () => {
+        const docText = 'state.var';
+        const r = buildCodeCompletions({
+            language: 'typescript',
+            docText,
+            pos: docText.length,
+            catalog: normalizeCatalogResponse({}),
+            variableKeys: [],
+            explicit: false,
+        });
+        expect(r).not.toBeNull();
+        expect(r.options.some((o) => o.label === 'variables')).toBe(true);
     });
 
     it('includes capability namespaces in generic symbols', () => {

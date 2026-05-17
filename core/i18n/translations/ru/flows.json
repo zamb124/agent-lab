@@ -578,7 +578,10 @@
   },
   "code_workbench": {
     "tab_params": "Параметры",
-    "language_aria": "Язык кода"
+    "language_aria": "Язык кода",
+    "validation_checking": "Проверка",
+    "validation_valid": "Код валиден",
+    "validation_invalid": "Код невалиден"
   },
   "code_node_drop_modal": {
     "title": "Code-нода",
@@ -714,7 +717,7 @@
     "field_id": "Tool ID",
     "field_name": "Название",
     "field_description": "Описание",
-    "field_code": "Код (Python)",
+    "field_code": "Код",
     "field_schema": "Parameters schema (JSON)",
     "action_cancel": "Отмена",
     "action_create": "Создать",

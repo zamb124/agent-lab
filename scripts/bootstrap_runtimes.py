@@ -64,8 +64,21 @@ def _ensure_dirs() -> None:
 
 def _symlink(source: Path, name: str) -> None:
     target = BIN_DIR / name
+    source = source.resolve()
+    if target.exists() or target.is_symlink():
+        try:
+            if target.resolve() == source:
+                return
+        except OSError:
+            pass
     target.unlink(missing_ok=True)
     target.symlink_to(source)
+
+
+def _symlink_existing_command(name: str) -> None:
+    executable = shutil.which(name)
+    if executable is not None:
+        _symlink(Path(executable), name)
 
 
 def _command_output(command: list[str]) -> str | None:
@@ -188,14 +201,20 @@ def main() -> None:
     _ensure_dirs()
     if _node_ready():
         print("runtime-bootstrap: node is ready", flush=True)
+        _symlink_existing_command("node")
+        _symlink_existing_command("npm")
+        _symlink_existing_command("npx")
     else:
         _install_node()
     if _go_ready():
         print("runtime-bootstrap: go is ready", flush=True)
+        _symlink_existing_command("go")
+        _symlink_existing_command("gofmt")
     else:
         _install_go()
     if _dotnet_ready():
         print("runtime-bootstrap: dotnet is ready", flush=True)
+        _symlink_existing_command("dotnet")
     else:
         _install_dotnet()
     _print_versions()

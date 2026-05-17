@@ -9,11 +9,11 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '../components/common/flows-code-language-icon.js';
 import { asObject } from '../_helpers/flows-resolvers.js';
 import {
     FLOW_CODE_LANGUAGES,
     flowCodeLanguageLabel,
-    flowCodeLanguageShortLabel,
     normalizeFlowCodeLanguage,
 } from '../_helpers/flows-code-languages.js';
 
@@ -149,9 +149,12 @@ export class FlowsCodeDocsModal extends PlatformModal {
                 box-sizing: border-box;
             }
             .language-button {
+                width: 36px;
                 height: 28px;
-                min-width: 0;
                 padding: 0;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
                 border: 0;
                 border-radius: calc(var(--radius-md) - 2px);
                 background: transparent;
@@ -171,6 +174,9 @@ export class FlowsCodeDocsModal extends PlatformModal {
             .language-button:focus-visible {
                 outline: 2px solid var(--accent);
                 outline-offset: 1px;
+            }
+            .language-button flows-code-language-icon {
+                pointer-events: none;
             }
             .docs-toc {
                 flex: 1;
@@ -396,7 +402,9 @@ export class FlowsCodeDocsModal extends PlatformModal {
                         title=${lang.label}
                         aria-label=${lang.label}
                         @click=${() => this._setLanguage(lang.value)}
-                    >${flowCodeLanguageShortLabel(lang.value)}</button>
+                    >
+                        <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
+                    </button>
                 `)}
             </div>
         `;

@@ -24,7 +24,84 @@
             "description": "Стиль приветствия: formal или casual"
           }
         },
+        "language": "python",
         "code": "async def run(args, state):\n    name = args.get('name', 'Гость')\n    style = args.get('style', 'casual')\n    if style == 'formal':\n        return f'Уважаемый {name}, добро пожаловать!'\n    return f'Привет, {name}!'"
+      },
+      {
+        "tool_id": "react_profile_card_js",
+        "type": "code",
+        "language": "javascript",
+        "description": "JavaScript tool: собирает короткую карточку пользователя и сохраняет её в state.react_profile_card",
+        "parameters_schema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Имя пользователя"
+            },
+            "role": {
+              "type": "string",
+              "description": "Роль или сегмент пользователя"
+            }
+          },
+          "required": []
+        },
+        "code": "async function buildProfileCard(args, state) {\n  const name = String(args.name ?? state.user_name ?? 'Гость');\n  const role = String(args.role ?? 'user');\n  const card = `${name} · ${role}`;\n  state.react_profile_card = card;\n  return {language: 'javascript', card};\n}\n"
+      },
+      {
+        "tool_id": "react_priority_summary_ts",
+        "type": "code",
+        "language": "typescript",
+        "description": "TypeScript tool: нормализует тему и числовой приоритет обращения",
+        "parameters_schema": {
+          "type": "object",
+          "properties": {
+            "topic": {
+              "type": "string",
+              "description": "Тема обращения"
+            },
+            "priority": {
+              "type": "number",
+              "description": "Приоритет от 0 до 10"
+            }
+          },
+          "required": []
+        },
+        "code": "async function summarizePriority(args: { topic?: string; priority?: number }, state: Record<string, unknown>) {\n  const topic = String(args.topic ?? state.content ?? 'request');\n  const priority = Number(args.priority ?? 1);\n  const label = priority >= 8 ? 'high' : priority >= 4 ? 'normal' : 'low';\n  state.react_priority = label;\n  return {language: 'typescript', topic, priority, label};\n}\n"
+      },
+      {
+        "tool_id": "react_order_score_go",
+        "type": "code",
+        "language": "go",
+        "description": "Go tool: рассчитывает tier заказа по сумме",
+        "parameters_schema": {
+          "type": "object",
+          "properties": {
+            "amount": {
+              "type": "number",
+              "description": "Сумма заказа"
+            }
+          },
+          "required": []
+        },
+        "code": "package main\n\nfunc ScoreOrder(args map[string]any, state map[string]any) (any, error) {\n    amount := 0.0\n    if raw, ok := args[\"amount\"].(float64); ok {\n        amount = raw\n    }\n    tier := \"standard\"\n    if amount >= 10000 {\n        tier = \"enterprise\"\n    } else if amount >= 1000 {\n        tier = \"priority\"\n    }\n    state[\"react_order_tier\"] = tier\n    return map[string]any{\"language\": \"go\", \"amount\": amount, \"tier\": tier}, nil\n}\n"
+      },
+      {
+        "tool_id": "react_status_card_csharp",
+        "type": "code",
+        "language": "csharp",
+        "description": "C# tool: формирует статусную карточку обращения",
+        "parameters_schema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "description": "Статус обращения"
+            }
+          },
+          "required": []
+        },
+        "code": "using System.Collections.Generic;\nusing System.Threading.Tasks;\n\nTask<object?> BuildStatusCard(Dictionary<string, object?> args, Dictionary<string, object?> state)\n{\n    var status = args.TryGetValue(\"status\", out var raw) && raw is not null ? raw.ToString() : \"new\";\n    state[\"react_status\"] = status;\n    return Task.FromResult<object?>(new Dictionary<string, object?> { [\"language\"] = \"csharp\", [\"status\"] = status });\n}\n"
       }
     ],
     "llm": {

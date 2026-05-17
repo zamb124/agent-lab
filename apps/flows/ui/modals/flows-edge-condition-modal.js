@@ -23,12 +23,12 @@ import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js'
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '../components/common/flows-code-language-icon.js';
 import '../components/editors/flows-code-editor.js';
 import { getEdgeEndpoints } from '../_helpers/flows-resolvers.js';
 import {
     FLOW_CODE_LANGUAGES,
     edgeConditionStarterCodeForLanguage,
-    flowCodeLanguageShortLabel,
     isKnownEdgeConditionStarterCode,
     normalizeFlowCodeLanguage,
 } from '../_helpers/flows-code-languages.js';
@@ -83,6 +83,8 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         _pythonCode: { state: true },
         _codeLanguage: { state: true },
         _hydrated: { state: true },
+        _codeValidationStatus: { state: true },
+        _codeValidationMessage: { state: true },
     };
 
     static styles = [
@@ -171,7 +173,9 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             .python-mode { margin-top: var(--space-2); }
             .code-mode-head {
                 display: flex;
-                justify-content: flex-end;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
                 margin-bottom: var(--space-2);
             }
             .language-segment {
@@ -210,6 +214,40 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             .language-button:focus-visible {
                 outline: 2px solid var(--accent);
                 outline-offset: 1px;
+            }
+            .language-button flows-code-language-icon {
+                pointer-events: none;
+            }
+            .code-validation-status {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                min-width: 0;
+                max-width: 260px;
+                height: 28px;
+                padding: 0 9px;
+                box-sizing: border-box;
+                border-radius: var(--radius-full, 999px);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                line-height: 1;
+                white-space: nowrap;
+            }
+            .code-validation-status[data-state='valid'] {
+                color: var(--success);
+                background: var(--success-bg);
+                border-color: var(--success-border);
+            }
+            .code-validation-status[data-state='invalid'] {
+                color: var(--error);
+                background: var(--error-bg);
+                border-color: var(--error-border);
+            }
+            .code-validation-text {
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             flows-code-editor { display: block; min-height: 200px; }
             .python-hint {
@@ -282,17 +320,33 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         this._codeLanguage = 'python';
         this._pythonCode = edgeConditionStarterCodeForLanguage(this._codeLanguage);
         this._hydrated = false;
+        this._codeValidationStatus = 'idle';
+        this._codeValidationMessage = '';
+        this._codeValidationTimer = 0;
+        this._codeValidationSeq = 0;
         this._editor = this.useOp('flows/editor');
+        this._codeValidateOp = this.useOp('flows/code_validate');
     }
 
     updated(changed) {
         super.updated?.(changed);
+        if (changed.has('_pythonCode') || changed.has('_codeLanguage') || changed.has('_mode')) {
+            this._scheduleCodeValidation();
+        }
         if (this._hydrated || this.edgeIndex < 0) return;
         const edges = this._currentEdges();
         const edge = edges[this.edgeIndex];
         if (!edge) return;
         this._loadCondition(edge.condition);
         this._hydrated = true;
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (this._codeValidationTimer) {
+            window.clearTimeout(this._codeValidationTimer);
+            this._codeValidationTimer = 0;
+        }
     }
 
     _currentEdges() {
@@ -428,6 +482,10 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         } else if (this._mode === 'python') {
             if (this._pythonCode.trim().length === 0) {
                 errors.code = this.t('edge_condition_modal.err_code');
+            } else if (this._codeValidationStatus === 'pending') {
+                errors.code = this.t('code_workbench.validation_checking');
+            } else if (this._codeValidationStatus === 'invalid') {
+                errors.code = this._codeValidationMessage;
             }
         }
         return errors;
@@ -507,6 +565,90 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         this.isDirty = true;
     }
 
+    _validationPayload() {
+        return {
+            code: this._pythonCode,
+            language: normalizeFlowCodeLanguage(this._codeLanguage),
+            kind: 'node',
+            node_type: 'code',
+            entrypoint: 'check',
+        };
+    }
+
+    _scheduleCodeValidation() {
+        if (this._codeValidationTimer) {
+            window.clearTimeout(this._codeValidationTimer);
+            this._codeValidationTimer = 0;
+        }
+        if (this._mode !== 'python' || this._pythonCode.trim().length === 0) {
+            this._codeValidationSeq += 1;
+            this._codeValidationStatus = 'idle';
+            this._codeValidationMessage = '';
+            return;
+        }
+        this._codeValidationStatus = 'pending';
+        this._codeValidationMessage = this.t('code_workbench.validation_checking');
+        this._codeValidationTimer = window.setTimeout(() => {
+            this._codeValidationTimer = 0;
+            void this._runCodeValidation();
+        }, 650);
+    }
+
+    async _runCodeValidation() {
+        const seq = this._codeValidationSeq + 1;
+        this._codeValidationSeq = seq;
+        let result;
+        try {
+            result = await this._codeValidateOp.run(this._validationPayload());
+        } catch (err) {
+            if (seq !== this._codeValidationSeq) {
+                return;
+            }
+            this._codeValidationStatus = 'invalid';
+            this._codeValidationMessage = err instanceof Error ? err.message : String(err);
+            return;
+        }
+        if (seq !== this._codeValidationSeq) {
+            return;
+        }
+        if (!result || typeof result !== 'object' || result.valid !== true) {
+            const message = result && typeof result === 'object' && typeof result.error === 'string'
+                ? result.error
+                : this.t('code_workbench.validation_invalid');
+            this._codeValidationStatus = 'invalid';
+            this._codeValidationMessage = message;
+            return;
+        }
+        this._codeValidationStatus = 'valid';
+        this._codeValidationMessage = this.t('code_workbench.validation_valid');
+    }
+
+    _renderValidationStatus() {
+        const status = this._codeValidationStatus;
+        if (status === 'idle') {
+            return '';
+        }
+        let iconName = 'circle';
+        let label = this._codeValidationMessage;
+        if (status === 'pending') {
+            label = this.t('code_workbench.validation_checking');
+        } else if (status === 'valid') {
+            iconName = 'check';
+            label = this.t('code_workbench.validation_valid');
+        } else if (status === 'invalid') {
+            iconName = 'alert-triangle';
+            if (typeof label !== 'string' || label.length === 0) {
+                label = this.t('code_workbench.validation_invalid');
+            }
+        }
+        return html`
+            <span class="code-validation-status" data-state=${status} title=${label}>
+                <platform-icon name=${iconName} size="14"></platform-icon>
+                <span class="code-validation-text">${label}</span>
+            </span>
+        `;
+    }
+
     _renderCodeLanguageSegment() {
         const current = normalizeFlowCodeLanguage(this._codeLanguage);
         return html`
@@ -519,7 +661,9 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                         title=${lang.label}
                         aria-label=${lang.label}
                         @click=${() => this._setCodeLanguage(lang.value)}
-                    >${flowCodeLanguageShortLabel(lang.value)}</button>
+                    >
+                        <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
+                    </button>
                 `)}
             </div>
         `;
@@ -635,6 +779,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         return html`
             <div class="python-mode">
                 <div class="code-mode-head">
+                    ${this._renderValidationStatus()}
                     ${this._renderCodeLanguageSegment()}
                 </div>
                 <flows-code-editor

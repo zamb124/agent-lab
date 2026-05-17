@@ -1,6 +1,9 @@
 """Общие контракты platform capabilities и code execution."""
 
-from core.capabilities.error_response import code_execution_failed_response
+from core.capabilities.error_response import (
+    code_execution_failed_response,
+    code_validation_failed_response,
+)
 from core.capabilities.models import (
     CAPABILITY_LANGUAGE_SET,
     CAPABILITY_LANGUAGES,
@@ -23,6 +26,8 @@ from core.capabilities.models import (
     CodeExecutionRequest,
     CodeExecutionResponse,
     CodeExecutionStatus,
+    CodeValidationRequest,
+    CodeValidationResponse,
     JsonObject,
     JsonScalar,
     JsonValue,
@@ -57,11 +62,14 @@ __all__ = [
     "CodeExecutionRequest",
     "CodeExecutionResponse",
     "CodeExecutionStatus",
+    "CodeValidationRequest",
+    "CodeValidationResponse",
     "JsonObject",
     "JsonScalar",
     "JsonValue",
     "CapabilityExecutionTokenClaims",
     "code_execution_failed_response",
+    "code_validation_failed_response",
     "execution_token_exp",
     "issue_execution_token",
     "verify_execution_context",

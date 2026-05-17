@@ -797,6 +797,29 @@ export class ChatMessage extends PlatformElement {
                     }
                 }
             }
+            if (res === null && isPlainObject(call) && typeof call.name === 'string' && call.name.length > 0) {
+                const callName = call.name;
+                for (let j = 0; j < results.length; j++) {
+                    if (used.has(j)) {
+                        continue;
+                    }
+                    const item = results[j];
+                    if (!isPlainObject(item)) {
+                        continue;
+                    }
+                    const resultName =
+                        typeof item.name === 'string' && item.name.length > 0
+                            ? item.name
+                            : typeof item.tool === 'string' && item.tool.length > 0
+                              ? item.tool
+                              : '';
+                    if (resultName === callName) {
+                        res = item;
+                        used.add(j);
+                        break;
+                    }
+                }
+            }
             if (res === null && !used.has(i) && i < results.length) {
                 res = results[i];
                 used.add(i);
@@ -826,10 +849,32 @@ export class ChatMessage extends PlatformElement {
     }
 
     _toolResultBody(result) {
-        if (!isPlainObject(result) || !Object.prototype.hasOwnProperty.call(result, 'result')) {
+        if (!isPlainObject(result)) {
             return '';
         }
-        const r = result.result;
+        const valueKeys = ['result', 'value', 'output', 'content', 'data'];
+        let hasValue = false;
+        let r;
+        for (const key of valueKeys) {
+            if (Object.prototype.hasOwnProperty.call(result, key)) {
+                hasValue = true;
+                r = result[key];
+                break;
+            }
+        }
+        if (!hasValue) {
+            const body = {};
+            for (const [key, value] of Object.entries(result)) {
+                if (key === 'id' || key === 'tool_call_id' || key === 'name' || key === 'tool') {
+                    continue;
+                }
+                body[key] = value;
+            }
+            if (Object.keys(body).length === 0) {
+                return '';
+            }
+            return JSON.stringify(body, null, 2);
+        }
         if (typeof r === 'string') {
             return r;
         }

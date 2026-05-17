@@ -6,12 +6,13 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '../components/common/flows-code-language-icon.js';
 import '../components/editors/flows-code-editor.js';
 import { asString } from '../_helpers/flows-resolvers.js';
 import {
     FLOW_CODE_LANGUAGES,
-    flowCodeLanguageShortLabel,
     isKnownStarterCode,
     normalizeFlowCodeLanguage,
     starterCodeForLanguage,
@@ -32,6 +33,8 @@ export class FlowsToolCreateModal extends PlatformFormModal {
         _code: { state: true },
         _language: { state: true },
         _schemaJson: { state: true },
+        _codeValidationStatus: { state: true },
+        _codeValidationMessage: { state: true },
     };
 
     static styles = [
@@ -48,6 +51,12 @@ export class FlowsToolCreateModal extends PlatformFormModal {
                 align-items: center;
                 justify-content: space-between;
                 gap: var(--space-2);
+            }
+            .field-actions {
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
             }
             .language-segment {
                 display: inline-flex;
@@ -86,6 +95,39 @@ export class FlowsToolCreateModal extends PlatformFormModal {
                 outline: 2px solid var(--accent);
                 outline-offset: 1px;
             }
+            .language-button flows-code-language-icon {
+                pointer-events: none;
+            }
+            .code-validation-status {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                max-width: 220px;
+                height: 28px;
+                padding: 0 9px;
+                box-sizing: border-box;
+                border-radius: var(--radius-full, 999px);
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                color: var(--text-tertiary);
+                font-size: var(--text-xs);
+                line-height: 1;
+                white-space: nowrap;
+            }
+            .code-validation-status[data-state='valid'] {
+                color: var(--success);
+                background: var(--success-bg);
+                border-color: var(--success-border);
+            }
+            .code-validation-status[data-state='invalid'] {
+                color: var(--error);
+                background: var(--error-bg);
+                border-color: var(--error-border);
+            }
+            .code-validation-text {
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
         `,
     ];
 
@@ -97,10 +139,30 @@ export class FlowsToolCreateModal extends PlatformFormModal {
         this._language = 'python';
         this._code = starterCodeForLanguage(this._language);
         this._schemaJson = JSON.stringify(EMPTY_PARAMETERS_SCHEMA, null, 2);
+        this._codeValidationStatus = 'idle';
+        this._codeValidationMessage = '';
+        this._codeValidationTimer = 0;
+        this._codeValidationSeq = 0;
         this._tools = this.useResource('flows/tools');
+        this._codeValidateOp = this.useOp('flows/code_validate');
     }
 
     renderHeader() { return html`<h3>${this.t('tool_create_modal.title')}</h3>`; }
+
+    updated(changed) {
+        super.updated?.(changed);
+        if (changed.has('_code') || changed.has('_language')) {
+            this._scheduleCodeValidation();
+        }
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (this._codeValidationTimer) {
+            window.clearTimeout(this._codeValidationTimer);
+            this._codeValidationTimer = 0;
+        }
+    }
 
     _setLanguage(language) {
         const normalized = normalizeFlowCodeLanguage(language);
@@ -115,6 +177,89 @@ export class FlowsToolCreateModal extends PlatformFormModal {
         this.isDirty = true;
     }
 
+    _validationPayload() {
+        return {
+            code: this._code,
+            language: this._language,
+            kind: 'tool',
+            node_type: 'tool',
+        };
+    }
+
+    _scheduleCodeValidation() {
+        if (this._codeValidationTimer) {
+            window.clearTimeout(this._codeValidationTimer);
+            this._codeValidationTimer = 0;
+        }
+        if (this._code.trim().length === 0) {
+            this._codeValidationSeq += 1;
+            this._codeValidationStatus = 'idle';
+            this._codeValidationMessage = '';
+            return;
+        }
+        this._codeValidationStatus = 'pending';
+        this._codeValidationMessage = this.t('code_workbench.validation_checking');
+        this._codeValidationTimer = window.setTimeout(() => {
+            this._codeValidationTimer = 0;
+            void this._runCodeValidation();
+        }, 650);
+    }
+
+    async _runCodeValidation() {
+        const seq = this._codeValidationSeq + 1;
+        this._codeValidationSeq = seq;
+        let result;
+        try {
+            result = await this._codeValidateOp.run(this._validationPayload());
+        } catch (err) {
+            if (seq !== this._codeValidationSeq) {
+                return;
+            }
+            this._codeValidationStatus = 'invalid';
+            this._codeValidationMessage = err instanceof Error ? err.message : String(err);
+            return;
+        }
+        if (seq !== this._codeValidationSeq) {
+            return;
+        }
+        if (!result || typeof result !== 'object' || result.valid !== true) {
+            const message = result && typeof result === 'object' && typeof result.error === 'string'
+                ? result.error
+                : this.t('code_workbench.validation_invalid');
+            this._codeValidationStatus = 'invalid';
+            this._codeValidationMessage = message;
+            return;
+        }
+        this._codeValidationStatus = 'valid';
+        this._codeValidationMessage = this.t('code_workbench.validation_valid');
+    }
+
+    _renderValidationStatus() {
+        const status = this._codeValidationStatus;
+        if (status === 'idle') {
+            return '';
+        }
+        let iconName = 'circle';
+        let label = this._codeValidationMessage;
+        if (status === 'pending') {
+            label = this.t('code_workbench.validation_checking');
+        } else if (status === 'valid') {
+            iconName = 'check';
+            label = this.t('code_workbench.validation_valid');
+        } else if (status === 'invalid') {
+            iconName = 'alert-triangle';
+            if (typeof label !== 'string' || label.length === 0) {
+                label = this.t('code_workbench.validation_invalid');
+            }
+        }
+        return html`
+            <span class="code-validation-status" data-state=${status} title=${label}>
+                <platform-icon name=${iconName} size="14"></platform-icon>
+                <span class="code-validation-text">${label}</span>
+            </span>
+        `;
+    }
+
     _renderLanguageSegment() {
         return html`
             <div class="language-segment" role="group" aria-label=${this.t('code_workbench.language_aria')}>
@@ -126,7 +271,9 @@ export class FlowsToolCreateModal extends PlatformFormModal {
                         title=${lang.label}
                         aria-label=${lang.label}
                         @click=${() => this._setLanguage(lang.value)}
-                    >${flowCodeLanguageShortLabel(lang.value)}</button>
+                    >
+                        <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
+                    </button>
                 `)}
             </div>
         `;
@@ -164,7 +311,10 @@ export class FlowsToolCreateModal extends PlatformFormModal {
             <div class="field">
                 <div class="field-head">
                     <label>${this.t('tool_create_modal.field_code')}</label>
-                    ${this._renderLanguageSegment()}
+                    <div class="field-actions">
+                        ${this._renderValidationStatus()}
+                        ${this._renderLanguageSegment()}
+                    </div>
                 </div>
                 <flows-code-editor
                     .language=${this._language}
@@ -188,7 +338,10 @@ export class FlowsToolCreateModal extends PlatformFormModal {
     }
 
     renderFooter() {
-        const valid = TOOL_ID_PATTERN.test(this._toolId) && this._name.trim();
+        const valid = TOOL_ID_PATTERN.test(this._toolId)
+            && this._name.trim()
+            && this._codeValidationStatus !== 'pending'
+            && this._codeValidationStatus !== 'invalid';
         return html`
             <platform-button @click=${() => this.close()}>${this.t('tool_create_modal.action_cancel')}</platform-button>
             <platform-button variant="primary" ?disabled=${!valid} @click=${this._save}>

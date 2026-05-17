@@ -6,6 +6,8 @@ from core.capabilities.models import (
     CodeExecutionErrorEnvelope,
     CodeExecutionRequest,
     CodeExecutionResponse,
+    CodeValidationRequest,
+    CodeValidationResponse,
 )
 
 
@@ -24,6 +26,35 @@ def code_execution_failed_response(
     return CodeExecutionResponse(
         status="failed",
         state=request.state,
+        error=CodeExecutionErrorEnvelope(
+            language=request.language,
+            service=service,
+            stage=stage,
+            message=message,
+            exception_type=exception_type,
+            traceback=traceback_text,
+            stdout=stdout,
+            stderr=stderr,
+            request_id=request.context.request_id,
+            trace_id=request.context.trace_id,
+        ),
+    )
+
+
+def code_validation_failed_response(
+    request: CodeValidationRequest,
+    *,
+    service: str,
+    stage: str,
+    message: str,
+    exception_type: str,
+    traceback_text: str | None = None,
+    stdout: str | None = None,
+    stderr: str | None = None,
+) -> CodeValidationResponse:
+    """Build a failed CodeValidationResponse preserving correlation fields."""
+    return CodeValidationResponse(
+        valid=False,
         error=CodeExecutionErrorEnvelope(
             language=request.language,
             service=service,

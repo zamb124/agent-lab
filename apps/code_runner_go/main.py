@@ -1,6 +1,7 @@
 """FastAPI entrypoint code-runner-go."""
 
 from apps.code_runner_go.api.v1.execute import router as execute_router
+from apps.code_runner_go.api.v1.validate import router as validate_router
 from apps.code_runner_go.config import CodeRunnerGoSettings, get_code_runner_go_settings
 from apps.code_runner_go.container import get_code_runner_go_container
 from core.app import create_service_app
@@ -9,7 +10,7 @@ app = create_service_app(
     service_name="code_runner_go",
     settings_class=CodeRunnerGoSettings,
     get_container=get_code_runner_go_container,
-    routers=[execute_router],
+    routers=[execute_router, validate_router],
     repository_names=[],
     cors_origins=["*"],
     title="Platform Go Code Runner",

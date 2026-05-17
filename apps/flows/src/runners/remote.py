@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import cast, override
 
 from apps.flows.config import get_settings as get_flows_settings
@@ -15,6 +16,8 @@ from core.capabilities import (
     CodeExecutionKind,
     CodeExecutionRequest,
     CodeExecutionResponse,
+    CodeValidationRequest,
+    CodeValidationResponse,
     JsonObject,
     JsonValue,
     execution_token_exp,
@@ -40,6 +43,14 @@ RUNNER_EXECUTE_PATHS: dict[str, tuple[str, str]] = {
     "typescript": ("code_runner_node", "/code-runner-node/api/v1/execute"),
     "go": ("code_runner_go", "/code-runner-go/api/v1/execute"),
     "csharp": ("code_runner_csharp", "/code-runner-csharp/api/v1/execute"),
+}
+
+RUNNER_VALIDATE_PATHS: dict[str, tuple[str, str]] = {
+    "python": ("code_runner_python", "/code-runner-python/api/v1/validate"),
+    "javascript": ("code_runner_node", "/code-runner-node/api/v1/validate"),
+    "typescript": ("code_runner_node", "/code-runner-node/api/v1/validate"),
+    "go": ("code_runner_go", "/code-runner-go/api/v1/validate"),
+    "csharp": ("code_runner_csharp", "/code-runner-csharp/api/v1/validate"),
 }
 
 logger = get_logger(__name__)
@@ -100,6 +111,53 @@ class RemoteCodeRunner(BaseCodeRunner):
         if not code.strip():
             return (False, "Код пустой")
         return (True, None)
+
+    async def validate_remote(
+        self,
+        *,
+        code: str,
+        entrypoint: str | None,
+        kind: CodeExecutionKind,
+        flow_id: str | None = None,
+        branch_id: str | None = None,
+    ) -> CodeValidationResponse:
+        runner_service, runner_path = self._runner_validation_endpoint()
+        manifest = await self._load_manifest()
+        context = self._validation_context(flow_id=flow_id, branch_id=branch_id)
+        request = CodeValidationRequest(
+            kind=kind,
+            language=self._language,
+            code=strip_forbidden_platform_import_lines(code),
+            entrypoint=entrypoint,
+            wall_time_limit_seconds=get_flows_settings().node_execution_wall_time_cap_seconds,
+            context=context,
+            capability_manifest=manifest,
+        )
+        async with traced_operation(
+            "flows.code_runner.validate",
+            event_type="code_runner.validate_requested",
+            operation_category="code_runner",
+            resource_type="flow",
+            resource_id=context.flow_id,
+            extra_attributes={
+                "platform.code_runner.language": self._language,
+                "platform.code_runner.kind": kind,
+                "platform.code_runner.entrypoint": entrypoint or "<first_function>",
+                "platform.code_runner.service": runner_service,
+                "platform.code_runner.path": runner_path,
+                "platform.flow.branch_id": context.branch_id,
+                "platform.flow.session_id": context.session_id,
+                "platform.flow.task_id": context.task_id,
+                "platform.flow.context_id": context.context_id,
+            },
+        ):
+            raw_response = await self._client.post(
+                runner_service,
+                runner_path,
+                json=request.model_dump(mode="json"),
+                timeout=float(get_flows_settings().node_execution_wall_time_cap_seconds),
+            )
+        return CodeValidationResponse.model_validate(raw_response)
 
     async def _execute_remote(
         self,
@@ -200,8 +258,59 @@ class RemoteCodeRunner(BaseCodeRunner):
             trace_id=context.trace_id,
         )
 
+    def _validation_context(
+        self,
+        *,
+        flow_id: str | None,
+        branch_id: str | None,
+    ) -> CapabilityExecutionContext:
+        context = get_context()
+        if context is None or context.active_company is None:
+            raise ValueError("Remote code validation requires Context with active_company")
+        company_id = context.active_company.company_id
+        user_id = context.user.user_id
+        settings = get_flows_settings()
+        log_context = get_log_context()
+        request_id = log_context.get("request_id")
+        request_id_value = request_id if isinstance(request_id, str) and request_id.strip() else None
+        flow_id_value = flow_id.strip() if isinstance(flow_id, str) and flow_id.strip() else "code-validation"
+        branch_id_value = branch_id.strip() if isinstance(branch_id, str) and branch_id.strip() else "default"
+        context_id = str(uuid.uuid4())
+        task_id = str(uuid.uuid4())
+        session_id = f"{flow_id_value}:validation:{context_id}"
+        claims = CapabilityExecutionTokenClaims(
+            company_id=company_id,
+            user_id=user_id,
+            flow_id=flow_id_value,
+            branch_id=branch_id_value,
+            session_id=session_id,
+            task_id=task_id,
+            context_id=context_id,
+            request_id=request_id_value,
+            exp=execution_token_exp(settings.capability_execution_token_ttl_seconds),
+        )
+        token = issue_execution_token(claims)
+        return CapabilityExecutionContext(
+            execution_token=token,
+            company_id=company_id,
+            user_id=user_id,
+            flow_id=flow_id_value,
+            branch_id=branch_id_value,
+            session_id=session_id,
+            task_id=task_id,
+            context_id=context_id,
+            request_id=request_id_value,
+            trace_id=context.trace_id,
+        )
+
     def _runner_endpoint(self) -> tuple[str, str]:
         endpoint = RUNNER_EXECUTE_PATHS.get(self._language)
+        if endpoint is None:
+            raise ValueError(f"Unsupported code runner language: {self._language}")
+        return endpoint
+
+    def _runner_validation_endpoint(self) -> tuple[str, str]:
+        endpoint = RUNNER_VALIDATE_PATHS.get(self._language)
         if endpoint is None:
             raise ValueError(f"Unsupported code runner language: {self._language}")
         return endpoint

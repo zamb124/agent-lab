@@ -31,7 +31,15 @@ class TestCodeCompletions:
         # Проверяем generated SDK namespaces из capability manifest.
         assert "globals" in data
         global_names = [g["name"] for g in data["globals"]]
+        assert "args" in global_names
+        assert "state" in global_names
+        assert "variables" in global_names
         assert "tools/files/http/text/voice/flow_state/log/trace/platform/channel/flow" in global_names
+
+        state_fields = {item["name"]: item for item in data["state_fields"]}
+        assert "content" in state_fields
+        assert "variables" in state_fields
+        assert "messages" in state_fields
 
         namespaces = {item["name"]: item for item in data["capability_namespaces"]}
         assert "files" in namespaces

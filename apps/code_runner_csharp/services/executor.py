@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import tempfile
 import textwrap
 import traceback
@@ -16,7 +15,14 @@ from pathlib import Path
 from core.capabilities import (
     CodeExecutionRequest,
     CodeExecutionResponse,
+    CodeValidationRequest,
+    CodeValidationResponse,
     code_execution_failed_response,
+    code_validation_failed_response,
+)
+from core.capabilities.runtime_executables import (
+    resolve_runtime_executable,
+    runtime_executable_required_message,
 )
 from core.config import get_settings
 from core.tracing.operation_span import traced_operation
@@ -24,6 +30,13 @@ from core.tracing.operation_span import traced_operation
 CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 RESPONSE_PREFIX = "__CODE_RUNNER_RESPONSE__"
 SERVICE_NAME = "code_runner_csharp"
+DOTNET_BIN_ENV = "CODE_RUNNER_DOTNET_BIN"
+CSHARP_METHOD_RE = re.compile(
+    r"(?m)^\s*"
+    r"(?:(?:public|private|protected|internal|static|async|virtual|override|sealed|new|partial)\s+)*"
+    r"(?:[A-Za-z_][A-Za-z0-9_<>,\[\]\.?]*\s+)+"
+    r"([A-Za-z_][A-Za-z0-9_]*)\s*\("
+)
 
 
 class CsharpSandboxExecutor:
@@ -43,12 +56,12 @@ class CsharpSandboxExecutor:
                 exception_type="UnsupportedLanguageError",
             )
 
-        dotnet_bin = shutil.which("dotnet")
+        dotnet_bin = resolve_runtime_executable("dotnet", override_env=DOTNET_BIN_ENV)
         if dotnet_bin is None:
             return self._failed_response(
                 request=request,
                 stage="runtime",
-                message="dotnet executable with .NET 10 SDK is required for code-runner-csharp",
+                message=runtime_executable_required_message("dotnet", override_env=DOTNET_BIN_ENV),
                 exception_type="MissingRuntimeExecutableError",
             )
 
@@ -100,7 +113,84 @@ class CsharpSandboxExecutor:
                 )
         return completed
 
-    def _artifact_key(self, request: CodeExecutionRequest) -> str:
+    async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
+        if request.language != "csharp":
+            return self._failed_validation_response(
+                request=request,
+                stage="validation",
+                message=f"code-runner-csharp cannot validate language={request.language}",
+                exception_type="UnsupportedLanguageError",
+            )
+
+        entrypoint = request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else self._infer_entrypoint(request.code)
+        if entrypoint is None:
+            return self._failed_validation_response(
+                request=request,
+                stage="validation",
+                message="Entrypoint function not found: declare at least one function",
+                exception_type="EntrypointNotFoundError",
+            )
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", entrypoint) is None:
+            return self._failed_validation_response(
+                request=request,
+                stage="validation",
+                message=f"invalid C# entrypoint name: {entrypoint!r}",
+                exception_type="InvalidEntrypointError",
+            )
+        if entrypoint not in self._method_names(request.code):
+            return self._failed_validation_response(
+                request=request,
+                stage="validation",
+                message=f"Entrypoint function not found: {entrypoint}",
+                exception_type="EntrypointNotFoundError",
+            )
+
+        dotnet_bin = resolve_runtime_executable("dotnet", override_env=DOTNET_BIN_ENV)
+        if dotnet_bin is None:
+            return self._failed_validation_response(
+                request=request,
+                stage="runtime",
+                message=runtime_executable_required_message("dotnet", override_env=DOTNET_BIN_ENV),
+                exception_type="MissingRuntimeExecutableError",
+            )
+
+        async with traced_operation(
+            "code_runner_csharp.validate",
+            event_type="code_runner.validate",
+            operation_category="code_runner",
+            extra_attributes={
+                "platform.code_runner.language": request.language,
+                "platform.code_runner.kind": request.kind,
+                "platform.code_runner.entrypoint": entrypoint,
+                "platform.code_runner.runtime": "build_artifact_cache",
+                "platform.code_runner.dotnet_target": "net10.0",
+                "platform.code_runner.csharp_lang_version": "14.0",
+            },
+        ):
+            request_for_build = request.model_copy(update={"entrypoint": entrypoint})
+            artifact_key = self._artifact_key(request_for_build)
+            artifact_path = self._artifact_root / artifact_key
+            output_path = artifact_path / "out"
+            dll_path = output_path / "Sandbox.dll"
+            try:
+                await self._ensure_artifact(
+                    request=request_for_build,
+                    dotnet_bin=dotnet_bin,
+                    artifact_path=artifact_path,
+                    output_path=output_path,
+                    dll_path=dll_path,
+                )
+            except Exception as exc:
+                return self._failed_validation_response(
+                    request=request,
+                    stage="compile",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+        return CodeValidationResponse(valid=True)
+
+    def _artifact_key(self, request: CodeExecutionRequest | CodeValidationRequest) -> str:
         payload = {
             "language": request.language,
             "code": request.code,
@@ -123,7 +213,7 @@ class CsharpSandboxExecutor:
     async def _ensure_artifact(
         self,
         *,
-        request: CodeExecutionRequest,
+        request: CodeExecutionRequest | CodeValidationRequest,
         dotnet_bin: str,
         artifact_path: Path,
         output_path: Path,
@@ -141,10 +231,14 @@ class CsharpSandboxExecutor:
             runner_path = artifact_path / "Runner.cs"
             user_path = artifact_path / "UserCode.cs"
             sdk_path = artifact_path / "Sdk.cs"
+            entrypoint_check_path = artifact_path / "EntrypointCheck.cs"
             project_path.write_text(self._project_source(), encoding="utf-8")
             runner_path.write_text(self._runner_source(), encoding="utf-8")
             user_path.write_text(self._user_source(request.code), encoding="utf-8")
             sdk_path.write_text(self._sdk_source(request), encoding="utf-8")
+            entrypoint = request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else ""
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", entrypoint) is not None:
+                entrypoint_check_path.write_text(self._entrypoint_check_source(entrypoint), encoding="utf-8")
             env = self._dotnet_env()
             process = await asyncio.create_subprocess_exec(
                 dotnet_bin,
@@ -272,6 +366,35 @@ class CsharpSandboxExecutor:
             stderr=stderr,
         )
 
+    def _failed_validation_response(
+        self,
+        *,
+        request: CodeValidationRequest,
+        stage: str,
+        message: str,
+        exception_type: str,
+        traceback_text: str | None = None,
+        stdout: str | None = None,
+        stderr: str | None = None,
+    ) -> CodeValidationResponse:
+        return code_validation_failed_response(
+            request,
+            service=SERVICE_NAME,
+            stage=stage,
+            message=message,
+            exception_type=exception_type,
+            traceback_text=traceback_text,
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    def _infer_entrypoint(self, code: str) -> str | None:
+        match = CSHARP_METHOD_RE.search(code)
+        return match.group(1) if match else None
+
+    def _method_names(self, code: str) -> set[str]:
+        return {match.group(1) for match in CSHARP_METHOD_RE.finditer(code)}
+
     def _project_source(self) -> str:
         return textwrap.dedent(
             """
@@ -305,6 +428,21 @@ class CsharpSandboxExecutor:
             "}\n"
         )
 
+    def _entrypoint_check_source(self, entrypoint: str) -> str:
+        return textwrap.dedent(
+            f"""
+            using System.Collections.Generic;
+
+            public sealed partial class UserCode
+            {{
+                public object? __ValidateEntrypointSignature(Dictionary<string, object?> args, Dictionary<string, object?> state)
+                {{
+                    return {entrypoint}(args, state);
+                }}
+            }}
+            """
+        ).strip()
+
     def _csharp_member_name(self, raw: str) -> str:
         parts: list[str] = []
         current: list[str] = []
@@ -333,7 +471,7 @@ class CsharpSandboxExecutor:
             cleaned = f"{cleaned}_"
         return cleaned[:1].lower() + cleaned[1:]
 
-    def _sdk_source(self, request: CodeExecutionRequest) -> str:
+    def _sdk_source(self, request: CodeExecutionRequest | CodeValidationRequest) -> str:
         grouped: dict[str, dict[str, str]] = {}
         for capability in request.capability_manifest.capabilities:
             if "." not in capability.name:

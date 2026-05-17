@@ -16,6 +16,44 @@ const PYTHON_IDENT_RE = /^[A-Za-z_]\w*$/;
 const JS_IDENT_RE = /^[$A-Za-z_][$\w]*$/;
 const SIMPLE_IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+const RUNTIME_GLOBALS = Object.freeze([
+    {
+        label: 'args',
+        type: 'variable',
+        detail: 'runtime input',
+        info: 'Arguments passed into the code entrypoint.',
+    },
+    {
+        label: 'state',
+        type: 'variable',
+        detail: 'execution state',
+        info: 'Mutable flow execution state shared across nodes.',
+    },
+    {
+        label: 'variables',
+        type: 'namespace',
+        detail: 'flow variables',
+        info: 'Resolved flow variables from state.variables.',
+    },
+]);
+
+const DEFAULT_STATE_FIELDS = Object.freeze([
+    { name: 'content', type: 'string', description: 'Input message content.' },
+    { name: 'response', type: 'string', description: 'Agent response text.' },
+    { name: 'result', type: 'any', description: 'Last node or tool result.' },
+    { name: 'validation', type: 'object', description: 'Node validation payload.' },
+    { name: 'messages', type: 'array', description: 'Conversation message history.' },
+    { name: 'variables', type: 'object', description: 'Resolved flow variables.' },
+    { name: 'files', type: 'array', description: 'Attached files available to the flow.' },
+    { name: 'triggers', type: 'object', description: 'Trigger runtime payloads by trigger id.' },
+    { name: 'tool_results', type: 'object', description: 'Results produced by tools.' },
+    { name: 'node_history', type: 'object', description: 'Runtime node call history.' },
+    { name: 'current_nodes', type: 'array', description: 'Current graph nodes being executed.' },
+    { name: 'branch_id', type: 'string', description: 'Current flow branch id.' },
+    { name: 'session_id', type: 'string', description: 'Runtime session id.' },
+    { name: 'flow_config_version', type: 'string', description: 'Flow config version snapshot.' },
+]);
+
 /**
  * @param {string} text
  */
@@ -168,19 +206,62 @@ function mapDocTypeToCm(t) {
 }
 
 /**
+ * @param {string} language
+ */
+function runtimeGlobalOptions(language) {
+    return RUNTIME_GLOBALS
+        .filter((opt) => isValidLanguageIdentifier(language, opt.label))
+        .map((opt) => ({ ...opt }));
+}
+
+/**
+ * @param {unknown[]} stateFields
+ */
+function normalizedStateFieldRows(stateFields) {
+    const rows = [];
+    const seen = new Set();
+    const push = (row) => {
+        if (!row || typeof row !== 'object') {
+            return;
+        }
+        const name = 'name' in row && typeof row.name === 'string' ? row.name : '';
+        if (!isValidPythonIdentifier(name) || seen.has(name)) {
+            return;
+        }
+        seen.add(name);
+        const typ = 'type' in row && typeof row.type === 'string' ? row.type : '';
+        const desc = 'description' in row && typeof row.description === 'string' ? row.description : '';
+        rows.push({ name, type: typ, description: desc });
+    };
+    for (const row of DEFAULT_STATE_FIELDS) {
+        push(row);
+    }
+    if (Array.isArray(stateFields)) {
+        for (const row of stateFields) {
+            push(row);
+        }
+    }
+    return rows;
+}
+
+/**
  * @param {{ globals?: unknown[], runtime_namespace_extras?: unknown[], builtins?: string[], platform_tools?: unknown[] }} catalog
  * @returns {Map<string, CMCompletionOption>}
  */
-export function buildGlobalSymbolMap(catalog) {
+export function buildGlobalSymbolMap(catalog, language = 'python') {
     /** @type {Map<string, CMCompletionOption>} */
     const map = new Map();
+
+    for (const opt of runtimeGlobalOptions(language)) {
+        map.set(opt.label, opt);
+    }
 
     const pushGlobals = (arr) => {
         if (!Array.isArray(arr)) {
             return;
         }
         for (const g of arr) {
-            const opts = globalEntryToGenericOptions('python', g);
+            const opts = globalEntryToGenericOptions(language, g);
             for (const opt of opts) {
                 if (!map.has(opt.label)) {
                     map.set(opt.label, opt);
@@ -409,18 +490,11 @@ function filterStateFields(partial, stateFields) {
     const p = partial.toLowerCase();
     /** @type {CMCompletionOption[]} */
     const out = [];
-    for (const f of stateFields) {
-        if (!f || typeof f !== 'object') {
-            continue;
-        }
-        const name = 'name' in f && typeof f.name === 'string' ? f.name : '';
-        if (!isValidPythonIdentifier(name)) {
-            continue;
-        }
+    for (const f of normalizedStateFieldRows(stateFields)) {
+        const name = f.name;
         if (!p || name.toLowerCase().startsWith(p)) {
-            const typ = 'type' in f && typeof f.type === 'string' ? f.type : '';
-            const desc =
-                'description' in f && typeof f.description === 'string' ? f.description : '';
+            const typ = f.type;
+            const desc = f.description;
             const fieldOpt = {
                 label: name,
                 type: 'property',
@@ -629,7 +703,7 @@ function filterCompletionOptions(partial, options) {
 function buildGenericSymbolOptions(args) {
     const language = typeof args.language === 'string' ? args.language : 'javascript';
     const catalog = args.catalog && typeof args.catalog === 'object' ? args.catalog : normalizeCatalogResponse({});
-    const out = [];
+    const out = runtimeGlobalOptions(language);
     for (const row of [...catalog.globals, ...catalog.runtime_namespace_extras]) {
         out.push(...globalEntryToGenericOptions(language, row));
     }
@@ -713,7 +787,7 @@ export function buildPythonCompletions(args) {
         return null;
     }
 
-    const symbolMap = buildGlobalSymbolMap(catalog);
+    const symbolMap = buildGlobalSymbolMap(catalog, 'python');
 
     if (!chain || chain === '') {
         const opts = filterSymbolMap(partial, symbolMap);
@@ -762,6 +836,17 @@ export function buildCodeCompletions(args) {
         return null;
     }
     if (chain) {
+        if (chain === 'state') {
+            const opts = filterStateFields(partial, catalog.state_fields);
+            return opts.length === 0 ? null : { from, options: opts };
+        }
+        if (chain === 'state.variables' || chain === 'variables') {
+            const variableKeys = Array.isArray(args.variableKeys)
+                ? args.variableKeys.filter((k) => typeof k === 'string')
+                : [];
+            const opts = filterVariableKeys(partial, variableKeys);
+            return opts.length === 0 ? null : { from, options: opts };
+        }
         const opts = filterCapabilityMethods(language, partial, chain, catalog);
         return opts.length === 0 ? null : { from, options: opts };
     }

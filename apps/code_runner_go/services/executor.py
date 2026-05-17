@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import json
 import re
-import shutil
 import tempfile
 import textwrap
 import traceback
@@ -15,7 +14,14 @@ from pathlib import Path
 from core.capabilities import (
     CodeExecutionRequest,
     CodeExecutionResponse,
+    CodeValidationRequest,
+    CodeValidationResponse,
     code_execution_failed_response,
+    code_validation_failed_response,
+)
+from core.capabilities.runtime_executables import (
+    resolve_runtime_executable,
+    runtime_executable_required_message,
 )
 from core.config import get_settings
 from core.tracing.operation_span import traced_operation
@@ -23,6 +29,7 @@ from core.tracing.operation_span import traced_operation
 CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 RESPONSE_PREFIX = "__CODE_RUNNER_RESPONSE__"
 SERVICE_NAME = "code_runner_go"
+GO_BIN_ENV = "CODE_RUNNER_GO_BIN"
 
 
 class GoSandboxExecutor:
@@ -58,12 +65,12 @@ class GoSandboxExecutor:
                 exception_type="InvalidEntrypointError",
             )
 
-        go_bin = shutil.which("go")
+        go_bin = resolve_runtime_executable("go", override_env=GO_BIN_ENV)
         if go_bin is None:
             return self._failed_response(
                 request=request,
                 stage="runtime",
-                message="go executable is required for code-runner-go",
+                message=runtime_executable_required_message("go", override_env=GO_BIN_ENV),
                 exception_type="MissingRuntimeExecutableError",
             )
 
@@ -111,7 +118,73 @@ class GoSandboxExecutor:
                 )
         return completed
 
-    def _artifact_key(self, request: CodeExecutionRequest, entrypoint: str) -> str:
+    async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
+        if request.language != "go":
+            return self._failed_validation_response(
+                request=request,
+                stage="validation",
+                message=f"code-runner-go cannot validate language={request.language}",
+                exception_type="UnsupportedLanguageError",
+            )
+
+        entrypoint = request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else self._infer_entrypoint(request.code)
+        if entrypoint is None:
+            return self._failed_validation_response(
+                request=request,
+                stage="validation",
+                message="Entrypoint function not found: declare at least one function",
+                exception_type="EntrypointNotFoundError",
+            )
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", entrypoint) is None:
+            return self._failed_validation_response(
+                request=request,
+                stage="validation",
+                message=f"invalid Go entrypoint name: {entrypoint!r}",
+                exception_type="InvalidEntrypointError",
+            )
+
+        go_bin = resolve_runtime_executable("go", override_env=GO_BIN_ENV)
+        if go_bin is None:
+            return self._failed_validation_response(
+                request=request,
+                stage="runtime",
+                message=runtime_executable_required_message("go", override_env=GO_BIN_ENV),
+                exception_type="MissingRuntimeExecutableError",
+            )
+
+        async with traced_operation(
+            "code_runner_go.validate",
+            event_type="code_runner.validate",
+            operation_category="code_runner",
+            extra_attributes={
+                "platform.code_runner.language": request.language,
+                "platform.code_runner.kind": request.kind,
+                "platform.code_runner.entrypoint": entrypoint,
+                "platform.code_runner.runtime": "build_artifact_cache",
+            },
+        ):
+            artifact_key = self._artifact_key(request, entrypoint)
+            artifact_path = self._artifact_root / artifact_key
+            binary_path = artifact_path / "sandbox"
+            try:
+                await self._ensure_artifact(
+                    request=request,
+                    go_bin=go_bin,
+                    entrypoint=entrypoint,
+                    artifact_path=artifact_path,
+                    binary_path=binary_path,
+                )
+            except Exception as exc:
+                return self._failed_validation_response(
+                    request=request,
+                    stage="compile",
+                    message=str(exc),
+                    exception_type=type(exc).__name__,
+                    traceback_text="".join(traceback.format_exception(exc)),
+                )
+        return CodeValidationResponse(valid=True)
+
+    def _artifact_key(self, request: CodeExecutionRequest | CodeValidationRequest, entrypoint: str) -> str:
         payload = {
             "language": request.language,
             "code": request.code,
@@ -132,7 +205,7 @@ class GoSandboxExecutor:
     async def _ensure_artifact(
         self,
         *,
-        request: CodeExecutionRequest,
+        request: CodeExecutionRequest | CodeValidationRequest,
         go_bin: str,
         entrypoint: str,
         artifact_path: Path,
@@ -265,6 +338,28 @@ class GoSandboxExecutor:
             stderr=stderr,
         )
 
+    def _failed_validation_response(
+        self,
+        *,
+        request: CodeValidationRequest,
+        stage: str,
+        message: str,
+        exception_type: str,
+        traceback_text: str | None = None,
+        stdout: str | None = None,
+        stderr: str | None = None,
+    ) -> CodeValidationResponse:
+        return code_validation_failed_response(
+            request,
+            service=SERVICE_NAME,
+            stage=stage,
+            message=message,
+            exception_type=exception_type,
+            traceback_text=traceback_text,
+            stdout=stdout,
+            stderr=stderr,
+        )
+
     def _infer_entrypoint(self, code: str) -> str | None:
         match = re.search(r"func\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", code)
         return match.group(1) if match else None
@@ -306,7 +401,7 @@ class GoSandboxExecutor:
             cleaned = f"capabilities_{cleaned}"
         return cleaned[:1].lower() + cleaned[1:]
 
-    def _sdk_source(self, request: CodeExecutionRequest) -> str:
+    def _sdk_source(self, request: CodeExecutionRequest | CodeValidationRequest) -> str:
         grouped: dict[str, dict[str, str]] = {}
         for capability in request.capability_manifest.capabilities:
             if "." not in capability.name:

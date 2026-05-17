@@ -14,6 +14,7 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
+import '../components/common/flows-code-language-icon.js';
 import { embedAssistantMarkdownToHtml } from '@platform/lib/embed-chat/embed-chat-markdown.js';
 import { registryItemIconName, registryItemTitle } from '../_helpers/flows-registry-item-icon.js';
 import { isPlainObject } from '../_helpers/flows-resolvers.js';
@@ -21,10 +22,8 @@ import { isMcpToolRegistryItem } from '../_helpers/flows-mcp-tool-registry.js';
 import {
     FLOW_CODE_LANGUAGES,
     flowCodeLanguageLabel,
-    flowCodeLanguageShortLabel,
     normalizeFlowCodeLanguage,
 } from '../_helpers/flows-code-languages.js';
-import { getNodeTypeMeta } from '../constants/node-icons.js';
 
 function _templatesFromResult(result) {
     if (result && typeof result === 'object' && Array.isArray(result.templates)) {
@@ -152,6 +151,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 outline: 2px solid var(--accent);
                 outline-offset: 1px;
             }
+            .language-button flows-code-language-icon {
+                pointer-events: none;
+            }
             .tab {
                 padding: 6px 12px;
                 border-radius: var(--radius-md);
@@ -209,6 +211,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 justify-content: center;
                 color: #fff;
                 flex-shrink: 0;
+                box-sizing: border-box;
             }
             .lib-card-icon[data-kind='flow'] {
                 background: linear-gradient(135deg, #bb8fce 0%, #8e44ad 100%);
@@ -217,7 +220,16 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 background: linear-gradient(135deg, #82e0aa 0%, #58d68d 100%);
             }
             .lib-card-icon[data-kind='code'] {
-                background: linear-gradient(135deg, #5dade2 0%, #5499c7 100%);
+                background: var(--glass-solid);
+                border: 1px solid var(--glass-border-subtle);
+                box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+            }
+            .lib-card-icon[data-kind='code'] flows-code-language-icon {
+                width: 38px;
+                height: 38px;
+            }
+            .lib-card-icon platform-icon {
+                flex-shrink: 0;
             }
             .lib-card-title {
                 font-weight: var(--font-semibold);
@@ -551,7 +563,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                             title=${lang.label}
                             aria-label=${lang.label}
                             @click=${() => this._setCodeLanguage(lang.value)}
-                        >${flowCodeLanguageShortLabel(lang.value)}</button>
+                        >
+                            <flows-code-language-icon language=${lang.value} size="18"></flows-code-language-icon>
+                        </button>
                     `)}
                 </div>
             </div>
@@ -599,6 +613,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     _renderRegistryCard(t, { onSelect }) {
         const icon = registryItemIconName(t);
         const kindAttr = this._iconKindAttr(t);
+        const cardIcon = kindAttr === 'code'
+            ? html`<flows-code-language-icon language=${t.language} size="38"></flows-code-language-icon>`
+            : html`<platform-icon name=${icon} size="26"></platform-icon>`;
         const title = registryItemTitle(t);
         const desc = typeof t.description === 'string' ? t.description : '';
         const id = typeof t.tool_id === 'string' ? t.tool_id : '';
@@ -606,7 +623,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             <button type="button" class="lib-card" @click=${onSelect}>
                 <div class="lib-card-icon-row">
                     <div class="lib-card-icon" data-kind=${kindAttr}>
-                        <platform-icon name=${icon} size="26"></platform-icon>
+                        ${cardIcon}
                     </div>
                 </div>
                 <div class="lib-card-title">${title}</div>
@@ -712,10 +729,6 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         }
     }
 
-    _catalogIconName() {
-        return getNodeTypeMeta('code').icon;
-    }
-
     _renderBodyToolPick() {
         const busy = this._toolsAll.busy;
         const rows = this._pickModeRows();
@@ -771,14 +784,13 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (rows.length === 0) {
             return html`<div class="lib-empty">${this.t('code_node_templates_modal.empty')}</div>`;
         }
-        const icon = this._catalogIconName();
         return html`
             <div class="lib-grid">
                 ${rows.map((t) => html`
                     <button type="button" class="lib-card" @click=${() => this._commitTemplate(t)}>
                         <div class="lib-card-icon-row">
                             <div class="lib-card-icon" data-kind="code">
-                                <platform-icon name=${icon} size="26"></platform-icon>
+                                <flows-code-language-icon language=${t.language} size="38"></flows-code-language-icon>
                             </div>
                         </div>
                         <div class="lib-card-title">${typeof t.name === 'string' ? t.name : t.id}</div>

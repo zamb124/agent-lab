@@ -578,7 +578,10 @@
   },
   "code_workbench": {
     "tab_params": "Parameters",
-    "language_aria": "Code language"
+    "language_aria": "Code language",
+    "validation_checking": "Checking",
+    "validation_valid": "Code is valid",
+    "validation_invalid": "Code is invalid"
   },
   "code_node_drop_modal": {
     "title": "Code node",
@@ -714,7 +717,7 @@
     "field_id": "Tool ID",
     "field_name": "Name",
     "field_description": "Description",
-    "field_code": "Code (Python)",
+    "field_code": "Code",
     "field_schema": "Parameters schema (JSON)",
     "action_cancel": "Cancel",
     "action_create": "Create",
