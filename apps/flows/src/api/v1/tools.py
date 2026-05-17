@@ -59,6 +59,62 @@ class ToolResponse(BaseModel):
 _TOOLS_MAX_LIMIT = 2000
 
 
+def _enum_value(value: Any) -> Any:
+    return value.value if hasattr(value, "value") else value
+
+
+def _tool_response_from_reference(t: ToolReference) -> ToolResponse:
+    return ToolResponse(
+        tool_id=t.tool_id,
+        title=t.title,
+        description=t.description,
+        code=t.code,
+        language=t.language,
+        entrypoint=t.entrypoint,
+        args_schema=t.args_schema if t.args_schema else None,
+        parameters_schema=t.parameters_schema,
+        tags=t.tags or ["misc"],
+        permission=t.permission,
+        item_type="tool",
+        react_role=t.react_role.value,
+        code_mode=t.code_mode.value if t.code_mode else None,
+        mcp_server_id=t.mcp_server_id,
+        mcp_tool_name=t.mcp_tool_name,
+    )
+
+
+def _tool_response_from_registry_tool(tool: Any) -> ToolResponse:
+    react_role = _enum_value(getattr(tool, "react_role", ReactToolRole.STANDARD))
+    return ToolResponse(
+        tool_id=str(getattr(tool, "name", "")),
+        title=str(getattr(tool, "name", "")),
+        description=str(getattr(tool, "description", "")),
+        code=None,
+        language="python",
+        entrypoint=None,
+        args_schema=None,
+        parameters_schema=getattr(tool, "parameters", None),
+        tags=list(tool.get_tags()) if callable(getattr(tool, "get_tags", None)) else ["misc"],
+        permission=getattr(tool, "permission", None),
+        item_type="tool",
+        react_role=str(react_role) if react_role is not None else None,
+        code_mode=None,
+        mcp_server_id=None,
+        mcp_tool_name=None,
+    )
+
+
+def _flow_response(flow_row: Any) -> ToolResponse:
+    return ToolResponse(
+        tool_id=flow_row.flow_id,
+        title=flow_row.name,
+        description=flow_row.description,
+        tags=flow_row.tags or ["flow"],
+        permission=None,
+        item_type="flow",
+    )
+
+
 @router.get("/", response_model=OffsetPage[ToolResponse])
 async def list_tools(
     container: ContainerDep,
@@ -71,26 +127,7 @@ async def list_tools(
         container.tool_repository.count_all(),
     )
     return OffsetPage[ToolResponse](
-        items=[
-            ToolResponse(
-                tool_id=t.tool_id,
-                title=t.title,
-                description=t.description,
-                code=t.code,
-                language=t.language,
-                entrypoint=t.entrypoint,
-                args_schema=t.args_schema if t.args_schema else None,
-                parameters_schema=t.parameters_schema,
-                tags=t.tags or ["misc"],
-                permission=t.permission,
-                item_type="tool",
-                react_role=t.react_role.value,
-                code_mode=t.code_mode.value if t.code_mode else None,
-                mcp_server_id=t.mcp_server_id,
-                mcp_tool_name=t.mcp_tool_name,
-            )
-            for t in tools
-        ],
+        items=[_tool_response_from_reference(t) for t in tools],
         total=total,
         limit=limit,
         offset=offset,
@@ -105,42 +142,36 @@ async def list_all_tools_and_flows(
 ) -> OffsetPage[ToolResponse]:
     """Список tools и flows для picker с общим лимитом."""
     tools_list, flows_list, tools_count, flows_count = await asyncio.gather(
-        container.tool_repository.list(limit=limit, offset=offset),
-        container.flow_repository.list(limit=limit),
+        container.tool_repository.list(limit=_TOOLS_MAX_LIMIT, offset=0),
+        container.flow_repository.list(limit=_TOOLS_MAX_LIMIT),
         container.tool_repository.count_all(),
         container.flow_repository.count_all(),
     )
-    items = []
+    items: list[ToolResponse] = []
+    seen_tool_ids: set[str] = set()
     for t in tools_list:
-        items.append(ToolResponse(
-            tool_id=t.tool_id,
-            title=t.title,
-            description=t.description,
-            code=t.code,
-            language=t.language,
-            entrypoint=t.entrypoint,
-            args_schema=t.args_schema if t.args_schema else None,
-            parameters_schema=t.parameters_schema,
-            tags=t.tags or ["misc"],
-            permission=t.permission,
-            item_type="tool",
-            react_role=t.react_role.value,
-            code_mode=t.code_mode.value if t.code_mode else None,
-            mcp_server_id=t.mcp_server_id,
-            mcp_tool_name=t.mcp_tool_name,
-        ))
+        items.append(_tool_response_from_reference(t))
+        seen_tool_ids.add(t.tool_id)
+
+    registry = container.tool_registry
+    registry.register_builtin_tools()
+    registry_only_count = 0
+    for tool_id, tool in sorted(registry.list_all().items(), key=lambda item: item[0]):
+        if tool_id in seen_tool_ids:
+            continue
+        if not getattr(type(tool), "listed_in_platform_tool_docs", True):
+            continue
+        items.append(_tool_response_from_registry_tool(tool))
+        seen_tool_ids.add(tool_id)
+        registry_only_count += 1
+
     for flow_row in flows_list:
-        items.append(ToolResponse(
-            tool_id=flow_row.flow_id,
-            title=flow_row.name,
-            description=flow_row.description,
-            tags=flow_row.tags or ["flow"],
-            permission=None,
-            item_type="flow",
-        ))
+        items.append(_flow_response(flow_row))
+
+    page = items[offset:offset + limit]
     return OffsetPage[ToolResponse](
-        items=items,
-        total=tools_count + flows_count,
+        items=page,
+        total=tools_count + flows_count + registry_only_count,
         limit=limit,
         offset=offset,
     )

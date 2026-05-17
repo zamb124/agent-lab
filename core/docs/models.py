@@ -2,7 +2,7 @@
 Модели для сервиса документации.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -117,6 +117,8 @@ class CodeTemplate(BaseModel):
     node_type: str = "tool"  # tool или function
     tags: Optional[List[str]] = None
     language: str = "python"
+    args_schema: Optional[Dict[str, Any]] = None
+    parameters_schema: Optional[Dict[str, Any]] = None
 
 
 class DocumentationResponse(BaseModel):

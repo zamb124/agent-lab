@@ -46,6 +46,157 @@ function _tagsFromItem(t) {
     return [];
 }
 
+function _hasInlineCode(t) {
+    return t && typeof t.code === 'string' && t.code.trim().length > 0;
+}
+
+const PYTHON_KEYWORDS = new Set([
+    'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue',
+    'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import',
+    'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while',
+    'with', 'yield',
+]);
+
+function _sdkMethodName(raw) {
+    let name = String(raw || '')
+        .replace(/[^0-9A-Za-z_]/g, '_')
+        .replace(/^_+|_+$/g, '');
+    if (name.length === 0) {
+        name = 'tool';
+    }
+    if (/^[0-9]/.test(name)) {
+        name = `tool_${name}`;
+    }
+    if (name === 'call' || name === 'then') {
+        name = `tool_${name}`;
+    }
+    return name;
+}
+
+function _exportedMethodName(raw) {
+    const parts = String(raw || '').match(/[0-9A-Za-z]+/g) || [];
+    if (parts.length === 0) {
+        return 'Call';
+    }
+    let name = parts.map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join('');
+    if (/^[0-9]/.test(name)) {
+        name = `Call${name}`;
+    }
+    return name;
+}
+
+function _jsonString(value) {
+    return JSON.stringify(String(value));
+}
+
+function _schemaType(prop) {
+    if (!isPlainObject(prop)) {
+        return 'string';
+    }
+    const t = prop.type;
+    if (typeof t === 'string' && t.length > 0) {
+        return t;
+    }
+    if (Array.isArray(t)) {
+        const item = t.find((x) => typeof x === 'string' && x !== 'null');
+        if (item) {
+            return item;
+        }
+    }
+    if (isPlainObject(prop.properties)) {
+        return 'object';
+    }
+    if ('items' in prop) {
+        return 'array';
+    }
+    return 'string';
+}
+
+function _schemaProperties(schema) {
+    if (!isPlainObject(schema) || !isPlainObject(schema.properties)) {
+        return {};
+    }
+    const out = {};
+    for (const [name, prop] of Object.entries(schema.properties)) {
+        if (isPlainObject(prop)) {
+            out[name] = prop;
+        }
+    }
+    return out;
+}
+
+function _argsSchemaFromParametersSchema(schema) {
+    const properties = _schemaProperties(schema);
+    const requiredRaw = isPlainObject(schema) && Array.isArray(schema.required) ? schema.required : [];
+    const required = new Set(requiredRaw.filter((x) => typeof x === 'string'));
+    const out = {};
+    for (const [name, prop] of Object.entries(properties)) {
+        const item = {
+            type: _schemaType(prop),
+            description: typeof prop.description === 'string' ? prop.description : '',
+            required: required.has(name),
+        };
+        if ('default' in prop) {
+            item.default = prop.default;
+        }
+        out[name] = item;
+    }
+    return out;
+}
+
+function _toolCallCode(language, toolId, parametersSchema) {
+    const lang = normalizeFlowCodeLanguage(language);
+    const method = _sdkMethodName(toolId);
+    const exported = _exportedMethodName(method);
+    const argNames = Object.keys(_schemaProperties(parametersSchema));
+    if (lang === 'python') {
+        const direct = argNames.length > 0
+            && argNames.every((name) => /^[A-Za-z_][0-9A-Za-z_]*$/.test(name) && !PYTHON_KEYWORDS.has(name));
+        if (direct) {
+            const kwargs = argNames.map((name) => `        ${name}=args[${_jsonString(name)}]`).join(',\n');
+            return `async def run(args, state):\n    result = await tools.${method}(\n${kwargs},\n    )\n    return {"result": result}\n`;
+        }
+        if (argNames.length > 0) {
+            const entries = argNames.map((name) => `        ${_jsonString(name)}: args[${_jsonString(name)}],`).join('\n');
+            return `async def run(args, state):\n    result = await tools.call(${_jsonString(toolId)}, **{\n${entries}\n    })\n    return {"result": result}\n`;
+        }
+        return `async def run(args, state):\n    result = await tools.${method}()\n    return {"result": result}\n`;
+    }
+    if (lang === 'javascript' || lang === 'typescript') {
+        const payload = argNames.length > 0
+            ? `{\n${argNames.map((name) => `    ${_jsonString(name)}: args[${_jsonString(name)}],`).join('\n')}\n  }`
+            : '{}';
+        return `async function run(args, state) {\n  const result = await tools.${method}(${payload});\n  return {result};\n}\n`;
+    }
+    if (lang === 'go') {
+        const payload = argNames.length > 0
+            ? `map[string]any{\n${argNames.map((name) => `        ${_jsonString(name)}: args[${_jsonString(name)}],`).join('\n')}\n    }`
+            : 'map[string]any{}';
+        return `package main\n\nfunc run(args map[string]any, state map[string]any) (any, error) {\n    result, err := tools.${exported}(${payload})\n    if err != nil {\n        return nil, err\n    }\n    return map[string]any{"result": result}, nil\n}\n`;
+    }
+    const payload = argNames.length > 0
+        ? `new Dictionary<string, object?> {\n${argNames.map((name) => `        [${_jsonString(name)}] = args[${_jsonString(name)}],`).join('\n')}\n    }`
+        : 'new Dictionary<string, object?>()';
+    return `using System.Collections.Generic;\nusing System.Threading.Tasks;\n\nasync Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)\n{\n    var result = await tools.${exported}(${payload});\n    return new Dictionary<string, object?> { ["result"] = result };\n}\n`;
+}
+
+function _generatedToolConfig(t, language) {
+    const parametersSchema = isPlainObject(t.parameters_schema) ? t.parameters_schema : {};
+    const cfg = {
+        tool_id: t.tool_id,
+        code: _toolCallCode(language, t.tool_id, parametersSchema),
+        language: normalizeFlowCodeLanguage(language),
+    };
+    const argsSchema = _argsSchemaFromParametersSchema(parametersSchema);
+    if (Object.keys(argsSchema).length > 0) {
+        cfg.args_schema = argsSchema;
+    }
+    if (Object.keys(parametersSchema).length > 0) {
+        cfg.parameters_schema = parametersSchema;
+    }
+    return cfg;
+}
+
 export class FlowsLibraryPickerModal extends PlatformModal {
     static i18nNamespace = 'flows';
 
@@ -224,6 +375,10 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 border: 1px solid var(--glass-border-subtle);
                 box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
             }
+            .lib-card-icon[data-kind='tool'] {
+                background: var(--accent-subtle);
+                color: var(--accent);
+            }
             .lib-card-icon[data-kind='code'] flows-code-language-icon {
                 width: 38px;
                 height: 38px;
@@ -349,12 +504,21 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     }
 
     _toolRegistryRows() {
-        const list = this._toolsAllItems().filter((t) => t.item_type !== 'flow');
+        const list = this._toolsAllItems().filter((t) => {
+            if (t.item_type === 'flow') {
+                return false;
+            }
+            return true;
+        });
         const tagF = this._activeTag;
         const q = _lower(this._search);
         const wantedLanguage = normalizeFlowCodeLanguage(this._codeLanguage);
         return list.filter((t) => {
-            if (this._isCodeNodeTemplates() && normalizeFlowCodeLanguage(t.language) !== wantedLanguage) {
+            if (
+                this._isCodeNodeTemplates()
+                && _hasInlineCode(t)
+                && normalizeFlowCodeLanguage(t.language) !== wantedLanguage
+            ) {
                 return false;
             }
             if (tagF.length > 0) {
@@ -470,10 +634,16 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (item.item_type === 'flow') {
             return 'flow';
         }
+        if (this._isCodeNodeTemplates()) {
+            return 'code';
+        }
         if (isMcpToolRegistryItem(item)) {
             return 'mcp';
         }
-        return 'code';
+        if (_hasInlineCode(item)) {
+            return 'code';
+        }
+        return 'tool';
     }
 
     /**
@@ -613,8 +783,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
     _renderRegistryCard(t, { onSelect }) {
         const icon = registryItemIconName(t);
         const kindAttr = this._iconKindAttr(t);
+        const cardLanguage = _hasInlineCode(t) ? t.language : this._codeLanguage;
         const cardIcon = kindAttr === 'code'
-            ? html`<flows-code-language-icon language=${t.language} size="38"></flows-code-language-icon>`
+            ? html`<flows-code-language-icon language=${cardLanguage} size="38"></flows-code-language-icon>`
             : html`<platform-icon name=${icon} size="26"></platform-icon>`;
         const title = registryItemTitle(t);
         const desc = typeof t.description === 'string' ? t.description : '';
@@ -630,8 +801,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 <div class="lib-card-desc">${this._mdDescription(desc)}</div>
                 <div class="lib-card-meta">
                     ${id.length > 0 ? html`<span class="lib-chip">${id}</span>` : null}
-                    ${kindAttr === 'code' && typeof t.language === 'string' && t.language.length > 0
-                        ? html`<span class="lib-chip">${flowCodeLanguageLabel(t.language)}</span>`
+                    ${kindAttr === 'code'
+                        ? html`<span class="lib-chip">${flowCodeLanguageLabel(cardLanguage)}</span>`
                         : nothing}
                     ${_tagsFromItem(t).map((g) => html`<span class="lib-chip">${g}</span>`)}
                 </div>
@@ -689,6 +860,9 @@ export class FlowsLibraryPickerModal extends PlatformModal {
             if (Object.keys(argsSchema).length > 0) {
                 cfg.args_schema = argsSchema;
             }
+            if (isPlainObject(t.parameters_schema)) {
+                cfg.parameters_schema = t.parameters_schema;
+            }
             const nodeName = typeof t.name === 'string' && t.name.length > 0
                 ? t.name
                 : (typeof t.id === 'string' ? t.id : 'code');
@@ -702,23 +876,22 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         if (!isPlainObject(t) || typeof t.tool_id !== 'string' || t.tool_id.length === 0) {
             return;
         }
-        if (typeof t.code !== 'string' || t.code.length === 0) {
-            this.toast('flows:code_node_templates_modal.toast_no_code', { type: 'error' });
-            return;
-        }
+        const generated = _hasInlineCode(t) ? null : _generatedToolConfig(t, this._codeLanguage);
         const fn = this.onCommit;
         this.close();
         if (typeof fn === 'function') {
-            const cfg = {
+            const cfg = generated || {
                 tool_id: t.tool_id,
                 code: t.code,
                 language: normalizeFlowCodeLanguage(t.language),
             };
-            if (t.args_schema && typeof t.args_schema === 'object') {
-                cfg.args_schema = t.args_schema;
-            }
-            if (t.parameters_schema && typeof t.parameters_schema === 'object') {
-                cfg.parameters_schema = t.parameters_schema;
+            if (!generated) {
+                if (t.args_schema && typeof t.args_schema === 'object') {
+                    cfg.args_schema = t.args_schema;
+                }
+                if (t.parameters_schema && typeof t.parameters_schema === 'object') {
+                    cfg.parameters_schema = t.parameters_schema;
+                }
             }
             const nodeName = typeof t.title === 'string' && t.title.length > 0
                 ? t.title

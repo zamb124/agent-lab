@@ -615,6 +615,29 @@ async def test_python_runner_does_not_evaluate_annotations_at_load(sandbox_servi
 
 
 @pytest.mark.asyncio
+async def test_python_runner_accepts_future_annotations_import(sandbox_services) -> None:
+    payload = _request(
+        "python",
+        "from __future__ import annotations\n\n"
+        "from typing import Any\n\n"
+        "async def run(args: dict[str, Any], state: Any):\n"
+        "    state['value'] = args['x'] + 1\n"
+        "    return {'ok': state['value']}\n",
+    )
+    async with AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"{sandbox_services['code_runner_python']}/code-runner-python/api/v1/execute",
+            json=payload,
+            headers={"X-Request-Id": "test-request-id", "X-Trace-Id": "test-trace-id"},
+        )
+    response.raise_for_status()
+    body = response.json()
+    assert body["status"] == "completed", body
+    assert body["result"] == {"ok": 42}
+    assert body["state"] == {"value": 42}
+
+
+@pytest.mark.asyncio
 async def test_example_bundles_inline_code_tools_execute_on_declared_languages(
     sandbox_services,
 ) -> None:

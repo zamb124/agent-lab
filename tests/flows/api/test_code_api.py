@@ -71,6 +71,18 @@ class TestCodeCompletions:
         assert "await tools.calculator(" in templates[0]["code"]
 
     @pytest.mark.asyncio
+    async def test_code_templates_include_platform_tools(self, client, app):
+        """Шаблоны code-ноды включают готовые platform tools на выбранном языке."""
+        response = await client.get("/flows/api/v1/code/templates?language=javascript")
+        assert response.status_code == 200
+        templates = response.json()["templates"]
+        by_id = {item["id"]: item for item in templates}
+        template = by_id["javascript-tool-browser_page_markdown"]
+        assert template["language"] == "javascript"
+        assert "await tools.browser_page_markdown" in template["code"]
+        assert template["args_schema"]["url"]["required"] is True
+
+    @pytest.mark.asyncio
     async def test_get_documentation_markdown(self, client, app):
         """GET /documentation отдаёт text/markdown."""
         response = await client.get("/flows/api/v1/code/documentation")

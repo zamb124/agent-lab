@@ -513,6 +513,16 @@ class TestToolsAPI:
         assert isinstance(data, list)
 
     @pytest.mark.asyncio
+    async def test_list_all_tools_includes_builtin_registry_tools(self, client, app):
+        """Общий picker должен видеть platform tools из ToolRegistry."""
+        response = await client.get("/flows/api/v1/tools/all?limit=2000&offset=0")
+        assert response.status_code == 200
+        page = response.json()
+        ids = {item["tool_id"] for item in page["items"]}
+        assert "browser_page_markdown" in ids
+        assert "schedule_one_time_task" in ids
+
+    @pytest.mark.asyncio
     async def test_get_tool(self, client, app, auth_headers_system):
         """Получение tool."""
         # calculator должен быть загружен

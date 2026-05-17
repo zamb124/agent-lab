@@ -472,7 +472,7 @@ class PythonSandboxExecutor:
 
             def build_namespace():
                 allowed_import_roots = {{
-                    "asyncio", "ast", "base64", "collections", "datetime", "decimal",
+                    "__future__", "asyncio", "ast", "base64", "collections", "datetime", "decimal",
                     "functools", "hashlib", "html", "itertools", "json", "math",
                     "random", "re", "statistics", "string", "time", "typing", "uuid",
                 }}

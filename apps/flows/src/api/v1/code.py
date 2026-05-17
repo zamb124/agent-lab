@@ -9,6 +9,7 @@ import ast
 import copy
 import importlib
 import inspect
+import json
 import keyword
 import re
 import time
@@ -153,6 +154,203 @@ def _execution_state_fields() -> list[StateField]:
         StateField(name="session_id", type="string", description="Runtime session id."),
         StateField(name="flow_config_version", type="string", description="Flow config version snapshot."),
     ]
+
+
+_RESERVED_SDK_METHODS = frozenset({"call", "then"})
+
+
+def _sdk_method_name(raw: str) -> str:
+    name = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in raw).strip("_")
+    if not name:
+        name = "tool"
+    if name[0].isdigit():
+        name = f"tool_{name}"
+    if name in _RESERVED_SDK_METHODS:
+        name = f"tool_{name}"
+    return name
+
+
+def _exported_method_name(raw: str) -> str:
+    parts: list[str] = []
+    current: list[str] = []
+    for ch in raw:
+        if ch.isalnum():
+            current.append(ch)
+        elif current:
+            parts.append("".join(current))
+            current = []
+    if current:
+        parts.append("".join(current))
+    if not parts:
+        return "Call"
+    name = "".join(part[:1].upper() + part[1:] for part in parts)
+    if name[:1].isdigit():
+        name = f"Call{name}"
+    return name
+
+
+def _schema_type(value: Any) -> str:
+    raw = value.get("type") if isinstance(value, dict) else None
+    if isinstance(raw, list):
+        raw = next((item for item in raw if isinstance(item, str) and item != "null"), None)
+    if isinstance(raw, str) and raw:
+        return raw
+    if isinstance(value, dict) and isinstance(value.get("properties"), dict):
+        return "object"
+    if isinstance(value, dict) and "items" in value:
+        return "array"
+    return "string"
+
+
+def _schema_properties(parameters_schema: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    if not isinstance(parameters_schema, dict):
+        return {}
+    raw = parameters_schema.get("properties")
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(name): prop
+        for name, prop in raw.items()
+        if isinstance(name, str) and isinstance(prop, dict)
+    }
+
+
+def _args_schema_from_parameters_schema(parameters_schema: dict[str, Any] | None) -> dict[str, Any]:
+    properties = _schema_properties(parameters_schema)
+    if not properties:
+        return {}
+    required_raw = parameters_schema.get("required") if isinstance(parameters_schema, dict) else None
+    required = {item for item in required_raw if isinstance(item, str)} if isinstance(required_raw, list) else set()
+    args_schema: dict[str, Any] = {}
+    for name, prop in properties.items():
+        item: dict[str, Any] = {
+            "type": _schema_type(prop),
+            "description": prop.get("description") if isinstance(prop.get("description"), str) else "",
+            "required": name in required,
+        }
+        if "default" in prop:
+            item["default"] = copy.deepcopy(prop["default"])
+        args_schema[name] = item
+    return args_schema
+
+
+def _tool_arg_entries(parameters_schema: dict[str, Any] | None) -> list[str]:
+    return list(_schema_properties(parameters_schema).keys())
+
+
+def _json_string(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _tool_call_code(language: CapabilityLanguage, tool_id: str, parameters_schema: dict[str, Any] | None) -> str:
+    method = _sdk_method_name(tool_id)
+    exported = _exported_method_name(method)
+    arg_names = _tool_arg_entries(parameters_schema)
+    if language == "python":
+        if arg_names and all(name.isidentifier() and not keyword.iskeyword(name) for name in arg_names):
+            kwargs = ",\n".join(
+                f"        {name}=args[{name!r}]"
+                for name in arg_names
+            )
+            return (
+                "async def run(args, state):\n"
+                f"    result = await tools.{method}(\n{kwargs},\n    )\n"
+                "    return {\"result\": result}\n"
+            )
+        if arg_names:
+            entries = ",\n".join(
+                f"        {name!r}: args[{name!r}],"
+                for name in arg_names
+            )
+            return (
+                "async def run(args, state):\n"
+                f"    result = await tools.call({tool_id!r}, **{{\n{entries}\n    }})\n"
+                "    return {\"result\": result}\n"
+            )
+        return (
+            "async def run(args, state):\n"
+            f"    result = await tools.{method}()\n"
+            "    return {\"result\": result}\n"
+        )
+    if language in {"javascript", "typescript"}:
+        if arg_names:
+            entries = ",\n".join(
+                f"    {name!r}: args[{name!r}],"
+                for name in arg_names
+            )
+            payload = f"{{\n{entries}\n  }}"
+        else:
+            payload = "{}"
+        return (
+            "async function run(args, state) {\n"
+            f"  const result = await tools.{method}({payload});\n"
+            "  return {result};\n"
+            "}\n"
+        )
+    if language == "go":
+        if arg_names:
+            entries = "\n".join(
+                f"        {_json_string(name)}: args[{_json_string(name)}],"
+                for name in arg_names
+            )
+            payload = f"map[string]any{{\n{entries}\n    }}"
+        else:
+            payload = "map[string]any{}"
+        return (
+            "package main\n\n"
+            "func run(args map[string]any, state map[string]any) (any, error) {\n"
+            f"    result, err := tools.{exported}({payload})\n"
+            "    if err != nil {\n"
+            "        return nil, err\n"
+            "    }\n"
+            "    return map[string]any{\"result\": result}, nil\n"
+            "}\n"
+        )
+    if arg_names:
+        entries = "\n".join(
+            f"        [{_json_string(name)}] = args[{_json_string(name)}],"
+            for name in arg_names
+        )
+        payload = f"new Dictionary<string, object?> {{\n{entries}\n    }}"
+    else:
+        payload = "new Dictionary<string, object?>()"
+    return (
+        "using System.Collections.Generic;\n"
+        "using System.Threading.Tasks;\n\n"
+        "async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)\n"
+        "{\n"
+        f"    var result = await tools.{exported}({payload});\n"
+        "    return new Dictionary<string, object?> { [\"result\"] = result };\n"
+        "}\n"
+    )
+
+
+def _platform_tool_templates(container: FlowContainer, language: CapabilityLanguage) -> list[CodeTemplate]:
+    registry = container.tool_registry
+    registry.register_builtin_tools()
+    templates: list[CodeTemplate] = []
+    for tool_id, tool in sorted(registry.list_all().items(), key=lambda item: item[0]):
+        if not getattr(type(tool), "listed_in_platform_tool_docs", True):
+            continue
+        parameters_schema = copy.deepcopy(getattr(tool, "parameters", None))
+        if not isinstance(parameters_schema, dict):
+            parameters_schema = {"type": "object", "properties": {}, "required": []}
+        tags = list(tool.get_tags()) if callable(getattr(tool, "get_tags", None)) else ["misc"]
+        templates.append(
+            CodeTemplate(
+                id=f"{language}-tool-{tool_id}",
+                name=str(getattr(tool, "name", tool_id)),
+                description=str(getattr(tool, "description", "")),
+                code=_tool_call_code(language, tool_id, parameters_schema),
+                category="platform_tools",
+                node_type="code",
+                tags=["tool", *tags],
+                language=language,
+                args_schema=_args_schema_from_parameters_schema(parameters_schema),
+                parameters_schema=parameters_schema,
+            )
+        )
+    return templates
 
 
 def _capability_templates(language: CapabilityLanguage) -> list[CodeTemplate]:
@@ -406,8 +604,12 @@ async def get_code_templates(
         tags: Теги через запятую (http,api)
     """
     capability_language = _require_capability_language(language)
-    _ = container, category, node_type, tags
-    return TemplatesResponse(templates=_capability_templates(capability_language))
+    _ = category, node_type, tags
+    templates = [
+        *_capability_templates(capability_language),
+        *_platform_tool_templates(container, capability_language),
+    ]
+    return TemplatesResponse(templates=templates)
 
 
 @router.get("/editor-state")

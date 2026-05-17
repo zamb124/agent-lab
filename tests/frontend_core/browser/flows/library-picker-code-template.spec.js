@@ -6,11 +6,12 @@ import {
     codeCompletionsOp,
     codeTemplatesOp,
     codeParseSignatureOp,
+    codeValidateOp,
 } from '../../../../apps/flows/ui/events/resources/code.resource.js';
 import '../../../../apps/flows/ui/modals/flows-library-picker-modal.js';
 import '../../../../apps/flows/ui/modals/flows-tool-create-modal.js';
 
-const FACTORIES = [toolsAllOp, toolsResource, codeCompletionsOp, codeTemplatesOp, codeParseSignatureOp];
+const FACTORIES = [toolsAllOp, toolsResource, codeCompletionsOp, codeTemplatesOp, codeParseSignatureOp, codeValidateOp];
 
 function bootstrap() {
     for (const factory of FACTORIES) {
@@ -139,5 +140,60 @@ describe('flows library picker code templates', () => {
         expect(created.title).to.equal('TypeScript tool');
         expect(created.language).to.equal('typescript');
         expect(created.parameters_schema).to.deep.equal({ type: 'object', properties: {} });
+    });
+
+    it('creates generated code-node template from registry-only platform tool', async () => {
+        const modal = await fixture(html`<flows-library-picker-modal></flows-library-picker-modal>`);
+        modal._modalId = 'test_modal';
+        let committed = null;
+        modal.onCommit = (detail) => {
+            committed = detail;
+        };
+        const platformTool = {
+            tool_id: 'browser_page_markdown',
+            title: 'browser_page_markdown',
+            item_type: 'tool',
+            code: null,
+            language: 'python',
+            parameters_schema: {
+                type: 'object',
+                properties: {
+                    url: { type: 'string', description: 'Page URL' },
+                },
+                required: ['url'],
+            },
+            tags: ['browser'],
+        };
+        modal._toolsAll = {
+            busy: false,
+            lastResult: {
+                items: [
+                    platformTool,
+                    {
+                        tool_id: 'py_transform',
+                        title: 'Python transform',
+                        item_type: 'tool',
+                        language: 'python',
+                        code: 'async def run(args, state):\n    return {}',
+                        tags: ['sandbox'],
+                    },
+                ],
+            },
+        };
+
+        modal._modalKind = 'flows.tool_picker';
+        expect(modal._pickModeRows().map((row) => row.tool_id)).to.include('browser_page_markdown');
+
+        modal._modalKind = 'flows.code_node_templates';
+        modal._codeLanguage = 'javascript';
+        expect(modal._toolRegistryRows().map((row) => row.tool_id)).to.include('browser_page_markdown');
+
+        modal._commitTool(platformTool);
+        await aTimeout(0);
+
+        expect(committed.config.language).to.equal('javascript');
+        expect(committed.config.tool_id).to.equal('browser_page_markdown');
+        expect(committed.config.code).to.include('await tools.browser_page_markdown');
+        expect(committed.config.args_schema.url.required).to.equal(true);
     });
 });
