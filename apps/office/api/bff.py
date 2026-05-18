@@ -270,11 +270,36 @@ _ONLYOFFICE_COMMAND_ERROR_DETAILS = {
     6: "invalid Document Server JWT token",
 }
 
+_LOCAL_DOCUMENT_SERVER_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
 def _document_server_command_base_url(settings: OfficeSettings) -> str:
     dev_upstream = (settings.server.document_server_dev_upstream_url or "").strip().rstrip("/")
     if settings.server.env in ("development", "test") and dev_upstream:
         return dev_upstream
     return settings.office.document_server_public_url.strip().rstrip("/")
+
+
+def _request_public_scheme(request: Request) -> str:
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
+    if forwarded_proto in {"http", "https"}:
+        return forwarded_proto
+    return request.url.scheme
+
+
+def _browser_document_server_url(raw_url: str, request: Request) -> str:
+    value = raw_url.strip().rstrip("/")
+    if not value:
+        return ""
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return value
+    host = (parsed.hostname or "").lower()
+    if _request_public_scheme(request) == "https" and parsed.scheme == "http" and host not in _LOCAL_DOCUMENT_SERVER_HOSTS:
+        return parsed._replace(scheme="https").geturl().rstrip("/")
+    return value
+
 
 async def _post_onlyoffice_command(
     *,
@@ -1490,6 +1515,7 @@ async def delete_document(binding_id: str, container: ContainerDep) -> Response:
 async def editor_config(
     binding_id: str,
     container: ContainerDep,
+    request: Request,
 ) -> OfficeEditorConfigResponse:
     namespace = await _require_explicit_namespace(container)
     ctx = _require_office_context()
@@ -1570,7 +1596,7 @@ async def editor_config(
         },
     }
     token = encode_editor_config(config, integ.jwt_secret)
-    ds = integ.document_server_public_url.rstrip("/")
+    ds = _browser_document_server_url(integ.document_server_public_url, request)
     return OfficeEditorConfigResponse(document_server_url=ds, token=token)
 
 @router.get("/office-download")

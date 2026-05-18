@@ -898,7 +898,14 @@ export class ChatPage extends PlatformPage {
     }
 
     _renderDesktopActions(hasFlow) {
+        const files = this._currentFiles();
         return html`
+            <chat-files-panel
+                inline
+                .files=${files}
+                active-company-id=${asString(this._activeCompanySel.value)}
+                @files-updated=${this._onFilesPanelUpdated}
+            ></chat-files-panel>
             <button
                 type="button"
                 class="action-btn"
@@ -974,8 +981,15 @@ export class ChatPage extends PlatformPage {
     }
 
     _renderMobileActions(hasFlow) {
+        const files = this._currentFiles();
         return html`
             <div class="flow-chat-header-actions" @click=${(e) => e.stopPropagation()}>
+                <chat-files-panel
+                    inline
+                    .files=${files}
+                    active-company-id=${asString(this._activeCompanySel.value)}
+                    @files-updated=${this._onFilesPanelUpdated}
+                ></chat-files-panel>
                 <button
                     type="button"
                     class="action-btn"
@@ -1052,7 +1066,6 @@ export class ChatPage extends PlatformPage {
         const branchLabel = this.branchId === 'base' ? this.t('platform_chat.base_branch') : this.branchId;
         const hasFlow = typeof this.flowId === 'string' && this.flowId.length > 0;
         const messages = this._currentMessages();
-        const files = this._currentFiles();
         const runTrace = this._currentRunTrace();
         const streaming = Boolean(this._chat.state?.streaming);
         const currentTaskId = asString(this._chat.state?.currentTaskId);
@@ -1106,11 +1119,6 @@ export class ChatPage extends PlatformPage {
                         @tts-output-toggle=${this._onTtsOutputToggle}
                     ></chat-input>
                 </div>
-                <chat-files-panel
-                    .files=${files}
-                    active-company-id=${asString(this._activeCompanySel.value)}
-                    @files-updated=${this._onFilesPanelUpdated}
-                ></chat-files-panel>
             </div>
         `;
     }

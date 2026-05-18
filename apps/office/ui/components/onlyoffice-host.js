@@ -71,6 +71,31 @@ function ensureOnlyOfficeIframePermissions(iframe) {
     iframe.setAttribute('allowfullscreen', '');
 }
 
+function isLocalDocumentServerHost(hostname) {
+    const host = String(hostname || '').toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+function browserSafeDocumentServerUrl(raw) {
+    const value = typeof raw === 'string' ? raw.trim().replace(/\/$/, '') : '';
+    if (!value || typeof window === 'undefined') {
+        return value;
+    }
+    try {
+        const url = new URL(value, window.location.href);
+        if (
+            window.location.protocol === 'https:'
+            && url.protocol === 'http:'
+            && !isLocalDocumentServerHost(url.hostname)
+        ) {
+            url.protocol = 'https:';
+        }
+        return url.toString().replace(/\/$/, '');
+    } catch {
+        return value;
+    }
+}
+
 let _ooEmbedCounter = 0;
 
 export class OnlyOfficeHost extends PlatformElement {
@@ -169,7 +194,7 @@ export class OnlyOfficeHost extends PlatformElement {
 
     _computeConfigKey(config) {
         if (!config || typeof config !== 'object') return null;
-        const ds = typeof config.document_server_url === 'string' ? config.document_server_url : '';
+        const ds = browserSafeDocumentServerUrl(config.document_server_url);
         const token = typeof config.token === 'string' ? config.token : '';
         if (token.length > 0) return `${ds}#${token}`;
         return ds;
@@ -445,9 +470,7 @@ export class OnlyOfficeHost extends PlatformElement {
     async _bootEditor() {
         const config = this.config;
         if (!config) return;
-        const dsUrl = typeof config.document_server_url === 'string'
-            ? config.document_server_url.trim().replace(/\/$/, '')
-            : '';
+        const dsUrl = browserSafeDocumentServerUrl(config.document_server_url);
         const token = typeof config.token === 'string' ? config.token : '';
         if (!dsUrl || !token) {
             this._emitError('bad_config', null);

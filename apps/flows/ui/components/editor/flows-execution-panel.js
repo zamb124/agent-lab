@@ -92,6 +92,24 @@ function _readAsBase64(file) {
     });
 }
 
+function _executionFileToUploadFile(raw) {
+    const name = asString(raw?.name);
+    const bytes = asString(raw?.bytes);
+    if (name.length === 0 || bytes.length === 0) {
+        throw new Error('flows-execution-panel: attached file is missing name or bytes');
+    }
+    if (typeof File === 'undefined' || typeof atob !== 'function') {
+        throw new Error('flows-execution-panel: File API is unavailable');
+    }
+    const binary = atob(bytes);
+    const data = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+        data[i] = binary.charCodeAt(i);
+    }
+    const type = asString(raw?.type) || 'application/octet-stream';
+    return new File([data], name, { type });
+}
+
 export class FlowsExecutionPanel extends PlatformElement {
     static i18nNamespace = 'flows';
 
@@ -516,6 +534,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._chat = this.useResource('flows/chat');
         this._send = this.useOp('flows/chat_send');
         this._cancel = this.useOp('flows/chat_cancel');
+        this._upload = this.useOp('flows/file_upload');
         this._ui = this.useSlice('flows/execution_ui');
         this._lastChatCtx = '';
         this._lastChatLen = 0;
@@ -928,6 +947,7 @@ export class FlowsExecutionPanel extends PlatformElement {
             'glass-button',
             'platform-switch',
             'platform-help-hint',
+            'chat-files-panel',
             '.resize-handle',
         ].join(',')));
     }
@@ -1054,7 +1074,10 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     async _handleFileSelect(e) {
-        const list = e.target.files;
+        const input = e.currentTarget instanceof HTMLInputElement
+            ? e.currentTarget
+            : (e.target instanceof HTMLInputElement ? e.target : null);
+        const list = input?.files;
         if (!list || list.length === 0) return;
         const files = Array.from(list);
         const prepared = await Promise.all(files.map(async (file) => ({
@@ -1064,23 +1087,62 @@ export class FlowsExecutionPanel extends PlatformElement {
             bytes: await _readAsBase64(file),
         })));
         this._ui.addFiles({ files: prepared });
-        e.target.value = '';
+        if (input) {
+            input.value = '';
+        }
     }
 
     _pickAttachedFiles() {
         const root = this.renderRoot;
         if (!root || typeof root.getElementById !== 'function') {
-            throw new Error('flows-execution-panel: renderRoot unavailable');
+            return;
         }
         const input = root.getElementById('flows-exec-file-input');
         if (!(input instanceof HTMLInputElement)) {
-            throw new Error('flows-execution-panel: file input missing');
+            return;
         }
         input.click();
     }
 
     _removeFile(index) {
         this._ui.removeFile({ index });
+    }
+
+    async _uploadExecutionFiles(files) {
+        const list = asArray(files);
+        const uploaded = [];
+        for (const raw of list) {
+            const file = _executionFileToUploadFile(raw);
+            const result = await this._upload.run({ file, public: 'false' });
+            if (!result || typeof result.file_id !== 'string' || result.file_id.length === 0) {
+                throw new Error('flows execution: file_upload op must return file_id');
+            }
+            const name = asString(result.original_name) || file.name;
+            const mimeType = asString(result.content_type) || file.type || 'application/octet-stream';
+            const size = typeof result.file_size === 'number' ? result.file_size : file.size;
+            const path = asString(result.url) || `/flows/api/v1/files/download/${encodeURIComponent(result.file_id)}`;
+            uploaded.push({
+                file_id: result.file_id,
+                name,
+                path,
+                url: path,
+                mime_type: mimeType,
+                type: mimeType,
+                size,
+            });
+        }
+        return uploaded;
+    }
+
+    _uploadedFileToPart(file) {
+        return {
+            kind: 'file',
+            file: {
+                name: asString(file.name),
+                mimeType: asString(file.mime_type) || asString(file.type) || 'application/octet-stream',
+                uri: asString(file.path) || asString(file.url),
+            },
+        };
     }
 
     async _onRun() {
@@ -1102,66 +1164,62 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
         const contextId = this._ensureContextId();
 
-        stopStreamTtsPlayback();
-
-        const userMessage = {
-            id: `user_${Date.now()}`,
-            role: 'user',
-            content: text,
-            timestamp: new Date().toISOString(),
-            files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
-        };
-        this._chat.addUserMessage({ contextId, message: userMessage });
-
-        const parts = [{ kind: 'text', text }];
-        for (const f of files) {
-            parts.push({
-                kind: 'file',
-                file: { name: f.name, mimeType: f.type, bytes: f.bytes },
-            });
-        }
-
-        this._ui.clear({});
-        const a2aMessage = {
-            messageId: `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-            role: 'user',
-            parts,
-            contextId,
-        };
-
-        const metadata = {};
-        if (this.branchId && this.branchId !== 'base') {
-            metadata.branch = this.branchId;
-        }
-        const preview = editorState.previewExecutionState;
-        const bps = preview && preview.breakpoints;
-        if (Array.isArray(bps) && bps.length > 0) {
-            metadata.breakpoints = bps;
-        }
-        if (Array.isArray(ui.mockResponses) && ui.mockResponses.length > 0) {
-            metadata.mock = {
-                enabled: true,
-                llm: ui.mockResponses.map((m) => ({
-                    type: 'text',
-                    content: m.response,
-                    match: m.match,
-                })),
-            };
-        }
-
-        const params = { message: a2aMessage };
-        if (Object.keys(metadata).length > 0) {
-            params.metadata = metadata;
-        }
-
-        if (readTtsOutputEnabled() && !this._voiceOn) {
-            primeStreamTtsPlaybackFromUserGesture();
-            this._primeExecTtsOnlyStreamFromUserGesture();
-            await this._awaitExecTtsOnlyReady();
-        }
-
         this._editor.setAgentExecutionRunning({ running: true });
         try {
+            stopStreamTtsPlayback();
+
+            const uploadedFiles = await this._uploadExecutionFiles(files);
+            const fileParts = uploadedFiles.map((file) => this._uploadedFileToPart(file));
+            const userMessage = {
+                id: `user_${Date.now()}`,
+                role: 'user',
+                content: text,
+                timestamp: new Date().toISOString(),
+                files: uploadedFiles,
+            };
+            this._chat.addUserMessage({ contextId, message: userMessage });
+
+            const parts = [{ kind: 'text', text }, ...fileParts];
+
+            this._ui.clear({});
+            const a2aMessage = {
+                messageId: `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+                role: 'user',
+                parts,
+                contextId,
+            };
+
+            const metadata = {};
+            if (this.branchId && this.branchId !== 'base') {
+                metadata.branch = this.branchId;
+            }
+            const preview = editorState.previewExecutionState;
+            const bps = preview && preview.breakpoints;
+            if (Array.isArray(bps) && bps.length > 0) {
+                metadata.breakpoints = bps;
+            }
+            if (Array.isArray(ui.mockResponses) && ui.mockResponses.length > 0) {
+                metadata.mock = {
+                    enabled: true,
+                    llm: ui.mockResponses.map((m) => ({
+                        type: 'text',
+                        content: m.response,
+                        match: m.match,
+                    })),
+                };
+            }
+
+            const params = { message: a2aMessage };
+            if (Object.keys(metadata).length > 0) {
+                params.metadata = metadata;
+            }
+
+            if (readTtsOutputEnabled() && !this._voiceOn) {
+                primeStreamTtsPlaybackFromUserGesture();
+                this._primeExecTtsOnlyStreamFromUserGesture();
+                await this._awaitExecTtsOnlyReady();
+            }
+
             await this._send.run({ flow_id: this.flowId, params });
         } finally {
             this._editor.setAgentExecutionRunning({ running: false });

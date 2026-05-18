@@ -1002,6 +1002,17 @@ export class ChatFilesPanel extends PlatformElement {
         this._expanded = !this._expanded;
     }
 
+    _stopOuterPanelEvent(event) {
+        if (event && typeof event.stopPropagation === 'function') {
+            event.stopPropagation();
+        }
+    }
+
+    _toggleFromEvent(event) {
+        this._stopOuterPanelEvent(event);
+        this._toggle();
+    }
+
     _selectedFile() {
         const key = this._selectedKey;
         return asArray(this.files).find((file) => fileKey(file) === key) || null;
@@ -1022,7 +1033,8 @@ export class ChatFilesPanel extends PlatformElement {
         this._syncEditorPortal();
     }
 
-    async _open(file) {
+    async _open(file, event = null) {
+        this._stopOuterPanelEvent(event);
         const key = fileKey(file);
         const isSameOpenEditor = this._editorUrl.length > 0 && this._selectedKey === key;
         if (!canOpenInDocuments(file)) {
@@ -1169,7 +1181,8 @@ export class ChatFilesPanel extends PlatformElement {
                 type="button"
                 class=${classMap({ 'file-row': true, active })}
                 ?disabled=${busy}
-                @click=${() => this._open(file)}
+                @pointerdown=${this._stopOuterPanelEvent}
+                @click=${(event) => this._open(file, event)}
                 title=${canOpen ? asString(file.name) : 'Download'}
                 style=${`--stagger: ${Math.min(asArray(this.files).indexOf(file) * 10, 110)}px`}
             >
@@ -1194,15 +1207,23 @@ export class ChatFilesPanel extends PlatformElement {
             return nothing;
         }
         return html`
-            <div class="widget">
-                <button type="button" class="trigger" @click=${this._toggle}>
+            <div
+                class="widget"
+                @pointerdown=${this._stopOuterPanelEvent}
+                @click=${this._stopOuterPanelEvent}
+            >
+                <button type="button" class="trigger" @click=${this._toggleFromEvent}>
                     <platform-icon name="paperclip" size="18"></platform-icon>
                     <span>Files <span class="count">${files.length}</span></span>
                     <platform-icon name=${this._expanded ? 'chevron-up' : 'chevron-down'} size="16"></platform-icon>
                 </button>
                 ${this._expanded
                     ? html`
-                        <div class="tray">
+                        <div
+                            class="tray"
+                            @pointerdown=${this._stopOuterPanelEvent}
+                            @click=${this._stopOuterPanelEvent}
+                        >
                         ${files.map((file) => this._renderFile(file))}
                         ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
                         </div>

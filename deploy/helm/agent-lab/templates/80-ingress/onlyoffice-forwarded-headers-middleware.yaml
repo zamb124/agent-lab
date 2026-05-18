@@ -1,0 +1,14 @@
+{{- if and .Values.ingress.enabled .Values.onlyoffice.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: onlyoffice-forwarded-headers
+  namespace: {{ .Values.namespace }}
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Proto: "https"
+      X-Forwarded-Host: {{ .Values.ingress.onlyofficeHost | quote }}
+      X-Forwarded-Port: "443"
+{{- end }}

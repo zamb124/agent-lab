@@ -671,6 +671,12 @@ export class ChatMessage extends PlatformElement {
                     max-width: 100%;
                     width: 100%;
                 }
+
+                .message.user .bubble {
+                    width: fit-content;
+                    max-width: 100%;
+                    margin-left: auto;
+                }
                 
                 .message.user .content {
                     padding-right: 40px;
