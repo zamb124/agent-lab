@@ -33,6 +33,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-button.js';
 
 const _CUSTOM_REF_PREFIX = 'custom:';
+const _HUMANITEC_LLM_PROVIDER = 'humanitec_llm';
 
 export class PlatformLlmConfigEditor extends PlatformElement {
     static i18nNamespace = 'frontend';
@@ -87,7 +88,14 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         return typeof value === 'string' && value.startsWith(_CUSTOM_REF_PREFIX);
     }
 
+    _isHumanitecLlmProvider(value) {
+        return value === _HUMANITEC_LLM_PROVIDER;
+    }
+
     _supportsModelOverride() {
+        if (this._isHumanitecLlmProvider((this.config && this.config.provider) || '')) {
+            return false;
+        }
         return (
             typeof this.capability === 'string'
             && (
@@ -115,6 +123,13 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             patch.api_key = null;
             patch.base_url = null;
             patch.extra_request_headers = null;
+        }
+        if (this._isHumanitecLlmProvider(value)) {
+            patch.api_key = null;
+            patch.base_url = null;
+            patch.folder_id = null;
+            patch.extra_request_headers = null;
+            patch.model = null;
         }
         this._emitChange(patch);
     }
@@ -155,7 +170,8 @@ export class PlatformLlmConfigEditor extends PlatformElement {
     render() {
         const provider = (this.config && this.config.provider) || '';
         const isCustom = this._isCustomProvider(provider);
-        const showByok = !isCustom && this.mode === 'company_capability';
+        const isHumanitecLlm = this._isHumanitecLlmProvider(provider);
+        const showByok = !isCustom && !isHumanitecLlm && this.mode === 'company_capability';
         const showModelOverride = this._supportsModelOverride();
         const costOriginBadge = this.costOrigin
             ? html`<span class="badge" data-kind=${this.costOrigin}>${

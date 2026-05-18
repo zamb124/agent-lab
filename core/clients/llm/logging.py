@@ -18,6 +18,7 @@ from core.logging.attributes import (
     LOG_LLM_MODEL,
     LOG_LLM_OUTPUT_TOKENS,
     LOG_LLM_PROVIDER,
+    LOG_LLM_SOURCE,
     LOG_LLM_STREAM,
     LOG_LLM_TOTAL_TOKENS,
     LOG_LLM_URL,
@@ -33,6 +34,7 @@ def log_llm_stream_response(
     usage: dict[str, Any],
     provider: str | None = None,
     model: str | None = None,
+    source: str | None = None,
     duration_ms: float | None = None,
     reasoning: str | None = None,
     tool_calls: list[Any] | None = None,
@@ -52,6 +54,8 @@ def log_llm_stream_response(
         fields[LOG_LLM_PROVIDER] = provider
     if model is not None:
         fields[LOG_LLM_MODEL] = model
+    if source is not None:
+        fields[LOG_LLM_SOURCE] = source
     if duration_ms is not None:
         fields[LOG_LLM_DURATION_MS] = round(duration_ms, 2)
 

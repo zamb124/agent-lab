@@ -284,6 +284,37 @@ class BillingService:
         merged.pop("tool", None)
         return merged
 
+    def get_static_resource_base_prices(self) -> Dict[str, Dict[str, float]]:
+        return copy.deepcopy(self._resource_base_prices_static)
+
+    def get_tariff_multipliers_for_plan(self, plan: TariffPlan) -> Dict[str, Dict[str, float]]:
+        return copy.deepcopy(self._tariff_prices.get(plan, {}))
+
+    def apply_tariff_multipliers_to_base_prices(
+        self,
+        base_prices: Dict[str, Dict[str, float]],
+        plan: TariffPlan,
+    ) -> Dict[str, Dict[str, float]]:
+        tariff_prices = self._tariff_prices.get(plan, {})
+        out: Dict[str, Dict[str, float]] = {}
+        for category, resources in base_prices.items():
+            category_multipliers = tariff_prices.get(category, {})
+            out_bucket: Dict[str, float] = {}
+            for resource, base_cost in resources.items():
+                if base_cost == 0:
+                    out_bucket[resource] = 0.0
+                    continue
+                if resource in category_multipliers:
+                    multiplier = category_multipliers[resource]
+                elif "*" in category_multipliers:
+                    multiplier = category_multipliers["*"]
+                else:
+                    multiplier = 1.0
+                out_bucket[resource] = float(base_cost) * float(multiplier)
+            out[category] = out_bucket
+        out.pop("tool", None)
+        return out
+
     async def get_effective_resource_base_prices_for_company(self, company_id: str) -> Dict[str, Dict[str, float]]:
         merged = await self.get_effective_resource_base_prices()
         if self._shared_storage is None:

@@ -435,8 +435,6 @@ export const editorResource = createAsyncOp({
                 entryNodeId: nextEntry,
                 inheritedNodeIds,
                 inheritedEdgeKeys,
-                dataflow: null,
-                dataflowObservations: {},
             };
         }
 

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import NodeConfig, ToolReference
 from apps.flows.src.models.enums import NodeType, ReactToolRole
-from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.models.tool_reference import CallParameter
 from core.logging import get_logger
 from core.pagination import OffsetPage
@@ -22,8 +22,8 @@ router = APIRouter(tags=["nodes"])
 JsonDict = dict[str, Any]
 
 
-class NodeLLMOverrideRequest(BaseModel):
-    """Request для переопределения LLM настроек ноды."""
+class NodeLLMConfigRequest(BaseModel):
+    """Request для LLM настроек ноды."""
 
     model: str | None = None
     temperature: float | None = None
@@ -39,7 +39,7 @@ class NodeCreateRequest(BaseModel):
     description: str | None = None
     prompt: str | None = None
     tools: list[Any] = Field(default_factory=list)  # str для обычных tools, dict для inline tools
-    llm: NodeLLMOverrideRequest | None = None
+    llm: NodeLLMConfigRequest | None = None
     variables: dict[str, Any] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
 
@@ -111,7 +111,7 @@ def _node_to_response(node: NodeConfig) -> NodeResponse:
         description=node.description,
         prompt=node.prompt,
         tools=[_tool_ref_to_response(t) for t in node.tools],
-        llm=node.llm_override.model_dump() if node.llm_override else None,
+        llm=node.llm.model_dump() if node.llm else None,
         variables=node.local_variables,
         tags=node.tags,
         source=node.source,
@@ -147,9 +147,9 @@ async def create_node(request: NodeCreateRequest, container: ContainerDep) -> No
                     raise HTTPException(status_code=400, detail=f"Tool '{tool_ref}' not found")
             tools.append(ToolReference(tool_id=tool_ref))
 
-    llm_config: NodeLLMOverride | None = None
+    llm_config: NodeLLMConfig | None = None
     if request.llm:
-        llm_config = NodeLLMOverride(**request.llm.model_dump())
+        llm_config = NodeLLMConfig(**request.llm.model_dump())
 
     node_config = NodeConfig(
         node_id=request.node_id,
@@ -201,9 +201,9 @@ async def update_node(
                         raise HTTPException(status_code=400, detail=f"Tool '{tool_ref}' not found")
             tools.append(ToolReference(tool_id=tool_ref))
 
-    llm_config: NodeLLMOverride | None = None
+    llm_config: NodeLLMConfig | None = None
     if request.llm:
-        llm_config = NodeLLMOverride(**request.llm.model_dump())
+        llm_config = NodeLLMConfig(**request.llm.model_dump())
 
     node_config = NodeConfig(
         node_id=node_id,

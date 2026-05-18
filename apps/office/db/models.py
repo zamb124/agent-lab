@@ -73,7 +73,7 @@ class OfficeDocumentBinding(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-
     __table_args__ = (
         Index("ix_office_bindings_company_namespace_created", "company_id", "namespace", "created_at"),
+        Index("uq_office_bindings_company_namespace_file", "company_id", "namespace", "file_id", unique=True),
     )

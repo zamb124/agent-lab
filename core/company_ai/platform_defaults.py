@@ -11,6 +11,7 @@ LLM_CODEGEN, LLM_VISION, IMAGE_GEN). Для LLM_CHAT модель берётся
 
 from __future__ import annotations
 
+from core.clients.llm.model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
 from core.company_ai.schema import AICapability
 from core.config import get_settings
 
@@ -56,6 +57,15 @@ def platform_default_model(capability: AICapability, provider: str | None = None
     Возвращает None, если для capability нет жёсткого дефолта (например LLM_CHAT — берётся
     из settings.llm.default_model, или из bundle-нод flows runtime overlay-ом).
     """
+    if provider == HUMANITEC_LLM_PROVIDER:
+        if capability in (
+            AICapability.LLM_CHAT,
+            AICapability.LLM_SUMMARIZE,
+            AICapability.LLM_FORMAT_MARKDOWN,
+            AICapability.LLM_CODEGEN,
+        ):
+            return HUMANITEC_LLM_AUTO_MODEL
+        return None
     if provider:
         per_provider = _PROVIDER_MODEL_BY_CAPABILITY.get(capability) or {}
         if provider in per_provider and str(per_provider[provider]).strip():

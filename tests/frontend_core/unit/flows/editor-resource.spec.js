@@ -48,6 +48,32 @@ describe('flows/editor extraReducer', () => {
         expect(s.historyStack).toEqual([]);
     });
 
+    it('branch_data_updated сохраняет dataflow до нового inspect результата', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/editor/flow_loaded', {
+            flow: { flow_id: 'demo', name: 'Demo', nodes: { a: { type: 'code' } }, edges: [], variables: {} },
+            branchId: 'base',
+        });
+        const dataflow = { nodes: { a: { incoming_state: [{ path: 'content' }] } } };
+        bus.dispatch('flows/editor/dataflow_set', { dataflow });
+        bus.dispatch('flows/editor/dataflow_observation_recorded', {
+            nodeId: 'a',
+            observation: { diff: [], output_state: { content: 'x' } },
+        });
+
+        bus.dispatch('flows/editor/branch_data_updated', {
+            data: {
+                nodes: { a: { type: 'code', input_mapping: { content: '@state:content' } } },
+                edges: [],
+                variables: {},
+            },
+        });
+
+        const s = getState().flowsEditor;
+        expect(s.dataflow).toEqual(dataflow);
+        expect(s.dataflowObservations.a.output_state.content).toBe('x');
+    });
+
     it('flow_loaded: авто-раскладка нод 0,0 (>=2) ставит isDirty', () => {
         const { bus, getState } = build();
         bus.dispatch('flows/editor/flow_loaded', {

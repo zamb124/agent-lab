@@ -18,9 +18,9 @@
       "name": "Фитнес демо-тренер",
       "prompt": "prompts/main.md",
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.3,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       },
       "tools": [
         "ask_user",

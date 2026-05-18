@@ -7,11 +7,24 @@ import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-icon.js';
+import '@platform/lib/components/platform-json-editor.js';
 import { FrontendSystemAccessModal } from '../../modals/system-access-modal.js';
 import { FrontendBalanceGrantModal } from '../../modals/balance-grant-modal.js';
 
 const TABS = Object.freeze(['companies', 'prices_rules', 'usage']);
+const BILLING_RULE_ATTR_SUGGESTIONS = Object.freeze([
+    'platform.billing.quantity',
+    'platform.billing.settlement_quantity_rub',
+    'platform.billing.resource_name',
+    'platform.billing.cost_origin',
+    'platform.llm.provider',
+    'platform.llm.model',
+    'platform.llm.total_tokens',
+    'platform.llm.input_tokens',
+    'platform.llm.output_tokens',
+]);
 
 export class FrontendBillingAdminPage extends PlatformPage {
     static properties = {
@@ -25,6 +38,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
         _companyPricesDraft: { state: true },
         _rulesDraft: { state: true },
         _rulesDraftError: { state: true },
+        _matchModeDraft: { state: true },
         _usageFilters: { state: true },
         _usageFacetOpen: { state: true },
     };
@@ -66,11 +80,46 @@ export class FrontendBillingAdminPage extends PlatformPage {
             }
             .company-panel {
                 display: grid;
-                grid-template-columns: minmax(280px, 1fr) auto minmax(240px, 0.8fr);
+                grid-template-columns: minmax(320px, 1fr) minmax(240px, 0.8fr);
                 gap: var(--space-4);
                 align-items: end;
             }
             .company-search { position: relative; min-width: 0; }
+            .company-search platform-field { width: 100%; }
+            .field-search-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 32px;
+                height: 32px;
+                min-width: 32px;
+                min-height: 32px;
+                padding: 0;
+                border: 1px solid var(--accent);
+                border-radius: var(--radius-full);
+                background: var(--accent);
+                color: white;
+                cursor: pointer;
+                box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 24%, transparent);
+                transition:
+                    transform var(--duration-fast) var(--easing-default),
+                    box-shadow var(--duration-fast) var(--easing-default),
+                    background var(--duration-fast) var(--easing-default);
+            }
+            .field-search-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 32%, transparent);
+            }
+            .field-search-btn:focus-visible {
+                outline: 2px solid color-mix(in srgb, var(--accent) 38%, white);
+                outline-offset: 2px;
+            }
+            .field-search-btn:disabled {
+                opacity: 0.55;
+                cursor: not-allowed;
+                transform: none;
+                box-shadow: none;
+            }
             .company-meta {
                 display: grid;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -214,6 +263,12 @@ export class FrontendBillingAdminPage extends PlatformPage {
             }
             .source.company { color: var(--accent); border-color: var(--accent); }
             .source.global { color: var(--warning); border-color: var(--warning); }
+            .badge-row {
+                display: flex;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+                justify-content: flex-end;
+            }
 
             .filters {
                 display: grid;
@@ -234,8 +289,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 text-transform: uppercase;
                 letter-spacing: 0.04em;
             }
-            .row-input,
-            .company-input {
+            .row-input {
                 background: var(--glass-solid-medium);
                 border: 1px solid var(--glass-border-subtle);
                 border-radius: var(--radius-sm);
@@ -293,12 +347,209 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 font-size: var(--text-sm);
                 margin-top: var(--space-2);
             }
+            .rule-list {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+            .rule-card {
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-sm);
+                background: var(--glass-solid-medium);
+                padding: var(--space-2);
+            }
+            .rule-card:focus {
+                outline: 2px solid color-mix(in srgb, var(--accent) 36%, transparent);
+                outline-offset: 2px;
+            }
+            .rule-card-head {
+                display: flex;
+                justify-content: space-between;
+                gap: var(--space-2);
+                align-items: flex-start;
+                margin-bottom: var(--space-2);
+            }
+            .rule-title {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                min-width: 0;
+                color: var(--text-primary);
+                font-weight: var(--font-semibold);
+            }
+            .rule-grid {
+                display: grid;
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+                gap: var(--space-2);
+            }
+            .match-grid {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                column-gap: var(--space-2);
+                row-gap: var(--space-2);
+                margin-top: var(--space-2);
+                align-items: end;
+            }
+            .match-combo {
+                display: flex;
+                flex-direction: column;
+                gap: var(--field-pill-gap);
+                padding: var(--field-pill-dense-padding-y) var(--field-pill-dense-padding-x);
+                border: 1px solid var(--field-pill-border);
+                border-radius: var(--field-pill-compact-radius);
+                background: var(--field-pill-bg);
+                min-width: 0;
+                box-sizing: border-box;
+            }
+            .match-combo:focus-within {
+                border-color: var(--accent);
+                box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+            }
+            .match-combo-head {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                min-width: 0;
+            }
+            .match-combo-label {
+                color: var(--field-pill-label-color);
+                font-size: var(--field-pill-label-size);
+                font-weight: var(--field-pill-label-weight);
+                line-height: var(--field-pill-label-line, 1.1);
+                letter-spacing: var(--field-pill-label-letter);
+                text-transform: uppercase;
+            }
+            .match-combo-head platform-help-hint,
+            .rule-subtitle platform-help-hint {
+                flex-shrink: 0;
+            }
+            .match-combo-control {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr);
+                gap: var(--space-1);
+                align-items: center;
+                min-height: var(--field-pill-dense-spin-height);
+                box-sizing: border-box;
+            }
+            .match-mode-picker {
+                display: inline-flex;
+                align-items: center;
+                gap: 2px;
+                min-height: var(--field-pill-dense-spin-height);
+                padding-right: var(--space-1);
+                border-right: 1px solid var(--glass-border-subtle);
+                box-sizing: border-box;
+            }
+            .match-mode-btn {
+                width: 24px;
+                height: 24px;
+                min-width: 24px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                border: 1px solid transparent;
+                border-radius: var(--radius-sm);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+            }
+            .match-mode-btn:hover,
+            .match-mode-btn:focus-visible {
+                color: var(--text-primary);
+                background: var(--glass-solid-medium);
+                border-color: var(--glass-border-subtle);
+                outline: none;
+            }
+            .match-mode-btn[aria-pressed="true"] {
+                color: var(--accent);
+                background: color-mix(in srgb, var(--accent) 13%, transparent);
+                border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+            }
+            .match-value-input {
+                width: 100%;
+                min-width: 0;
+                min-height: var(--field-pill-dense-spin-height);
+                border: 0;
+                border-radius: 0;
+                background: transparent;
+                color: var(--field-pill-input-color);
+                font-size: var(--field-pill-compact-input-size);
+                font-weight: var(--field-pill-compact-input-weight);
+                padding: 0 var(--space-2);
+                outline: none;
+                box-sizing: border-box;
+            }
+            .match-value-input:disabled {
+                color: var(--text-tertiary);
+                background: color-mix(in srgb, var(--glass-solid-medium) 48%, transparent);
+                cursor: not-allowed;
+            }
+            .rule-subsection {
+                margin-top: var(--space-2);
+                padding-top: var(--space-2);
+                border-top: 1px solid var(--glass-border-subtle);
+            }
+            .rule-subtitle {
+                display: flex;
+                align-items: center;
+                gap: var(--space-1);
+                color: var(--text-secondary);
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                margin-bottom: var(--space-2);
+            }
+            .kv-editor-row {
+                display: grid;
+                grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) auto;
+                gap: var(--space-2);
+                align-items: end;
+                margin-bottom: var(--space-2);
+            }
+            .present-row {
+                display: grid;
+                grid-template-columns: minmax(220px, 1fr) auto;
+                gap: var(--space-2);
+                align-items: end;
+                margin-bottom: var(--space-2);
+            }
+            .rule-card .btn {
+                min-height: 30px;
+                padding: var(--space-1) var(--space-2);
+                font-size: var(--text-xs);
+            }
+            .rule-card platform-field {
+                min-width: 0;
+            }
+            .json-details {
+                margin-top: var(--space-4);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-sm);
+                overflow: hidden;
+            }
+            .json-details summary {
+                cursor: pointer;
+                padding: var(--space-3);
+                color: var(--text-primary);
+                font-weight: var(--font-semibold);
+                background: var(--glass-solid-medium);
+            }
+            .json-details platform-json-editor {
+                border: none;
+                border-radius: 0;
+            }
 
             @media (max-width: 900px) {
                 .company-panel,
                 .split,
                 .filters,
-                .summary-row {
+                .summary-row,
+                .rule-grid,
+                .match-grid,
+                .kv-editor-row,
+                .present-row {
                     grid-template-columns: 1fr;
                 }
                 .company-meta { grid-template-columns: 1fr; }
@@ -319,8 +570,10 @@ export class FrontendBillingAdminPage extends PlatformPage {
         this._companyPricesDraft = null;
         this._rulesDraft = null;
         this._rulesDraftError = '';
+        this._matchModeDraft = {};
         this._usageFilters = {};
         this._usageFacetOpen = null;
+        this._pendingRuleScrollId = null;
 
         this._companies = this.useOp('frontend/admin_billing_companies');
         this._companyResolve = this.useOp('frontend/admin_billing_company_resolve');
@@ -476,34 +729,51 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return html`
             <div class="company-panel">
                 <div class="company-search">
-                    <span class="meta-label">${this.t('platform_billing_page.billing_scope_banner_title')}</span>
-                    <input
-                        class="company-input"
-                        type="text"
-                        data-canon="combobox"
-                        placeholder=${this.t('platform_billing_page.billing_company_search_placeholder')}
+                    <platform-field
+                        type="string"
+                        input-type="search"
+                        mode="edit"
+                        pill-density="compact"
+                        .label=${this.t('platform_billing_page.billing_scope_banner_title')}
+                        .placeholder=${this.t('platform_billing_page.billing_company_search_placeholder')}
                         .value=${this._companyQuery}
-                        @input=${(e) => this._onCompanyInput(e.target.value)}
+                        ?disabled=${this._companyResolve.busy}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('billing company scope: company query expects detail.value string');
+                            }
+                            this._onCompanyInput(e.detail.value);
+                        }}
                         @keydown=${(e) => { if (e.key === 'Enter') this._resolveCompany(); }}
-                        @blur=${() => setTimeout(() => { this._facetOpen = false; }, 180)}
-                    />
+                        @platform-field-managed-focus-out=${() => setTimeout(() => { this._facetOpen = false; }, 180)}
+                    >
+                        <button
+                            slot="suffix"
+                            type="button"
+                            class="field-search-btn"
+                            ?disabled=${this._companyResolve.busy}
+                            title=${this.t('platform_billing_page.billing_company_apply')}
+                            aria-label=${this.t('platform_billing_page.billing_company_apply')}
+                            @click=${() => this._resolveCompany()}
+                        >
+                            <platform-icon name="refresh" size="15"></platform-icon>
+                        </button>
+                    ></platform-field>
                     ${this._facetOpen ? html`
                         <div class="suggest">
                             ${items.length === 0
                                 ? html`<div class="suggest-item">${this.t('platform_billing_page.empty')}</div>`
                                 : items.map((it) => html`
-                                    <div class="suggest-item"
-                                        @mousedown=${(e) => { e.preventDefault(); this._selectCompanyFromFacet(it); }}>
+                                    <div
+                                        class="suggest-item"
+                                        @mousedown=${(e) => { e.preventDefault(); this._selectCompanyFromFacet(it); }}
+                                    >
                                         ${typeof it.label === 'string' && it.label.length > 0 ? it.label : it.value}
                                     </div>
                                 `)}
                         </div>
                     ` : null}
                 </div>
-                <button class="btn primary" ?disabled=${this._companyResolve.busy} @click=${() => this._resolveCompany()}>
-                    <platform-icon name="search" size="16"></platform-icon>
-                    ${this.t('platform_billing_page.billing_company_apply')}
-                </button>
                 <div class="company-meta">
                     <div class="meta-item">
                         <span class="meta-label">${this.t('platform_billing_page.billing_scope_active_label')}</span>
@@ -624,6 +894,61 @@ export class FrontendBillingAdminPage extends PlatformPage {
         return 'base';
     }
 
+    _catalogValue(catalog, category, resourceName) {
+        if (!catalog || typeof catalog !== 'object') return null;
+        const bucket = catalog[category];
+        if (!bucket || typeof bucket !== 'object') return null;
+        if (!Object.prototype.hasOwnProperty.call(bucket, resourceName)) return null;
+        const value = bucket[resourceName];
+        return typeof value === 'number' && !Number.isNaN(value) ? value : null;
+    }
+
+    _tariffMultiplier(tariffMultipliers, category, resourceName) {
+        if (!tariffMultipliers || typeof tariffMultipliers !== 'object') return 1;
+        const bucket = tariffMultipliers[category];
+        if (!bucket || typeof bucket !== 'object') return 1;
+        if (Object.prototype.hasOwnProperty.call(bucket, resourceName)) {
+            const value = bucket[resourceName];
+            return typeof value === 'number' && !Number.isNaN(value) ? value : 1;
+        }
+        if (Object.prototype.hasOwnProperty.call(bucket, '*')) {
+            const value = bucket['*'];
+            return typeof value === 'number' && !Number.isNaN(value) ? value : 1;
+        }
+        return 1;
+    }
+
+    _pricingLayerRows({ staticBase, globalOverride, companyOverride, effective, unitEffective, tariffMultipliers }) {
+        const keys = new Set();
+        for (const catalog of [staticBase, globalOverride, companyOverride, effective, unitEffective]) {
+            if (!catalog || typeof catalog !== 'object') continue;
+            for (const [category, resources] of Object.entries(catalog)) {
+                if (!resources || typeof resources !== 'object') continue;
+                for (const resourceName of Object.keys(resources)) {
+                    keys.add(`${category}\u0000${resourceName}`);
+                }
+            }
+        }
+        const rows = [];
+        for (const key of keys) {
+            const [category, resourceName] = key.split('\u0000');
+            const row = {
+                category,
+                resource_name: resourceName,
+                static_base: this._catalogValue(staticBase, category, resourceName),
+                global_override: this._catalogValue(globalOverride, category, resourceName),
+                company_override: this._catalogValue(companyOverride, category, resourceName),
+                base_effective: this._catalogValue(effective, category, resourceName),
+                tariff_multiplier: this._tariffMultiplier(tariffMultipliers, category, resourceName),
+                unit_effective: this._catalogValue(unitEffective, category, resourceName),
+            };
+            row.source = this._priceSource(row, companyOverride, globalOverride);
+            rows.push(row);
+        }
+        rows.sort((a, b) => `${a.category}:${a.resource_name}`.localeCompare(`${b.category}:${b.resource_name}`));
+        return rows;
+    }
+
     _buildCatalog(rows) {
         const catalog = {};
         for (const r of rows) {
@@ -662,6 +987,44 @@ export class FrontendBillingAdminPage extends PlatformPage {
                                 <td class="mono">${r.resource_name}</td>
                                 <td>${r.price}</td>
                                 ${showSource ? html`<td>${this._renderPriceSource(r.source)}</td>` : null}
+                            </tr>
+                        `)}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    _renderPricingLayerTable(rows, showCompanyPricing) {
+        if (rows.length === 0) {
+            return html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`;
+        }
+        return html`
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>${this.t('platform_billing_page.price_col_category')}</th>
+                        <th>${this.t('platform_billing_page.price_col_resource')}</th>
+                        <th>${this.t('platform_billing_page.price_col_static_base')}</th>
+                        <th>${this.t('platform_billing_page.price_col_global_override')}</th>
+                        ${showCompanyPricing ? html`<th>${this.t('platform_billing_page.price_col_company_override')}</th>` : null}
+                        <th>${this.t('platform_billing_page.price_col_base_effective')}</th>
+                        ${showCompanyPricing ? html`<th>${this.t('platform_billing_page.price_col_tariff_multiplier')}</th>` : null}
+                        ${showCompanyPricing ? html`<th>${this.t('platform_billing_page.price_col_final_unit')}</th>` : null}
+                        <th>${this.t('platform_billing_page.price_col_source')}</th>
+                    </tr></thead>
+                    <tbody>
+                        ${rows.map((r) => html`
+                            <tr>
+                                <td>${r.category}</td>
+                                <td class="mono">${r.resource_name}</td>
+                                <td>${this._formatNumber(r.static_base, 8)}</td>
+                                <td>${this._formatNumber(r.global_override, 8)}</td>
+                                ${showCompanyPricing ? html`<td>${this._formatNumber(r.company_override, 8)}</td>` : null}
+                                <td>${this._formatNumber(r.base_effective, 8)}</td>
+                                ${showCompanyPricing ? html`<td>${this._formatNumber(r.tariff_multiplier, 4)}</td>` : null}
+                                ${showCompanyPricing ? html`<td>${this._formatNumber(r.unit_effective, 8)}</td>` : null}
+                                <td>${this._renderPriceSource(r.source)}</td>
                             </tr>
                         `)}
                     </tbody>
@@ -756,7 +1119,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
             this._pricesDraft = this._flattenPrices(pricesData.storage_override);
         }
         const companyPrices = this._companyPrices.lastResult;
-        if (this._companyId && this._companyPricesDraft === null && companyPrices) {
+        if (this._companyId && this._companyPricesDraft === null && companyPrices && companyPrices.company_id === this._companyId) {
             this._companyPricesDraft = this._flattenPrices(companyPrices.storage_override);
         }
         const rulesData = this._rules.lastResult;
@@ -786,32 +1149,44 @@ export class FrontendBillingAdminPage extends PlatformPage {
 
     _renderEffectivePricesSection() {
         const pricesData = this._pricesGlobal.lastResult;
-        const companyPrices = this._companyPrices.lastResult;
+        const companyPricesResult = this._companyPrices.lastResult;
+        const companyPrices = companyPricesResult && companyPricesResult.company_id === this._companyId ? companyPricesResult : null;
         const sourceData = this._companyId && companyPrices ? companyPrices : pricesData;
         if (!sourceData && (this._pricesGlobal.busy || this._companyPrices.busy)) {
             return html`<section><div class="state"><glass-spinner></glass-spinner></div></section>`;
         }
+        const showCompanyPricing = !!(this._companyId && companyPrices);
+        const staticBase = sourceData && sourceData.static_base ? sourceData.static_base : null;
         const effective = sourceData && sourceData.effective ? sourceData.effective : null;
         const globalOverride = pricesData && pricesData.storage_override ? pricesData.storage_override : null;
-        const companyOverride = companyPrices && companyPrices.storage_override ? companyPrices.storage_override : null;
-        const rows = this._flattenPrices(effective).map((row) => ({
-            ...row,
-            source: this._companyId ? this._priceSource(row, companyOverride, globalOverride) : this._priceSource(row, null, globalOverride),
-        }));
+        const companyOverride = showCompanyPricing && companyPrices.storage_override ? companyPrices.storage_override : null;
+        const rows = this._pricingLayerRows({
+            staticBase,
+            globalOverride,
+            companyOverride,
+            effective,
+            unitEffective: showCompanyPricing ? companyPrices.unit_effective : null,
+            tariffMultipliers: showCompanyPricing ? companyPrices.tariff_multipliers : null,
+        });
         return html`
             <section>
                 <div class="section-head">
                     <div>
                         <div class="section-title">${this.t('platform_billing_page.price_effective_title')}</div>
                         <div class="section-subtitle">
-                            ${this._companyId
-                                ? this.t('platform_billing_page.price_effective_company_hint')
+                            ${showCompanyPricing
+                                ? this.t('platform_billing_page.price_effective_company_layers_hint')
                                 : this.t('platform_billing_page.price_effective_global_hint')}
                         </div>
                     </div>
-                    <span class="source">${this.t('platform_billing_page.billing_readonly_catalog_rows', { count: rows.length })}</span>
+                    <div class="badge-row">
+                        <span class="source">${this.t('platform_billing_page.billing_readonly_catalog_rows', { count: rows.length })}</span>
+                        ${showCompanyPricing ? html`
+                            <span class="source">${this.t('platform_billing_page.price_tariff_badge', { tariff: companyPrices.tariff_plan })}</span>
+                        ` : null}
+                    </div>
                 </div>
-                ${this._renderReadonlyPriceTable(rows, true)}
+                ${this._renderPricingLayerTable(rows, showCompanyPricing)}
             </section>
         `;
     }
@@ -877,17 +1252,335 @@ export class FrontendBillingAdminPage extends PlatformPage {
         }
     }
 
+    _emptyRulesDoc() {
+        return { version: 1, application_mode: 'first_win', rules: [] };
+    }
+
+    _cloneRulesDoc() {
+        const doc = this._rulesDocFromDraft();
+        const source = doc && typeof doc === 'object' ? doc : this._emptyRulesDoc();
+        const clone = JSON.parse(JSON.stringify(source));
+        if (!Array.isArray(clone.rules)) clone.rules = [];
+        if (!clone.version) clone.version = 1;
+        if (!clone.application_mode) clone.application_mode = 'first_win';
+        return clone;
+    }
+
+    _setRulesDoc(doc) {
+        this._rulesDraft = JSON.stringify(doc, null, 2);
+        this._rulesDraftError = '';
+    }
+
+    _updateRulesDoc(mutator) {
+        const doc = this._cloneRulesDoc();
+        mutator(doc);
+        this._setRulesDoc(doc);
+    }
+
+    _emptyRule() {
+        return {
+            rule_id: `rule_${Date.now().toString(36)}`,
+            enabled: true,
+            priority: 100,
+            exclusive_group: null,
+            resource_name: 'llm:*',
+            usage_type: 'llm_request',
+            quantity_from: 'const:1',
+            match: {
+                operation_name_prefix: '',
+                attribute_equals: {},
+                attribute_regex: {},
+                attribute_keys_present: [],
+            },
+        };
+    }
+
+    _addRuleAndScroll() {
+        const rule = this._emptyRule();
+        this._pendingRuleScrollId = rule.rule_id;
+        this._updateRulesDoc((draft) => {
+            draft.rules.push(rule);
+        });
+        this.updateComplete.then(() => {
+            requestAnimationFrame(() => this._scrollToPendingRule());
+        });
+    }
+
+    _scrollToPendingRule() {
+        const targetId = this._pendingRuleScrollId;
+        this._pendingRuleScrollId = null;
+        const cards = Array.from(this.renderRoot.querySelectorAll('.rule-card'));
+        if (cards.length === 0) return;
+        const target = cards.find((card) => card.dataset.ruleId === targetId) || cards[cards.length - 1];
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.focus({ preventScroll: true });
+    }
+
+    _ensureRule(doc, idx) {
+        const rule = doc.rules[idx];
+        if (!rule.match || typeof rule.match !== 'object') rule.match = {};
+        if (!rule.match.attribute_equals || typeof rule.match.attribute_equals !== 'object') {
+            rule.match.attribute_equals = {};
+        }
+        if (!rule.match.attribute_regex || typeof rule.match.attribute_regex !== 'object') {
+            rule.match.attribute_regex = {};
+        }
+        if (!Array.isArray(rule.match.attribute_keys_present)) {
+            rule.match.attribute_keys_present = [];
+        }
+        return rule;
+    }
+
+    _setRuleField(idx, field, value) {
+        this._updateRulesDoc((doc) => {
+            const rule = this._ensureRule(doc, idx);
+            rule[field] = value;
+        });
+    }
+
+    _setRuleMatchField(idx, field, value) {
+        this._updateRulesDoc((doc) => {
+            const rule = this._ensureRule(doc, idx);
+            if (typeof value === 'string' && value.trim().length === 0) {
+                delete rule.match[field];
+            } else {
+                rule.match[field] = value;
+            }
+        });
+    }
+
+    _matchModeDraftKey(idx, rule, scope) {
+        const rid = rule && typeof rule.rule_id === 'string' && rule.rule_id.length > 0
+            ? rule.rule_id
+            : String(idx);
+        return `${idx}:${rid}:${scope}`;
+    }
+
+    _setMatchModeDraft(key, mode) {
+        this._matchModeDraft = { ...this._matchModeDraft, [key]: mode };
+    }
+
+    _clearMatchModeDraft(key) {
+        const next = { ...this._matchModeDraft };
+        delete next[key];
+        this._matchModeDraft = next;
+    }
+
+    _setRuleMatchMode(idx, scope, mode) {
+        const fields = {
+            operation: ['operation_name_prefix', 'operation_name_equals', 'operation_name_regex'],
+            service: ['service_name_equals', 'service_name_regex'],
+            event: ['event_type_equals', 'event_type_regex'],
+        }[scope];
+        if (!fields) return;
+        const doc = this._cloneRulesDoc();
+        const rule = this._ensureRule(doc, idx);
+        const key = this._matchModeDraftKey(idx, rule, scope);
+        let previous = '';
+        for (const field of fields) {
+            if (typeof rule.match[field] === 'string' && rule.match[field].length > 0) {
+                previous = rule.match[field];
+            }
+            delete rule.match[field];
+        }
+        const target = fields.find((field) => field.endsWith(mode));
+        if (target && previous.length > 0) {
+            rule.match[target] = previous;
+        }
+        this._setRulesDoc(doc);
+        if (!target) {
+            this._clearMatchModeDraft(key);
+        } else if (previous.length > 0) {
+            this._clearMatchModeDraft(key);
+        } else {
+            this._setMatchModeDraft(key, mode);
+        }
+    }
+
+    _actualMatchMode(match, scope) {
+        if (!match || typeof match !== 'object') return 'none';
+        if (scope === 'operation') {
+            if (typeof match.operation_name_regex === 'string' && match.operation_name_regex.length > 0) return 'regex';
+            if (typeof match.operation_name_equals === 'string' && match.operation_name_equals.length > 0) return 'equals';
+            if (typeof match.operation_name_prefix === 'string' && match.operation_name_prefix.length > 0) return 'prefix';
+        }
+        if (scope === 'service') {
+            if (typeof match.service_name_regex === 'string' && match.service_name_regex.length > 0) return 'regex';
+            if (typeof match.service_name_equals === 'string' && match.service_name_equals.length > 0) return 'equals';
+        }
+        if (scope === 'event') {
+            if (typeof match.event_type_regex === 'string' && match.event_type_regex.length > 0) return 'regex';
+            if (typeof match.event_type_equals === 'string' && match.event_type_equals.length > 0) return 'equals';
+        }
+        return 'none';
+    }
+
+    _matchMode(match, scope, idx = null, rule = null) {
+        const actual = this._actualMatchMode(match, scope);
+        if (actual !== 'none') return actual;
+        if (idx === null || rule === null) return 'none';
+        const draft = this._matchModeDraft[this._matchModeDraftKey(idx, rule, scope)];
+        return typeof draft === 'string' && draft.length > 0 ? draft : 'none';
+    }
+
+    _matchValue(match, scope) {
+        if (!match || typeof match !== 'object') return '';
+        if (scope === 'operation') {
+            return match.operation_name_regex || match.operation_name_equals || match.operation_name_prefix || '';
+        }
+        if (scope === 'service') {
+            return match.service_name_regex || match.service_name_equals || '';
+        }
+        if (scope === 'event') {
+            return match.event_type_regex || match.event_type_equals || '';
+        }
+        return '';
+    }
+
+    _setMatchValueByMode(idx, scope, value, modeHint = null) {
+        const doc = this._cloneRulesDoc();
+        const rule = this._ensureRule(doc, idx);
+        const mode = modeHint || this._matchMode(rule.match, scope, idx, rule);
+        const fieldByScopeMode = {
+            operation: {
+                prefix: 'operation_name_prefix',
+                equals: 'operation_name_equals',
+                regex: 'operation_name_regex',
+            },
+            service: {
+                equals: 'service_name_equals',
+                regex: 'service_name_regex',
+            },
+            event: {
+                equals: 'event_type_equals',
+                regex: 'event_type_regex',
+            },
+        };
+        const field = fieldByScopeMode[scope] && fieldByScopeMode[scope][mode];
+        if (!field) return;
+        const key = this._matchModeDraftKey(idx, rule, scope);
+        if (typeof value === 'string' && value.trim().length === 0) {
+            delete rule.match[field];
+            this._setRulesDoc(doc);
+            this._setMatchModeDraft(key, mode);
+            return;
+        }
+        rule.match[field] = value;
+        this._setRulesDoc(doc);
+        this._clearMatchModeDraft(key);
+    }
+
+    _quantityParts(quantityFrom) {
+        const value = typeof quantityFrom === 'string' ? quantityFrom : '';
+        if (value.startsWith('attr:')) return { mode: 'attr', value: value.slice(5) };
+        if (value.startsWith('const:')) return { mode: 'const', value: value.slice(6) };
+        return { mode: 'const', value: '1' };
+    }
+
+    _setQuantityMode(idx, mode) {
+        const rule = this._cloneRulesDoc().rules[idx];
+        const current = this._quantityParts(rule && rule.quantity_from);
+        const nextValue = mode === 'attr'
+            ? (current.mode === 'attr' ? current.value : 'platform.billing.quantity')
+            : (current.mode === 'const' ? current.value : '1');
+        this._setRuleField(idx, 'quantity_from', `${mode}:${nextValue}`);
+    }
+
+    _setQuantityValue(idx, value) {
+        const rule = this._cloneRulesDoc().rules[idx];
+        const current = this._quantityParts(rule && rule.quantity_from);
+        this._setRuleField(idx, 'quantity_from', `${current.mode}:${value}`);
+    }
+
+    _jsonScalarInput(value) {
+        if (typeof value === 'string') return value;
+        return JSON.stringify(value);
+    }
+
+    _parseScalarInput(value) {
+        const raw = typeof value === 'string' ? value : '';
+        const trimmed = raw.trim();
+        if (!trimmed) return '';
+        try {
+            return JSON.parse(trimmed);
+        } catch (_err) {
+            return raw;
+        }
+    }
+
+    _mapEntries(map) {
+        if (!map || typeof map !== 'object') return [];
+        return Object.entries(map);
+    }
+
+    _setMapEntry(idx, mapName, entryIndex, key, value) {
+        this._updateRulesDoc((doc) => {
+            const rule = this._ensureRule(doc, idx);
+            const entries = this._mapEntries(rule.match[mapName]);
+            entries[entryIndex] = [key, value];
+            rule.match[mapName] = Object.fromEntries(entries.filter(([k]) => typeof k === 'string' && k.length > 0));
+        });
+    }
+
+    _addMapEntry(idx, mapName) {
+        this._updateRulesDoc((doc) => {
+            const rule = this._ensureRule(doc, idx);
+            const current = rule.match[mapName];
+            rule.match[mapName] = { ...(current && typeof current === 'object' ? current : {}), '': '' };
+        });
+    }
+
+    _removeMapEntry(idx, mapName, entryIndex) {
+        this._updateRulesDoc((doc) => {
+            const rule = this._ensureRule(doc, idx);
+            const entries = this._mapEntries(rule.match[mapName]);
+            entries.splice(entryIndex, 1);
+            rule.match[mapName] = Object.fromEntries(entries);
+        });
+    }
+
+    _setPresentAttr(idx, entryIndex, value) {
+        this._updateRulesDoc((doc) => {
+            const rule = this._ensureRule(doc, idx);
+            rule.match.attribute_keys_present[entryIndex] = value;
+            rule.match.attribute_keys_present = rule.match.attribute_keys_present.filter((v) => typeof v === 'string' && v.length > 0);
+        });
+    }
+
+    _addPresentAttr(idx) {
+        this._updateRulesDoc((doc) => {
+            const rule = this._ensureRule(doc, idx);
+            rule.match.attribute_keys_present.push('');
+        });
+    }
+
+    _removePresentAttr(idx, entryIndex) {
+        this._updateRulesDoc((doc) => {
+            const rule = this._ensureRule(doc, idx);
+            rule.match.attribute_keys_present.splice(entryIndex, 1);
+        });
+    }
+
     _formatMatch(match) {
         if (!match || typeof match !== 'object') return '';
         const parts = [];
         if (match.operation_name_equals) parts.push(`op=${match.operation_name_equals}`);
         if (match.operation_name_prefix) parts.push(`op^=${match.operation_name_prefix}`);
+        if (match.operation_name_regex) parts.push(`op~=${match.operation_name_regex}`);
         if (match.service_name_equals) parts.push(`service=${match.service_name_equals}`);
+        if (match.service_name_regex) parts.push(`service~=${match.service_name_regex}`);
         if (match.event_type_equals) parts.push(`event=${match.event_type_equals}`);
+        if (match.event_type_regex) parts.push(`event~=${match.event_type_regex}`);
         const equals = match.attribute_equals;
         if (equals && typeof equals === 'object') {
             for (const [key, value] of Object.entries(equals)) {
                 parts.push(`${key}=${String(value)}`);
+            }
+        }
+        const regex = match.attribute_regex;
+        if (regex && typeof regex === 'object') {
+            for (const [key, value] of Object.entries(regex)) {
+                parts.push(`${key}~=${String(value)}`);
             }
         }
         const present = Array.isArray(match.attribute_keys_present) ? match.attribute_keys_present : [];
@@ -895,6 +1588,24 @@ export class FrontendBillingAdminPage extends PlatformPage {
             parts.push(`${key}:present`);
         }
         return parts.join(' · ');
+    }
+
+    _enumConfig(values) {
+        return { values };
+    }
+
+    _ruleHint(key) {
+        return this.t(`platform_billing_page.rule_hint_${key}`);
+    }
+
+    _numberOrNull(value) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    _numberOrDefault(value, fallback) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
     }
 
     _renderRulesSummary(doc) {
@@ -927,6 +1638,377 @@ export class FrontendBillingAdminPage extends PlatformPage {
                     </tbody>
                 </table>
             </div>
+        `;
+    }
+
+    _renderMatchSelector(idx, rule, scope, labelKey) {
+        const mode = this._matchMode(rule.match, scope, idx, rule);
+        const values = scope === 'operation'
+            ? [
+                { value: 'none', label: this.t('platform_billing_page.rules_match_none'), icon: 'close' },
+                { value: 'prefix', label: this.t('platform_billing_page.rules_match_prefix'), icon: 'chevron-right' },
+                { value: 'equals', label: this.t('platform_billing_page.rules_match_equals'), icon: 'target' },
+                { value: 'regex', label: this.t('platform_billing_page.rules_match_regex'), icon: 'code' },
+            ]
+            : [
+                { value: 'none', label: this.t('platform_billing_page.rules_match_none'), icon: 'close' },
+                { value: 'equals', label: this.t('platform_billing_page.rules_match_equals'), icon: 'target' },
+                { value: 'regex', label: this.t('platform_billing_page.rules_match_regex'), icon: 'code' },
+            ];
+        const disabled = mode === 'none';
+        return html`
+            <div class="match-combo">
+                <div class="match-combo-head">
+                    <span class="match-combo-label">${this.t(labelKey)}</span>
+                    <platform-help-hint
+                        .text=${this._ruleHint(`match_${scope}`)}
+                        .label=${this.t(labelKey)}
+                        ?wide=${true}
+                    ></platform-help-hint>
+                </div>
+                <div class="match-combo-control">
+                    <div class="match-mode-picker" role="group" aria-label=${this.t(labelKey)}>
+                        ${values.map((item) => html`
+                            <button
+                                type="button"
+                                class="match-mode-btn"
+                                title=${item.label}
+                                aria-label=${item.label}
+                                aria-pressed=${mode === item.value ? 'true' : 'false'}
+                                @click=${() => this._setRuleMatchMode(idx, scope, item.value)}
+                            >
+                                <platform-icon name=${item.icon} size="14"></platform-icon>
+                            </button>
+                        `)}
+                    </div>
+                    <input
+                        class="match-value-input"
+                        type="text"
+                        data-canon="input"
+                        .value=${this._matchValue(rule.match, scope)}
+                        placeholder=${disabled
+                            ? this.t('platform_billing_page.rules_match_disabled_placeholder')
+                            : this.t('platform_billing_page.rules_match_value_placeholder')}
+                        ?disabled=${disabled}
+                        @input=${(e) => this._setMatchValueByMode(idx, scope, e.target.value, mode)}
+                    />
+                </div>
+            </div>
+        `;
+    }
+
+    _renderAttributeMapEditor(idx, rule, mapName, titleKey, valueMode) {
+        const entries = this._mapEntries(rule.match[mapName]);
+        const isRegex = valueMode === 'regex';
+        return html`
+            <div class="rule-subsection">
+                <div class="rule-subtitle">
+                    <span>${this.t(titleKey)}</span>
+                    <platform-help-hint
+                        .text=${this._ruleHint(isRegex ? 'attr_regex_section' : 'attr_equals_section')}
+                        .label=${this.t(titleKey)}
+                        ?wide=${true}
+                    ></platform-help-hint>
+                </div>
+                ${entries.length === 0 ? html`<div class="hint">${this.t('platform_billing_page.rules_no_attribute_rows')}</div>` : null}
+                ${entries.map(([key, value], entryIdx) => html`
+                    <div class="kv-editor-row">
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            pill-density="dense"
+                            .label=${this.t('platform_billing_page.rules_attr_key_label')}
+                            .hint=${this._ruleHint('attr_key')}
+                            .placeholder=${this.t('platform_billing_page.rules_attr_key_placeholder')}
+                            .suggestions=${BILLING_RULE_ATTR_SUGGESTIONS}
+                            .value=${key}
+                            @change=${(e) => {
+                                if (!e.detail || typeof e.detail.value !== 'string') {
+                                    throw new Error('billing rule attribute: key expects detail.value string');
+                                }
+                                this._setMapEntry(idx, mapName, entryIdx, e.detail.value, value);
+                            }}
+                        ></platform-field>
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            pill-density="dense"
+                            .label=${this.t('platform_billing_page.rules_attr_value_label')}
+                            .hint=${this._ruleHint(isRegex ? 'attr_regex_value' : 'attr_equals_value')}
+                            .placeholder=${valueMode === 'regex'
+                                ? this.t('platform_billing_page.rules_attr_regex_placeholder')
+                                : this.t('platform_billing_page.rules_attr_value_placeholder')}
+                            .value=${valueMode === 'regex' ? String(value) : this._jsonScalarInput(value)}
+                            @change=${(e) => {
+                                if (!e.detail || typeof e.detail.value !== 'string') {
+                                    throw new Error('billing rule attribute: value expects detail.value string');
+                                }
+                                this._setMapEntry(
+                                    idx,
+                                    mapName,
+                                    entryIdx,
+                                    key,
+                                    valueMode === 'regex' ? e.detail.value : this._parseScalarInput(e.detail.value),
+                                );
+                            }}
+                        ></platform-field>
+                        <button class="btn" @click=${() => this._removeMapEntry(idx, mapName, entryIdx)}>
+                            <platform-icon name="trash" size="16"></platform-icon>
+                            ${this.t('platform_billing_page.price_remove_row')}
+                        </button>
+                    </div>
+                `)}
+                <button class="btn" @click=${() => this._addMapEntry(idx, mapName)}>
+                    <platform-icon name="plus" size="16"></platform-icon>
+                    ${this.t('platform_billing_page.rules_add_attribute_row')}
+                </button>
+            </div>
+        `;
+    }
+
+    _renderPresentAttributes(idx, rule) {
+        const items = Array.isArray(rule.match.attribute_keys_present) ? rule.match.attribute_keys_present : [];
+        return html`
+            <div class="rule-subsection">
+                <div class="rule-subtitle">
+                    <span>${this.t('platform_billing_page.rules_attr_present_title')}</span>
+                    <platform-help-hint
+                        .text=${this._ruleHint('attr_present_section')}
+                        .label=${this.t('platform_billing_page.rules_attr_present_title')}
+                        ?wide=${true}
+                    ></platform-help-hint>
+                </div>
+                ${items.length === 0 ? html`<div class="hint">${this.t('platform_billing_page.rules_no_attribute_rows')}</div>` : null}
+                ${items.map((value, entryIdx) => html`
+                    <div class="present-row">
+                        <platform-field
+                            type="string"
+                            mode="edit"
+                            pill-density="dense"
+                            .label=${this.t('platform_billing_page.rules_attr_key_label')}
+                            .hint=${this._ruleHint('attr_present_key')}
+                            .placeholder=${this.t('platform_billing_page.rules_attr_key_placeholder')}
+                            .suggestions=${BILLING_RULE_ATTR_SUGGESTIONS}
+                            .value=${value}
+                            @change=${(e) => {
+                                if (!e.detail || typeof e.detail.value !== 'string') {
+                                    throw new Error('billing rule present attribute: key expects detail.value string');
+                                }
+                                this._setPresentAttr(idx, entryIdx, e.detail.value);
+                            }}
+                        ></platform-field>
+                        <button class="btn" @click=${() => this._removePresentAttr(idx, entryIdx)}>
+                            <platform-icon name="trash" size="16"></platform-icon>
+                            ${this.t('platform_billing_page.price_remove_row')}
+                        </button>
+                    </div>
+                `)}
+                <button class="btn" @click=${() => this._addPresentAttr(idx)}>
+                    <platform-icon name="plus" size="16"></platform-icon>
+                    ${this.t('platform_billing_page.rules_add_attribute_row')}
+                </button>
+            </div>
+        `;
+    }
+
+    _renderRuleCard(rule, idx) {
+        const quantity = this._quantityParts(rule.quantity_from);
+        const usageTypeValues = [
+            'tool_call',
+            'llm_request',
+            'embedding_request',
+            'rerank_request',
+            'agent_execution',
+            'flow_execution',
+            'file_upload',
+            'storage_usage',
+        ];
+        return html`
+            <div class="rule-card" tabindex="-1" data-rule-id=${rule.rule_id || ''}>
+                <div class="rule-card-head">
+                    <div class="rule-title">
+                        <span class="source">${idx + 1}</span>
+                        <span class="mono">${rule.rule_id}</span>
+                    </div>
+                    <button class="btn" @click=${() => this._updateRulesDoc((doc) => { doc.rules.splice(idx, 1); })}>
+                        <platform-icon name="trash" size="16"></platform-icon>
+                        ${this.t('platform_billing_page.rules_remove_rule')}
+                    </button>
+                </div>
+                <div class="rule-grid">
+                    <platform-field
+                        type="boolean"
+                        mode="edit"
+                        pill-density="dense"
+                        .label=${this.t('platform_billing_page.rules_col_enabled')}
+                        .hint=${this._ruleHint('enabled')}
+                        .value=${rule.enabled !== false}
+                        @change=${(e) => this._setRuleField(idx, 'enabled', !!(e.detail && e.detail.value))}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        pill-density="dense"
+                        .label=${this.t('platform_billing_page.rules_col_rule')}
+                        .hint=${this._ruleHint('rule_id')}
+                        .value=${rule.rule_id || ''}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('billing rule: rule_id expects detail.value string');
+                            }
+                            this._setRuleField(idx, 'rule_id', e.detail.value);
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="integer"
+                        mode="edit"
+                        pill-density="dense"
+                        .label=${this.t('platform_billing_page.rules_col_priority')}
+                        .hint=${this._ruleHint('priority')}
+                        .value=${this._numberOrDefault(rule.priority, 100)}
+                        @change=${(e) => {
+                            const value = e.detail && typeof e.detail.value === 'number' ? e.detail.value : 100;
+                            this._setRuleField(idx, 'priority', value);
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        pill-density="dense"
+                        .label=${this.t('platform_billing_page.rules_col_group')}
+                        .hint=${this._ruleHint('exclusive_group')}
+                        .value=${rule.exclusive_group || ''}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('billing rule: exclusive_group expects detail.value string');
+                            }
+                            const trimmed = e.detail.value.trim();
+                            this._setRuleField(idx, 'exclusive_group', trimmed.length > 0 ? e.detail.value : null);
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        pill-density="dense"
+                        .label=${this.t('platform_billing_page.rules_col_resource')}
+                        .hint=${this._ruleHint('resource_name')}
+                        .value=${rule.resource_name || ''}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('billing rule: resource_name expects detail.value string');
+                            }
+                            this._setRuleField(idx, 'resource_name', e.detail.value);
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        pill-density="dense"
+                        .label=${this.t('platform_billing_page.rules_col_usage_type')}
+                        .hint=${this._ruleHint('usage_type')}
+                        .value=${rule.usage_type || 'tool_call'}
+                        .config=${this._enumConfig(usageTypeValues)}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('billing rule: usage_type expects detail.value string');
+                            }
+                            if (e.detail.value.length === 0) {
+                                return;
+                            }
+                            this._setRuleField(idx, 'usage_type', e.detail.value);
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="enum"
+                        mode="edit"
+                        pill-density="dense"
+                        .label=${this.t('platform_billing_page.rules_quantity_mode')}
+                        .hint=${this._ruleHint('quantity_mode')}
+                        .value=${quantity.mode}
+                        .config=${this._enumConfig([
+                            { value: 'const', label: this.t('platform_billing_page.rules_quantity_const') },
+                            { value: 'attr', label: this.t('platform_billing_page.rules_quantity_attr') },
+                        ])}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('billing rule: quantity mode expects detail.value string');
+                            }
+                            if (e.detail.value !== 'const' && e.detail.value !== 'attr') {
+                                return;
+                            }
+                            this._setQuantityMode(idx, e.detail.value);
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type=${quantity.mode === 'const' ? 'number' : 'string'}
+                        mode="edit"
+                        pill-density="dense"
+                        .label=${this.t('platform_billing_page.rules_quantity_value')}
+                        .hint=${this._ruleHint(quantity.mode === 'attr' ? 'quantity_attr_value' : 'quantity_const_value')}
+                        .value=${quantity.mode === 'const' ? this._numberOrNull(quantity.value) : quantity.value}
+                        .suggestions=${quantity.mode === 'attr' ? BILLING_RULE_ATTR_SUGGESTIONS : []}
+                        @change=${(e) => {
+                            const raw = e.detail ? e.detail.value : null;
+                            this._setQuantityValue(idx, raw === null ? '' : String(raw));
+                        }}
+                    ></platform-field>
+                </div>
+                <div class="match-grid">
+                    ${this._renderMatchSelector(idx, rule, 'operation', 'platform_billing_page.rules_match_operation')}
+                    ${this._renderMatchSelector(idx, rule, 'service', 'platform_billing_page.rules_match_service')}
+                    ${this._renderMatchSelector(idx, rule, 'event', 'platform_billing_page.rules_match_event')}
+                </div>
+                ${this._renderAttributeMapEditor(idx, rule, 'attribute_equals', 'platform_billing_page.rules_attr_equals_title', 'value')}
+                ${this._renderAttributeMapEditor(idx, rule, 'attribute_regex', 'platform_billing_page.rules_attr_regex_title', 'regex')}
+                ${this._renderPresentAttributes(idx, rule)}
+            </div>
+        `;
+    }
+
+    _renderRulesBuilder(doc) {
+        const rules = doc && Array.isArray(doc.rules) ? doc.rules : [];
+        return html`
+            <div class="rule-grid">
+                <platform-field
+                    type="integer"
+                    mode="edit"
+                    pill-density="dense"
+                    .label=${this.t('platform_billing_page.rules_doc_version')}
+                    .hint=${this._ruleHint('doc_version')}
+                    .value=${this._numberOrDefault(doc.version, 1)}
+                    @change=${(e) => {
+                        const value = e.detail && typeof e.detail.value === 'number' ? e.detail.value : 1;
+                        this._updateRulesDoc((draft) => { draft.version = value; });
+                    }}
+                ></platform-field>
+                <platform-field
+                    type="enum"
+                    mode="edit"
+                    pill-density="dense"
+                    .label=${this.t('platform_billing_page.rules_application_mode')}
+                    .hint=${this._ruleHint('application_mode')}
+                    .value=${doc.application_mode || 'first_win'}
+                    .config=${this._enumConfig(['first_win', 'all_matching'])}
+                    @change=${(e) => {
+                        if (!e.detail || typeof e.detail.value !== 'string') {
+                            throw new Error('billing rules document: application_mode expects detail.value string');
+                        }
+                        if (e.detail.value !== 'first_win' && e.detail.value !== 'all_matching') {
+                            return;
+                        }
+                        this._updateRulesDoc((draft) => { draft.application_mode = e.detail.value; });
+                    }}
+                ></platform-field>
+            </div>
+            <div class="actions">
+                <button class="btn" @click=${() => this._addRuleAndScroll()}>
+                    <platform-icon name="plus" size="16"></platform-icon>
+                    ${this.t('platform_billing_page.rules_add_rule')}
+                </button>
+            </div>
+            ${rules.length === 0
+                ? html`<div class="empty-block">${this.t('platform_billing_page.empty')}</div>`
+                : html`<div class="rule-list">${rules.map((rule, idx) => this._renderRuleCard(rule, idx))}</div>`}
         `;
     }
 
@@ -967,7 +2049,8 @@ export class FrontendBillingAdminPage extends PlatformPage {
         if (this._rules.busy && !this._rulesDraft) {
             return html`<section><div class="state"><glass-spinner></glass-spinner></div></section>`;
         }
-        const doc = this._rulesDocFromDraft();
+        const parsedDoc = this._rulesDocFromDraft();
+        const doc = parsedDoc || this._emptyRulesDoc();
         return html`
             <section>
                 <div class="section-head">
@@ -979,26 +2062,25 @@ export class FrontendBillingAdminPage extends PlatformPage {
                         ? html`<span class="source">${this.t('platform_billing_page.rules_count', { count: doc.rules.length })}</span>`
                         : null}
                 </div>
-                ${this._renderRulesSummary(doc)}
-                <div class="section-head" style="margin-top:var(--space-4)">
-                    <div>
-                        <div class="section-title">${this.t('platform_billing_page.rules_json_title')}</div>
-                    </div>
-                </div>
-                <platform-field
-                    type="text"
-                    mode="edit"
-                    label=""
-                    .value=${this._rulesDraft || ''}
-                    @change=${(e) => {
-                        if (!e.detail || typeof e.detail.value !== 'string') {
-                            throw new Error('billing rules: draft expects detail.value string');
-                        }
-                        this._rulesDraft = e.detail.value;
-                        this._rulesDraftError = '';
-                    }}
-                ></platform-field>
+                ${parsedDoc ? this._renderRulesBuilder(doc) : html`
+                    <div class="empty-block">${this.t('platform_billing_page.rules_parse_error')}</div>
+                `}
                 ${this._rulesDraftError ? html`<div class="rules-error">${this._rulesDraftError}</div>` : null}
+                <details class="json-details">
+                    <summary>${this.t('platform_billing_page.rules_json_title')}</summary>
+                    <platform-json-editor
+                        .value=${this._rulesDraft || ''}
+                        .readonly=${false}
+                        .minHeight=${360}
+                        @change=${(e) => {
+                            if (!e.detail || typeof e.detail.value !== 'string') {
+                                throw new Error('billing rules: json editor expects detail.value string');
+                            }
+                            this._rulesDraft = e.detail.value;
+                            this._rulesDraftError = '';
+                        }}
+                    ></platform-json-editor>
+                </details>
                 <div class="actions">
                     <button class="btn primary" ?disabled=${this._rulesSave.busy} @click=${() => this._saveRules()}>
                         <platform-icon name="save" size="16"></platform-icon>

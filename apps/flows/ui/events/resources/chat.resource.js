@@ -25,6 +25,7 @@ import {
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_OBJECT = Object.freeze({});
 const BROWSER_PREVIEW_EVENT_PREFIX = 'browser.preview.';
+const FILES_EVENT_PREFIX = 'files.';
 
 /** Ключ i18n `flows.chat_message.*` при обрыве SSE без терминального status-update. */
 const STREAM_INCOMPLETE_I18N_KEY = 'stream_incomplete';
@@ -177,6 +178,22 @@ function _processArtifactDataTrace(ctx, cid, taskId, artifact, causationId) {
                     meta,
                 );
             }
+            if (d.type.startsWith(FILES_EVENT_PREFIX) && canMutateMessages) {
+                ctx.dispatch(
+                    'flows/chat/files_event',
+                    {
+                        task_id: taskId,
+                        context_id: cid,
+                        event: {
+                            id: typeof d.id === 'string' ? d.id : '',
+                            type: d.type,
+                            payload: d.payload && typeof d.payload === 'object' ? d.payload : {},
+                            timestamp: typeof d.timestamp === 'string' ? d.timestamp : '',
+                        },
+                    },
+                    meta,
+                );
+            }
             _appendRunTrace(
                 ctx,
                 cid,
@@ -241,6 +258,7 @@ function _newAssistantMessage(taskId, id) {
         toolCalls: [],
         toolResults: [],
         browserPreviews: [],
+        files: [],
         streaming: true,
         taskId,
         inputRequired: null,
@@ -489,6 +507,60 @@ function _upsertBrowserPreview(list, event) {
         return [...existing, next];
     }
     return existing.map((item, i) => (i === idx ? next : item));
+}
+
+function _normalizeFileItem(item) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const fileId = typeof item.file_id === 'string' ? item.file_id : '';
+    const name =
+        typeof item.name === 'string' && item.name.length > 0
+            ? item.name
+            : typeof item.original_name === 'string'
+              ? item.original_name
+              : fileId;
+    const path =
+        typeof item.path === 'string' && item.path.length > 0
+            ? item.path
+            : typeof item.url === 'string'
+              ? item.url
+              : fileId
+                ? `/flows/api/v1/files/download/${encodeURIComponent(fileId)}`
+                : '';
+    if (!fileId && !path) return null;
+    const mime =
+        typeof item.mime_type === 'string' && item.mime_type.length > 0
+            ? item.mime_type
+            : typeof item.type === 'string'
+              ? item.type
+              : '';
+    return {
+        ...item,
+        file_id: fileId,
+        name,
+        path,
+        url: typeof item.url === 'string' && item.url.length > 0 ? item.url : path,
+        mime_type: mime,
+        type: mime,
+    };
+}
+
+function _upsertFiles(list, incoming) {
+    const existing = Array.isArray(list) ? list : [];
+    const files = Array.isArray(incoming) ? incoming.map(_normalizeFileItem).filter(Boolean) : [];
+    if (files.length === 0) return existing;
+    let next = existing.slice();
+    for (const file of files) {
+        const fid = typeof file.file_id === 'string' ? file.file_id : '';
+        const idx = fid
+            ? next.findIndex((item) => item && item.file_id === fid)
+            : next.findIndex((item) => item && item.path === file.path);
+        if (idx >= 0) {
+            next[idx] = { ...next[idx], ...file };
+        } else {
+            next.push(file);
+        }
+    }
+    return next;
 }
 
 function _extractTextFromParts(parts) {
@@ -1217,6 +1289,7 @@ export const chatResource = createResourceCollection({
     operations: ['list'],
     extraInitial: {
         messagesByContextId: EMPTY_OBJECT,
+        filesByContextId: EMPTY_OBJECT,
         runTraceByContextId: EMPTY_OBJECT,
         currentContextId: null,
         currentFlowId: null,
@@ -1230,6 +1303,7 @@ export const chatResource = createResourceCollection({
         SESSION_INIT: 'session_init',
         SESSION_RESET: 'session_reset',
         USER_MESSAGE_ADDED: 'user_message_added',
+        FILES_UPDATED: 'files_updated',
         SESSION_LOADED: 'session_loaded',
         A2A_INTERRUPTED: 'a2a_interrupted',
     },
@@ -1237,6 +1311,7 @@ export const chatResource = createResourceCollection({
         initSession: 'session_init',
         resetSession: 'session_reset',
         addUserMessage: 'user_message_added',
+        updateFiles: 'files_updated',
         loadSession: 'session_loaded',
     },
     extraReducer: (state, event) => {
@@ -1261,6 +1336,10 @@ export const chatResource = createResourceCollection({
                     ...next.runTraceByContextId,
                     [contextId]: EMPTY_LIST,
                 },
+                filesByContextId: {
+                    ...(next.filesByContextId || {}),
+                    [contextId]: EMPTY_LIST,
+                },
             };
         }
 
@@ -1280,6 +1359,10 @@ export const chatResource = createResourceCollection({
                     ...state.runTraceByContextId,
                     [contextId]: EMPTY_LIST,
                 },
+                filesByContextId: {
+                    ...(state.filesByContextId || {}),
+                    [contextId]: EMPTY_LIST,
+                },
             };
         }
 
@@ -1289,6 +1372,7 @@ export const chatResource = createResourceCollection({
             const sessionId = typeof p.sessionId === 'string' ? p.sessionId : null;
             const flowId = typeof p.flowId === 'string' ? p.flowId : state.currentFlowId;
             const messages = Array.isArray(p.messages) ? p.messages : [];
+            const files = Array.isArray(p.files) ? _upsertFiles([], p.files) : [];
             const taskId = typeof p.taskId === 'string' ? p.taskId : null;
             let contextId;
             if (typeof p.contextId === 'string' && p.contextId.length > 0) {
@@ -1314,6 +1398,10 @@ export const chatResource = createResourceCollection({
                 runTraceByContextId: {
                     ...state.runTraceByContextId,
                     [contextId]: EMPTY_LIST,
+                },
+                filesByContextId: {
+                    ...(state.filesByContextId || {}),
+                    [contextId]: files,
                 },
             };
         }
@@ -1348,7 +1436,32 @@ export const chatResource = createResourceCollection({
             const message = p.message;
             if (!message || typeof message !== 'object') return state;
             const ensured = _ensureContextBucket(state, contextId);
-            return _pushMessage(ensured, contextId, message);
+            return {
+                ..._pushMessage(ensured, contextId, message),
+                filesByContextId: {
+                    ...(ensured.filesByContextId || {}),
+                    [contextId]: _upsertFiles(ensured.filesByContextId?.[contextId], message.files),
+                },
+            };
+        }
+
+        if (type === 'flows/chat/files_updated') {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') return state;
+            const contextId = typeof p.contextId === 'string' && p.contextId.length > 0
+                ? p.contextId
+                : state.currentContextId;
+            const files = Array.isArray(p.files) ? p.files : [];
+            if (typeof contextId !== 'string' || contextId.length === 0 || files.length === 0) {
+                return state;
+            }
+            return {
+                ...state,
+                filesByContextId: {
+                    ...(state.filesByContextId || {}),
+                    [contextId]: _upsertFiles(state.filesByContextId?.[contextId], files),
+                },
+            };
         }
 
         if (type === 'flows/chat_send/succeeded') {
@@ -1617,6 +1730,41 @@ export const chatResource = createResourceCollection({
                 },
                 contextId,
             );
+        }
+
+        if (type === 'flows/chat/files_event') {
+            const p = event.payload;
+            if (!p || typeof p !== 'object') return state;
+            const taskId = typeof p.task_id === 'string' ? p.task_id : null;
+            const contextId = typeof p.context_id === 'string' ? p.context_id : null;
+            const filesEvent = p.event;
+            if (!taskId || !filesEvent || typeof filesEvent !== 'object') return state;
+            const payload = filesEvent.payload && typeof filesEvent.payload === 'object' ? filesEvent.payload : {};
+            const files = Array.isArray(payload.files) ? payload.files : [];
+            if (files.length === 0) return state;
+            const withMessage = _applyToBucketMessages(
+                state,
+                taskId,
+                (messages) => {
+                    const { messages: nextMsgs, idx } = _findOrCreateAssistantMessage(messages, taskId);
+                    return _replaceMessage(nextMsgs, idx, (m) => ({
+                        ...m,
+                        files: _upsertFiles(m.files, files),
+                    }));
+                },
+                contextId,
+            );
+            const cid = contextId || state.currentContextId;
+            if (typeof cid !== 'string' || cid.length === 0) {
+                return withMessage;
+            }
+            return {
+                ...withMessage,
+                filesByContextId: {
+                    ...(withMessage.filesByContextId || {}),
+                    [cid]: _upsertFiles(withMessage.filesByContextId?.[cid], files),
+                },
+            };
         }
 
         if (type === 'flows/chat/breakpoint') {

@@ -4,24 +4,27 @@ BYOK (Bring Your Own Key / endpoint): детекция для биллинга �
 
 from __future__ import annotations
 
-from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.models.node_config import NodeLLMConfig
 
 
-def is_llm_byok_override(override: NodeLLMOverride | None) -> bool:
-    """True если в override заданы свой api_key, свой base_url или provider=custom_openai_compatible.
+def is_llm_byok_config(config: NodeLLMConfig | None) -> bool:
+    """True если в LLM config заданы свой api_key, свой base_url или provider=custom_openai_compatible.
 
     Канонический источник правды для cost_origin — ``core.company_ai.resolver.ResolvedLLM.cost_origin``,
     но раннер использует эту эвристику как быстрый проверочный путь по конфигу ноды.
     """
-    if not override:
+    if not config:
         return False
-    if override.api_key is not None and str(override.api_key).strip():
+    if config.api_key is not None and str(config.api_key).strip():
         return True
-    if override.base_url is not None and str(override.base_url).strip():
+    if config.base_url is not None and str(config.base_url).strip():
         return True
-    if override.provider == "custom_openai_compatible":
+    if config.provider == "custom_openai_compatible":
         return True
     return False
+
+
+is_llm_byok_override = is_llm_byok_config
 
 
 def is_llm_byok_resource(

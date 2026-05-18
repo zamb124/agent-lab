@@ -25,6 +25,8 @@ from core.company_ai.platform_defaults import (
 from core.company_ai.schema import (
     CUSTOM_PROVIDER_REF_PREFIX,
     CUSTOM_PROVIDER_SLUG,
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
     AICapability,
     CompanyAIProviders,
     CompanyCustomOpenAICompatibleProvider,
@@ -56,6 +58,7 @@ class ResolvedLLM(_FrozenModel):
     base_url: Optional[str] = None
     folder_id: Optional[str] = None
     extra_request_headers: Optional[dict[str, str]] = None
+    extra_request_body: Optional[dict[str, object]] = None
     cost_origin: CostOrigin = COST_ORIGIN_PLATFORM
     custom_provider_id: Optional[str] = None
 
@@ -186,6 +189,29 @@ def resolve_llm_for_capability(
             f"capability {capability} ожидает CompanyLLMOverride, получено {type(override).__name__}"
         )
 
+    if override.provider == HUMANITEC_LLM_PROVIDER:
+        if capability not in {
+            AICapability.LLM_CHAT,
+            AICapability.LLM_SUMMARIZE,
+            AICapability.LLM_FORMAT_MARKDOWN,
+            AICapability.LLM_CODEGEN,
+        }:
+            raise ValueError(
+                f"capability {capability.value}: provider=humanitec_llm поддерживает "
+                "только текстовые LLM capability"
+            )
+        model = (
+            override.model
+            or platform_default_model(capability, override.provider)
+            or HUMANITEC_LLM_AUTO_MODEL
+        )
+        return ResolvedLLM(
+            provider=HUMANITEC_LLM_PROVIDER,
+            model=str(model).strip(),
+            cost_origin=COST_ORIGIN_PLATFORM,
+            custom_provider_id=None,
+        )
+
     if override.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
         custom = _resolve_custom_provider(aip, override.provider)
         model = (
@@ -204,6 +230,7 @@ def resolve_llm_for_capability(
             api_key=decrypt_secret(custom.api_key_encrypted),
             base_url=custom.base_url,
             extra_request_headers=dict(custom.extra_request_headers or {}) or None,
+            extra_request_body=dict(custom.extra_request_body or {}) or None,
             cost_origin=COST_ORIGIN_COMPANY,
             custom_provider_id=custom.id,
         )
@@ -228,6 +255,54 @@ def resolve_llm_for_capability(
         extra_request_headers=dict(override.extra_request_headers or {}) or None,
         cost_origin=cost_origin,
         custom_provider_id=None,
+    )
+
+
+def resolve_custom_llm_provider_ref(
+    provider_ref: str,
+    *,
+    capability: AICapability = AICapability.LLM_CHAT,
+    model: Optional[str] = None,
+) -> ResolvedLLM:
+    """
+    Разворачивает прямой ``custom:<id>`` ref в параметры ``get_llm``.
+
+    Используется там, где пользователь явно выбрал custom provider в конфиге ноды,
+    LLM-ресурса или sandbox capability. Это отличается от
+    ``resolve_llm_for_capability(...)``: здесь не требуется capability override, нужна
+    только запись в ``custom_providers`` и поддержка указанной capability.
+    """
+    if capability not in {
+        AICapability.LLM_CHAT,
+        AICapability.LLM_SUMMARIZE,
+        AICapability.LLM_FORMAT_MARKDOWN,
+        AICapability.LLM_CODEGEN,
+        AICapability.LLM_VISION,
+        AICapability.IMAGE_GEN,
+    }:
+        raise ValueError(f"resolve_custom_llm_provider_ref: capability {capability} не LLM-типа")
+    aip = load_company_ai_providers()
+    custom = _resolve_custom_provider(aip, provider_ref)
+    if capability.value not in custom.capabilities:
+        raise ValueError(
+            f"capability={capability.value}: custom_provider {custom.id!r} не поддерживает её "
+            f"(capabilities={custom.capabilities})"
+        )
+    resolved_model = model or custom.model_by_capability.get(capability.value)
+    if not resolved_model or not str(resolved_model).strip():
+        raise ValueError(
+            f"capability {capability.value}: для custom_provider {custom.id!r} не задана "
+            f"модель (model_by_capability[{capability.value}] или явный model)"
+        )
+    return ResolvedLLM(
+        provider=CUSTOM_PROVIDER_SLUG,
+        model=str(resolved_model).strip(),
+        api_key=decrypt_secret(custom.api_key_encrypted),
+        base_url=custom.base_url,
+        extra_request_headers=dict(custom.extra_request_headers or {}) or None,
+        extra_request_body=dict(custom.extra_request_body or {}) or None,
+        cost_origin=COST_ORIGIN_COMPANY,
+        custom_provider_id=custom.id,
     )
 
 
@@ -377,6 +452,7 @@ __all__ = [
     "ResolvedVoice",
     "load_company_ai_providers",
     "resolve_embedding_for_company",
+    "resolve_custom_llm_provider_ref",
     "resolve_llm_for_capability",
     "resolve_rerank_for_company",
     "resolve_voice_for_company",

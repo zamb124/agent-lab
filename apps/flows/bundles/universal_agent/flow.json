@@ -22,9 +22,9 @@
       "name": "Универсальный агент",
       "prompt": "prompts/main.md",
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.2,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       },
       "tools": [
         "ask_user",
@@ -60,9 +60,9 @@
           "name": "Универсальный агент (код)",
           "prompt": "prompts/code_focus.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.15,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "tools": [
             "ask_user",
@@ -88,9 +88,9 @@
           "name": "Универсальный агент (RAG)",
           "prompt": "prompts/with_rag.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.2,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "tools": [
             "ask_user",

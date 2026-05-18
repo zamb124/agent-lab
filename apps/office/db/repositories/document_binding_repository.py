@@ -73,6 +73,24 @@ class DocumentBindingRepository:
             )
             return result.scalar_one_or_none()
 
+    async def get_by_file_for_company(
+        self,
+        file_id: str,
+        company_id: str,
+        namespace: str,
+    ) -> Optional[OfficeDocumentBinding]:
+        async with self._db.session() as session:
+            result = await session.execute(
+                select(OfficeDocumentBinding)
+                .where(
+                    OfficeDocumentBinding.file_id == file_id,
+                    OfficeDocumentBinding.company_id == company_id,
+                    OfficeDocumentBinding.namespace == namespace,
+                )
+                .order_by(OfficeDocumentBinding.created_at.desc())
+            )
+            return result.scalar_one_or_none()
+
     async def create(
         self,
         *,

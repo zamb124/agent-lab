@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import copy
 import pathlib
+import unicodedata
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal, overload
@@ -20,6 +21,25 @@ from core.state.mutation_policy import forbid_frozen_update_key
 
 UI_EVENTS_KEY = "ui_events_pending"
 JsonDict = dict[str, Any]
+
+
+def normalize_file_lookup_name(value: Any) -> str:
+    """
+    Нормализует имя файла для устойчивого поиска в state.files.
+
+    Имена вложений часто содержат Unicode combining marks, которые визуально почти
+    неотличимы, но ломают буквальное сравнение.
+    """
+    if value is None:
+        return ""
+    text = str(value).strip().strip("`'\"")
+    return unicodedata.normalize("NFC", text).casefold()
+
+
+def normalize_file_lookup_key(value: Any) -> str:
+    normalized = normalize_file_lookup_name(value)
+    decomposed = unicodedata.normalize("NFKD", normalized)
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
 
 
 def deep_copy_state(state: 'ExecutionState | JsonDict') -> 'ExecutionState | JsonDict':
@@ -170,7 +190,8 @@ def find_file(files: list[dict[str, Any]], name: str | None = None) -> dict[str,
     """
     Ищет файл в списке state.files по имени.
 
-    Точное совпадение по полю name, затем case-insensitive подстрока.
+    Точное совпадение по полю name, затем Unicode-normalized/case-insensitive
+    сравнение, затем сравнение без combining marks и подстрока.
     Без name — последний элемент списка (как у read_file без file_name).
 
     Args:
@@ -187,9 +208,17 @@ def find_file(files: list[dict[str, Any]], name: str | None = None) -> dict[str,
     for f in files:
         if f.get("name") == name:
             return f
-    name_lower = name.lower()
+    normalized_name = normalize_file_lookup_name(name)
     for f in files:
-        if name_lower in (f.get("name") or "").lower():
+        if normalize_file_lookup_name(f.get("name")) == normalized_name:
+            return f
+    name_key = normalize_file_lookup_key(name)
+    for f in files:
+        if normalize_file_lookup_key(f.get("name")) == name_key:
+            return f
+    for f in files:
+        file_key = normalize_file_lookup_key(f.get("name"))
+        if name_key and name_key in file_key:
             return f
     return None
 

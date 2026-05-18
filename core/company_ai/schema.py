@@ -23,7 +23,11 @@ from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from core.clients.llm.model_routing import LLM_ROUTING_PROVIDER_SLUGS
+from core.clients.llm.model_routing import (
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
+    LLM_ROUTING_PROVIDER_SLUGS,
+)
 
 METADATA_KEY = "ai_providers"
 
@@ -147,6 +151,19 @@ class CompanyLLMOverride(BaseModel):
                     "Для provider=custom:<id> поля api_key_encrypted/base_url/extra_request_headers "
                     "не используются — задайте их в custom_providers"
                 )
+        if self.provider == HUMANITEC_LLM_PROVIDER:
+            if (
+                self.api_key_encrypted
+                or self.base_url
+                or self.folder_id
+                or self.extra_request_headers
+            ):
+                raise ValueError(
+                    "provider=humanitec_llm — виртуальный платформенный провайдер; "
+                    "api_key_encrypted/base_url/folder_id/extra_request_headers не задаются"
+                )
+            if self.model and self.model != HUMANITEC_LLM_AUTO_MODEL:
+                raise ValueError("provider=humanitec_llm поддерживает только model='auto' или пусто")
         return self
 
 
@@ -167,6 +184,8 @@ class CompanyEmbeddingOverride(BaseModel):
 
     @model_validator(mode="after")
     def _v_byok_only_for_platform(self) -> "CompanyEmbeddingOverride":
+        if self.provider == HUMANITEC_LLM_PROVIDER:
+            raise ValueError("provider=humanitec_llm не поддерживает embedding")
         if _is_custom_ref(self.provider):
             if self.api_key_encrypted or self.base_url or self.extra_request_headers:
                 raise ValueError(
@@ -407,6 +426,8 @@ __all__ = [
     "CompanyVoiceOverride",
     "CUSTOM_PROVIDER_REF_PREFIX",
     "CUSTOM_PROVIDER_SLUG",
+    "HUMANITEC_LLM_AUTO_MODEL",
+    "HUMANITEC_LLM_PROVIDER",
     "METADATA_KEY",
     "PLATFORM_LLM_PROVIDERS",
 ]

@@ -13,9 +13,9 @@
       "type": "llm_node",
       "prompt": "prompts/main.md",
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.2,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       },
       "tools": [],
       "output_key": "response"
@@ -31,9 +31,9 @@
           "type": "llm_node",
           "prompt": "prompts/analyze.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.1,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "tools": [],
           "structured_output": true,
@@ -51,9 +51,9 @@
           "type": "llm_node",
           "prompt": "prompts/summarize.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.3,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "llm_capability": "llm_summarize",
           "tools": [],
@@ -72,9 +72,9 @@
           "type": "llm_node",
           "prompt": "prompts/summarize_chunk.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.3,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "llm_capability": "llm_summarize",
           "tools": [],
@@ -93,9 +93,9 @@
           "type": "llm_node",
           "prompt": "prompts/summarize_merge.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.2,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "llm_capability": "llm_summarize",
           "tools": [],
@@ -114,9 +114,9 @@
           "type": "llm_node",
           "prompt": "prompts/period_summarize_merge.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.2,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "llm_capability": "llm_summarize",
           "tools": [],
@@ -135,9 +135,9 @@
           "type": "llm_node",
           "prompt": "prompts/summarize_attachment.md",
           "llm": {
-            "model": "Qwen/Qwen2.5-1.5B-Instruct",
+            "model": "auto",
             "temperature": 0.1,
-            "provider": "provider_litserve"
+            "provider": "humanitec_llm"
           },
           "llm_capability": "llm_summarize",
           "tools": [],
@@ -156,9 +156,9 @@
           "type": "llm_node",
           "prompt": "prompts/deduplicate.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.1,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "tools": [],
           "structured_output": true,
@@ -176,9 +176,9 @@
           "type": "llm_node",
           "prompt": "prompts/deduplicate_batch.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.1,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "tools": [],
           "structured_output": true,
@@ -196,9 +196,9 @@
           "type": "llm_node",
           "prompt": "prompts/draft_repair.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.1,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "tools": [],
           "structured_output": true,

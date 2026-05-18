@@ -21,7 +21,10 @@
 
 import { getActivePlatformNamespaceName } from '@platform/lib/utils/platform-namespace.js';
 
-export function nsHeader(ctx) {
+export function nsHeader(ctx, explicitNamespace = '') {
+    if (typeof explicitNamespace === 'string' && explicitNamespace.trim().length > 0) {
+        return { 'X-Platform-Namespace': explicitNamespace.trim() };
+    }
     if (!ctx || typeof ctx.getState !== 'function') {
         throw new Error('nsHeader: ctx with getState() required');
     }

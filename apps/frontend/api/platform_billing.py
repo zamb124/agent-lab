@@ -293,7 +293,11 @@ async def get_billing_prices(request: Request, container: ContainerDep) -> Platf
             raise ValueError("billing:resource_base_prices_json должен быть JSON-объектом")
         override = _validate_price_catalog(parsed)
     effective = await container.billing_service.get_effective_resource_base_prices()
-    return PlatformBillingPricesResponse(effective=effective, storage_override=override)
+    return PlatformBillingPricesResponse(
+        static_base=container.billing_service.get_static_resource_base_prices(),
+        effective=effective,
+        storage_override=override,
+    )
 
 
 @router.put("/prices")
@@ -386,9 +390,10 @@ async def get_company_billing_prices(
     company_id: str,
 ) -> PlatformBillingCompanyPricesResponse:
     _require_system(request)
-    if not company_id.strip():
+    cid = company_id.strip()
+    if not cid:
         raise HTTPException(status_code=422, detail="company_id не может быть пустым")
-    key = company_resource_prices_storage_key(company_id)
+    key = company_resource_prices_storage_key(cid)
     raw = await container.shared_storage.get(key, force_global=True)
     override: Optional[Dict[str, Dict[str, float]]] = None
     if raw:
@@ -396,10 +401,26 @@ async def get_company_billing_prices(
         if not isinstance(parsed, dict):
             raise ValueError(f"{key} должен быть JSON-объектом")
         override = _validate_price_catalog(parsed)
-    effective = await container.billing_service.get_effective_resource_base_prices_for_company(company_id)
+    effective = await container.billing_service.get_effective_resource_base_prices_for_company(cid)
+    company = await container.company_repository.get(cid)
+    tariff_plan = company.tariff_plan if company is not None else None
+    tariff_multipliers = (
+        container.billing_service.get_tariff_multipliers_for_plan(tariff_plan)
+        if tariff_plan is not None
+        else {}
+    )
+    unit_effective = (
+        container.billing_service.apply_tariff_multipliers_to_base_prices(effective, tariff_plan)
+        if tariff_plan is not None
+        else None
+    )
     return PlatformBillingCompanyPricesResponse(
-        company_id=company_id,
+        company_id=cid,
+        static_base=container.billing_service.get_static_resource_base_prices(),
         effective=effective,
+        unit_effective=unit_effective,
+        tariff_plan=tariff_plan.value if tariff_plan is not None else None,
+        tariff_multipliers=tariff_multipliers,
         storage_override=override,
     )
 
@@ -412,11 +433,12 @@ async def put_company_billing_prices(
     body: Dict[str, Any] = Body(...),
 ) -> dict[str, str]:
     _require_system(request)
-    if not company_id.strip():
+    cid = company_id.strip()
+    if not cid:
         raise HTTPException(status_code=422, detail="company_id не может быть пустым")
     catalog = _validate_price_catalog(body)
     await container.shared_storage.set(
-        company_resource_prices_storage_key(company_id),
+        company_resource_prices_storage_key(cid),
         json.dumps(catalog),
         force_global=True,
     )

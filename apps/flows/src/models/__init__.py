@@ -41,7 +41,7 @@ from .flow_speech_settings import (
 )
 from .llm_model import LLMModel
 from .mcp import MCPCallResult, MCPServerConfig, MCPToolInfo, MCPTransportType
-from .node_config import NodeConfig, NodeLLMOverride, ReactConfig, ReactLoopMode
+from .node_config import NodeConfig, NodeLLMConfig, NodeLLMOverride, ReactConfig, ReactLoopMode
 from .resource import (
     LLMResourceConfig,
     ResourceDefinition,
@@ -59,8 +59,7 @@ from .trigger_config import (
     WebhookTriggerConfig,
 )
 
-# Алиас для обратной совместимости (deprecated)
-LLMConfig = NodeLLMOverride
+LLMConfig = NodeLLMConfig
 
 __all__ = [
     "FlowType",
@@ -84,8 +83,9 @@ __all__ = [
     "InputConfig",
     "InputType",
     "NodeConfig",
+    "NodeLLMConfig",
     "NodeLLMOverride",
-    "LLMConfig",  # deprecated alias
+    "LLMConfig",
     "LLMModel",
     "MergeMode",
     "OutputAction",

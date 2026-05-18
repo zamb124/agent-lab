@@ -8,7 +8,7 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils.message import get_message_text
 
-from apps.flows.src.models import NodeConfig, NodeLLMOverride
+from apps.flows.src.models import NodeConfig, NodeLLMConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.runners import LlmNodeRunner
 from apps.flows.src.streaming import InMemoryEmitter
@@ -34,7 +34,7 @@ class SimpleLlmNodeExecutorMeta(type(AgentExecutor)):
                 name=node_name,
                 description=node_description,
                 prompt=prompt,
-                llm=NodeLLMOverride(model=model, temperature=0.2),
+                llm=NodeLLMConfig(model=model, temperature=0.2),
             )
             self.runner = LlmNodeRunner(config, tools, None, prompt, llm_node=None)
             self.agent_skills = agent_skills

@@ -10,6 +10,7 @@ import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-assistant-message-actions.js';
 import { asArray, asString, isPlainObject, toolCallIconName } from '../../_helpers/flows-resolvers.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
+import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { resolveFlowVoiceHttpOrigin } from '../../_helpers/flow-voice-session.js';
 import {
     readTtsOutputEnabled,
@@ -616,6 +617,13 @@ export class ChatMessage extends PlatformElement {
                 font-size: var(--text-sm);
                 text-decoration: none;
                 color: inherit;
+                cursor: pointer;
+            }
+
+            .file-item:hover .file-name {
+                color: var(--accent);
+                text-decoration: underline;
+                text-underline-offset: 2px;
             }
             
             .file-image {
@@ -834,6 +842,9 @@ export class ChatMessage extends PlatformElement {
             return true;
         }
         if (asArray(this.browserPreviews).length > 0) {
+            return true;
+        }
+        if (asArray(this.files).length > 0) {
             return true;
         }
         return false;
@@ -1420,17 +1431,29 @@ export class ChatMessage extends PlatformElement {
     }
 
     _renderFile(file) {
-        const isImage = file.type && file.type.startsWith('image/');
-        const iconKey = isImage ? 'image' : resolveFileIconKey(asString(file.name), asString(file.type));
-
-        return html`
-            <div class="file-item">
-                <platform-icon file-icon name=${iconKey} size="20"></platform-icon>
-                <div>
-                    <div class="file-name">${file.name}</div>
-                    ${file.size ? html`<div class="file-size">${this._formatFileSize(file.size)}</div>` : ''}
-                </div>
+        const mimeType = asString(file.mime_type) || asString(file.type);
+        const isImage = mimeType.startsWith('image/');
+        const iconKey = isImage ? 'image' : resolveFileIconKey(asString(file.name), mimeType);
+        const fileId = asString(file.file_id);
+        const href =
+            asString(file.url) ||
+            asString(file.path) ||
+            (fileId.length > 0 ? `/flows/api/v1/files/download/${encodeURIComponent(fileId)}` : '');
+        const content = html`
+            <platform-icon file-icon name=${iconKey} size="20"></platform-icon>
+            <div>
+                <div class="file-name">${asString(file.name) || fileId || href}</div>
+                ${file.size ? html`<div class="file-size">${this._formatFileSize(file.size)}</div>` : ''}
             </div>
+        `;
+
+        if (href.length === 0) {
+            return html`<div class="file-item">${content}</div>`;
+        }
+        return html`
+            <a class="file-item" href=${href} target="_blank" rel="noopener">
+                ${content}
+            </a>
         `;
     }
 

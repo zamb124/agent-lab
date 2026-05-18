@@ -6,11 +6,15 @@ read_file — чтение вложений; create_file — FileWriter() + crea
 
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.runtime_helpers.state_utils import find_file, push_ui_event
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
+from core.clients.service_client import NAMESPACE_HEADER, ServiceClient, ServiceClientError
+from core.context import get_context
 from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
@@ -18,6 +22,128 @@ from core.files.writer import FileWriteError, FileWriter
 from core.state import ExecutionState
 
 JsonDict = dict[str, Any]
+OFFICE_EXT_RE = r"\.(docx?|odt|rtf|txt|pdf|xlsx?|ods|csv|pptx?|odp)$"
+OFFICE_MIME_RE = r"(pdf|word|excel|spreadsheet|presentation|powerpoint|officedocument|opendocument|text/csv|text/plain)"
+
+
+def _context_namespace() -> str:
+    ctx = get_context()
+    if ctx is None:
+        return "default"
+    ns = (ctx.active_namespace or "default").strip()
+    return ns or "default"
+
+
+def _is_office_file(item: JsonDict) -> bool:
+    import re
+
+    name = str(item.get("name") or item.get("original_name") or "").lower()
+    mime = str(item.get("mime_type") or item.get("content_type") or item.get("type") or "").lower()
+    return re.search(OFFICE_EXT_RE, name) is not None or re.search(OFFICE_MIME_RE, mime) is not None
+
+
+def _document_capability(raw: JsonDict, namespace: str) -> JsonDict:
+    return {
+        "kind": "onlyoffice",
+        "binding_id": raw["binding_id"],
+        "file_id": raw["file_id"],
+        "catalog_id": raw["catalog_id"],
+        "document_type": raw.get("document_type") or "",
+        "title": raw.get("title") or "",
+        "namespace": namespace,
+        "editor_url": raw.get("editor_url") or "",
+        "editable": True,
+    }
+
+
+def _with_document_capability(item: JsonDict, raw: JsonDict, namespace: str) -> JsonDict:
+    capabilities = item.get("capabilities")
+    if not isinstance(capabilities, dict):
+        capabilities = {}
+    doc = _document_capability(raw, namespace)
+    return {
+        **item,
+        "file_id": raw["file_id"],
+        "capabilities": {**capabilities, "document": doc},
+        "document": doc,
+    }
+
+
+def _upsert_state_file(state: ExecutionState, item: JsonDict) -> None:
+    fid = str(item.get("file_id") or "").strip()
+    files = list(state.files or [])
+    if fid:
+        for idx, existing in enumerate(files):
+            if str(existing.get("file_id") or "") == fid:
+                files[idx] = {**existing, **item}
+                state.files = files
+                return
+    files.append(item)
+    state.files = files
+
+
+async def _sync_office_file_before_read(state: ExecutionState, item: JsonDict) -> tuple[JsonDict, str | None]:
+    fid = str(item.get("file_id") or "").strip()
+    if not fid or not _is_office_file(item):
+        return item, None
+
+    namespace = _context_namespace()
+    document = item.get("document")
+    capabilities = item.get("capabilities")
+    if not isinstance(document, dict) and isinstance(capabilities, dict):
+        cap_doc = capabilities.get("document")
+        if isinstance(cap_doc, dict):
+            document = cap_doc
+
+    raw: JsonDict | None = None
+    if isinstance(document, dict) and isinstance(document.get("binding_id"), str):
+        raw = {
+            "binding_id": document["binding_id"],
+            "file_id": fid,
+            "catalog_id": document.get("catalog_id") or "",
+            "document_type": document.get("document_type") or "",
+            "title": document.get("title") or item.get("name") or "",
+            "editor_url": document.get("editor_url") or "",
+        }
+    else:
+        try:
+            candidate = await ServiceClient().post(
+                "office",
+                "/documents/api/v1/documents/from-file",
+                json={"file_id": fid, "title": str(item.get("name") or fid)},
+                headers={NAMESPACE_HEADER: namespace},
+            )
+        except ServiceClientError:
+            return item, None
+        if isinstance(candidate, dict) and isinstance(candidate.get("binding_id"), str):
+            raw = candidate
+
+    if raw is None:
+        return item, None
+
+    binding_id = str(raw["binding_id"])
+    try:
+        synced = await ServiceClient().post(
+            "office",
+            f"/documents/api/v1/documents/{quote(binding_id, safe='')}/sync",
+            headers={NAMESPACE_HEADER: namespace},
+            timeout=30.0,
+        )
+    except ServiceClientError as exc:
+        return item, f"Не удалось синхронизировать открытый редактор documents перед чтением: {exc}"
+    if isinstance(synced, dict):
+        raw = {**raw, **synced}
+
+    enriched = _with_document_capability(item, raw, namespace)
+    _upsert_state_file(state, enriched)
+    push_ui_event(
+        state,
+        event_type="files.updated",
+        payload={"files": [enriched]},
+        source="documents",
+        correlation_id=binding_id,
+    )
+    return enriched, None
 
 _CREATE_FILE_TOOL_DESCRIPTION = """
 Создаёт файл в хранилище платформы и возвращает ссылку на скачивание.
@@ -64,20 +190,6 @@ file_size, checksum (если есть), is_public.
 
 
 def _read_file_mock(args: JsonDict, state: Any = None) -> JsonDict:
-    def _pick(entries: list[JsonDict], name: Any) -> JsonDict | None:
-        if not entries:
-            return None
-        if not name:
-            return entries[-1]
-        for f in entries:
-            if f.get("name") == name:
-                return f
-        nl = name.lower()
-        for f in entries:
-            if nl in (f.get("name") or "").lower():
-                return f
-        return None
-
     file_name_arg = args.get("file_name")
     if state is not None:
         files = getattr(state, "files", None)
@@ -86,7 +198,7 @@ def _read_file_mock(args: JsonDict, state: Any = None) -> JsonDict:
         files = files or []
         if not files:
             return {"success": False, "error": "Нет файлов для чтения"}
-        finfo = _pick(files, file_name_arg)
+        finfo = find_file(files, file_name_arg)
         if finfo is None:
             return {
                 "success": False,
@@ -171,30 +283,20 @@ async def read_file(
     *,
     state: ExecutionState,
 ) -> JsonDict:
-    def _pick_file(files_list: list[dict[str, Any]], name: str | None) -> dict[str, Any] | None:
-        if not files_list:
-            return None
-        if not name:
-            return files_list[-1]
-        for f in files_list:
-            if f.get("name") == name:
-                return f
-        name_lower = name.lower()
-        for f in files_list:
-            if name_lower in (f.get("name") or "").lower():
-                return f
-        return None
-
     files = state.files
     if not files:
         return {"success": False, "error": "Нет файлов для чтения"}
 
-    finfo = _pick_file(files, file_name)
+    finfo = find_file(files, file_name)
     if finfo is None:
         return {
             "success": False,
             "error": f"Файл не найден. Доступные: {[f.get('name') for f in files]}",
         }
+
+    finfo, sync_error = await _sync_office_file_before_read(state, finfo)
+    if sync_error is not None:
+        return {"success": False, "error": sync_error}
 
     reader = FileReader()
     try:
@@ -250,4 +352,22 @@ async def create_file(
         return {"success": False, "error": str(exc)}
 
     response = FileResponse.from_record(record)
-    return {"success": True, **response.model_dump(mode="json")}
+    payload = response.model_dump(mode="json")
+    file_item = {
+        "file_id": response.file_id,
+        "name": response.original_name,
+        "path": response.url,
+        "url": response.url,
+        "mime_type": response.content_type,
+        "type": response.content_type,
+        "size": response.file_size,
+    }
+    _upsert_state_file(state, file_item)
+    push_ui_event(
+        state,
+        event_type="files.added",
+        payload={"files": [file_item]},
+        source="files",
+        correlation_id=response.file_id,
+    )
+    return {"success": True, **payload}

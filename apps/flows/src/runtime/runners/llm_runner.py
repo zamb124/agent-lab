@@ -37,10 +37,10 @@ from apps.flows.src.runtime.a2a_messages import (
 )
 from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.runtime.llm_byok import is_llm_byok_override
+from apps.flows.src.runtime.llm_byok import is_llm_byok_config
 from apps.flows.src.runtime.llm_override_params import (
-    client_kwargs_from_override,
-    split_llm_override_for_client,
+    client_kwargs_from_llm_config,
+    split_llm_config_for_client,
 )
 from apps.flows.src.runtime.tool_call_context import active_tool_call_context
 from apps.flows.src.state.cancellation import (
@@ -401,8 +401,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         trace_ctx = _get_trace_ctx_from_state()
         tracer = get_tracer()
         model = (
-            self.node_config.llm_override.model
-            if self.node_config and self.node_config.llm_override and self.node_config.llm_override.model
+            self.node_config.llm.model
+            if self.node_config and self.node_config.llm and self.node_config.llm.model
             else "unknown"
         )
 
@@ -414,9 +414,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         container = self.container
         if container is None:
             raise RuntimeError("LlmNodeRunner requires FlowContainer for billing")
-        override = self.node_config.llm_override if self.node_config else None
+        llm_config = self.node_config.llm if self.node_config else None
         allow_platform_paid_fallback = True
-        byok_override = is_llm_byok_override(override)
+        byok_override = is_llm_byok_config(llm_config)
         (
             billing_model,
             _billing_temp,
@@ -426,7 +426,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             _billing_max_tok,
             billing_folder_id,
             _billing_fallback_models,
-        ) = split_llm_override_for_client(override)
+        ) = split_llm_config_for_client(llm_config)
         uses_platform_free_pool = should_use_platform_default_free_pool(
             model_name=billing_model,
             provider=billing_provider,
@@ -515,14 +515,17 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         provider_reported_cost: float | None = None
                         provider_upstream_inference_cost: float | None = None
                         settlement_quantity_rub: int | None = None
+                        resolved_llm_model: str | None = None
+                        resolved_llm_provider: str | None = None
+                        resolved_llm_source: str | None = None
 
                         llm, stream_kw, max_tok = self._resolve_llm_client(
                             state,
                             allow_platform_paid_fallback=allow_platform_paid_fallback,
                         )
                         llm_provider = getattr(llm, "llm_provider", None)
-                        byok = is_llm_byok_override(
-                            self.node_config.llm_override if self.node_config else None
+                        byok = is_llm_byok_config(
+                            self.node_config.llm if self.node_config else None
                         )
                         billing_res: str | None = "llm:byok" if byok else None
 
@@ -569,6 +572,15 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             tc = md.get("tool_calls")
                                             if tc:
                                                 tool_calls = tc
+                                            md_model = md.get("model")
+                                            if isinstance(md_model, str) and md_model.strip():
+                                                resolved_llm_model = md_model.strip()
+                                            md_provider = md.get("provider")
+                                            if isinstance(md_provider, str) and md_provider.strip():
+                                                resolved_llm_provider = md_provider.strip()
+                                            md_source = md.get("source")
+                                            if isinstance(md_source, str) and md_source.strip():
+                                                resolved_llm_source = md_source.strip()
                                             usage = md.get("usage")
                                             if usage:
                                                 input_tokens = usage.get("input_tokens", 0)
@@ -590,7 +602,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 raise
 
                             if (
-                                llm_provider == "openrouter"
+                                (resolved_llm_provider or llm_provider) == "openrouter"
                                 and provider_reported_cost is not None
                                 and provider_reported_cost > 0
                             ):
@@ -602,6 +614,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     settlement_quantity_rub = rub
 
                             llm_duration = (time.time() - llm_start) * 1000
+                            if resolved_llm_model:
+                                logger.info(
+                                    "llm.call_resolved",
+                                    requested_model=model,
+                                    provider=resolved_llm_provider or llm_provider,
+                                    model=resolved_llm_model,
+                                    source=resolved_llm_source,
+                                )
                             tracer.record_llm_response(
                                 llm_span,
                                 input_tokens=input_tokens,
@@ -610,7 +630,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 duration_ms=llm_duration,
                                 response_content=content,
                                 tool_calls=tool_calls,
-                                llm_provider=llm_provider,
+                                llm_provider=resolved_llm_provider or llm_provider,
+                                llm_model=resolved_llm_model,
+                                candidate_source=resolved_llm_source,
                                 provider_reported_cost=provider_reported_cost,
                                 provider_upstream_inference_cost=provider_upstream_inference_cost,
                                 settlement_quantity_rub=settlement_quantity_rub,
@@ -845,9 +867,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         *,
         allow_platform_paid_fallback: bool = True,
     ) -> tuple[LLMClient | MockLLM, dict[str, Any], int | None]:
-        override = self.node_config.llm_override if self.node_config else None
-        max_tok = override.max_tokens if override is not None else None
-        client_kwargs = client_kwargs_from_override(override, state)
+        llm_config = self.node_config.llm if self.node_config else None
+        max_tok = llm_config.max_tokens if llm_config is not None else None
+        client_kwargs = client_kwargs_from_llm_config(llm_config, state)
         llm = get_llm_for_state(
             state,
             **client_kwargs,

@@ -615,7 +615,7 @@ async def test_onlyoffice_callback_requires_bearer_and_accepts_status_without_sa
     )
     assert no_auth.status_code == 401
 
-    bearer = jwt.encode({"status": 1}, integ.jwt_secret, algorithm="HS256")
+    bearer = jwt.encode({"payload": {"status": 1}}, integ.jwt_secret, algorithm="HS256")
     ok = await office_client.post(
         f"/documents/api/v1/onlyoffice/callback?token={quote(ctx_tok, safe='')}",
         headers={"Authorization": f"Bearer {bearer}"},
@@ -623,6 +623,14 @@ async def test_onlyoffice_callback_requires_bearer_and_accepts_status_without_sa
     )
     assert ok.status_code == 200
     assert ok.json()["error"] == 0
+
+    body_token = jwt.encode({"status": 1}, integ.jwt_secret, algorithm="HS256")
+    ok_body_token = await office_client.post(
+        f"/documents/api/v1/onlyoffice/callback?token={quote(ctx_tok, safe='')}",
+        json={"token": body_token},
+    )
+    assert ok_body_token.status_code == 200
+    assert ok_body_token.json()["error"] == 0
 
 
 @pytest.mark.asyncio
@@ -826,4 +834,3 @@ async def test_upload_filename_blob_spreadsheet_mime_stores_cell_and_editor_cell
     cfg = _decode_editor_config_token(er.json()["token"])
     assert cfg["documentType"] == "cell"
     assert cfg["document"]["fileType"] == "xlsx"
-

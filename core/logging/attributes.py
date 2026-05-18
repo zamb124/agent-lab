@@ -58,6 +58,7 @@ LOG_DB_DURATION_MS = "db.duration_ms"
 # LLM (синхронизировано с core/tracing/attributes.py платформенными ключами)
 LOG_LLM_PROVIDER = "llm.provider"
 LOG_LLM_MODEL = "llm.model"
+LOG_LLM_SOURCE = "llm.source"
 LOG_LLM_INPUT_TOKENS = "llm.tokens.input"
 LOG_LLM_OUTPUT_TOKENS = "llm.tokens.output"
 LOG_LLM_TOTAL_TOKENS = "llm.tokens.total"

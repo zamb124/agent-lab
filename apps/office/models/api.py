@@ -29,6 +29,58 @@ class OfficeDocumentCreateResponse(BaseModel):
     binding_id: str
     file_id: str
     catalog_id: str
+    document_type: str | None = None
+    title: str | None = None
+    editor_url: str | None = None
+
+
+class OfficeDocumentFromFileRequest(BaseModel):
+    file_id: str = Field(min_length=1, max_length=128)
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    catalog_id: str | None = None
+
+
+class OfficeDocumentEditorSessionResponse(BaseModel):
+    binding_id: str
+    file_id: str
+    catalog_id: str
+    title: str
+    document_type: str
+    namespace: str
+    editor_url: str
+
+
+class OfficeDocumentSyncRequest(BaseModel):
+    close: bool = False
+    settle_ms: int = Field(default=750, ge=0, le=3000)
+    dirty: bool | None = None
+
+
+class OfficeDocumentMutationResponse(BaseModel):
+    binding_id: str
+    file_id: str
+    checksum: str | None = None
+    file_size: int
+    editor_url: str
+    changed_count: int | None = None
+
+
+class OfficeDocumentReplaceTextRequest(BaseModel):
+    find: str = Field(min_length=1, max_length=2000)
+    replace: str = Field(default="", max_length=20000)
+    match_case: bool = False
+    tool_call_id: str | None = Field(default=None, max_length=128)
+
+
+class OfficeDocumentAppendTextRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=200000)
+    tool_call_id: str | None = Field(default=None, max_length=128)
+
+
+class OfficeSpreadsheetUpdateCellsRequest(BaseModel):
+    cells: dict[str, str | int | float | bool | None] = Field(min_length=1)
+    sheet: str | None = Field(default=None, max_length=128)
+    tool_call_id: str | None = Field(default=None, max_length=128)
 
 
 class OfficeEmptyCreateRequest(BaseModel):

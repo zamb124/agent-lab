@@ -87,8 +87,8 @@ class ReactConfig(StrictBaseModel):
     )
 
 
-class NodeLLMOverride(LLMCallConfig):
-    """Переопределение LLM настроек для конкретной ноды."""
+class NodeLLMConfig(LLMCallConfig):
+    """LLM настройки конкретной ноды."""
 
     model: str | None = Field(default=None, description="Модель (если None - из global LLMConfig)")
     fallback_models: list[LLMCallConfig] | None = Field(
@@ -111,6 +111,9 @@ class NodeLLMOverride(LLMCallConfig):
         v: list[LLMCallConfig] | None,
     ) -> list[LLMCallConfig] | None:
         return validate_fallback_model_configs(v)
+
+
+NodeLLMOverride = NodeLLMConfig
 
 
 class NodeConfig(StrictBaseModel):
@@ -179,10 +182,9 @@ class NodeConfig(StrictBaseModel):
     tools: list[ToolReference] = Field(
         default_factory=list, description="Список инструментов"
     )
-    llm_override: NodeLLMOverride | None = Field(
+    llm: NodeLLMConfig | None = Field(
         default=None,
-        description="Переопределение LLM настроек (если None - из global config)",
-        alias="llm"
+        description="LLM настройки ноды (если None - из global config)",
     )
     llm_capability: LLMCapability | None = Field(
         default=None,
@@ -370,6 +372,17 @@ class NodeConfig(StrictBaseModel):
             )
         return iv
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_llm_override(cls, data: object) -> object:
+        if not isinstance(data, dict) or "llm_override" not in data:
+            return data
+        out = dict(data)
+        legacy_llm = out.pop("llm_override", None)
+        if legacy_llm not in (None, {}):
+            out["llm"] = legacy_llm
+        return out
+
     @model_validator(mode="after")
     def validate_resource_node_excludes_agent_surface(self) -> "NodeConfig":
         if self.type != NodeType.RESOURCE:
@@ -382,6 +395,6 @@ class NodeConfig(StrictBaseModel):
             raise ValueError("resource node: react is not allowed")
         if self.structured_output:
             raise ValueError("resource node: structured_output must be False")
-        if self.llm_override is not None:
-            raise ValueError("resource node: llm / llm_override is not allowed")
+        if self.llm is not None:
+            raise ValueError("resource node: llm is not allowed")
         return self

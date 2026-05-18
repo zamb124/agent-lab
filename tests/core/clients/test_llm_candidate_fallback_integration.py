@@ -14,11 +14,19 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 import pytest
-from a2a.types import Message, Part, Role, TaskArtifactUpdateEvent, TextPart
+from a2a.types import (
+    Message,
+    Part,
+    Role,
+    TaskArtifactUpdateEvent,
+    TaskStatusUpdateEvent,
+    TextPart,
+)
 from a2a.utils.message import get_message_text
 
 from core.clients.llm.config import LLMCallConfig
-from core.clients.llm.factory import LLMClient, get_llm
+from core.clients.llm.factory import LLMClient, get_llm, should_use_platform_default_free_pool
+from core.clients.llm.model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
 from core.config import BaseSettings, get_settings, set_settings
 from core.config.models import (
     LLMConfig,
@@ -261,6 +269,37 @@ async def test_stream_falls_back_when_primary_has_no_first_token() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stream_status_metadata_uses_resolved_candidate_model_provider_and_source() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "primary-500": lambda writer: _write_json_response(writer, 500, {"error": "boom"}),
+            "fallback-fast": lambda writer: _write_sse_text(writer, "fallback-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = _client_for(
+            server,
+            [
+                _candidate("primary-500", base_url=server.base_url, source="primary-source"),
+                _candidate("fallback-fast", base_url=server.base_url, source="fallback-source"),
+            ],
+        )
+
+        events = []
+        async for event in client.stream([_message("hello")]):
+            events.append(event)
+
+        status_events = [event for event in events if isinstance(event, TaskStatusUpdateEvent)]
+        final_metadata = status_events[-1].status.message.metadata
+        assert final_metadata["model"] == "fallback-fast"
+        assert final_metadata["provider"] == "openai"
+        assert final_metadata["source"] == "fallback-source"
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
 async def test_fallback_candidate_uses_its_own_full_llm_config() -> None:
     server = _OpenAICompatibleTestServer(
         {
@@ -428,6 +467,102 @@ async def test_stream_skips_candidate_that_cannot_handle_tools() -> None:
         assert get_message_text(message) == "tools-ok"
         assert [request.model for request in server.requests] == ["fallback-with-tools"]
         assert "tools" in server.requests[0].body
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_openrouter_free_candidate_requires_explicit_tool_support() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "free-no-metadata": lambda writer: _write_sse_text(writer, "unexpected"),
+            "free-with-tools": lambda writer: _write_sse_text(writer, "tools-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = _client_for(
+            server,
+            [
+                _candidate(
+                    "free-no-metadata",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset(),
+                    source="openrouter_free",
+                ),
+                _candidate(
+                    "free-with-tools",
+                    base_url=server.base_url,
+                    supported_parameters=frozenset({"tools"}),
+                    source="openrouter_free",
+                ),
+            ],
+        )
+
+        message = await client.chat(
+            [_message("hello")],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup",
+                        "description": "Lookup something",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+            ],
+        )
+
+        assert get_message_text(message) == "tools-ok"
+        assert [request.model for request in server.requests] == ["free-with-tools"]
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_openrouter_free_pool_raises_when_no_candidate_supports_tools() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "free-no-tools": lambda writer: _write_sse_text(writer, "unexpected"),
+        }
+    )
+    await server.start()
+    try:
+        candidate = _candidate(
+            "free-no-tools",
+            base_url=server.base_url,
+            supported_parameters=frozenset({"temperature"}),
+            source="openrouter_free",
+        )
+        client = LLMClient(
+            model=str(candidate.model),
+            api_key=str(candidate.api_key),
+            base_url=candidate.base_url,
+            llm_provider=candidate.provider,
+            candidates=[candidate],
+            first_token_timeout=0.05,
+            candidate_cooldown_seconds=0.0,
+            timeout=2.0,
+            platform_default_free_pool=True,
+            platform_paid_fallback_enabled=False,
+        )
+
+        with pytest.raises(RuntimeError, match="совместимых"):
+            await client.chat(
+                [_message("hello")],
+                tools=[
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "lookup",
+                            "description": "Lookup something",
+                            "parameters": {"type": "object", "properties": {}},
+                        },
+                    }
+                ],
+            )
+
+        assert server.requests == []
     finally:
         await server.close()
 
@@ -615,4 +750,52 @@ def test_get_llm_default_pool_can_disable_paid_fallback_for_empty_balance() -> N
     assert isinstance(client, LLMClient)
     assert client.platform_default_free_pool is True
     assert client.platform_paid_fallback_enabled is False
+    assert client._static_candidates == []
+
+
+def test_humanitec_llm_provider_uses_dynamic_pool_independent_of_default_strategy() -> None:
+    old_settings = get_settings()
+    settings = BaseSettings(
+        testing=False,
+        llm=LLMConfig(
+            provider="openai",
+            default_strategy="configured",
+            default_model="configured/default",
+            temperature=0.2,
+            timeout=10.0,
+            openrouter=OpenRouterProviderConfig(
+                api_key="sk-openrouter",
+                base_url="https://openrouter.ai/api/v1",
+                site_url="https://platform.example",
+                site_name="Platform Test",
+            ),
+            openrouter_free_pool=OpenRouterFreePoolConfig(
+                enabled=True,
+                fallback_model="qwen/qwen-2.5-7b-instruct",
+            ),
+        ),
+    )
+    try:
+        set_settings(settings)
+        assert should_use_platform_default_free_pool(
+            model_name=HUMANITEC_LLM_AUTO_MODEL,
+            provider=HUMANITEC_LLM_PROVIDER,
+            api_key=None,
+            base_url=None,
+            folder_id=None,
+            settings=settings,
+        ) is True
+        with _production_llm_env():
+            client = get_llm(
+                provider=HUMANITEC_LLM_PROVIDER,
+                model_name=HUMANITEC_LLM_AUTO_MODEL,
+                allow_platform_paid_fallback=False,
+            )
+    finally:
+        set_settings(old_settings)
+
+    assert isinstance(client, LLMClient)
+    assert client.platform_default_free_pool is True
+    assert client.platform_paid_fallback_enabled is False
+    assert client._candidate_resolver is not None
     assert client._static_candidates == []

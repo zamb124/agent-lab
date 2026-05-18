@@ -31,7 +31,7 @@ from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.container_state import get_current_container
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.mock import get_mock_for_node
-from apps.flows.src.models import NodeConfig, NodeLLMOverride, ReactConfig
+from apps.flows.src.models import NodeConfig, NodeLLMConfig, ReactConfig
 from apps.flows.src.models.enums import ChannelType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig
@@ -40,14 +40,20 @@ from apps.flows.src.runtime.exception_policy import node_exception_policy, shoul
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
 from apps.flows.src.runtime.llm_resource_override import (
     infer_unique_llm_resource_key_from_merged_maps,
-    resolve_llm_override_with_resource_key,
+    resolve_llm_config_with_resource_key,
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.registry import ToolRegistry
 from apps.flows.src.variables import VariableResolver, VarResolver
 from core.clients.llm import get_llm
-from core.company_ai import AICapability, resolve_llm_for_capability
+from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER
+from core.company_ai import (
+    CUSTOM_PROVIDER_REF_PREFIX,
+    AICapability,
+    resolve_custom_llm_provider_ref,
+    resolve_llm_for_capability,
+)
 from core.context import get_context as get_request_context
 from core.errors import NodeWallClockTimeoutError
 from core.logging import get_logger
@@ -485,15 +491,10 @@ class LlmNode(BaseNode):
 
         self.prompt_template = self.prompt or cfg.get("prompt", "")
         self.tool_refs = cfg.get("tools", []) or self.tools
-        raw_override = cfg.get("llm_override")
         raw_llm = cfg.get("llm")
-        if isinstance(raw_override, dict):
-            if raw_override:
-                self.llm_config_dict = dict(raw_override)
-            elif isinstance(raw_llm, dict):
-                self.llm_config_dict = dict(raw_llm)
-            else:
-                self.llm_config_dict = {}
+        raw_legacy_llm = cfg.get("llm_override")
+        if isinstance(raw_legacy_llm, dict) and raw_legacy_llm:
+            self.llm_config_dict = dict(raw_legacy_llm)
         elif isinstance(raw_llm, dict):
             self.llm_config_dict = dict(raw_llm)
         else:
@@ -530,12 +531,12 @@ class LlmNode(BaseNode):
         """LLM конфигурация."""
         return self.llm_config_dict
 
-    def _get_typed_llm_override(self) -> NodeLLMOverride | None:
-        if self._node_config and self._node_config.llm_override:
-            return self._node_config.llm_override
+    def _get_typed_llm_config(self) -> NodeLLMConfig | None:
+        if self._node_config and self._node_config.llm:
+            return self._node_config.llm
         if not self.llm_config_dict:
             return None
-        return NodeLLMOverride.model_validate(self.llm_config_dict)
+        return NodeLLMConfig.model_validate(self.llm_config_dict)
 
     @property
     def llm_node_name(self) -> str:
@@ -665,40 +666,89 @@ class LlmNode(BaseNode):
         reasoning_effort = None
         max_tok: int | None = None
 
-        override = self._get_typed_llm_override()
-        if override:
-            model = override.model
-            fallback_models = override.fallback_models
-            temp = override.temperature
-            provider = override.provider
-            api_key = override.api_key
-            base_url = override.base_url
-            folder_id = override.folder_id
-            extra_request_headers = override.extra_request_headers
-            extra_request_body = override.extra_request_body
-            top_p = override.top_p
-            top_k = override.top_k
-            frequency_penalty = override.frequency_penalty
-            presence_penalty = override.presence_penalty
-            seed = override.seed
-            reasoning_effort = override.reasoning_effort
-            max_tok = override.max_tokens
+        llm_config = self._get_typed_llm_config()
+        if llm_config:
+            model = llm_config.model
+            fallback_models = llm_config.fallback_models
+            temp = llm_config.temperature
+            provider = llm_config.provider
+            api_key = llm_config.api_key
+            base_url = llm_config.base_url
+            folder_id = llm_config.folder_id
+            extra_request_headers = llm_config.extra_request_headers
+            extra_request_body = llm_config.extra_request_body
+            top_p = llm_config.top_p
+            top_k = llm_config.top_k
+            frequency_penalty = llm_config.frequency_penalty
+            presence_penalty = llm_config.presence_penalty
+            seed = llm_config.seed
+            reasoning_effort = llm_config.reasoning_effort
+            max_tok = llm_config.max_tokens
 
         node_has_byok = bool(
             (api_key and api_key.strip()) or (base_url and base_url.strip())
         )
-        if not node_has_byok:
-            cap_value = (
-                self._node_config.llm_capability
-                if self._node_config and self._node_config.llm_capability
-                else AICapability.LLM_CHAT.value
+        node_uses_virtual_provider = provider == HUMANITEC_LLM_PROVIDER
+        cap_value = (
+            self._node_config.llm_capability
+            if self._node_config and self._node_config.llm_capability
+            else AICapability.LLM_CHAT.value
+        )
+        try:
+            capability = AICapability(cap_value)
+        except ValueError as e:
+            raise ValueError(
+                f"LlmNode {self.node_id}: неизвестный llm_capability {cap_value!r}"
+            ) from e
+
+        if fallback_models:
+            resolved_fallback_models = []
+            for fallback in fallback_models:
+                fallback_provider = fallback.provider
+                if fallback_provider and fallback_provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+                    resolved = resolve_custom_llm_provider_ref(
+                        fallback_provider,
+                        capability=capability,
+                        model=fallback.model,
+                    )
+                    fallback_headers = dict(resolved.extra_request_headers or {})
+                    fallback_headers.update(fallback.extra_request_headers or {})
+                    fallback_body = dict(resolved.extra_request_body or {})
+                    fallback_body.update(fallback.extra_request_body or {})
+                    fallback = fallback.model_copy(
+                        update={
+                            "provider": resolved.provider,
+                            "model": resolved.model,
+                            "api_key": resolved.api_key,
+                            "base_url": resolved.base_url,
+                            "folder_id": resolved.folder_id or fallback.folder_id,
+                            "extra_request_headers": fallback_headers or None,
+                            "extra_request_body": fallback_body or None,
+                        }
+                    )
+                resolved_fallback_models.append(fallback)
+            fallback_models = resolved_fallback_models
+
+        if provider and provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+            resolved = resolve_custom_llm_provider_ref(
+                provider,
+                capability=capability,
+                model=model,
             )
-            try:
-                capability = AICapability(cap_value)
-            except ValueError as e:
-                raise ValueError(
-                    f"LlmNode {self.node_id}: неизвестный llm_capability {cap_value!r}"
-                ) from e
+            provider = resolved.provider
+            model = resolved.model
+            api_key = resolved.api_key
+            base_url = resolved.base_url
+            folder_id = resolved.folder_id or folder_id
+            if resolved.extra_request_headers:
+                merged = dict(extra_request_headers or {})
+                merged.update(resolved.extra_request_headers)
+                extra_request_headers = merged
+            if resolved.extra_request_body:
+                merged_body = dict(resolved.extra_request_body)
+                merged_body.update(extra_request_body or {})
+                extra_request_body = merged_body
+        elif not node_has_byok and not node_uses_virtual_provider:
             try:
                 resolved = resolve_llm_for_capability(
                     capability,
@@ -717,6 +767,10 @@ class LlmNode(BaseNode):
                     merged = dict(extra_request_headers or {})
                     merged.update(resolved.extra_request_headers)
                     extra_request_headers = merged
+                if resolved.extra_request_body:
+                    merged_body = dict(resolved.extra_request_body)
+                    merged_body.update(extra_request_body or {})
+                    extra_request_body = merged_body
 
         logger.info(f"[_get_llm] node_id={self.node_id}, model={model}, temp={temp}, provider={provider}")
         return get_llm(
@@ -742,10 +796,10 @@ class LlmNode(BaseNode):
     async def _resolve_effective_node_config(
         self, base: NodeConfig, state: ExecutionState | None
     ) -> NodeConfig:
-        ov = base.llm_override
-        if not ov:
+        llm_config = base.llm
+        if not llm_config:
             return base
-        explicit = ov.llm_resource_key and str(ov.llm_resource_key).strip()
+        explicit = llm_config.llm_resource_key and str(llm_config.llm_resource_key).strip()
         if state is None:
             if explicit:
                 raise ValueError("ExecutionState обязателен при заданном llm_resource_key")
@@ -763,14 +817,14 @@ class LlmNode(BaseNode):
         node_resources_raw = self.config.get("resources", {}) or {}
         repo = container.resource_repository
         if explicit:
-            merged_ov = await resolve_llm_override_with_resource_key(
-                llm_override=ov,
+            merged_ov = await resolve_llm_config_with_resource_key(
+                llm_config=llm_config,
                 flow_resources=flow_resources or {},
                 skill_resources=skill_resources,
                 node_resources_raw=node_resources_raw,
                 repository=repo,
             )
-            return base.model_copy(update={"llm_override": merged_ov})
+            return base.model_copy(update={"llm": merged_ov})
         inferred = await infer_unique_llm_resource_key_from_merged_maps(
             flow_resources=flow_resources or {},
             skill_resources=skill_resources,
@@ -779,23 +833,23 @@ class LlmNode(BaseNode):
         )
         if inferred is None:
             return base
-        ov_with_key = ov.model_copy(update={"llm_resource_key": inferred})
-        merged_ov = await resolve_llm_override_with_resource_key(
-            llm_override=ov_with_key,
+        ov_with_key = llm_config.model_copy(update={"llm_resource_key": inferred})
+        merged_ov = await resolve_llm_config_with_resource_key(
+            llm_config=ov_with_key,
             flow_resources=flow_resources or {},
             skill_resources=skill_resources,
             node_resources_raw=node_resources_raw,
             repository=repo,
         )
-        return base.model_copy(update={"llm_override": merged_ov})
+        return base.model_copy(update={"llm": merged_ov})
 
     def _create_default_config(self) -> NodeConfig:
         """Создает конфигурацию по умолчанию."""
-        llm_override = None
+        llm_config = None
         if self.llm_config_dict:
-            allowed = set(NodeLLMOverride.model_fields.keys())
+            allowed = set(NodeLLMConfig.model_fields.keys())
             raw_llm = {k: v for k, v in self.llm_config_dict.items() if k in allowed}
-            llm_override = NodeLLMOverride.model_validate(raw_llm)
+            llm_config = NodeLLMConfig.model_validate(raw_llm)
 
         react_config = None
         react_dict = self.config.get("react") if self.config else None
@@ -824,7 +878,7 @@ class LlmNode(BaseNode):
             name=self.node_id,
             description=self.description or "",
             prompt=self.prompt_template or self.prompt or "",
-            llm=llm_override,
+            llm=llm_config,
             react=react_config,
             structured_output=structured_output,
             output_schema=output_schema,
@@ -1518,6 +1572,9 @@ async def create_node(
     Zero-Guess: неизвестный тип = исключение.
     """
     node_config = dict(node_config)
+    legacy_llm = node_config.pop("llm_override", None)
+    if isinstance(legacy_llm, dict) and legacy_llm:
+        node_config["llm"] = legacy_llm
     t = node_config.get("type")
     if isinstance(t, str) and not t.strip():
         node_config.pop("type", None)

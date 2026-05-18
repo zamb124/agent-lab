@@ -2,10 +2,10 @@
  * flows-llm-config-editor — единая форма LLM-конфига.
  *
  * Используется в:
- *   - LLM ноде (`NodeLLMOverride`, `cfg.llm_override`)
+ *   - LLM ноде (`NodeLLMConfig`, `cfg.llm`)
  *   - LLM ресурсе (`LLMResourceConfig`, `resource.config`)
  *
- * Поля точно соответствуют [NodeLLMOverride / LLMResourceConfig]
+ * Поля точно соответствуют [NodeLLMConfig / LLMResourceConfig]
  * (apps/flows/src/models/node_config.py, apps/flows/src/models/resource.py):
  *   provider, model, fallback_models, temperature, max_tokens, api_key, folder_id, base_url,
  *   top_p, top_k, frequency_penalty, presence_penalty, seed,
@@ -32,9 +32,18 @@ import './flows-json-field-editor.js';
 import { asString } from '../../_helpers/flows-resolvers.js';
 
 const REASONING_LEVELS = Object.freeze(['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+const HUMANITEC_LLM_PROVIDER = 'humanitec_llm';
+const HUMANITEC_LLM_AUTO_MODEL = 'auto';
 
 /** Синхронно с `core/clients/llm/model_routing.LLM_ROUTING_PROVIDER_SLUGS` */
-const LLM_ROUTING_PROVIDER_SLUGS = new Set(['openrouter', 'openai', 'bothub', 'provider_litserve', 'yandex']);
+const LLM_ROUTING_PROVIDER_SLUGS = new Set([
+    'openrouter',
+    'openai',
+    'bothub',
+    'provider_litserve',
+    'yandex',
+    HUMANITEC_LLM_PROVIDER,
+]);
 
 export class FlowsLlmConfigEditor extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -537,6 +546,44 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         this._emitFallbackModels(items.filter((_, i) => i !== idx));
     }
 
+    _isHumanitecLlmProvider(provider) {
+        return provider === HUMANITEC_LLM_PROVIDER;
+    }
+
+    _onProviderChange(value) {
+        const base = this.config && typeof this.config === 'object' && !Array.isArray(this.config)
+            ? this.config
+            : {};
+        if (this._isHumanitecLlmProvider(value)) {
+            this._headerRows = [];
+            const next = {
+                ...base,
+                provider: HUMANITEC_LLM_PROVIDER,
+                model: HUMANITEC_LLM_AUTO_MODEL,
+            };
+            for (const field of [
+                'api_key',
+                'base_url',
+                'folder_id',
+                'fallback_models',
+                'extra_request_body',
+                'extra_request_headers',
+            ]) {
+                delete next[field];
+            }
+            this.emit('change', { config: next });
+            return;
+        }
+        const next = { ...base, provider: value };
+        if (value.length === 0) {
+            delete next.provider;
+        }
+        if (base.provider === HUMANITEC_LLM_PROVIDER && next.model === HUMANITEC_LLM_AUTO_MODEL) {
+            delete next.model;
+        }
+        this.emit('change', { config: next });
+    }
+
     _moveFallbackModel(from, to) {
         const items = this._fallbackModels();
         if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return;
@@ -618,6 +665,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         const folderId = this._readString('folder_id');
         const baseUrl = this._readString('base_url');
         const reasoning = this._readString('reasoning_effort');
+        const humanitecLlm = this._isHumanitecLlmProvider(provider);
         const extraJson = cfg.extra_request_body && typeof cfg.extra_request_body === 'object'
             ? JSON.stringify(cfg.extra_request_body, null, 2)
             : '{}';
@@ -625,7 +673,14 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         const providers = this._providersList();
         const providerEnumValues = [
             { value: '', label: '—' },
-            ...providers.map((p) => ({ value: p, label: p })),
+            ...providers.map((p) => {
+                if (p && typeof p === 'object') {
+                    const value = typeof p.value === 'string' ? p.value : '';
+                    const label = typeof p.label === 'string' && p.label.length > 0 ? p.label : value;
+                    return { value, label };
+                }
+                return { value: p, label: p };
+            }).filter((p) => typeof p.value === 'string'),
         ];
         const providerViewValues = provider.length > 0
             ? [{ value: provider, label: provider }]
@@ -645,7 +700,14 @@ export class FlowsLlmConfigEditor extends PlatformElement {
         const reasoningEnumValues = REASONING_LEVELS.map((lv) => (lv === ''
             ? { value: '', label: '—' }
             : { value: lv, label: lv }));
-        const modelField = this.readOnly
+        const modelField = humanitecLlm
+            ? html`<platform-field
+                type="string"
+                mode="view"
+                .label=${this.t('llm_config_editor.model')}
+                .value=${HUMANITEC_LLM_AUTO_MODEL}
+            ></platform-field>`
+            : this.readOnly
             ? html`<platform-field
                 type="string"
                 mode="view"
@@ -683,7 +745,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                 : { values: providerEnumValues }}
                             @change=${this.readOnly
                                 ? nothing
-                                : (e) => this._onString('provider', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                                : (e) => this._onProviderChange(typeof e.detail.value === 'string' ? e.detail.value : '')}
                         ></platform-field>
                     </div>
                     <div class="field">
@@ -723,7 +785,7 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                     >
                         <summary class="advanced-summary">${this.t('llm_config_editor.advanced')}</summary>
                         <div class="grid">
-                            ${this.allowFallbacks
+                            ${this.allowFallbacks && !humanitecLlm
                                 ? html`
                                       <div class="field full">
                                           <div class="fallbacks">
@@ -842,20 +904,24 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                       </div>
                                   `
                                 : ''}
-                            <div class="field full">
-                                <platform-field
-                                    type="string"
-                                    mode=${fieldMode}
-                                    input-type="password"
-                                    .label=${this.t('llm_config_editor.api_key')}
-                                    .placeholder="@var:KEY"
-                                    .value=${apiKey}
-                                    @change=${this.readOnly
-                                        ? nothing
-                                        : (e) => this._onString('api_key', typeof e.detail.value === 'string' ? e.detail.value : '')}
-                                ></platform-field>
-                            </div>
-                            ${provider === 'yandex'
+                            ${humanitecLlm
+                                ? ''
+                                : html`
+                                      <div class="field full">
+                                          <platform-field
+                                              type="string"
+                                              mode=${fieldMode}
+                                              input-type="password"
+                                              .label=${this.t('llm_config_editor.api_key')}
+                                              .placeholder="@var:KEY"
+                                              .value=${apiKey}
+                                              @change=${this.readOnly
+                                                  ? nothing
+                                                  : (e) => this._onString('api_key', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                                          ></platform-field>
+                                      </div>
+                                  `}
+                            ${provider === 'yandex' && !humanitecLlm
                                 ? html`
                                       <div class="field full">
                                           <platform-field
@@ -875,18 +941,22 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                       </div>
                                   `
                                 : ''}
-                            <div class="field full">
-                                <platform-field
-                                    type="string"
-                                    mode=${fieldMode}
-                                    .label=${this.t('llm_config_editor.base_url')}
-                                    .placeholder="https://api.example.com/v1"
-                                    .value=${baseUrl}
-                                    @change=${this.readOnly
-                                        ? nothing
-                                        : (e) => this._onString('base_url', typeof e.detail.value === 'string' ? e.detail.value : '')}
-                                ></platform-field>
-                            </div>
+                            ${humanitecLlm
+                                ? ''
+                                : html`
+                                      <div class="field full">
+                                          <platform-field
+                                              type="string"
+                                              mode=${fieldMode}
+                                              .label=${this.t('llm_config_editor.base_url')}
+                                              .placeholder="https://api.example.com/v1"
+                                              .value=${baseUrl}
+                                              @change=${this.readOnly
+                                                  ? nothing
+                                                  : (e) => this._onString('base_url', typeof e.detail.value === 'string' ? e.detail.value : '')}
+                                          ></platform-field>
+                                      </div>
+                                  `}
                             <div class="field">
                                 <platform-field
                                     type="number"
@@ -959,81 +1029,85 @@ export class FlowsLlmConfigEditor extends PlatformElement {
                                         : (e) => this._onString('reasoning_effort', typeof e.detail.value === 'string' ? e.detail.value : '')}
                                 ></platform-field>
                             </div>
-                            ${this.readOnly
+                            ${this.readOnly || humanitecLlm
                                 ? ''
                                 : html`
                                       <div class="field full extra">
                                           <p class="extra">${this.t('llm_config_editor.merge_layers_hint')}</p>
                                       </div>
                                   `}
-                            <div class="field full extra">
-                                <label>${this.t('llm_config_editor.extra_request_body')}</label>
-                                <flows-json-field-editor
-                                    .value=${extraJson}
-                                    .readonly=${this.readOnly}
-                                    @change=${this.readOnly
-                                        ? nothing
-                                        : (e) => {
-                                            if (e.detail && 'parsed' in e.detail) {
-                                                this._onJson('extra_request_body', e.detail.parsed);
-                                            }
-                                        }}
-                                ></flows-json-field-editor>
-                            </div>
-                            <div class="field full extra">
-                                <label>${this.t('llm_config_editor.extra_request_headers')}</label>
-                                ${(Array.isArray(this._headerRows) ? this._headerRows : []).map(
-                                    (row, idx) => html`
-                                        <div class="header-pair-row">
-                                            <platform-field
-                                                mode=${fieldMode}
-                                                type="string"
-                                                .label=${this.t('llm_config_editor.extra_header_name')}
-                                                .placeholder=${this.t('llm_config_editor.extra_header_name_placeholder')}
-                                                .value=${typeof row.name === 'string' ? row.name : ''}
-                                                @change=${this.readOnly
-                                                    ? nothing
-                                                    : (e) => this._onHeaderPairName(idx, e)}
-                                            ></platform-field>
-                                            <platform-field
-                                                mode=${fieldMode}
-                                                type="string"
-                                                .label=${this.t('llm_config_editor.extra_header_value')}
-                                                .placeholder=${this.t('llm_config_editor.extra_header_value_placeholder')}
-                                                .value=${typeof row.value === 'string' ? row.value : ''}
-                                                @change=${this.readOnly
-                                                    ? nothing
-                                                    : (e) => this._onHeaderPairValue(idx, e)}
-                                            ></platform-field>
-                                            ${this.readOnly
-                                                ? ''
-                                                : html`
-                                                      <button
-                                                          type="button"
-                                                          class="del"
-                                                          title=${this.t('llm_config_editor.extra_header_remove')}
-                                                          @click=${() => this._removeHeaderPairRow(idx)}
-                                                      >
-                                                          <platform-icon name="trash" .size=${16}></platform-icon>
-                                                      </button>
-                                                  `}
-                                        </div>
-                                    `,
-                                )}
-                                ${this.readOnly
-                                    ? ''
-                                    : html`
-                                          <glass-button
-                                              class="header-pairs-add"
-                                              size="sm"
-                                              variant="ghost"
-                                              @click=${() => this._addHeaderPairRow()}
-                                          >
-                                              <platform-icon name="plus"></platform-icon>
-                                              ${this.t('llm_config_editor.extra_header_add')}
-                                          </glass-button>
-                                      `}
-                            </div>
+                            ${humanitecLlm
+                                ? ''
+                                : html`
+                                      <div class="field full extra">
+                                          <label>${this.t('llm_config_editor.extra_request_body')}</label>
+                                          <flows-json-field-editor
+                                              .value=${extraJson}
+                                              .readonly=${this.readOnly}
+                                              @change=${this.readOnly
+                                                  ? nothing
+                                                  : (e) => {
+                                                      if (e.detail && 'parsed' in e.detail) {
+                                                          this._onJson('extra_request_body', e.detail.parsed);
+                                                      }
+                                                  }}
+                                          ></flows-json-field-editor>
+                                      </div>
+                                      <div class="field full extra">
+                                          <label>${this.t('llm_config_editor.extra_request_headers')}</label>
+                                          ${(Array.isArray(this._headerRows) ? this._headerRows : []).map(
+                                              (row, idx) => html`
+                                                  <div class="header-pair-row">
+                                                      <platform-field
+                                                          mode=${fieldMode}
+                                                          type="string"
+                                                          .label=${this.t('llm_config_editor.extra_header_name')}
+                                                          .placeholder=${this.t('llm_config_editor.extra_header_name_placeholder')}
+                                                          .value=${typeof row.name === 'string' ? row.name : ''}
+                                                          @change=${this.readOnly
+                                                              ? nothing
+                                                              : (e) => this._onHeaderPairName(idx, e)}
+                                                      ></platform-field>
+                                                      <platform-field
+                                                          mode=${fieldMode}
+                                                          type="string"
+                                                          .label=${this.t('llm_config_editor.extra_header_value')}
+                                                          .placeholder=${this.t('llm_config_editor.extra_header_value_placeholder')}
+                                                          .value=${typeof row.value === 'string' ? row.value : ''}
+                                                          @change=${this.readOnly
+                                                              ? nothing
+                                                              : (e) => this._onHeaderPairValue(idx, e)}
+                                                      ></platform-field>
+                                                      ${this.readOnly
+                                                          ? ''
+                                                          : html`
+                                                                <button
+                                                                    type="button"
+                                                                    class="del"
+                                                                    title=${this.t('llm_config_editor.extra_header_remove')}
+                                                                    @click=${() => this._removeHeaderPairRow(idx)}
+                                                                >
+                                                                    <platform-icon name="trash" .size=${16}></platform-icon>
+                                                                </button>
+                                                            `}
+                                                  </div>
+                                              `,
+                                          )}
+                                          ${this.readOnly
+                                              ? ''
+                                              : html`
+                                                    <glass-button
+                                                        class="header-pairs-add"
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        @click=${() => this._addHeaderPairRow()}
+                                                    >
+                                                        <platform-icon name="plus"></platform-icon>
+                                                        ${this.t('llm_config_editor.extra_header_add')}
+                                                    </glass-button>
+                                                `}
+                                      </div>
+                                  `}
                         </div>
                     </details>
                 </div>

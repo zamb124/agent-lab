@@ -341,7 +341,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         delete stripped.llm_resource_key;
         const merged = key.length > 0 ? { ...stripped, llm_resource_key: key } : stripped;
         const isEmpty = Object.keys(merged).length === 0;
-        this._emitPatch({ llm_override: isEmpty ? null : merged });
+        this._emitPatch({ llm: isEmpty ? null : merged });
     }
 
     _flowBranchResources() {
@@ -374,9 +374,9 @@ export class FlowsLlmNodeEditor extends PlatformElement {
     }
 
     _currentLlmResourceKey() {
-        const ov = this.nodeConfig?.llm_override;
         const lm = this.nodeConfig?.llm;
-        const bag = isPlainObject(ov) ? ov : (isPlainObject(lm) ? lm : null);
+        const legacy = this.nodeConfig?.llm_override;
+        const bag = isPlainObject(lm) ? lm : (isPlainObject(legacy) ? legacy : null);
         if (!isPlainObject(bag)) {
             return '';
         }
@@ -394,11 +394,11 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         const resources = this.nodeConfig?.resources && typeof this.nodeConfig.resources === 'object'
             ? { ...this.nodeConfig.resources }
             : {};
-        const rawOv = this.nodeConfig?.llm_override;
         const rawLlm = this.nodeConfig?.llm;
-        const ov = isPlainObject(rawOv)
-            ? { ...rawOv }
-            : (isPlainObject(rawLlm) ? { ...rawLlm } : {});
+        const rawLegacy = this.nodeConfig?.llm_override;
+        const ov = isPlainObject(rawLlm)
+            ? { ...rawLlm }
+            : (isPlainObject(rawLegacy) ? { ...rawLegacy } : {});
 
         if (
             Object.prototype.hasOwnProperty.call(flowRes, k)
@@ -415,7 +415,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             ov.llm_resource_key = k;
             this._emitPatch({
                 resources: next,
-                llm_override: ov,
+                llm: ov,
             });
             return;
         }
@@ -434,13 +434,13 @@ export class FlowsLlmNodeEditor extends PlatformElement {
             ov.llm_resource_key = k;
             this._emitPatch({
                 resources: next,
-                llm_override: ov,
+                llm: ov,
             });
             return;
         }
 
         ov.llm_resource_key = k;
-        this._emitPatch({ llm_override: ov });
+        this._emitPatch({ llm: ov });
     }
 
     _legacySingleUnboundLlmResourceId() {
@@ -485,9 +485,9 @@ export class FlowsLlmNodeEditor extends PlatformElement {
 
     _llmConfigForEditor() {
         const cfg = asObject(this.nodeConfig);
-        const override = isPlainObject(cfg.llm_override) ? cfg.llm_override : null;
-        const fallback = isPlainObject(cfg.llm) ? cfg.llm : null;
-        const llm = override !== null ? override : (fallback !== null ? fallback : {});
+        const llm = isPlainObject(cfg.llm)
+            ? cfg.llm
+            : (isPlainObject(cfg.llm_override) ? cfg.llm_override : {});
         const { llm_resource_key: _drop, ...rest } = llm;
         return rest;
     }

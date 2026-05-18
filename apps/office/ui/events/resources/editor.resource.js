@@ -26,7 +26,7 @@ export const documentEditorConfigOp = createAsyncOp({
         return httpRequest({
             method: 'GET',
             url: `/documents/api/v1/documents/${encodeURIComponent(payload.bindingId)}/editor-config`,
-            headers: nsHeader(ctx),
+            headers: nsHeader(ctx, typeof payload.namespace === 'string' ? payload.namespace : ''),
         });
     },
 });

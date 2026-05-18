@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
 from apps.flows.src.models import FlowConfig, NodeConfig, ToolReference, TriggerConfig
-from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.src.tools.json_schema_parameters import (
@@ -463,13 +463,12 @@ class FlowsLoader:
             # Конвертируем tools в List[ToolReference]
             tools = self._convert_tools(raw_node.get("tools", []))
 
-            # Создаём NodeLLMOverride
-            llm_override = None
+            llm_config = None
             if "llm" in raw_node:
                 llm_data = {**self._defaults.get("llm", {}), **raw_node["llm"]}
-                llm_override = NodeLLMOverride(**llm_data)
+                llm_config = NodeLLMConfig(**llm_data)
             elif self._defaults.get("llm"):
-                llm_override = NodeLLMOverride(**self._defaults["llm"])
+                llm_config = NodeLLMConfig(**self._defaults["llm"])
 
             node_type = raw_node.get("type")
             if not node_type:
@@ -482,7 +481,7 @@ class FlowsLoader:
                 description=str(raw_node.get("description") or ""),
                 prompt=raw_node.get("prompt", ""),
                 tools=tools,
-                llm=llm_override,
+                llm=llm_config,
                 code=raw_node.get("code"),
                 files=raw_node.get("files", []),
                 local_variables=raw_node.get("variables", {}),
@@ -718,7 +717,7 @@ class FlowsLoader:
             "name": cached_node.name,
             "description": cached_node.description,
             "prompt": cached_node.prompt,
-            "llm": cached_node.llm_override.model_dump() if cached_node.llm_override else {},
+            "llm": cached_node.llm.model_dump() if cached_node.llm else {},
             "code": cached_node.code,
         }
 
@@ -1008,8 +1007,8 @@ class FlowsLoader:
             "prompt": node_config.prompt,
         }
 
-        if node_config.llm_override:
-            result["llm"] = node_config.llm_override.model_dump()
+        if node_config.llm:
+            result["llm"] = node_config.llm.model_dump()
 
         if node_config.code:
             result["code"] = node_config.code

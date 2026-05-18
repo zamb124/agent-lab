@@ -8,6 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.runtime_helpers.state_utils import find_file, normalize_file_lookup_name
 from apps.flows.src.tools.decorator import tool
 from core.files.docx_template import DocxTemplater
 from core.files.models import FileResponse
@@ -115,27 +116,10 @@ async def fill_docx_template(
     state: ExecutionState,
 ) -> JsonDict:
     def _normalize_file_name(value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = value.strip()
+        normalized = normalize_file_lookup_name(value)
         if not normalized:
             return None
-        return normalized.strip("`'\"")
-
-    def _pick_file(entries: list[JsonDict], name: str | None) -> JsonDict | None:
-        if not entries:
-            return None
-        normalized_name = _normalize_file_name(name)
-        if not normalized_name:
-            return entries[-1]
-        for f in entries:
-            if f.get("name") == normalized_name:
-                return f
-        name_lower = normalized_name.lower()
-        for f in entries:
-            if name_lower in (f.get("name") or "").lower():
-                return f
-        return None
+        return normalized
 
     files = state.files
     if not files:
@@ -160,7 +144,7 @@ async def fill_docx_template(
     ]
     normalized_file_name = _normalize_file_name(file_name)
     if normalized_file_name:
-        finfo = _pick_file(files, normalized_file_name)
+        finfo = find_file(files, normalized_file_name)
     else:
         finfo = docx_entries[-1] if docx_entries else None
 

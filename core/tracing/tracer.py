@@ -58,6 +58,21 @@ _span_repository: Optional["SpanRepository"] = None
 _process_tracing_service_name: Optional[str] = None
 
 
+def _span_attribute(span: Span, key: str) -> Any:
+    span_attrs = getattr(span, "attributes", None) or {}
+    try:
+        return span_attrs.get(key)
+    except AttributeError:
+        return None
+
+
+def _llm_operation_name(span: Span, fallback_model: str) -> str:
+    model = _span_attribute(span, attr.ATTR_LLM_MODEL)
+    if isinstance(model, str) and model.strip():
+        return f"llm.{model.strip()}"
+    return f"llm.{fallback_model}"
+
+
 def set_tracing_service_name(name: str) -> None:
     """Имя процесса для колонки service_name (один раз при старте сервиса/воркера)."""
     global _process_tracing_service_name
@@ -504,6 +519,7 @@ class PlatformTracer:
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_LLM_MODEL] = model
+        attributes[attr.ATTR_LLM_REQUESTED_MODEL] = model
         attributes["llm.messages_count"] = messages_count
         attributes["llm.tools_count"] = tools_count
         attributes[attr.ATTR_LLM_STREAM] = True
@@ -518,7 +534,13 @@ class PlatformTracer:
             try:
                 yield span
             finally:
-                await self._save_span(span, f"llm.{model}", "CLIENT", start_time, trace_ctx)
+                await self._save_span(
+                    span,
+                    _llm_operation_name(span, model),
+                    "CLIENT",
+                    start_time,
+                    trace_ctx,
+                )
 
     def record_llm_request(
         self,
@@ -555,6 +577,8 @@ class PlatformTracer:
         response_content: Optional[str] = None,
         tool_calls: Optional[List[Dict[str, Any]]] = None,
         llm_provider: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        candidate_source: Optional[str] = None,
         provider_reported_cost: Optional[float] = None,
         provider_upstream_inference_cost: Optional[float] = None,
         settlement_quantity_rub: Optional[int] = None,
@@ -573,8 +597,15 @@ class PlatformTracer:
                 attr.ATTR_LLM_DURATION_MS: duration_ms,
             }
         )
+        resolved_model: Any = llm_model
+        if isinstance(resolved_model, str):
+            resolved_model = resolved_model.strip()
+        if resolved_model:
+            span.set_attribute(attr.ATTR_LLM_MODEL, resolved_model)
         if llm_provider:
             span.set_attribute(attr.ATTR_LLM_PROVIDER, llm_provider)
+        if candidate_source:
+            span.set_attribute(attr.ATTR_LLM_CANDIDATE_SOURCE, candidate_source)
         if provider_reported_cost is not None:
             span.set_attribute(attr.ATTR_LLM_PROVIDER_REPORTED_COST, provider_reported_cost)
         if provider_upstream_inference_cost is not None:
@@ -587,8 +618,7 @@ class PlatformTracer:
                 raise ValueError("settlement_quantity_rub должна быть >= 1")
             span.set_attribute(attr.ATTR_BILLING_SETTLEMENT_QUANTITY_RUB, settlement_quantity_rub)
 
-        span_attrs = getattr(span, "attributes", None) or {}
-        model = span_attrs.get(attr.ATTR_LLM_MODEL, "unknown")
+        model = resolved_model or _span_attribute(span, attr.ATTR_LLM_MODEL) or "unknown"
         resource_name = billing_resource_name if billing_resource_name else f"llm:{model}"
         span.set_attributes(
             {

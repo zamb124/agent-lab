@@ -230,7 +230,6 @@ export class FlowEditorPage extends PlatformPage {
         } catch {
             if (seq === this._dataflowSeq) {
                 this._pendingDataflowKey = '';
-                this._editor.setDataflow({ dataflow: null });
             }
         }
     }

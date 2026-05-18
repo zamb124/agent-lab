@@ -18,9 +18,9 @@
     "order_processor": {
       "type": "llm_node",
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.2,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       },
       "prompt": "Ты обрабатываешь заказы. Спроси номер заказа если не указан.",
       "tools": [
@@ -32,9 +32,9 @@
     "complaint_processor": {
       "type": "llm_node",
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.2,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       },
       "prompt": "Ты обрабатываешь жалобы. Спроси детали если не указаны.",
       "tools": [
@@ -46,9 +46,9 @@
     "general_processor": {
       "type": "llm_node",
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.2,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       },
       "prompt": "Ты отвечаешь на общие вопросы.",
       "tools": [
@@ -396,9 +396,9 @@
           "type": "llm_node",
           "prompt": "Ты общий процессор. Ответь на вопрос.",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.2,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "tools": []
         }

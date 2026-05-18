@@ -74,7 +74,10 @@ from core.clients.llm.mock import (
     _global_mock_registry,
     get_global_mock_llm,
 )
-from core.clients.llm.model_routing import split_provider_prefixed_model
+from core.clients.llm.model_routing import (
+    HUMANITEC_LLM_PROVIDER,
+    split_provider_prefixed_model,
+)
 
 logger = get_logger(__name__)
 
@@ -459,6 +462,14 @@ def _candidate_key(candidate: LLMCallConfig) -> str:
     return f"{candidate.provider}:{candidate.base_url}:{candidate.model}"
 
 
+def _is_humanitec_llm_provider(provider: Optional[str]) -> bool:
+    return str(provider or "").strip() == HUMANITEC_LLM_PROVIDER
+
+
+def _candidate_capability_metadata_is_strict(candidate: LLMCallConfig) -> bool:
+    return candidate.source == "openrouter_free"
+
+
 def _messages_have_non_text_parts(openai_messages: List[Dict[str, Any]]) -> bool:
     for message in openai_messages:
         content = message.get("content")
@@ -477,16 +488,30 @@ def _candidate_supports_request(
     has_tools: bool,
     has_response_format: bool,
 ) -> bool:
-    # Empty metadata means "unknown"; preserve compatibility for explicit models.
+    # Empty metadata means "unknown" for explicit models. OpenRouter free-pool
+    # records are discovery output, so absence of a capability there is treated
+    # as unsupported for request-shaping features.
+    strict_metadata = _candidate_capability_metadata_is_strict(candidate)
     if has_files and candidate.input_modalities and not (
         "image" in candidate.input_modalities or "file" in candidate.input_modalities
     ):
         return False
-    if has_tools and candidate.supported_parameters and "tools" not in candidate.supported_parameters:
+    if has_tools and (
+        (strict_metadata and "tools" not in candidate.supported_parameters)
+        or (candidate.supported_parameters and "tools" not in candidate.supported_parameters)
+    ):
         return False
-    if has_response_format and candidate.supported_parameters and not (
-        "response_format" in candidate.supported_parameters
-        or "structured_outputs" in candidate.supported_parameters
+    if has_response_format and (
+        (
+            strict_metadata
+            and "response_format" not in candidate.supported_parameters
+            and "structured_outputs" not in candidate.supported_parameters
+        )
+        or (
+            candidate.supported_parameters
+            and "response_format" not in candidate.supported_parameters
+            and "structured_outputs" not in candidate.supported_parameters
+        )
     ):
         return False
     return True
@@ -514,6 +539,7 @@ class LLMClient:
         candidate_cooldown_seconds: float = 0.0,
         platform_default_free_pool: bool = False,
         platform_paid_fallback_enabled: bool = True,
+        llm_source: Optional[str] = None,
         top_p: Optional[float] = None,
         top_k: Optional[int] = None,
         frequency_penalty: Optional[float] = None,
@@ -541,6 +567,7 @@ class LLMClient:
         self.llm_provider = (
             llm_provider if llm_provider is not None else _detect_provider(self.base_url)
         )
+        self.llm_source = llm_source or "explicit"
         base_candidate = LLMCallConfig(
             provider=self.llm_provider or "unknown",
             model=self.model,
@@ -557,7 +584,7 @@ class LLMClient:
             extra_request_body=dict(extra_request_body) if extra_request_body else None,
             extra_request_headers=dict(extra_request_headers) if extra_request_headers else None,
             default_headers=dict(self.default_headers),
-            source="explicit",
+            source=self.llm_source,
         )
         self._static_candidates = list(candidates) if candidates is not None else [base_candidate]
         self._candidate_resolver = candidate_resolver
@@ -583,6 +610,7 @@ class LLMClient:
             candidate_cooldown_seconds=self.candidate_cooldown_seconds,
             platform_default_free_pool=self.platform_default_free_pool,
             platform_paid_fallback_enabled=self.platform_paid_fallback_enabled,
+            llm_source=candidate.source,
             top_p=candidate.top_p,
             top_k=candidate.top_k,
             frequency_penalty=candidate.frequency_penalty,
@@ -698,6 +726,12 @@ class LLMClient:
             filtered.append(candidate)
         if filtered:
             return filtered
+        if self.platform_default_free_pool and candidates:
+            raise RuntimeError(
+                "LLM default free-pool: нет доступных моделей, совместимых с параметрами "
+                "запроса (tools/response_format/files) и не находящихся в cooldown; "
+                "платный fallback недоступен или тоже несовместим"
+            )
         if (
             not candidates
             and self.platform_default_free_pool
@@ -1268,6 +1302,7 @@ class LLMClient:
                     "usage": usage_data,
                     "model": self.model,
                     "provider": self.llm_provider,
+                    "source": self.llm_source,
                 },
             )
             yield TaskStatusUpdateEvent(
@@ -1283,6 +1318,7 @@ class LLMClient:
                 "usage": usage_data,
                 "model": self.model,
                 "provider": self.llm_provider,
+                "source": self.llm_source,
             }
         # final=False: это конец одного вызова LLM внутри задачи, не конец A2A-задачи.
         # completed+final=True рвёт EventSubscriber до node_complete и emit_complete канала.
@@ -1298,9 +1334,11 @@ class LLMClient:
 
         stream_duration = time.monotonic() - stream_start_time
         logger.info(
-            "LLM stream complete: model=%s, chunks=%d, content_len=%d, "
+            "LLM stream complete: provider=%s, model=%s, source=%s, chunks=%d, content_len=%d, "
             "reasoning_len=%d, tool_calls=%d, duration=%.1fs",
+            self.llm_provider,
             self.model,
+            self.llm_source,
             _chunk_count,
             len(full_content),
             len(full_reasoning),
@@ -1316,6 +1354,7 @@ class LLMClient:
             usage=usage_data,
             provider=self.llm_provider,
             model=self.model,
+            source=self.llm_source,
             duration_ms=stream_duration * 1000,
         )
 
@@ -1891,6 +1930,14 @@ async def _read_openrouter_free_records() -> list[OpenRouterFreeModelRecord]:
     return parse_openrouter_free_models(raw)
 
 
+def _platform_default_pool_is_configured(settings: BaseSettings) -> bool:
+    return (
+        settings.llm.openrouter_free_pool.enabled
+        and settings.llm.openrouter is not None
+        and bool(settings.llm.openrouter.api_key)
+    )
+
+
 def _should_use_platform_default_pool(
     *,
     model_name: Optional[str],
@@ -1900,16 +1947,20 @@ def _should_use_platform_default_pool(
     folder_id: Optional[str],
     settings: BaseSettings,
 ) -> bool:
-    return (
+    has_explicit_transport = any(
+        value is not None and str(value).strip()
+        for value in (api_key, base_url, folder_id)
+    )
+    explicit_humanitec_llm = _is_humanitec_llm_provider(provider)
+    implicit_default_route = (
         model_name is None
         and provider is None
-        and api_key is None
-        and base_url is None
-        and folder_id is None
         and settings.llm.default_strategy == "openrouter_free_pool"
-        and settings.llm.openrouter_free_pool.enabled
-        and settings.llm.openrouter is not None
-        and bool(settings.llm.openrouter.api_key)
+    )
+    return (
+        not has_explicit_transport
+        and _platform_default_pool_is_configured(settings)
+        and (explicit_humanitec_llm or implicit_default_route)
     )
 
 
@@ -1987,7 +2038,8 @@ def get_llm(
     Args:
         model_name: Имя модели
         temperature: Температура
-        provider: Провайдер (openai, openrouter, bothub, provider_litserve, yandex)
+        provider: Провайдер (openai, openrouter, bothub, provider_litserve, yandex,
+            humanitec_llm)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
         folder_id: Каталог Yandex Cloud (yandex); иначе из llm.yandex.folder_id
@@ -2000,6 +2052,11 @@ def get_llm(
     """
     settings = get_settings()
     _testing = _is_testing()
+
+    split_prov, split_model = split_provider_prefixed_model(provider, model_name)
+    if split_prov is not None:
+        provider = split_prov
+    model_name = split_model if split_model is not None else model_name
 
     if _should_use_platform_default_pool(
         model_name=model_name,
@@ -2060,12 +2117,26 @@ def get_llm(
             extra_request_headers=_resolve_headers_vars(extra_request_headers, state),
         )
 
-    model = model_name or settings.llm.default_model
-    split_prov, split_model = split_provider_prefixed_model(provider, model)
-    if split_prov is not None:
-        provider = split_prov
-    model = split_model if split_model is not None else model
+    if _testing and _is_humanitec_llm_provider(provider):
+        provider = None
+        model_name = "mock-gpt-4"
 
+    if _is_humanitec_llm_provider(provider):
+        if any(
+            value is not None and str(value).strip()
+            for value in (api_key, base_url, folder_id)
+        ):
+            raise ValueError(
+                "humanitec_llm: api_key/base_url/folder_id не задаются — это виртуальный "
+                "провайдер платформы"
+            )
+        if not _platform_default_pool_is_configured(settings):
+            raise ValueError(
+                "humanitec_llm недоступен: включите llm.openrouter_free_pool и настройте "
+                "llm.openrouter.api_key"
+            )
+
+    model = model_name or settings.llm.default_model
     if _testing and model and not model.startswith("mock-"):
         logger.warning(f"PYTEST detected: замена {model} на mock-gpt-4")
         model = "mock-gpt-4"
@@ -2198,7 +2269,8 @@ def get_llm_for_state(
         state: ExecutionState
         model_name: Имя модели
         temperature: Температура
-        provider: Провайдер (openai, openrouter, bothub, provider_litserve, yandex)
+        provider: Провайдер (openai, openrouter, bothub, provider_litserve, yandex,
+            humanitec_llm)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)
         folder_id: Каталог Yandex Cloud при кастомном api_key / override

@@ -18,9 +18,9 @@
       "name": "Демо-репетитор",
       "prompt": "prompts/main.md",
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.25,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       },
       "tools": [
         "ask_user",

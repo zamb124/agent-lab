@@ -105,9 +105,9 @@
       }
     ],
     "llm": {
-      "model": "qwen/qwen3.5-397b-a17b",
+      "model": "auto",
       "temperature": 0.3,
-      "provider": "openrouter"
+      "provider": "humanitec_llm"
     }
   },
   {
@@ -122,9 +122,9 @@
       "finish"
     ],
     "llm": {
-      "model": "qwen/qwen3.5-397b-a17b",
+      "model": "auto",
       "temperature": 0.1,
-      "provider": "openrouter"
+      "provider": "humanitec_llm"
     },
     "react": {
       "loop_mode": "explicit",
@@ -145,9 +145,9 @@
       "finish"
     ],
     "llm": {
-      "model": "qwen/qwen3.5-397b-a17b",
+      "model": "auto",
       "temperature": 0.2,
-      "provider": "openrouter"
+      "provider": "humanitec_llm"
     },
     "react": {
       "loop_mode": "explicit",
@@ -167,9 +167,9 @@
       "reason"
     ],
     "llm": {
-      "model": "qwen/qwen3.5-397b-a17b",
+      "model": "auto",
       "temperature": 0.2,
-      "provider": "openrouter"
+      "provider": "humanitec_llm"
     }
   },
   {
@@ -180,9 +180,9 @@
     "prompt_file": "prompts/evaluation_tester.md",
     "tools": [],
     "llm": {
-      "model": "qwen/qwen3.5-397b-a17b",
+      "model": "auto",
       "temperature": 0.5,
-      "provider": "openrouter"
+      "provider": "humanitec_llm"
     }
   },
   {
@@ -193,9 +193,9 @@
     "prompt_file": "prompts/evaluation_judge.md",
     "tools": [],
     "llm": {
-      "model": "qwen/qwen3.5-397b-a17b",
+      "model": "auto",
       "temperature": 0.1,
-      "provider": "openrouter"
+      "provider": "humanitec_llm"
     }
   },
   {
@@ -210,9 +210,9 @@
       "hitl_operator_task"
     ],
     "llm": {
-      "model": "qwen/qwen3.5-397b-a17b",
+      "model": "auto",
       "temperature": 0.2,
-      "provider": "openrouter"
+      "provider": "humanitec_llm"
     }
   },
   {
@@ -234,9 +234,9 @@
       "gdocs_share_document"
     ],
     "llm": {
-      "model": "qwen/qwen3.5-397b-a17b",
+      "model": "auto",
       "temperature": 0.2,
-      "provider": "openrouter"
+      "provider": "humanitec_llm"
     }
   }
 ]

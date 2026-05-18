@@ -57,6 +57,7 @@ export function a2aStateMessagesToChatMessages(rawMessages, defaultTaskId) {
                 content: text,
                 timestamp,
                 taskId,
+                files: _partsFiles(msg),
                 streaming: false,
             });
             idx += 1;
@@ -299,6 +300,40 @@ function _partsText(msg) {
         }
     }
     return chunks.join('');
+}
+
+/**
+ * @param {object} msg
+ */
+function _partsFiles(msg) {
+    if (!Array.isArray(msg.parts)) {
+        return [];
+    }
+    const files = [];
+    for (const p of msg.parts) {
+        if (!isPlainObject(p) || p.kind !== 'file' || !isPlainObject(p.file)) {
+            continue;
+        }
+        const f = p.file;
+        const path = typeof f.uri === 'string' ? f.uri : '';
+        const match = path.match(/\/files\/download\/([^/?#]+)/);
+        const fileId = match ? match[1] : '';
+        const mime =
+            typeof f.mimeType === 'string' && f.mimeType.length > 0
+                ? f.mimeType
+                : typeof f.mime_type === 'string'
+                  ? f.mime_type
+                  : '';
+        files.push({
+            file_id: fileId,
+            name: typeof f.name === 'string' ? f.name : fileId,
+            path,
+            url: path,
+            mime_type: mime,
+            type: mime,
+        });
+    }
+    return files;
 }
 
 /**

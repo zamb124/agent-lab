@@ -26,6 +26,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
 const BOOT_WATCH_TIMEOUT_MS = 120_000;
 const UI_FALLBACK_TIMEOUT_MS = 2_500;
+const ONLYOFFICE_IFRAME_ALLOW_FEATURES = ['clipboard-read', 'clipboard-write', 'fullscreen', 'unload'];
 
 function ooFrameIdKey(id) {
     if (!id || !id.startsWith('oo-embed-')) {
@@ -53,11 +54,29 @@ function parseJwtPayloadClaims(jwt) {
     return claims;
 }
 
+function ensureOnlyOfficeIframePermissions(iframe) {
+    if (!iframe) {
+        return;
+    }
+    const entries = (iframe.getAttribute('allow') || '')
+        .split(';')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    for (const feature of ONLYOFFICE_IFRAME_ALLOW_FEATURES) {
+        if (!entries.some((entry) => entry.split(/\s+/)[0] === feature)) {
+            entries.push(feature);
+        }
+    }
+    iframe.setAttribute('allow', entries.join('; '));
+    iframe.setAttribute('allowfullscreen', '');
+}
+
 let _ooEmbedCounter = 0;
 
 export class OnlyOfficeHost extends PlatformElement {
     static properties = {
         config: { type: Object },
+        bindingId: { type: String, attribute: 'binding-id' },
         _initializing: { state: true },
     };
 
@@ -114,6 +133,7 @@ export class OnlyOfficeHost extends PlatformElement {
     constructor() {
         super();
         this.config = null;
+        this.bindingId = '';
         this._initializing = false;
         this._docEditor = null;
         this._configKey = null;
@@ -157,6 +177,24 @@ export class OnlyOfficeHost extends PlatformElement {
 
     _emitError(code, detail) {
         this.emit('editor-error', { code, detail });
+    }
+
+    _emitDocumentState(dirty) {
+        const bindingId = typeof this.bindingId === 'string' && this.bindingId.length > 0
+            ? this.bindingId
+            : (typeof this.config?.document?.key === 'string' ? this.config.document.key : '');
+        if (!bindingId || typeof window === 'undefined' || window.parent === window) {
+            return;
+        }
+        window.parent.postMessage(
+            {
+                type: 'platform.office.document-state',
+                bindingId,
+                dirty: Boolean(dirty),
+                sentAt: Date.now(),
+            },
+            window.location.origin,
+        );
     }
 
     _clearBootWatch() {
@@ -231,6 +269,7 @@ export class OnlyOfficeHost extends PlatformElement {
 
     _pinIframeToHost(iframe) {
         const imp = 'important';
+        ensureOnlyOfficeIframePermissions(iframe);
         iframe.removeAttribute('width');
         iframe.removeAttribute('height');
         iframe.removeAttribute('align');
@@ -254,6 +293,7 @@ export class OnlyOfficeHost extends PlatformElement {
 
     _pinIframeToViewport(iframe, left, top, w, h) {
         const imp = 'important';
+        ensureOnlyOfficeIframePermissions(iframe);
         iframe.removeAttribute('width');
         iframe.removeAttribute('height');
         iframe.removeAttribute('align');
@@ -455,6 +495,9 @@ export class OnlyOfficeHost extends PlatformElement {
                     onAppReady: () => this._markEditorUiVisible(),
                     onDocumentReady: () => this._markEditorUiVisible(),
                     onInfo: () => this._markEditorUiVisible(),
+                    onDocumentStateChange: (event) => {
+                        this._emitDocumentState(Boolean(event && event.data));
+                    },
                     onError: (event) => {
                         const d = event && event.data;
                         let detail = '';

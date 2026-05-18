@@ -30,6 +30,7 @@ from core.tracing.operation_span import traced_operation
 CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 SERVICE_NAME = "code_runner_python"
 WORKER_POOL_ENV = "CODE_RUNNER_PYTHON_WORKERS"
+WORKER_IPC_STREAM_LIMIT_BYTES = 64 * 1024 * 1024
 
 
 class _PythonWorker:
@@ -165,6 +166,7 @@ class _PythonWorker:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
+            limit=WORKER_IPC_STREAM_LIMIT_BYTES,
         )
         return self._process
 

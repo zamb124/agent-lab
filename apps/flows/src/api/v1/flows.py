@@ -355,8 +355,8 @@ async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> di
         "description": node.description,
         "prompt": node.prompt,
     }
-    if node.llm_override:
-        result["llm"] = node.llm_override.model_dump()
+    if node.llm:
+        result["llm"] = node.llm.model_dump()
     if node.code:
         result["code"] = node.code
     if node.tools:

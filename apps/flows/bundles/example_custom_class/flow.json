@@ -17,9 +17,9 @@
         "ask_user"
       ],
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.3,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       }
     },
     "preprocessor": {
@@ -30,9 +30,9 @@
         "ask_user"
       ],
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.5,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       }
     }
   },

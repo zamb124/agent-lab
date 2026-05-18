@@ -119,6 +119,17 @@ def test_rule_matches_operation_name_equals() -> None:
     assert rule_matches_span(rule, _span(operation_name="exact.op.other")) is False
 
 
+def test_rule_matches_operation_name_regex() -> None:
+    rule = SettlementRule(
+        rule_id="r1",
+        resource_name="livekit:*",
+        usage_type="tool_call",
+        match=SettlementRuleMatch(operation_name_regex=r"^flows\.(llm|agent)\."),
+    )
+    assert rule_matches_span(rule, _span(operation_name="flows.llm.invoke")) is True
+    assert rule_matches_span(rule, _span(operation_name="flows.tool.invoke")) is False
+
+
 def test_rule_matches_service_name_equals() -> None:
     rule = SettlementRule(
         rule_id="r1",
@@ -177,6 +188,25 @@ def test_rule_matches_attribute_equals() -> None:
     attrs = {"platform.billing.resource_name": "llm:gpt-4"}
     assert rule_matches_span(rule, _span(attributes=attrs)) is True
     assert rule_matches_span(rule, _span(attributes={})) is False
+
+
+def test_rule_matches_attribute_regex() -> None:
+    rule = SettlementRule(
+        rule_id="r1",
+        resource_name="llm:*",
+        usage_type="llm_request",
+        match=SettlementRuleMatch(
+            attribute_regex={"platform.llm.model": r"^(gpt|claude)-"},
+        ),
+    )
+    assert rule_matches_span(rule, _span(attributes={"platform.llm.model": "gpt-4o"})) is True
+    assert rule_matches_span(rule, _span(attributes={"platform.llm.model": "deepseek-chat"})) is False
+    assert rule_matches_span(rule, _span(attributes={})) is False
+
+
+def test_settlement_match_invalid_regex_raises() -> None:
+    with pytest.raises(ValidationError, match="невалидный regex"):
+        SettlementRuleMatch(operation_name_regex="[")
 
 
 def test_rule_matches_attribute_keys_present() -> None:

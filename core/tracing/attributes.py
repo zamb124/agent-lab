@@ -52,6 +52,8 @@ ATTR_LLM_NODE_LABEL = "platform.llm_node.label"
 # LLM
 ATTR_LLM_MODEL = "platform.llm.model"
 ATTR_LLM_PROVIDER = "platform.llm.provider"
+ATTR_LLM_REQUESTED_MODEL = "platform.llm.requested_model"
+ATTR_LLM_CANDIDATE_SOURCE = "platform.llm.candidate_source"
 # Стоимость из ответа провайдера (OpenRouter: usage.cost в USD; расширения OpenAI-совместимых API)
 ATTR_LLM_PROVIDER_REPORTED_COST = "platform.llm.provider_reported_cost"
 # OpenRouter BYOK: usage.cost_details.upstream_inference_cost

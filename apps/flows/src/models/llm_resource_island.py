@@ -1,7 +1,7 @@
 """
 LLM resource island: нода type=resource с единственной привязкой к ресурсу llm.
 
-Валидация ветки/flow; оверлей поля llm на branch.resource definitions при резолве.
+Валидация ветки/flow; слой поля llm на branch.resource definitions при резолве.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from apps.flows.src.models.flow_config import Edge
-from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.models.resource import (
     LLMResourceConfig,
     LLMResourcePatch,
@@ -158,7 +158,7 @@ def _patch_llm_dict_into_bucket(
     if bind_key not in bucket:
         return
     ref = _resource_ref_plain(bucket[bind_key])
-    ov = NodeLLMOverride.model_validate(llm_raw)
+    ov = NodeLLMConfig.model_validate(llm_raw)
     allowed = frozenset(LLMResourcePatch.model_fields.keys())
     patch_dict = {
         k: v

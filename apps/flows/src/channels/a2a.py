@@ -52,6 +52,7 @@ from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.config.testing import is_testing
 from core.context import set_current_channel
+from core.files.file_ref import file_id_from_download_url
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.tasks.kicker import kiq_task_name_with_context
@@ -359,14 +360,29 @@ class A2AChannel(BaseChannel):
             else:
                 if not inc.uri:
                     raise ValueError("FileWithUri без uri")
-                files_data.append(
-                    {
-                        "name": inc.name,
-                        "path": inc.uri,
-                        "mime_type": inc.mime_type,
-                        "size": inc.size,
-                    }
-                )
+                item: dict[str, Any] = {
+                    "name": inc.name,
+                    "path": inc.uri,
+                    "mime_type": inc.mime_type,
+                    "size": inc.size,
+                }
+                linked_file_id = file_id_from_download_url(inc.uri)
+                if linked_file_id:
+                    record = await self.container.file_processor.get_file_record(linked_file_id)
+                    if record is None:
+                        raise ValueError(f"FileWithUri с неизвестным file_id: {linked_file_id}")
+                    if record.company_id != company_id:
+                        raise ValueError("FileWithUri file_id не принадлежит активной компании")
+                    item.update(
+                        {
+                            "file_id": record.file_id,
+                            "name": record.original_name,
+                            "path": record.download_url or inc.uri,
+                            "mime_type": record.content_type,
+                            "size": record.file_size,
+                        }
+                    )
+                files_data.append(item)
 
         return files_data, format_a2a_files_content(files_data)
 

@@ -11,8 +11,15 @@ from a2a.utils.message import get_message_text
 import core.tracing.attributes as trace_attributes
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
-from core.clients.llm.factory import get_llm
+from core.clients.llm.factory import get_llm, should_use_platform_default_free_pool
 from core.clients.llm.model_routing import split_provider_prefixed_model
+from core.company_ai import (
+    CUSTOM_PROVIDER_REF_PREFIX,
+    COST_ORIGIN_PLATFORM,
+    AICapability,
+    resolve_custom_llm_provider_ref,
+    resolve_llm_for_capability,
+)
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
 from core.context import get_context
@@ -62,12 +69,27 @@ class TextTransformService:
         if not stripped:
             raise ValueError("summarize: text пуст")
 
-        await self._require_llm_balance()
-        rp, rm = split_provider_prefixed_model(provider, model)
+        rp, rm, api_key, base_url, headers, body, cost_origin = self._resolve_company_llm_args(
+            AICapability.LLM_SUMMARIZE,
+            provider=provider,
+            model=model,
+        )
+        allow_platform_paid_fallback = await self._prepare_llm_billing(
+            cost_origin=cost_origin,
+            model=rm,
+            provider=rp,
+            api_key=api_key,
+            base_url=base_url,
+        )
         llm = get_llm(
             model_name=rm,
             provider=rp,
             max_tokens=max_output_tokens,
+            api_key=api_key,
+            base_url=base_url,
+            extra_request_headers=headers,
+            extra_request_body=body,
+            allow_platform_paid_fallback=allow_platform_paid_fallback,
         )
         sys_text = instruction.strip() if instruction is not None and instruction.strip() else _DEFAULT_SUMMARY_INSTRUCTION
         messages: list[Message] = [
@@ -97,7 +119,11 @@ class TextTransformService:
         if not stripped:
             raise ValueError("format_markdown: text пуст")
 
-        rp, rm = split_provider_prefixed_model(provider, model)
+        rp, rm, api_key, base_url, headers, body, cost_origin = self._resolve_company_llm_args(
+            AICapability.LLM_FORMAT_MARKDOWN,
+            provider=provider,
+            model=model,
+        )
         settings = get_settings()
         infra = settings.provider_litserve.infra
         chunk_lim = max_chunk_chars if max_chunk_chars is not None else infra.markdown_max_chunk_chars
@@ -112,10 +138,21 @@ class TextTransformService:
                 max_chunk_chars=int(chunk_lim),
             )
 
-        await self._require_llm_balance()
+        allow_platform_paid_fallback = await self._prepare_llm_billing(
+            cost_origin=cost_origin,
+            model=rm,
+            provider=rp,
+            api_key=api_key,
+            base_url=base_url,
+        )
         llm = get_llm(
             provider=rp,
             model_name=str(rm).strip() if rm is not None and str(rm).strip() else None,
+            api_key=api_key,
+            base_url=base_url,
+            extra_request_headers=headers,
+            extra_request_body=body,
+            allow_platform_paid_fallback=allow_platform_paid_fallback,
         )
         chunks = split_text_into_markdown_chunks(stripped, int(chunk_lim))
         if not chunks:
@@ -146,7 +183,81 @@ class TextTransformService:
             raise ValueError("format_markdown: пустой результат LLM-пути")
         return result
 
-    async def _require_llm_balance(self) -> None:
+    def _resolve_company_llm_args(
+        self,
+        capability: AICapability,
+        *,
+        provider: str | None,
+        model: str | None,
+    ) -> tuple[
+        str | None,
+        str | None,
+        str | None,
+        str | None,
+        dict[str, str] | None,
+        dict[str, Any] | None,
+        str,
+    ]:
+        rp, rm = split_provider_prefixed_model(provider, model)
+        if rp and rp.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+            resolved = resolve_custom_llm_provider_ref(
+                rp,
+                capability=capability,
+                model=rm,
+            )
+            return (
+                resolved.provider,
+                resolved.model,
+                resolved.api_key,
+                resolved.base_url,
+                resolved.extra_request_headers,
+                resolved.extra_request_body,
+                resolved.cost_origin,
+            )
+        if rp is None:
+            resolved = resolve_llm_for_capability(
+                capability,
+                fallback_model=rm,
+            )
+            if resolved is not None:
+                return (
+                    resolved.provider,
+                    resolved.model,
+                    resolved.api_key,
+                    resolved.base_url,
+                    resolved.extra_request_headers,
+                    resolved.extra_request_body,
+                    resolved.cost_origin,
+                )
+        return rp, rm, None, None, None, None, COST_ORIGIN_PLATFORM
+
+    async def _prepare_llm_billing(
+        self,
+        *,
+        cost_origin: str,
+        model: str | None,
+        provider: str | None,
+        api_key: str | None,
+        base_url: str | None,
+    ) -> bool:
+        if cost_origin == COST_ORIGIN_PLATFORM and should_use_platform_default_free_pool(
+            model_name=model,
+            provider=provider,
+            api_key=api_key,
+            base_url=base_url,
+            folder_id=None,
+            settings=get_settings(),
+        ):
+            actx = get_context()
+            if actx is None or actx.active_company is None:
+                raise ValueError("TextTransformService: нужен Context с active_company (биллинг)")
+            return await get_billing_service().company_may_incur_billable_operation_charge(
+                actx.active_company.company_id
+            )
+        await self._require_llm_balance(cost_origin=cost_origin)
+        return True
+
+    async def _require_llm_balance(self, *, cost_origin: str = COST_ORIGIN_PLATFORM) -> None:
         actx = get_context()
         if actx is None or actx.active_company is None:
             raise ValueError("TextTransformService: нужен Context с active_company (биллинг)")
@@ -157,6 +268,7 @@ class TextTransformService:
             str(actx.user.user_id).strip(),
             operation_code=BALANCE_BLOCK_OPERATION_LLM,
             notification_service="flows",
+            cost_origin=cost_origin,
         )
 
     async def _format_markdown_litserve_http(

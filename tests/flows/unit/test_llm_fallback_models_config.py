@@ -5,12 +5,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.api.v1.code import ExecuteRequest, _build_node_config
+from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, NodeType
 from apps.flows.src.models.resource import LLMResourceConfig, LLMResourcePatch
 
 
-def test_node_llm_override_accepts_and_normalizes_fallback_models() -> None:
-    override = NodeLLMOverride(
+def test_node_llm_config_accepts_and_normalizes_fallback_models() -> None:
+    config = NodeLLMConfig(
         model="openrouter:vendor/primary",
         fallback_models=[
             {"model": " vendor/fallback ", "temperature": 0.3},
@@ -18,25 +19,25 @@ def test_node_llm_override_accepts_and_normalizes_fallback_models() -> None:
         ],
     )
 
-    assert override.provider == "openrouter"
-    assert override.model == "vendor/primary"
-    assert override.fallback_models is not None
-    assert override.fallback_models[0].model == "vendor/fallback"
-    assert override.fallback_models[0].temperature == 0.3
-    assert override.fallback_models[1].provider == "openai"
-    assert override.fallback_models[1].model == "gpt-4o-mini"
-    assert override.fallback_models[1].base_url == "https://api.openai.test/v1"
+    assert config.provider == "openrouter"
+    assert config.model == "vendor/primary"
+    assert config.fallback_models is not None
+    assert config.fallback_models[0].model == "vendor/fallback"
+    assert config.fallback_models[0].temperature == 0.3
+    assert config.fallback_models[1].provider == "openai"
+    assert config.fallback_models[1].model == "gpt-4o-mini"
+    assert config.fallback_models[1].base_url == "https://api.openai.test/v1"
 
 
-def test_node_llm_override_rejects_invalid_fallback_models() -> None:
+def test_node_llm_config_rejects_invalid_fallback_models() -> None:
     with pytest.raises(ValidationError):
-        NodeLLMOverride(model="vendor/primary", fallback_models="vendor/fallback")
-
-    with pytest.raises(ValidationError):
-        NodeLLMOverride(model="vendor/primary", fallback_models=["vendor/fallback"])
+        NodeLLMConfig(model="vendor/primary", fallback_models="vendor/fallback")
 
     with pytest.raises(ValidationError):
-        NodeLLMOverride(model="vendor/primary", fallback_models=[{}])
+        NodeLLMConfig(model="vendor/primary", fallback_models=["vendor/fallback"])
+
+    with pytest.raises(ValidationError):
+        NodeLLMConfig(model="vendor/primary", fallback_models=[{}])
 
 
 def test_llm_resource_config_accepts_fallback_models() -> None:
@@ -75,15 +76,54 @@ def test_llm_resource_models_reject_invalid_fallback_models() -> None:
 
 
 def test_runtime_candidate_metadata_is_not_dumped_into_authoring_config() -> None:
-    override = NodeLLMOverride(
+    config = NodeLLMConfig(
         model="vendor/primary",
         fallback_models=[{"model": "vendor/fallback"}],
     )
 
-    dumped = override.model_dump(mode="json", exclude_none=True)
+    dumped = config.model_dump(mode="json", exclude_none=True)
 
     assert "source" not in dumped
     assert "default_headers" not in dumped
     assert "supported_parameters" not in dumped
     assert "source" not in dumped["fallback_models"][0]
     assert "default_headers" not in dumped["fallback_models"][0]
+
+
+def test_legacy_llm_override_input_is_dumped_as_llm_only() -> None:
+    node = NodeConfig.model_validate(
+        {
+            "node_id": "main",
+            "type": NodeType.LLM_NODE,
+            "name": "Main",
+            "description": "",
+            "llm": {"provider": "openrouter", "model": "old-model"},
+            "llm_override": {"provider": "humanitec_llm", "model": "auto"},
+        }
+    )
+
+    dumped = node.model_dump(mode="json", exclude_none=True)
+
+    assert node.llm is not None
+    assert node.llm.provider == "humanitec_llm"
+    assert dumped["llm"]["provider"] == "humanitec_llm"
+    assert "llm_override" not in dumped
+
+
+@pytest.mark.asyncio
+async def test_execute_request_normalizes_legacy_llm_override_to_llm() -> None:
+    config = await _build_node_config(
+        ExecuteRequest(
+            node_type="llm_node",
+            node_config={
+                "prompt": "test",
+                "tools": [],
+                "llm": {"provider": "openrouter", "model": "old-model"},
+                "llm_override": {"provider": "humanitec_llm", "model": "auto"},
+            },
+            state={},
+        )
+    )
+
+    assert config["llm"]["provider"] == "humanitec_llm"
+    assert "llm_override" not in config

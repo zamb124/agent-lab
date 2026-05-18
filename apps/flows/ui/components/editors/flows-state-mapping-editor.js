@@ -12,6 +12,8 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/platform-help-hint.js';
+import '@platform/lib/components/platform-icon.js';
 
 function _parseInputSource(raw) {
     const s = String(raw);
@@ -95,7 +97,7 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 box-sizing: border-box;
             }
             .map-row.input-grid {
-                grid-template-columns: 1fr minmax(0, 10px) minmax(100px, 130px) minmax(0, 28px) 1fr minmax(0, 36px);
+                grid-template-columns: 1fr minmax(0, 10px) 114px minmax(0, 28px) 1fr minmax(0, 36px);
             }
             .map-row.output-grid {
                 grid-template-columns: 1fr minmax(0, 28px) 1fr minmax(0, 36px);
@@ -116,6 +118,70 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 min-width: 0;
                 --field-pill-padding-y: var(--space-1);
                 --field-pill-padding-x: var(--space-2);
+            }
+            .source-switch {
+                display: grid;
+                grid-template-columns: repeat(3, 32px);
+                align-items: center;
+                justify-content: center;
+                gap: 3px;
+                width: 114px;
+                height: 34px;
+                padding: 3px;
+                box-sizing: border-box;
+                border: 1px solid var(--field-pill-border);
+                border-radius: var(--field-pill-radius);
+                background: var(--field-pill-bg);
+            }
+            .source-switch platform-help-hint {
+                display: inline-flex;
+                width: 32px;
+                height: 28px;
+                min-width: 0;
+            }
+            .source-toggle-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 32px;
+                height: 28px;
+                padding: 0;
+                box-sizing: border-box;
+                border: none;
+                border-radius: var(--radius-sm);
+                background: transparent;
+                color: var(--text-tertiary);
+                cursor: pointer;
+                transition:
+                    background var(--duration-fast) var(--easing-default),
+                    color var(--duration-fast) var(--easing-default),
+                    box-shadow var(--duration-fast) var(--easing-default);
+            }
+            .source-toggle-btn:hover,
+            .source-toggle-btn:focus-visible {
+                color: var(--text-primary);
+                background: var(--glass-tint-medium);
+                outline: none;
+            }
+            .source-toggle-btn[data-source='state'] {
+                --source-color: var(--accent);
+                --source-bg: var(--accent-subtle);
+                --source-border: color-mix(in oklab, var(--accent) 34%, transparent);
+            }
+            .source-toggle-btn[data-source='var'] {
+                --source-color: var(--success);
+                --source-bg: var(--success-bg);
+                --source-border: var(--success-border);
+            }
+            .source-toggle-btn[data-source='const'] {
+                --source-color: var(--warning);
+                --source-bg: var(--warning-bg);
+                --source-border: var(--warning-border);
+            }
+            .source-toggle-btn[aria-pressed='true'] {
+                color: var(--source-color);
+                background: var(--source-bg);
+                box-shadow: inset 0 0 0 1px var(--source-border);
             }
             .remove-btn {
                 width: 32px;
@@ -139,7 +205,7 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 padding: 0 var(--space-3) var(--space-1);
             }
             .head-row.input-grid {
-                grid-template-columns: 1fr minmax(0, 10px) minmax(100px, 130px) minmax(0, 28px) 1fr minmax(0, 36px);
+                grid-template-columns: 1fr minmax(0, 10px) 114px minmax(0, 28px) 1fr minmax(0, 36px);
             }
             .head-row.output-grid {
                 grid-template-columns: 1fr minmax(0, 28px) 1fr minmax(0, 36px);
@@ -270,16 +336,6 @@ export class FlowsStateMappingEditor extends PlatformElement {
         this._emitChange();
     }
 
-    _inputSourceTypeEnumConfig() {
-        return {
-            values: [
-                { value: 'state', label: '@state' },
-                { value: 'var', label: '@var' },
-                { value: 'const', label: this.t('state_mapping_editor.type_const') },
-            ],
-        };
-    }
-
     _suggestionsForInputSource(sourceType) {
         if (sourceType === 'var') {
             return Array.isArray(this.varSuggestions) ? this.varSuggestions : [];
@@ -308,6 +364,60 @@ export class FlowsStateMappingEditor extends PlatformElement {
                 .suggestions=${values}
                 @change=${(e) => onInput(typeof e.detail.value === 'string' ? e.detail.value : '')}
             ></platform-field>
+        `;
+    }
+
+    _sourceTypeOptions() {
+        return [
+            {
+                value: 'state',
+                icon: 'database',
+                label: this.t('state_mapping_editor.type_state_label'),
+                hint: this.t('state_mapping_editor.type_state_hint'),
+            },
+            {
+                value: 'var',
+                icon: 'key',
+                label: this.t('state_mapping_editor.type_var_label'),
+                hint: this.t('state_mapping_editor.type_var_hint'),
+            },
+            {
+                value: 'const',
+                icon: 'text-fields',
+                label: this.t('state_mapping_editor.type_const_label'),
+                hint: this.t('state_mapping_editor.type_const_hint'),
+            },
+        ];
+    }
+
+    _renderSourceTypeSwitch(value, onChange) {
+        const current = ['state', 'var', 'const'].includes(value) ? value : 'state';
+        return html`
+            <div class="source-switch" role="group" aria-label=${this.t('state_mapping_editor.col_type')}>
+                ${this._sourceTypeOptions().map((option) => {
+                    const active = option.value === current;
+                    return html`
+                        <platform-help-hint
+                            .text=${option.hint}
+                            .label=${option.label}
+                            placement="top"
+                        >
+                            <button
+                                type="button"
+                                class="source-toggle-btn"
+                                data-source=${option.value}
+                                aria-label=${option.label}
+                                aria-pressed=${active ? 'true' : 'false'}
+                                @click=${() => {
+                                    if (!active) onChange(option.value);
+                                }}
+                            >
+                                <platform-icon name=${option.icon} size="15"></platform-icon>
+                            </button>
+                        </platform-help-hint>
+                    `;
+                })}
+            </div>
         `;
     }
 
@@ -384,14 +494,10 @@ export class FlowsStateMappingEditor extends PlatformElement {
                                 this.t('state_mapping_editor.placeholder_source_path'),
                             )}
                             <span class="sep" aria-hidden="true">|</span>
-                            <platform-field
-                                type="enum"
-                                mode="edit"
-                                label=""
-                                .value=${r.sourceType}
-                                .config=${this._inputSourceTypeEnumConfig()}
-                                @change=${(e) => this._updateInputRow(i, { sourceType: typeof e.detail.value === 'string' ? e.detail.value : 'state' })}
-                            ></platform-field>
+                            ${this._renderSourceTypeSwitch(
+                                r.sourceType,
+                                (sourceType) => this._updateInputRow(i, { sourceType }),
+                            )}
                             <span class="arrow" aria-hidden="true">→</span>
                             <platform-field
                                 type="string"

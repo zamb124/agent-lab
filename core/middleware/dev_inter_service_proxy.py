@@ -8,8 +8,11 @@
 Если текущий процесс уже обслуживает этот сервис (первый сегмент пути совпадает с именем процесса
 или с публичным префиксом из _PREFIX_TO_SERVICE_URL_KEY, например office и /documents/...), прокси не используется.
 
-OnlyOffice: префиксы /web-apps, /common, /cache, /fonts, /sdkjs, /downloadfile и пути
-/{semver}-{hex}/web-apps/..., /{semver}-{hex}/sdkjs/..., /{semver}-{hex}/fonts/..., /{semver}-{hex}/doc/... (co-editing)
+OnlyOffice: префиксы /web-apps, /common, /cache, /fonts, /sdkjs, /downloadfile, /command и пути
+/{semver}-{hex}/web-apps/..., /{semver}-{hex}/sdkjs/..., /{semver}-{hex}/sdkjs-plugins/...,
+/{semver}-{hex}/fonts/...,
+/{semver}-{hex}/doc/... (co-editing), /{semver}-{hex}/themes.json,
+/{semver}-{hex}/plugins.json, /{semver}-{hex}/document_editor_service_worker.js
 при server.document_server_dev_upstream_url проксируются на Document Server. Host к upstream — тот же, что у браузера (shell),
 иначе DS подставляет netloc контейнера в подписанные URL (/cache/...) и ловится CORS.
 """
@@ -66,17 +69,17 @@ _PREFIX_TO_SERVICE_URL_KEY: dict[str, str] = {
 }
 
 _ONLYOFFICE_STATIC_SEGMENTS: frozenset[str] = frozenset(
-    {"web-apps", "common", "cache", "fonts", "sdkjs"},
+    {"web-apps", "common", "cache", "fonts", "dictionaries", "sdkjs", "sdkjs-plugins"},
 )
 
 # Сессии редактора: POST/GET у корня хоста DS, не под /web-apps/
 _ONLYOFFICE_DS_ROOT_SEGMENTS: frozenset[str] = frozenset(
-    {"downloadfile"},
+    {"command", "downloadfile"},
 )
 
-# DS (7.3+): под /{semver}-{hex}/ — web-apps, sdkjs, fonts, doc (шрифты и статика не только под /fonts/)
+# DS (7.3+): под /{semver}-{hex}/ — web-apps, sdkjs, sdkjs-plugins, fonts, doc и root-assets редактора.
 _ONLYOFFICE_VERSIONED_DS_PREFIX: re.Pattern[str] = re.compile(
-    r"^/[0-9]+\.[0-9]+\.[0-9]+-[a-f0-9]+/(?:web-apps|sdkjs|fonts|doc)(?:/|$)",
+    r"^/[0-9]+\.[0-9]+\.[0-9]+-[a-f0-9]+/(?:(?:web-apps|sdkjs|sdkjs-plugins|fonts|dictionaries|doc)(?:/|$)|(?:themes|plugins)\.json$|document_editor_service_worker\.js$)",
     re.IGNORECASE,
 )
 
@@ -123,6 +126,71 @@ _EXCLUDED_RESPONSE_HEADERS: FrozenSet[str] = frozenset(
     }
 )
 
+_TEXT_REWRITE_CONTENT_MARKERS: tuple[str, ...] = (
+    "text/",
+    "javascript",
+    "json",
+    "xml",
+)
+
+
+def _public_origin_from_host(scheme: str, host: str) -> str:
+    raw_scheme = (scheme or "http").strip().lower()
+    public_scheme = "https" if raw_scheme in ("https", "wss") else "http"
+    return f"{public_scheme}://{host.strip()}"
+
+
+def _should_rewrite_text_response(content_type: str | None) -> bool:
+    ct = (content_type or "").lower()
+    return any(marker in ct for marker in _TEXT_REWRITE_CONTENT_MARKERS)
+
+
+def _rewrite_upstream_origin_text(text: str, *, upstream_origin: str, public_origin: str) -> str:
+    src = upstream_origin.strip().rstrip("/")
+    dst = public_origin.strip().rstrip("/")
+    if not src or not dst or src == dst:
+        return text
+    out = text
+    for source, target in _origin_rewrite_pairs(src, dst):
+        out = out.replace(source, target)
+        # Some OnlyOffice JSON/config strings escape slashes.
+        out = out.replace(source.replace("/", "\\/"), target.replace("/", "\\/"))
+    return out
+
+
+def _origin_rewrite_pairs(upstream_origin: str, public_origin: str) -> tuple[tuple[str, str], ...]:
+    upstream = urlparse(upstream_origin)
+    public = urlparse(public_origin)
+    if not upstream.scheme or not upstream.netloc or not public.scheme or not public.netloc:
+        return ((upstream_origin, public_origin),)
+
+    source_netlocs = [upstream.netloc]
+    if upstream.hostname in ("localhost", "127.0.0.1"):
+        alt_host = "127.0.0.1" if upstream.hostname == "localhost" else "localhost"
+        port = f":{upstream.port}" if upstream.port else ""
+        alt_netloc = f"{alt_host}{port}"
+        if alt_netloc not in source_netlocs:
+            source_netlocs.append(alt_netloc)
+
+    scheme_pairs = [(upstream.scheme, public.scheme)]
+    if upstream.scheme == "http":
+        scheme_pairs.append(("ws", "wss" if public.scheme == "https" else "ws"))
+    elif upstream.scheme == "https":
+        scheme_pairs.append(("wss", "wss" if public.scheme == "https" else "ws"))
+    elif upstream.scheme == "ws":
+        scheme_pairs.append(("http", "https" if public.scheme == "wss" else "http"))
+    elif upstream.scheme == "wss":
+        scheme_pairs.append(("https", "https" if public.scheme == "wss" else "http"))
+
+    pairs: list[tuple[str, str]] = []
+    for source_scheme, target_scheme in scheme_pairs:
+        target = f"{target_scheme}://{public.netloc}"
+        for source_netloc in source_netlocs:
+            source = f"{source_scheme}://{source_netloc}"
+            if source != target and (source, target) not in pairs:
+                pairs.append((source, target))
+    return tuple(pairs)
+
 
 class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, *, service_name: str) -> None:
@@ -136,6 +204,8 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
         upstream_base: str,
         path: str,
         upstream_host: str,
+        rewrite_origin_from: str | None = None,
+        rewrite_origin_to: str | None = None,
     ) -> Response:
         base = upstream_base.rstrip("/")
         parsed = urlparse(base)
@@ -215,6 +285,28 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             http_status_code=upstream_response.status_code,
         )
 
+        if (
+            rewrite_origin_from
+            and rewrite_origin_to
+            and _should_rewrite_text_response(upstream_response.headers.get("content-type"))
+        ):
+            try:
+                body = await upstream_response.aread()
+            finally:
+                await upstream_response.aclose()
+                await client.aclose()
+            text = body.decode("utf-8", errors="replace")
+            rewritten = _rewrite_upstream_origin_text(
+                text,
+                upstream_origin=rewrite_origin_from,
+                public_origin=rewrite_origin_to,
+            )
+            return Response(
+                content=rewritten.encode("utf-8"),
+                status_code=upstream_response.status_code,
+                headers=out_headers,
+            )
+
         resp = upstream_response
         cli = client
 
@@ -255,11 +347,14 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             if not parsed_ds.netloc:
                 raise RuntimeError(f"Некорректный server.document_server_dev_upstream_url: {ds_base!r}")
             client_host = (request.headers.get("host") or "").strip() or parsed_ds.netloc
+            public_origin = _public_origin_from_host(request.url.scheme, client_host)
             return await self._forward_http(
                 request,
                 upstream_base=ds_base,
                 path=path,
                 upstream_host=client_host,
+                rewrite_origin_from=f"{parsed_ds.scheme}://{parsed_ds.netloc}",
+                rewrite_origin_to=public_origin,
             )
 
         if target not in _SERVICE_PREFIXES:
@@ -333,16 +428,28 @@ class DevInterServiceWsProxyMiddleware:
             return await self.app(scope, receive, send)
 
         target = parts[0]
-        if target not in _SERVICE_PREFIXES:
-            return await self.app(scope, receive, send)
-        if _is_local_target_for_process(target, self._service_name):
-            return await self.app(scope, receive, send)
-
-        url_key = _PREFIX_TO_SERVICE_URL_KEY.get(target, target)
-        base = settings.server.get_service_url(url_key).rstrip("/")
+        rewrite_origin_from: str | None = None
+        rewrite_origin_to: str | None = None
+        if _is_onlyoffice_upstream_path(path):
+            base = (settings.server.document_server_dev_upstream_url or "").strip().rstrip("/")
+            if not base:
+                return await self.app(scope, receive, send)
+            parsed_base = urlparse(base)
+            if not parsed_base.netloc:
+                raise RuntimeError(f"Некорректный WebSocket upstream для path {path}: {base!r}")
+            client_host = host.strip() or parsed_base.netloc
+            rewrite_origin_from = f"{parsed_base.scheme}://{parsed_base.netloc}"
+            rewrite_origin_to = _public_origin_from_host(scope.get("scheme") or "ws", client_host)
+        else:
+            if target not in _SERVICE_PREFIXES:
+                return await self.app(scope, receive, send)
+            if _is_local_target_for_process(target, self._service_name):
+                return await self.app(scope, receive, send)
+            url_key = _PREFIX_TO_SERVICE_URL_KEY.get(target, target)
+            base = settings.server.get_service_url(url_key).rstrip("/")
         parsed = urlparse(base)
         if not parsed.netloc:
-            raise RuntimeError(f"Некорректный URL сервиса {url_key} (path {target}): {base!r}")
+            raise RuntimeError(f"Некорректный WebSocket upstream для path {path}: {base!r}")
 
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
         query = scope.get("query_string", b"").decode("latin-1")
@@ -405,6 +512,12 @@ class DevInterServiceWsProxyMiddleware:
                     if isinstance(frame, bytes):
                         await send({"type": "websocket.send", "bytes": frame})
                     else:
+                        if rewrite_origin_from and rewrite_origin_to:
+                            frame = _rewrite_upstream_origin_text(
+                                frame,
+                                upstream_origin=rewrite_origin_from,
+                                public_origin=rewrite_origin_to,
+                            )
                         await send({"type": "websocket.send", "text": frame})
             except websockets.ConnectionClosed:
                 return

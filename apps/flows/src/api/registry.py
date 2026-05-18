@@ -11,12 +11,80 @@ from fastapi.responses import HTMLResponse
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import BranchConfig, FlowConfig
 from apps.flows.src.services.flows_loader import get_all_flows
+from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER
+from core.company_ai import CUSTOM_PROVIDER_REF_PREFIX, AICapability, CompanyAIProviders
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/registry", tags=["registry"])
+
+_LLM_CAPABILITY_VALUES = {
+    AICapability.LLM_CHAT.value,
+    AICapability.LLM_SUMMARIZE.value,
+    AICapability.LLM_FORMAT_MARKDOWN.value,
+    AICapability.LLM_CODEGEN.value,
+    AICapability.LLM_VISION.value,
+    AICapability.IMAGE_GEN.value,
+}
+
+
+def _company_ai_from_request(request: Request) -> CompanyAIProviders:
+    company = getattr(request.state, "company", None)
+    if company is None:
+        return CompanyAIProviders()
+    return CompanyAIProviders.from_metadata(getattr(company, "metadata", None) or {})
+
+
+def _custom_provider_options(aip: CompanyAIProviders) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for provider in aip.custom_providers:
+        if not any(cap in _LLM_CAPABILITY_VALUES for cap in provider.capabilities):
+            continue
+        items.append(
+            {
+                "value": f"{CUSTOM_PROVIDER_REF_PREFIX}{provider.id}",
+                "label": provider.label,
+                "kind": "custom",
+                "custom_id": provider.id,
+            }
+        )
+    return items
+
+
+def _platform_provider_options(providers: list[str]) -> list[Any]:
+    out: list[Any] = []
+    for provider in providers:
+        if provider == HUMANITEC_LLM_PROVIDER:
+            out.append(
+                {
+                    "value": HUMANITEC_LLM_PROVIDER,
+                    "label": "Humanitec LLM",
+                    "kind": "virtual",
+                }
+            )
+            continue
+        out.append(provider)
+    return out
+
+
+def _custom_provider_models(aip: CompanyAIProviders, provider_ref: str) -> list[str]:
+    if not provider_ref.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+        return []
+    custom_id = provider_ref[len(CUSTOM_PROVIDER_REF_PREFIX) :].strip()
+    try:
+        provider = aip.find_custom(custom_id)
+    except KeyError:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for cap in _LLM_CAPABILITY_VALUES:
+        model = provider.model_by_capability.get(cap)
+        if model and model not in seen:
+            out.append(model)
+            seen.add(model)
+    return out
 
 
 def get_base_url(request: Request) -> str:
@@ -175,15 +243,16 @@ async def get_tools(container: ContainerDep) -> list[dict[str, Any]]:
 
 
 @router.get("/providers/values")
-async def get_providers_values(container: ContainerDep) -> list[str]:
+async def get_providers_values(request: Request, container: ContainerDep) -> list[Any]:
     """
-    Список настроенных LLM-провайдеров платформы (читается из conf.json).
+    Список настроенных LLM-провайдеров платформы и custom-провайдеров активной компании.
     """
-    return container.llm_models_service.get_configured_providers()
+    platform_items = _platform_provider_options(container.llm_models_service.get_configured_providers())
+    return [*platform_items, *_custom_provider_options(_company_ai_from_request(request))]
 
 
 @router.get("/models/values")
-async def get_models_values(container: ContainerDep, provider: str | None = None) -> list[str]:
+async def get_models_values(request: Request, container: ContainerDep, provider: str | None = None) -> list[str]:
     """
     Список доступных моделей.
 
@@ -192,7 +261,9 @@ async def get_models_values(container: ContainerDep, provider: str | None = None
                   Если не указан - используется текущий из конфига.
     """
 
-    if provider:
+    if provider and provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+        models = _custom_provider_models(_company_ai_from_request(request), provider)
+    elif provider:
         models = await container.llm_models_service.get_models_by_provider(provider)
     else:
         models = await container.llm_models_service.get_models()

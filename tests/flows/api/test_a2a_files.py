@@ -126,6 +126,69 @@ class TestA2AFilesHandling:
         assert stored.file_size == len(test_content)
 
     @pytest.mark.asyncio
+    async def test_file_with_uri_reuses_existing_file_record(
+        self,
+        client,
+        flow_id,
+        mock_llm_with_queue,
+        sync_tools,
+        auth_headers_system,
+    ):
+        """FileWithUri из chat upload остаётся тем же FileRecord, без повторной записи bytes."""
+        mock_llm_with_queue([{"type": "text", "content": "I received your linked file"}])
+
+        upload = await client.post(
+            "/flows/api/v1/files/",
+            headers=auth_headers_system,
+            files={"file": ("linked.csv", b"a,b\n1,2\n", "text/csv")},
+            data={"public": "false"},
+        )
+        assert upload.status_code == 200, upload.text
+        uploaded = upload.json()
+        file_id = uploaded["file_id"]
+        uri = uploaded["url"]
+        context_id = str(uuid.uuid4())
+
+        resp = await client.post(
+            f"/flows/api/v1/{flow_id}",
+            headers=auth_headers_system,
+            json={
+                "jsonrpc": "2.0",
+                "id": "test-file-uri-1",
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "messageId": str(uuid.uuid4()),
+                        "role": "user",
+                        "contextId": context_id,
+                        "parts": [
+                            {"kind": "text", "text": "Use this uploaded file"},
+                            {
+                                "kind": "file",
+                                "file": {
+                                    "uri": uri,
+                                    "name": "ignored-client-name.csv",
+                                    "mimeType": "text/csv",
+                                },
+                            },
+                        ],
+                    }
+                },
+            },
+        )
+
+        assert resp.status_code == 200
+        state = await get_container().state_manager.get_state(f"{flow_id}:{context_id}")
+        assert state is not None
+        assert len(state["files"]) == 1
+        file_info = state["files"][0]
+        assert file_info["file_id"] == file_id
+        assert file_info["name"] == "linked.csv"
+        assert file_info["path"] == uri
+        assert file_info["mime_type"] == "text/csv"
+        assert file_info["size"] == len(b"a,b\n1,2\n")
+
+    @pytest.mark.asyncio
     async def test_file_info_in_content(self, client, flow_id, mock_llm_with_queue, sync_tools):
         """
         Проверяет что информация о файле добавляется в content сообщения.

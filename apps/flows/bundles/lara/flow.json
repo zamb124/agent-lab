@@ -21,9 +21,9 @@
       "name": "Lara",
       "prompt": "prompts/base.md",
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.2,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       },
       "tools": [
         "ask_user"
@@ -65,9 +65,9 @@
           "name": "Lara CRM",
           "prompt": "prompts/crm.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.2,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "tools": [
             "ask_user",
@@ -102,9 +102,9 @@
           "name": "Lara Flows",
           "prompt": "prompts/flows.md",
           "llm": {
-            "model": "qwen/qwen3.5-397b-a17b",
+            "model": "auto",
             "temperature": 0.2,
-            "provider": "openrouter"
+            "provider": "humanitec_llm"
           },
           "tools": [
             "ask_user",

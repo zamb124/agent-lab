@@ -12,6 +12,7 @@
  *   /documents/catalogs                          → documents_catalogs
  *   /documents/catalog/:catalogId                → documents_catalogs (legacy alias)
  *   /documents/edit/:bindingId                   → document_editor
+ *   /documents/embed/edit/:bindingId             → document_editor_embed
  */
 
 import { html, css } from 'lit';
@@ -71,6 +72,7 @@ const OFFICE_ROUTES = [
     { key: 'documents_catalogs', path: 'catalogs',           parent: 'documents_list', titleKey: 'routes.documents_catalogs' },
     { key: 'documents_catalogs', path: 'catalog/:catalogId', parent: 'documents_list', titleKey: 'routes.documents_catalogs' },
     { key: 'document_editor',    path: 'edit/:bindingId',    parent: 'documents_list', titleKey: 'routes.document_editor' },
+    { key: 'document_editor_embed', path: 'embed/edit/:bindingId', titleKey: 'routes.document_editor' },
 ];
 
 /**
@@ -206,6 +208,20 @@ export class OfficeApp extends PlatformApp {
                     .bindingId=${params.bindingId}
                 ></office-document-editor-page>`;
                 break;
+            case 'document_editor_embed':
+                editorMode = true;
+                content = html`<office-document-editor-page
+                    .bindingId=${params.bindingId}
+                    ?embedded=${true}
+                ></office-document-editor-page>`;
+                return html`
+                    <div class="main main--bleed">
+                        <platform-island
+                            padding="none"
+                            ?content-no-scroll=${true}
+                        >${content}</platform-island>
+                    </div>
+                `;
             default:
                 content = html`<office-documents-list-page></office-documents-list-page>`;
         }

@@ -1,12 +1,10 @@
-"""
-Слияние LLMResourceConfig с типизированным patch и с NodeLLMOverride (llm_node).
-"""
+"""Слияние LLMResourceConfig с типизированным patch и NodeLLMConfig."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.models.resource import LLMResourceConfig, LLMResourcePatch
 
 
@@ -98,10 +96,10 @@ def merge_llm_resource_config_with_patch(
     return LLMResourceConfig.model_validate(d)
 
 
-def merge_llm_resource_into_node_override(
+def merge_llm_resource_into_node_config(
     base: LLMResourceConfig,
-    patch: NodeLLMOverride,
-) -> NodeLLMOverride:
+    patch: NodeLLMConfig,
+) -> NodeLLMConfig:
     base_dict = base.model_dump(exclude_none=True)
     for name, val in patch.model_dump(exclude_none=False).items():
         if name == "llm_resource_key":
@@ -123,4 +121,7 @@ def merge_llm_resource_into_node_override(
             }
             continue
         base_dict[name] = val
-    return NodeLLMOverride.model_validate(base_dict)
+    return NodeLLMConfig.model_validate(base_dict)
+
+
+merge_llm_resource_into_node_override = merge_llm_resource_into_node_config

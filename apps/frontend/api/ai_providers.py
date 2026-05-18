@@ -26,6 +26,7 @@ from apps.frontend.models import (
     CustomProviderCreate,
     CustomProviderUpdate,
 )
+from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER
 from core.company_ai import (
     METADATA_KEY,
     PLATFORM_LLM_PROVIDERS,
@@ -60,6 +61,14 @@ _LLM_CAPABILITIES: tuple[AICapability, ...] = (
     AICapability.LLM_CODEGEN,
     AICapability.LLM_VISION,
     AICapability.IMAGE_GEN,
+)
+_HUMANITEC_LLM_CAPABILITIES: frozenset[AICapability] = frozenset(
+    {
+        AICapability.LLM_CHAT,
+        AICapability.LLM_SUMMARIZE,
+        AICapability.LLM_FORMAT_MARKDOWN,
+        AICapability.LLM_CODEGEN,
+    }
 )
 _VOICE_CAPABILITIES: tuple[AICapability, ...] = (
     AICapability.VOICE_STT,
@@ -208,9 +217,17 @@ def _provider_catalog(aip: CompanyAIProviders) -> dict[str, Any]:
     """Каталог провайдеров для UI селектора (per capability)."""
     catalog: dict[str, list[dict[str, Any]]] = {}
     for cap in _LLM_CAPABILITIES:
-        items: list[dict[str, Any]] = [
-            {"value": p, "label": p, "kind": "platform"} for p in PLATFORM_LLM_PROVIDERS
-        ]
+        items: list[dict[str, Any]] = []
+        for p in PLATFORM_LLM_PROVIDERS:
+            if p == HUMANITEC_LLM_PROVIDER and cap not in _HUMANITEC_LLM_CAPABILITIES:
+                continue
+            items.append(
+                {
+                    "value": p,
+                    "label": "Humanitec LLM" if p == HUMANITEC_LLM_PROVIDER else p,
+                    "kind": "virtual" if p == HUMANITEC_LLM_PROVIDER else "platform",
+                }
+            )
         for cp in aip.custom_providers:
             if cap.value in cp.capabilities:
                 items.append(
@@ -260,9 +277,15 @@ def _provider_catalog(aip: CompanyAIProviders) -> dict[str, Any]:
 
 
 def _build_llm_override(capability: AICapability, payload: AIProvidersCapabilityUpdate) -> CompanyLLMOverride:
+    provider = payload.provider.strip()
+    if provider == HUMANITEC_LLM_PROVIDER and capability not in _HUMANITEC_LLM_CAPABILITIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"provider=humanitec_llm не поддерживает capability {capability.value}",
+        )
     encrypted = encrypt_secret(payload.api_key) if payload.api_key else None
     return CompanyLLMOverride(
-        provider=payload.provider.strip(),
+        provider=provider,
         api_key_encrypted=encrypted,
         base_url=payload.base_url,
         folder_id=payload.folder_id,

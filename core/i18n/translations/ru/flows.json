@@ -852,7 +852,9 @@
     "dataflow_inputs": "Читает",
     "dataflow_outputs": "Пишет",
     "dataflow_inputs_empty": "Нет явных чтений",
-    "dataflow_outputs_empty": "Нет записей в state"
+    "dataflow_outputs_empty": "Нет записей в state",
+    "dataflow_add_input": "Добавить во входной маппинг",
+    "dataflow_add_output": "Добавить в выходной маппинг"
   },
   "code_editor": {
     "fullscreen": "Полноэкранный режим",
@@ -874,7 +876,13 @@
     "col_parameter": "Параметр",
     "col_result_key": "Ключ результата",
     "col_state_field": "Поле state",
-    "type_const": "const"
+    "type_const": "const",
+    "type_state_label": "@state",
+    "type_var_label": "@var",
+    "type_const_label": "const",
+    "type_state_hint": "Значение берётся из текущего state flow. В источнике укажи путь без @state:.",
+    "type_var_hint": "Значение берётся из переменных flow или компании. В источнике укажи имя без @var:.",
+    "type_const_hint": "Текст источника передаётся как константа без чтения state или variables."
   },
   "flows_sidebar": {
     "home": "Обзор",
@@ -1151,6 +1159,9 @@
     "reset_chat": "Сбросить чат",
     "reset_chat_title": "Новая сессия: очистить историю сообщений",
     "close_panel": "Закрыть",
+    "minimize_panel": "Свернуть панель",
+    "restore_panel": "Развернуть панель",
+    "resize_panel": "Изменить размер панели",
     "expand_panel": "Развернуть панель",
     "collapse_panel": "Обычный размер панели",
     "attach_files": "Прикрепить файлы",

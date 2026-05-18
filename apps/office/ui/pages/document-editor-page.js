@@ -32,6 +32,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
 
     static properties = {
         bindingId: { type: String },
+        embedded: { type: Boolean },
         _editorError: { state: true },
     };
 
@@ -71,6 +72,10 @@ export class OfficeDocumentEditorPage extends PlatformPage {
             }
             .toolbar .back:hover { color: var(--text-primary); }
             .editor-area { flex: 1; display: flex; min-height: 0; }
+            :host([embedded]) .editor-area,
+            :host-context([embedded]) .editor-area {
+                height: 100%;
+            }
             .error {
                 color: var(--text-secondary);
                 padding: var(--space-3);
@@ -87,6 +92,7 @@ export class OfficeDocumentEditorPage extends PlatformPage {
     constructor() {
         super();
         this.bindingId = '';
+        this.embedded = false;
         this._editorError = '';
         this._editor = this.useOp('office/document_editor_config');
     }
@@ -100,11 +106,17 @@ export class OfficeDocumentEditorPage extends PlatformPage {
                 this._editorError = this.t('editor.errInvalidBindingId');
                 return;
             }
-            this._editor.run({ bindingId: id });
+            this._editor.run({ bindingId: id, namespace: this._namespaceFromLocation() });
         }
     }
 
     _back() { this.navigate('documents_list'); }
+
+    _namespaceFromLocation() {
+        if (typeof window === 'undefined') return '';
+        const raw = new URLSearchParams(window.location.search).get('namespace');
+        return typeof raw === 'string' ? raw.trim() : '';
+    }
 
     _onEditorError(e) {
         const detail = e.detail || {};
@@ -132,29 +144,34 @@ export class OfficeDocumentEditorPage extends PlatformPage {
         }
         if (this._editorError) {
             return html`
-                <div class="breadcrumbs-wrap">
-                    <platform-breadcrumbs current-label=${this._docTitle()}></platform-breadcrumbs>
-                </div>
-                <div class="toolbar">
-                    <button class="back" type="button" @click=${this._back}>← ${this.t('editor.back')}</button>
-                </div>
+                ${this.embedded ? nothing : html`
+                    <div class="breadcrumbs-wrap">
+                        <platform-breadcrumbs current-label=${this._docTitle()}></platform-breadcrumbs>
+                    </div>
+                    <div class="toolbar">
+                        <button class="back" type="button" @click=${this._back}>← ${this.t('editor.back')}</button>
+                    </div>
+                `}
                 <div class="error">${this._editorError}</div>
             `;
         }
         const config = this._editor.lastResult;
         const showLoading = this._editor.busy && !config;
         return html`
-            <div class="breadcrumbs-wrap">
-                <platform-breadcrumbs current-label=${this._docTitle()}></platform-breadcrumbs>
-            </div>
-            <div class="toolbar">
-                <button class="back" type="button" @click=${this._back}>← ${this.t('editor.back')}</button>
-            </div>
+            ${this.embedded ? nothing : html`
+                <div class="breadcrumbs-wrap">
+                    <platform-breadcrumbs current-label=${this._docTitle()}></platform-breadcrumbs>
+                </div>
+                <div class="toolbar">
+                    <button class="back" type="button" @click=${this._back}>← ${this.t('editor.back')}</button>
+                </div>
+            `}
             <div class="editor-area">
                 ${showLoading
                     ? html`<div class="loading">${this.t('editor.loading')}</div>`
                     : (config
                         ? html`<onlyoffice-host
+                                .bindingId=${this.bindingId}
                                 .config=${config}
                                 @editor-error=${this._onEditorError}
                             ></onlyoffice-host>`

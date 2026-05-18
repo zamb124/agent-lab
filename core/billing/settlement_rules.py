@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import json
+import re
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core.models.billing_models import UsageType
 
@@ -25,13 +26,37 @@ class SettlementRuleMatch(BaseModel):
 
     operation_name_prefix: Optional[str] = None
     operation_name_equals: Optional[str] = None
+    operation_name_regex: Optional[str] = None
     service_name_equals: Optional[str] = None
+    service_name_regex: Optional[str] = None
     event_type_equals: Optional[str] = None
+    event_type_regex: Optional[str] = None
     attribute_equals: Dict[str, Any] = Field(default_factory=dict)
+    attribute_regex: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Все перечисленные attributes должны матчить regex через re.search(str(value))",
+    )
     attribute_keys_present: List[str] = Field(
         default_factory=list,
         description="Все перечисленные ключи должны быть в attributes и не None",
     )
+
+    @model_validator(mode="after")
+    def regex_patterns_must_compile(self) -> "SettlementRuleMatch":
+        patterns: list[tuple[str, str]] = []
+        for field_name in ("operation_name_regex", "service_name_regex", "event_type_regex"):
+            value = getattr(self, field_name)
+            if value:
+                patterns.append((field_name, value))
+        for key, value in self.attribute_regex.items():
+            if value:
+                patterns.append((f"attribute_regex.{key}", value))
+        for label, pattern in patterns:
+            try:
+                re.compile(pattern)
+            except re.error as e:
+                raise ValueError(f"невалидный regex {label}: {e}") from e
+        return self
 
 
 class SettlementRule(BaseModel):
@@ -80,6 +105,17 @@ def _attr_value(attrs: Dict[str, Any], key: str) -> Any:
     return None
 
 
+def _regex_matches(pattern: Optional[str], value: Any) -> bool:
+    if not pattern:
+        return True
+    if value is None:
+        return False
+    try:
+        return re.search(pattern, str(value)) is not None
+    except re.error as e:
+        raise ValueError(f"невалидный regex {pattern!r}: {e}") from e
+
+
 def rule_matches_span(rule: SettlementRule, span_dict: Dict[str, Any]) -> bool:
     m = rule.match
     if m.operation_name_prefix:
@@ -89,17 +125,26 @@ def rule_matches_span(rule: SettlementRule, span_dict: Dict[str, Any]) -> bool:
     if m.operation_name_equals is not None:
         if span_dict.get("operation_name") != m.operation_name_equals:
             return False
+    if not _regex_matches(m.operation_name_regex, span_dict.get("operation_name")):
+        return False
     if m.service_name_equals is not None:
         if span_dict.get("service_name") != m.service_name_equals:
             return False
+    if not _regex_matches(m.service_name_regex, span_dict.get("service_name")):
+        return False
     if m.event_type_equals is not None:
         if span_dict.get("event_type") != m.event_type_equals:
             return False
+    if not _regex_matches(m.event_type_regex, span_dict.get("event_type")):
+        return False
     attrs = span_dict.get("attributes") or {}
     if not isinstance(attrs, dict):
         return False
     for attr_key, expected in m.attribute_equals.items():
         if _attr_value(attrs, attr_key) != expected:
+            return False
+    for attr_key, pattern in m.attribute_regex.items():
+        if not _regex_matches(pattern, _attr_value(attrs, attr_key)):
             return False
     for key in m.attribute_keys_present:
         if key not in attrs or attrs.get(key) is None:

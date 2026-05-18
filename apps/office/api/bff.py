@@ -4,16 +4,21 @@ BFF: привязки документов OnlyOffice, выдача JWT реда
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
+import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote, urlparse
 
 import jwt
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
+from sqlalchemy.exc import IntegrityError
 
 from apps.office.config import OfficeSettings, get_office_settings
 from apps.office.container import OfficeContainer
@@ -27,11 +32,17 @@ from apps.office.models.api import (
     OfficeCatalogMemberItem,
     OfficeCatalogMembersResponse,
     OfficeCatalogPatchRequest,
+    OfficeDocumentAppendTextRequest,
     OfficeDocumentCreateResponse,
+    OfficeDocumentEditorSessionResponse,
+    OfficeDocumentFromFileRequest,
     OfficeDocumentItem,
     OfficeDocumentListResponse,
+    OfficeDocumentMutationResponse,
     OfficeDocumentRenameRequest,
     OfficeDocumentRenameResponse,
+    OfficeDocumentReplaceTextRequest,
+    OfficeDocumentSyncRequest,
     OfficeEditorConfigResponse,
     OfficeEmptyCreateRequest,
     OfficeIntegrationStatusResponse,
@@ -39,12 +50,19 @@ from apps.office.models.api import (
     OfficeNamespaceCreateResponse,
     OfficeNamespaceItem,
     OfficeNamespaceTemplateItem,
+    OfficeSpreadsheetUpdateCellsRequest,
     OnlyOfficeCallbackResponse,
 )
 from apps.office.services.callback_dedupe import try_claim_onlyoffice_callback
 from apps.office.services.callback_token import (
     decode_callback_context_token,
     encode_callback_context_token,
+)
+from apps.office.services.document_mutations import (
+    DocumentMutationError,
+    append_text_to_document,
+    replace_text_in_document,
+    update_spreadsheet_cells,
 )
 from apps.office.services.document_type import (
     onlyoffice_document_type_for_upload,
@@ -58,6 +76,7 @@ from apps.office.services.onlyoffice_jwt import (
     encode_download_token,
     encode_editor_config,
 )
+from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import Context, get_context
@@ -185,6 +204,201 @@ def _office_inline_content_disposition(original_name: str) -> str:
     ascii_fallback = ascii_fallback.replace("\\", "_").replace('"', "'")[:200]
     encoded = quote(name, safe="")
     return f"inline; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
+
+def _editor_embed_url(binding_id: str, namespace: str) -> str:
+    return (
+        f"/documents/embed/edit/{quote(binding_id, safe='')}"
+        f"?namespace={quote(namespace, safe='')}"
+    )
+
+def _onlyoffice_document_key(binding_id: str, checksum: str | None) -> str:
+    """
+    ONLYOFFICE `document.key` is a cache/version key, not our document identity.
+    Keep identity in `binding_id`, and derive the editor key from current file bytes
+    so Document Server reloads the real S3 object after every saved change.
+    """
+    safe_checksum = re.sub(r"[^a-zA-Z0-9_-]", "", checksum or "")[:24]
+    if not safe_checksum:
+        return binding_id
+    return f"{binding_id}_{safe_checksum}"
+
+def _onlyoffice_request_payload(token_payload: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
+    """
+    ONLYOFFICE can sign callback/command parameters directly or wrap them in {"payload": {...}}.
+    Header JWT uses the wrapper in current docs; body JWT often signs the parameters directly.
+    """
+    wrapped = token_payload.get("payload")
+    if isinstance(wrapped, dict):
+        return wrapped
+    if "status" in token_payload or "url" in token_payload or "key" in token_payload:
+        return token_payload
+    if "status" in body or "url" in body or "key" in body:
+        return body
+    return token_payload
+
+@asynccontextmanager
+async def _document_mutation_lock(binding_id: str, *, wait_timeout_seconds: float = 45.0):
+    redis_url = get_settings().database.redis_url
+    lock_key = f"office:document:{binding_id}:mutation"
+    token = uuid.uuid4().hex
+    client = RedisClient(redis_url)
+    deadline = asyncio.get_running_loop().time() + wait_timeout_seconds
+    ok = False
+    try:
+        while True:
+            ok = await client.set_nx(lock_key, token, 120)
+            if ok:
+                break
+            if asyncio.get_running_loop().time() >= deadline:
+                raise HTTPException(status_code=409, detail="Документ уже изменяется")
+            await asyncio.sleep(0.25)
+    except Exception:
+        await client.close()
+        raise
+    try:
+        yield
+    finally:
+        await client.delete(lock_key)
+        await client.close()
+
+_ONLYOFFICE_COMMAND_ERROR_DETAILS = {
+    1: "document key is missing or no open document with this key was found",
+    2: "callback URL is not correct or is not reachable from Document Server",
+    3: "internal Document Server error",
+    4: "no changes were applied before forcesave",
+    5: "command is not correct",
+    6: "invalid Document Server JWT token",
+}
+
+def _document_server_command_base_url(settings: OfficeSettings) -> str:
+    dev_upstream = (settings.server.document_server_dev_upstream_url or "").strip().rstrip("/")
+    if settings.server.env in ("development", "test") and dev_upstream:
+        return dev_upstream
+    return settings.office.document_server_public_url.strip().rstrip("/")
+
+async def _post_onlyoffice_command(
+    *,
+    payload: dict[str, object],
+    binding_id: str,
+    command_name: str,
+    timeout: float = 10.0,
+) -> int | None:
+    settings = get_office_settings()
+    integ = settings.office
+    ds = _document_server_command_base_url(settings)
+    if not ds:
+        return None
+    body = {"token": jwt.encode(payload, integ.jwt_secret, algorithm="HS256")}
+    key = str(payload.get("key") or "").strip()
+    url = f"{ds}/command"
+    if key:
+        url = f"{url}?shardkey={quote(key, safe='')}"
+    try:
+        async with get_httpx_client(timeout=timeout) as client:
+            response = await client.post(url, json=body)
+            response.raise_for_status()
+            data = response.json()
+    except Exception as exc:
+        response = getattr(exc, "response", None)
+        status_code = getattr(response, "status_code", None)
+        response_preview = ""
+        if response is not None:
+            response_preview = str(getattr(response, "text", "") or "")[:500]
+        logger.exception(
+            "OnlyOffice command failed before mutation binding_id=%s command=%s http_status=%s response=%s",
+            binding_id,
+            command_name,
+            status_code,
+            response_preview,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=f"OnlyOffice {command_name} command failed",
+        ) from exc
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=409, detail=f"OnlyOffice {command_name} returned invalid response")
+    code = int(data.get("error", -1) or 0)
+    if code != 0:
+        logger.warning(
+            "OnlyOffice command returned error binding_id=%s command=%s code=%s detail=%s",
+            binding_id,
+            command_name,
+            code,
+            _ONLYOFFICE_COMMAND_ERROR_DETAILS.get(code, "unknown error"),
+        )
+    else:
+        logger.info(
+            "OnlyOffice command accepted binding_id=%s command=%s key=%s",
+            binding_id,
+            command_name,
+            key,
+        )
+    return code
+
+async def _force_save_open_editor_if_needed(
+    *,
+    binding_id: str,
+    document_key: str,
+) -> int | None:
+    code = await _post_onlyoffice_command(
+        payload={
+            "c": "forcesave",
+            "key": document_key,
+            "userdata": f"sync:{binding_id}:{uuid.uuid4().hex}",
+        },
+        binding_id=binding_id,
+        command_name="forcesave",
+    )
+    if code is None or code in (0, 1, 4):
+        return code
+    detail = _ONLYOFFICE_COMMAND_ERROR_DETAILS.get(code, "unknown error")
+    raise HTTPException(status_code=409, detail=f"OnlyOffice forcesave failed: error={code} ({detail})")
+
+async def _drop_open_editor_sessions(
+    *,
+    binding_id: str,
+    document_key: str,
+) -> None:
+    code = await _post_onlyoffice_command(
+        payload={"c": "drop", "key": document_key},
+        binding_id=binding_id,
+        command_name="drop",
+    )
+    if code is None or code in (0, 1):
+        return
+    detail = _ONLYOFFICE_COMMAND_ERROR_DETAILS.get(code, "unknown error")
+    raise HTTPException(status_code=409, detail=f"OnlyOffice drop failed: error={code} ({detail})")
+
+async def _wait_for_file_change_after_forcesave(
+    *,
+    container: OfficeContainer,
+    binding_id: str,
+    file_id: str,
+    previous_checksum: str | None,
+    previous_file_size: int | None,
+) -> None:
+    for _ in range(90):
+        await asyncio.sleep(0.5)
+        meta = await container.file_processor.get_file_record(file_id)
+        if meta is None:
+            raise HTTPException(status_code=404, detail="Файл не найден")
+        if meta.checksum != previous_checksum or meta.file_size != previous_file_size:
+            logger.info(
+                "OnlyOffice forcesave materialized binding_id=%s file_id=%s old_size=%s new_size=%s",
+                binding_id,
+                file_id,
+                previous_file_size,
+                meta.file_size,
+            )
+            return
+    logger.warning(
+        "OnlyOffice forcesave callback did not update file binding_id=%s file_id=%s old_size=%s old_checksum=%s",
+        binding_id,
+        file_id,
+        previous_file_size,
+        previous_checksum,
+    )
+    raise HTTPException(status_code=409, detail="Не удалось дождаться сохранения открытого редактора")
 
 def _editor_header_brand_base_url(settings: OfficeSettings) -> str:
     """Origin для логотипа в шапке OnlyOffice (браузер пользователя, не host.docker.internal)."""
@@ -786,6 +1000,91 @@ async def upload_document(
         binding_id=row.binding_id,
         file_id=row.file_id,
         catalog_id=row.catalog_id,
+        document_type=row.document_type,
+        title=row.title,
+        editor_url=_editor_embed_url(row.binding_id, namespace),
+    )
+
+@router.post("/documents/from-file", response_model=OfficeDocumentCreateResponse)
+async def open_existing_file_as_document(
+    body: OfficeDocumentFromFileRequest,
+    container: ContainerDep,
+) -> OfficeDocumentCreateResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    file_id = body.file_id.strip()
+    meta = await container.file_processor.get_file_record(file_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    if meta.company_id != ctx.active_company.company_id:
+        raise HTTPException(status_code=403, detail="Файл не принадлежит компании")
+
+    try:
+        document_type, _ = onlyoffice_document_type_for_upload(
+            meta.original_name,
+            (meta.content_type or "application/octet-stream").split(";")[0].strip(),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    existing = await container.document_binding_repository.get_by_file_for_company(
+        file_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if existing is not None:
+        await _require_binding_catalog_access(container, existing, ctx.user.user_id)
+        return OfficeDocumentCreateResponse(
+            binding_id=existing.binding_id,
+            file_id=existing.file_id,
+            catalog_id=existing.catalog_id,
+            document_type=existing.document_type,
+            title=existing.title,
+            editor_url=_editor_embed_url(existing.binding_id, namespace),
+        )
+
+    resolved_catalog_id = await _resolve_catalog_for_create(
+        container,
+        company_id=ctx.active_company.company_id,
+        namespace=namespace,
+        user_id=ctx.user.user_id,
+        catalog_id=body.catalog_id,
+    )
+    title = (body.title or "").strip() or Path(meta.original_name).stem or meta.original_name
+    try:
+        row = await container.document_binding_repository.create(
+            company_id=ctx.active_company.company_id,
+            namespace=namespace,
+            catalog_id=resolved_catalog_id,
+            file_id=meta.file_id,
+            document_type=document_type,
+            title=title,
+            created_by_user_id=ctx.user.user_id,
+        )
+    except IntegrityError:
+        existing = await container.document_binding_repository.get_by_file_for_company(
+            file_id,
+            ctx.active_company.company_id,
+            namespace,
+        )
+        if existing is None:
+            raise
+        await _require_binding_catalog_access(container, existing, ctx.user.user_id)
+        return OfficeDocumentCreateResponse(
+            binding_id=existing.binding_id,
+            file_id=existing.file_id,
+            catalog_id=existing.catalog_id,
+            document_type=existing.document_type,
+            title=existing.title,
+            editor_url=_editor_embed_url(existing.binding_id, namespace),
+        )
+    return OfficeDocumentCreateResponse(
+        binding_id=row.binding_id,
+        file_id=row.file_id,
+        catalog_id=row.catalog_id,
+        document_type=row.document_type,
+        title=row.title,
+        editor_url=_editor_embed_url(row.binding_id, namespace),
     )
 
 @router.post("/documents/empty", response_model=OfficeDocumentCreateResponse)
@@ -861,6 +1160,274 @@ async def create_empty_document(
         binding_id=row.binding_id,
         file_id=row.file_id,
         catalog_id=row.catalog_id,
+        document_type=row.document_type,
+        title=row.title,
+        editor_url=_editor_embed_url(row.binding_id, namespace),
+    )
+
+@router.post(
+    "/documents/{binding_id}/editor-session",
+    response_model=OfficeDocumentEditorSessionResponse,
+)
+async def document_editor_session(
+    binding_id: str,
+    container: ContainerDep,
+) -> OfficeDocumentEditorSessionResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    row = await container.document_binding_repository.get_for_company(
+        binding_id,
+        ctx.active_company.company_id,
+        namespace,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Привязка не найдена")
+    await _require_binding_catalog_access(container, row, ctx.user.user_id)
+    return OfficeDocumentEditorSessionResponse(
+        binding_id=row.binding_id,
+        file_id=row.file_id,
+        catalog_id=row.catalog_id,
+        title=row.title,
+        document_type=row.document_type,
+        namespace=namespace,
+        editor_url=_editor_embed_url(row.binding_id, namespace),
+    )
+
+@router.post(
+    "/documents/{binding_id}/sync",
+    response_model=OfficeDocumentEditorSessionResponse,
+)
+async def sync_document_editor_state(
+    binding_id: str,
+    container: ContainerDep,
+    body: OfficeDocumentSyncRequest | None = None,
+) -> OfficeDocumentEditorSessionResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    sync_options = body or OfficeDocumentSyncRequest()
+    async with _document_mutation_lock(binding_id):
+        row = await container.document_binding_repository.get_for_company(
+            binding_id,
+            ctx.active_company.company_id,
+            namespace,
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail="Привязка не найдена")
+        await _require_binding_catalog_access(container, row, ctx.user.user_id)
+        meta = await container.file_processor.get_file_record(row.file_id)
+        if meta is None:
+            raise HTTPException(status_code=404, detail="Файл не найден")
+
+        document_key = _onlyoffice_document_key(row.binding_id, meta.checksum)
+        if sync_options.settle_ms > 0:
+            await asyncio.sleep(sync_options.settle_ms / 1000)
+        force_code = await _force_save_open_editor_if_needed(
+            binding_id=row.binding_id,
+            document_key=document_key,
+        )
+        if sync_options.close and force_code == 4:
+            await asyncio.sleep(1.5)
+            force_code = await _force_save_open_editor_if_needed(
+                binding_id=row.binding_id,
+                document_key=document_key,
+            )
+        logger.info(
+            "OnlyOffice sync command result binding_id=%s file_id=%s close=%s dirty=%s force_code=%s",
+            row.binding_id,
+            row.file_id,
+            sync_options.close,
+            sync_options.dirty,
+            force_code,
+        )
+        if sync_options.close and sync_options.dirty is True and force_code in (1, 4):
+            detail = _ONLYOFFICE_COMMAND_ERROR_DETAILS.get(force_code, "unknown error")
+            raise HTTPException(
+                status_code=409,
+                detail=f"OnlyOffice did not accept pending editor changes yet: error={force_code} ({detail})",
+            )
+        if force_code == 0:
+            await _wait_for_file_change_after_forcesave(
+                container=container,
+                binding_id=row.binding_id,
+                file_id=row.file_id,
+                previous_checksum=meta.checksum,
+                previous_file_size=meta.file_size,
+            )
+        if sync_options.close and force_code in (0, 4):
+            await _drop_open_editor_sessions(
+                binding_id=row.binding_id,
+                document_key=document_key,
+            )
+
+    return OfficeDocumentEditorSessionResponse(
+        binding_id=row.binding_id,
+        file_id=row.file_id,
+        catalog_id=row.catalog_id,
+        title=row.title,
+        document_type=row.document_type,
+        namespace=namespace,
+        editor_url=_editor_embed_url(row.binding_id, namespace),
+    )
+
+async def _apply_document_bytes_mutation(
+    *,
+    binding_id: str,
+    container: OfficeContainer,
+    mutate,
+    changed_count: int | None = None,
+    tool_call_id: str | None = None,
+) -> OfficeDocumentMutationResponse:
+    namespace = await _require_explicit_namespace(container)
+    ctx = _require_office_context()
+    async with _document_mutation_lock(binding_id):
+        row = await container.document_binding_repository.get_for_company(
+            binding_id,
+            ctx.active_company.company_id,
+            namespace,
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail="Привязка не найдена")
+        await _require_binding_catalog_access(container, row, ctx.user.user_id)
+        meta = await container.file_processor.get_file_record(row.file_id)
+        if meta is None:
+            raise HTTPException(status_code=404, detail="Файл не найден")
+        document_key = _onlyoffice_document_key(row.binding_id, meta.checksum)
+        force_code = await _force_save_open_editor_if_needed(
+            binding_id=row.binding_id,
+            document_key=document_key,
+        )
+        if force_code == 0:
+            await _wait_for_file_change_after_forcesave(
+                container=container,
+                binding_id=row.binding_id,
+                file_id=row.file_id,
+                previous_checksum=meta.checksum,
+                previous_file_size=meta.file_size,
+            )
+            meta = await container.file_processor.get_file_record(row.file_id)
+            if meta is None:
+                raise HTTPException(status_code=404, detail="Файл не найден")
+        if force_code in (0, 4):
+            await _drop_open_editor_sessions(
+                binding_id=row.binding_id,
+                document_key=document_key,
+            )
+
+        s3 = S3ClientFactory.create_client_for_bucket(meta.s3_bucket)
+        try:
+            current_bytes = await s3.download_bytes(meta.s3_key)
+        finally:
+            await s3.close()
+        try:
+            mutation_result = mutate(current_bytes, meta.original_name)
+        except DocumentMutationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if isinstance(mutation_result, tuple):
+            new_bytes, changed = mutation_result
+        else:
+            new_bytes, changed = mutation_result, changed_count
+        if not isinstance(new_bytes, bytes):
+            raise HTTPException(status_code=500, detail="Mutation returned invalid bytes")
+        if changed == 0:
+            return OfficeDocumentMutationResponse(
+                binding_id=row.binding_id,
+                file_id=row.file_id,
+                checksum=meta.checksum,
+                file_size=meta.file_size,
+                editor_url=_editor_embed_url(row.binding_id, namespace),
+                changed_count=0,
+            )
+
+        digest = hashlib.sha256(new_bytes).hexdigest()
+        s3 = S3ClientFactory.create_client_for_bucket(meta.s3_bucket)
+        try:
+            await s3.upload_bytes(
+                data=new_bytes,
+                key=meta.s3_key,
+                content_type=meta.content_type or "application/octet-stream",
+                public=meta.is_public,
+            )
+        finally:
+            await s3.close()
+        updated_meta = meta.model_copy(
+            update={"file_size": len(new_bytes), "checksum": digest},
+        )
+        await container.file_processor.file_repository.set(updated_meta)
+        return OfficeDocumentMutationResponse(
+            binding_id=row.binding_id,
+            file_id=row.file_id,
+            checksum=digest,
+            file_size=len(new_bytes),
+            editor_url=_editor_embed_url(row.binding_id, namespace),
+            changed_count=changed,
+        )
+
+
+@router.post(
+    "/documents/{binding_id}/mutations/replace-text",
+    response_model=OfficeDocumentMutationResponse,
+)
+async def replace_document_text(
+    binding_id: str,
+    body: OfficeDocumentReplaceTextRequest,
+    container: ContainerDep,
+) -> OfficeDocumentMutationResponse:
+    return await _apply_document_bytes_mutation(
+        binding_id=binding_id,
+        container=container,
+        mutate=lambda data, original_name: replace_text_in_document(
+            data=data,
+            original_name=original_name,
+            find=body.find,
+            replace=body.replace,
+            match_case=body.match_case,
+        ),
+        tool_call_id=body.tool_call_id,
+    )
+
+
+@router.post(
+    "/documents/{binding_id}/mutations/append-text",
+    response_model=OfficeDocumentMutationResponse,
+)
+async def append_document_text(
+    binding_id: str,
+    body: OfficeDocumentAppendTextRequest,
+    container: ContainerDep,
+) -> OfficeDocumentMutationResponse:
+    return await _apply_document_bytes_mutation(
+        binding_id=binding_id,
+        container=container,
+        mutate=lambda data, original_name: append_text_to_document(
+            data=data,
+            original_name=original_name,
+            text=body.text,
+        ),
+        changed_count=None,
+        tool_call_id=body.tool_call_id,
+    )
+
+
+@router.post(
+    "/documents/{binding_id}/mutations/update-cells",
+    response_model=OfficeDocumentMutationResponse,
+)
+async def update_document_cells(
+    binding_id: str,
+    body: OfficeSpreadsheetUpdateCellsRequest,
+    container: ContainerDep,
+) -> OfficeDocumentMutationResponse:
+    return await _apply_document_bytes_mutation(
+        binding_id=binding_id,
+        container=container,
+        mutate=lambda data, original_name: update_spreadsheet_cells(
+            data=data,
+            original_name=original_name,
+            sheet=body.sheet,
+            cells=body.cells,
+        ),
+        changed_count=None,
+        tool_call_id=body.tool_call_id,
     )
 
 @router.patch(
@@ -962,8 +1529,7 @@ async def editor_config(
     )
     callback_url = f"{base}/documents/api/v1/onlyoffice/callback?token={quote(cb_ctx, safe='')}"
 
-    checksum = meta.checksum or meta.file_id
-    doc_key = f"{row.binding_id}_{checksum[:24]}"
+    doc_key = _onlyoffice_document_key(row.binding_id, meta.checksum)
 
     editor_document_type = resolve_onlyoffice_document_type_for_editor(
         row.document_type,
@@ -1078,22 +1644,45 @@ async def onlyoffice_callback(
     binding_id = ctx_cb["binding_id"]
     company_id = ctx_cb["company_id"]
 
-    auth = request.headers.get("Authorization")
-    if not auth or not auth.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Ожидается Authorization: Bearer (JWT OnlyOffice)")
-    bearer = auth[7:].strip()
     try:
-        payload = decode_callback_authorization(bearer, integ.jwt_secret)
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+
+    auth = request.headers.get("Authorization")
+    bearer = ""
+    if auth and auth.startswith("Bearer "):
+        bearer = auth[7:].strip()
+    elif isinstance(body.get("token"), str) and str(body.get("token")).strip():
+        bearer = str(body["token"]).strip()
+    if not bearer:
+        raise HTTPException(status_code=401, detail="Ожидается JWT OnlyOffice в Authorization: Bearer или body.token")
+    try:
+        token_payload = decode_callback_authorization(bearer, integ.jwt_secret)
     except jwt.PyJWTError as e:
         raise HTTPException(status_code=401, detail="Недействительный JWT callback") from e
+    payload = _onlyoffice_request_payload(token_payload, body)
 
-    status = payload.get("status")
     namespace = ctx_cb["namespace"]
-    if status in (2, 6):
+    try:
+        status_int = int(payload.get("status"))
+    except (TypeError, ValueError):
+        status_int = 0
+    logger.info(
+        "OnlyOffice callback received binding_id=%s company_id=%s namespace=%s status=%s key=%s",
+        binding_id,
+        company_id,
+        namespace,
+        status_int,
+        payload.get("key"),
+    )
+
+    if status_int in (2, 6):
         url = payload.get("url")
         if not url or not isinstance(url, str):
             raise HTTPException(status_code=400, detail="В callback нет url для сохранения")
-        status_int = int(status)
         redis_url = get_settings().database.redis_url
         claimed = await try_claim_onlyoffice_callback(
             redis_url,
@@ -1131,17 +1720,33 @@ async def onlyoffice_callback(
             r = await client.get(url)
             r.raise_for_status()
             new_bytes = r.content
-        s3 = await container.file_processor.get_s3_client()
-        await s3.upload_bytes(
-            data=new_bytes,
-            key=meta.s3_key,
-            content_type=meta.content_type or "application/octet-stream",
-        )
+        previous_size = meta.file_size
+        previous_checksum = meta.checksum
+        s3 = S3ClientFactory.create_client_for_bucket(meta.s3_bucket)
+        try:
+            await s3.upload_bytes(
+                data=new_bytes,
+                key=meta.s3_key,
+                content_type=meta.content_type or "application/octet-stream",
+                public=meta.is_public,
+            )
+        finally:
+            await s3.close()
         digest = hashlib.sha256(new_bytes).hexdigest()
         updated = meta.model_copy(
             update={"file_size": len(new_bytes), "checksum": digest},
         )
         await container.file_processor.file_repository.set(updated)
+        logger.info(
+            "OnlyOffice callback saved binding_id=%s file_id=%s status=%s bytes=%s old_size=%s old_checksum=%s new_checksum=%s",
+            binding_id,
+            row.file_id,
+            status_int,
+            len(new_bytes),
+            previous_size,
+            previous_checksum,
+            digest,
+        )
 
         await notify_user(
             row.created_by_user_id,

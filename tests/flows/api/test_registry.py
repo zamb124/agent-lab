@@ -4,7 +4,67 @@
 Реальный сервис, flows загружаются из agents/.
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
+
+from apps.flows.src.api.registry import (
+    _custom_provider_models,
+    _custom_provider_options,
+    _platform_provider_options,
+)
+from apps.flows.src.services.llm_models_service import LLMModelsService
+from core.clients.llm.model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
+from core.company_ai import CompanyAIProviders, CompanyCustomOpenAICompatibleProvider
+
+
+def test_registry_custom_provider_options_use_label_and_custom_ref():
+    aip = CompanyAIProviders(
+        custom_providers=[
+            CompanyCustomOpenAICompatibleProvider(
+                id="corp",
+                label="Corp LLM",
+                base_url="https://llm.example.test/v1",
+                api_key_encrypted="encrypted",
+                capabilities=["llm_chat"],
+                model_by_capability={"llm_chat": "chat-model"},
+            )
+        ]
+    )
+
+    assert _custom_provider_options(aip) == [
+        {
+            "value": "custom:corp",
+            "label": "Corp LLM",
+            "kind": "custom",
+            "custom_id": "corp",
+        }
+    ]
+    assert _custom_provider_models(aip, "custom:corp") == ["chat-model"]
+
+
+def test_registry_platform_provider_options_labels_humanitec_llm():
+    assert _platform_provider_options(["openrouter", HUMANITEC_LLM_PROVIDER]) == [
+        "openrouter",
+        {
+            "value": HUMANITEC_LLM_PROVIDER,
+            "label": "Humanitec LLM",
+            "kind": "virtual",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository():
+    class Repo:
+        async def list_by_provider(self, provider):
+            raise AssertionError(f"unexpected repository call for {provider}")
+
+    service = LLMModelsService(Repo(), AsyncMock())
+
+    assert await service.get_models_by_provider(HUMANITEC_LLM_PROVIDER) == [
+        HUMANITEC_LLM_AUTO_MODEL
+    ]
 
 
 class TestRegistryAgents:
@@ -266,4 +326,3 @@ class TestFlowSchema:
         html = response.text
 
         assert "Главный" in html or "главн" in html.lower()
-

@@ -58,6 +58,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         embedded: { type: Boolean, reflect: true },
         _stateDraft: { state: true },
         _mappingTab: { state: true },
+        _mappingSyncNonce: { state: true },
         _addResourcePick: { state: true },
     };
 
@@ -202,6 +203,39 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             .mapping-tabs {
                 display: flex; gap: var(--space-1); margin-bottom: var(--space-2);
             }
+            .dataflow-mapping-shell {
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                background: var(--glass-solid-subtle);
+                padding: var(--space-3);
+            }
+            .dataflow-mapping-shell .section-title {
+                margin-bottom: var(--space-2);
+            }
+            .dataflow-mapping-grid {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-3);
+            }
+            .dataflow-mapping-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--space-2);
+            }
+            .dataflow-mapping-head .section-title {
+                margin-bottom: 0;
+            }
+            .dataflow-mapping-head .mapping-tabs {
+                margin-bottom: 0;
+            }
+            .dataflow-mapping-body {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                padding-top: var(--space-1);
+                border-top: 1px solid var(--glass-border-subtle);
+            }
             .mapping-tab {
                 padding: 4px 12px;
                 background: var(--glass-solid-subtle);
@@ -253,6 +287,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 min-width: 0;
                 font-size: var(--text-xs);
                 color: var(--text-secondary);
+                animation: dataflow-chip-in 160ms var(--easing-smooth, ease-out) both;
             }
             .dataflow-row .arrow {
                 color: var(--text-tertiary);
@@ -269,6 +304,20 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 background: var(--glass-solid-medium);
                 color: var(--text-secondary);
                 line-height: 1.2;
+                animation: dataflow-chip-in 160ms var(--easing-smooth, ease-out) both;
+            }
+            button.dataflow-chip {
+                appearance: none;
+                font: inherit;
+                text-align: left;
+                cursor: pointer;
+            }
+            button.dataflow-chip:hover,
+            button.dataflow-chip:focus-visible {
+                color: var(--accent);
+                border-color: color-mix(in oklab, var(--accent) 34%, var(--glass-border-subtle));
+                background: var(--accent-subtle);
+                outline: none;
             }
             .dataflow-chip .label {
                 min-width: 0;
@@ -315,6 +364,22 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             .dataflow-issue[data-severity="error"] {
                 border-left-color: var(--error);
             }
+            @keyframes dataflow-chip-in {
+                from {
+                    opacity: 0;
+                    transform: translateY(3px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .dataflow-row,
+                .dataflow-chip {
+                    animation: none;
+                }
+            }
             @media (max-width: 720px) {
                 .dataflow-lanes {
                     grid-template-columns: minmax(0, 1fr);
@@ -347,6 +412,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         this.expanded = false;
         this.embedded = false;
         this._mappingTab = 'input';
+        this._mappingSyncNonce = 0;
         this._stateDraft = null;
         this._addResourcePick = '';
         this._fileUpload = this.useOp('flows/file_upload');
@@ -551,6 +617,15 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         });
     }
 
+    _nodeConfigForPayload() {
+        const cfg = { ...asObject(this.nodeConfig) };
+        if (isPlainObject(cfg.llm_override)) {
+            cfg.llm = { ...cfg.llm_override };
+        }
+        delete cfg.llm_override;
+        return cfg;
+    }
+
     async _runNodeTest() {
         let state;
         try {
@@ -567,7 +642,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         setCodeExecuteRequestClientId(this._codeExecuteClientId);
         const result = await this._nodeExecute.run({
             node_type: this.nodeType,
-            node_config: asObject(this.nodeConfig),
+            node_config: this._nodeConfigForPayload(),
             state,
             flow_id: this.flowId,
             branch_id: skill,
@@ -903,11 +978,15 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 }
             }
             patch.resources = next;
-            const ov = this.nodeConfig?.llm_override && typeof this.nodeConfig.llm_override === 'object'
-                ? { ...this.nodeConfig.llm_override }
-                : {};
+            const ov = this.nodeConfig?.llm && typeof this.nodeConfig.llm === 'object'
+                ? { ...this.nodeConfig.llm }
+                : (
+                    this.nodeConfig?.llm_override && typeof this.nodeConfig.llm_override === 'object'
+                        ? { ...this.nodeConfig.llm_override }
+                        : {}
+                );
             ov.llm_resource_key = resourceId;
-            patch.llm_override = ov;
+            patch.llm = ov;
             this._emitPatch(patch);
             return;
         }
@@ -925,11 +1004,15 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             }
             next[resourceId] = { resource_id: resourceId };
             patch.resources = next;
-            const ov = this.nodeConfig?.llm_override && typeof this.nodeConfig.llm_override === 'object'
-                ? { ...this.nodeConfig.llm_override }
-                : {};
+            const ov = this.nodeConfig?.llm && typeof this.nodeConfig.llm === 'object'
+                ? { ...this.nodeConfig.llm }
+                : (
+                    this.nodeConfig?.llm_override && typeof this.nodeConfig.llm_override === 'object'
+                        ? { ...this.nodeConfig.llm_override }
+                        : {}
+                );
             ov.llm_resource_key = resourceId;
-            patch.llm_override = ov;
+            patch.llm = ov;
         } else {
             patch.resources = { ...resources, [resourceId]: { resource_id: resourceId } };
         }
@@ -943,13 +1026,17 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         const next = { ...resources };
         delete next[key];
         const patch = { resources: next };
-        const ov = this.nodeConfig?.llm_override && typeof this.nodeConfig.llm_override === 'object'
-            ? { ...this.nodeConfig.llm_override }
-            : {};
+        const ov = this.nodeConfig?.llm && typeof this.nodeConfig.llm === 'object'
+            ? { ...this.nodeConfig.llm }
+            : (
+                this.nodeConfig?.llm_override && typeof this.nodeConfig.llm_override === 'object'
+                    ? { ...this.nodeConfig.llm_override }
+                    : {}
+            );
         const presetKey = typeof ov.llm_resource_key === 'string' ? ov.llm_resource_key.trim() : '';
         if (presetKey === key) {
             delete ov.llm_resource_key;
-            patch.llm_override = Object.keys(ov).length > 0 ? ov : null;
+            patch.llm = Object.keys(ov).length > 0 ? ov : null;
         }
         this._emitPatch(patch);
     }
@@ -1191,7 +1278,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         const allResources = Array.isArray(this._resources.items) ? this._resources.items : [];
         const availableResources = allResources.filter((r) => r && !resources[r.resource_id]);
         const flowRes = this._flowBranchResources();
-        const ov = cfg?.llm_override && typeof cfg.llm_override === 'object' ? cfg.llm_override : {};
+        const ov = cfg?.llm && typeof cfg.llm === 'object'
+            ? cfg.llm
+            : (cfg?.llm_override && typeof cfg.llm_override === 'object' ? cfg.llm_override : {});
         const presetRaw = ov.llm_resource_key;
         const presetKey = typeof presetRaw === 'string' ? presetRaw.trim() : '';
         const catalog = allResources;
@@ -1272,20 +1361,139 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         return typeof value === 'string' && value.length > 0 ? value : 'any';
     }
 
+    _dataflowActionTitle(value, actionKey) {
+        const label = this._dataflowLabel(value);
+        const action = this.t(actionKey);
+        return `${label} · ${action}`;
+    }
+
+    _stateSourceFromPath(path) {
+        const raw = typeof path === 'string' ? path.trim() : '';
+        if (raw.startsWith('@var:')) {
+            return { sourceType: 'var', sourcePath: raw.slice(5) };
+        }
+        if (raw.startsWith('@state:')) {
+            return { sourceType: 'state', sourcePath: raw.slice(7) };
+        }
+        if (raw.startsWith('variables.')) {
+            return { sourceType: 'var', sourcePath: raw.slice('variables.'.length) };
+        }
+        return { sourceType: 'state', sourcePath: raw };
+    }
+
+    _pathLeaf(path, fallback = 'value') {
+        const raw = typeof path === 'string' ? path.trim() : '';
+        const source = raw.length > 0 ? raw : fallback;
+        const parts = source.replace(/\]/g, '').split(/[.[\s]+/).filter(Boolean);
+        const last = parts.length > 0 ? parts[parts.length - 1] : fallback;
+        const safe = last.replace(/[^a-zA-Z0-9_]/g, '_').replace(/^_+|_+$/g, '');
+        return safe.length > 0 ? safe : fallback;
+    }
+
+    _uniqueMappingKey(base, mapping) {
+        const safeBase = this._pathLeaf(base, 'value');
+        if (!Object.prototype.hasOwnProperty.call(mapping, safeBase)) {
+            return safeBase;
+        }
+        for (let i = 2; i < 100; i += 1) {
+            const candidate = `${safeBase}_${i}`;
+            if (!Object.prototype.hasOwnProperty.call(mapping, candidate)) {
+                return candidate;
+            }
+        }
+        return `${safeBase}_${Date.now()}`;
+    }
+
+    _outputMappingField() {
+        return this.nodeType === 'mcp' || this.nodeType === 'external_api'
+            ? 'state_mapping'
+            : 'output_mapping';
+    }
+
+    _mappingObject(field) {
+        const cfg = asObject(this.nodeConfig);
+        const raw = cfg[field];
+        return isPlainObject(raw) ? raw : {};
+    }
+
+    _applyMappingFromDataflow(field, mapping, tab) {
+        this._mappingTab = tab;
+        this._emitPatch({ [field]: mapping });
+        queueMicrotask(() => {
+            this._mappingSyncNonce += 1;
+        });
+    }
+
+    _addInputMappingFromPath(path) {
+        const rawPath = typeof path === 'string' ? path.trim() : '';
+        if (rawPath.length === 0) return;
+        const { sourceType, sourcePath } = this._stateSourceFromPath(rawPath);
+        if (sourcePath.length === 0) return;
+        const source = sourceType === 'var' ? `@var:${sourcePath}` : `@state:${sourcePath}`;
+        const mapping = this._mappingObject('input_mapping');
+        if (Object.values(mapping).some((value) => value === source)) {
+            this._mappingTab = 'input';
+            return;
+        }
+        const key = this._uniqueMappingKey(sourcePath, mapping);
+        this._applyMappingFromDataflow('input_mapping', { ...mapping, [key]: source }, 'input');
+    }
+
+    _resultKeyForStatePath(path) {
+        const raw = typeof path === 'string' ? path.trim() : '';
+        if (raw.length === 0) return '';
+        const resultKeys = this._dataflowResultSuggestions();
+        if (resultKeys.includes(raw)) return raw;
+        const leaf = this._pathLeaf(raw, 'result');
+        if (resultKeys.includes(leaf)) return leaf;
+        return raw;
+    }
+
+    _addOutputMappingFromPath(path) {
+        const stateField = typeof path === 'string' ? path.trim() : '';
+        if (stateField.length === 0) return;
+        const field = this._outputMappingField();
+        const mapping = this._mappingObject(field);
+        if (Object.values(mapping).some((value) => value === stateField)) {
+            this._mappingTab = 'output';
+            return;
+        }
+        const desiredKey = this._resultKeyForStatePath(stateField);
+        const key = this._uniqueMappingKey(desiredKey, mapping);
+        this._applyMappingFromDataflow(field, { ...mapping, [key]: stateField }, 'output');
+    }
+
     _renderDataflowInputRows(rows, incoming) {
-        if (Array.isArray(rows) && rows.length > 0) {
+        const visible = Array.isArray(incoming)
+            ? incoming.filter((item) => item && item.source !== 'system').slice(0, 8)
+            : [];
+        if (visible.length > 0) {
+            const mappedRows = Array.isArray(rows) ? rows.slice(0, 4) : [];
             return html`
                 <div class="dataflow-list">
-                    ${rows.slice(0, 8).map((row) => html`
+                    ${visible.map((item) => html`
+                        <button
+                            type="button"
+                            class="dataflow-chip"
+                            title=${this._dataflowActionTitle(item.path, 'base_node_editor.dataflow_add_input')}
+                            @click=${() => this._addInputMappingFromPath(item.path)}
+                        >
+                            <span class="label">${this._dataflowLabel(item.path)}</span>
+                            <span class="type">${this._dataflowType(item.type)}</span>
+                        </button>
+                    `)}
+                    ${mappedRows.map((row) => html`
                         <div class="dataflow-row">
-                            <span
+                            <button
+                                type="button"
                                 class="dataflow-chip"
                                 data-status=${row.status === 'missing' ? 'missing' : 'ok'}
-                                title=${this._dataflowLabel(row.source)}
+                                title=${this._dataflowActionTitle(row.source_path || row.source, 'base_node_editor.dataflow_add_input')}
+                                @click=${() => this._addInputMappingFromPath(row.source_path || row.source)}
                             >
                                 <span class="label">${this._dataflowLabel(row.source_path || row.source)}</span>
                                 <span class="type">${this._dataflowType(row.type)}</span>
-                            </span>
+                            </button>
                             <span class="arrow">→</span>
                             <span class="dataflow-chip" title=${this._dataflowLabel(row.target)}>
                                 <span class="label">${this._dataflowLabel(row.target)}</span>
@@ -1295,22 +1503,31 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 </div>
             `;
         }
-        const visible = Array.isArray(incoming)
-            ? incoming.filter((item) => item && item.source !== 'system').slice(0, 8)
-            : [];
-        if (visible.length === 0) {
-            return html`<div class="dataflow-empty">${this.t('base_node_editor.dataflow_inputs_empty')}</div>`;
+        if (Array.isArray(rows) && rows.length > 0) {
+            return html`
+                <div class="dataflow-list">
+                    ${rows.slice(0, 8).map((row) => html`
+                        <div class="dataflow-row">
+                            <button
+                                type="button"
+                                class="dataflow-chip"
+                                data-status=${row.status === 'missing' ? 'missing' : 'ok'}
+                                title=${this._dataflowActionTitle(row.source_path || row.source, 'base_node_editor.dataflow_add_input')}
+                                @click=${() => this._addInputMappingFromPath(row.source_path || row.source)}
+                            >
+                                <span class="label">${this._dataflowLabel(row.source_path || row.source)}</span>
+                                <span class="type">${this._dataflowType(row.type)}</span>
+                            </button>
+                            <span class="arrow">→</span>
+                            <span class="dataflow-chip" title=${this._dataflowLabel(row.target)}>
+                                <span class="label">${this._dataflowLabel(row.target)}</span>
+                            </span>
+                        </div>
+                    `)}
+                </div>
+            `;
         }
-        return html`
-            <div class="dataflow-list">
-                ${visible.map((item) => html`
-                    <span class="dataflow-chip" title=${this._dataflowLabel(item.path)}>
-                        <span class="label">${this._dataflowLabel(item.path)}</span>
-                        <span class="type">${this._dataflowType(item.type)}</span>
-                    </span>
-                `)}
-            </div>
-        `;
+        return html`<div class="dataflow-empty">${this.t('base_node_editor.dataflow_inputs_empty')}</div>`;
     }
 
     _renderDataflowWrites(writes) {
@@ -1321,14 +1538,16 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         return html`
             <div class="dataflow-list">
                 ${visible.map((item) => html`
-                    <span
+                    <button
+                        type="button"
                         class="dataflow-chip"
                         data-status=${item.protected ? 'missing' : 'ok'}
-                        title=${this._dataflowLabel(item.source)}
+                        title=${this._dataflowActionTitle(item.path, 'base_node_editor.dataflow_add_output')}
+                        @click=${() => this._addOutputMappingFromPath(item.path)}
                     >
                         <span class="label">${this._dataflowLabel(item.path)}</span>
                         <span class="type">${this._dataflowType(item.type)}</span>
-                    </span>
+                    </button>
                 `)}
             </div>
         `;
@@ -1350,7 +1569,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderDataflow() {
+    _renderDataflowLanes() {
         const df = isPlainObject(this.dataflowNode) ? this.dataflowNode : null;
         if (!df) return nothing;
         const inputs = Array.isArray(df.input_mapping) ? [...df.input_mapping] : [];
@@ -1369,20 +1588,17 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         const writes = Array.isArray(df.writes) ? df.writes : [];
         const issues = Array.isArray(df.issues) ? df.issues : [];
         return html`
-            <div class="section">
-                <div class="section-title">${this.t('base_node_editor.section_dataflow')}</div>
-                <div class="dataflow-lanes">
-                    <div class="dataflow-lane">
-                        <div class="dataflow-lane-title">${this.t('base_node_editor.dataflow_inputs')}</div>
-                        ${this._renderDataflowInputRows(inputs, incoming)}
-                    </div>
-                    <div class="dataflow-lane">
-                        <div class="dataflow-lane-title">${this.t('base_node_editor.dataflow_outputs')}</div>
-                        ${this._renderDataflowWrites(writes)}
-                    </div>
+            <div class="dataflow-lanes">
+                <div class="dataflow-lane">
+                    <div class="dataflow-lane-title">${this.t('base_node_editor.dataflow_inputs')}</div>
+                    ${this._renderDataflowInputRows(inputs, incoming)}
                 </div>
-                ${this._renderDataflowIssues(issues)}
+                <div class="dataflow-lane">
+                    <div class="dataflow-lane-title">${this.t('base_node_editor.dataflow_outputs')}</div>
+                    ${this._renderDataflowWrites(writes)}
+                </div>
             </div>
+            ${this._renderDataflowIssues(issues)}
         `;
     }
 
@@ -1438,7 +1654,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         `;
     }
 
-    _renderMapping() {
+    _renderMappingContent() {
         const cfg = asObject(this.nodeConfig);
         const tab = this._mappingTab;
         const isMcp = this.nodeType === 'mcp';
@@ -1458,9 +1674,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         }
         const mapping = isPlainObject(rawMapping) ? rawMapping : {};
         const syncSegment = isMcp ? 'mcp-' : isExternalApi ? 'extapi-' : '';
-        const syncKey = `${String(this.flowId ?? '')}--${String(this.nodeId ?? '')}--imap--${syncSegment}${tab}`;
+        const syncKey = `${String(this.flowId ?? '')}--${String(this.nodeId ?? '')}--imap--${syncSegment}${tab}--${this._mappingSyncNonce}`;
         return html`
-            <div class="section">
+            <div class="dataflow-mapping-head">
                 <div class="section-title">${this.t('base_node_editor.section_mapping')}</div>
                 <div class="mapping-tabs">
                     <button class="mapping-tab" type="button" ?active=${tab === 'input'}
@@ -1472,15 +1688,37 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                         ${this.t('base_node_editor.tab_output')}
                     </button>
                 </div>
-                <flows-state-mapping-editor
-                    syncKey=${syncKey}
-                    kind=${tab === 'input' ? 'input' : 'output'}
-                    .mapping=${mapping}
-                    .stateSuggestions=${this._dataflowStateSuggestions()}
-                    .varSuggestions=${this._dataflowVarSuggestions()}
-                    .resultSuggestions=${this._dataflowResultSuggestions()}
-                    @change=${(e) => this._onMapping(field, e)}
-                ></flows-state-mapping-editor>
+            </div>
+            <flows-state-mapping-editor
+                syncKey=${syncKey}
+                kind=${tab === 'input' ? 'input' : 'output'}
+                .mapping=${mapping}
+                .stateSuggestions=${this._dataflowStateSuggestions()}
+                .varSuggestions=${this._dataflowVarSuggestions()}
+                .resultSuggestions=${this._dataflowResultSuggestions()}
+                @change=${(e) => this._onMapping(field, e)}
+            ></flows-state-mapping-editor>
+        `;
+    }
+
+    _renderMapping() {
+        return html`
+            <div class="section">
+                ${this._renderMappingContent()}
+            </div>
+        `;
+    }
+
+    _renderDataflowMapping() {
+        return html`
+            <div class="section dataflow-mapping-shell">
+                <div class="section-title">${this.t('base_node_editor.section_dataflow')}</div>
+                <div class="dataflow-mapping-grid">
+                    ${this._renderDataflowLanes()}
+                    <div class="dataflow-mapping-body">
+                        ${this._renderMappingContent()}
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -1506,8 +1744,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                     <div class="panel-main">
                         <div class="panel-run-fallback" data-node-run-fallback="expanded"></div>
                         ${this._renderSettingsSlot()}
-                        ${this.nodeType === 'resource' ? nothing : this._renderDataflow()}
-                        ${this.nodeType === 'resource' ? nothing : this._renderMapping()}
+                        ${this.nodeType === 'resource' ? nothing : this._renderDataflowMapping()}
                     </div>
                 </div>
             `;
@@ -1518,8 +1755,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 ${this._renderBasic()}
                 ${this._shouldShowPinnedResourcesSection() ? this._renderResources() : nothing}
                 ${this._renderSettingsSlot()}
-                ${this.nodeType === 'resource' ? nothing : this._renderDataflow()}
-                ${this.nodeType === 'resource' ? nothing : this._renderMapping()}
+                ${this.nodeType === 'resource' ? nothing : this._renderDataflowMapping()}
                 ${this._renderInputState()}
             </div>
         `;

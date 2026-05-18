@@ -183,6 +183,7 @@ class PlatformTracingFacetItemsResponse(BaseModel):
 class PlatformBillingPricesResponse(BaseModel):
     """Эффективный прайс (конфиг + override) и сырой override из shared storage."""
 
+    static_base: Dict[str, Dict[str, float]]
     effective: Dict[str, Dict[str, float]]
     storage_override: Optional[Dict[str, Dict[str, float]]] = None
 
@@ -200,10 +201,14 @@ class PlatformBillingSettlementRulesResponse(BaseModel):
 
 
 class PlatformBillingCompanyPricesResponse(BaseModel):
-    """Эффективный прайс для компании (global merge + override компании)."""
+    """Эффективный прайс для компании с учетом override и тарифного множителя."""
 
     company_id: str
+    static_base: Dict[str, Dict[str, float]]
     effective: Dict[str, Dict[str, float]]
+    unit_effective: Optional[Dict[str, Dict[str, float]]] = None
+    tariff_plan: Optional[str] = None
+    tariff_multipliers: Dict[str, Dict[str, float]] = Field(default_factory=dict)
     storage_override: Optional[Dict[str, Dict[str, float]]] = None
 
 

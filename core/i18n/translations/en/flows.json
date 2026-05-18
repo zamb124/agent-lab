@@ -852,7 +852,9 @@
     "dataflow_inputs": "Reads",
     "dataflow_outputs": "Writes",
     "dataflow_inputs_empty": "No explicit reads",
-    "dataflow_outputs_empty": "No state writes"
+    "dataflow_outputs_empty": "No state writes",
+    "dataflow_add_input": "Add to input mapping",
+    "dataflow_add_output": "Add to output mapping"
   },
   "code_editor": {
     "fullscreen": "Fullscreen",
@@ -874,7 +876,13 @@
     "col_parameter": "Parameter",
     "col_result_key": "Result key",
     "col_state_field": "State field",
-    "type_const": "const"
+    "type_const": "const",
+    "type_state_label": "@state",
+    "type_var_label": "@var",
+    "type_const_label": "const",
+    "type_state_hint": "Reads from the current flow state. Enter the source path without @state:.",
+    "type_var_hint": "Reads from flow or company variables. Enter the variable name without @var:.",
+    "type_const_hint": "Passes the source text as a constant without reading state or variables."
   },
   "flows_sidebar": {
     "home": "Overview",
@@ -1151,6 +1159,9 @@
     "reset_chat": "Reset chat",
     "reset_chat_title": "New session: clear message history",
     "close_panel": "Close",
+    "minimize_panel": "Minimize panel",
+    "restore_panel": "Restore panel",
+    "resize_panel": "Resize panel",
     "expand_panel": "Expand panel",
     "collapse_panel": "Restore panel size",
     "attach_files": "Attach files",

@@ -7,6 +7,7 @@ import httpx
 from apps.flows.config import get_settings
 from apps.flows.src.db import LLMModelRepository
 from apps.flows.src.models import LLMModel
+from core.clients.llm.model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
 from core.clients.scheduler_client import SchedulerClient
 from core.config.llm_openai_compat import (
     yandex_llm_openai_root_from_provider_cfg,
@@ -270,6 +271,8 @@ class LLMModelsService:
 
     async def get_models_by_provider(self, provider: str) -> list[str]:
         """Возвращает список id моделей указанного провайдера из БД."""
+        if provider == HUMANITEC_LLM_PROVIDER:
+            return [HUMANITEC_LLM_AUTO_MODEL]
         models = await self._repository.list_by_provider(provider)
         return [m.model_id for m in models]
 
@@ -279,7 +282,8 @@ class LLMModelsService:
 
         Провайдер считается настроенным, если в `settings.llm.<provider>` присутствует
         api_key (для openai/openrouter/bothub), для yandex — ещё и непустой folder_id,
-        либо если для provider_litserve задан base_url.
+        либо если для provider_litserve задан base_url. humanitec_llm доступен, когда
+        включён платформенный OpenRouter dynamic pool.
         """
         settings = get_settings()
         providers: list[str] = []
@@ -287,6 +291,12 @@ class LLMModelsService:
             providers.append("openai")
         if settings.llm.openrouter and settings.llm.openrouter.api_key:
             providers.append("openrouter")
+        if (
+            settings.llm.openrouter_free_pool.enabled
+            and settings.llm.openrouter
+            and settings.llm.openrouter.api_key
+        ):
+            providers.append(HUMANITEC_LLM_PROVIDER)
         if settings.llm.bothub and settings.llm.bothub.api_key:
             providers.append("bothub")
         if (

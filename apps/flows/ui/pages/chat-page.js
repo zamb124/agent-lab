@@ -24,7 +24,9 @@ import {
 import '../modals/flows-preview-share-modal.js';
 import '../components/chat/chat-input.js';
 import '../components/chat/chat-messages.js';
+import '../components/chat/chat-files-panel.js';
 import { asArray, asString, isPlainObject, authActiveCompanyId } from '../_helpers/flows-resolvers.js';
+import { collectCurrentChatFiles } from '../_helpers/chat-files.js';
 import { a2aStateMessagesToChatMessages } from '../_helpers/chat-session-messages.js';
 import { relayA2aVoiceStreamRpcFrame } from '../_helpers/relay-voice-a2a-to-chat.js';
 import { resolveFlowsChatTaskId } from '../_helpers/resolve-flows-chat-task-id.js';
@@ -136,10 +138,22 @@ export class ChatPage extends PlatformPage {
                 flex-direction: column;
                 overflow: hidden;
             }
+            .chat-workspace {
+                flex: 1;
+                min-height: 0;
+                position: relative;
+                display: flex;
+                overflow: hidden;
+            }
             chat-messages {
                 flex: 1;
                 min-height: 0;
                 overflow: auto;
+            }
+            @media (max-width: 960px) {
+                .chat-workspace {
+                    flex-direction: column;
+                }
             }
         `,
     ];
@@ -177,6 +191,7 @@ export class ChatPage extends PlatformPage {
         this._chat = this.useResource('flows/chat');
         this._send = this.useOp('flows/chat_send');
         this._cancel = this.useOp('flows/chat_cancel');
+        this._upload = this.useOp('flows/file_upload');
         this._sessionState = this.useOp('flows/session_state');
         this._flows = this.useResource('flows/flows');
         this._activeCompanySel = this.select((s) => authActiveCompanyId(s));
@@ -615,12 +630,14 @@ export class ChatPage extends PlatformPage {
     async _restoreSessionFromUrl(sessionId) {
         const result = await this._sessionState.run({ session_id: sessionId });
         const rawMessages = isPlainObject(result) && Array.isArray(result.messages) ? result.messages : [];
+        const rawFiles = isPlainObject(result) && Array.isArray(result.files) ? result.files : [];
         const resultTaskId = isPlainObject(result) && typeof result.task_id === 'string' ? result.task_id : null;
         const messages = a2aStateMessagesToChatMessages(rawMessages, resultTaskId);
         this._chat.loadSession({
             sessionId,
             flowId: this.flowId,
             messages,
+            files: rawFiles,
             taskId: resultTaskId,
         });
     }
@@ -634,6 +651,19 @@ export class ChatPage extends PlatformPage {
             : null;
         const bucket = buckets !== null && isPlainObject(buckets[ctx]) ? buckets[ctx] : null;
         return bucket !== null && Array.isArray(bucket.messages) ? bucket.messages : [];
+    }
+
+    _currentFiles() {
+        return collectCurrentChatFiles(this._chat.state, this._currentMessages());
+    }
+
+    _onFilesPanelUpdated(e) {
+        const detail = isPlainObject(e.detail) ? e.detail : {};
+        const files = asArray(detail.files);
+        if (files.length === 0) return;
+        const contextId = this._chat.state?.currentContextId;
+        if (typeof contextId !== 'string' || contextId.length === 0) return;
+        this._chat.updateFiles({ contextId, files });
     }
 
     _currentRunTrace() {
@@ -671,14 +701,15 @@ export class ChatPage extends PlatformPage {
 
         stopStreamTtsPlayback();
 
-        const fileParts = await Promise.all(files.map((file) => this._fileToPart(file)));
+        const uploadedFiles = await this._uploadChatFiles(files);
+        const fileParts = uploadedFiles.map((file) => this._uploadedFileToPart(file));
 
         const userMessage = {
             id: `user_${Date.now()}`,
             role: 'user',
             content: text,
             timestamp: new Date().toISOString(),
-            files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
+            files: uploadedFiles,
         };
         this._chat.addUserMessage({ contextId, message: userMessage });
 
@@ -724,24 +755,46 @@ export class ChatPage extends PlatformPage {
         }
     }
 
-    async _fileToPart(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const result = reader.result;
-                const base64 = typeof result === 'string' ? result.split(',')[1] : '';
-                resolve({
-                    kind: 'file',
-                    file: {
-                        name: file.name,
-                        mimeType: typeof file.type === 'string' && file.type.length > 0 ? file.type : 'application/octet-stream',
-                        bytes: base64,
-                    },
-                });
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
+    async _uploadChatFiles(files) {
+        const list = Array.isArray(files) ? files : [];
+        const uploaded = [];
+        for (const file of list) {
+            const result = await this._upload.run({ file, public: 'false' });
+            if (!result || typeof result.file_id !== 'string' || result.file_id.length === 0) {
+                throw new Error('flows chat: file_upload op must return file_id');
+            }
+            const name = typeof result.original_name === 'string' && result.original_name.length > 0
+                ? result.original_name
+                : file.name;
+            const mimeType = typeof result.content_type === 'string' && result.content_type.length > 0
+                ? result.content_type
+                : (typeof file.type === 'string' && file.type.length > 0 ? file.type : 'application/octet-stream');
+            const size = typeof result.file_size === 'number' ? result.file_size : file.size;
+            const path = typeof result.url === 'string' && result.url.length > 0
+                ? result.url
+                : `/flows/api/v1/files/download/${encodeURIComponent(result.file_id)}`;
+            uploaded.push({
+                file_id: result.file_id,
+                name,
+                path,
+                url: path,
+                mime_type: mimeType,
+                type: mimeType,
+                size,
+            });
+        }
+        return uploaded;
+    }
+
+    _uploadedFileToPart(file) {
+        return {
+            kind: 'file',
+            file: {
+                name: file.name,
+                mimeType: file.mime_type || file.type || 'application/octet-stream',
+                uri: file.path || file.url,
+            },
+        };
     }
 
     _onStop() {
@@ -999,6 +1052,7 @@ export class ChatPage extends PlatformPage {
         const branchLabel = this.branchId === 'base' ? this.t('platform_chat.base_branch') : this.branchId;
         const hasFlow = typeof this.flowId === 'string' && this.flowId.length > 0;
         const messages = this._currentMessages();
+        const files = this._currentFiles();
         const runTrace = this._currentRunTrace();
         const streaming = Boolean(this._chat.state?.streaming);
         const currentTaskId = asString(this._chat.state?.currentTaskId);
@@ -1030,26 +1084,33 @@ export class ChatPage extends PlatformPage {
                 </div>
             </page-header>
             ${this._isMobile ? html`<div class="chat-branch-hint">${branchLabel}</div>` : nothing}
-            <div class="chat-body">
-                <chat-messages
-                    .messages=${messages}
-                    .runTrace=${runTrace}
-                    .currentTaskId=${currentTaskId}
-                    .voicePlayGetHeaders=${flowsVoiceAuxiliaryHttpHeadersStub}
-                    @show-tracing=${this._onChatShowTracing}
-                ></chat-messages>
-                <chat-input
-                    ?show-voice=${hasFlow}
-                    ?voice-active=${this._voiceOn}
-                    voice-status=${this._voiceStatus}
-                    ?tts-output-enabled=${readTtsOutputEnabled()}
-                    ?streaming=${streaming}
-                    .cancelBusy=${this._cancel.busy}
-                    @send=${this._onSendMessage}
-                    @stop=${this._onStop}
-                    @voice-toggle=${this._toggleVoice}
-                    @tts-output-toggle=${this._onTtsOutputToggle}
-                ></chat-input>
+            <div class="chat-workspace">
+                <div class="chat-body">
+                    <chat-messages
+                        .messages=${messages}
+                        .runTrace=${runTrace}
+                        .currentTaskId=${currentTaskId}
+                        .voicePlayGetHeaders=${flowsVoiceAuxiliaryHttpHeadersStub}
+                        @show-tracing=${this._onChatShowTracing}
+                    ></chat-messages>
+                    <chat-input
+                        ?show-voice=${hasFlow}
+                        ?voice-active=${this._voiceOn}
+                        voice-status=${this._voiceStatus}
+                        ?tts-output-enabled=${readTtsOutputEnabled()}
+                        ?streaming=${streaming}
+                        .cancelBusy=${this._cancel.busy}
+                        @send=${this._onSendMessage}
+                        @stop=${this._onStop}
+                        @voice-toggle=${this._toggleVoice}
+                        @tts-output-toggle=${this._onTtsOutputToggle}
+                    ></chat-input>
+                </div>
+                <chat-files-panel
+                    .files=${files}
+                    active-company-id=${asString(this._activeCompanySel.value)}
+                    @files-updated=${this._onFilesPanelUpdated}
+                ></chat-files-panel>
             </div>
         `;
     }

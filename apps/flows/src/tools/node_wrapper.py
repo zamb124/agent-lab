@@ -220,7 +220,7 @@ class NodeAsToolWrapper(BaseTool):
                     "type": self.node_config.type,
                     "prompt": self.node_config.prompt,
                     "tools": tools,
-                    "llm": self.node_config.llm_override.model_dump() if self.node_config.llm_override else {},
+                    "llm": self.node_config.llm.model_dump() if self.node_config.llm else {},
                     "code": self.node_config.code,
                     "react": self.node_config.react.model_dump() if self.node_config.react else None,
                 }

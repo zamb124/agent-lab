@@ -14,9 +14,10 @@ logger = get_logger(__name__)
 @idle_broker.task(task_name="refresh_openrouter_free_models_task", queue_name="idle")
 async def refresh_openrouter_free_models_task(
     scheduler_task_id: str | None = None,
+    company_id: str | None = None,
     system_task: str | None = None,
 ) -> dict[str, object]:
-    del system_task
+    del company_id, system_task
     container = get_container()
     result = await refresh_openrouter_free_models_cache(
         container.redis_client,

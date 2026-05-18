@@ -65,7 +65,23 @@ export class FlowsPropertyPanel extends PlatformElement {
         const nodes = skillsData.nodes && typeof skillsData.nodes === 'object' ? { ...skillsData.nodes } : {};
         const node = nodes[nodeId];
         if (!node) return;
-        nodes[nodeId] = { ...node, ...patch };
+        const normalizedPatch = { ...patch };
+        if (Object.prototype.hasOwnProperty.call(normalizedPatch, 'llm_override')) {
+            if (!Object.prototype.hasOwnProperty.call(normalizedPatch, 'llm')) {
+                normalizedPatch.llm = normalizedPatch.llm_override;
+            }
+            delete normalizedPatch.llm_override;
+        }
+        const nextNode = { ...node, ...normalizedPatch };
+        const patchHasLlm = Object.prototype.hasOwnProperty.call(normalizedPatch, 'llm');
+        if (
+            !patchHasLlm
+            && isPlainObject(nextNode.llm_override)
+        ) {
+            nextNode.llm = { ...nextNode.llm_override };
+        }
+        delete nextNode.llm_override;
+        nodes[nodeId] = nextNode;
         this._editor.updateBranchData({ data: { ...skillsData, nodes } });
         this._editor.setDirty({ dirty: true });
         this._editor.pushHistory({ snapshot: { ...skillsData, nodes } });

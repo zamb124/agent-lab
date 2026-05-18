@@ -1330,6 +1330,9 @@ def _validate_node_config(config: dict[str, Any]) -> None:
 async def _build_node_config(request: ExecuteRequest) -> dict[str, Any]:
     """Строит node_config из ExecuteRequest."""
     config = request.node_config.copy()
+    legacy_llm = config.pop("llm_override", None)
+    if isinstance(legacy_llm, dict) and legacy_llm:
+        config["llm"] = legacy_llm
     if request.code is not None and "code" not in config:
         config["code"] = request.code
     config["type"] = _require_execute_node_type(str(request.node_type))

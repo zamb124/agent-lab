@@ -12,9 +12,9 @@
       "type": "llm_node",
       "prompt": "Отвечай на вопросы. Отправь ответ через send_telegram.",
       "llm": {
-        "model": "qwen/qwen3.5-397b-a17b",
+        "model": "auto",
         "temperature": 0.2,
-        "provider": "openrouter"
+        "provider": "humanitec_llm"
       },
       "tools": [
         {

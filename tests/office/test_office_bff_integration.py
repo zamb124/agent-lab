@@ -5,6 +5,7 @@ BFF documents/office: реальные PostgreSQL (platform_office), MinIO, http
 from __future__ import annotations
 
 import hashlib
+import io
 from urllib.parse import parse_qs, quote, urlparse
 
 import jwt
@@ -165,6 +166,51 @@ async def test_office_upload_csv_cell_type(office_client, auth_headers_system, u
 
 
 @pytest.mark.asyncio
+async def test_open_existing_file_as_document_is_same_file_and_idempotent(
+    office_client,
+    auth_headers_system,
+    unique_id,
+):
+    catalog_id = await _first_accessible_catalog_id(office_client, auth_headers_system)
+    upload = await office_client.post(
+        "/documents/api/v1/files/",
+        headers=auth_headers_system,
+        files={
+            "file": (
+                f"flow-table-{unique_id}.csv",
+                io.BytesIO(b"a,b\n1,2\n"),
+                "text/csv",
+            )
+        },
+        data={"public": "false"},
+    )
+    assert upload.status_code == 200, upload.text
+    file_id = upload.json()["file_id"]
+
+    first = await office_client.post(
+        "/documents/api/v1/documents/from-file",
+        headers=auth_headers_system,
+        json={"file_id": file_id, "catalog_id": catalog_id, "title": f"Flow table {unique_id}"},
+    )
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    assert first_body["file_id"] == file_id
+    assert first_body["catalog_id"] == catalog_id
+    assert first_body["document_type"] == "cell"
+    assert first_body["editor_url"].startswith("/documents/embed/edit/")
+
+    second = await office_client.post(
+        "/documents/api/v1/documents/from-file",
+        headers=auth_headers_system,
+        json={"file_id": file_id, "catalog_id": catalog_id},
+    )
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    assert second_body["binding_id"] == first_body["binding_id"]
+    assert second_body["file_id"] == file_id
+
+
+@pytest.mark.asyncio
 async def test_office_empty_document_cell_slide_csv_editor_type(
     office_client, auth_headers_system, unique_id
 ):
@@ -236,6 +282,7 @@ async def test_office_editor_config_download_roundtrip(office_client, auth_heade
     secret = get_office_settings().office.jwt_secret
     cfg = jwt.decode(body["token"], secret, algorithms=["HS256"])
     assert cfg["documentType"] == "word"
+    assert cfg["document"]["key"] == binding_id or cfg["document"]["key"].startswith(f"{binding_id}_")
     assert cfg["editorConfig"]["mode"] == "edit"
     assert cfg["editorConfig"]["coEditing"]["mode"] == "fast"
     assert cfg["editorConfig"]["lang"] in ("ru", "en")
@@ -292,7 +339,7 @@ async def test_onlyoffice_callback_saves_to_s3(
     )
     file_url = f"{office_saved_file_http['base']}/saved"
     auth_payload = {"status": 2, "url": file_url}
-    bearer = jwt.encode(auth_payload, integ.jwt_secret, algorithm="HS256")
+    bearer = jwt.encode({"payload": auth_payload}, integ.jwt_secret, algorithm="HS256")
 
     post = await office_client.post(
         f"/documents/api/v1/onlyoffice/callback?token={quote(ctx_tok, safe='')}",
@@ -309,8 +356,16 @@ async def test_onlyoffice_callback_saves_to_s3(
     assert meta.checksum == expected_checksum
     assert meta.file_size == len(new_body)
 
+    er = await office_client.get(
+        f"/documents/api/v1/documents/{binding_id}/editor-config",
+        headers=auth_headers_system,
+    )
+    assert er.status_code == 200
+    cfg = jwt.decode(er.json()["token"], integ.jwt_secret, algorithms=["HS256"])
+    assert cfg["document"]["key"] == f"{binding_id}_{expected_checksum[:24]}"
+
     office_saved_file_http["set_body"](b"duplicate-callback-should-not-apply")
-    bearer_dup = jwt.encode(auth_payload, integ.jwt_secret, algorithm="HS256")
+    bearer_dup = jwt.encode({"payload": auth_payload}, integ.jwt_secret, algorithm="HS256")
     post_dup = await office_client.post(
         f"/documents/api/v1/onlyoffice/callback?token={quote(ctx_tok, safe='')}",
         headers={"Authorization": f"Bearer {bearer_dup}"},

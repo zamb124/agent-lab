@@ -1,19 +1,17 @@
-"""
-Слияние NodeLLMOverride с LLM-ресурсом по ключу из flow/skill/node resources.
-"""
+"""Слияние NodeLLMConfig с LLM-ресурсом по ключу из flow/skill/node resources."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from apps.flows.src.models import ResourceType
-from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.models.resource import LLMResourceConfig, ResourceReference
 from apps.flows.src.resources.merge import (
     merge_flow_skill_node_resource_maps,
     merge_shared_definition_config_with_patch,
 )
-from apps.flows.src.resources.merge_llm import merge_llm_resource_into_node_override
+from apps.flows.src.resources.merge_llm import merge_llm_resource_into_node_config
 
 
 async def infer_unique_llm_resource_key_from_merged_maps(
@@ -47,22 +45,22 @@ async def infer_unique_llm_resource_key_from_merged_maps(
     return llm_keys[0]
 
 
-async def resolve_llm_override_with_resource_key(
+async def resolve_llm_config_with_resource_key(
     *,
-    llm_override: NodeLLMOverride | None,
+    llm_config: NodeLLMConfig | None,
     flow_resources: dict[str, Any],
     skill_resources: dict[str, Any] | None,
     node_resources_raw: dict[str, Any],
     repository: Any,
-) -> NodeLLMOverride | None:
+) -> NodeLLMConfig | None:
     """
-    Если в override задан llm_resource_key — подмешивает LLMResourceConfig из мержи ресурсов.
+    Если в config задан llm_resource_key — подмешивает LLMResourceConfig из мержи ресурсов.
     Ключи flow → skill → node (как в ResourceResolver).
     Результат без llm_resource_key, чтобы не применять дважды.
     """
-    if not llm_override or not llm_override.llm_resource_key:
-        return llm_override
-    key = str(llm_override.llm_resource_key).strip()
+    if not llm_config or not llm_config.llm_resource_key:
+        return llm_config
+    key = str(llm_config.llm_resource_key).strip()
     if not key:
         raise ValueError("llm_resource_key пуст")
 
@@ -98,5 +96,22 @@ async def resolve_llm_override_with_resource_key(
             )
         base_cfg = LLMResourceConfig.model_validate(merged_dict)
 
-    merged_override = merge_llm_resource_into_node_override(base_cfg, llm_override)
-    return merged_override.model_copy(update={"llm_resource_key": None})
+    merged_config = merge_llm_resource_into_node_config(base_cfg, llm_config)
+    return merged_config.model_copy(update={"llm_resource_key": None})
+
+
+async def resolve_llm_override_with_resource_key(
+    *,
+    llm_override: NodeLLMConfig | None,
+    flow_resources: dict[str, Any],
+    skill_resources: dict[str, Any] | None,
+    node_resources_raw: dict[str, Any],
+    repository: Any,
+) -> NodeLLMConfig | None:
+    return await resolve_llm_config_with_resource_key(
+        llm_config=llm_override,
+        flow_resources=flow_resources,
+        skill_resources=skill_resources,
+        node_resources_raw=node_resources_raw,
+        repository=repository,
+    )

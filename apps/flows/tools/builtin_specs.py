@@ -8,6 +8,10 @@ from functools import lru_cache
 BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.math_tools", "calculator"),
     ("apps.flows.tools.files", "create_file"),
+    ("apps.flows.tools.documents", "documents_open_file"),
+    ("apps.flows.tools.documents", "documents_replace_text"),
+    ("apps.flows.tools.documents", "documents_append_text"),
+    ("apps.flows.tools.documents", "documents_update_cells"),
     ("apps.flows.tools.sandbox_codegen", "sandbox_codegen"),
     ("apps.flows.tools.google_docs", "gdocs_append_text"),
     ("apps.flows.tools.google_docs", "gdocs_create_document"),

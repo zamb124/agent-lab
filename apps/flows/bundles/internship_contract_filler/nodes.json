@@ -42,9 +42,9 @@
       }
     ],
     "llm": {
-      "model": "qwen/qwen3.5-397b-a17b",
+      "model": "auto",
       "temperature": 0.2,
-      "provider": "openrouter"
+      "provider": "humanitec_llm"
     }
   }
 ]

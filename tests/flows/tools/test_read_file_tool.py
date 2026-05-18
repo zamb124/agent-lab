@@ -43,3 +43,25 @@ async def test_read_file_integration_txt(tmp_path) -> None:
     )
     assert result["success"] is True
     assert result["pages"][0]["text"] == "hello"
+
+
+@pytest.mark.asyncio
+async def test_read_file_matches_unicode_combining_marks(tmp_path) -> None:
+    actual_name = "Договор наи\u0306ма жилого помещения.txt"
+    requested_name = "Договор наи\u030bма жилого помещения.txt"
+    f = tmp_path / "contract.txt"
+    f.write_text("contract", encoding="utf-8")
+    state = ExecutionState.create(
+        task_id="t1",
+        context_id="c1",
+        user_id="u1",
+        session_id="flow:c1",
+        files=[{"name": actual_name, "path": str(f), "mime_type": "text/plain"}],
+    )
+    result = await read_file._run_impl(
+        {"file_name": requested_name, "include_asset_bytes": False},
+        state,
+    )
+    assert result["success"] is True
+    assert result["file_name"] == actual_name
+    assert result["pages"][0]["text"] == "contract"

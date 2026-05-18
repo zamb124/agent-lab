@@ -2,7 +2,8 @@
 Маршрутизация LLM: префикс платформенного провайдера в поле model.
 
 Формат: ``<slug>:<model_id>`` (первое вхождение ``:``), где ``slug`` —
-``openrouter``, ``openai``, ``bothub``, ``provider_litserve``, ``yandex``.
+``openrouter``, ``openai``, ``bothub``, ``provider_litserve``, ``yandex``,
+``humanitec_llm``.
 Идентификаторы вида ``vendor/model`` без такого префикса не изменяются.
 """
 
@@ -10,8 +11,19 @@ from __future__ import annotations
 
 from typing import Optional
 
+HUMANITEC_LLM_PROVIDER = "humanitec_llm"
+HUMANITEC_LLM_AUTO_MODEL = "auto"
+
 LLM_ROUTING_PROVIDER_SLUGS = frozenset(
-    {"openrouter", "openai", "bothub", "provider_litserve", "yandex", "custom_openai_compatible"}
+    {
+        "openrouter",
+        "openai",
+        "bothub",
+        "provider_litserve",
+        "yandex",
+        "custom_openai_compatible",
+        HUMANITEC_LLM_PROVIDER,
+    }
 )
 
 

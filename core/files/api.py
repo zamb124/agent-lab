@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 import httpx
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 
 from core.config import get_settings
@@ -71,7 +71,10 @@ def build_file_api_router(
     download_url_prefix = f"{service_api_prefix}/files/download"
 
     @router.post("/", response_model=FileResponse, summary="Загрузить файл")
-    async def upload_file(file: UploadFile = File(...)) -> FileResponse:
+    async def upload_file(
+        file: UploadFile = File(...),
+        public: str | None = Form(None),
+    ) -> FileResponse:
         settings = get_settings()
         if not settings.s3.enabled or not settings.s3.default_bucket:
             raise HTTPException(
@@ -100,6 +103,9 @@ def build_file_api_router(
         user_id = context.user.user_id
 
         checksum = compute_content_checksum_sha256(data)
+        is_public = True
+        if isinstance(public, str) and public.strip():
+            is_public = public.strip().lower() in {"1", "true", "yes", "on"}
 
         repo = get_file_repo()
         processor = FileProcessor(file_repository=repo)
@@ -110,7 +116,7 @@ def build_file_api_router(
                 content_type=content_type,
                 uploaded_by=user_id,
                 company_id=company_id,
-                public=True,
+                public=is_public,
                 download_url_prefix=download_url_prefix,
                 content_sha256_hex=checksum,
             )

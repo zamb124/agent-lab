@@ -17,7 +17,12 @@ from .factory import (
     should_use_platform_default_free_pool,
 )
 from .mock import MockLLM, get_global_mock_llm
-from .model_routing import LLM_ROUTING_PROVIDER_SLUGS, split_provider_prefixed_model
+from .model_routing import (
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
+    LLM_ROUTING_PROVIDER_SLUGS,
+    split_provider_prefixed_model,
+)
 
 __all__ = [
     "get_llm",
@@ -32,6 +37,8 @@ __all__ = [
     "should_use_platform_default_free_pool",
     "get_global_mock_llm",
     "StreamEvent",
+    "HUMANITEC_LLM_AUTO_MODEL",
+    "HUMANITEC_LLM_PROVIDER",
     "LLM_ROUTING_PROVIDER_SLUGS",
     "split_provider_prefixed_model",
 ]
