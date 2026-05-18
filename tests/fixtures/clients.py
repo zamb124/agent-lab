@@ -422,6 +422,17 @@ async def frontend_client_http(frontend_service):
         yield client
 
 
+@pytest_asyncio.fixture
+async def office_client_http(office_service):
+    """
+    HTTP клиент для Documents/Office API (реальный HTTP).
+
+    Использует реальный HTTP сервер на порту 9008.
+    """
+    async with AsyncClient(base_url="http://localhost:9008") as client:
+        yield client
+
+
 # ==============================================================================
 # Convenience фикстуры
 # ==============================================================================

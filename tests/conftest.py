@@ -57,6 +57,7 @@ os.environ["SERVER__RAG_SERVICE_URL"] = "http://localhost:9002"
 os.environ["SERVER__CRM_SERVICE_URL"] = "http://localhost:9003"
 os.environ["SERVER__FRONTEND_SERVICE_URL"] = "http://localhost:9004"
 os.environ["SERVER__SYNC_SERVICE_URL"] = "http://localhost:9005"
+os.environ["SERVER__OFFICE_SERVICE_URL"] = "http://localhost:9008"
 os.environ.setdefault("SERVER__VOICE_SERVICE_URL", "http://localhost:9015")
 os.environ.setdefault("SERVER__CAPABILITY_GATEWAY_SERVICE_URL", "http://localhost:9016")
 os.environ.setdefault("SERVER__CODE_RUNNER_PYTHON_SERVICE_URL", "http://localhost:9017")
@@ -76,6 +77,7 @@ os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhos
 os.environ.setdefault("OFFICE__JWT_SECRET", "test-onlyoffice-jwt-secret")
 os.environ.setdefault("OFFICE__DOCUMENT_SERVER_PUBLIC_URL", "http://localhost:18088")
 os.environ.setdefault("OFFICE__CALLBACK_PUBLIC_BASE_URL", "http://testserver")
+os.environ["SERVER__DOCUMENT_SERVER_DEV_UPSTREAM_URL"] = os.environ["OFFICE__DOCUMENT_SERVER_PUBLIC_URL"]
 # RAG config для тестов (pgvector в PostgreSQL)
 os.environ.setdefault("RAG__ENABLED", "true")
 os.environ.setdefault("RAG__DEFAULT_PROVIDER", "pgvector")
@@ -481,7 +483,7 @@ async def setup_database_before_tests():
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    test_ports = [9001, 9002, 9003, 9004, 9005, 9016, 9017, 9018, 9019, 9020]
+    test_ports = [9001, 9002, 9003, 9004, 9005, 9008, 9016, 9017, 9018, 9019, 9020]
     print(f"\n Освобождаем тестовые порты: {test_ports}...")
     for port in test_ports:
         try:

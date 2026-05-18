@@ -274,6 +274,8 @@ class SessionWorkerManager:
             "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL",
             "S3__DEFAULT_BUCKET",
             "DATABASE__FLOWS_URL",
+            "SERVER__OFFICE_SERVICE_URL",
+            "SERVER__DOCUMENT_SERVER_DEV_UPSTREAM_URL",
             "MOCK_LLM_REDIS_KEY",
         )
         try:

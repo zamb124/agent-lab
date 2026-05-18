@@ -14,6 +14,7 @@
 - crm_service: CRM сервис (порт 9003)
 - frontend_service: Frontend сервис (порт 9004)
 - sync_service: Sync сервис (порт 9005)
+- office_service: Documents/Office сервис (порт 9008)
 - capability_gateway_service: capability gateway (порт 9016)
 - code_runner_python_service: Python runner (порт 9017)
 - code_runner_node_service: Node.js runner (порт 9018)
@@ -41,6 +42,9 @@ _FRONTEND_SERVER_PID = "/tmp/platform_test_frontend_server.pid"
 
 _SYNC_SERVER_LOCK = "/tmp/platform_test_sync_server.lock"
 _SYNC_SERVER_PID = "/tmp/platform_test_sync_server.pid"
+
+_OFFICE_SERVER_LOCK = "/tmp/platform_test_office_server.lock"
+_OFFICE_SERVER_PID = "/tmp/platform_test_office_server.pid"
 
 _CAPABILITY_GATEWAY_SERVER_LOCK = "/tmp/platform_test_capability_gateway_server.lock"
 _CAPABILITY_GATEWAY_SERVER_PID = "/tmp/platform_test_capability_gateway_server.pid"
@@ -376,7 +380,31 @@ def sync_service():
 
 
 @pytest.fixture(scope="session")
-def all_services(flows_service, rag_service, crm_service, frontend_service, sync_service):
+def office_service():
+    """
+    Documents/Office сервис как реальный HTTP сервер на порту 9008.
+
+    Используется для:
+    - Documents BFF
+    - Привязки flow files к OnlyOffice editor
+    - Byte-level mutations, которые пишут обратно в тот же FileRecord/S3 object
+    """
+    manager = SessionServerManager(
+        name="Office",
+        lock_file=_OFFICE_SERVER_LOCK,
+        pid_file=_OFFICE_SERVER_PID,
+        app_path="apps.office.main:app",
+        port=9008,
+        startup_wait=25.0,
+        env=_COMMON_TEST_ENV,
+    )
+
+    with manager.start():
+        yield
+
+
+@pytest.fixture(scope="session")
+def all_services(flows_service, rag_service, crm_service, frontend_service, sync_service, office_service):
     """
     Запускает все сервисы платформы.
 
@@ -388,6 +416,7 @@ def all_services(flows_service, rag_service, crm_service, frontend_service, sync
     3. CRM (9003) - зависит от RAG и Agents
     4. Frontend (9004) - зависит от Agents
     5. Sync (9005) - зависит от PostgreSQL и Redis
+    6. Office (9008) - зависит от PostgreSQL, Redis, MinIO и OnlyOffice Document Server
     """
     return {
         "flows": "http://localhost:9001",
@@ -395,6 +424,7 @@ def all_services(flows_service, rag_service, crm_service, frontend_service, sync
         "crm": "http://localhost:9003",
         "frontend": "http://localhost:9004",
         "sync": "http://localhost:9005",
+        "office": "http://localhost:9008",
         "capability_gateway": "http://localhost:9016",
         "code_runner_python": "http://localhost:9017",
         "code_runner_node": "http://localhost:9018",

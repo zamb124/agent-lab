@@ -22,6 +22,7 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "SERVER__CRM_SERVICE_URL": "http://localhost:9003",
     "SERVER__FRONTEND_SERVICE_URL": "http://localhost:9004",
     "SERVER__SYNC_SERVICE_URL": "http://localhost:9005",
+    "SERVER__OFFICE_SERVICE_URL": "http://localhost:9008",
     "S3__ENABLED": "true",
     "S3__DEFAULT_BUCKET": "test-bucket",
     "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",
