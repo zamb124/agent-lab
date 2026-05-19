@@ -341,12 +341,15 @@ async def test_llm_node_runner_build_tools_schema_matches_openai_canon(app) -> N
 
 @pytest.mark.asyncio
 async def test_code_tool_run_applies_json_defaults_and_executes(app) -> None:
+    from apps.flows.src.container import get_container
+
     schema = sanitize_parameters_schema_for_llm(pydantic_model_to_parameters_schema(ComplexArgs))
     tool = CodeTool(
         tool_id="complex_exec",
         code=COMPLEX_TOOL_CODE.strip(),
         description="exec",
         parameters_schema=schema,
+        container=get_container(),
     )
     state = ExecutionState.create(
         task_id="t1",
@@ -371,12 +374,15 @@ async def test_code_tool_run_applies_json_defaults_and_executes(app) -> None:
 
 @pytest.mark.asyncio
 async def test_code_tool_explicit_args_override_defaults(app) -> None:
+    from apps.flows.src.container import get_container
+
     schema = sanitize_parameters_schema_for_llm(pydantic_model_to_parameters_schema(ComplexArgs))
     tool = CodeTool(
         tool_id="complex_exec2",
         code=COMPLEX_TOOL_CODE.strip(),
         description="exec2",
         parameters_schema=schema,
+        container=get_container(),
     )
     state = ExecutionState.create(
         task_id="t2",

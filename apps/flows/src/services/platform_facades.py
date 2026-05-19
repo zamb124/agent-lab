@@ -15,6 +15,7 @@ from apps.flows.src.services.flow_speech_resolve import (
 )
 from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
+from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
 from core.clients.voice_resolver import get_stt_client, get_tts_client
 from core.context import get_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
@@ -52,8 +53,8 @@ def get_lara_facade() -> "LaraFacade":
     return require_current_container().lara_facade
 
 
-_SPEECH_PROVIDERS = frozenset({"litserve", "cloud_ru", "yandex", "sber", "mock"})
-_SPEECH_RESPONSE_FORMATS = frozenset({"wav", "mp3", "ogg", "pcm", "lpcm"})
+_SPEECH_PROVIDERS = STT_TTS_PROVIDER_IDS
+_SPEECH_RESPONSE_FORMATS = VOICE_RESPONSE_FORMAT_IDS
 
 
 def _speech_provider(value: str | None) -> SpeechProviderName | None:

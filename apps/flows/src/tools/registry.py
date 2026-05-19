@@ -20,21 +20,14 @@ from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
 from apps.flows.src.tools.mcp_wrapper import MCPTool
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS, builtin_tool_ids
+from apps.browser.api.mcp import (
+    ToolCloseSessionArgs,
+    ToolCreateSessionArgs,
+    ToolNavigateArgs,
+    ToolObserveArgs,
+)
 from core.capabilities.source_sanitize import strip_forbidden_platform_import_lines
 from core.logging import get_logger
-
-try:
-    from apps.browser.api.mcp import (
-        ToolCloseSessionArgs,
-        ToolCreateSessionArgs,
-        ToolNavigateArgs,
-        ToolObserveArgs,
-    )
-except ImportError:
-    ToolCloseSessionArgs = None
-    ToolCreateSessionArgs = None
-    ToolNavigateArgs = None
-    ToolObserveArgs = None
 
 logger = get_logger(__name__)
 
@@ -59,13 +52,6 @@ def _browser_runtime_mcp_tool_parameters_schema(
     Применяется только если URL MCP указывает на HTTP-эндпоинт browser-сервиса.
     """
     if "/browser/" not in (server_config.url or ""):
-        return None
-    if (
-        ToolCloseSessionArgs is None
-        or ToolCreateSessionArgs is None
-        or ToolNavigateArgs is None
-        or ToolObserveArgs is None
-    ):
         return None
 
     model_by_name: dict[str, Any] = {

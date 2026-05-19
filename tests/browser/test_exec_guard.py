@@ -1,19 +1,14 @@
-"""Ограничения exec_code."""
+"""Legacy browser action не исполняет произвольный код в процессе."""
 
 import pytest
 
-from apps.browser.engine.playwright_interactor import _assert_no_imports
+from apps.browser.adapters.playwright_control_adapter import PlaywrightAdapter
+from apps.browser.contracts.control_types import BrowserCapabilityError
 
 
-def test_exec_rejects_import() -> None:
-    with pytest.raises(ValueError, match="import"):
-        _assert_no_imports("import os\nx = 1")
+@pytest.mark.asyncio
+async def test_browser_action_disabled() -> None:
+    adapter = PlaywrightAdapter(interactor=object())  # type: ignore[arg-type]
 
-
-def test_exec_rejects_from_import() -> None:
-    with pytest.raises(ValueError, match="import"):
-        _assert_no_imports("from pathlib import Path")
-
-
-def test_exec_allows_expression_only() -> None:
-    _assert_no_imports("x = 1 + 2")
+    with pytest.raises(BrowserCapabilityError, match="Arbitrary in-process browser actions are disabled"):
+        await adapter.run_action(page=object(), code="print(1)", timeout_ms=1000)

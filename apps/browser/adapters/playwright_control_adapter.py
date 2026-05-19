@@ -6,25 +6,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from apps.browser.contracts.control_types import BrowserControlFeatures
+from apps.browser.contracts.control_types import BrowserCapabilityError, BrowserControlFeatures
 from apps.browser.contracts.runtime import BrowserInteractor
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserAcquireResult,
     BrowserFetchRequest,
     BrowserFetchResult,
-    ExecCodeResult,
 )
-
-
-def _exec_result_to_dict(r: ExecCodeResult) -> dict[str, Any]:
-    return {
-        "ok": r.ok,
-        "stdout": r.stdout,
-        "console_events": r.console_events,
-        "dom_diff_ref": r.dom_diff_ref,
-        "error": r.error,
-    }
 
 
 class PlaywrightAdapter:
@@ -32,7 +21,8 @@ class PlaywrightAdapter:
     Рабочая реализация `BrowserControlAdapter` на базе `BrowserInteractor`.
 
     Связи:
-    - Делегирует start/navigate/run_action/stop в interactor.
+    - Делегирует start/navigate/stop в interactor.
+    - Явно запрещает legacy action-выполнение произвольного кода.
     - Строит visibility/accessibility/listeners через AX/CDP утилиты.
 
     Состояние:
@@ -50,7 +40,7 @@ class PlaywrightAdapter:
     - Не стоит: для backend-а без Playwright API; тогда нужен отдельный адаптер.
     """
     def __init__(self, interactor: BrowserInteractor) -> None:
-        self._interactor = interactor
+        self._interactor: BrowserInteractor = interactor
 
     def features(self) -> BrowserControlFeatures:
         return BrowserControlFeatures(
@@ -68,8 +58,14 @@ class PlaywrightAdapter:
         return await self._interactor.fetch(page, req)
 
     async def run_action(self, page: Any, code: str, *, timeout_ms: int) -> dict[str, Any]:
-        result = await self._interactor.exec_code(page, code, timeout_ms=timeout_ms)
-        return _exec_result_to_dict(result)
+        _ = page, code, timeout_ms
+        raise BrowserCapabilityError(
+            code="browser_action_disabled",
+            message=(
+                "Arbitrary in-process browser actions are disabled; "
+                "use navigate/observe/click/fill/press/wait control operations."
+            ),
+        )
 
     async def stop(self, page: Any) -> None:
         await self._interactor.release(page)

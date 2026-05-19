@@ -140,7 +140,7 @@ class TestCodeToolSchema:
         assert params["properties"]["formal"]["type"] == "boolean"
 
     @pytest.mark.asyncio
-    async def test_inline_tool_with_state_access(self):
+    async def test_inline_tool_with_state_access(self, container):
         """CodeTool имеет доступ к state."""
         tool = CodeTool(
             tool_id="state_reader",
@@ -149,6 +149,7 @@ class TestCodeToolSchema:
     return f"User: {user.get('name', 'anonymous')}"
 """,
             description="Читает данные пользователя из state",
+            container=container,
         )
 
         state = ExecutionState(
@@ -167,7 +168,7 @@ class TestCodeToolsExecution:
     """Тесты выполнения inline tools."""
 
     @pytest.mark.asyncio
-    async def test_inline_tool_with_complex_logic(self):
+    async def test_inline_tool_with_complex_logic(self, container):
         """Inline tool с complex логикой."""
         tool = CodeTool(
             tool_id="data_processor",
@@ -189,6 +190,7 @@ class TestCodeToolsExecution:
     }
 """,
             description="Обрабатывает список элементов",
+            container=container,
         )
 
         state = ExecutionState(
@@ -207,7 +209,7 @@ class TestCodeToolsExecution:
         assert result["sum"] == 100
 
     @pytest.mark.asyncio
-    async def test_inline_tool_uses_allowed_modules(self):
+    async def test_inline_tool_uses_allowed_modules(self, container):
         """Inline tool может использовать разрешенные модули."""
         tool = CodeTool(
             tool_id="json_tool",
@@ -217,6 +219,7 @@ class TestCodeToolsExecution:
     return json.dumps(data)
 """,
             description="Сериализует в JSON",
+            container=container,
         )
 
         state = ExecutionState(
@@ -229,7 +232,7 @@ class TestCodeToolsExecution:
         assert result == '{"key": "test"}'
 
     @pytest.mark.asyncio
-    async def test_inline_tool_math_operations(self):
+    async def test_inline_tool_math_operations(self, container):
         """Inline tool с math операциями."""
         tool = CodeTool(
             tool_id="math_tool",
@@ -242,6 +245,7 @@ class TestCodeToolsExecution:
     }
 """,
             description="Математические операции",
+            container=container,
         )
 
         state = ExecutionState(
@@ -336,4 +340,3 @@ class TestCodeToolsInFlowConfig:
         )
         results = [await t.run({}, state) for t in tools]
         assert results == ["A", "B", "C"]
-

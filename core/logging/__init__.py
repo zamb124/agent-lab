@@ -29,7 +29,7 @@ from core.logging.contract import (
     LoggingMisconfigured,
     LogRecordPayload,
 )
-from core.logging.logger import get_logger
+from .logger import get_logger
 from core.logging.scope import (
     LogContractViolation,
     RequestLogScope,

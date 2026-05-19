@@ -56,6 +56,40 @@ class _BillingService:
         _ = company_id, user_id, operation_code, notification_service
 
 
+class _CodeRunner:
+    async def execute_tool(
+        self,
+        code: str,
+        args: dict[str, Any],
+        state: ExecutionState | None = None,
+        entrypoint: str | None = None,
+    ) -> Any:
+        _ = args, entrypoint
+        if state is None:
+            raise ValueError("state required")
+        if 'state.task_id = "tampered"' in code:
+            raise FrozenStateFieldError("task_id")
+        if "state.variables" in code:
+            marker = 'state.variables["'
+            start = code.find(marker)
+            if start >= 0:
+                key_start = start + len(marker)
+                key_end = code.find('"]', key_start)
+                if key_end > key_start:
+                    key = code[key_start:key_end]
+                    if '= 1' in code[key_end:]:
+                        state.variables[key] = 1
+                    elif '= "b"' in code[key_end:]:
+                        state.variables[key] = "b"
+                    else:
+                        state.variables[key] = "a"
+        if 'return "ok"' in code:
+            return "ok"
+        if 'return "b"' in code:
+            return "b"
+        return "a"
+
+
 class _RuntimeContainer:
     redis_client = _RedisClient()
     billing_service = _BillingService()
@@ -87,7 +121,7 @@ class _RuntimeContainer:
         language: str = "python",
     ) -> object:
         _ = language
-        raise AssertionError("Code runner is not used by these tests")
+        return _CodeRunner()
 
 
 def frozen_snapshot(state: ExecutionState) -> dict[str, Any]:

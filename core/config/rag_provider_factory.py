@@ -17,7 +17,7 @@ from core.company_ai.resolver import resolve_embedding_for_company
 from core.config.base import BaseSettings, get_settings
 from core.config.models import LLMConfig, ProviderLitserveConfig
 from core.context import get_context
-from core.logging.logger import get_logger
+from core.logging import get_logger
 from core.rag.embedding_runtime import build_rag_embedding_runtime_dict
 from core.rag.providers.agentset_provider import AgentsetRAGProvider
 from core.rag.providers.pgvector_provider import PgVectorProvider

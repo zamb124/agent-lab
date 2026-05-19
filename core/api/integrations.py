@@ -14,6 +14,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, field_validator
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from core.api.integration_oauth_error_html import (
@@ -43,6 +44,36 @@ def set_flow_resume_handler(handler: Callable[..., Coroutine[Any, Any, Any]]) ->
     """Регистрирует обработчик resume flow (вызывается из apps при старте)."""
     global _flow_resume_handler
     _flow_resume_handler = handler
+
+
+class FlowResumeContext(BaseModel):
+    """Strict contract for OAuth-triggered flow resume."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    flow_id: str
+    session_id: str
+    task_id: str
+    context_id: str
+    branch_id: str
+    channel: str
+    user_id: str
+    context_data: dict[str, Any]
+    trace_context: dict[str, Any] | None = None
+
+    @field_validator("flow_id", "session_id", "task_id", "context_id", "branch_id", "channel", "user_id")
+    @classmethod
+    def _non_empty_string(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must be a non-empty string")
+        return value
+
+    @field_validator("context_data")
+    @classmethod
+    def _non_empty_context_data(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if not value:
+            raise ValueError("must be a non-empty dict")
+        return value
 
 
 @router.get("/credentials", response_model=ListResponse[CredentialInfo])
@@ -195,45 +226,28 @@ async def _resume_flow(
 ) -> None:
     """Продолжает flow после OAuth. Использует зарегистрированный handler из apps/."""
     if _flow_resume_handler is None:
-        logger.warning("OAuth flow_context получен, но flow_resume_handler не зарегистрирован")
-        return
+        raise RuntimeError("OAuth flow_context received but flow_resume_handler is not registered")
 
-    flow_id = flow_context.get("flow_id")
-    session_id = flow_context.get("session_id")
-    context_data = flow_context.get("context_data")
-
-    if not flow_id or not session_id or not context_data:
-        logger.warning(
-            "OAuth flow_context incomplete, skip resume: flow_id=%s session_id=%s",
-            flow_id, session_id,
-        )
-        return
-
-    task_id = flow_context.get("task_id", "")
-    context_id = flow_context.get("context_id", session_id)
-    branch_id = flow_context.get("branch_id", "default")
-    channel = flow_context.get("channel", "a2a")
-    user_id = flow_context.get("user_id", "")
-    trace_context = flow_context.get("trace_context")
+    resume_context = FlowResumeContext.model_validate(flow_context)
 
     await _flow_resume_handler(
-        flow_id=flow_id,
-        session_id=session_id,
-        user_id=user_id,
+        flow_id=resume_context.flow_id,
+        session_id=resume_context.session_id,
+        user_id=resume_context.user_id,
         content=f"oauth_completed:{provider}:{service}",
-        branch_id=branch_id,
-        channel=channel,
-        task_id=task_id,
-        context_id=context_id,
+        branch_id=resume_context.branch_id,
+        channel=resume_context.channel,
+        task_id=resume_context.task_id,
+        context_id=resume_context.context_id,
         metadata={},
         is_resume=True,
         files=[],
-        context_data=context_data,
-        trace_context=trace_context,
+        context_data=resume_context.context_data,
+        trace_context=resume_context.trace_context,
     )
     logger.info(
         "OAuth auto-resume kicked: flow_id=%s session_id=%s provider=%s service=%s",
-        flow_id, session_id, provider, service,
+        resume_context.flow_id, resume_context.session_id, provider, service,
     )
 
 

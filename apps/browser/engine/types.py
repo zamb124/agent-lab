@@ -205,30 +205,6 @@ class SessionStateBlob:
     pause_ttl_hard_sec: Optional[int] = None
 
 
-@dataclass
-class ExecCodeResult:
-    """
-    Нормализованный результат выполнения action-кода в sandbox.
-
-    Связи:
-    - Формируется interactor-ом и сериализуется adapter-ом в ответ `/action`.
-
-    Инварианты:
-    - При `ok=False` поле `error` содержит диагностическую причину.
-
-    Мотивация:
-    - Нормализовать ответ sandbox-исполнения для API/оркестратора.
-
-    Переиспользование:
-    - Стоит: для любых backend-ов, которые поддерживают action/exec.
-    """
-    ok: bool
-    stdout: str
-    console_events: list[dict[str, Any]]
-    dom_diff_ref: Optional[str]
-    error: Optional[str]
-
-
 ControlBackend = Literal["playwright", "browser_use", "agent_browser"]
 
 

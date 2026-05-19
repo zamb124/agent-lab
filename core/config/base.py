@@ -36,7 +36,7 @@ from core.config.models import (
     WhatsAppConfig,
     WorkerConfig,
 )
-from core.logging.logger import get_logger
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 class BaseSettings(PydanticBaseSettings):

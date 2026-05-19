@@ -303,8 +303,8 @@ async def run(args, state):
         assert result == "mock_inline_result"
 
     @pytest.mark.asyncio
-    async def test_inline_tool_real_execution(self):
-        """CodeTool выполняет реальный код когда mock нет."""
+    async def test_inline_tool_requires_container_without_mock(self):
+        """CodeTool без mock требует FlowContainer-backed remote runner."""
         code = """
 async def run(args, state):
     return f"inline_result_{args.get('x', 0)}"
@@ -322,9 +322,8 @@ async def run(args, state):
             }
         )
 
-        result = await tool.run({"x": 42}, state)
-
-        assert result == "inline_result_42"
+        with pytest.raises(RuntimeError, match="requires FlowContainer"):
+            await tool.run({"x": 42}, state)
 
 
 class TestToolMockWithPermissions:
@@ -403,5 +402,4 @@ class TestToolMockWithPermissions:
 
         # Должно вернуть сообщение об ошибке, не mock
         assert "нет прав" in result
-
 

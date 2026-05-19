@@ -81,7 +81,7 @@ async def format_note_description_markdown_task(
 ) -> dict[str, Any]:
     """
     Форматирует заметку через общий TextTransformService. По умолчанию это платформенный
-    ``get_llm()`` default-route с candidate/fallback логикой; явный LitServe остаётся
+    платформенный LLM default-route с candidate/fallback логикой; явный LitServe остаётся
     доступен на уровне TextTransformService/provider override.
     """
     await _set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)

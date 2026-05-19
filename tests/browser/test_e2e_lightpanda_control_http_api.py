@@ -5,7 +5,7 @@ E2E: Browser Control HTTP API по реальному CDP (Lightpanda).
 - создание control-сессии
 - navigate (fetch) с разными wait_policy и артефактами
 - observe (visibility/html/dom_diff/listeners/ax)
-- action (exec_code) включая ошибки в коде и таймаут
+- legacy action явно запрещён без in-process исполнения кода
 - закрытие сессии
 
 Тест запускается только при явном флаге BROWSER__E2E_LIGHTPANDA=1 и наличии CDP URL.
@@ -136,35 +136,14 @@ async def test_control_http_api_full_flow() -> None:
             assert o2["html_fingerprint_sha256"] == o1["html_fingerprint_sha256"]
             assert o2["html_changed"] is False
 
-            # action: ok
+            # legacy action: произвольный in-process код запрещён
             ra = await ac.post(
                 f"/browser/api/v1/control/sessions/{session_id}/action",
                 json={"code": "print(page.url)", "timeout_ms": 30_000},
             )
-            assert ra.status_code == 200, ra.text
-            a1 = ra.json()
-            assert a1["ok"] is True
-            assert "example.com" in (a1.get("stdout") or "")
-
-            # action: import запрещён → ok=False, но HTTP 200 (ошибка внутри sandbox exec)
-            ra2 = await ac.post(
-                f"/browser/api/v1/control/sessions/{session_id}/action",
-                json={"code": "import os\nprint(os.getcwd())", "timeout_ms": 30_000},
-            )
-            assert ra2.status_code == 200, ra2.text
-            a2 = ra2.json()
-            assert a2["ok"] is False
-            assert isinstance(a2.get("error"), str) and a2["error"]
-
-            # action: таймаут
-            ra3 = await ac.post(
-                f"/browser/api/v1/control/sessions/{session_id}/action",
-                json={"code": "while True:\n    pass", "timeout_ms": 1000},
-            )
-            assert ra3.status_code == 200, ra3.text
-            a3 = ra3.json()
-            assert a3["ok"] is False
-            assert isinstance(a3.get("error"), str) and a3["error"]
+            assert ra.status_code == 501, ra.text
+            detail = ra.json()["detail"]
+            assert detail["code"] == "browser_action_disabled"
 
             # delete session
             rd = await ac.delete(f"/browser/api/v1/control/sessions/{session_id}")

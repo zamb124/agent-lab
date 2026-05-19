@@ -65,6 +65,7 @@ from core.http.egress_route_preference import (
     normalized_http_origin,
 )
 from core.logging import get_logger
+from core.utils.background import run_with_log_context
 from core.variables import VariableResolutionError, VarResolver
 
 if TYPE_CHECKING:
@@ -1100,7 +1101,11 @@ class LLMClient:
                             raise
 
                     # Watchdog запускается ВСЕГДА (не только при stream_cancel_poll)
-                    watch = asyncio.create_task(_watch_idle_and_cancel())
+                    watch = run_with_log_context(
+                        _watch_idle_and_cancel(),
+                        name=f"llm.stream_idle_watch.{self.model}",
+                        background_kind="llm_stream",
+                    )
                     try:
                         try:
                             async for line in response.aiter_lines():

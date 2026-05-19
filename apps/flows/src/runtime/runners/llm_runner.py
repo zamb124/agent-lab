@@ -126,6 +126,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             llm_node=llm_node,
         )
         self.container = container
+        if container is not None:
+            for tool in self.tools:
+                if hasattr(tool, "container") and getattr(tool, "container", None) is None:
+                    setattr(tool, "container", container)
 
     def _resolve_tool_by_call_name(self, call_name: str):
         """Резолвит tool по имени вызова, включая API-совместимую санитизацию."""

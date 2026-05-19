@@ -68,6 +68,7 @@ from core.logging import bind_log_context, get_logger
 from core.logging.attributes import LOG_SESSION_AGENT
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt, interrupt_to_response_dict
+from core.utils.background import run_with_log_context
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
 from core.tasks.kicker import kiq_task_name_with_context
 from core.tracing import get_tracer
@@ -597,7 +598,11 @@ class BaseChannel(ABC):
         emitter = Emitter(container.redis_client, exec_state)
 
         logger.debug(f"[process_task] Emitter created for stream:{effective_task_id}")
-        heartbeat_task = asyncio.create_task(self._run_stream_heartbeat(emitter))
+        heartbeat_task = run_with_log_context(
+            self._run_stream_heartbeat(emitter),
+            name=f"flows.stream_heartbeat.{effective_task_id}",
+            background_kind="flow_stream",
+        )
 
         try:
             pinned_version = saved_state.flow_config_version if saved_state else None

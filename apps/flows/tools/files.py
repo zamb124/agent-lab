@@ -5,6 +5,7 @@ read_file — чтение вложений; create_file — FileWriter() + crea
 """
 
 from pathlib import Path
+import re
 from typing import Any, Literal
 from urllib.parse import quote
 
@@ -35,8 +36,6 @@ def _context_namespace() -> str:
 
 
 def _is_office_file(item: JsonDict) -> bool:
-    import re
-
     name = str(item.get("name") or item.get("original_name") or "").lower()
     mime = str(item.get("mime_type") or item.get("content_type") or item.get("type") or "").lower()
     return re.search(OFFICE_EXT_RE, name) is not None or re.search(OFFICE_MIME_RE, mime) is not None

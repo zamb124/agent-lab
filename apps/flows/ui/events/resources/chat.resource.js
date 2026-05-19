@@ -52,6 +52,28 @@ function _resolveStreamContextId(result, fallback) {
     return null;
 }
 
+function _stringOrEmpty(value) {
+    return typeof value === 'string' ? value : '';
+}
+
+function _stringOrPrevious(value, previous) {
+    return typeof value === 'string' ? value : _stringOrEmpty(previous);
+}
+
+function _nonEmptyStringOrPrevious(value, previous) {
+    if (typeof value === 'string' && value.length > 0) {
+        return value;
+    }
+    return _stringOrEmpty(previous);
+}
+
+function _filesByContextMap(value) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return value;
+    }
+    return EMPTY_OBJECT;
+}
+
 /** @param {{ dispatch: Function }} ctx */
 function _appendRunTrace(ctx, contextId, taskId, fields, causationId) {
     if (typeof contextId !== 'string' || contextId.length === 0) {
@@ -472,32 +494,32 @@ function _upsertBrowserPreview(list, event) {
         ...prev,
         sessionId,
         browserSessionId: sessionId,
-        toolCallId: toolCallId || prev.toolCallId || '',
-        parentToolCallId: toolCallId || prev.parentToolCallId || '',
+        toolCallId: _nonEmptyStringOrPrevious(toolCallId, prev.toolCallId),
+        parentToolCallId: _nonEmptyStringOrPrevious(toolCallId, prev.parentToolCallId),
         topLevelToolName:
             typeof payload.top_level_tool_name === 'string'
                 ? payload.top_level_tool_name
-                : prev.topLevelToolName || '',
+                : _stringOrEmpty(prev.topLevelToolName),
         browserToolName:
             typeof payload.browser_tool_name === 'string'
                 ? payload.browser_tool_name
-                : prev.browserToolName || '',
+                : _stringOrEmpty(prev.browserToolName),
         status: _browserPreviewStatus(event.type, payload),
         viewerUrl:
             typeof payload.viewer_url === 'string' && payload.viewer_url.length > 0
                 ? payload.viewer_url
-                : prev.viewerUrl || '',
+                : _stringOrEmpty(prev.viewerUrl),
         screenshotUrl:
             typeof payload.screenshot_url === 'string' && payload.screenshot_url.length > 0
                 ? payload.screenshot_url
-                : prev.screenshotUrl || '',
+                : _stringOrEmpty(prev.screenshotUrl),
         currentUrl:
             typeof payload.final_url === 'string' && payload.final_url.length > 0
                 ? payload.final_url
                 : typeof payload.url === 'string' && payload.url.length > 0
                   ? payload.url
-                  : prev.currentUrl || '',
-        lastEventType: typeof event.type === 'string' ? event.type : prev.lastEventType || '',
+                  : _stringOrEmpty(prev.currentUrl),
+        lastEventType: _stringOrPrevious(event.type, prev.lastEventType),
         updatedAt:
             typeof event.timestamp === 'string' && event.timestamp.length > 0
                 ? event.timestamp
@@ -1337,7 +1359,7 @@ export const chatResource = createResourceCollection({
                     [contextId]: EMPTY_LIST,
                 },
                 filesByContextId: {
-                    ...(next.filesByContextId || {}),
+                    ..._filesByContextMap(next.filesByContextId),
                     [contextId]: EMPTY_LIST,
                 },
             };
@@ -1360,7 +1382,7 @@ export const chatResource = createResourceCollection({
                     [contextId]: EMPTY_LIST,
                 },
                 filesByContextId: {
-                    ...(state.filesByContextId || {}),
+                    ..._filesByContextMap(state.filesByContextId),
                     [contextId]: EMPTY_LIST,
                 },
             };
@@ -1400,7 +1422,7 @@ export const chatResource = createResourceCollection({
                     [contextId]: EMPTY_LIST,
                 },
                 filesByContextId: {
-                    ...(state.filesByContextId || {}),
+                    ..._filesByContextMap(state.filesByContextId),
                     [contextId]: files,
                 },
             };
@@ -1439,7 +1461,7 @@ export const chatResource = createResourceCollection({
             return {
                 ..._pushMessage(ensured, contextId, message),
                 filesByContextId: {
-                    ...(ensured.filesByContextId || {}),
+                    ..._filesByContextMap(ensured.filesByContextId),
                     [contextId]: _upsertFiles(ensured.filesByContextId?.[contextId], message.files),
                 },
             };
@@ -1458,7 +1480,7 @@ export const chatResource = createResourceCollection({
             return {
                 ...state,
                 filesByContextId: {
-                    ...(state.filesByContextId || {}),
+                    ..._filesByContextMap(state.filesByContextId),
                     [contextId]: _upsertFiles(state.filesByContextId?.[contextId], files),
                 },
             };
@@ -1761,7 +1783,7 @@ export const chatResource = createResourceCollection({
             return {
                 ...withMessage,
                 filesByContextId: {
-                    ...(withMessage.filesByContextId || {}),
+                    ..._filesByContextMap(withMessage.filesByContextId),
                     [cid]: _upsertFiles(withMessage.filesByContextId?.[cid], files),
                 },
             };

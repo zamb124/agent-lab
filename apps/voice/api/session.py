@@ -14,7 +14,7 @@ bridge мобильного приложения).
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Awaitable
+from typing import Any, Awaitable, cast
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
@@ -30,6 +30,7 @@ from core.clients.speech_override import (
     SpeechOverrideProviderName,
     SpeechProviderName,
 )
+from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VAD_PROVIDER_IDS
 from core.clients.voice_resolver import get_tts_streamer
 from core.logging import get_logger
 from core.utils.background import run_with_log_context
@@ -47,23 +48,17 @@ _HEARTBEAT_INTERVAL_S = 30.0
 def _speech_provider_name(value: str | None) -> SpeechProviderName | None:
     if value is None:
         return None
-    if value == "litserve":
-        return "litserve"
-    if value == "cloud_ru":
-        return "cloud_ru"
-    if value == "yandex":
-        return "yandex"
-    if value == "sber":
-        return "sber"
-    if value == "mock":
-        return "mock"
+    if value in STT_TTS_PROVIDER_IDS:
+        return cast(SpeechProviderName, value)
     raise ValueError(f"Unsupported speech provider: {value!r}")
 
 
 def _speech_override_provider_name(value: str | None) -> SpeechOverrideProviderName | None:
-    if value == "silero_local":
-        return "silero_local"
-    return _speech_provider_name(value)
+    if value is None:
+        return None
+    if value in VAD_PROVIDER_IDS:
+        return cast(SpeechOverrideProviderName, value)
+    raise ValueError(f"Unsupported VAD provider: {value!r}")
 
 
 @router.websocket("/{session_id}")

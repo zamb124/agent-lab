@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from apps.voice.container import get_voice_container
+from apps.voice.dependencies import ContainerDep
 
 health_router = APIRouter(prefix="/health", tags=["voice"])
 
@@ -21,24 +21,15 @@ health_router = APIRouter(prefix="/health", tags=["voice"])
     "/providers",
     summary="Deployment-default STT/TTS/VAD провайдеры",
 )
-async def health_providers() -> dict[str, Any]:
-    container = get_voice_container()
-
-    cfg_status = "ready"
-    stt_provider = ""
-    tts_provider = ""
-    vad_provider = ""
-    try:
-        settings = container.settings
-        stt_provider = settings.voice.stt.provider
-        tts_provider = settings.voice.tts.provider
-        vad_provider = settings.voice.vad.provider
-    except Exception:
-        cfg_status = "not_configured"
+async def health_providers(container: ContainerDep) -> dict[str, Any]:
+    settings = container.settings
+    stt_provider = settings.voice.stt.provider
+    tts_provider = settings.voice.tts.provider
+    vad_provider = settings.voice.vad.provider
 
     return {
-        "status": cfg_status,
-        "vad": "ready" if cfg_status == "ready" else cfg_status,
+        "status": "ready",
+        "vad": "ready",
         "stt_provider": stt_provider,
         "tts_provider": tts_provider,
         "vad_provider": vad_provider,

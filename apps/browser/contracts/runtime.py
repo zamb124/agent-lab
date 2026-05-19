@@ -9,7 +9,6 @@ from apps.browser.engine.types import (
     BrowserAcquireResult,
     BrowserFetchRequest,
     BrowserFetchResult,
-    ExecCodeResult,
 )
 
 
@@ -25,7 +24,7 @@ class BrowserInteractor(Protocol):
     - Реализация (`PlaywrightBrowserInteractor`) используется control adapter-ом.
 
     Инварианты:
-    - API acquire/fetch/exec/save/restore/release должно оставаться стабильным для orchestration-слоя.
+    - API acquire/fetch/save/restore/release должно оставаться стабильным для orchestration-слоя.
 
     Переиспользование:
     - Стоит: как обязательный интерфейс для любых новых backend-реализаций interactor.
@@ -33,8 +32,6 @@ class BrowserInteractor(Protocol):
     async def acquire(self, req: BrowserAcquireRequest) -> BrowserAcquireResult: ...
 
     async def fetch(self, page: Any, req: BrowserFetchRequest) -> BrowserFetchResult: ...
-
-    async def exec_code(self, page: Any, code: str, *, timeout_ms: int) -> ExecCodeResult: ...
 
     async def save_state(self, context: Any, shared_storage_key: str) -> str: ...
 

@@ -4,11 +4,7 @@ Playwright-реализация BrowserInteractor (§17).
 
 from __future__ import annotations
 
-import ast
-import asyncio
-import io
 import uuid
-from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, Optional
 
@@ -22,7 +18,6 @@ from apps.browser.engine.types import (
     BrowserFetchRequest,
     BrowserFetchResult,
     BrowserRuntimeSettingsView,
-    ExecCodeResult,
 )
 
 
@@ -31,7 +26,7 @@ class PlaywrightBrowserInteractor:
     Реализация `BrowserInteractor` поверх Playwright + CDP.
 
     Мотивация:
-    - Сконцентрировать все "браузерные действия" в одном слое: acquire/fetch/exec/state/release.
+    - Сконцентрировать все "браузерные действия" в одном слое: acquire/fetch/state/release.
     - Спрятать детали Playwright от API и adapter-слоя, оставив стабильный контракт.
 
     Связи:
@@ -45,7 +40,7 @@ class PlaywrightBrowserInteractor:
     Инварианты:
     - Acquire всегда использует валидный endpoint из настроек.
     - `fetch` принимает только поддержанные `wait_policy`.
-    - `exec_code` работает в sandbox с запретом import.
+    - Произвольный пользовательский код не исполняется внутри browser runtime.
 
     Что именно переиспользуется:
     - Browser transport переиспользуется через `CDPConnectionPool` (по endpoint).
@@ -208,90 +203,6 @@ class PlaywrightBrowserInteractor:
             anti_bot_signals={},
         )
 
-    async def exec_code(self, page: Any, code: str, *, timeout_ms: int) -> ExecCodeResult:
-        if not code:
-            raise ValueError("code не может быть пустым")
-        if timeout_ms <= 0:
-            raise ValueError("timeout_ms должен быть положительным")
-        _assert_no_imports(code)
-        console_events: list[dict[str, Any]] = []
-
-        def on_console(msg: Any) -> None:
-            console_events.append(
-                {
-                    "type": str(msg.type),
-                    "text": msg.text,
-                }
-            )
-
-        page.on("console", on_console)
-        buf = io.StringIO()
-        safe_builtins: dict[str, Any] = {
-            "len": len,
-            "str": str,
-            "int": int,
-            "float": float,
-            "bool": bool,
-            "dict": dict,
-            "list": list,
-            "tuple": tuple,
-            "set": set,
-            "range": range,
-            "min": min,
-            "max": max,
-            "sum": sum,
-            "repr": repr,
-            "isinstance": isinstance,
-            "type": type,
-            "abs": abs,
-            "enumerate": enumerate,
-            "zip": zip,
-        }
-        ns: dict[str, Any] = {
-            "__builtins__": safe_builtins,
-            "page": page,
-            "context": page.context,
-        }
-
-        async def _run() -> None:
-            with redirect_stdout(buf):
-                wrapped = "async def __user_main__():\n"
-                for line in code.splitlines():
-                    wrapped += f"    {line}\n"
-                if wrapped.endswith("async def __user_main__():\n"):
-                    raise ValueError("code не может быть пустым")
-                exec(wrapped, ns, ns)  # noqa: S102
-                main = ns.get("__user_main__")
-                if not callable(main):
-                    raise RuntimeError("exec_code: __user_main__ не определён")
-                res = main()
-                if asyncio.iscoroutine(res):
-                    out = await res
-                else:
-                    out = res
-                if out is not None:
-                    print(out)
-
-        try:
-            await asyncio.wait_for(_run(), timeout=timeout_ms / 1000.0)
-            return ExecCodeResult(
-                ok=True,
-                stdout=buf.getvalue(),
-                console_events=console_events,
-                dom_diff_ref=None,
-                error=None,
-            )
-        except Exception as exc:
-            return ExecCodeResult(
-                ok=False,
-                stdout=buf.getvalue(),
-                console_events=console_events,
-                dom_diff_ref=None,
-                error=str(exc),
-            )
-        finally:
-            page.remove_listener("console", on_console)
-
     async def save_state(self, context: Any, shared_storage_key: str) -> str:
         pages = context.pages
         if len(pages) == 0:
@@ -345,10 +256,3 @@ class PlaywrightBrowserInteractor:
             page,
             warm_idle_sec=self._settings.warm_idle_sec,
         )
-
-
-def _assert_no_imports(source: str) -> None:
-    tree = ast.parse(source, mode="exec")
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            raise ValueError("Запрещён import в exec_code")

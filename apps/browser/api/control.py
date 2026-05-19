@@ -304,7 +304,8 @@ class ControlActionBody(BaseModel):
     - `timeout_ms` валидируется pydantic-ограничением.
 
     Мотивация:
-    - Явно ограничить contract для sandbox-выполнения кода.
+    - Зафиксировать legacy contract для клиентов, при этом adapter обязан fail-fast,
+      если backend не поддерживает action без in-process исполнения кода.
 
     Переиспользование:
     - Стоит: как единая входная модель для action/exec endpoint-ов.
