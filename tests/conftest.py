@@ -47,6 +47,9 @@ for _db_key, _db_val in TEST_DATABASE_ENV.items():
     os.environ.setdefault(_db_key, _db_val)
 os.environ.setdefault("DATABASE__REDIS_URL", "redis://localhost:63792/0")
 os.environ.setdefault("TASKS__BROKER_URL", "redis://localhost:63792/1")
+# Локальный pytest не должен поднимать OTLP exporter из conf.json: без collector
+# BatchSpanProcessor пишет ошибки из фонового thread уже после закрытия stream-ов xdist.
+os.environ.setdefault("TRACING__TEMPO_ENABLED", "false")
 # Отключаем проверку permissions по умолчанию для тестов (кроме test_permissions.py)
 os.environ.setdefault("AUTH__PERMISSIONS_ENABLED", "false")
 # Default tenant для тестов
@@ -101,12 +104,17 @@ from apps.flows.main import app as fastapi_app  # noqa: E402
 from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
 from core.clients.llm import MockLLM, get_global_mock_llm, setup_mock_responses  # noqa: E402
 from core.context import Company, Context, User  # noqa: E402
+from core.tracing.provider import shutdown_tracing  # noqa: E402
 
 if id(process_flow_task.broker) != id(platform_broker_module.broker):
     raise RuntimeError(
         "process_flow_task привязан к другому broker, чем apps.flows_worker.broker: "
         "TaskIQ worker не сможет выполнять kiq из HTTP."
     )
+
+
+def pytest_sessionfinish(session, exitstatus):
+    shutdown_tracing()
 
 
 _DB_SETUP_LOCK = "/tmp/platform_test_db_setup.lock"

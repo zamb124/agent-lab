@@ -36,8 +36,10 @@ from apps.flows.src.models.enums import ChannelType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig
 from apps.flows.src.models.operator_schemas import OperatorTaskStatus
+from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
+from apps.flows.src.runtime.llm_override_params import client_kwargs_from_llm_config
 from apps.flows.src.runtime.llm_resource_override import (
     infer_unique_llm_resource_key_from_merged_maps,
     resolve_llm_config_with_resource_key,
@@ -47,13 +49,6 @@ from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.registry import ToolRegistry
 from apps.flows.src.variables import VariableResolver, VarResolver
 from core.clients.llm import get_llm
-from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER
-from core.company_ai import (
-    CUSTOM_PROVIDER_REF_PREFIX,
-    AICapability,
-    resolve_custom_llm_provider_ref,
-    resolve_llm_for_capability,
-)
 from core.context import get_context as get_request_context
 from core.errors import NodeWallClockTimeoutError
 from core.logging import get_logger
@@ -605,7 +600,6 @@ class LlmNode(BaseNode):
             return self._runner
 
         tools = await self.get_tools(state)
-        llm = self._get_llm(state)
         prompt = self.llm_node_prompt or ""
 
         base = self._node_config or self._create_default_config()
@@ -614,7 +608,7 @@ class LlmNode(BaseNode):
         self._runner = LlmNodeRunner(
             node_config=config,
             tools=tools,
-            llm=llm,
+            llm=None,
             prompt=prompt,
             llm_node=self,
             container=self.container,
@@ -641,157 +635,23 @@ class LlmNode(BaseNode):
         self._loaded_tools = tools
 
     def _get_llm(self, state: ExecutionState | None = None):
-        """Возвращает LLM клиент.
+        """Возвращает company-aware LLM client для legacy вызовов.
 
-        Runtime overlay для capability LLM_CHAT: если у активной компании задан
-        ``llm_chat`` override (BYOK поверх платформенного провайдера или custom),
-        и у ноды нет своего ``api_key``/``base_url``, накладываем company-провайдера
-        поверх дефолтов из bundle. Это позволяет компании переключить ВСЕ flows
-        на свой ключ/endpoint без правки JSON-бандлов.
+        Основной runtime создаёт client внутри runner-а из той же effective config,
+        чтобы биллинг и фактический вызов использовали один источник истины.
         """
-        model: str | None = None
-        temp: float | None = None
-        provider: str | None = None
-        api_key: str | None = None
-        base_url: str | None = None
-        folder_id: str | None = None
-        fallback_models = None
-        extra_request_headers: dict[str, str] | None = None
-        extra_request_body: dict[str, Any] | None = None
-        top_p: float | None = None
-        top_k: int | None = None
-        frequency_penalty: float | None = None
-        presence_penalty: float | None = None
-        seed: int | None = None
-        reasoning_effort = None
-        max_tok: int | None = None
-
-        llm_config = self._get_typed_llm_config()
-        if llm_config:
-            model = llm_config.model
-            fallback_models = llm_config.fallback_models
-            temp = llm_config.temperature
-            provider = llm_config.provider
-            api_key = llm_config.api_key
-            base_url = llm_config.base_url
-            folder_id = llm_config.folder_id
-            extra_request_headers = llm_config.extra_request_headers
-            extra_request_body = llm_config.extra_request_body
-            top_p = llm_config.top_p
-            top_k = llm_config.top_k
-            frequency_penalty = llm_config.frequency_penalty
-            presence_penalty = llm_config.presence_penalty
-            seed = llm_config.seed
-            reasoning_effort = llm_config.reasoning_effort
-            max_tok = llm_config.max_tokens
-
-        node_has_byok = bool(
-            (api_key and api_key.strip()) or (base_url and base_url.strip())
+        base = self._node_config or self._create_default_config()
+        effective = resolve_effective_llm_config_for_node(base)
+        client_kwargs = client_kwargs_from_llm_config(effective.config, state)
+        client_kwargs.setdefault("extra_request_headers", None)
+        logger.info(
+            "[_get_llm] node_id=%s provider=%s model=%s source=%s",
+            self.node_id,
+            effective.config.provider,
+            effective.config.model,
+            effective.source,
         )
-        node_uses_virtual_provider = provider == HUMANITEC_LLM_PROVIDER
-        cap_value = (
-            self._node_config.llm_capability
-            if self._node_config and self._node_config.llm_capability
-            else AICapability.LLM_CHAT.value
-        )
-        try:
-            capability = AICapability(cap_value)
-        except ValueError as e:
-            raise ValueError(
-                f"LlmNode {self.node_id}: неизвестный llm_capability {cap_value!r}"
-            ) from e
-
-        if fallback_models:
-            resolved_fallback_models = []
-            for fallback in fallback_models:
-                fallback_provider = fallback.provider
-                if fallback_provider and fallback_provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
-                    resolved = resolve_custom_llm_provider_ref(
-                        fallback_provider,
-                        capability=capability,
-                        model=fallback.model,
-                    )
-                    fallback_headers = dict(resolved.extra_request_headers or {})
-                    fallback_headers.update(fallback.extra_request_headers or {})
-                    fallback_body = dict(resolved.extra_request_body or {})
-                    fallback_body.update(fallback.extra_request_body or {})
-                    fallback = fallback.model_copy(
-                        update={
-                            "provider": resolved.provider,
-                            "model": resolved.model,
-                            "api_key": resolved.api_key,
-                            "base_url": resolved.base_url,
-                            "folder_id": resolved.folder_id or fallback.folder_id,
-                            "extra_request_headers": fallback_headers or None,
-                            "extra_request_body": fallback_body or None,
-                        }
-                    )
-                resolved_fallback_models.append(fallback)
-            fallback_models = resolved_fallback_models
-
-        if provider and provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
-            resolved = resolve_custom_llm_provider_ref(
-                provider,
-                capability=capability,
-                model=model,
-            )
-            provider = resolved.provider
-            model = resolved.model
-            api_key = resolved.api_key
-            base_url = resolved.base_url
-            folder_id = resolved.folder_id or folder_id
-            if resolved.extra_request_headers:
-                merged = dict(extra_request_headers or {})
-                merged.update(resolved.extra_request_headers)
-                extra_request_headers = merged
-            if resolved.extra_request_body:
-                merged_body = dict(resolved.extra_request_body)
-                merged_body.update(extra_request_body or {})
-                extra_request_body = merged_body
-        elif not node_has_byok and not node_uses_virtual_provider:
-            try:
-                resolved = resolve_llm_for_capability(
-                    capability,
-                    fallback_provider=provider,
-                    fallback_model=model,
-                )
-            except Exception:
-                resolved = None
-            if resolved is not None and resolved.cost_origin == "company":
-                provider = resolved.provider
-                model = resolved.model
-                api_key = resolved.api_key
-                base_url = resolved.base_url
-                folder_id = resolved.folder_id or folder_id
-                if resolved.extra_request_headers:
-                    merged = dict(extra_request_headers or {})
-                    merged.update(resolved.extra_request_headers)
-                    extra_request_headers = merged
-                if resolved.extra_request_body:
-                    merged_body = dict(resolved.extra_request_body)
-                    merged_body.update(extra_request_body or {})
-                    extra_request_body = merged_body
-
-        logger.info(f"[_get_llm] node_id={self.node_id}, model={model}, temp={temp}, provider={provider}")
-        return get_llm(
-            model_name=model,
-            temperature=temp,
-            provider=provider,
-            api_key=api_key,
-            base_url=base_url,
-            folder_id=folder_id,
-            max_tokens=max_tok,
-            state=state,
-            top_p=top_p,
-            top_k=top_k,
-            frequency_penalty=frequency_penalty,
-            presence_penalty=presence_penalty,
-            seed=seed,
-            reasoning_effort=reasoning_effort,
-            extra_request_body=extra_request_body,
-            extra_request_headers=extra_request_headers,
-            fallback_models=fallback_models,
-        )
+        return get_llm(state=state, **client_kwargs)
 
     async def _resolve_effective_node_config(
         self, base: NodeConfig, state: ExecutionState | None

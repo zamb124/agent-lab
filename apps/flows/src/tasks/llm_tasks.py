@@ -14,6 +14,7 @@ from apps.flows_worker.broker import broker
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import get_llm
+from core.company_ai import COST_ORIGIN_COMPANY, AICapability, resolve_llm_for_capability
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.billing_models import UsageType
@@ -50,8 +51,6 @@ async def invoke_llm(
         set_context(Context.from_dict(context_data))
 
     try:
-        llm = get_llm()
-
         trace_extra: dict[str, str] = {}
         actx = get_context()
         if actx is None or actx.active_company is None:
@@ -59,12 +58,29 @@ async def invoke_llm(
         if actx.user is None or not str(actx.user.user_id).strip():
             raise ValueError("Контекст с user обязателен для invoke_llm (биллинг и уведомления)")
         uid = str(actx.user.user_id).strip()
-        await get_billing_service().require_balance_for_billable_operation(
-            actx.active_company.company_id,
-            uid,
-            operation_code=BALANCE_BLOCK_OPERATION_LLM,
-            notification_service="flows",
+        resolved = resolve_llm_for_capability(AICapability.LLM_CHAT)
+        if resolved is None:
+            raise ValueError(
+                "invoke_llm требует company override для capability=llm_chat; "
+                "скрытый fallback на settings.llm.default_model запрещён"
+            )
+        llm = get_llm(
+            model_name=resolved.model,
+            provider=resolved.provider,
+            api_key=resolved.api_key,
+            base_url=resolved.base_url,
+            folder_id=resolved.folder_id,
+            extra_request_headers=resolved.extra_request_headers,
+            extra_request_body=resolved.extra_request_body,
+            fallback_models=list(resolved.fallback_models or ()) or None,
         )
+        if resolved.cost_origin != COST_ORIGIN_COMPANY:
+            await get_billing_service().require_balance_for_billable_operation(
+                actx.active_company.company_id,
+                uid,
+                operation_code=BALANCE_BLOCK_OPERATION_LLM,
+                notification_service="flows",
+            )
         trace_extra[trace_attributes.ATTR_USER_ID] = uid
         trace_extra[trace_attributes.ATTR_TENANT_COMPANY_ID] = actx.active_company.company_id
 
@@ -73,7 +89,7 @@ async def invoke_llm(
             event_type="llm.invoke",
             operation_category="llm",
             billing_usage_type=UsageType.LLM_REQUEST.value,
-            billing_resource_name="llm:default",
+            billing_resource_name=resolved.billing_resource_name,
             billing_quantity=1,
             billing_pending_settlement=True,
             extra_attributes=trace_extra if trace_extra else None,

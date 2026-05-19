@@ -179,7 +179,7 @@ class TestGetLLMWithCustomCredentials:
     def test_get_llm_with_custom_api_key_creates_client(self):
         """get_llm с кастомным api_key создает LLMClient с этим ключом."""
         with disable_testing_mode():
-            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "gpt-4"
                 mock_settings.return_value.llm.models = {}
                 mock_settings.return_value.llm.temperature = 0.2
@@ -217,7 +217,7 @@ class TestGetLLMWithCustomCredentials:
         )
 
         with disable_testing_mode():
-            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "gpt-4"
                 mock_settings.return_value.llm.models = {}
                 mock_settings.return_value.llm.temperature = 0.2
@@ -244,7 +244,7 @@ class TestGetLLMWithCustomCredentials:
     def test_get_llm_detects_provider_from_base_url(self):
         """get_llm определяет провайдера по base_url если не указан явно."""
         with disable_testing_mode():
-            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "gpt-4"
                 mock_settings.return_value.llm.models = {}
                 mock_settings.return_value.llm.temperature = 0.2
@@ -272,7 +272,7 @@ class TestGetLLMWithCustomCredentials:
     def test_get_llm_explicit_provider_overrides_detection(self):
         """Явно указанный provider имеет приоритет над auto-detection."""
         with disable_testing_mode():
-            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "gpt-4"
                 mock_settings.return_value.llm.models = {}
                 mock_settings.return_value.llm.temperature = 0.2
@@ -300,7 +300,7 @@ class TestGetLLMWithCustomCredentials:
     def test_get_llm_with_provider_litserve_from_settings(self):
         """Системный provider_litserve создает LLMClient с локальным base_url."""
         with disable_testing_mode():
-            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "qwen/qwen3.5-397b-a17b"
                 mock_settings.return_value.llm.models = {}
                 mock_settings.return_value.llm.temperature = 0.2
@@ -960,7 +960,7 @@ class TestLLMModelsServiceRealAPI:
 class TestGetLLMYandex:
     def test_get_llm_yandex_sets_api_key_headers(self):
         with disable_testing_mode():
-            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "yandexgpt"
                 mock_settings.return_value.llm.models = {}
                 mock_settings.return_value.llm.temperature = 0.2
@@ -985,7 +985,7 @@ class TestGetLLMYandex:
 
     def test_get_llm_yandex_missing_folder_raises(self):
         with disable_testing_mode():
-            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "m"
                 mock_settings.return_value.llm.models = {}
                 mock_settings.return_value.llm.temperature = 0.2
@@ -1007,7 +1007,7 @@ class TestGetLLMYandex:
 
     def test_get_llm_yandex_custom_key_uses_override_folder_and_uri(self):
         with disable_testing_mode():
-            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "yandexgpt"
                 mock_settings.return_value.llm.models = {}
                 mock_settings.return_value.llm.temperature = 0.2
@@ -1039,7 +1039,7 @@ class TestGetLLMYandex:
 
     def test_get_llm_yandex_custom_key_falls_back_platform_folder(self):
         with disable_testing_mode():
-            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "yandexgpt"
                 mock_settings.return_value.llm.models = {}
                 mock_settings.return_value.llm.temperature = 0.2
@@ -1069,7 +1069,7 @@ class TestGetLLMYandex:
 
     def test_get_llm_yandex_custom_key_without_any_folder_raises(self):
         with disable_testing_mode():
-            with patch("core.clients.llm.factory.get_settings") as mock_settings:
+            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
                 mock_settings.return_value.llm.default_model = "yandexgpt"
                 mock_settings.return_value.llm.models = {}
                 mock_settings.return_value.llm.temperature = 0.2
@@ -1136,12 +1136,12 @@ class TestGetDefaultBaseUrl:
         result = _get_default_base_url("yandex", mock_settings)
         assert result == "https://llm.api.cloud.yandex.net/v1"
 
-    def test_get_default_base_url_fallback(self):
-        """Fallback на OpenAI для неизвестного провайдера."""
+    def test_get_default_base_url_unknown_provider_raises(self):
+        """Неизвестный провайдер не подменяется OpenAI."""
         mock_settings = MagicMock()
 
-        result = _get_default_base_url("unknown", mock_settings)
-        assert result == "https://api.openai.com/v1"
+        with pytest.raises(ValueError, match="Неизвестный LLM провайдер"):
+            _get_default_base_url("unknown", mock_settings)
 
     def test_get_default_base_url_no_config(self):
         """Fallback если конфиг провайдера не настроен."""

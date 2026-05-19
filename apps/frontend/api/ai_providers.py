@@ -142,6 +142,11 @@ def _llm_override_to_public(
         "base_url": ov.base_url if ov else None,
         "folder_id": ov.folder_id if ov else None,
         "extra_request_headers": (ov.extra_request_headers or {}) if ov else {},
+        "fallback_models": (
+            [fb.model_dump(mode="json", exclude_none=True) for fb in (ov.fallback_models or [])]
+            if ov
+            else []
+        ),
         "key_masked": mask_encrypted_secret(ov.api_key_encrypted) if ov and ov.api_key_encrypted else None,
         "platform_default_provider": platform_default_provider_for_capability(capability),
         "platform_default_model": platform_default_model(
@@ -291,6 +296,7 @@ def _build_llm_override(capability: AICapability, payload: AIProvidersCapability
         folder_id=payload.folder_id,
         extra_request_headers=payload.extra_request_headers,
         model=payload.model,
+        fallback_models=payload.fallback_models,
     )
 
 
@@ -556,6 +562,10 @@ async def get_resolved(request: Request, container: ContainerDep):
                         "cost_origin": r.cost_origin,
                         "custom_provider_id": r.custom_provider_id,
                         "billing_resource_name": r.billing_resource_name,
+                        "fallback_models": [
+                            fb.model_dump(mode="json", exclude_none=True)
+                            for fb in (r.fallback_models or ())
+                        ],
                     }
                 )
         re = resolve_embedding_for_company()

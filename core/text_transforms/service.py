@@ -11,16 +11,17 @@ from a2a.utils.message import get_message_text
 import core.tracing.attributes as trace_attributes
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
+from core.clients.llm.config import LLMCallConfig
 from core.clients.llm.factory import get_llm, should_use_platform_default_free_pool
 from core.clients.llm.model_routing import split_provider_prefixed_model
+from core.clients.service_client import ServiceClient, ServiceClientError
 from core.company_ai import (
-    CUSTOM_PROVIDER_REF_PREFIX,
     COST_ORIGIN_PLATFORM,
+    CUSTOM_PROVIDER_REF_PREFIX,
     AICapability,
     resolve_custom_llm_provider_ref,
     resolve_llm_for_capability,
 )
-from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
 from core.context import get_context
 from core.models.billing_models import UsageType
@@ -44,16 +45,13 @@ _DEFAULT_SUMMARY_INSTRUCTION = (
 
 class TextTransformService:
     """
-    Суммаризация через ``get_llm`` (включая ``provider_litserve`` как OpenAI-compatible chat).
+    Суммаризация и Markdown сначала резолвят company capability override.
+    Явные provider/model аргументы используются только если override capability не задан.
 
     Форматирование в Markdown:
-    - по умолчанию — ``get_llm()`` с платформенной candidate/fallback стратегией;
+    - при company override — provider/model/fallback policy берутся из ``ai_providers``;
     - при явном ``provider_litserve`` — ``POST /v1/text/format_markdown`` (LitServe);
-    - при явном ``openrouter`` / ``openai`` / ``bothub`` / ``yandex`` — чанкованный вызов ``get_llm``.
-
-    Префикс в поле model: ``openrouter:vendor/model`` разбирается в ``(openrouter, vendor/model)``.
-    Если ``provider`` и ``model`` не заданы, суммаризация и Markdown используют платформенный
-    default-route ``get_llm()``. Явный ``provider_litserve`` сохраняет старый HTTP-путь Markdown.
+    - иначе явный ``openrouter`` / ``openai`` / ``bothub`` / ``yandex`` идёт через ``get_llm``.
     """
 
     async def summarize(
@@ -69,7 +67,16 @@ class TextTransformService:
         if not stripped:
             raise ValueError("summarize: text пуст")
 
-        rp, rm, api_key, base_url, headers, body, cost_origin = self._resolve_company_llm_args(
+        (
+            rp,
+            rm,
+            api_key,
+            base_url,
+            headers,
+            body,
+            fallback_models,
+            cost_origin,
+        ) = self._resolve_company_llm_args(
             AICapability.LLM_SUMMARIZE,
             provider=provider,
             model=model,
@@ -89,6 +96,7 @@ class TextTransformService:
             base_url=base_url,
             extra_request_headers=headers,
             extra_request_body=body,
+            fallback_models=fallback_models,
             allow_platform_paid_fallback=allow_platform_paid_fallback,
         )
         sys_text = instruction.strip() if instruction is not None and instruction.strip() else _DEFAULT_SUMMARY_INSTRUCTION
@@ -119,7 +127,16 @@ class TextTransformService:
         if not stripped:
             raise ValueError("format_markdown: text пуст")
 
-        rp, rm, api_key, base_url, headers, body, cost_origin = self._resolve_company_llm_args(
+        (
+            rp,
+            rm,
+            api_key,
+            base_url,
+            headers,
+            body,
+            fallback_models,
+            cost_origin,
+        ) = self._resolve_company_llm_args(
             AICapability.LLM_FORMAT_MARKDOWN,
             provider=provider,
             model=model,
@@ -152,6 +169,7 @@ class TextTransformService:
             base_url=base_url,
             extra_request_headers=headers,
             extra_request_body=body,
+            fallback_models=fallback_models,
             allow_platform_paid_fallback=allow_platform_paid_fallback,
         )
         chunks = split_text_into_markdown_chunks(stripped, int(chunk_lim))
@@ -196,9 +214,22 @@ class TextTransformService:
         str | None,
         dict[str, str] | None,
         dict[str, Any] | None,
+        list[LLMCallConfig] | None,
         str,
     ]:
         rp, rm = split_provider_prefixed_model(provider, model)
+        resolved = resolve_llm_for_capability(capability)
+        if resolved is not None:
+            return (
+                resolved.provider,
+                resolved.model,
+                resolved.api_key,
+                resolved.base_url,
+                resolved.extra_request_headers,
+                resolved.extra_request_body,
+                list(resolved.fallback_models or ()) or None,
+                resolved.cost_origin,
+            )
         if rp and rp.startswith(CUSTOM_PROVIDER_REF_PREFIX):
             resolved = resolve_custom_llm_provider_ref(
                 rp,
@@ -212,24 +243,15 @@ class TextTransformService:
                 resolved.base_url,
                 resolved.extra_request_headers,
                 resolved.extra_request_body,
+                list(resolved.fallback_models or ()) or None,
                 resolved.cost_origin,
             )
-        if rp is None:
-            resolved = resolve_llm_for_capability(
-                capability,
-                fallback_model=rm,
+        if rp is None or rm is None:
+            raise ValueError(
+                f"TextTransformService: для capability={capability.value} нет company override; "
+                "явные provider и model обязательны. Скрытый fallback на settings.llm запрещён."
             )
-            if resolved is not None:
-                return (
-                    resolved.provider,
-                    resolved.model,
-                    resolved.api_key,
-                    resolved.base_url,
-                    resolved.extra_request_headers,
-                    resolved.extra_request_body,
-                    resolved.cost_origin,
-                )
-        return rp, rm, None, None, None, None, COST_ORIGIN_PLATFORM
+        return rp, rm, None, None, None, None, None, COST_ORIGIN_PLATFORM
 
     async def _prepare_llm_billing(
         self,

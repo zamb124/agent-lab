@@ -204,17 +204,10 @@ describe('platform-field-string inputType', () => {
         });
     }
 
-    it('inputType вне списка — throws при render', async () => {
-        let caught = null;
-        try {
-            await fixture(html`
-                <platform-field-string mode="edit" value="" .inputType=${'date'}></platform-field-string>
-            `);
-        } catch (err) {
-            caught = err;
-        }
-        expect(caught).to.be.an('error');
-        expect(String(caught.message)).to.match(/inputType/);
+    it('inputType вне списка — fails fast в валидаторе', () => {
+        const el = document.createElement('platform-field-string');
+        el.inputType = 'date';
+        expect(() => el._resolvedInputType()).to.throw(/inputType/);
     });
 
     it('password в view-режиме маскирует значение', async () => {

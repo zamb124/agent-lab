@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from core.clients.llm.config import LLMCallConfig
 from core.company_ai import CapabilityLiteral
 
 
@@ -88,6 +89,7 @@ class AIProvidersCapabilityUpdate(BaseModel):
     folder_id: Optional[str] = None
     extra_request_headers: Optional[Dict[str, str]] = None
     model: Optional[str] = None
+    fallback_models: Optional[List[LLMCallConfig]] = None
     voice: Optional[str] = None
     language: Optional[str] = None
     sample_rate: Optional[int] = None

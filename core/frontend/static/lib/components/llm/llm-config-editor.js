@@ -107,6 +107,15 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         );
     }
 
+    _supportsFallbackPolicy() {
+        const provider = (this.config && this.config.provider) || '';
+        return (
+            this.mode === 'company_capability'
+            && (this.capability || '').startsWith('llm_')
+            && !this._isHumanitecLlmProvider(provider)
+        );
+    }
+
     _emitChange(patch) {
         const next = { ...(this.config || {}), ...patch };
         this.config = next;
@@ -130,6 +139,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
             patch.folder_id = null;
             patch.extra_request_headers = null;
             patch.model = null;
+            patch.fallback_models = null;
         }
         this._emitChange(patch);
     }
@@ -155,6 +165,21 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         this._emitChange({ model: e.detail.value || null });
     }
 
+    _onFallbackModelsChange(e) {
+        if (!e.detail) {
+            return;
+        }
+        const value = e.detail.value;
+        if (value == null) {
+            this._emitChange({ fallback_models: null });
+            return;
+        }
+        if (!Array.isArray(value)) {
+            throw new Error('platform-llm-config-editor: fallback_models expects JSON array');
+        }
+        this._emitChange({ fallback_models: value.length > 0 ? value : null });
+    }
+
     _onClear() {
         this.dispatchEvent(new CustomEvent('clear-override', { detail: {}, bubbles: true, composed: true }));
     }
@@ -173,6 +198,7 @@ export class PlatformLlmConfigEditor extends PlatformElement {
         const isHumanitecLlm = this._isHumanitecLlmProvider(provider);
         const showByok = !isCustom && !isHumanitecLlm && this.mode === 'company_capability';
         const showModelOverride = this._supportsModelOverride();
+        const showFallbackPolicy = this._supportsFallbackPolicy();
         const costOriginBadge = this.costOrigin
             ? html`<span class="badge" data-kind=${this.costOrigin}>${
                   this.costOrigin === 'company'
@@ -261,6 +287,19 @@ export class PlatformLlmConfigEditor extends PlatformElement {
                               ?disabled=${this.readOnly}
                               @change=${this._onModelChange}
                           ></platform-field>
+                      `
+                    : ''}
+                ${showFallbackPolicy
+                    ? html`
+                          <platform-field
+                              type="object"
+                              mode="edit"
+                              label=${this.t('settings_page.ai_providers.fallback_models_label')}
+                              .value=${(this.config && this.config.fallback_models) || null}
+                              ?disabled=${this.readOnly}
+                              @change=${this._onFallbackModelsChange}
+                          ></platform-field>
+                          <small class="help">${this.t('settings_page.ai_providers.fallback_models_help')}</small>
                       `
                     : ''}
             </div>

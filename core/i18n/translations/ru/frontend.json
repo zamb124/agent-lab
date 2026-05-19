@@ -440,6 +440,8 @@
             "model_optional_label": "Модель (опционально)",
             "model_override_label": "Модель компании",
             "model_override_help": "Пустое значение использует платформенную модель; указанное значение становится дефолтом компании для этой capability.",
+            "fallback_models_label": "Fallback policy (JSON array)",
+            "fallback_models_help": "Явная цепочка fallback-моделей компании. Доступно только не для Humanitec LLM. Пример: [{\"provider\":\"openrouter\",\"model\":\"openai/gpt-4o-mini\"}].",
             "api_key_label": "API-ключ компании (BYOK)",
             "api_key_help": "Оставьте пустым, чтобы не менять текущий ключ. Введите новый, чтобы заменить.",
             "base_url_label": "Base URL (опционально)",

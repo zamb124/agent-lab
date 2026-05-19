@@ -8,8 +8,8 @@ from core.company_ai import (
     METADATA_KEY,
     AICapability,
     CompanyAIProviders,
-    CompanyLLMOverride,
     CompanyCustomOpenAICompatibleProvider,
+    CompanyLLMOverride,
     resolve_custom_llm_provider_ref,
     resolve_llm_for_capability,
 )
@@ -92,7 +92,16 @@ def test_text_transform_resolves_explicit_custom_provider(monkeypatch):
     monkeypatch.setattr("core.company_ai.resolver.decrypt_secret", lambda token: "plain-key")
     service = TextTransformService()
 
-    provider, model, api_key, base_url, headers, body, cost_origin = service._resolve_company_llm_args(
+    (
+        provider,
+        model,
+        api_key,
+        base_url,
+        headers,
+        body,
+        fallback_models,
+        cost_origin,
+    ) = service._resolve_company_llm_args(
         AICapability.LLM_SUMMARIZE,
         provider="custom:corp",
         model=None,
@@ -104,4 +113,16 @@ def test_text_transform_resolves_explicit_custom_provider(monkeypatch):
     assert base_url == "https://llm.example.test/v1"
     assert headers == {"X-Tenant": "c1"}
     assert body == {"metadata": {"tenant": "c1"}}
+    assert fallback_models is None
     assert cost_origin == "company"
+
+
+def test_text_transform_rejects_hidden_default_route_without_company_override():
+    service = TextTransformService()
+
+    with pytest.raises(ValueError, match="settings.llm"):
+        service._resolve_company_llm_args(
+            AICapability.LLM_SUMMARIZE,
+            provider=None,
+            model=None,
+        )

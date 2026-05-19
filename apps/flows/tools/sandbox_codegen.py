@@ -12,19 +12,12 @@ from apps.flows.src.tools.decorator import tool
 from core.capabilities import CAPABILITY_LANGUAGES, CapabilityLanguage, JsonObject
 from core.clients.llm import get_llm
 from core.clients.service_client import ServiceClient
-from core.config import get_settings
+from core.company_ai import AICapability, resolve_llm_for_capability
 from core.errors import CodeExecutionRuntimeError
 from core.state import ExecutionState
 
 _CAPABILITY_DOCUMENTATION_PATH = "/capability-gateway/api/v1/capabilities/documentation"
 _LANGUAGES = CAPABILITY_LANGUAGES
-
-
-def _sandbox_codegen_default_model() -> str:
-    model = (get_settings().llm.default_model or "").strip()
-    if not model:
-        raise ValueError("sandbox_codegen: settings.llm.default_model is required")
-    return model
 
 
 class GeneratedCode(BaseModel):
@@ -64,18 +57,17 @@ class SandboxCodegenArgs(BaseModel):
     max_iterations: int = Field(5, ge=1, le=20)
     max_doc_chars: int = Field(120_000, ge=5_000, le=500_000)
     model: str = Field(
-        default_factory=_sandbox_codegen_default_model,
-        min_length=1,
-        description="LLM model for code generation.",
+        default="",
+        description=(
+            "Explicit LLM model for code generation when company llm_codegen override is not set."
+        ),
     )
 
     @field_validator("model", mode="before")
     @classmethod
     def _model_non_empty(cls, value: Any) -> Any:
         if value is None:
-            return _sandbox_codegen_default_model()
-        if isinstance(value, str) and value.strip() == "":
-            return _sandbox_codegen_default_model()
+            return ""
         return value
 
     @field_validator("run_args", "run_variables", mode="before")
@@ -161,6 +153,31 @@ def _execution_state_for_codegen(
     return base
 
 
+def _resolve_codegen_llm_kwargs(model: str) -> tuple[dict[str, Any], str]:
+    resolved = resolve_llm_for_capability(AICapability.LLM_CODEGEN)
+    if resolved is not None:
+        return (
+            {
+                "provider": resolved.provider,
+                "model_name": resolved.model,
+                "api_key": resolved.api_key,
+                "base_url": resolved.base_url,
+                "folder_id": resolved.folder_id,
+                "extra_request_headers": resolved.extra_request_headers,
+                "extra_request_body": resolved.extra_request_body,
+                "fallback_models": list(resolved.fallback_models or ()) or None,
+            },
+            resolved.model,
+        )
+    selected_model = model.strip() if model and model.strip() else ""
+    if not selected_model:
+        raise ValueError(
+            "sandbox_codegen: нет company override для capability=llm_codegen; "
+            "явный model обязателен. Скрытый fallback на settings.llm.default_model запрещён."
+        )
+    return {"model_name": selected_model}, selected_model
+
+
 @tool(
     name="sandbox_codegen",
     description=(
@@ -187,10 +204,10 @@ async def sandbox_codegen(
     if capability_language not in _LANGUAGES:
         raise ValueError(f"Unsupported language: {language}")
     entrypoint_name = entrypoint.strip() if isinstance(entrypoint, str) and entrypoint.strip() else None
-    selected_model = model.strip() if model and model.strip() else _sandbox_codegen_default_model()
     exec_state = _execution_state_for_codegen(state, run_variables)
+    llm_kwargs, selected_model = _resolve_codegen_llm_kwargs(model)
     docs = await _language_docs(capability_language, max_doc_chars)
-    llm = get_llm(model_name=selected_model, state=exec_state)
+    llm = get_llm(state=exec_state, **llm_kwargs)
     runner = get_code_runner(language=capability_language)
     args = cast(JsonObject, dict(run_args or {}))
     trace: list[dict[str, Any]] = []

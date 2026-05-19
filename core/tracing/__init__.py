@@ -13,7 +13,7 @@ from .config import TracingConfig
 from .context import TraceContext, get_current_trace_context, set_current_trace_context
 from .middleware import TracingMiddleware
 from .operation_span import traced_operation
-from .provider import is_tracing_enabled, set_tracing_enabled, setup_tracing
+from .provider import is_tracing_enabled, set_tracing_enabled, setup_tracing, shutdown_tracing
 from .repository import SpanRepository
 from .tracer import (
     PlatformTracer,
@@ -30,6 +30,7 @@ __all__ = [
     "setup_tracing",
     "is_tracing_enabled",
     "set_tracing_enabled",
+    "shutdown_tracing",
     "PlatformTracer",
     "get_tracer",
     "set_span_repository",
@@ -38,4 +39,3 @@ __all__ = [
     "SpanRepository",
     "traced_operation",
 ]
-

@@ -414,6 +414,10 @@ export class FrontendSettingsPage extends PlatformPage {
         if (draft.base_url) body.base_url = draft.base_url;
         if (draft.model) body.model = draft.model;
         if (draft.folder_id) body.folder_id = draft.folder_id;
+        if (draft.extra_request_headers) body.extra_request_headers = draft.extra_request_headers;
+        if (Array.isArray(draft.fallback_models) && draft.fallback_models.length > 0) {
+            body.fallback_models = draft.fallback_models;
+        }
         this._capPut.run(body);
     }
 

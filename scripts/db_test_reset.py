@@ -45,6 +45,13 @@ _TEST_POSTGRES_HOSTS = {"localhost", "127.0.0.1"}
 _DEFAULT_POSTGRES_DSN = "postgresql://platform_user:admin@localhost:54322"
 _DEFAULT_REDIS_HOST = "localhost"
 _TEST_INFRA_EPOCH_FILE = Path("/tmp/platform_test_infra_epoch")
+_TRUNCATE_ATTEMPTS = 5
+_TRUNCATE_RETRY_SLEEP_SECONDS = 0.2
+_TERMINATE_WAIT_SECONDS = 2.0
+
+
+def _quote_ident(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
 
 
 def _load_database_names() -> list[str]:
@@ -111,16 +118,19 @@ async def _terminate_other_sessions(conn: asyncpg.Connection) -> int:
         if terminated:
             total += 1
 
-    # Ждём, пока все сторонние lock'и исчезнут.
-    # platform_crm: rollback 10+ сессий может занимать 10-20s.
+    # Коротко ждём, пока сторонние lock'и исчезнут. Долгий rollback покрывает
+    # retry/fallback ниже; здесь нельзя зависать на stale backend'е.
     if total:
-        for _ in range(600):  # 600 * 0.05s = 30s max
+        attempts = max(1, int(_TERMINATE_WAIT_SECONDS / 0.05))
+        for _ in range(attempts):
             locks = await conn.fetch(
                 """
                 SELECT 1
                 FROM pg_locks l
+                LEFT JOIN pg_stat_activity a ON l.pid = a.pid
                 WHERE l.pid <> pg_backend_pid()
                   AND l.granted = true
+                  AND a.datname = current_database()
                 LIMIT 1
                 """
             )
@@ -128,6 +138,98 @@ async def _terminate_other_sessions(conn: asyncpg.Connection) -> int:
                 break
             await asyncio.sleep(0.05)
     return total
+
+
+async def _print_lock_diagnostics(conn: asyncpg.Connection, db_name: str) -> list[int]:
+    """Печатает текущие lock'и чужих pid в этой БД и возвращает pid'ы блокеров."""
+    print(f"  [{db_name}] TRUNCATE lock timeout — диагностика lock'ов:")
+    locks = await conn.fetch(
+        """
+        SELECT l.locktype, l.mode, l.pid, c.relname, a.query
+        FROM pg_locks l
+        LEFT JOIN pg_class c ON l.relation = c.oid
+        LEFT JOIN pg_stat_activity a ON l.pid = a.pid
+        WHERE l.pid <> pg_backend_pid()
+          AND l.granted = true
+          AND a.datname = current_database()
+        ORDER BY l.locktype, l.mode
+        """
+    )
+    blocker_pids: set[int] = set()
+    for row in locks:
+        pid = row["pid"]
+        if isinstance(pid, int):
+            blocker_pids.add(pid)
+        q = (row["query"] or "")[:60].replace("\n", " ")
+        print(
+            f"    {row['locktype']} {row['mode']} pid={pid} "
+            f"rel={row['relname']} q={q!r}"
+        )
+    return sorted(blocker_pids)
+
+
+async def _terminate_pids(conn: asyncpg.Connection, pids: list[int]) -> int:
+    """Best-effort terminate для конкретных pid. Возвращает число успешно завершённых."""
+    total = 0
+    for pid in pids:
+        terminated = await conn.fetchval("SELECT pg_terminate_backend($1)", pid)
+        if terminated:
+            total += 1
+    return total
+
+
+async def _truncate_with_retries(
+    conn: asyncpg.Connection,
+    *,
+    db_name: str,
+    quoted_tables: str,
+) -> bool:
+    """TRUNCATE с повторной зачисткой сессий на race с переподключившимися сервисами."""
+    for attempt in range(1, _TRUNCATE_ATTEMPTS + 1):
+        try:
+            await conn.execute(f"TRUNCATE TABLE {quoted_tables} RESTART IDENTITY CASCADE")
+            return True
+        except (asyncpg.QueryCanceledError, asyncpg.LockNotAvailableError):
+            blocker_pids = await _print_lock_diagnostics(conn, db_name)
+            killed_blockers = await _terminate_pids(conn, blocker_pids)
+            killed_sessions = await _terminate_other_sessions(conn)
+            killed_total = killed_blockers + killed_sessions
+            if killed_total:
+                print(
+                    f"  [{db_name}] TRUNCATE retry {attempt}/{_TRUNCATE_ATTEMPTS}: "
+                    f"завершено блокирующих/сторонних сессий: {killed_total}"
+                )
+            if attempt >= _TRUNCATE_ATTEMPTS:
+                return False
+            await asyncio.sleep(_TRUNCATE_RETRY_SLEEP_SECONDS * attempt)
+    return False
+
+
+async def _delete_tables_fallback(
+    conn: asyncpg.Connection,
+    *,
+    db_name: str,
+    tables: list[str],
+) -> None:
+    """Fallback для stale AccessShareLock: DELETE совместим с обычным SELECT."""
+    print(
+        f"  [{db_name}] TRUNCATE заблокирован после {_TRUNCATE_ATTEMPTS} попыток; "
+        "fallback DELETE + reset sequences"
+    )
+    await conn.execute("SET statement_timeout = '60s'")
+    for table in tables:
+        await conn.execute(f"DELETE FROM {_quote_ident(table)}")
+
+    sequences = await conn.fetch(
+        """
+        SELECT sequence_name
+        FROM information_schema.sequences
+        WHERE sequence_schema = 'public'
+        """
+    )
+    for row in sequences:
+        await conn.execute(f"ALTER SEQUENCE {_quote_ident(row['sequence_name'])} RESTART WITH 1")
+    await conn.execute("SET statement_timeout = '5s'")
 
 
 async def _truncate_database(base_dsn: str, db_name: str) -> int:
@@ -162,7 +264,7 @@ async def _truncate_database(base_dsn: str, db_name: str) -> int:
         # Убиваем все сессии, которые держат relation lock'и.
         # Повторяем, пока не перестанут убиваться.
         total_killed = 0
-        for _ in range(10):
+        for _ in range(3):
             killed = await _terminate_other_sessions(conn)
             if killed:
                 total_killed += killed
@@ -191,28 +293,12 @@ async def _truncate_database(base_dsn: str, db_name: str) -> int:
         await conn.execute("SET statement_timeout = '5s'")
         await conn.execute("SET lock_timeout = '5s'")
 
-        quoted = ", ".join(f'"{name}"' for name in tables)
-        try:
-            await conn.execute(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
-        except asyncpg.QueryCanceledError:
-            # Диагностика: кто держит lock'и в момент падения?
-            print(f"  [{db_name}] TRUNCATE QueryCanceledError — диагностика lock'ов:")
-            locks = await conn.fetch(
-                """
-                SELECT l.locktype, l.mode, l.pid, c.relname, a.query
-                FROM pg_locks l
-                LEFT JOIN pg_class c ON l.relation = c.oid
-                LEFT JOIN pg_stat_activity a ON l.pid = a.pid
-                WHERE l.pid <> pg_backend_pid()
-                  AND l.granted = true
-                ORDER BY l.locktype, l.mode
-                """
-            )
-            for row in locks:
-                q = (row["query"] or "")[:60].replace("\n", " ")
-                print(f"    {row['locktype']} {row['mode']} pid={row['pid']} rel={row['relname']} q={q!r}")
-            raise
-        print(f"  [{db_name}] TRUNCATE: {len(tables)} таблиц")
+        quoted = ", ".join(_quote_ident(name) for name in tables)
+        truncated = await _truncate_with_retries(conn, db_name=db_name, quoted_tables=quoted)
+        if not truncated:
+            await _delete_tables_fallback(conn, db_name=db_name, tables=tables)
+        mode = "TRUNCATE" if truncated else "DELETE fallback"
+        print(f"  [{db_name}] {mode}: {len(tables)} таблиц")
         return len(tables)
     finally:
         await conn.close()

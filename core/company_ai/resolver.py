@@ -18,6 +18,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
+from core.clients.llm.config import LLMCallConfig
 from core.company_ai.crypto import decrypt_secret
 from core.company_ai.platform_defaults import (
     platform_default_model,
@@ -59,6 +60,7 @@ class ResolvedLLM(_FrozenModel):
     folder_id: Optional[str] = None
     extra_request_headers: Optional[dict[str, str]] = None
     extra_request_body: Optional[dict[str, object]] = None
+    fallback_models: Optional[tuple[LLMCallConfig, ...]] = None
     cost_origin: CostOrigin = COST_ORIGIN_PLATFORM
     custom_provider_id: Optional[str] = None
 
@@ -150,6 +152,94 @@ def _decrypt_or_none(token: Optional[str]) -> Optional[str]:
     return decrypt_secret(token)
 
 
+def _resolve_llm_fallback_models(
+    aip: CompanyAIProviders,
+    capability: AICapability,
+    *,
+    primary: ResolvedLLM,
+    fallback_models: Optional[list[LLMCallConfig]],
+) -> Optional[tuple[LLMCallConfig, ...]]:
+    """Разворачивает company-level fallback policy в конкретные LLMCallConfig.
+
+    Не читает конфиг ноды/ресурса: fallback chain для компании существует только
+    в ``Company.metadata['ai_providers']``. Для BYOK fallback используется
+    ``custom:<id>``; секреты внутри самих fallback_models схемой запрещены.
+    """
+    if not fallback_models:
+        return None
+    if primary.provider == HUMANITEC_LLM_PROVIDER:
+        raise ValueError(
+            f"capability {capability.value}: humanitec_llm не поддерживает fallback_models"
+        )
+
+    resolved_items: list[LLMCallConfig] = []
+    for idx, fallback in enumerate(fallback_models):
+        if fallback.provider == HUMANITEC_LLM_PROVIDER:
+            raise ValueError(
+                f"capability {capability.value}: fallback_models[{idx}] не может быть humanitec_llm"
+            )
+        if (
+            primary.cost_origin == COST_ORIGIN_COMPANY
+            and fallback.provider is not None
+            and not fallback.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX)
+        ):
+            raise ValueError(
+                f"capability {capability.value}: fallback_models[{idx}] задаёт платформенный "
+                f"provider={fallback.provider!r} после BYOK/custom primary. Это смешивает "
+                "company-cost и platform-cost в одном failover; используйте custom:<id> "
+                "или оставьте provider пустым для наследования primary transport."
+            )
+        if fallback.provider and fallback.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
+            custom = _resolve_custom_provider(aip, fallback.provider)
+            if capability.value not in custom.capabilities:
+                raise ValueError(
+                    f"capability={capability.value}: custom_provider {custom.id!r} "
+                    f"не поддерживает её (capabilities={custom.capabilities})"
+                )
+            resolved_model = fallback.model or custom.model_by_capability.get(capability.value)
+            if not resolved_model or not str(resolved_model).strip():
+                raise ValueError(
+                    f"capability {capability.value}: для custom_provider {custom.id!r} "
+                    "не задана fallback model"
+                )
+            fallback_body = dict(custom.extra_request_body or {})
+            fallback_body.update(fallback.extra_request_body or {})
+            resolved_items.append(
+                fallback.model_copy(
+                    update={
+                        "provider": CUSTOM_PROVIDER_SLUG,
+                        "model": str(resolved_model).strip(),
+                        "api_key": decrypt_secret(custom.api_key_encrypted),
+                        "base_url": custom.base_url,
+                        "folder_id": fallback.folder_id,
+                        "extra_request_headers": dict(custom.extra_request_headers or {}) or None,
+                        "extra_request_body": fallback_body or None,
+                    }
+                )
+            )
+            continue
+
+        resolved_items.append(fallback)
+
+    return tuple(resolved_items)
+
+
+def _with_company_fallbacks(
+    aip: CompanyAIProviders,
+    capability: AICapability,
+    *,
+    resolved: ResolvedLLM,
+    override: CompanyLLMOverride,
+) -> ResolvedLLM:
+    fallback_models = _resolve_llm_fallback_models(
+        aip,
+        capability,
+        primary=resolved,
+        fallback_models=override.fallback_models,
+    )
+    return resolved.model_copy(update={"fallback_models": fallback_models})
+
+
 def resolve_llm_for_capability(
     capability: AICapability,
     *,
@@ -205,11 +295,17 @@ def resolve_llm_for_capability(
             or platform_default_model(capability, override.provider)
             or HUMANITEC_LLM_AUTO_MODEL
         )
-        return ResolvedLLM(
+        resolved = ResolvedLLM(
             provider=HUMANITEC_LLM_PROVIDER,
             model=str(model).strip(),
             cost_origin=COST_ORIGIN_PLATFORM,
             custom_provider_id=None,
+        )
+        return _with_company_fallbacks(
+            aip,
+            capability,
+            resolved=resolved,
+            override=override,
         )
 
     if override.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
@@ -224,7 +320,7 @@ def resolve_llm_for_capability(
                 f"capability {capability.value}: для custom_provider {custom.id!r} не задана "
                 f"модель (model_by_capability[{capability.value}] или override.model)"
             )
-        return ResolvedLLM(
+        resolved = ResolvedLLM(
             provider=CUSTOM_PROVIDER_SLUG,
             model=str(model).strip(),
             api_key=decrypt_secret(custom.api_key_encrypted),
@@ -233,6 +329,12 @@ def resolve_llm_for_capability(
             extra_request_body=dict(custom.extra_request_body or {}) or None,
             cost_origin=COST_ORIGIN_COMPANY,
             custom_provider_id=custom.id,
+        )
+        return _with_company_fallbacks(
+            aip,
+            capability,
+            resolved=resolved,
+            override=override,
         )
 
     api_key = _decrypt_or_none(override.api_key_encrypted)
@@ -246,7 +348,7 @@ def resolve_llm_for_capability(
             f"для provider {override.provider!r} (нет в platform_defaults и override.model пуст)"
         )
 
-    return ResolvedLLM(
+    resolved = ResolvedLLM(
         provider=override.provider,
         model=str(model).strip(),
         api_key=api_key,
@@ -255,6 +357,12 @@ def resolve_llm_for_capability(
         extra_request_headers=dict(override.extra_request_headers or {}) or None,
         cost_origin=cost_origin,
         custom_provider_id=None,
+    )
+    return _with_company_fallbacks(
+        aip,
+        capability,
+        resolved=resolved,
+        override=override,
     )
 
 

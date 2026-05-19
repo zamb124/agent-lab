@@ -45,9 +45,9 @@ def split_provider_prefixed_model(
         return None, model
     if ":" not in model:
         return None, model
-    head, _, tail = model.partition(":")
-    if not head or not tail:
+    provider_prefix, _, model_without_provider_prefix = model.partition(":")
+    if not provider_prefix or not model_without_provider_prefix:
         return None, model
-    if head not in LLM_ROUTING_PROVIDER_SLUGS:
+    if provider_prefix not in LLM_ROUTING_PROVIDER_SLUGS:
         return None, model
-    return head, tail
+    return provider_prefix, model_without_provider_prefix

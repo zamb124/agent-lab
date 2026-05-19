@@ -45,21 +45,21 @@ def _float_zero(value: Any) -> bool:
 
 def _model_size_score(*texts: str) -> float:
     """Returns size in billions when the slug/name contains 80B, 120b, 1.2B, etc."""
-    best = 0.0
+    best_size_billions = 0.0
     for text in texts:
         for match in _SIZE_RE.finditer(text or ""):
             value = float(match.group(1))
             unit = match.group(2).lower()
             billions = value if unit == "b" else value / 1000.0
-            best = max(best, billions)
-    return best
+            best_size_billions = max(best_size_billions, billions)
+    return best_size_billions
 
 
 def is_free_text_model(item: dict[str, Any]) -> bool:
     pricing = item.get("pricing") or {}
-    arch = item.get("architecture") or {}
-    input_modalities = set(arch.get("input_modalities") or ())
-    output_modalities = set(arch.get("output_modalities") or ())
+    architecture = item.get("architecture") or {}
+    input_modalities = set(architecture.get("input_modalities") or ())
+    output_modalities = set(architecture.get("output_modalities") or ())
     if "text" not in input_modalities or "text" not in output_modalities:
         return False
     if item.get("expiration_date") is not None:
@@ -84,10 +84,16 @@ def rank_openrouter_free_models(
         model_id = str(item.get("id") or "").strip()
         if not model_id or not is_free_text_model(item):
             continue
-        arch = item.get("architecture") or {}
-        supported = tuple(sorted(str(v) for v in (item.get("supported_parameters") or [])))
-        input_modalities = tuple(sorted(str(v) for v in (arch.get("input_modalities") or [])))
-        output_modalities = tuple(sorted(str(v) for v in (arch.get("output_modalities") or [])))
+        architecture = item.get("architecture") or {}
+        supported = tuple(
+            sorted(str(parameter) for parameter in (item.get("supported_parameters") or []))
+        )
+        input_modalities = tuple(
+            sorted(str(value) for value in (architecture.get("input_modalities") or []))
+        )
+        output_modalities = tuple(
+            sorted(str(value) for value in (architecture.get("output_modalities") or []))
+        )
         context_length = item.get("context_length")
         if not isinstance(context_length, int):
             context_length = None
@@ -110,18 +116,25 @@ def rank_openrouter_free_models(
         records.append(record)
 
     records.sort(
-        key=lambda r: (
-            r.score,
-            r.context_length or 0,
-            int("response_format" in r.supported_parameters or "structured_outputs" in r.supported_parameters),
-            r.created or 0,
-            r.id,
+        key=lambda record: (
+            record.score,
+            record.context_length or 0,
+            int(
+                "response_format" in record.supported_parameters
+                or "structured_outputs" in record.supported_parameters
+            ),
+            record.created or 0,
+            record.id,
         ),
         reverse=True,
     )
     if max_candidates > 0:
         records = records[:max_candidates]
-    if include_router_as_last and router is not None and all(r.id != router.id for r in records):
+    if (
+        include_router_as_last
+        and router is not None
+        and all(record.id != router.id for record in records)
+    ):
         records.append(router)
     return records
 
@@ -139,89 +152,98 @@ def serialize_openrouter_free_models(records: Sequence[OpenRouterFreeModelRecord
     )
 
 
-def parse_openrouter_free_models(raw: str | None) -> list[OpenRouterFreeModelRecord]:
-    if not raw:
+def parse_openrouter_free_models(raw_cache_payload: str | None) -> list[OpenRouterFreeModelRecord]:
+    if not raw_cache_payload:
         return []
     try:
-        payload = json.loads(raw)
+        cache_payload = json.loads(raw_cache_payload)
     except json.JSONDecodeError:
         logger.warning("openrouter.free_models.cache_invalid_json")
         return []
-    if not isinstance(payload, dict) or payload.get("version") != OPENROUTER_FREE_MODELS_CACHE_VERSION:
+    if (
+        not isinstance(cache_payload, dict)
+        or cache_payload.get("version") != OPENROUTER_FREE_MODELS_CACHE_VERSION
+    ):
         return []
-    models = payload.get("models")
+    models = cache_payload.get("models")
     if not isinstance(models, list):
         return []
-    result: list[OpenRouterFreeModelRecord] = []
+    records: list[OpenRouterFreeModelRecord] = []
     for item in models:
         if not isinstance(item, dict):
             continue
         model_id = str(item.get("id") or "").strip()
         if not model_id:
             continue
-        result.append(
+        records.append(
             OpenRouterFreeModelRecord(
                 id=model_id,
                 score=float(item.get("score") or 0),
                 context_length=item.get("context_length") if isinstance(item.get("context_length"), int) else None,
-                supported_parameters=tuple(str(v) for v in (item.get("supported_parameters") or [])),
-                input_modalities=tuple(str(v) for v in (item.get("input_modalities") or [])),
-                output_modalities=tuple(str(v) for v in (item.get("output_modalities") or [])),
+                supported_parameters=tuple(
+                    str(parameter) for parameter in (item.get("supported_parameters") or [])
+                ),
+                input_modalities=tuple(
+                    str(modality) for modality in (item.get("input_modalities") or [])
+                ),
+                output_modalities=tuple(
+                    str(modality) for modality in (item.get("output_modalities") or [])
+                ),
                 created=item.get("created") if isinstance(item.get("created"), int) else None,
             )
         )
-    return result
+    return records
 
 
 async def fetch_openrouter_model_items(settings: BaseSettings) -> list[dict[str, Any]]:
-    cfg = settings.llm.openrouter
-    if cfg is None or not cfg.api_key:
+    openrouter_config = settings.llm.openrouter
+    if openrouter_config is None or not openrouter_config.api_key:
         logger.warning("openrouter.free_models.no_api_key")
         return []
-    url = f"{cfg.base_url.rstrip('/')}/models?output_modalities=text"
-    response = await request_with_strategy(
+    url = f"{openrouter_config.base_url.rstrip('/')}/models?output_modalities=text"
+    http_response = await request_with_strategy(
         "GET",
         url,
         headers={
-            "Authorization": f"Bearer {cfg.api_key}",
-            "HTTP-Referer": cfg.site_url,
-            "X-Title": cfg.site_name,
+            "Authorization": f"Bearer {openrouter_config.api_key}",
+            "HTTP-Referer": openrouter_config.site_url,
+            "X-Title": openrouter_config.site_name,
         },
         timeout=30.0,
         strategy=ProxyStrategy.DIRECT_FIRST,
         direct_attempts=3,
         proxy_attempts=3,
     )
-    response.raise_for_status()
-    data = response.json()
-    items = data.get("data", [])
-    return [item for item in items if isinstance(item, dict)]
+    http_response.raise_for_status()
+    response_payload = http_response.json()
+    model_items = response_payload.get("data", [])
+    return [item for item in model_items if isinstance(item, dict)]
 
 
 async def refresh_openrouter_free_models_cache(redis_client: Any, settings: BaseSettings) -> dict[str, Any]:
-    cfg = settings.llm.openrouter_free_pool
-    items = await fetch_openrouter_model_items(settings)
+    free_pool_config = settings.llm.openrouter_free_pool
+    model_items = await fetch_openrouter_model_items(settings)
     records = rank_openrouter_free_models(
-        items,
-        max_candidates=cfg.max_candidates,
-        include_router_as_last=cfg.include_router_as_last_free_fallback,
+        model_items,
+        max_candidates=free_pool_config.max_candidates,
+        include_router_as_last=free_pool_config.include_router_as_last_free_fallback,
     )
     payload = serialize_openrouter_free_models(records)
-    ok = await redis_client.set(
+    redis_ok = await redis_client.set(
         OPENROUTER_FREE_MODELS_CACHE_KEY,
         payload,
-        ttl=cfg.cache_ttl_seconds,
+        ttl=free_pool_config.cache_ttl_seconds,
     )
     logger.info(
         "openrouter.free_models.cache_refreshed",
         count=len(records),
-        redis_ok=ok,
-        ttl_seconds=cfg.cache_ttl_seconds,
+        redis_ok=redis_ok,
+        ttl_seconds=free_pool_config.cache_ttl_seconds,
     )
     return {
         "count": len(records),
         "models": [record.id for record in records],
-        "redis_ok": bool(ok),
+        "redis_ok": bool(redis_ok),
     }
 
 

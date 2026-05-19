@@ -2,6 +2,7 @@
 Инициализация OpenTelemetry TracerProvider.
 """
 
+import atexit
 import os
 from typing import TYPE_CHECKING, Optional
 
@@ -20,6 +21,7 @@ logger = get_logger(__name__)
 
 _initialized: bool = False
 _tracer_provider: Optional[TracerProvider] = None
+_shutdown_registered: bool = False
 
 
 def setup_tracing(config: "TracingConfig") -> None:
@@ -29,7 +31,7 @@ def setup_tracing(config: "TracingConfig") -> None:
     Args:
         config: Конфигурация трейсинга
     """
-    global _initialized, _tracer_provider
+    global _initialized, _tracer_provider, _shutdown_registered
 
     if _initialized:
         return
@@ -62,7 +64,30 @@ def setup_tracing(config: "TracingConfig") -> None:
 
     trace.set_tracer_provider(_tracer_provider)
     _initialized = True
+    if not _shutdown_registered:
+        atexit.register(shutdown_tracing)
+        _shutdown_registered = True
     logger.info(f"Tracing initialized: service={config.service_name}, sampling={config.sampling_rate}")
+
+
+def shutdown_tracing() -> None:
+    """Останавливает OTel processors/exporters без логирования из atexit/pytest teardown."""
+    global _initialized, _tracer_provider
+
+    provider = _tracer_provider
+    _initialized = False
+    _tracer_provider = None
+    if provider is None:
+        return
+
+    try:
+        provider.force_flush(timeout_millis=1000)
+    except Exception:
+        pass
+    try:
+        provider.shutdown()
+    except Exception:
+        pass
 
 
 def get_tracer_provider() -> Optional[TracerProvider]:

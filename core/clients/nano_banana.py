@@ -15,6 +15,7 @@ from a2a.types import FilePart, FileWithBytes, Message, Part, Role, TextPart
 from a2a.utils.message import get_message_text
 
 from core.clients.llm.factory import get_llm
+from core.company_ai import AICapability, resolve_llm_for_capability
 from core.config import get_settings
 from core.files.s3_client import S3ClientFactory
 from core.logging import get_logger
@@ -56,7 +57,21 @@ class NanoBananaClient:
     def _get_llm(self) -> _ChatLLM:
         """Получает LLM с multimodal support"""
         if self._llm is None:
-            self._llm = get_llm(model_name=self._model_name)
+            resolved = resolve_llm_for_capability(AICapability.IMAGE_GEN)
+            if resolved is not None:
+                self._llm = get_llm(
+                    model_name=resolved.model,
+                    provider=resolved.provider,
+                    api_key=resolved.api_key,
+                    base_url=resolved.base_url,
+                    folder_id=resolved.folder_id,
+                    fallback_models=list(resolved.fallback_models or ()) or None,
+                )
+            else:
+                raise ValueError(
+                    "NanoBananaClient требует company override для capability=image_gen; "
+                    "скрытый fallback на settings.nano_banana.model_name запрещён"
+                )
         return self._llm
 
     async def generate_images(

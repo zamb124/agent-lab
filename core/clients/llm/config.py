@@ -50,59 +50,63 @@ class LLMCallConfig(StrictBaseModel):
 
     @field_validator("provider", "model", "api_key", "folder_id", "base_url", mode="before")
     @classmethod
-    def _strip_optional_strings(cls, v: Any) -> Any:
-        if v is None:
+    def _strip_optional_strings(cls, value: Any) -> Any:
+        if value is None:
             return None
-        if isinstance(v, str):
-            stripped = v.strip()
+        if isinstance(value, str):
+            stripped = value.strip()
             return stripped if stripped else None
-        return v
+        return value
 
     @field_validator("extra_request_body", mode="before")
     @classmethod
-    def _extra_body_must_be_object(cls, v: Any) -> Any:
-        if v is None:
+    def _extra_body_must_be_object(cls, value: Any) -> Any:
+        if value is None:
             return None
-        if isinstance(v, dict):
-            return v
+        if isinstance(value, dict):
+            return value
         raise ValueError("extra_request_body должен быть объектом JSON, не массивом и не скаляром")
 
     @field_validator("extra_request_headers", mode="before")
     @classmethod
-    def _extra_headers_must_be_object(cls, v: Any) -> Any:
-        if v is None:
+    def _extra_headers_must_be_object(cls, value: Any) -> Any:
+        if value is None:
             return None
-        if not isinstance(v, dict):
+        if not isinstance(value, dict):
             raise ValueError("extra_request_headers должен быть объектом JSON, не массивом и не скаляром")
-        for key, val in v.items():
+        for key, header_value in value.items():
             if not isinstance(key, str) or not key.strip():
                 raise ValueError("extra_request_headers: ключи — непустые строки")
-            if not isinstance(val, str):
+            if not isinstance(header_value, str):
                 raise ValueError("extra_request_headers: значения должны быть строками")
-        return v
+        return value
 
     @model_validator(mode="before")
     @classmethod
-    def _split_provider_prefixed_model(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        prov_raw = data.get("provider")
-        prov_set = prov_raw is not None and isinstance(prov_raw, str) and prov_raw.strip() != ""
-        if prov_set:
-            return data
-        model_raw = data.get("model")
-        if isinstance(model_raw, str):
-            model_raw = model_raw.strip()
-        split_prov, split_model = split_provider_prefixed_model(
-            None,
-            model_raw if isinstance(model_raw, str) else None,
+    def _split_provider_prefixed_model(cls, raw_config: Any) -> Any:
+        if not isinstance(raw_config, dict):
+            return raw_config
+        raw_provider = raw_config.get("provider")
+        provider_is_set = (
+            raw_provider is not None
+            and isinstance(raw_provider, str)
+            and raw_provider.strip() != ""
         )
-        if split_prov is None:
-            return data
-        out = dict(data)
-        out["provider"] = split_prov
-        out["model"] = split_model
-        return out
+        if provider_is_set:
+            return raw_config
+        raw_model = raw_config.get("model")
+        if isinstance(raw_model, str):
+            raw_model = raw_model.strip()
+        split_provider, split_model = split_provider_prefixed_model(
+            None,
+            raw_model if isinstance(raw_model, str) else None,
+        )
+        if split_provider is None:
+            return raw_config
+        normalized_config = dict(raw_config)
+        normalized_config["provider"] = split_provider
+        normalized_config["model"] = split_model
+        return normalized_config
 
 
 def validate_fallback_model_configs(
@@ -110,9 +114,9 @@ def validate_fallback_model_configs(
 ) -> Optional[list[LLMCallConfig]]:
     if configs is None:
         return None
-    for idx, cfg in enumerate(configs):
-        if cfg.model is None or not str(cfg.model).strip():
-            raise ValueError(f"fallback_models[{idx}].model обязателен")
+    for fallback_index, fallback_config in enumerate(configs):
+        if fallback_config.model is None or not str(fallback_config.model).strip():
+            raise ValueError(f"fallback_models[{fallback_index}].model обязателен")
     return configs
 
 

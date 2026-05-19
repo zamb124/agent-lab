@@ -269,6 +269,32 @@ async def test_stream_falls_back_when_primary_has_no_first_token() -> None:
 
 
 @pytest.mark.asyncio
+async def test_chat_model_override_uses_requested_model_for_single_call() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "override-model": lambda writer: _write_sse_text(writer, "override-ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = _client_for(
+            server,
+            [
+                _candidate("primary-model", base_url=server.base_url),
+                _candidate("fallback-model", base_url=server.base_url),
+            ],
+        )
+
+        message = await client.chat([_message("hello")], model="override-model")
+
+        assert get_message_text(message) == "override-ok"
+        assert [request.model for request in server.requests] == ["override-model"]
+        assert client.model == "primary-model"
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
 async def test_stream_status_metadata_uses_resolved_candidate_model_provider_and_source() -> None:
     server = _OpenAICompatibleTestServer(
         {

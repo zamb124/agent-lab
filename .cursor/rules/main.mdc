@@ -120,6 +120,33 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 - `get_context()` — `user`, `company_id`, `trace_id`. Репозитории берут `company_id` из контекста автоматически.
 - ВСЁ асинхронное: `async/await` для БД/HTTP/LLM/тулов/фабрик.
 
+### LLM naming glossary
+
+В `core/clients/llm/**` каждое перечисленное LLM-понятие имеет ровно одно имя. Новый термин для этих понятий запрещён без правки этого glossary.
+
+| Понятие | Каноническое имя | Запрет/исключение |
+|---|---|---|
+| ID модели провайдера | `model` | `model_name` допустим только в legacy/public API `get_llm(...)`, `get_llm_for_state(...)`, `setup_mock_responses(...)`, `MockLLM(...)`, `get_vision_llm(...)`; внутри реализации сразу нормализуется в `model`. |
+| Slug провайдера | `provider` | `llm_provider` допустим только как runtime-атрибут `LLMClient`/`MockLLM` и tracing/metadata compatibility. |
+| Источник candidate/config | `source` | `llm_source` допустим только как runtime-атрибут `LLMClient` и metadata compatibility. |
+| Base URL / ключ / Yandex folder | `base_url`, `api_key`, `folder_id` | `url`, `key`, `fid` для этих смыслов запрещены. |
+| Provider/client headers | `default_headers` | Не смешивать с request overlays. |
+| Config-level HTTP body overlay | `extra_request_body` | Используется в `LLMCallConfig`, ресурсах, `get_llm(...)`. |
+| Per-call HTTP body overlay | `extra_body` | Используется только в `LLMClient.stream/chat/invoke` и transport; не сохраняется в config/resource. |
+| Config-level HTTP headers overlay | `extra_request_headers` | Используется в `LLMCallConfig`, ресурсах, `get_llm(...)`; `@var:` резолвится до transport. |
+| Per-call HTTP headers overlay | `extra_headers` | Используется только в `LLMClient.stream/chat/invoke` и transport; мержится последним. |
+| Вход метода | `messages` | После нормализации — другое имя. |
+| A2A-normalized messages | `normalized_messages` | `normalized` запрещён для LLM messages. |
+| OpenAI-compatible messages | `openai_messages` | Не называть `messages` после конвертации. |
+| Pydantic structured output type | `response_model` | Только high-level `chat()`. |
+| OpenAI request `response_format` | `response_format` | Только transport/OpenAI-compatible request shape; не смешивать с `response_model`. |
+| Non-stream JSON flag | `json_output` | Только `invoke()`/`invoke_once()`. |
+| Candidate list item/list | `candidate`, `candidates` | `fallback` только для входного config `fallback_models` или явного paid fallback. |
+| Normalized usage metadata | `usage_data` | Raw provider object — `usage`. |
+| Assistant text / reasoning / tools | `content`, `reasoning`, `tool_calls` | Для накопленного stream текста — `full_content`, `full_reasoning`. |
+
+В `core/clients/llm/**` запрещены локальные имена `data`, `result`, `response`, `raw`, `cfg`, `temp`, `out`, `val`, `txt`, `msg`, `tc`, `mc`, `idx` для доменных значений. Использовать конкретные имена: `http_response`, `response_payload`, `raw_cache_payload`, `provider_config`, `resolved_temperature`, `resolved_headers`, `header_value`, `status_text`, `choice_message`, `tool_call_delta`, `message_content`, `candidate_index`, `tool_call_index`.
+
 ## Bootstrap
 
 При старте `frontend`: компания `system` создаётся при отсутствии. Если в хранилище есть пользователь с email `zambas124@yandex.ru` без `admin` в `system` — обновляются `company.members` и `user.companies`. Нет такого пользователя — старт не падает (предупреждение в логе).

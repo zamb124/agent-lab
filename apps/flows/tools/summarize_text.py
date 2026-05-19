@@ -26,11 +26,11 @@ class SummarizeTextArgs(BaseModel):
     )
     provider: str | None = Field(
         None,
-        description="Провайдер LLM (openrouter, provider_litserve, …); None — из настроек.",
+        description="Используется только если company override для llm_summarize не задан.",
     )
     model: str | None = Field(
         None,
-        description="Модель или префикс `openrouter:vendor/model`; None — default_model.",
+        description="Используется только если company override для llm_summarize не задан.",
     )
 
 
@@ -38,7 +38,7 @@ class SummarizeTextArgs(BaseModel):
     name="summarize_text",
     description=(
         "Кратко суммирует текст через платформенный LLM. "
-        "Провайдер и модель — как у `get_llm` (в т.ч. `openrouter:…`)."
+        "Провайдер и модель сначала берутся из company capability settings."
     ),
     tags=["text", "llm"],
     args_schema=SummarizeTextArgs,

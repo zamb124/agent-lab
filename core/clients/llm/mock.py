@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 import uuid
-from typing import Any, AsyncGenerator, Dict, List, Optional, Type, TypeVar, Union, overload
+from typing import Any, AsyncGenerator, Dict, List, Optional, Type, TypeVar, overload
 
 from a2a.types import (
     Artifact,
@@ -22,24 +22,19 @@ from a2a.types import (
 from a2a.utils.message import get_message_text, new_agent_text_message
 from pydantic import BaseModel
 
+from core.clients.llm.messages import (
+    MessageInput,
+    StreamEvent,
+)
+from core.clients.llm.messages import (
+    normalize_messages as _normalize_messages,
+)
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
-# Типы для messages
-MessageInput = Union[
-    str,
-    List[str],
-    Message,
-    List[Message],
-    Dict[str, Any],
-    List[Dict[str, Any]],
-]
-
-# A2A событие от LLM
-StreamEvent = TaskArtifactUpdateEvent | TaskStatusUpdateEvent
 
 def _mock_redis_key() -> str:
     """Ключ Redis для mock LLM ответов.
@@ -79,11 +74,11 @@ _global_mock_registry: Dict[str, "MockLLM"] = {}
 
 # Атомарно: один элемент JSON-массива за вызов (несколько async LLM на одном ключе).
 _MOCK_LLM_REDIS_POP_SCRIPT = """
-local raw = redis.call('GET', KEYS[1])
-if not raw then
+local raw_payload = redis.call('GET', KEYS[1])
+if not raw_payload then
   return nil
 end
-local decoded = cjson.decode(raw)
+local decoded = cjson.decode(raw_payload)
 if decoded == nil or #decoded == 0 then
   redis.call('DEL', KEYS[1])
   return nil
@@ -132,7 +127,7 @@ class MockLLM:
         """Настройка mock ответов."""
         if response_queue is not None:
             self._response_queue = list(response_queue)
-            logger.info(f"MockLLM: настроена очередь из {len(self._response_queue)} ответов")
+            logger.info("mock_llm.response_queue_configured", count=len(self._response_queue))
 
         if tool_responses:
             self._tool_responses = tool_responses
@@ -159,22 +154,28 @@ class MockLLM:
 
         key = _mock_redis_key()
         try:
-            raw = await self._redis_client.eval(_MOCK_LLM_REDIS_POP_SCRIPT, 1, key)
-            if raw is None:
+            redis_response_payload = await self._redis_client.eval(
+                _MOCK_LLM_REDIS_POP_SCRIPT, 1, key
+            )
+            if redis_response_payload is None:
                 return None
-            response = json.loads(raw)
-            logger.info("MockLLM: ответ из Redis (очередь уменьшена атомарно)")
-            return response
-        except Exception as e:
-            logger.warning(f"MockLLM: ошибка чтения из Redis: {e}")
-
-        return None
+            redis_response = json.loads(redis_response_payload)
+            logger.info("mock_llm.redis_response_popped")
+            return redis_response
+        except Exception as exc:
+            logger.warning(
+                "mock_llm.redis_response_read_failed",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            raise
 
     async def _capture_call_to_redis(
         self,
         messages: List[Message],
         tools: Optional[List[Dict[str, Any]]],
         response_format: Optional[Dict[str, Any]],
+        model: Optional[str] = None,
     ) -> None:
         """
         Если фикстура теста выставила активный capture-scope в Redis,
@@ -191,8 +192,12 @@ class MockLLM:
         try:
             scope = await self._redis_client.get(_MOCK_CAPTURE_SCOPE_KEY)
         except Exception as exc:
-            logger.warning(f"MockLLM capture: ошибка чтения scope: {exc}")
-            return
+            logger.warning(
+                "mock_llm.capture_scope_read_failed",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            raise
         if scope is None:
             return
         if isinstance(scope, bytes):
@@ -200,9 +205,11 @@ class MockLLM:
         if not scope:
             return
 
-        normalized_messages = [_normalize_message_for_capture(m) for m in messages]
+        normalized_messages = [
+            _normalize_message_for_capture(message) for message in messages
+        ]
         record = {
-            "model": self.model_name,
+            "model": model or self.model_name,
             "messages": normalized_messages,
             "tools": tools or [],
             "response_format": response_format,
@@ -212,15 +219,20 @@ class MockLLM:
                 _mock_capture_key(scope), json.dumps(record, ensure_ascii=False)
             )
         except Exception as exc:
-            logger.warning(f"MockLLM capture: ошибка записи в Redis: {exc}")
+            logger.warning(
+                "mock_llm.capture_write_failed",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            raise
 
     def _get_response(self, messages: List[Message]) -> Dict[str, Any]:
         """Внутренний метод получения ответа."""
         # Сначала локальная очередь
         if self._response_queue:
-            response = self._response_queue.pop(0)
-            logger.debug(f"MockLLM: ответ из очереди (осталось {len(self._response_queue)})")
-            return self._process_response(response, messages)
+            mock_response = self._response_queue.pop(0)
+            logger.debug("mock_llm.local_response_popped", remaining=len(self._response_queue))
+            return self._process_response(mock_response, messages)
 
         return self._generate_from_patterns(messages)
 
@@ -229,9 +241,9 @@ class MockLLM:
         # Локальная очередь приоритетнее Redis: в одном тесте uvicorn ест очередь
         # из configure_mock_llm, а worker — из ключа mock_llm:responses без пересечения.
         if self._response_queue:
-            response = self._response_queue.pop(0)
-            logger.debug(f"MockLLM: ответ из очереди (осталось {len(self._response_queue)})")
-            return self._process_response(response, messages)
+            mock_response = self._response_queue.pop(0)
+            logger.debug("mock_llm.local_response_popped", remaining=len(self._response_queue))
+            return self._process_response(mock_response, messages)
 
         redis_response = await self._get_redis_response()
         if redis_response is not None:
@@ -239,12 +251,15 @@ class MockLLM:
 
         return self._generate_from_patterns(messages)
 
-    def _process_response(self, response: Any, messages: List[Message]) -> Dict[str, Any]:
+    def _process_response(self, mock_response: Any, messages: List[Message]) -> Dict[str, Any]:
         """Обрабатывает ответ из очереди"""
-        if isinstance(response, dict):
-            if response.get("type") == "tool_call":
-                args = response.get("args", {})
-                tool_call_id = response.get("id") or f"call_mock_{response['tool']}_{len(messages)}"
+        if isinstance(mock_response, dict):
+            if mock_response.get("type") == "tool_call":
+                arguments = mock_response.get("args", {})
+                tool_call_id = (
+                    mock_response.get("id")
+                    or f"call_mock_{mock_response['tool']}_{len(messages)}"
+                )
                 return {
                     "content": "",
                     "reasoning": None,
@@ -252,53 +267,63 @@ class MockLLM:
                         {
                             "id": tool_call_id,
                             "type": "function",
-                            "function": {"name": response["tool"], "arguments": json.dumps(args)},
-                            "name": response["tool"],
-                            "arguments": args,
+                            "function": {
+                                "name": mock_response["tool"],
+                                "arguments": json.dumps(arguments),
+                            },
+                            "name": mock_response["tool"],
+                            "arguments": arguments,
                         }
                     ],
                 }
-            elif response.get("type") == "tool_calls":
+            elif mock_response.get("type") == "tool_calls":
                 # Множественные tool_calls - ПАРАЛЛЕЛЬНОЕ выполнение
-                calls = response.get("calls", [])
+                calls = mock_response.get("calls", [])
                 tool_calls = []
-                for i, call in enumerate(calls):
-                    args = call.get("args", {})
+                for call_index, call in enumerate(calls):
+                    arguments = call.get("args", {})
                     tool_name = call.get("tool")
-                    tool_call_id = call.get("id") or f"call_mock_{tool_name}_{len(messages)}_{i}"
+                    tool_call_id = (
+                        call.get("id")
+                        or f"call_mock_{tool_name}_{len(messages)}_{call_index}"
+                    )
                     tool_calls.append({
                         "id": tool_call_id,
                         "type": "function",
-                        "function": {"name": tool_name, "arguments": json.dumps(args)},
+                        "function": {"name": tool_name, "arguments": json.dumps(arguments)},
                         "name": tool_name,
-                        "arguments": args,
+                        "arguments": arguments,
                     })
                 return {
                     "content": "",
                     "reasoning": None,
                     "tool_calls": tool_calls,
                 }
-            elif response.get("type") == "text":
+            elif mock_response.get("type") == "text":
                 return {
-                    "content": response.get("content", self._default_response),
-                    "reasoning": response.get("reasoning"),
+                    "content": mock_response.get("content", self._default_response),
+                    "reasoning": mock_response.get("reasoning"),
                     "tool_calls": None,
                 }
-            elif response.get("type") == "structured_output":
+            elif mock_response.get("type") == "structured_output":
                 # Structured output возвращает JSON как content
-                data = response.get("data", {})
-                content = json.dumps(data, ensure_ascii=False) if isinstance(data, dict) else str(data)
+                structured_payload = mock_response.get("data", {})
+                content = (
+                    json.dumps(structured_payload, ensure_ascii=False)
+                    if isinstance(structured_payload, dict)
+                    else str(structured_payload)
+                )
                 return {
                     "content": content,
-                    "reasoning": response.get("reasoning"),
+                    "reasoning": mock_response.get("reasoning"),
                     "tool_calls": None,
                 }
             else:
-                return {"content": str(response), "reasoning": None, "tool_calls": None}
-        elif isinstance(response, str):
-            return {"content": response, "reasoning": None, "tool_calls": None}
+                return {"content": str(mock_response), "reasoning": None, "tool_calls": None}
+        elif isinstance(mock_response, str):
+            return {"content": mock_response, "reasoning": None, "tool_calls": None}
         else:
-            return {"content": str(response), "reasoning": None, "tool_calls": None}
+            return {"content": str(mock_response), "reasoning": None, "tool_calls": None}
 
     def _generate_from_patterns(self, messages: List[Message]) -> Dict[str, Any]:
         """Генерирует ответ на основе паттернов"""
@@ -309,14 +334,14 @@ class MockLLM:
         content_str = get_message_text(last_message)
         metadata = last_message.metadata or {}
         if metadata and metadata.get("tool_call_id"):
-            for key, response in self._responses.items():
+            for key, mock_response_text in self._responses.items():
                 if key.lower() in content_str.lower():
-                    return {"content": response, "reasoning": None, "tool_calls": None}
+                    return {"content": mock_response_text, "reasoning": None, "tool_calls": None}
             return {"content": content_str or self._default_response, "reasoning": None, "tool_calls": None}
 
         for key, tool_config in self._tool_responses.items():
             if key.lower() in content_str.lower():
-                args = tool_config.get("args", {})
+                arguments = tool_config.get("args", {})
                 return {
                     "content": "",
                     "reasoning": None,
@@ -326,17 +351,17 @@ class MockLLM:
                             "type": "function",
                             "function": {
                                 "name": tool_config["tool"],
-                                "arguments": json.dumps(args),
+                                "arguments": json.dumps(arguments),
                             },
                             "name": tool_config["tool"],
-                            "arguments": args,
+                            "arguments": arguments,
                         }
                     ],
                 }
 
-        for key, response in self._responses.items():
+        for key, mock_response_text in self._responses.items():
             if key.lower() in content_str.lower():
-                return {"content": response, "reasoning": None, "tool_calls": None}
+                return {"content": mock_response_text, "reasoning": None, "tool_calls": None}
 
         return {"content": self._default_response, "reasoning": None, "tool_calls": None}
 
@@ -345,6 +370,7 @@ class MockLLM:
         messages: MessageInput,
         tools: Optional[List[Dict[str, Any]]] = None,
         response_format: Optional[Dict[str, Any]] = None,
+        model: Optional[str] = None,
         task_id: Optional[str] = None,
         context_id: Optional[str] = None,
         **_: Any,
@@ -363,30 +389,31 @@ class MockLLM:
         context_id = context_id or task_id
         artifact_id = str(uuid.uuid4())
 
-        normalized = _normalize_messages(messages)
+        normalized_messages = _normalize_messages(messages)
 
         await self._capture_call_to_redis(
-            messages=normalized,
+            messages=normalized_messages,
             tools=tools,
             response_format=response_format,
+            model=model,
         )
 
         # Используем async метод для поддержки Redis
-        response = await self._get_response_async(normalized)
-        content = response.get("content", "")
-        reasoning = response.get("reasoning", "")
-        tool_calls = response.get("tool_calls")
+        mock_response = await self._get_response_async(normalized_messages)
+        content = mock_response.get("content", "")
+        reasoning = mock_response.get("reasoning", "")
+        tool_calls = mock_response.get("tool_calls")
 
         # Стримим reasoning по токенам (2-5 символов) как реальная LLM
         reasoning_artifact_id = str(uuid.uuid4())
         if reasoning:
-            pos = 0
-            while pos < len(reasoning):
-                chunk_size = min(3, len(reasoning) - pos)
-                chunk = reasoning[pos : pos + chunk_size]
-                pos += chunk_size
+            reasoning_offset = 0
+            while reasoning_offset < len(reasoning):
+                chunk_size = min(3, len(reasoning) - reasoning_offset)
+                chunk = reasoning[reasoning_offset : reasoning_offset + chunk_size]
+                reasoning_offset += chunk_size
 
-                is_last_reasoning_chunk = pos >= len(reasoning)
+                is_last_reasoning_chunk = reasoning_offset >= len(reasoning)
                 is_last_reasoning_overall = is_last_reasoning_chunk and not content and not tool_calls
 
                 yield TaskArtifactUpdateEvent(
@@ -404,14 +431,14 @@ class MockLLM:
 
         # Стримим контент по токенам (2-5 символов) как реальная LLM
         if content:
-            pos = 0
-            while pos < len(content):
+            content_offset = 0
+            while content_offset < len(content):
                 # Размер чанка 2-5 символов (имитация токенов)
-                chunk_size = min(3, len(content) - pos)
-                chunk = content[pos : pos + chunk_size]
-                pos += chunk_size
+                chunk_size = min(3, len(content) - content_offset)
+                chunk = content[content_offset : content_offset + chunk_size]
+                content_offset += chunk_size
 
-                is_last_content = pos >= len(content)
+                is_last_content = content_offset >= len(content)
                 is_last = is_last_content and not tool_calls
 
                 yield TaskArtifactUpdateEvent(
@@ -479,21 +506,21 @@ class MockLLM:
     ) -> str | Dict[str, Any]:
         """Non-streaming вызов (vision/OCR и др.), совместим с ``LLMClient.invoke``."""
         del max_tokens, extra_body, extra_headers
-        normalized = _normalize_messages(messages)
+        normalized_messages = _normalize_messages(messages)
         response_format: Optional[Dict[str, Any]] = None
         if json_output:
             response_format = {"type": "json_object"}
         await self._capture_call_to_redis(
-            messages=normalized,
+            messages=normalized_messages,
             tools=None,
             response_format=response_format,
         )
-        response = await self._get_response_async(normalized)
-        content = response.get("content", "")
+        mock_response = await self._get_response_async(normalized_messages)
+        content = mock_response.get("content", "")
         if json_output:
             stripped = content.strip()
             if not stripped:
-                return {}
+                raise ValueError("MockLLM json_output requested but response content is empty")
             return json.loads(stripped)
         return content
 
@@ -556,7 +583,7 @@ class MockLLM:
         Единый метод вызова MockLLM (совместим с LLMClient.chat).
         """
         del seed, reasoning_effort, extra_body
-        normalized = _normalize_messages(messages)
+        normalized_messages = _normalize_messages(messages)
 
         response_format = None
         if response_model:
@@ -575,9 +602,10 @@ class MockLLM:
         last_status_text = ""
 
         async for event in self.stream(
-            normalized,
+            normalized_messages,
             tools=tools if not response_model else None,
             response_format=response_format,
+            model=model,
         ):
             if isinstance(event, TaskArtifactUpdateEvent):
                 if (
@@ -591,13 +619,13 @@ class MockLLM:
                             content_parts.append(root.text)
             if isinstance(event, TaskStatusUpdateEvent) and event.status:
                 if event.status.message:
-                    txt = get_message_text(event.status.message)
-                    if txt:
-                        last_status_text = txt
+                    status_text = get_message_text(event.status.message)
+                    if status_text:
+                        last_status_text = status_text
                 if event.status.message and event.status.message.metadata:
-                    tc = event.status.message.metadata.get("tool_calls")
-                    if tc:
-                        tool_calls = tc
+                    metadata_tool_calls = event.status.message.metadata.get("tool_calls")
+                    if metadata_tool_calls:
+                        tool_calls = metadata_tool_calls
 
         content = "".join(content_parts)
         if response_model:
@@ -607,8 +635,8 @@ class MockLLM:
                     "LLM structured output: пустой ответ (нет текста вне reasoning-артефакта "
                     "и нет текста в финальном статусе задачи)"
                 )
-            data = json.loads(text_for_json)
-            return response_model.model_validate(data)
+            structured_payload = json.loads(text_for_json)
+            return response_model.model_validate(structured_payload)
 
         return Message(
             message_id=str(uuid.uuid4()),
@@ -636,7 +664,7 @@ def _normalize_message_for_capture(message: Any) -> Dict[str, Any]:
         return {"role": "user", "text": str(message), "parts": [], "metadata": {}}
 
     text_parts: List[str] = []
-    raw_parts: List[Dict[str, Any]] = []
+    serialized_parts: List[Dict[str, Any]] = []
     for part in parts:
         root = getattr(part, "root", None)
         if root is None and isinstance(part, dict):
@@ -650,7 +678,7 @@ def _normalize_message_for_capture(message: Any) -> Dict[str, Any]:
             text = root["text"]
         if isinstance(text, str):
             text_parts.append(text)
-            raw_parts.append({"type": "text", "text": text})
+            serialized_parts.append({"type": "text", "text": text})
             continue
         file_obj = None
         if hasattr(root, "file"):
@@ -658,12 +686,12 @@ def _normalize_message_for_capture(message: Any) -> Dict[str, Any]:
         elif isinstance(root, dict) and "file" in root:
             file_obj = root["file"]
         if file_obj is not None:
-            mime = None
+            mime_type = None
             if hasattr(file_obj, "mime_type"):
-                mime = getattr(file_obj, "mime_type")
+                mime_type = getattr(file_obj, "mime_type")
             elif isinstance(file_obj, dict):
-                mime = file_obj.get("mimeType") or file_obj.get("mime_type")
-            raw_parts.append({"type": "file", "mime_type": mime or "application/octet-stream"})
+                mime_type = file_obj.get("mimeType") or file_obj.get("mime_type")
+            serialized_parts.append({"type": "file", "mime_type": mime_type or "application/octet-stream"})
 
     role_str = role.value if hasattr(role, "value") else str(role)
     safe_metadata: Dict[str, Any] = {}
@@ -673,78 +701,9 @@ def _normalize_message_for_capture(message: Any) -> Dict[str, Any]:
     return {
         "role": role_str,
         "text": "".join(text_parts),
-        "parts": raw_parts,
+        "parts": serialized_parts,
         "metadata": safe_metadata,
     }
-
-
-def _normalize_messages(messages: MessageInput) -> List[Message]:
-    """
-    Нормализует различные форматы messages в List[Message].
-    """
-    if isinstance(messages, str):
-        return [
-            Message(
-                message_id=str(uuid.uuid4()),
-                role=Role.user,
-                parts=[Part(root=TextPart(text=messages))],
-            )
-        ]
-
-    if isinstance(messages, Message):
-        return [messages]
-
-    if isinstance(messages, dict):
-        role = Role.user if messages.get("role", "user") == "user" else Role.agent
-        content = messages.get("content", "")
-        return [
-            Message(
-                message_id=str(uuid.uuid4()),
-                role=role,
-                parts=[Part(root=TextPart(text=str(content)))],
-            )
-        ]
-
-    if isinstance(messages, list):
-        if not messages:
-            return []
-
-        items: list[Any] = messages
-        first = items[0]
-
-        if isinstance(first, str):
-            result = []
-            for i, text in enumerate(items):
-                role = Role.user if i % 2 == 0 else Role.agent
-                result.append(
-                    Message(
-                        message_id=str(uuid.uuid4()),
-                        role=role,
-                        parts=[Part(root=TextPart(text=str(text)))],
-                    )
-                )
-            return result
-
-        if isinstance(first, Message):
-            return [item for item in items if isinstance(item, Message)]
-
-        if isinstance(first, dict):
-            result = []
-            for msg in items:
-                if not isinstance(msg, dict):
-                    raise ValueError("Mixed message list is not supported")
-                role = Role.user if msg.get("role", "user") == "user" else Role.agent
-                content = msg.get("content", "")
-                result.append(
-                    Message(
-                        message_id=str(uuid.uuid4()),
-                        role=role,
-                        parts=[Part(root=TextPart(text=str(content)))],
-                    )
-                )
-            return result
-
-    raise ValueError(f"Unsupported messages type: {type(messages)}")
 
 
 def get_global_mock_llm(model_name: str = "mock-gpt-4") -> Optional[MockLLM]:
@@ -757,7 +716,7 @@ def configure_mock_llm_redis(redis_client, model_name: str = "mock-gpt-4") -> Op
     mock_llm = get_global_mock_llm(model_name)
     if mock_llm:
         mock_llm.set_redis_client(redis_client)
-        logger.info("MockLLM: настроен для чтения из Redis")
+        logger.info("mock_llm.redis_configured")
     return mock_llm
 
 
@@ -781,7 +740,7 @@ async def setup_mock_responses_redis(
     """
     key = key_override or _mock_redis_key()
     await redis_client.set(key, json.dumps(response_queue))
-    logger.info(f"MockLLM: записано {len(response_queue)} ответов в Redis (key={key})")
+    logger.info("mock_llm.redis_responses_written", count=len(response_queue), key=key)
 
 
 async def clear_mock_responses_redis(
@@ -819,10 +778,10 @@ async def stop_mock_llm_capture(redis_client, scope: str) -> None:
 
 async def read_mock_llm_capture(redis_client, scope: str) -> List[Dict[str, Any]]:
     """Возвращает все записанные за scope вызовы MockLLM в порядке прихода."""
-    raw = await redis_client.lrange(_mock_capture_key(scope), 0, -1)
-    out: List[Dict[str, Any]] = []
-    for item in raw or []:
-        if isinstance(item, bytes):
-            item = item.decode("utf-8")
-        out.append(json.loads(item))
-    return out
+    capture_payloads = await redis_client.lrange(_mock_capture_key(scope), 0, -1)
+    captured_calls: List[Dict[str, Any]] = []
+    for capture_item in capture_payloads or []:
+        if isinstance(capture_item, bytes):
+            capture_item = capture_item.decode("utf-8")
+        captured_calls.append(json.loads(capture_item))
+    return captured_calls

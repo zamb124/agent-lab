@@ -18,8 +18,8 @@ class FormatTextMarkdownArgs(BaseModel):
     provider: str | None = Field(
         None,
         description=(
-            "None — платформенный `get_llm()` default-route. "
-            "`provider_litserve` — старый LitServe HTTP. Иначе — явный LLM-провайдер."
+            "Используется только если company override для llm_format_markdown не задан. "
+            "`provider_litserve` — старый LitServe HTTP; иначе — явный LLM-провайдер."
         ),
     )
     model: str | None = Field(
@@ -38,8 +38,7 @@ class FormatTextMarkdownArgs(BaseModel):
     name="format_text_markdown",
     description=(
         "Превращает произвольный текст в аккуратный Markdown. "
-        "По умолчанию вызывает платформенный `get_llm()`; "
-        "`provider_litserve` оставляет HTTP-путь LitServe."
+        "Провайдер и модель сначала берутся из company capability settings."
     ),
     tags=["text", "markdown"],
     args_schema=FormatTextMarkdownArgs,

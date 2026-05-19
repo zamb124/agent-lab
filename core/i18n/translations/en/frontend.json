@@ -440,6 +440,8 @@
             "model_optional_label": "Model (optional)",
             "model_override_label": "Company model",
             "model_override_help": "Leave empty to use the platform model; set a value to make it the company default for this capability.",
+            "fallback_models_label": "Fallback policy (JSON array)",
+            "fallback_models_help": "Explicit company fallback chain. Available only when Humanitec LLM is not selected. Example: [{\"provider\":\"openrouter\",\"model\":\"openai/gpt-4o-mini\"}].",
             "api_key_label": "Company API key (BYOK)",
             "api_key_help": "Leave empty to keep the current key. Enter a new value to replace it.",
             "base_url_label": "Base URL (optional)",

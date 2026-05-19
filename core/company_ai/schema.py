@@ -23,6 +23,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from core.clients.llm.config import LLMCallConfig, validate_fallback_model_configs
 from core.clients.llm.model_routing import (
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
@@ -125,6 +126,14 @@ class CompanyLLMOverride(BaseModel):
     folder_id: Optional[str] = None
     extra_request_headers: Optional[Dict[str, str]] = None
     model: Optional[str] = None
+    fallback_models: Optional[List[LLMCallConfig]] = Field(
+        default=None,
+        description=(
+            "Явная company-level fallback policy для capability. Допускается только "
+            "для не-humanitec primary provider; транспортные секреты внутри fallback "
+            "запрещены, используйте custom:<id> для BYOK fallback."
+        ),
+    )
 
     @field_validator("provider")
     @classmethod
@@ -164,6 +173,34 @@ class CompanyLLMOverride(BaseModel):
                 )
             if self.model and self.model != HUMANITEC_LLM_AUTO_MODEL:
                 raise ValueError("provider=humanitec_llm поддерживает только model='auto' или пусто")
+            if self.fallback_models:
+                raise ValueError(
+                    "provider=humanitec_llm не поддерживает fallback_models: "
+                    "Humanitec LLM сам выбирает бесплатную модель через виртуальный маршрут"
+                )
+        self.fallback_models = validate_fallback_model_configs(self.fallback_models)
+        for idx, fallback in enumerate(self.fallback_models or []):
+            if fallback.provider == HUMANITEC_LLM_PROVIDER:
+                raise ValueError(
+                    f"fallback_models[{idx}]: humanitec_llm нельзя использовать как fallback; "
+                    "настройте Humanitec LLM как primary provider capability"
+                )
+            if fallback.provider is not None:
+                _validate_provider_ref(fallback.provider, allow_custom=True)
+            secret_fields = {
+                "api_key": fallback.api_key,
+                "base_url": fallback.base_url,
+                "folder_id": fallback.folder_id,
+                "extra_request_headers": fallback.extra_request_headers,
+            }
+            present_secret_fields = [
+                name for name, value in secret_fields.items() if value is not None
+            ]
+            if present_secret_fields:
+                raise ValueError(
+                    f"fallback_models[{idx}]: поля {present_secret_fields} запрещены в "
+                    "company metadata; используйте platform provider без секрета или custom:<id>"
+                )
         return self
 
 
@@ -344,6 +381,13 @@ class CompanyAIProviders(BaseModel):
             if ov is None:
                 continue
             self._check_provider_ref(ov.provider, capability=cap, custom_index=custom_index)
+            for fallback in ov.fallback_models or []:
+                if fallback.provider and _is_custom_ref(fallback.provider):
+                    self._check_provider_ref(
+                        fallback.provider,
+                        capability=cap,
+                        custom_index=custom_index,
+                    )
 
         if self.embedding is not None:
             self._check_provider_ref(
