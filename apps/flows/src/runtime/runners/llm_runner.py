@@ -35,9 +35,12 @@ from apps.flows.src.runtime.a2a_messages import (
 from apps.flows.src.runtime.a2a_messages import (
     build_user_message as new_user_message,
 )
+from apps.flows.src.runtime.effective_llm_config import (
+    EffectiveLLMConfig,
+    resolve_effective_llm_config_for_node,
+)
 from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.runtime.llm_byok import is_llm_byok_config
 from apps.flows.src.runtime.llm_override_params import (
     client_kwargs_from_llm_config,
     split_llm_config_for_client,
@@ -64,6 +67,7 @@ from core.clients.llm import (
     get_llm_for_state,
     should_use_platform_default_free_pool,
 )
+from core.company_ai import COST_ORIGIN_COMPANY
 from core.config import get_settings
 from core.context import get_context
 from core.errors import ToolExecutionError
@@ -404,11 +408,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         system_prompt = await self._render_prompt(state)
         trace_ctx = _get_trace_ctx_from_state()
         tracer = get_tracer()
-        model = (
-            self.node_config.llm.model
-            if self.node_config and self.node_config.llm and self.node_config.llm.model
-            else "unknown"
-        )
+        effective_llm = resolve_effective_llm_config_for_node(self.node_config)
+        llm_config = effective_llm.config
+        model = llm_config.model or "unknown"
 
         actx = get_context()
         if actx is None or actx.active_company is None:
@@ -418,9 +420,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         container = self.container
         if container is None:
             raise RuntimeError("LlmNodeRunner requires FlowContainer for billing")
-        llm_config = self.node_config.llm if self.node_config else None
         allow_platform_paid_fallback = True
-        byok_override = is_llm_byok_config(llm_config)
+        byok_override = effective_llm.cost_origin == COST_ORIGIN_COMPANY
         (
             billing_model,
             _billing_temp,
@@ -525,13 +526,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                         llm, stream_kw, max_tok = self._resolve_llm_client(
                             state,
+                            effective_llm=effective_llm,
                             allow_platform_paid_fallback=allow_platform_paid_fallback,
                         )
                         llm_provider = getattr(llm, "llm_provider", None)
-                        byok = is_llm_byok_config(
-                            self.node_config.llm if self.node_config else None
-                        )
-                        billing_res: str | None = "llm:byok" if byok else None
+                        billing_res = effective_llm.billing_resource_name
 
                         async with tracer.llm_call_span(
                             model,
@@ -869,9 +868,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         self,
         state: ExecutionState,
         *,
+        effective_llm: EffectiveLLMConfig,
         allow_platform_paid_fallback: bool = True,
     ) -> tuple[LLMClient | MockLLM, dict[str, Any], int | None]:
-        llm_config = self.node_config.llm if self.node_config else None
+        llm_config = effective_llm.config
         max_tok = llm_config.max_tokens if llm_config is not None else None
         client_kwargs = client_kwargs_from_llm_config(llm_config, state)
         llm = get_llm_for_state(
