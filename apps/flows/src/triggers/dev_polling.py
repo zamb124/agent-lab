@@ -239,7 +239,7 @@ class TelegramDevPolling:
         return triggers
 
     async def _get_all_subdomains(self, container) -> list[str]:
-        """Уникальные идентификаторы tenant (сегмент company:*:flow:*) по ключам в таблице flows."""
+        """Уникальные company identifiers (сегмент company:*:flow:*) по ключам в таблице flows."""
         try:
             flows_table = container.flow_repository._get_table_name()
             all_data = await container.flow_repository._storage.get_all_by_prefix_and_table(

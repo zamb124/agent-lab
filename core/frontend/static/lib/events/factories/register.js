@@ -3,7 +3,7 @@
  *
  * Идея: вместо ручной сборки `getServiceSlices` / `getServiceEffects` с
  * перечислением каждого слайса и эффекта, сервис передаёт массив фабрик
- * (любая из createAsyncOp / createResourceCollection / createCursorList /
+ * (любая из createAsyncOp / createResourceCollection / createКурсорList /
  * createFacets / createForm / createSlice), а helper извлекает из них
  * slices и effect-функции.
  *

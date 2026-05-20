@@ -1,5 +1,5 @@
 /**
- * flows tracing/logs modals — polling while Tempo/Loki are still indexing.
+ * Модалки tracing/logs flows — polling, пока Tempo/Loki ещё индексируют.
  */
 
 import { fixture, fixtureCleanup, html, expect, waitUntil, elementUpdated } from '../helpers/render.js';

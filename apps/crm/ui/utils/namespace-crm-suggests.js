@@ -1,5 +1,5 @@
 /**
- * Fields for background AI suggestions from `NamespaceCRMSettings`.
+ * Поля фоновых AI-suggest-ов из `NamespaceCRMSettings`.
  */
 
 export const DEFAULT_SUGGESTS_CRON = '0 2 * * *';

@@ -62,7 +62,7 @@ async def test_control_http_api_full_flow() -> None:
             transport=ASGITransport(app=app),
             base_url="http://testserver",
         ) as ac:
-            # create session
+            # создаём session
             create_body = {
                 "session_id": f"sess-http-{uid}",
                 "run_id": f"run-http-{uid}",
@@ -145,12 +145,12 @@ async def test_control_http_api_full_flow() -> None:
             detail = ra.json()["detail"]
             assert detail["code"] == "browser_action_disabled"
 
-            # delete session
+            # удаляем session
             rd = await ac.delete(f"/browser/api/v1/control/sessions/{session_id}")
             assert rd.status_code == 200, rd.text
             assert rd.json()["status"] == "closed"
 
-            # navigate after delete → 404
+            # навигация после удаления → 404
             r404 = await ac.post(
                 f"/browser/api/v1/control/sessions/{session_id}/navigate",
                 json={"url": "https://example.com"},

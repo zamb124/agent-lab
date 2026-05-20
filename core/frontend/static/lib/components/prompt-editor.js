@@ -227,7 +227,7 @@ export class PromptEditor extends PlatformElement {
                 font-style: italic;
             }
             
-            /* Light theme */
+            /* Светлая тема */
             :host-context([data-theme="light"]) .cm-variable-required {
                 color: #7c3aed;
             }
@@ -342,7 +342,7 @@ export class PromptEditor extends PlatformElement {
                 overflow-y: auto;
             }
             
-            /* Icon buttons */
+            /* Иконки-кнопки */
             .icon-btn {
                 display: inline-flex;
                 align-items: center;

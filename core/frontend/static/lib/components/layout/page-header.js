@@ -188,7 +188,7 @@ export class PageHeader extends PlatformElement {
                 }
             }
 
-            /* Light theme */
+            /* Светлая тема */
             :host-context([data-theme="light"]) .header-wrap {
                 background: rgba(255, 255, 255, 0.92);
                 border-bottom-color: rgba(15, 23, 42, 0.08);

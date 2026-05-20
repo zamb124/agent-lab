@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Adopt orphan ресурсов в Helm-release или удаление legacy.
+# Adopt orphan-ресурсов в Helm-release или удаление legacy.
 #
 # Helm v3 отказывается upgrade'ить релиз, если в namespace уже существует ресурс
 # того же name+kind БЕЗ Helm-метаданных:

@@ -111,18 +111,18 @@ def extract_subdomain(host: str) -> str | None:
     return None
 
 
-INFRA_NON_TENANT_SUBDOMAINS: frozenset[str] = frozenset({"grafana"})
+INFRA_NON_COMPANY_SUBDOMAINS: frozenset[str] = frozenset({"grafana"})
 
 
-def extract_tenant_subdomain(host: str) -> str | None:
+def extract_company_subdomain(host: str) -> str | None:
     """
-    Субдомен для привязки к компании (тенант).
+    Субдомен для привязки Host к компании.
 
-    Хосты вида grafana.<base_domain> — инфраструктурные Ingress, не тенанты:
+    Хосты вида grafana.<base_domain> — инфраструктурные Ingress, не компании:
     для них возвращается None, чтобы JWT/X-Company-Id определяли компанию.
     """
     label = extract_subdomain(host)
-    if label and label in INFRA_NON_TENANT_SUBDOMAINS:
+    if label and label in INFRA_NON_COMPANY_SUBDOMAINS:
         return None
     return label
 
@@ -151,8 +151,8 @@ def _default_port_for_scheme(scheme: str) -> str:
     return "443" if scheme == "https" else "80"
 
 
-def _hosts_same_tenant_cluster(o_host: str, p_host: str) -> bool:
-    """Один кластер тенантов: apex, поддомен того же base, localhost/*.localhost, один и тот же dev-IP."""
+def _hosts_same_company_host_cluster(o_host: str, p_host: str) -> bool:
+    """Один кластер company-hosts: apex, поддомен того же base, localhost/*.localhost, один dev-IP."""
     if o_host == p_host:
         return True
     base = extract_base_domain(p_host)
@@ -167,7 +167,7 @@ def _hosts_same_tenant_cluster(o_host: str, p_host: str) -> bool:
 
 def is_allowed_integration_return_origin(origin: str, platform_public_base_url: str | None) -> bool:
     """
-    Разрешённый origin вкладки после OAuth: тот же scheme, хост в том же тенант-кластере,
+    Разрешённый origin вкладки после OAuth: тот же scheme, хост в том же company-host кластере,
     что и server.platform_public_base_url, и совпадающий порт (или локальный dev: lvh.me,
     localhost, dev-IP — разный порт допустим при том же кластере хостов).
 
@@ -193,10 +193,10 @@ def is_allowed_integration_return_origin(origin: str, platform_public_base_url: 
         if not (
             is_local(o_host)
             and is_local(p_host)
-            and _hosts_same_tenant_cluster(o_host, p_host)
+            and _hosts_same_company_host_cluster(o_host, p_host)
         ):
             return False
-    return _hosts_same_tenant_cluster(o_host, p_host)
+    return _hosts_same_company_host_cluster(o_host, p_host)
 
 
 def get_protocol(host: str) -> str:
@@ -204,31 +204,31 @@ def get_protocol(host: str) -> str:
     return "http" if is_local(host) else "https"
 
 
-def build_company_tenant_absolute_url(
+def build_company_subdomain_absolute_url(
     *,
     host_header: str,
     url_scheme: str,
     path: str,
     query: str,
-    tenant_subdomain: str,
+    company_subdomain: str,
 ) -> str:
     """
-    Полный URL с тем же path/query и портом Host, на DNS-субдомене tenant_subdomain.
-    Согласовано с core/frontend/static/lib/utils/tenant-url.js (buildCompanySubdomainUrl).
+    Полный URL с тем же path/query и портом Host, на DNS-субдомене company_subdomain.
+    Согласовано с core/frontend/static/lib/utils/company-url.js (buildCompanySubdomainUrl).
 
     Raises:
-        ValueError: пустой tenant_subdomain или базовый хост — IP (нет foo.<IP> в DNS).
+        ValueError: пустой company_subdomain или базовый хост — IP (нет foo.<IP> в DNS).
     """
-    if not tenant_subdomain or not str(tenant_subdomain).strip():
-        raise ValueError("tenant_subdomain must be non-empty")
-    tenant_subdomain = str(tenant_subdomain).strip()
+    if not company_subdomain or not str(company_subdomain).strip():
+        raise ValueError("company_subdomain must be non-empty")
+    company_subdomain = str(company_subdomain).strip()
     base = extract_base_domain(host_header)
     if _ip_dev_base(base) is not None:
-        raise ValueError("tenant URL cannot be built for IP-only base host")
+        raise ValueError("company subdomain URL cannot be built for IP-only base host")
     _, port_part = split_host_port(host_header)
     scheme = url_scheme if url_scheme in ("http", "https") else get_protocol(host_header)
     normalized_path = path if path.startswith("/") else f"/{path}"
-    netloc = f"{tenant_subdomain}.{base}"
+    netloc = f"{company_subdomain}.{base}"
     if port_part:
         netloc = f"{netloc}:{port_part}"
     qs = f"?{query}" if query else ""

@@ -20,9 +20,9 @@ def candidate_supports_request(
     has_tools: bool,
     has_response_format: bool,
 ) -> bool:
-    # Empty metadata means "unknown" for explicit models. OpenRouter free-pool
-    # records are discovery output, so absence of a capability there is treated
-    # as unsupported for request-shaping features.
+    # Пустые metadata означают "unknown" для explicit-моделей. Записи free-pool OpenRouter
+    # являются результатом discovery, поэтому отсутствие capability там трактуется
+    # как отсутствие поддержки request-shaping возможностей.
     strict_metadata = candidate_capability_metadata_is_strict(candidate)
     if has_files and candidate.input_modalities and not (
         "image" in candidate.input_modalities or "file" in candidate.input_modalities

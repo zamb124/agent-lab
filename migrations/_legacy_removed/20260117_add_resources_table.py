@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-# revision identifiers, used by Alembic.
+# Идентификаторы ревизии, используются Alembic.
 revision: str = '9b4c6d8e0f2a'
 down_revision: Union[str, None] = '8a3b5c7d9e1f'
 branch_labels: Union[str, Sequence[str], None] = None

@@ -1,14 +1,14 @@
 /**
  * CRMKnowledgeImportModal — мастер импорта знаний в выбранный namespace.
  *
- * 5-шаговый wizard поверх PlatformModal:
+ * 5-шаговый мастер поверх PlatformModal:
  *   0. mode      — graph (полный граф сущностей и связей) | notes_only (только заметки).
  *   1. types     — какие типы сущностей извлекать; пусто = все типы из namespace.
  *   2. source    — файлы (через crm/file_upload, multipart) и/или вставленный текст.
  *   3. settings  — split_by_headings, chunk_max_chars (2000..500000).
  *   4. summary   — финальный обзор и запуск crm/task_knowledge_import_start.
  *
- * Source-step:
+ * Шаг source:
  *   - upload файла идёт через POST /crm/api/v1/files/, который возвращает file_id;
  *     id-шники накапливаются в this._files и подставляются в payload как
  *     source_file_id (если ровно один) или source_file_ids (если несколько).

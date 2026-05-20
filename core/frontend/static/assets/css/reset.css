@@ -1,6 +1,6 @@
 /* 
- * Reset & Base Styles
- * Modern CSS reset with Liquid Glass foundation
+ * Сброс и базовые стили
+ * Современный CSS reset на основе Liquid Glass
  * Поддержка темной и светлой темы
  */
 
@@ -84,7 +84,7 @@ body.platform-shell {
     }
 }
 
-/* Animated background orbs for depth */
+/* Анимированные фоновые сферы для глубины */
 body::before,
 body::after {
     content: '';
@@ -130,7 +130,7 @@ body::after {
     75% { transform: translate(20px, 10px) scale(1.02); }
 }
 
-/* Light theme - subtle background */
+/* Светлая тема - деликатный фон */
 [data-theme="light"] body::before {
     background: var(--accent);
     opacity: 0.08;
@@ -182,7 +182,7 @@ table {
     border-spacing: 0;
 }
 
-/* Focus styles */
+/* Стили фокуса */
 :focus-visible {
     outline: none;
     box-shadow: var(--focus-ring);
@@ -225,7 +225,7 @@ table {
     display: none !important;
 }
 
-/* Reduced motion */
+/* Уменьшенное движение */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
@@ -239,7 +239,7 @@ table {
     }
 }
 
-/* Print styles */
+/* Стили печати */
 @media print {
     body::before,
     body::after {

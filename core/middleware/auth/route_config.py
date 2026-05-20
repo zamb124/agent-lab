@@ -64,7 +64,7 @@ def browser_request_allows_spa_fallback(request: Request) -> bool:
     return False
 
 
-def browser_request_accepts_tenant_error_html(request: Request) -> bool:
+def browser_request_accepts_company_access_error_html(request: Request) -> bool:
     """
     Та же эвристика, что и для SPA-fallback: когда ответ-ошибка лучше отдать
     как HTML, а не JSON.
@@ -181,7 +181,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/llms.txt", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/llms.txt", auth_required=False, context_type="anonymous"),
     RouteRule("/api/platform/file-types", auth_required=False, context_type="anonymous"),
-    # Browser Runtime control-plane (Playwright/CDP). Технический сервис, auth делается на уровне внешнего контура.
+    # Control-plane Browser Runtime (Playwright/CDP). Технический сервис, auth делается на уровне внешнего контура.
     RouteRule("/browser/api/v1/control/*", auth_required=False, context_type="anonymous"),
     RouteRule("/browser/api/v1/mcp*", auth_required=False, context_type="anonymous"),
 
@@ -347,7 +347,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/frontend/platform-tracing", context_type="frontend", auth_required=True),
     RouteRule("/frontend/platform-billing", context_type="frontend", auth_required=True),
 
-    # Scheduler service API
+    # API сервиса Scheduler
     RouteRule("/scheduler/api/v1/*", context_type="api", auth_required=True),
 
     # UI агентов — публичные превью лендинга (статика под /flows/demo_cards на сервисе flows)
@@ -396,7 +396,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/crm/*", context_type="frontend", auth_required=True),
     RouteRule("/crm", context_type="frontend", auth_required=True),
 
-    # RAG Service - требует авторизацию для tenant isolation
+    # RAG Service - требует авторизацию для company isolation
     RouteRule("/rag/ui/static/*", auth_required=False, context_type="anonymous"),
     RouteRule("/rag/api/v1/*", context_type="session", auth_required=True),
     RouteRule("/rag/ui/*", context_type="anonymous", auth_required=False),
@@ -484,7 +484,7 @@ NO_SUBDOMAIN_ALLOWED_PATHS = [
     "/frontend/api/invites/accept",
     "/api/invites/preview",
     "/frontend/api/invites/preview",
-    "/*/test",  # E2E тестовые страницы (TESTING mode only)
+    "/*/test",  # E2E тестовые страницы (только TESTING mode)
 ]
 
 # Страницы доступные для удаляемой компании

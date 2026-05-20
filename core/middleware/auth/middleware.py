@@ -30,19 +30,19 @@ from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_se
 from core.utils.domain import extract_subdomain
 from core.utils.tokens import TokenData, TokenType, get_token_service
 
+from .company_access_error_page import (
+    build_company_access_error_response,
+    http_exception_detail_to_str,
+)
 from .company_resolver import CompanyResolver
 from .context_factory import ContextFactory
 from .platform_handlers import get_platform_handler
 from .route_config import (
     RouteMatcher,
     RouteRule,
-    browser_request_accepts_tenant_error_html,
+    browser_request_accepts_company_access_error_html,
     browser_request_allows_spa_fallback,
     path_allows_spa_fallback,
-)
-from .tenant_access_error_page import (
-    build_tenant_access_error_response,
-    http_exception_detail_to_str,
 )
 
 logger = get_logger(__name__)
@@ -170,10 +170,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
             accept = request.headers.get("accept", "")
             if e.status_code == 401 and "text/html" in accept:
                 return RedirectResponse(url="/", status_code=302)  # На главную для авторизации
-            if e.status_code in (403, 404) and browser_request_accepts_tenant_error_html(
+            if e.status_code in (403, 404) and browser_request_accepts_company_access_error_html(
                 request
             ):
-                return build_tenant_access_error_response(
+                return build_company_access_error_response(
                     e.status_code, http_exception_detail_to_str(e.detail)
                 )
             return JSONResponse(status_code=e.status_code, content={"detail": e.detail})

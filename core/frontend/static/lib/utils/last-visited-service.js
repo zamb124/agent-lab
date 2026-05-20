@@ -145,7 +145,7 @@ export function getLastVisitedService() {
 
 /**
  * Возвращает URL входа в последний посещённый сервис.
- * Если сервис не сохранён — возвращает fallback-путь.
+ * Если сервис не сохранён — возвращает резервный путь.
  * @param {{ fallbackPath?: string }} [options]
  * @returns {string}
  */

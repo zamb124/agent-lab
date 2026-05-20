@@ -549,16 +549,16 @@ async def run(args, state):
                 "done": done_node,
             },
             edges=[
-                # From agent_so to actions
+                # От agent_so к actions
                 Edge(from_node="agent_so", to_node="tool1", condition="next_action == 'tool1'"),
                 Edge(from_node="agent_so", to_node="tool2", condition="next_action == 'tool2'"),
                 Edge(from_node="agent_so", to_node="tool3", condition="next_action == 'tool3'"),
                 Edge(from_node="agent_so", to_node="done", condition="next_action == 'done'"),
-                # From actions back to agent_so
+                # От actions обратно к agent_so
                 Edge(from_node="tool1", to_node="agent_so"),
                 Edge(from_node="tool2", to_node="agent_so"),
                 Edge(from_node="tool3", to_node="agent_so"),
-                # Terminal
+                # Терминальная нода
                 Edge(from_node="done", to_node=None),
             ],
             variables={},
@@ -582,10 +582,10 @@ async def run(args, state):
         assert result.response is not None, "Tool3 RemoteAgent should return response"
         assert len(result.response) > 0, "Tool3 response should not be empty"
 
-        # Summary from last SO call
+        # Сводка из последнего SO-вызова
         assert result.summary == "All 4 steps completed", "Summary should be set from final SO"
 
-        # Final response
+        # Финальный ответ
         assert "SGR completed" in result.final_response, "Final response should contain completion message"
         assert result.steps_executed["tool1"] is True
         assert result.steps_executed["tool2"] is True

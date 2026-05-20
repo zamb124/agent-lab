@@ -805,7 +805,7 @@ class RAGProviderConfig(BaseModel):
     host: Optional[str] = None
     port: Optional[int] = None
 
-    # PgVector specific
+    # Специфика PgVector
     db_url: Optional[str] = None
 
     # Legacy: override ключа эмбеддингов pgvector (ENV); иначе llm.<provider>.api_key. У agentset — см. AgentsetRAGProvider.
@@ -815,7 +815,7 @@ class RAGProviderConfig(BaseModel):
     # Наценка платформы на embedding (1.1 = +10%)
     embedding_platform_markup: float = 1.1
 
-    # Chunking
+    # Чанкинг
     chunk_size: int = 1000
     chunk_overlap: int = 100
 

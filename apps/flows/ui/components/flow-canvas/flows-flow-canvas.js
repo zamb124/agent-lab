@@ -1315,7 +1315,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         return { x: snappedX, y: snappedY, guides };
     }
 
-    /* ===== Context menu ===== */
+    /* ===== Контекстное меню ===== */
     _onContextMenu(e, target, targetId) {
         e.preventDefault();
         e.stopPropagation();
@@ -1391,7 +1391,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._editor.setViewBox({ viewBox: vb });
     }
 
-    /* ===== Drag-and-drop create ===== */
+    /* ===== Создание через drag-and-drop ===== */
     _onDragOver(e) {
         const mode = this._inferPaletteDndMode(e);
         if (!mode) return;
@@ -1716,7 +1716,7 @@ export class FlowsFlowCanvas extends PlatformElement {
         this._editor.selectNode({ nodeId });
     }
 
-    /* ===== Sticky notes drag/edit/delete ===== */
+    /* ===== Drag/edit/delete для sticky notes ===== */
     _onStickyChange(e) {
         const detail = e.detail;
         if (!detail || !detail.noteId) return;

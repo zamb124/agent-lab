@@ -1,5 +1,5 @@
 /**
- * Shared Button Styles
+ * Общие стили кнопок
  * Humanitec UI Kit — violet primary, orange accent, pill shape
  * Поддержка темной и светлой темы
  */
@@ -31,7 +31,7 @@ export const buttonStyles = css`
         pointer-events: none;
     }
     
-    /* Primary Button — violet */
+    /* Основная кнопка — фиолетовая */
     .btn-primary,
     .btn.primary {
         color: var(--platform-btn-primary-text, #ffffff);
@@ -50,7 +50,7 @@ export const buttonStyles = css`
         transform: translateY(0);
     }
 
-    /* Accent Button — orange */
+    /* Акцентная кнопка — оранжевая */
     .btn-accent,
     .btn.accent {
         color: var(--platform-btn-accent-text, #ffffff);
@@ -69,7 +69,7 @@ export const buttonStyles = css`
         transform: translateY(0);
     }
     
-    /* Secondary Button — violet text, transparent bg */
+    /* Вторичная кнопка — фиолетовый текст, прозрачный фон */
     .btn-secondary,
     .btn.secondary {
         color: var(--platform-btn-secondary-text, #99A6F9);
@@ -97,7 +97,7 @@ export const buttonStyles = css`
         box-shadow: var(--platform-btn-accent-secondary-shadow-hover, 0 0 10px rgba(255, 136, 92, 0.2));
     }
     
-    /* Danger Button */
+    /* Опасная кнопка */
     .btn-danger,
     .btn.danger {
         color: white;
@@ -111,7 +111,7 @@ export const buttonStyles = css`
         box-shadow: 0 0 10px rgba(244, 63, 94, 0.4);
     }
     
-    /* Ghost Button */
+    /* Прозрачная кнопка */
     .btn-ghost,
     .btn.ghost {
         color: var(--text-secondary, rgba(255, 255, 255, 0.65));
@@ -146,7 +146,7 @@ export const buttonStyles = css`
         aspect-ratio: 1;
     }
     
-    /* Loading state */
+    /* Состояние загрузки */
     .btn.loading {
         position: relative;
         color: transparent;

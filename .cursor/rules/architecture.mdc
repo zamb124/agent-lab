@@ -56,10 +56,10 @@ WS `*_failed`: те же поля мерджатся в `payload` рядом с 
 
 ## Субдомен Host и сессия (JWT)
 
-`Host` — тенант запроса. `auth_token` — активная компания в payload.
+`Host` company subdomain задаёт company context запроса. `auth_token` — активная компания в payload.
 
-- Тенант `Host` ≠ `token.company_id`, токен `SESSION`, в `Host` субдомен компании, пользователь состоит в этой компании: **тенант Host главнее** — `AuthMiddleware` зовёт `rebind_session_to_company` (`core/utils/auth_session_rebind.py`). В БД обновляется `user.active_company_id`, выпускается новый JWT, ставится `Set-Cookie auth_token`. Без 307-редиректа.
-- Пользователь не состоит в компании тенанта — **403**.
+- Company `Host` ≠ `token.company_id`, токен `SESSION`, в `Host` субдомен компании, пользователь состоит в этой компании: **Host company главнее** — `AuthMiddleware` зовёт `rebind_session_to_company` (`core/utils/auth_session_rebind.py`). В БД обновляется `user.active_company_id`, выпускается новый JWT, ставится `Set-Cookie auth_token`. Без 307-редиректа.
+- Пользователь не состоит в компании из Host — **403**.
 - В JWT компания, в которой пользователь больше не состоит, но `Host` — его компания: тот же rebind на `Host`-компанию.
 - Контексты правила: `context_type` `frontend` и `api` (SPA + `/frontend/api/auth/me`).
 

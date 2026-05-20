@@ -229,7 +229,7 @@ class PgVectorProvider(BaseRAGProvider):
         """Идентификатор текущей модели эмбеддинга для записи в embedding_model."""
         return self._embedding_service.model
 
-    # -- Chunking --
+    # -- Чанкинг --
 
     def _chunk_text(self, text_content: str) -> List[str]:
         """Разбивает текст на chunks по токенам."""

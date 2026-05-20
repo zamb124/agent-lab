@@ -1,5 +1,5 @@
 /**
- * Dataflow inspector — static state contract shown in the visual editor.
+ * Dataflow inspector — статический контракт состояния, показываемый в визуальном редакторе.
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';

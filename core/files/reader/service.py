@@ -712,7 +712,7 @@ def _read_html_sync(
         )
     except Exception:
         extracted = None
-    # Fallback на BeautifulSoup для простой/частичной HTML-разметки
+    # Резерв на BeautifulSoup для простой/частичной HTML-разметки
     if extracted is None or extracted.strip() == "":
         soup = BeautifulSoup(html, "html.parser")
         for tag in soup(["script", "style", "noscript"]):

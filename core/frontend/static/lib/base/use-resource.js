@@ -1,5 +1,5 @@
 /**
- * useResource / useOp / useForm / useCursorList / useFacets — Reactive
+ * useResource / useOp / useForm / useКурсорList / useFacets — Reactive
  * Controllers поверх фабрик.
  *
  * Назначение: компоненту достаточно подключить контроллер, чтобы автоматически
@@ -133,7 +133,7 @@ export class ResourceController {
  *
  * Это явный контракт: caller, которому важна обработка ошибки, проверяет
  * `ctl.error` после `await ctl.run(...)` (или подписывается на slice).
- * Никакого fallback к успеху — null result отличим от реального result.
+ * Никакого скрытого успеха — null result отличим от реального result.
  * Спасает fire-and-forget вызовы (`this._typing.run(...)` без await/catch)
  * от unhandled promise rejection.
  *
@@ -247,9 +247,9 @@ export class FormController {
 }
 
 /**
- * useCursorList(host, list, opts) — для createCursorList.
+ * useКурсорList(host, list, opts) — для createКурсорList.
  *
- *   const ctl = new CursorListController(this, spansList, { autoload: true });
+ *   const ctl = new КурсорListController(this, spansList, { autoload: true });
  *   ctl.items, ctl.hasMore, ctl.loading, ctl.loadingMore, ctl.terminal,
  *   ctl.filters
  *   ctl.load(filters?), ctl.loadMore(), ctl.changeFilters(patch), ctl.resetFilters()
@@ -315,8 +315,8 @@ export class CursorListController {
  * useSlice(host, slice) — для createSlice.
  *
  *   const ctl = new SliceController(this, callUiSlice);
- *   ctl.value          // read-only slice (frozen)
- *   ctl.<actionMethod>(payload)  // bound from factory.actions
+ *   ctl.value          // slice только для чтения (frozen)
+ *   ctl.<actionMethod>(payload)  // привязан из factory.actions
  */
 export class SliceController {
     constructor(host, slice) {

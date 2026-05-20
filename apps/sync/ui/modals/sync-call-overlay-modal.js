@@ -5,12 +5,12 @@
  * `ui_components.mdc`):
  *   - State через фабрики `useOp`/`useSlice`/`useEvent`/`select`.
  *   - Никаких `localStorage` напрямую, никакого `fetch/httpRequest`.
- *   - Audio prefs (NS/EC/AGC, camera default, deviceIds) живут в slice
+ *   - Аудионастройки (NS/EC/AGC, camera default, deviceIds) живут в slice
  *     `sync/call_prefs`, persist делает bridge-effect
  *     `sync-call-prefs.effect.js` через `STORAGE_PERSIST_REQUESTED`.
  *
  * Что внутри:
- *   - fullscreen чёрный stage (position: fixed inset 0).
+ *   - полноэкранная чёрная stage (position: fixed inset 0).
  *   - Header: status-dot + duration / "Подключение…", REC-badge, participants
  *     count, copy-link, minimize.
  *   - Video-grid: tiles per participant (one/two/many layout), avatar для
@@ -23,7 +23,7 @@
  *   - Controls bar (3 слота): [Devices menu] | [mic/cam/screen/recording/
  *     hangup] | [chat-toggle/more-menu (audio quality NS/EC/AGC)].
  *   - Chat panel (правый сайдбар): сообщения текущего канала из
- *     `state.syncMessagesStore.byChannelId[channelId]`, lazy load older,
+ *     `state.syncMessagesStore.byChannelId[channelId]`, ленивая загрузка старых,
  *     send через `messagesSendOp`.
  *   - Minimize: атрибут `data-minimized` на :host; для открытой модалки нужен
  *     селектор `:host([open][data-minimized])`, иначе `display:flex !important`

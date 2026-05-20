@@ -244,7 +244,7 @@ jobs:
         # DNS-01 ACME challenge (cert-manager-webhook-regru, API reg.ru). Выполняется ДО
         # helm install — Secret platform-tls создаётся cert-manager'ом, ingress'ы платформы
         # его подхватывают на старте (без HTTP-01, чтобы поддерживать wildcard).
-        # Если webhook + ClusterIssuer + Certificate уже на месте и Ready — skip всех шагов.
+        # Если webhook + ClusterIssuer + Certificate уже на месте и Ready — пропускаем все шаги.
         env:
           REGRU_USERNAME: ${{ secrets.REGRU_USERNAME }}
           REGRU_PASSWORD: ${{ secrets.REGRU_PASSWORD }}

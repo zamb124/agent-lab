@@ -1,9 +1,9 @@
 /**
- * Shared color palette for entity types, calendar events, and graph nodes.
+ * Общая цветовая палитра для типов сущностей, календарных событий и нод графа.
  *
- * Each entry has a semantic `key` and a hex `dot` value.
- * Backend entity types store `color` as one of these hex values.
- * UI components resolve node/chip colors through this palette.
+ * У каждой записи есть семантический `key` и hex-значение `dot`.
+ * Backend-типы сущностей хранят `color` как одно из этих hex-значений.
+ * UI-компоненты берут цвета нод/chip-ов из этой палитры.
  */
 
 export const COLOR_PALETTE = [

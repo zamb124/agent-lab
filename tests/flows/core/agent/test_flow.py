@@ -711,8 +711,8 @@ class TestVariableResolver:
 
         assert "ИнгосСтрах" in result
         assert "8-800-100-77-55" in result
-        assert "9:00-18:00" in result  # default value
-        assert "{?client_name}" not in result  # optional removed
+        assert "9:00-18:00" in result  # значение по умолчанию
+        assert "{?client_name}" not in result  # optional удалён
 
 
 class TestFlowConditionEvaluation:

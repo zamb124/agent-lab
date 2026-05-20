@@ -15,7 +15,7 @@ import { createRouterEffect } from '@platform/lib/events/effects/router.effect.j
 import { syncPlatformThemeDom } from '@platform/lib/events/effects/theme.effect.js';
 import { getPlatformBus, hasPlatformBus } from '@platform/lib/events/bus-singleton.js';
 import { CoreAuthEvents } from '@platform/lib/events/effects/auth.effect.js';
-import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import { apiKeysResource } from '../events/resources/api-keys.resource.js';
@@ -439,7 +439,7 @@ export class FrontendApp extends PlatformApp {
         ) {
             const companies = this._companiesSel ? this._companiesSel.value : [];
             const loading = this._companiesLoadingSel ? this._companiesLoadingSel.value : false;
-            applyTenantHostRedirectIfNeeded(auth, companies, loading, {
+            applyCompanyHostRedirectIfNeeded(auth, companies, loading, {
                 loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null),
             });
         }

@@ -1,5 +1,5 @@
 /**
- * Embed code modal — display-only диалог с HTML/JS-кодом виджета и
+ * Модалка embed-кода — диалог только для отображения с HTML/JS-кодом виджета и
  * S2S-инструкциями по выдаче short-lived embed-session токена.
  *
  * Загружает данные через op `frontend/embed_code` (load by embed_id);

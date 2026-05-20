@@ -41,8 +41,8 @@ describe('hrefForDeepLinkNavigation', () => {
     });
 
     it('другой origin — полный href', () => {
-        const opened = new URL('https://tenant.humanitec.ru/crm/');
-        expect(hrefForDeepLinkNavigation(opened, 'https://humanitec.ru')).toBe('https://tenant.humanitec.ru/crm/');
+        const opened = new URL('https://acme.humanitec.ru/crm/');
+        expect(hrefForDeepLinkNavigation(opened, 'https://humanitec.ru')).toBe('https://acme.humanitec.ru/crm/');
     });
 
     it('на корне без search/hash — просто /', () => {

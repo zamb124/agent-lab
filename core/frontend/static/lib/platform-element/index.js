@@ -16,7 +16,7 @@
  *   this.useResource(name, opts?)                      — ResourceController по имени фабрики
  *   this.useOp(name)                                   — OpController по имени фабрики
  *   this.useForm(name)                                 — FormController по имени фабрики
- *   this.useCursorList(name, opts?)                    — CursorListController по имени фабрики
+ *   this.useКурсорList(name, opts?)                    — КурсорListController по имени фабрики
  *   this.useFacets(name)                               — FacetsController по имени фабрики
  *   this.useSlice(name)                                — SliceController по имени фабрики
  *   this.toast(i18n_key, {type?, vars?, duration?})    — toast через UI_TOAST_SHOW
@@ -157,7 +157,7 @@ export class PlatformElement extends LitElement {
      * useSlice(name) — Reactive Controller для `createSlice` фабрики.
      *
      *   const ctl = this.useSlice('sync/call_ui');
-     *   ctl.value          // read-only frozen slice (state.syncCallUi)
+     *   ctl.value          // замороженный slice только для чтения (state.syncCallUi)
      *   ctl.<actionMethod>(payload)  // bound из factory.actions
      *
      * Имя фабрики — `<svc>/<entity>` (ровно 2 сегмента, snake_case).

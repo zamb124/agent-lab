@@ -367,8 +367,8 @@ class EntityService:
             raise ValueError("Нет пользователя в контексте")
         return str(context.user.user_id)
 
-    async def _tenant_company_entity_ids(self) -> frozenset[str]:
-        """ID CRM-сущностей компании-тенанта (атрибут platform_company_id)."""
+    async def _platform_company_entity_ids(self) -> frozenset[str]:
+        """ID CRM-сущностей активной платформенной компании (атрибут platform_company_id)."""
         company_id = self._get_company_id()
         rows = await self._entity_repo.find_by_attribute(
             entity_type=COMPANY_ENTITY_TYPE,
@@ -4231,7 +4231,7 @@ class EntityService:
         for match_name, canonical_name, entity_id in entries:
             replacement = f"[@{canonical_name}](entity:{entity_id})"
             name_re = re.compile(re.escape(match_name), re.IGNORECASE)
-            # Разбиваем по уже существующим токенам: чётные индексы — plain-текст
+            # Разбиваем по уже существующим токенам: чётные индексы — обычный текст
             segments = self._EXISTING_TOKEN_SPLIT_RE.split(text)
             for i in range(0, len(segments), 2):
                 segments[i] = name_re.sub(replacement, segments[i])
@@ -4268,7 +4268,7 @@ class EntityService:
         """
         После apply AI-анализа: создаёт mentions-связи от заметки ко всем найденным сущностям.
         AI не всегда включает эти связи в черновик — создаём принудительно для всех извлечённых.
-        Сущность компании тенанта (platform_company_id) пропускается — не создаём шумную связь.
+        Сущность активной платформенной компании (platform_company_id) пропускается — не создаём шумную связь.
         """
         if not entity_ids:
             return
@@ -4277,12 +4277,12 @@ class EntityService:
             raise ValueError(f"Заметка не найдена: {note_id}")
         namespace = self._resolve_namespace_for_write(note.namespace)
         company_id = self._get_company_id()
-        tenant_company_ids = await self._tenant_company_entity_ids()
+        platform_company_entity_ids = await self._platform_company_entity_ids()
         now = datetime.now(UTC)
         for entity_id in entity_ids:
             if entity_id == note_id:
                 continue
-            if entity_id in tenant_company_ids:
+            if entity_id in platform_company_entity_ids:
                 continue
             row = Relationship(
                 relationship_id=str(uuid.uuid4()),

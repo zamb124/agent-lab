@@ -1,5 +1,5 @@
 /**
- * Leads resources — заявки с лендинга и system-only список заявок.
+ * Ресурсы leads — заявки с лендинга и системный список заявок.
  *
  * API (apps/frontend/api/leads.py):
  *   POST /api/leads             ← LeadCreateBody (name, email|phone обязательны)

@@ -2,7 +2,7 @@
  * Team page — участники компании, роли, ссылки-приглашения.
  *
  * Поток данных:
- *   - resource frontend/team_members → list/update/remove
+ *   - ресурс frontend/team_members → list/update/remove
  *   - op       frontend/team_invite  → генерация invite-ссылки на роль (silent);
  *     ссылки в slice `links: { [role]: link }` для кэша кнопки «Приглашение».
  *

@@ -1,8 +1,8 @@
 /**
- * Platform motion layer.
+ * Слой platform motion.
  *
- * Default motion is compositor-first: opacity + transform. Components may opt
- * into semantic classes, but layout properties are never animated by default.
+ * Motion по умолчанию сначала идёт через compositor: opacity + transform. Компоненты могут включать
+ * семантические классы, но layout-свойства по умолчанию никогда не анимируются.
  */
 import { css } from '../../../assets/js/lit/lit.min.js';
 

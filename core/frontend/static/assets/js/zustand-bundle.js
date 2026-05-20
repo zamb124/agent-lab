@@ -26,7 +26,7 @@ var createStore = ((createState) => createState ? createStoreImpl(createState) :
 // import React from "react"; // Removed - not used in vanilla API
 var identity = (arg) => arg;
 function useStore(api, selector = identity) {
-  // React hooks removed - not used in vanilla API
+  // React hooks удалены - не используются в vanilla API
   // const slice = React.useSyncExternalStore(...);
   // React.useDebugValue(slice);
   // return slice;

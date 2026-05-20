@@ -363,7 +363,7 @@ async def test_search_empty_namespace(rag_provider_pgvector, ns_name, rag_compan
     assert [r.model_dump() for r in results] == []
 
 
-# -- Chunking --
+# -- Чанкинг --
 
 
 @pytest.mark.asyncio
@@ -396,7 +396,7 @@ async def test_chunking(rag_provider_pgvector, ns_name, rag_company_id):
     assert all(r.company_id == rag_company_id for r in rows)
 
 
-# -- Search with filters --
+# -- Поиск с фильтрами --
 
 
 @pytest.mark.asyncio
@@ -1071,7 +1071,7 @@ async def test_delete_orphan_company_chunks_rejects_zero_limit(rag_provider_pgve
         await rag_provider_pgvector.delete_orphan_company_chunks(limit=0)
 
 
-# -- Reembed write API: write_reembed_chunk_embeddings + embedding_model_name --
+# -- Write API для reembed: write_reembed_chunk_embeddings + embedding_model_name --
 
 
 @pytest.mark.asyncio

@@ -27,7 +27,7 @@ import {
 } from '../events/resources/documents.resource.js';
 import { documentStatusResource } from '../events/resources/document-status.resource.js';
 import { searchOp } from '../events/resources/search.resource.js';
-import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import '@platform/lib/components/layout/platform-island.js';
@@ -47,7 +47,7 @@ const RAG_ROUTES = [
 ];
 
 /**
- * Mobile bottom-nav (mobile shell 2026): Knowledge bases, Search, Settings, Profile.
+ * Mobile bottom-nav (mobile shell 2026): базы знаний, поиск, настройки, профиль.
  */
 const RAG_BOTTOM_NAV_ITEMS = [
     { key: 'namespaces', routeKey: 'namespaces', icon: 'box',      labelKey: 'bottom_nav.namespaces' },
@@ -130,7 +130,7 @@ export class RagApp extends PlatformApp {
     updated(changed) {
         super.updated(changed);
         const auth = this._authSelect.value;
-        applyTenantHostRedirectIfNeeded(
+        applyCompanyHostRedirectIfNeeded(
             auth,
             this._companiesListSel.value,
             this._companiesLoadingSel.value,

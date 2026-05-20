@@ -6,11 +6,11 @@ import { resolveVoiceHttpOriginFromFlowsBaseUrl } from '@platform/lib/voice/voic
 
 describe('resolveVoiceHttpOriginFromFlowsBaseUrl', () => {
     it('maps …/flows to …/voice', () => {
-        expect(resolveVoiceHttpOriginFromFlowsBaseUrl('https://tenant.example.com/flows')).toBe(
-            'https://tenant.example.com/voice',
+        expect(resolveVoiceHttpOriginFromFlowsBaseUrl('https://acme.example.com/flows')).toBe(
+            'https://acme.example.com/voice',
         );
-        expect(resolveVoiceHttpOriginFromFlowsBaseUrl('https://tenant.example.com/flows/')).toBe(
-            'https://tenant.example.com/voice',
+        expect(resolveVoiceHttpOriginFromFlowsBaseUrl('https://acme.example.com/flows/')).toBe(
+            'https://acme.example.com/voice',
         );
     });
 

@@ -8,7 +8,7 @@ image:
   pullPolicy: IfNotPresent
   pullSecrets: []
 
-# Public domain для Ingress + сервисных URL платформы.
+# Публичный domain для Ingress + сервисных URL платформы.
 domain: humanitec.ru
 
 # Лейбл, которым размечается GPU-нода (kubectl label node <name> accelerator=nvidia-gpu).
@@ -494,7 +494,7 @@ observability:
 
 ingress:
   enabled: true
-  # MicroK8s ingress addon = traefik, IngressClass "public".
+  # Аддон ingress в MicroK8s = traefik, IngressClass "public".
   className: public
   apexHost: humanitec.ru
   wildcardHost: "*.humanitec.ru"

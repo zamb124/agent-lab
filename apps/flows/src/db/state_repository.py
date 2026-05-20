@@ -256,8 +256,8 @@ class DatabaseStateRepository(BaseStateRepository):
         if self._storage.session_factory is None:
             raise RuntimeError("Storage не подключен")
 
-        tenant_prefix = self._build_final_prefix()
-        if not tenant_prefix:
+        company_state_key_prefix = self._build_final_prefix()
+        if not company_state_key_prefix:
             raise ValueError(
                 "resolve_session_id_by_flow_and_identifier requires company-scoped repository"
             )
@@ -266,7 +266,7 @@ class DatabaseStateRepository(BaseStateRepository):
         async with self._storage.get_session() as session:
             query = text(f"""
                 SELECT key FROM {table}
-                WHERE key LIKE :tenant_prefix
+                WHERE key LIKE :company_state_key_prefix
                   AND key LIKE :flow_pattern
                   AND (
                       (value->'data'->>'task_id') = :lookup_id
@@ -278,7 +278,7 @@ class DatabaseStateRepository(BaseStateRepository):
             result = await session.execute(
                 query,
                 {
-                    "tenant_prefix": f"{tenant_prefix}%",
+                    "company_state_key_prefix": f"{company_state_key_prefix}%",
                     "flow_pattern": f"%{flow_id}:%",
                     "lookup_id": lookup_id,
                 },
@@ -289,8 +289,8 @@ class DatabaseStateRepository(BaseStateRepository):
 
             raw_id: str = row["key"]
             session_id = raw_id
-            if session_id.startswith(tenant_prefix):
-                session_id = session_id[len(tenant_prefix) :]
+            if session_id.startswith(company_state_key_prefix):
+                session_id = session_id[len(company_state_key_prefix) :]
 
             sp = self._get_prefix()
             if session_id.startswith(sp):
@@ -329,12 +329,12 @@ class DatabaseStateRepository(BaseStateRepository):
         params: dict[str, object] = {}
         param_idx = 1
 
-        # Добавляем tenant фильтр если не global
-        tenant_prefix = self._build_final_prefix()
-        if tenant_prefix:
+        # Добавляем company-scope фильтр если не global
+        company_state_key_prefix = self._build_final_prefix()
+        if company_state_key_prefix:
             param_name = f"param{param_idx}"
             conditions.append(f"key LIKE :{param_name}")
-            params[param_name] = f"{tenant_prefix}%"
+            params[param_name] = f"{company_state_key_prefix}%"
             param_idx += 1
 
         if user_id:
@@ -402,10 +402,10 @@ class DatabaseStateRepository(BaseStateRepository):
                 if not isinstance(state_data, dict):
                     raise ValueError("state row data must be a JSON object")
 
-                # Убираем tenant prefix из session_id
+                # Убираем company-scope prefix из session_id
                 session_id = raw_id
-                if tenant_prefix and session_id.startswith(tenant_prefix):
-                    session_id = session_id[len(tenant_prefix):]
+                if company_state_key_prefix and session_id.startswith(company_state_key_prefix):
+                    session_id = session_id[len(company_state_key_prefix):]
 
                 user_id_value = state_data.get("user_id", "")
                 user_id_from_state = user_id_value if isinstance(user_id_value, str) else ""

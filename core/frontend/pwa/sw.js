@@ -150,7 +150,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API запросы - Network First
+  // API запросы - сначала сеть
   if (url.pathname.startsWith('/api/') || 
       url.pathname.includes('/api/')) {
     event.respondWith(networkFirst(request));
@@ -163,13 +163,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // HTML страницы - Network First с offline fallback
+  // HTML страницы - сначала сеть с offline-резервом
   if (request.headers.get('accept')?.includes('text/html')) {
     event.respondWith(networkFirstWithOffline(request));
     return;
   }
 
-  // Остальное - Network First
+  // Остальное - сначала сеть
   event.respondWith(networkFirst(request));
 });
 
@@ -221,7 +221,7 @@ async function staleWhileRevalidateStatic(request) {
 }
 
 /**
- * Network First стратегия
+ * стратегия «сначала сеть»
  * Сначала пытаемся загрузить из сети, если не получается - из кэша
  */
 async function networkFirst(request) {
@@ -240,7 +240,7 @@ async function networkFirst(request) {
 }
 
 /**
- * Network First с offline fallback для HTML страниц
+ * сначала сеть с offline-резервом для HTML страниц
  */
 async function networkFirstWithOffline(request) {
   try {

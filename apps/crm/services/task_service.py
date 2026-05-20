@@ -882,7 +882,7 @@ class TaskService:
         row.data["review_completed_at"] = now.isoformat()
         return row
 
-    # ── Daily / Period Summary ─────────────────────────────────────────────────
+    # ── Дневная / периодическая сводка ─────────────────────────────────────────────────
 
     async def start_daily_summary(
         self,

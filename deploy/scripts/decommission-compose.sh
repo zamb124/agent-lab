@@ -2,7 +2,7 @@
 # Полный снос legacy docker compose стека на хосте по SSH.
 # CONFIRM=0 (dry-run, default) | 1 (реальный снос).
 # Шаги (CONFIRM=1): docker compose down --volumes --rmi all, docker rm -f, volume rm,
-# network rm, rmi -f, system prune -af --volumes, rm -rf COMPOSE_DIR / EXTRA_DIRS.
+# Выполняет network rm, rmi -f, system prune -af --volumes, rm -rf COMPOSE_DIR / EXTRA_DIRS.
 # Makefile: make k8s-decommission-compose [SSH_TARGET=root@<host>] [CONFIRM=1]
 
 set -uo pipefail
@@ -23,7 +23,7 @@ CONFIRM="${CONFIRM:-0}"
 
 log_section "Decommission docker compose: $SSH_TARGET (CONFIRM=$CONFIRM)"
 
-# Inventory: что есть на хосте.
+# Инвентаризация: что есть на хосте.
 remote_inventory() {
   ssh -o BatchMode=yes "$SSH_TARGET" "bash -s" <<EOF
 set -uo pipefail

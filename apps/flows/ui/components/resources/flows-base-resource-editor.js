@@ -2,13 +2,13 @@
  * flows-base-resource-editor — общая обёртка для редакторов ресурсов.
  *
  * Поля точно по `ResourceDefinition` (apps/flows/src/models/resource.py):
- *   - resource_id (read-only)
+ *   - resource_id (только для чтения)
  *   - type (badge)
  *   - name
  *   - description
  *   - tags (platform-field type=array)
  *
- * Slot 'settings' — type-specific поля (`config: dict`).
+ * Slot 'settings' — поля, специфичные для типа (`config: dict`).
  *
  * `compactHeader` — карточка закреплённого ресурса на resource-ноде: без шапки
  * (id / имя / описание / теги); только `slot settings`. Метаданные ресурса — в каталоге

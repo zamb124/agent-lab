@@ -10,7 +10,7 @@ describe('authCompanyNavigationEffect', () => {
         vi.unstubAllGlobals();
     });
 
-    it('с /select-company переходит на /dashboard?post_login=1 того же арендатора', async () => {
+    it('с /select-company переходит на /dashboard?post_login=1 того же subdomain', async () => {
         let href = 'https://system.humanitec.ru/select-company';
         const loc = {
             hostname: 'system.humanitec.ru',

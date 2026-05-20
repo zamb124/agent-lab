@@ -52,7 +52,7 @@ os.environ.setdefault("TASKS__BROKER_URL", "redis://localhost:63792/1")
 os.environ.setdefault("TRACING__TEMPO_ENABLED", "false")
 # Отключаем проверку permissions по умолчанию для тестов (кроме test_permissions.py)
 os.environ.setdefault("AUTH__PERMISSIONS_ENABLED", "false")
-# Default tenant для тестов
+# Default SERVER__DEFAULT_TENANT_ID для тестов
 os.environ.setdefault("SERVER__DEFAULT_TENANT_ID", "test_tenant")
 # Порты сервисов для тестов (900X чтобы не конфликтовать с production)
 os.environ["SERVER__FLOWS_SERVICE_URL"] = "http://localhost:9001"

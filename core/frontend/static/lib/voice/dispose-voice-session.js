@@ -2,7 +2,7 @@ import { clearStreamTtsTarget } from './stream-tts-registry.js';
 
 /**
  * Унифицированное завершение сессии (media + VoiceAgentBridge):
- * пока WS открыт — server-side flush STT (``end_recording`` → ``finalize_done``), затем
+ * пока WS открыт — серверный flush STT (``end_recording`` → ``finalize_done``), затем
  * ``bridge.stop()``: нефинальный partial уходит в одно ``message/stream``; ответ на уже
  *   запущенный запрос после финального transcript **не** обрывается (отмена только barge-in /
  *   ``tasks/cancel``), затем ``media.close()``.

@@ -60,7 +60,7 @@ class CompiledGraph(StrictBaseModel):
     compiled_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Время компиляции")
     checksum: str = Field(..., description="Хеш конфига для кеширования")
 
-    # Read-only граф
+    # Граф только для чтения
     model_config = {"frozen": True}
 
     def validate_state_flow(self) -> None:

@@ -2,7 +2,7 @@
 # Идемпотентная настройка wildcard TLS для humanitec.ru + *.humanitec.ru через
 # flant/cert-manager-webhook-regru (DNS-01) и Let's Encrypt.
 # Шаги: git clone webhook-чарта, helm upgrade --install regru-webhook, ClusterIssuer
-# letsencrypt-prod-dns01, Certificate platform-tls в namespace platform, wait Ready.
+# letsencrypt-prod-dns01, Certificate platform-tls в namespace platform, ждём Ready.
 # Fast-path: если Certificate и ClusterIssuer уже Ready — выходит без действий.
 #
 # REG.RU API требует whitelist IP master-ноды (Настройки → API в личном кабинете).

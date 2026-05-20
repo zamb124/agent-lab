@@ -6,7 +6,7 @@ SQLAlchemy модели для CRM Service.
 - entity_types: Типы сущностей с иерархией и промптами
 - relationship_types: Типы связей с промптами
 - relationships: Граф связей между entities
-- company_mapping: Связь tenant (company) с entity
+- company_mapping: Связь платформенной Company с CRM entity
 - access_grants: Гранты доступа
 - access_requests: Запросы на доступ
 """
@@ -338,7 +338,7 @@ class Relationship(Base):
 
 class CompanyMapping(Base):
     """
-    Связь между tenant (company из shared_db) и entity в crm_entities.
+    Связь между платформенной Company из shared_db и entity в crm_entities.
 
     При первом входе в CRM автоматически создается entity типа 'organization'
     для компании пользователя с is_owner=True.

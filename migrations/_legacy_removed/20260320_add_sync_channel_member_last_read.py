@@ -16,7 +16,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # IF NOT EXISTS: колонка могла уже появиться из SyncDatabase._ensure_schema_columns при старте сервиса.
+    # IF NOT EXISTS: колонка могла уже появиться из SyncБаза данных._ensure_schema_columns при старте сервиса.
     op.execute(
         "ALTER TABLE sync_channel_members "
         "ADD COLUMN IF NOT EXISTS last_read_at TIMESTAMP WITH TIME ZONE"

@@ -188,7 +188,7 @@ def main() -> int:
         except (UnicodeDecodeError, OSError):
             continue
 
-        # 1. metadata legacy keys
+        # 1. legacy-ключи metadata
         if not _path_starts_with_any(rel, METADATA_WHITELIST_PATHS):
             for m in METADATA_KEY_RE.finditer(text):
                 failures.append(f"{rel}: forbidden company.metadata.get({m.group(1)!r}) outside core.company_ai")
@@ -211,7 +211,7 @@ def main() -> int:
             for m in _VENDOR_URL_RE.finditer(text):
                 failures.append(f"{rel}: hardcoded vendor URL {m.group(0)!r} outside whitelist")
 
-        # 5. forbidden legacy symbols (reintroduction)
+        # 5. запрещённые legacy-символы (повторное введение)
         for sym in _FORBIDDEN_LEGACY_SYMBOLS:
             # допускаем упоминание в комментариях/docstring внутри scripts/check_company_ai_canon.py
             # и в .cursor/* / scripts/* / docs/*

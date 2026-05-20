@@ -48,7 +48,7 @@ alwaysApply: false
 
 Удобная обёртка — `traced_operation(...)` (`core/tracing/operation_span.py`); низкоуровнево — `PlatformTracer.platform_operation_span`. Идемпотентность джобы: после успешного `record_usage` в shared storage пишется `billing:settled_span:{span_id}` → `usage_id` (см. `billing.mdc`).
 
-**Колонки `company_id` / `namespace` в БД:** при сохранении span, если в итоговых атрибутах есть непустые `platform.tenant.company_id` / `platform.tenant.namespace`, они задают колонки **поверх** значений из `get_context()`. Так воркеры/фоновые задачи фиксируют tenant без HTTP-контекста.
+**Колонки `company_id` / `namespace` в БД:** при сохранении span, если в итоговых атрибутах есть непустые `platform.tenant.company_id` / `platform.tenant.namespace`, они задают колонки **поверх** значений из `get_context()`. Так воркеры/фоновые задачи фиксируют `company_id`/`namespace` без HTTP-контекста.
 
 **Обязательные атрибуты для `platform_tracing`:** `platform.tenant.company_id` (константа `ATTR_TENANT_COMPANY_ID`) и `platform.user.id` (`ATTR_USER_ID`). Если в атрибутах нет `platform.user.id`, он дописывается из `get_context().user.user_id` (как и компания). Операции без HTTP-контекста (воркеры, LiveKit из sync) обязаны передавать оба id в `extra_attributes` `traced_operation` или в API (например `LiveKitClient`: обязательные `company_id` и `user_id` на трейсируемых методах). Фоновые задачи без пользователя в payload — явно задавать субъект (инициатор/зарезервированный id), не оставлять пустое поле.
 

@@ -1,7 +1,7 @@
 /**
  * CRMShareModal — управление доступом к сущности (entity grants).
  *
- * Props:
+ * Свойства:
  *   - entityId: string — обязательный, сущность для шаринга.
  *
  * Поток:
@@ -20,9 +20,9 @@
  *          { user_id, label }).
  *        - для subject=company — текстовый ввод company_id.
  *        - для subject=public — никаких дополнительных полей.
- *   4. Submit → `entityGrantCreateOp.run({ entity_id, subject, body })`.
+ *   4. Отправка → `entityGrantCreateOp.run({ entity_id, subject, body })`.
  *      На SUCCEEDED перезагружаем список и сбрасываем форму.
- *   5. Revoke → `grantRevokeOp.run({ grant_id })`. На SUCCEEDED — refresh.
+ *   5. Отзыв → `grantRevokeOp.run({ grant_id })`. На SUCCEEDED — refresh.
  */
 
 import { html, css, nothing } from 'lit';

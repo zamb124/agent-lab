@@ -910,7 +910,7 @@ function _dispatchA2aEvent(ctx, contextId, currentTaskId, result, causationId) {
             return taskId;
         }
 
-        // См. _isTerminalState: completed/finished с final:false — не конец задачи, после LLM ещё идут ноды графа.
+        // См. _isТерминальная нодаState: completed/finished с final:false — не конец задачи, после LLM ещё идут ноды графа.
         if (final || state === 'failed' || state === 'error') {
             _dispatchTerminal(ctx, cid, taskId, state, message, metadata, causationId);
         }

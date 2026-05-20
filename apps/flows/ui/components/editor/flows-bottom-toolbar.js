@@ -4,7 +4,7 @@
  * Группы:
  *   1. zoom: zoom_in / zoom_out / zoom_100 / fit_view
  *   2. tools: select / pan
- *   3. actions: undo / redo / variables / smart-guides toggle / help
+ *   3. actions: undo / redo / variables / переключатель smart-guides / help
  *
  * Источник state: useOp('flows/editor').state.{activeTool,canUndo,canRedo,
  * smartGuidesEnabled,viewBox,skillsData,flowConfig}.

@@ -66,7 +66,7 @@ export class EmbedBlockRenderer extends LitElement {
             try {
                 el[propKey] = v;
             } catch {
-                /* ignore invalid prop */
+                /* игнорируем невалидный prop */
             }
         }
         el.addEventListener('embed-block-action', (e) => {

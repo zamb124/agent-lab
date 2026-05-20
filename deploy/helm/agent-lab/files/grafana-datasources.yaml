@@ -1,4 +1,4 @@
-# Provisioned datasources для Grafana.
+# Подготовленные datasources для Grafana.
 # Loki → Tempo (derivedFields по trace_id в логах).
 # Связку Tempo → Loki в Explore при желании включите в UI datasources (избегаем циклических UID при provisioning).
 apiVersion: 1

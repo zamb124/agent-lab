@@ -1,4 +1,4 @@
-# pre-trained STT models
+# Предобученные STT-модели
 stt_models:
   en:
     latest:

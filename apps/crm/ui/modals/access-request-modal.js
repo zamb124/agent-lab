@@ -1,7 +1,7 @@
 /**
  * CRMAccessRequestModal — запрос доступа к чужой сущности.
  *
- * Props:
+ * Свойства:
  *   - entityId: string — обязательный, сущность, на которую запрашивается доступ.
  *
  * Поток:
@@ -11,11 +11,11 @@
  *        - message: textarea (max 1000), не обязательный.
  *        - include_dependencies: чекбокс.
  *        - max_depth: range 1..5 (виден только если include_dependencies).
- *   3. Submit: `accessRequestsResource.create({
+ *   3. Отправка: `accessRequestsResource.create({
  *        resource_type: 'entity', resource_id: entityId, message?,
  *        include_dependencies, max_depth
  *      })`.
- *   4. На CREATED — close(); на CREATE_FAILED — показать ошибку в footer.
+ *   4. На CREATED — close(); на CREATE_FAILED — показать ошибку в футере.
  */
 
 import { html, css, nothing } from 'lit';

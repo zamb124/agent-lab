@@ -4,9 +4,9 @@
  */
 
 import {
-    getCompanyTenantHostContext,
+    getCompanyHostContext,
     buildCompanySubdomainUrl,
-} from './tenant-url.js';
+} from './company-url.js';
 
 const SUPPORTED_PRODUCTION = ['humanitec.ru', 'agents-lab.ru'];
 
@@ -92,25 +92,25 @@ export function resolveActiveCompanySubdomain(user, companiesList) {
  * @returns {string}
  */
 export function buildShellOriginPathUrl(path) {
-    const ctx = getCompanyTenantHostContext();
+    const ctx = getCompanyHostContext();
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     return `${ctx.protocol}://${ctx.baseDomain}${ctx.portSuffix}${normalizedPath}`;
 }
 
 /**
- * @param {string | null} hostSub
- * @param {string} activeSub
+ * @param {string | null} hostSubdomain
+ * @param {string} activeCompanySubdomain
  * @returns {boolean}
  */
-function _tenantSlugMatchesHost(hostSub, activeSub) {
-    const want = String(activeSub).trim().toLowerCase();
+function _companySubdomainMatchesHost(hostSubdomain, activeCompanySubdomain) {
+    const want = String(activeCompanySubdomain).trim().toLowerCase();
     if (want.length === 0) {
         return false;
     }
-    if (hostSub === null) {
+    if (hostSubdomain === null) {
         return false;
     }
-    return String(hostSub).trim().toLowerCase() === want;
+    return String(hostSubdomain).trim().toLowerCase() === want;
 }
 
 /**
@@ -118,15 +118,15 @@ function _tenantSlugMatchesHost(hostSub, activeSub) {
  * @param {ReadonlyArray<{ company_id: string, subdomain?: string }>} companiesList
  * @param {boolean} companiesLoading
  * @param {{ loadCompanies: () => void }} [handlers]
- * @param {string} [pathForTenant] при наличии субдомена: перейти на этот path (например `/dashboard`), иначе берётся текущий path
+ * @param {string} [pathForCompanySubdomain] при наличии субдомена: перейти на этот path (например `/dashboard`), иначе берётся текущий path
  * @returns {'ok' | 'wait' | 'replaced' | 'replaced_select'}
  */
-export function applyTenantHostRedirectIfNeeded(
+export function applyCompanyHostRedirectIfNeeded(
     auth,
     companiesList,
     companiesLoading,
     handlers,
-    pathForTenant,
+    pathForCompanySubdomain,
 ) {
     if (auth == null) {
         return 'ok';
@@ -137,7 +137,7 @@ export function applyTenantHostRedirectIfNeeded(
     if (typeof window === 'undefined') {
         return 'ok';
     }
-    const hostSub = extractSubdomainFromHostname(window.location.hostname);
+    const hostSubdomain = extractSubdomainFromHostname(window.location.hostname);
     if (companiesLoading) {
         return 'wait';
     }
@@ -147,15 +147,15 @@ export function applyTenantHostRedirectIfNeeded(
         }
         return 'wait';
     }
-    const activeSub = resolveActiveCompanySubdomain(auth.user, companiesList);
-    if (activeSub) {
-        if (!_tenantSlugMatchesHost(hostSub, activeSub)) {
+    const activeCompanySubdomain = resolveActiveCompanySubdomain(auth.user, companiesList);
+    if (activeCompanySubdomain) {
+        if (!_companySubdomainMatchesHost(hostSubdomain, activeCompanySubdomain)) {
             const rawPath =
-                typeof pathForTenant === 'string' && pathForTenant.length > 0
-                    ? pathForTenant
+                typeof pathForCompanySubdomain === 'string' && pathForCompanySubdomain.length > 0
+                    ? pathForCompanySubdomain
                     : `${window.location.pathname}${window.location.search}${window.location.hash}`;
             const pathNorm = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
-            const next = buildCompanySubdomainUrl(activeSub, pathNorm);
+            const next = buildCompanySubdomainUrl(activeCompanySubdomain, pathNorm);
             if (next !== window.location.href) {
                 window.location.replace(next);
                 return 'replaced';
@@ -163,7 +163,7 @@ export function applyTenantHostRedirectIfNeeded(
         }
         return 'ok';
     }
-    if (hostSub !== null) {
+    if (hostSubdomain !== null) {
         return 'ok';
     }
     if (window.location.pathname === '/select-company' || window.location.pathname.startsWith('/select-company?')) {

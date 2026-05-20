@@ -1,5 +1,5 @@
 /**
- * Glass Button Component
+ * Компонент Glass Button
  * Кнопка с glass morphism эффектом
  */
 import { html, css } from '../../assets/js/lit/lit.min.js';

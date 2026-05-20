@@ -1,7 +1,7 @@
 /**
  * GraphPage — экран графа знаний CRM.
  *
- * Layout: единый canvas-stage с overlay-картами:
+ * Макет: единый canvas-stage с overlay-картами:
  *   - graph-canvas (3D ForceGraph3D);
  *   - graph-search-pill (top-left): поиск + минимальная релевантность + view-mode
  *     (influence / related / path);
@@ -30,7 +30,7 @@
  *
  * UI-команды (модалки, тосты, навигация) — только через helpers базы
  * (`openModal`, `toast`, `navigate`). Никаких прямых dispatch UI/ROUTER/AUTH,
- * httpRequest, fetch, services.* / store / features.
+ * без httpRequest, fetch, services.* / store / features.
  *
  * Live-обновления — полный набор push-событий для обоих canvas-view.
  */

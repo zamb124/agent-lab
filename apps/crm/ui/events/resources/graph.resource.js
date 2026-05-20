@@ -138,7 +138,7 @@ export const entityRelationshipsOp = createAsyncOp({
  * `apps/crm/api/relationships.py` (router prefix `/relationships`).
  * На время подготовки backend alias'а `/entities/shortest-path` выравниваем
  * UI на существующий путь, а payload (`source_id`/`target_id`) маппим в
- * query `from`/`to`.
+ * query-параметры `from`/`to`.
  */
 export const shortestPathOp = createAsyncOp({
     name: 'crm/shortest_path',

@@ -1,6 +1,6 @@
 /* 
  * Liquid Glass Design System
- * Apple-inspired glassmorphism theme (2025)
+ * Glassmorphism-тема в стиле Apple (2025)
  * Поддержка темной и светлой темы
  */
 
@@ -96,7 +96,7 @@
         rgba(35, 35, 55, 0.95) 100%
     );
     
-    /* Glass solid backgrounds (for backdrop-filter) */
+    /* Сплошные glass-фоны (для backdrop-filter) */
     --glass-solid-subtle: rgba(28, 28, 46, 0.75);
     --glass-solid-medium: rgba(35, 35, 55, 0.85);
     --glass-solid-strong: rgba(40, 40, 64, 0.92);
@@ -254,7 +254,7 @@
     --duration-slow: 400ms;
     --duration-slower: 600ms;
 
-    /* Core motion 2026: browser-composited defaults (opacity/transform first). */
+    /* Core motion 2026: браузерная композиция по умолчанию (сначала opacity/transform). */
     --motion-duration-micro: 120ms;
     --motion-duration-enter: 180ms;
     --motion-duration-exit: 160ms;
@@ -278,7 +278,7 @@
         opacity var(--motion-duration-enter) var(--motion-ease-decelerate),
         transform var(--motion-duration-enter) var(--motion-ease-decelerate);
 
-    /* Stable modal body defaults. Services may override --modal-body-min-block-size. */
+    /* Стабильные дефолты тела модалки. Сервисы могут переопределять --modal-body-min-block-size. */
     --platform-modal-sm-body-min-block-size: 0px;
     --platform-modal-md-body-min-block-size: 6rem;
     --platform-modal-lg-body-min-block-size: 12rem;
@@ -493,7 +493,7 @@
     --crm-summary-chip-orange-bg: rgba(255, 171, 120, 0.3);
     --crm-summary-chip-rose-bg: rgba(250, 176, 187, 0.32);
 
-    /* CRM accents (Figma palette) */
+    /* Акценты CRM (палитра Figma) */
     --crm-accent-violet: #99A6F9;
     --crm-accent-yellow: #FAD17A;
     --crm-accent-orange: #FF885C;
@@ -825,7 +825,7 @@
     --accent-secondary-subtle: rgba(242, 120, 74, 0.12);
     --accent-quaternary-subtle: rgba(245, 158, 11, 0.12);
     
-    /* Sync semantic tokens (light) */
+    /* Семантические токены Sync (светлая тема) */
     --sync-bubble-own-bg: linear-gradient(135deg, rgba(153, 166, 249, 0.22) 0%, rgba(135, 148, 240, 0.14) 100%);
     --sync-bubble-own-border: rgba(135, 148, 240, 0.25);
     --sync-bubble-other-bg: linear-gradient(135deg, rgba(219, 234, 254, 0.85) 0%, rgba(191, 219, 254, 0.65) 100%);
@@ -918,7 +918,7 @@
     --crm-note-text-strikethrough: rgba(34, 34, 34, 0.2);
 }
 
-/* ========== Office / Documents service palette ========== */
+/* ========== Палитра сервиса Office / Documents ========== */
 :root {
     --documents-gradient: linear-gradient(105deg, #3ec9d8 0%, #6cb1e1 42%, #737ce9 100%);
     --documents-gradient-hover: linear-gradient(105deg, #48d4e2 0%, #78b9ea 42%, #828df0 100%);

@@ -741,13 +741,13 @@ async def run(args, state):
         # Extract results
         assert result.extracted['total'] == 2
 
-        # Transform results (10% increase: 100->110, 200->220)
+        # Трансформируем результаты (10% increase: 100->110, 200->220)
         assert len(result.transformed_items) == 2
         assert result.transformed_items[0]['price'] == 110
         assert result.transformed_items[1]['price'] == 220
         assert result.total_price == 330
 
-        # Load results
+        # Загружаем результаты
         assert result.load_result['saved'] == 2
         assert result.load_result['total_value'] == 330
 

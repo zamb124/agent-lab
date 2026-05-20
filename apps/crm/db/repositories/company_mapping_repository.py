@@ -1,5 +1,5 @@
 """
-Репозиторий для связи tenant (company) и entity в crm_entities.
+Репозиторий для связи платформенной Company и CRM entity в crm_entities.
 Работает с SQLAlchemy напрямую.
 """
 
@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 class CompanyMappingRepository(BaseCRMRepository[CompanyMapping]):
     """
-    Репозиторий для связи company (tenant) и entity в crm_entities.
+    Репозиторий для связи платформенной Company и CRM entity в crm_entities.
 
     При первом входе в CRM создается entity типа 'organization'
     для компании пользователя.

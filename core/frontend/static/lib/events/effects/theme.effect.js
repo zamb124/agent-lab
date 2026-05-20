@@ -1,5 +1,5 @@
 /**
- * Theme effect.
+ * Эффект темы.
  *
  * Применяет тему к DOM (data-theme на <html>, meta theme-color), persists выбор
  * пользователя в localStorage, слушает изменения системной темы и эмитит события.

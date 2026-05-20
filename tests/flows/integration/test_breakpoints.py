@@ -594,7 +594,7 @@ class TestBreakpointsAPIIntegration:
         from apps.flows.src.models import FlowConfig
         from core.context import set_context
 
-        # Устанавливаем контекст с tenant перед созданием агента
+        # Устанавливаем company context перед созданием flow
         set_context(mock_context)
 
         flow_id = f"bp_api_test_{unique_id}"
@@ -811,4 +811,3 @@ class TestBreakpointsAPIIntegration:
         assert not result.is_err
         assert result.return_value.get("status") == "completed"
         assert "All done" in result.return_value.get("response", "")
-

@@ -50,9 +50,9 @@ FILE_TYPE_REGISTRY: tuple[FileTypeEntry, ...] = (
     FileTypeEntry(".toml", ("application/toml",), FileCategory.TEXT),
     # Emacs Org mode
     FileTypeEntry(".org", ("text/x-org",), FileCategory.TEXT),
-    # Newline-delimited JSON
+    # JSON с разделением по строкам
     FileTypeEntry(".ndjson", ("application/x-ndjson",), FileCategory.TEXT),
-    # Source code — MIME text/plain (как GitHub/git)
+    # Исходный код — MIME text/plain (как GitHub/git)
     FileTypeEntry(".py", ("text/x-python", "text/plain"), FileCategory.TEXT),
     FileTypeEntry(".go", ("text/x-go", "text/plain"), FileCategory.TEXT),
     FileTypeEntry(".ts", ("text/typescript", "text/plain"), FileCategory.TEXT),

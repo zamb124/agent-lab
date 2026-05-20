@@ -389,7 +389,7 @@ class BaseRAGProvider(ABC):
         return results
 
     async def delete_orphan_company_chunks(self, *, limit: int) -> int:
-        """Удаляет chunks без company_id, если backend хранит tenant-aware chunks."""
+        """Удаляет chunks без company_id, если backend хранит company-scoped chunks."""
         raise NotImplementedError(f"{self.provider_name} не поддерживает orphan chunks cleanup")
 
     async def close(self):

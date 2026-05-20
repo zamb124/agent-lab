@@ -38,7 +38,7 @@
     pointer-events: none;
 }
 
-/* Primary Default (violet) */
+/* Основной вариант по умолчанию (фиолетовый) */
 .kit-btn-primary {
     background: var(--platform-btn-primary-bg);
     color: var(--platform-btn-primary-text);
@@ -62,7 +62,7 @@
     box-shadow: 0 0 10px rgba(255, 136, 92, 0.6);
 }
 
-/* Secondary Default (violet text, transparent bg) */
+/* Вторичный вариант по умолчанию (фиолетовый текст, прозрачный фон) */
 .kit-btn-secondary {
     background: var(--platform-btn-secondary-bg);
     color: var(--platform-btn-secondary-text);
@@ -170,7 +170,7 @@
     color: rgba(34, 34, 34, 0.3);
 }
 
-/* Dark theme overrides */
+/* Переопределения тёмной темы */
 :root .kit-input,
 [data-theme="dark"] .kit-input {
     background: var(--glass-tint-medium, rgba(255, 255, 255, 0.05));
@@ -442,7 +442,7 @@
     border-radius: 0;
 }
 
-/* ========== SUMMARY CARD ========== */
+/* ========== СВОДНАЯ КАРТОЧКА ========== */
 
 .kit-summary-card {
     background: var(--crm-summary-bg);

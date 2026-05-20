@@ -19,7 +19,7 @@ from apps.flows.src.constants.execution_limits import (
 )
 from core.clients.llm.config import LLMCallConfig, validate_fallback_model_configs
 from core.models import StrictBaseModel
-from core.urn import extract_id
+from core.urn import extract_resource_id
 
 from .enums import NodeType
 from .exception_absorb_allow import ExceptionAbsorbAllowName
@@ -153,7 +153,7 @@ class NodeConfig(StrictBaseModel):
         """Принимает URN или plain ID, извлекает ID."""
         if not isinstance(v, str):
             raise ValueError(f"node_id: ожидается строка, получено {type(v).__name__}")
-        return extract_id(v)
+        return extract_resource_id(v)
 
     description: str = Field(default="", description="Описание ноды")
 
@@ -244,7 +244,7 @@ class NodeConfig(StrictBaseModel):
                     raise ValueError(
                         f"messages_filter: элемент #{i} должен быть непустой строкой (node_id)"
                     )
-                out.append(extract_id(item))
+                out.append(extract_resource_id(item))
             return out
         raise ValueError(
             f"messages_filter: ожидается 'all', 'own' или список строк, получено {type(v).__name__}"

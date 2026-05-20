@@ -7,14 +7,14 @@
  *
  * Поток (mode='create'):
  *   - templates подгружаются через `useResource('crm/templates', { autoload })`.
- *   - draft seed: template_id + пустые name/description.
+ *   - стартовый draft: template_id + пустые name/description.
  *   - submit → форма шлёт `namespacesResource.events.CREATE_REQUESTED`.
  *   - На CREATED — `setPlatformNamespaceSelection(company_id, name)` +
  *     `closeAfterSave()`.
  *
  * Поток (mode='edit'):
  *   - preflight `useOp('crm/namespace_editability')` для бейджа со статистикой.
- *   - draft seed: description из `namespacesResource.byId[name]`; name read-only.
+ *   - стартовый draft: description из `namespacesResource.byId[name]`; name только для чтения.
  *   - submit → форма шлёт `namespaceUpdateOp.events.REQUESTED`.
  *   - На SUCCEEDED — `namespacesResource.load()` + `closeAfterSave()`.
  */

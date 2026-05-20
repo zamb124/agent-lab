@@ -1472,7 +1472,7 @@ class TestA2AJSONRPCErrors:
         _validate_jsonrpc_response(data)
 
         assert "error" in data
-        assert data["error"]["code"] == -32601  # Method not found
+        assert data["error"]["code"] == -32601  # Метод не найден
 
     @pytest.mark.asyncio
     async def test_missing_params_error(self, client, flow_id):

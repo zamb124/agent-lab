@@ -469,7 +469,7 @@ def _infer_node_writes(
         writes.append(desc)
         _append_write_issues(path, source, issues)
 
-    # Common BaseNode mapping contract.
+    # Общий контракт маппинга BaseNode.
     output_mapping = node.get("output_mapping") if isinstance(node.get("output_mapping"), dict) else {}
     schema_props = _schema_properties(node.get("output_schema"))
     return_keys = _infer_code_return_keys(node)

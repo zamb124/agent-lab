@@ -3,10 +3,10 @@
  *
  * Поля точно по `RemoteFlowNode` (apps/flows/src/runtime/nodes.py):
  *   - url (direct URL) ИЛИ flow_id (внешний реестр)
- *   - branch_id (default 'default')
+ *   - branch_id (по умолчанию 'default')
  *   - headers (dict<str, str>, @state: / @var: в строках)
  *
- * Toggle режима: direct URL ↔ by flow_id.
+ * Переключение режима: direct URL ↔ by flow_id.
  */
 
 import { html, css } from 'lit';

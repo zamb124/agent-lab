@@ -10,8 +10,8 @@ function stableFileKey(file) {
 }
 
 /**
- * Collects files for the active chat context from the canonical files bucket,
- * message-local files, and legacy fileIds.
+ * Собирает файлы активного chat-контекста из канонического bucket-а файлов,
+ * локальных файлов сообщения и legacy fileIds.
  *
  * @param {object | null | undefined} chatState
  * @param {unknown[]} messages

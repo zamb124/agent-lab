@@ -233,7 +233,7 @@ class ContextFactory:
 
     def _detect_language(self, request: Request) -> Language:
         """Определяет язык пользователя"""
-        # 1. HTMX Accept-Language header (highest priority)
+        # 1. HTMX header Accept-Language (высший приоритет)
         htmx_lang = (request.headers.get("Accept-Language") or "").lower()
         if htmx_lang:
             for lang in Language:

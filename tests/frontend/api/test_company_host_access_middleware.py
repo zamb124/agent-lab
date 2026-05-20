@@ -1,6 +1,6 @@
 """
-Субдомен Host = тенант: 403 при несовпадении membership; HTML для document/json для API;
-anonymous-страницы без 403.
+Субдомен Host задаёт активную компанию: 403 при несовпадении membership;
+HTML для document/json для API; anonymous-страницы без 403.
 """
 
 import pytest
@@ -10,7 +10,7 @@ from core.utils.tokens import get_token_service
 
 
 @pytest.mark.asyncio
-async def test_tenant_mismatch_403_json(
+async def test_company_host_mismatch_403_json(
     frontend_client, auth_token, frontend_container, unique_id: str
 ) -> None:
     """Чужой субдомен + Accept: application/json — JSON с detail."""
@@ -18,7 +18,7 @@ async def test_tenant_mismatch_403_json(
     other_cid = f"co_other_{unique_id}"
     other = Company(
         company_id=other_cid,
-        name="Other tenant",
+        name="Other company",
         owner_user_id="u_foreign",
         members={"u_foreign": ["owner"]},
         subdomain=other_slug,
@@ -43,7 +43,7 @@ async def test_tenant_mismatch_403_json(
 
 
 @pytest.mark.asyncio
-async def test_tenant_mismatch_403_html(
+async def test_company_host_mismatch_403_html(
     frontend_client, auth_token, frontend_container, unique_id: str
 ) -> None:
     """Тот же сценарий, браузерный Accept — HTML-страница ошибки."""
@@ -51,7 +51,7 @@ async def test_tenant_mismatch_403_html(
     other_cid = f"co_oh_{unique_id}"
     other = Company(
         company_id=other_cid,
-        name="Other tenant h",
+        name="Other company h",
         owner_user_id="u_foreign2",
         members={"u_foreign2": ["owner"]},
         subdomain=other_slug,
@@ -118,15 +118,15 @@ async def test_x_company_id_conflicts_with_subdomain_403(
 
 
 @pytest.mark.asyncio
-async def test_policy_anonymous_200_on_foreign_tenant_subdomain(
+async def test_policy_anonymous_200_on_foreign_company_subdomain(
     frontend_client, auth_token, frontend_container, unique_id: str
 ) -> None:
-    """Anonymous /policy: не 403, даже если сессия с другой компанией, Host — чужой тенант."""
+    """Anonymous /policy: не 403, даже если сессия с другой компанией, Host — чужая компания."""
     other_slug = f"pol-{unique_id}"
     other_cid = f"co_pol_{unique_id}"
     other = Company(
         company_id=other_cid,
-        name="Policy tenant",
+        name="Policy company",
         owner_user_id="u_pol",
         members={"u_pol": ["owner"]},
         subdomain=other_slug,
@@ -147,7 +147,7 @@ async def test_policy_anonymous_200_on_foreign_tenant_subdomain(
 
 
 @pytest.mark.asyncio
-async def test_flows_path_wrong_tenant_403(
+async def test_flows_path_wrong_company_host_403(
     flows_client, auth_token, frontend_container, unique_id: str
 ) -> None:
     """GET /flows/... (a2a) с Host чужого субдомена — 403 в middleware, не 200."""
@@ -195,7 +195,7 @@ async def test_session_host_mismatch_rebinds_200_and_set_cookie(
     other_cid = f"co_dual_{unique_id}"
     other = Company(
         company_id=other_cid,
-        name="Dual tenant",
+        name="Dual company",
         owner_user_id=td.user_id,
         members={td.user_id: ["member"]},
         subdomain=other_slug,
@@ -238,7 +238,7 @@ async def test_session_host_mismatch_rebinds_200_and_set_cookie(
 async def test_stale_session_company_rebinds_to_host(
     frontend_client, frontend_container, unique_id: str
 ) -> None:
-    """JWT с company_id вне user.companies; Host — компания из membership — rebind на тенант Host."""
+    """JWT с company_id вне user.companies; Host — компания из membership — rebind на Host company."""
     from core.models.identity_models import User
 
     user_id = f"u_stale_{unique_id}"
@@ -248,7 +248,7 @@ async def test_stale_session_company_rebinds_to_host(
 
     other = Company(
         company_id=other_cid,
-        name="Host tenant",
+        name="Host company",
         owner_user_id=user_id,
         members={user_id: ["member"]},
         subdomain=other_slug,

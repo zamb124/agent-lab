@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Объединение GPU worker ноды в MicroK8s кластер. Запускать на master под root.
 # Шаги: SSH-ключ master → gpu-worker, microk8s add-node, microk8s join --worker (data-plane,
-# не control-plane), wait for Ready, label accelerator=nvidia-gpu.
+# не control-plane), ждём Ready, label accelerator=nvidia-gpu.
 # nvidia-device-plugin DaemonSet ставит Helm-чарт agent-lab.
 #
 # ENV:

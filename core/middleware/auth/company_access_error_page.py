@@ -1,5 +1,5 @@
 """
-Минимальная HTML-страница ошибок доступа к тенанту (без SPA).
+Минимальная HTML-страница ошибок доступа к компании по Host/subdomain (без SPA).
 Тема: localStorage platform_theme, иначе prefers-color-scheme, иначе dark.
 """
 
@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from fastapi.responses import HTMLResponse
 
 
-def build_tenant_access_error_html(
+def build_company_access_error_html(
     status_code: int,
     message: str,
 ) -> str:
@@ -86,12 +86,12 @@ def build_tenant_access_error_html(
 """
 
 
-def build_tenant_access_error_response(
+def build_company_access_error_response(
     status_code: int,
     message: str,
 ) -> HTMLResponse:
     return HTMLResponse(
-        content=build_tenant_access_error_html(status_code, message),
+        content=build_company_access_error_html(status_code, message),
         status_code=status_code,
     )
 

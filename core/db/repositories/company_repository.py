@@ -48,7 +48,7 @@ class CompanyRepository(BaseRepository[Company]):
 
         entities: List[Company] = []
         for key, data in all_data.items():
-            # Company key must have exactly one colon: "company:<id>"
+            # Ключ компании должен содержать ровно одно двоеточие: "company:<id>"
             if key.count(":") != 1:
                 continue
             try:

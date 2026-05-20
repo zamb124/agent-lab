@@ -4,10 +4,10 @@
  * Поля точно по `ChannelNodeConfig` + `ChannelType` enum
  * (apps/flows/src/models/channel_config.py, enums.py):
  *   - channel: 'telegram' | 'email' | 'whatsapp' | 'sms' | 'webhook'
- *   - action: str (default 'send_message')
+ *   - action: str (по умолчанию 'send_message')
  *   - channel_config: per-channel конфиг
  *
- * Per-channel подформы:
+ * Подформы по channel:
  *   - telegram: bot_token, parse_mode (HTML | MarkdownV2 | null)
  *   - email: smtp_host, smtp_port, from_email, password
  *   - webhook: url, method, headers (JSON)

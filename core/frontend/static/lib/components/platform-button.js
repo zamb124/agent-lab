@@ -123,7 +123,7 @@ export class PlatformButton extends PlatformElement {
             background: var(--glass-tint-subtle, rgba(255, 255, 255, 0.04));
         }
         
-        /* Light theme */
+        /* Светлая тема */
         :host-context([data-theme="light"]) button.secondary {
             color: var(--platform-btn-secondary-text, #8794F0);
             background: var(--platform-btn-secondary-bg, rgba(135, 148, 240, 0.12));

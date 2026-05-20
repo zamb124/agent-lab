@@ -1,5 +1,5 @@
 /**
- * CRM Graph UI — UI-only slice состояния экрана графа.
+ * CRM Graph UI — slice состояния только для UI экрана графа.
  *
  * Хранит:
  *   - panels: { search, timeline, legend, meta } — видимость overlay-панелей

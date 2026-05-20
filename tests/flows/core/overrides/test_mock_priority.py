@@ -62,7 +62,7 @@ class TestMockConfigMerge:
         config = resolve_mock_config(flow_mock=flow_mock, skill_mock=skill_mock)
 
         assert config.tools["calculator"] == 100  # Override
-        assert config.tools["ask_user"] == "base response"  # From base
+        assert config.tools["ask_user"] == "base response"  # Из base
         assert config.tools["new_tool"] == "new response"  # Added
 
     def test_skill_mock_merges_nodes(self):
@@ -298,7 +298,7 @@ class TestMockConfigAllLevels:
 
     def test_all_levels_mock_priority(self):
         """Проверка приоритета всех уровней mock."""
-        # Flow level
+        # Уровень flow
         flow_mock = {
             "enabled": True,
             "tools": {"tool1": "flow", "tool2": "flow"},
@@ -307,7 +307,7 @@ class TestMockConfigAllLevels:
             "llm": [{"type": "text", "content": "flow"}]
         }
 
-        # Skill level (higher priority)
+        # Уровень skill (более высокий приоритет)
         skill_mock = {
             "enabled": True,
             "tools": {"tool1": "skill", "tool3": "skill"},
@@ -361,23 +361,23 @@ class TestMockConfigAllLevels:
 
         config = resolve_mock_config(flow_mock=flow_mock, skill_mock=skill_mock)
 
-        # Enabled from skill
+        # Включено из skill
         assert config.enabled is True
 
-        # LLM from skill
+        # LLM из skill
         assert len(config.llm) == 1
         first = config.llm[0]
         content = first["content"] if isinstance(first, dict) else first.content
         assert content == "Полностью замоканный ответ"
 
-        # Tools merged with skill priority
+        # Tools смержены с приоритетом skill
         assert config.tools["calculator"] == 999
         assert config.tools["ask_user"] == "Mock user response"
 
-        # Agents merged with skill priority
+        # Agents смержены с приоритетом skill
         assert config.flows["example_subflow"] == "Mock subflow response"
 
-        # Nodes merged with skill priority
+        # Nodes смержены с приоритетом skill
         assert config.nodes["main"]["response"] == "Mock node response"
         assert config.nodes["direct_subflow"]["response"] == "Mock direct subflow node response"
 

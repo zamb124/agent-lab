@@ -176,7 +176,7 @@ check_step \
   "Tempo ready" \
   "[ \"$($K get pod tempo-0 -n $PLATFORM_NS -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null)\" = 'true' ]"
 
-# 13. Health endpoints через ingress (если есть DNS)
+# 13. Health-endpoints через ingress (если есть DNS)
 if [ "$CHECK_PUBLIC" = "1" ] && command -v curl >/dev/null 2>&1; then
   log_section "13) Public health endpoints (через Ingress)"
   for path in "/flows/health" "/crm/health" "/sync/health"; do

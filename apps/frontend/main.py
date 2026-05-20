@@ -331,7 +331,7 @@ if ui_path.exists():
 
 # Удаляем дефолтный root endpoint от фабрики - ПОСЛЕ монтирования статики
 # (он возвращает {"service": "core", "version": "1.0.0", "status": "running"})
-# Заменим его на SPA fallback ниже
+# Заменим его на SPA-резерв ниже
 for route in list(app.routes):
     if isinstance(route, Route) and route.path == "/":
         app.routes.remove(route)
@@ -511,7 +511,7 @@ async def get_llms_txt(container: ContainerDep) -> PlainTextResponse:
     return PlainTextResponse(content=_build_llms_txt(base_url=base_url))
 
 
-# SPA fallback (все неизвестные пути → index.html)
+# SPA-резерв (все неизвестные пути → index.html)
 @app.get("/")
 @app.get("/{full_path:path}")
 async def serve_spa(container: ContainerDep, full_path: str = ""):

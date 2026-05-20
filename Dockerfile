@@ -1,7 +1,7 @@
 # Python 3.13 — единая версия для всех окружений (dev/test/prod).
 
 # ============================================
-# Stage 1: Базовый образ Python 3.13
+# Этап 1: базовый образ Python 3.13
 # ============================================
 FROM python:3.13-slim AS base-with-core
 
@@ -62,7 +62,7 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 
 # ============================================
-# Stage 2: Builder - установка ВСЕХ зависимостей
+# Этап 2: сборщик - установка ВСЕХ зависимостей
 # ============================================
 FROM base-with-core AS builder-all
 COPY pyproject.toml uv.lock README.md ./
@@ -81,7 +81,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system -r /tmp/requirements.txt
 
 # ============================================
-# Stage 3: Docs builder (Zensical static site)
+# Этап 3: сборщик документации (статический сайт Zensical)
 # ============================================
 FROM python:3.13-slim AS docs-builder
 RUN pip install --no-cache-dir "zensical>=0.0.32"
@@ -96,7 +96,7 @@ RUN python scripts/docs_prepare.py && \
     cp -a build/zensical-en-out/. documentation-dist/en/
 
 # ============================================
-# Stage 4: Base-final - общий образ со всем кодом
+# Этап 4: base-final - общий образ со всем кодом
 # ============================================
 FROM builder-all AS base-final
 WORKDIR /app
@@ -115,7 +115,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 # ============================================
-# Final stages - отличаются только CMD/EXPOSE
+# Финальные стадии - отличаются только CMD/EXPOSE
 # ============================================
 
 # Agents

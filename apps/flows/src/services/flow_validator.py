@@ -17,7 +17,7 @@ from typing import Any
 
 from apps.flows.src.state.node_files import validate_node_files_list
 from core.logging import get_logger
-from core.urn import extract_id
+from core.urn import extract_resource_id
 
 logger = get_logger(__name__)
 
@@ -596,15 +596,15 @@ class FlowValidator:
             if not isinstance(mf, list):
                 continue
             for ref in mf:
-                rid = extract_id(ref) if isinstance(ref, str) else str(ref)
-                if rid not in node_ids:
+                referenced_node_id = extract_resource_id(ref) if isinstance(ref, str) else str(ref)
+                if referenced_node_id not in node_ids:
                     result.add_error(
                         code="messages_filter_unknown_node",
                         message=(
-                            f"Нода '{nid}': messages_filter содержит неизвестный node_id '{rid}'"
+                            f"Нода '{nid}': messages_filter содержит неизвестный node_id '{referenced_node_id}'"
                         ),
                         node_id=nid,
-                        details={"messages_filter": mf, "unknown": rid},
+                        details={"messages_filter": mf, "unknown": referenced_node_id},
                     )
 
     def _validate_node_files(

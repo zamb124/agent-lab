@@ -4,13 +4,13 @@
  */
 
 /**
- * @typedef {{ isProduction: boolean, baseDomain: string, portSuffix: string, protocol: string }} TenantHostContext
+ * @typedef {{ isProduction: boolean, baseDomain: string, portSuffix: string, protocol: string }} CompanyHostContext
  */
 
 /**
- * @returns {TenantHostContext}
+ * @returns {CompanyHostContext}
  */
-export function getCompanyTenantHostContext() {
+export function getCompanyHostContext() {
     const hostname = window.location.hostname;
     const rawPort = window.location.port;
 
@@ -80,7 +80,7 @@ export function getCompanyTenantHostContext() {
  * @returns {string}
  */
 export function buildCompanySubdomainUrl(subdomain, path = '/') {
-    const ctx = getCompanyTenantHostContext();
+    const ctx = getCompanyHostContext();
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     return `${ctx.protocol}://${subdomain}.${ctx.baseDomain}${ctx.portSuffix}${normalizedPath}`;
 }
@@ -92,7 +92,7 @@ export function buildCompanySubdomainUrl(subdomain, path = '/') {
  * @returns {string}
  */
 export function formatCompanySubdomainLabel(subdomain) {
-    const ctx = getCompanyTenantHostContext();
+    const ctx = getCompanyHostContext();
     return `${subdomain}.${ctx.baseDomain}${ctx.portSuffix}`;
 }
 
@@ -102,6 +102,6 @@ export function formatCompanySubdomainLabel(subdomain) {
  * @returns {string}
  */
 export function getPlatformApexOriginUrl() {
-    const ctx = getCompanyTenantHostContext();
+    const ctx = getCompanyHostContext();
     return `${ctx.protocol}://${ctx.baseDomain}${ctx.portSuffix}/`;
 }

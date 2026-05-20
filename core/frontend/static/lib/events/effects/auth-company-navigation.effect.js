@@ -1,5 +1,5 @@
 /**
- * После смены активной компании (AUTH_COMPANY_SWITCHED) — редирект на tenant-subdomain.
+ * После смены активной компании (AUTH_COMPANY_SWITCHED) — редирект на company subdomain.
  *
  * Реакция перенесена из platform-user / service-switcher-sheet: лист bottom-sheet
  * снимается с DOM при закрытии и отписывается от bus до завершения HTTP switch-company,
@@ -7,7 +7,7 @@
  */
 
 import { CoreEvents } from '../contract.js';
-import { buildCompanySubdomainUrl } from '../../utils/tenant-url.js';
+import { buildCompanySubdomainUrl } from '../../utils/company-url.js';
 import { POST_LOGIN_DASHBOARD_QUERY } from '../../utils/last-visited-service.js';
 
 const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';

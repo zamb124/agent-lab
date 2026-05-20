@@ -73,7 +73,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         -o /tmp/requirements.txt && \
     uv pip install --system -r /tmp/requirements.txt
 
-# RAG Worker stage для тестов (минимальный образ; сборка: --target rag-worker)
+# Стадия RAG Worker для тестов (минимальный образ; сборка: --target rag-worker)
 FROM base-test AS rag-worker
 
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -94,7 +94,7 @@ ENV TESTING=true
 
 CMD ["taskiq", "worker", "apps.rag_worker.worker:worker_app", "--workers", "1"]
 
-# Полный образ для pytest и worker/scheduler (последний stage = default при сборке без --target)
+# Полный образ для pytest и worker/scheduler (последняя стадия = default при сборке без --target)
 FROM base-test AS default
 
 COPY . .

@@ -1,13 +1,13 @@
 /**
- * tenant-host-guard: согласованность с core.utils.domain (extract_subdomain).
+ * company-host-guard: согласованность с core.utils.domain (extract_subdomain).
  */
 
 import { describe, it, expect, vi } from 'vitest';
 import {
     extractSubdomainFromHostname,
     resolveActiveCompanySubdomain,
-    applyTenantHostRedirectIfNeeded,
-} from '@platform/lib/utils/tenant-host-guard.js';
+    applyCompanyHostRedirectIfNeeded,
+} from '@platform/lib/utils/company-host-guard.js';
 
 describe('extractSubdomainFromHostname', () => {
     it('humanitec.ru -> null (apex)', () => {
@@ -51,7 +51,7 @@ describe('resolveActiveCompanySubdomain', () => {
     });
 });
 
-describe('applyTenantHostRedirectIfNeeded', () => {
+describe('applyCompanyHostRedirectIfNeeded', () => {
     const withWindow = (loc, fn) => {
         const prev = globalThis.window;
         const replace = loc.replace ?? vi.fn();
@@ -81,7 +81,7 @@ describe('applyTenantHostRedirectIfNeeded', () => {
                     { company_id: 'd1', subdomain: 'demo' },
                 ];
 
-                const r = applyTenantHostRedirectIfNeeded(auth, companies, false, undefined, undefined);
+                const r = applyCompanyHostRedirectIfNeeded(auth, companies, false, undefined, undefined);
                 expect(r).toBe('replaced');
                 expect(replace).toHaveBeenCalledTimes(1);
                 expect(replace.mock.calls[0][0]).toBe('http://system.lvh.me:8002/dashboard');
@@ -104,7 +104,7 @@ describe('applyTenantHostRedirectIfNeeded', () => {
                 const auth = { status: 'authenticated', user: { company_id: 'sys' } };
                 const companies = [{ company_id: 'sys', subdomain: 'system' }];
 
-                const r = applyTenantHostRedirectIfNeeded(auth, companies, false, undefined, undefined);
+                const r = applyCompanyHostRedirectIfNeeded(auth, companies, false, undefined, undefined);
                 expect(r).toBe('ok');
                 expect(replace).not.toHaveBeenCalled();
             },
@@ -126,7 +126,7 @@ describe('applyTenantHostRedirectIfNeeded', () => {
                 const auth = { status: 'authenticated', user: { company_id: 'c2' } };
                 const companies = [{ company_id: 'c2', subdomain: 'acme' }];
 
-                const r = applyTenantHostRedirectIfNeeded(auth, companies, false, undefined, undefined);
+                const r = applyCompanyHostRedirectIfNeeded(auth, companies, false, undefined, undefined);
                 expect(r).toBe('replaced');
                 expect(replace.mock.calls[0][0]).toBe('http://acme.lvh.me:8002/team');
             },

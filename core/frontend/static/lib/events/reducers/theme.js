@@ -1,5 +1,5 @@
 /**
- * Theme slice.
+ * Slice темы.
  *
  * Поля state.theme:
  *   mode:   'dark' | 'light'

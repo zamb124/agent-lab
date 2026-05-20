@@ -1,9 +1,9 @@
 /**
- * Stable language logo renderer for isolated code runners.
+ * Стабильный рендерер логотипов языков для изолированных code runner-ов.
  *
- * `platform-icon` loads SVG through the platform icon cache. For language logos
- * inside dense pickers and canvas chips we want deterministic first paint, so
- * this component renders the shared official SVG assets directly.
+ * `platform-icon` загружает SVG через платформенный кэш иконок. Для логотипов языков
+ * в плотных пикерах и canvas-chip-ах нужен детерминированный первый paint, поэтому
+ * этот компонент напрямую рендерит общие официальные SVG-ассеты.
  */
 
 import { html, css } from 'lit';

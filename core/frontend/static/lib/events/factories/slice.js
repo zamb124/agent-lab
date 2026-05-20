@@ -1,5 +1,5 @@
 /**
- * createSlice — фабрика slice-only сущностей (UI-only state без HTTP/WS).
+ * createSlice — фабрика только slice сущностей (состояние только для UI без HTTP/WS).
  *
  * Назначение: завести именованный slice + reducer + actions без транспорта.
  * Для случаев, когда домен — чисто клиентский (звонок UI: `activeCall`,
@@ -10,7 +10,7 @@
  *   - name: 'scope/entity' (lowercase, snake_case, ровно 2 сегмента)
  *   - extraInitial: { ... } — каноничная форма slice (массивы [], словари {},
  *     строки '', числа 0). Минимум один ключ.
- *   - extraReducer(state, event, events) — pure (state, event) => state.
+ *   - extraReducer(state, event, events) — чистая функция (state, event) => state.
  *
  * Опциональные:
  *   - sliceKey: переопределение sliceKey (default — derived из name).

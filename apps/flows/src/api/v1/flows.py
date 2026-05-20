@@ -566,7 +566,7 @@ class FlowResponse(BaseModel):
     hidden: bool = False
     has_bundle_update: bool = False
 
-    # EXTERNAL flow (A2A)
+    # Внешний flow (A2A)
     url: str | None = None
     headers: dict[str, str] | None = None
     status: str | None = None
@@ -867,7 +867,7 @@ async def list_flows(
                 "branches": branches_response,
                 "evaluation": evaluation_dict,
             })
-        # EXTERNAL flow (A2A endpoint)
+        # Внешний flow (A2A endpoint)
         elif f.type == FlowType.EXTERNAL:
             status_value = f.status.value if isinstance(f.status, ExternalAgentStatus) else f.status
             response_data.update({

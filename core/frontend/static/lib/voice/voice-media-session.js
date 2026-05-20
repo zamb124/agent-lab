@@ -412,7 +412,7 @@ export function resampleMonoToPcm16ArrayBuffer(channel, inRate, state) {
  * @property {{ mime: string, sampleRate: number, channels: number }} mediaConfig
  * @property {{ code: string, detail: string }} error
  * @property {{ code: number, reason: string }} closed
- * @property {Record<string, never>} recordingFinalized — ответ сервера на ``end_recording`` (``finalize_done``)
+ * @property {Record<string, never>} recordingФиналized — ответ сервера на ``end_recording`` (``finalize_done``)
  */
 
 export class VoiceMediaSession extends EventTarget {
@@ -1310,7 +1310,7 @@ export class VoiceMediaSession extends EventTarget {
 
     /**
      * @param {string} text
-     * @param {boolean} isFinal
+     * @param {boolean} isФинал
      */
     _sendSpeakCommand(text, isFinal) {
         const payload = { type: 'speak', text };

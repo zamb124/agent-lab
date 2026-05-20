@@ -1,5 +1,5 @@
 /**
- * platform-json-editor — compact CodeMirror JSON viewer/editor for platform UIs.
+ * platform-json-editor — компактный CodeMirror viewer/editor для JSON в платформенных UI.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';

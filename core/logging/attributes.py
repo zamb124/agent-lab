@@ -13,7 +13,7 @@ LOG_SERVICE_NAME = "service.name"
 LOG_SERVICE_VERSION = "service.version"
 LOG_DEPLOYMENT_ENVIRONMENT = "deployment.environment"
 
-# Request / context
+# Запрос / контекст
 LOG_REQUEST_ID = "request_id"
 LOG_TRACE_ID = "trace_id"
 LOG_SPAN_ID = "span_id"

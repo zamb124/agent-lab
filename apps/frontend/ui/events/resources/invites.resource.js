@@ -10,7 +10,7 @@
 
 import { createAsyncOp } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
-import { buildCompanySubdomainUrl } from '@platform/lib/utils/tenant-url.js';
+import { buildCompanySubdomainUrl } from '@platform/lib/utils/company-url.js';
 import { INVITE_DASHBOARD_QUERY } from '@platform/lib/utils/last-visited-service.js';
 
 export const previewInviteOp = createAsyncOp({

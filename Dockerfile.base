@@ -1,5 +1,5 @@
-# Base image with core dependencies + heavy common libs
-# Build & Push (multiplatform):
+# Базовый образ с core-зависимостями и тяжёлыми общими библиотеками
+# Сборка и публикация (мультиплатформенная):
 #   docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.base -t zambas/agent-lab-base:latest --push .
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
@@ -58,10 +58,10 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
     rm -f /tmp/dotnet-install.sh && \
     dotnet --version
 
-# Copy only dependency files
+# Копируем только файлы зависимостей
 COPY pyproject.toml uv.lock README.md ./
 
-# Torch CPU-only (экономит ~2-3 GB по сравнению с CUDA версией)
+# Torch только для CPU (экономит ~2-3 GB по сравнению с CUDA версией)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system torch torchvision \
     --index-url https://download.pytorch.org/whl/cpu

@@ -1,5 +1,5 @@
 /**
- * createCursorList — фабрика cursor-paginated списка.
+ * createКурсорList — фабрика cursor-paginated списка.
  *
  * Назначение: tracing/spans, leads list, usage-report и любые другие домены,
  * где BE возвращает `{ items, next_cursor, has_more }` и фильтры формируются

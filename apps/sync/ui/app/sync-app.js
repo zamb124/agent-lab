@@ -52,7 +52,7 @@ import { gitResourceUpsertOp, gitResourceGetOp } from '../events/resources/git-r
 import { chatUiResource } from '../events/resources/chat-ui.resource.js';
 import { createSyncPersistEffect } from '../events/sync-persist.effect.js';
 import { createSyncCallPrefsEffect } from '../events/sync-call-prefs.effect.js';
-import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 const SYNC_ROUTES = [
@@ -122,7 +122,7 @@ export class SyncApp extends PlatformApp {
             return;
         }
         const auth = this._authSelect.value;
-        applyTenantHostRedirectIfNeeded(
+        applyCompanyHostRedirectIfNeeded(
             auth,
             this._companiesListSel.value,
             this._companiesLoadingSel.value,

@@ -1,6 +1,6 @@
 /**
  * EventBus: dispatch flow, frozen state, reducer purity, effects scheduling,
- * subscribers (state/type/any/selector), middleware.
+ * подписчики (state/type/any/selector), middleware.
  */
 
 import { describe, it, expect, vi } from 'vitest';

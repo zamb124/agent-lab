@@ -11,7 +11,7 @@
  *
  * Эмитит наружу:
  *   - change { nodeId, patch } — patch с top-level полями NodeConfig
- *     (description/tags/incoming_policy/exception_as_response/exception_allow_types/files/resources). Type-specific
+ *     (description/tags/incoming_policy/exception_as_response/exception_allow_types/files/resources). Специфичные для типа
  *     патчи приходят через slot='settings' (дочерний редактор сам диспатчит
  *     change на хосте).
  *

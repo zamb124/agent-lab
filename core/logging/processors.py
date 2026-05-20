@@ -165,7 +165,7 @@ def sample_info_logs(rate: float, sampled_loggers: list[str]) -> Callable[[Wrapp
             if not _should_sample(trace_id, rate):
                 raise structlog.DropEvent
             return event_dict
-        # trace_id отсутствует — fallback на random, чтобы не потерять запись совсем
+        # trace_id отсутствует — используем random как резерв, чтобы не потерять запись совсем
         if random.random() >= rate:
             raise structlog.DropEvent
         return event_dict

@@ -38,13 +38,13 @@ async def test_suggests_lifecycle(
     unique_id: str,
     system_user_id: str,
 ) -> None:
-    ns = "default"  # Using default namespace as it usually exists and is accessible
+    ns = "default"  # Используем namespace default, потому что он обычно существует и доступен
 
     survivor_id = f"surv_{unique_id}"
     source_id = f"src_{unique_id}"
     suggest_id = f"sug_{unique_id}"
 
-    # Setup Context
+    # Настраиваем контекст
     ctx = Context(
         user=User(user_id=system_user_id, name="Test"),
         active_company=Company(company_id="system", name="System"),
@@ -53,7 +53,7 @@ async def test_suggests_lifecycle(
     )
     set_context(ctx)
     try:
-        # Create entities for merge
+        # Создаём сущности для merge
         survivor = CRMEntity(
             entity_id=survivor_id,
             company_id="system",
@@ -75,7 +75,7 @@ async def test_suggests_lifecycle(
         await crm_container.entity_repository.create(survivor)
         await crm_container.entity_repository.create(source)
 
-        # Create Suggest
+        # Создаём suggest
         now = datetime.now(timezone.utc)
         suggest = CRMSuggest(
             id=suggest_id,
@@ -117,7 +117,7 @@ async def test_suggests_lifecycle(
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "resolved"
 
-    # Verify entity was merged (source should be deleted)
+    # Проверяем, что сущность смержена (source должен быть удалён)
     set_context(ctx)
     try:
         source_check = await crm_container.entity_repository.get(source_id)
@@ -169,7 +169,7 @@ async def test_suggests_dismiss(
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "dismissed"
 
-    # Check that it's no longer in pending list
+    # Проверяем, что записи больше нет в pending-списке
     response = await crm_client.get(
         f"/crm/api/v1/namespaces/{ns}/suggests",
         headers=auth_headers_system,

@@ -519,7 +519,7 @@ def create_service_app(
             services_spa_index,
         )
 
-    # Health endpoints
+    # Health-endpoints
     @app.get("/health")
     @app.get(f"/{service_name}/health")
     async def health():
@@ -529,7 +529,7 @@ def create_service_app(
     async def root():
         return {"service": service_name, "version": version, "status": "running"}
 
-    # Testing endpoint (ТОЛЬКО в TESTING режиме)
+    # Тестовый endpoint (ТОЛЬКО в TESTING режиме)
     if is_testing():
 
         @app.get(f"/{service_name}/test", response_class=HTMLResponse)

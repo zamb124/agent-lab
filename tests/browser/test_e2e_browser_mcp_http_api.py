@@ -89,7 +89,7 @@ async def test_mcp_http_api_initialize_list_and_call() -> None:
             assert "browser_save_html_to_s3" in names
             assert "browser_close_session" in names
 
-            # tools/call: create session
+            # tools/call: создаём session
             session_id = f"sess-mcp-{uid}"
             r2 = await ac.post(
                 "/browser/api/v1/mcp",
@@ -164,7 +164,7 @@ async def test_mcp_http_api_initialize_list_and_call() -> None:
             assert isinstance(snap.get("text"), str) and snap["text"]
             assert "refs" not in snap
 
-            # tools/call: close session
+            # tools/call: закрываем session
             r5 = await ac.post(
                 "/browser/api/v1/mcp",
                 headers={"Mcp-Session-Id": mcp_sid},

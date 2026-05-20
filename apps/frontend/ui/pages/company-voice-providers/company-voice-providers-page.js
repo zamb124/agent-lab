@@ -354,7 +354,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
         this._rulesTest   = this.useOp('frontend/company_pronunciation_rule_test');
         // ── Auth ──────────────────────────────────────────────────────
         this._auth = this.select(s => s.auth);
-        // ── Reactive state ────────────────────────────────────────────
+        // ── Реактивное состояние ──────────────────────────────────────
         this._activeTab        = 'providers';
         this._drafts           = { stt: _emptyProviderDraft(), tts: _emptyProviderDraft() };
         this._credEditedByKind = { stt: false, tts: false };

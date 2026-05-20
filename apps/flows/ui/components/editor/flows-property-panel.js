@@ -5,7 +5,7 @@
  * useOp('flows/editor'). Маршрутизирует по `node.type` (NodeType enum).
  *
  * Действия от base-node-editor:
- *   - 'change' { nodeId, patch } → updateBranchData(merge node)
+ *   - 'change' { nodeId, patch } → updateBranchData(смёржить node)
  *   - 'delete-node' { nodeId } → bulk_delete + локальный removeNode
  *   - 'duplicate-node' { nodeId } → клонирует node под новым id
  */

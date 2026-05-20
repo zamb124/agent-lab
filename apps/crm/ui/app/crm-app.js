@@ -156,7 +156,7 @@ import { dailyNotesUiSlice } from '../events/resources/daily-notes-ui.resource.j
 import { createCrmPersistEffect } from '../events/crm-persist.effect.js';
 import { createCrmGraphLegacyRoutesEffect } from '../events/crm-graph-legacy-routes.effect.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
-import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { getPlatformBus } from '@platform/lib/events/bus-singleton.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { getPlatformNamespaceSidebarSelection } from '@platform/lib/utils/platform-namespace.js';
@@ -389,7 +389,7 @@ export class CRMApp extends PlatformApp {
     updated(changed) {
         super.updated(changed);
         const auth = this._authSelect.value;
-        applyTenantHostRedirectIfNeeded(
+        applyCompanyHostRedirectIfNeeded(
             auth,
             this._companiesListSel.value,
             this._companiesLoadingSel.value,
@@ -401,7 +401,7 @@ export class CRMApp extends PlatformApp {
     /**
      * Сайдбар читает выбор из localStorage сразу; state.ui.namespace заполняется здесь.
      * Страницы с **`CRMNamespacePage`** берут фильтр через **`selectCrmApiNamespace`** (тот же
-     * fallback), чтобы первый запрос после F5 совпадал с сайдбаром.
+     * тот же источник), чтобы первый запрос после F5 совпадал с сайдбаром.
      */
     _hydrateCrmNamespaceSelection(auth) {
         if (!auth || auth.status !== 'authenticated' || !auth.user) {

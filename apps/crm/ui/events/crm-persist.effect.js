@@ -12,7 +12,7 @@
  * Ключи в localStorage:
  *   crm.graph_ui.panels        — { search, timeline, legend, meta }
  *   crm.graph_view.state      — { viewMode, maxDepth, displayDepth, searchInput }
- * Никаких fallback: если ключа нет — гидратация не происходит, slice остаётся
+ * Никакого резерва: если ключа нет — гидратация не происходит, slice остаётся
  * в `extraInitial`.
  */
 

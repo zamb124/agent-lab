@@ -1,5 +1,5 @@
 /**
- * Shared Island & Panel Styles
+ * Общие стили island и panel
  * Стили для glass-контейнеров контента и сворачиваемых панелей
  */
 import { css } from 'lit';
@@ -96,7 +96,7 @@ export const islandStyles = css`
         padding: var(--space-8);
     }
 
-    /* Light theme */
+    /* Светлая тема */
     :host-context([data-theme="light"]) .island {
         background: rgba(255, 255, 255, 0.9);
         border-color: rgba(15, 23, 42, 0.08);
@@ -226,7 +226,7 @@ export const panelHostStyles = css`
         flex: 0 0 var(--panel-collapsed-width, 48px) !important;
     }
 
-    /* Light theme */
+    /* Светлая тема */
     :host-context([data-theme="light"]) {
         background: rgba(255, 255, 255, 0.9);
         border-color: rgba(15, 23, 42, 0.08);
@@ -367,7 +367,7 @@ export const panelStyles = css`
         color: var(--text-tertiary);
     }
 
-    /* Light theme */
+    /* Светлая тема */
     :host-context([data-theme="light"]) .panel-header {
         background: linear-gradient(
             180deg,

@@ -99,7 +99,7 @@ def _get_user_groups(request: Request) -> list[str]:
 router = APIRouter(tags=["public", "a2a"])
 
 
-# Supported A2A methods
+# Поддерживаемые A2A-методы
 A2A_METHODS = {
     "message/send",
     "message/stream",

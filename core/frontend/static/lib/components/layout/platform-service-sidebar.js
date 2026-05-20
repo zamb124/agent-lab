@@ -5,7 +5,7 @@
  * Слоты (пробрасываются в platform-sidebar): header, default (nav), footer.
  * Слот logo пробрасывается только если у хоста есть дочерний узел со slot="logo" (иначе пустой <slot> ломал бы logo-src/logo-text).
  * События: collapse-change, mobile-change (проброс с внутреннего platform-sidebar).
- * Desktop collapsed: начальное значение и запись в localStorage — shell-sidebar-preference.
+ * Десктоп collapsed: начальное значение и запись в localStorage — shell-sidebar-preference.
  *
  * Методы: toggleMobile(), closeMobile() — для вызова из родительского App (меню).
  */

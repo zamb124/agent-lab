@@ -45,7 +45,7 @@ import {
     documentRenameForm,
 } from '../events/resources/documents.resource.js';
 import { documentEditorConfigOp } from '../events/resources/editor.resource.js';
-import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 
 import '@platform/lib/components/layout/platform-island.js';
@@ -179,7 +179,7 @@ export class OfficeApp extends PlatformApp {
     updated(changed) {
         super.updated(changed);
         const auth = this._authSelect.value;
-        applyTenantHostRedirectIfNeeded(
+        applyCompanyHostRedirectIfNeeded(
             auth,
             this._companiesListSel.value,
             this._companiesLoadingSel.value,

@@ -278,7 +278,7 @@ k8s-health:
 k8s-backup:
 	@PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/backup-postgres.sh $(if $(S3),--s3 $(S3),)
 
-# Restore: make k8s-restore FILE=backups/dump-...sql.gz [YES=1 — без подтверждения]
+# Восстановление: make k8s-restore FILE=backups/dump-...sql.gz [YES=1 — без подтверждения]
 k8s-restore:
 	@if [ -z "$(FILE)" ]; then echo "Usage: make k8s-restore FILE=<path/to/dump.sql.gz>"; exit 1; fi
 	@PLATFORM_NS=$(K8S_NAMESPACE) YES="$${YES:-0}" bash deploy/scripts/restore-postgres.sh $(FILE)

@@ -572,7 +572,7 @@ async def mcp_jsonrpc(
     params = req.params or {}
 
     # Простой session-id для MCP: клиент получает его на initialize и отдаёт обратно в headers.
-    # Никакого server-side состояния по этому ID не требуется: состояние control сессий живёт в browser session_id.
+    # Никакого серверного состояния по этому ID не требуется: состояние состояние control-сессий живёт в browser session_id.
     if method == "initialize":
         mcp_session_id = response.headers.get("Mcp-Session-Id")
         if not mcp_session_id:

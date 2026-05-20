@@ -1,10 +1,10 @@
 """
 URN (Universal Resource Name) для ресурсов платформы.
 
-Формат: urn:iman:type:id
+Формат: urn:iman:resource_type:resource_id
 
 Примеры:
-- urn:iman:agent:customer_service
+- urn:iman:flow:customer_service
 - urn:iman:node:summarizer
 - urn:iman:tool:calculator
 - urn:iman:branch:refund_processing
@@ -16,20 +16,20 @@ URN обеспечивает:
 4. Валидацию на этапе парсинга
 """
 
-from typing import Literal, Self, Union
+from __future__ import annotations
+
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
 # Типы ресурсов платформы
 URNNamespace = Literal["iman"]
-URNType = Literal["agent", "node", "tool", "branch", "variable"]
+URNResourceType = Literal["flow", "node", "tool", "branch", "variable"]
 
 
-def _parse_urn_type(value: str) -> URNType:
-    if value == "skill":
-        return "branch"
-    if value == "agent":
-        return "agent"
+def _parse_urn_resource_type(value: str) -> URNResourceType:
+    if value == "flow":
+        return "flow"
     if value == "node":
         return "node"
     if value == "tool":
@@ -38,7 +38,7 @@ def _parse_urn_type(value: str) -> URNType:
         return "branch"
     if value == "variable":
         return "variable"
-    valid_types = ("agent", "node", "tool", "branch", "variable")
+    valid_types = ("flow", "node", "tool", "branch", "variable")
     raise ValueError(
         f"Неизвестный тип ресурса: '{value}'. "
         f"Допустимые значения: {', '.join(valid_types)}"
@@ -49,18 +49,18 @@ class URN(BaseModel):
     """
     Базовый URN для ресурсов платформы.
 
-    Формат: urn:namespace:type:id
+    Формат: urn:namespace:resource_type:resource_id
     Пример: urn:iman:node:summarizer
     """
 
     namespace: URNNamespace = Field(default="iman", description="Namespace (всегда 'iman')")
-    type: URNType = Field(..., description="Тип ресурса")
-    id: str = Field(..., min_length=1, description="Идентификатор ресурса")
+    resource_type: URNResourceType = Field(..., description="Тип ресурса")
+    resource_id: str = Field(..., min_length=1, description="Идентификатор ресурса")
 
     @property
     def urn(self) -> str:
         """Возвращает полный URN в строковом формате"""
-        return f"urn:{self.namespace}:{self.type}:{self.id}"
+        return f"urn:{self.namespace}:{self.resource_type}:{self.resource_id}"
 
     @classmethod
     def parse(cls, urn_string: str) -> "URN":
@@ -78,29 +78,34 @@ class URN(BaseModel):
 
         Examples:
             >>> URN.parse("urn:iman:node:summarizer")
-            URN(namespace='iman', type='node', id='summarizer')
+            URN(namespace='iman', resource_type='node', resource_id='summarizer')
         """
         parts = urn_string.split(":")
         if len(parts) != 4:
             raise ValueError(
                 f"Невалидный URN формат: '{urn_string}'. "
-                f"Ожидается: 'urn:namespace:type:id'"
+                f"Ожидается: 'urn:namespace:resource_type:resource_id'"
             )
 
-        prefix, namespace, resource_type, resource_id = parts
+        prefix, namespace_part, resource_type_part, resource_id = parts
 
         if prefix != "urn":
             raise ValueError(f"URN должен начинаться с 'urn:', получено: '{prefix}:'")
 
-        if namespace != "iman":
-            raise ValueError(f"Namespace должен быть 'iman', получено: '{namespace}'")
+        if namespace_part != "iman":
+            raise ValueError(f"Namespace должен быть 'iman', получено: '{namespace_part}'")
 
-        parsed_type = _parse_urn_type(resource_type)
+        namespace: URNNamespace = "iman"
+        parsed_resource_type = _parse_urn_resource_type(resource_type_part)
 
-        return cls(namespace=namespace, type=parsed_type, id=resource_id)
+        return cls(
+            namespace=namespace,
+            resource_type=parsed_resource_type,
+            resource_id=resource_id,
+        )
 
     @classmethod
-    def from_string_or_urn(cls, value: Union[str, "URN"]) -> "URN":
+    def from_string_or_urn(cls, value: str | URN) -> URN:
         """
         Конвертирует строку или URN объект в URN.
 
@@ -113,7 +118,7 @@ class URN(BaseModel):
         Examples:
             >>> URN.from_string_or_urn("urn:iman:node:test")
             URN(...)
-            >>> URN.from_string_or_urn(URN(type="node", id="test"))
+            >>> URN.from_string_or_urn(URN(resource_type="node", resource_id="test"))
             URN(...)
         """
         if isinstance(value, URN):
@@ -146,39 +151,39 @@ class URN(BaseModel):
 # ============================================================================
 
 
-class AgentURN(URN):
+class FlowURN(URN):
     """
-    URN для агентов.
+    URN для flow.
 
     Примеры:
-    - urn:iman:agent:customer_service
-    - urn:iman:agent:docs_processor
+    - urn:iman:flow:customer_service
+    - urn:iman:flow:docs_processor
     """
 
-    type: URNType = Field(default="agent", description="Тип: agent")
+    resource_type: URNResourceType = Field(default="flow", description="Тип: flow")
 
     @model_validator(mode="after")
-    def _validate_agent_type(self) -> Self:
-        if self.type != "agent":
-            raise ValueError("AgentURN.type must be 'agent'")
+    def _validate_flow_resource_type(self) -> Self:
+        if self.resource_type != "flow":
+            raise ValueError("FlowURN.resource_type must be 'flow'")
         return self
 
     @classmethod
-    def create(cls, flow_id: str) -> "AgentURN":
+    def create(cls, flow_id: str) -> "FlowURN":
         """
-        Создаёт AgentURN из ID.
+        Создаёт FlowURN из flow_id.
 
         Args:
-            flow_id: ID агента
+            flow_id: ID flow
 
         Returns:
-            AgentURN объект
+            FlowURN объект
 
         Examples:
-            >>> AgentURN.create("customer_service")
-            AgentURN('urn:iman:agent:customer_service')
+            >>> FlowURN.create("customer_service")
+            FlowURN('urn:iman:flow:customer_service')
         """
-        return cls(id=flow_id)
+        return cls(resource_id=flow_id)
 
 
 class NodeURN(URN):
@@ -190,12 +195,12 @@ class NodeURN(URN):
     - urn:iman:node:validator
     """
 
-    type: URNType = Field(default="node", description="Тип: node")
+    resource_type: URNResourceType = Field(default="node", description="Тип: node")
 
     @model_validator(mode="after")
-    def _validate_node_type(self) -> Self:
-        if self.type != "node":
-            raise ValueError("NodeURN.type must be 'node'")
+    def _validate_node_resource_type(self) -> Self:
+        if self.resource_type != "node":
+            raise ValueError("NodeURN.resource_type must be 'node'")
         return self
 
     @classmethod
@@ -213,7 +218,7 @@ class NodeURN(URN):
             >>> NodeURN.create("summarizer")
             NodeURN('urn:iman:node:summarizer')
         """
-        return cls(id=node_id)
+        return cls(resource_id=node_id)
 
 
 class ToolURN(URN):
@@ -225,12 +230,12 @@ class ToolURN(URN):
     - urn:iman:tool:search_web
     """
 
-    type: URNType = Field(default="tool", description="Тип: tool")
+    resource_type: URNResourceType = Field(default="tool", description="Тип: tool")
 
     @model_validator(mode="after")
-    def _validate_tool_type(self) -> Self:
-        if self.type != "tool":
-            raise ValueError("ToolURN.type must be 'tool'")
+    def _validate_tool_resource_type(self) -> Self:
+        if self.resource_type != "tool":
+            raise ValueError("ToolURN.resource_type must be 'tool'")
         return self
 
     @classmethod
@@ -248,7 +253,7 @@ class ToolURN(URN):
             >>> ToolURN.create("calculator")
             ToolURN('urn:iman:tool:calculator')
         """
-        return cls(id=tool_id)
+        return cls(resource_id=tool_id)
 
 
 class BranchURN(URN):
@@ -260,12 +265,12 @@ class BranchURN(URN):
     - urn:iman:branch:order_tracking
     """
 
-    type: URNType = Field(default="branch", description="Тип: branch")
+    resource_type: URNResourceType = Field(default="branch", description="Тип: branch")
 
     @model_validator(mode="after")
-    def _validate_branch_type(self) -> Self:
-        if self.type != "branch":
-            raise ValueError("BranchURN.type must be 'branch'")
+    def _validate_branch_resource_type(self) -> Self:
+        if self.resource_type != "branch":
+            raise ValueError("BranchURN.resource_type must be 'branch'")
         return self
 
     @classmethod
@@ -283,7 +288,7 @@ class BranchURN(URN):
             >>> BranchURN.create("refund_processing")
             BranchURN('urn:iman:branch:refund_processing')
         """
-        return cls(id=branch_id)
+        return cls(resource_id=branch_id)
 
 
 class VariableURN(URN):
@@ -295,12 +300,12 @@ class VariableURN(URN):
     - urn:iman:variable:config.database.host
     """
 
-    type: URNType = Field(default="variable", description="Тип: variable")
+    resource_type: URNResourceType = Field(default="variable", description="Тип: variable")
 
     @model_validator(mode="after")
-    def _validate_variable_type(self) -> Self:
-        if self.type != "variable":
-            raise ValueError("VariableURN.type must be 'variable'")
+    def _validate_variable_resource_type(self) -> Self:
+        if self.resource_type != "variable":
+            raise ValueError("VariableURN.resource_type must be 'variable'")
         return self
 
     @classmethod
@@ -318,7 +323,7 @@ class VariableURN(URN):
             >>> VariableURN.create("api_key")
             VariableURN('urn:iman:variable:api_key')
         """
-        return cls(id=variable_name)
+        return cls(resource_id=variable_name)
 
 
 # ============================================================================
@@ -349,32 +354,32 @@ def is_urn(value: str) -> bool:
         return False
 
 
-def extract_id(value: Union[str, URN]) -> str:
+def extract_resource_id(value: str | URN) -> str:
     """
-    Извлекает ID из URN или возвращает строку как есть.
+    Извлекает resource_id из URN или возвращает строку как есть.
 
     Args:
         value: URN или строка
 
     Returns:
-        ID ресурса
+        resource_id
 
     Examples:
-        >>> extract_id("urn:iman:node:summarizer")
+        >>> extract_resource_id("urn:iman:node:summarizer")
         'summarizer'
-        >>> extract_id("just_id")
+        >>> extract_resource_id("just_id")
         'just_id'
     """
     if isinstance(value, URN):
-        return value.id
+        return value.resource_id
 
     if isinstance(value, str) and is_urn(value):
-        return URN.parse(value).id
+        return URN.parse(value).resource_id
 
     return value
 
 
-def normalize_to_urn(value: Union[str, URN], default_type: URNType) -> URN:
+def normalize_to_urn(value: str | URN, default_resource_type: URNResourceType) -> URN:
     """
     Нормализует значение к URN.
 
@@ -382,13 +387,13 @@ def normalize_to_urn(value: Union[str, URN], default_type: URNType) -> URN:
 
     Args:
         value: Строка или URN
-        default_type: Тип по умолчанию если value - простая строка
+        default_resource_type: Тип по умолчанию если value - простая строка
 
     Returns:
         URN объект
 
     Examples:
-        >>> normalize_to_urn("urn:iman:node:test", "agent")
+        >>> normalize_to_urn("urn:iman:node:test", "flow")
         URN('urn:iman:node:test')
         >>> normalize_to_urn("test", "node")
         URN('urn:iman:node:test')
@@ -400,24 +405,24 @@ def normalize_to_urn(value: Union[str, URN], default_type: URNType) -> URN:
         return URN.parse(value)
 
     # Простая строка - создаём URN с типом по умолчанию
-    return URN(type=default_type, id=value)
+    return URN(resource_type=default_resource_type, resource_id=value)
 
 
 # ============================================================================
-# Export
+# Экспорт
 # ============================================================================
 
 
 __all__ = [
     "URN",
     "URNNamespace",
-    "URNType",
-    "AgentURN",
+    "URNResourceType",
+    "FlowURN",
     "NodeURN",
     "ToolURN",
     "BranchURN",
     "VariableURN",
     "is_urn",
-    "extract_id",
+    "extract_resource_id",
     "normalize_to_urn",
 ]

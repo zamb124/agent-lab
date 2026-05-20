@@ -13,7 +13,7 @@ from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
 from apps.flows.src.models import FlowConfig, NodeConfig
 from core.errors import ResourceNotFoundError
 from core.logging import get_logger
-from core.urn import extract_id
+from core.urn import extract_resource_id
 
 if TYPE_CHECKING:
     from apps.flows.src.registry.nodes import NodeRegistry
@@ -62,8 +62,8 @@ class ResourceLoader:
         Raises:
             ResourceNotFoundError: если flow не найден
         """
-        id_str = extract_id(flow_id)
-        config = await self.flow_repository.get(id_str)
+        resolved_flow_id = extract_resource_id(flow_id)
+        config = await self.flow_repository.get(resolved_flow_id)
 
         if not config:
             raise ResourceNotFoundError(
@@ -86,8 +86,8 @@ class ResourceLoader:
         Raises:
             ResourceNotFoundError: Если нода не найдена
         """
-        id_str = extract_id(node_id)
-        config = await self.node_repository.get(id_str)
+        resolved_node_id = extract_resource_id(node_id)
+        config = await self.node_repository.get(resolved_node_id)
 
         if not config:
             raise ResourceNotFoundError(
@@ -111,9 +111,9 @@ class ResourceLoader:
         Raises:
             ResourceNotFoundError: Если tool не найден
         """
-        id_str = extract_id(tool_id)
+        resolved_tool_id = extract_resource_id(tool_id)
 
-        config = await self.tool_repository.get(id_str)
+        config = await self.tool_repository.get(resolved_tool_id)
         if not config:
             raise ResourceNotFoundError(
                 resource_type="Tool",

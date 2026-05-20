@@ -99,7 +99,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         """
         Ищет актуальный flow по flow_id по всем ключам company:*:flow:* без контекста компании.
 
-        Нужен для публичного POST Telegram (в запросе нет tenant-а, как у серверов Telegram).
+        Нужен для публичного POST Telegram (в запросе нет company context, как у серверов Telegram).
         Возвращает (config, company_identifier) — идентификатор сегмента company:* из ключа.
         """
         table_name = self._get_table_name()

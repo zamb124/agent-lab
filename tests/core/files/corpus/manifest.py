@@ -52,7 +52,7 @@ CORPUS: tuple[CorpusFile, ...] = (
     CorpusFile("hebrew-text-base64-iso88598i.txt", FileReadKind.TEXT, None),  # base64-encoded hebrew
     CorpusFile("fake-email.txt", FileReadKind.TEXT, None),
     CorpusFile("fake-incomplete-json.txt", FileReadKind.TEXT, None),
-    # truly empty / whitespace — only
+    # полностью пустой / только пробелы
     CorpusFile("empty.txt", FileReadKind.TEXT, None, allows_empty_text=True),
     CorpusFile("fake-text-all-whitespace.txt", FileReadKind.TEXT, None, allows_empty_text=True),
 
@@ -124,7 +124,7 @@ CORPUS: tuple[CorpusFile, ...] = (
     # .yaml
     CorpusFile("simple.yaml", FileReadKind.TEXT, "deer"),
 
-    # source code
+    # исходный код
     CorpusFile("fake.go", FileReadKind.TEXT, "Hello Go!"),
     CorpusFile("logger.py", FileReadKind.TEXT, "logging"),
 
@@ -145,7 +145,7 @@ CORPUS: tuple[CorpusFile, ...] = (
     CorpusFile("example-with-scripts.html", FileReadKind.HTML, None),
     CorpusFile("fake-html-pre.htm", FileReadKind.HTML, None),
     CorpusFile("language-docs/eng_spa_mult.html", FileReadKind.HTML, "human beings"),
-    # UTF-16 HTML — trafilatura получит garbled text через replace errors; может упасть
+    # UTF-16 HTML — trafilatura получит искажённый текст через replace errors; может упасть
     CorpusFile(
         "example-steelJIS-datasheet-utf-16.html",
         FileReadKind.HTML,
@@ -177,7 +177,7 @@ CORPUS: tuple[CorpusFile, ...] = (
     CorpusFile("pdf/header-test-doc.pdf", FileReadKind.PDF, None, expected_min_pages=1),
     CorpusFile("pdf/multi-column-2p.pdf", FileReadKind.PDF, None, expected_min_pages=2),
     CorpusFile("language-docs/fr_olap.pdf", FileReadKind.PDF, None),
-    # password-protected PDF: PyMuPDF не вылетает, но текст пустой
+    # PDF с паролем: PyMuPDF не вылетает, но текст пустой
     CorpusFile("pdf/password.pdf", FileReadKind.PDF, None, allows_empty_text=True),
 
     # ---------------------------------------------------------------------------
@@ -233,7 +233,7 @@ CORPUS: tuple[CorpusFile, ...] = (
     CorpusFile("test-image-jpg-mime.pptx", FileReadKind.OFFICE, None, allows_empty_text=True),
     CorpusFile("science-exploration-1p.pptx", FileReadKind.OFFICE, None),
     CorpusFile("language-docs/eng_spa_mult.pptx", FileReadKind.OFFICE, "human beings"),
-    # Legacy .ppt (PowerPoint 97-2003): требует libreoffice/soffice — намеренно not supported
+    # Legacy .ppt (PowerPoint 97-2003): требует libreoffice/soffice — намеренно не поддерживается
     CorpusFile(
         "fake-power-point.ppt",
         FileReadKind.OFFICE,
@@ -287,7 +287,7 @@ CORPUS: tuple[CorpusFile, ...] = (
     CorpusFile("language-docs/eng_spa_mult.epub", FileReadKind.OFFICE, "human beings"),
 
     # ---------------------------------------------------------------------------
-    # IMAGE (vision LLM via MockLLM)
+    # IMAGE (vision LLM через MockLLM)
     # ---------------------------------------------------------------------------
     CorpusFile("img/example.jpg", FileReadKind.IMAGE, "MOCK_VISION", uses_vision_llm=True),
     CorpusFile("img/DA-1p.jpg", FileReadKind.IMAGE, "MOCK_VISION", uses_vision_llm=True),

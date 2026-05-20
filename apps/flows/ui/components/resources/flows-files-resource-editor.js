@@ -2,12 +2,12 @@
  * flows-files-resource-editor — ресурс files (S3 хранилище).
  *
  * Поля точно по `FilesResourceConfig`:
- *   - bucket (str, required)
+ *   - bucket (str, обязательный)
  *   - prefix (str)
  *   - endpoint_url (str)
  *   - access_key_id (str)
  *   - secret_access_key (str, через variable-input)
- *   - region (str, default 'us-east-1')
+ *   - region (str, по умолчанию 'us-east-1')
  */
 
 import { html, css } from 'lit';

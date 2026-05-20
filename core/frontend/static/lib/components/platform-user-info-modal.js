@@ -15,9 +15,9 @@
  * Режим Own (isOwn === true):
  *   - Форма с полями first_name, last_name, name (обяз.), email (read-only),
  *     bio, language (ru/en).
- *   - Submit → dispatch('auth/profile/update_requested', { updates }).
+ *   - Отправка → dispatch('auth/profile/update_requested', { updates }).
  *   - Toast platform:user_info_modal.toast_profile_saved.
- *   - Footer: Save (primary), Logout (danger), Cancel.
+ *   - Футер: Save (primary), Logout (danger), Cancel.
  *
  * Режим Other (isOwn === false), member найден:
  *   - Карточка: avatar, name, email, роли, joined_at.
@@ -25,13 +25,13 @@
  *     компании — инлайн-секция «Роли»: чекбоксы owner/admin/developer/viewer.
  *     Чекбокс owner блокируется, если у member.roles есть 'owner' (защита
  *     владельца компании).
- *   - Save roles → useResource('frontend/team_members').update(userId, { roles }).
- *   - Footer: Save roles (если admin и роли изменены), Message in Sync,
+ *   - Сохранение ролей → useResource('frontend/team_members').update(userId, { roles }).
+ *   - Футер: Save roles (если admin и роли изменены), Message in Sync,
  *     Open in Team, Close.
  *   - Копирование user id: иконка в шапке слева от Save.
  *
  * Режим Other (member не найден):
- *   - Read-only карточка с user_chip.unknown.
+ *   - Карточка только для чтения с user_chip.unknown.
  *   - Footer: Close (копирование id — иконка в шапке).
  *
  * Cross-app переходы — через window.location.href (общего routes-реестра

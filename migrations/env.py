@@ -22,18 +22,18 @@ from sqlalchemy.ext.asyncio import create_async_engine
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Импортируем Base и core модели
-# CRM models
+# CRM-модели
 
 # Импорт моделей - они автоматически регистрируются в Base.metadata и service_registry
-# Flows service models
+# Модели сервиса Flows
 
-# Sync models
+# Sync-модели
 from core.db.models import Base
 
 # Теперь импортируем реестр после регистрации всех сервисов
 from core.db.service_registry import get_unique_db_urls
 
-# Push models (core)
+# Push-модели (core)
 
 config = context.config
 logger = logging.getLogger("alembic.env")

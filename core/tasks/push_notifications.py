@@ -23,7 +23,7 @@ REDIS_PREFIX = "push_notification:"
 REDIS_TTL = 86400 * 7  # 7 days
 
 logger = get_logger(__name__)
-# Singleton redis_client для core-задач
+# Singleton-экземпляр redis_client для core-задач
 _redis_client: Optional[RedisClient] = None
 
 def _get_redis() -> RedisClient:

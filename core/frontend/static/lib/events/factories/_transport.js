@@ -2,7 +2,7 @@
  * Транспортный слой фабрик. Скрывает выбор HTTP / WS от тела фабрики.
  *
  * Любая фабрика (`createAsyncOp` / `createResourceCollection` /
- * `createCursorList`) объявляет `transport: 'http' | 'ws'` и обязательное
+ * `createКурсорList`) объявляет `transport: 'http' | 'ws'` и обязательное
  * `restMirror` (для платформенного инварианта «REST-зеркало команд»).
  *
  * При `transport: 'http'` effect делает обычный `httpRequest`. При
@@ -53,7 +53,7 @@ function _assertRestMirrorEntry(entry, ownerLabel) {
 }
 
 /**
- * Нормализовать `restMirror` для одиночной операции (createAsyncOp / createCursorList).
+ * Нормализовать `restMirror` для одиночной операции (createAsyncOp / createКурсорList).
  * Бросает Error если поле невалидно. null/undefined — допустимы (caller сам решает).
  */
 export function normalizeRestMirrorSingle(value, ownerLabel) {

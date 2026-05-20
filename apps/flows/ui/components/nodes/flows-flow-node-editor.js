@@ -3,7 +3,7 @@
  *
  * Поля точно по `FlowNode` (apps/flows/src/runtime/nodes.py):
  *   - flow_id (combobox: список доступных flows + ручной ввод)
- *   - branch_id (default 'default')
+ *   - branch_id (по умолчанию 'default')
  */
 
 import { html, css } from 'lit';

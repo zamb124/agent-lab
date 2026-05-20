@@ -147,7 +147,7 @@ class TranslationManager:
                     logger.error(f"Ошибка загрузки модульных переводов для {language.value}: {e}")
                     self._translations_cache[language] = {}
             else:
-                # Fallback на старую монолитную структуру
+                # Резерв на старую монолитную структуру
                 old_file_path = translations_path / f"{language.value}.json"
                 if old_file_path.exists():
                     try:
@@ -425,7 +425,7 @@ class TranslationManager:
             if lang_dir.exists() and lang_dir.is_dir():
                 await self._update_modular_translations(lang_dir, language)
             else:
-                # Fallback на монолитную структуру
+                # Резерв на монолитную структуру
                 await self._update_monolithic_translations(translations_path, language)
 
         # Перезагружаем кеш
@@ -645,7 +645,7 @@ class TranslationManager:
         translations = self._translations_cache.get(language, {})
         translation = translations.get(key)
 
-        # Fallback на основной язык если перевод не найден
+        # Резерв на основной язык если перевод не найден
         if translation is None and language != self.config.fallback_language:
             fallback_translations = self._translations_cache.get(self.config.fallback_language, {})
             translation = fallback_translations.get(key)

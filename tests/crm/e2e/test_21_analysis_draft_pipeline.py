@@ -25,7 +25,7 @@ async def _apply_note(crm_client, headers: dict, note_id: str):
         headers=headers,
     )
     if start.status_code not in (200, 202):
-        return start  # propagate error for assertions
+        return start  # пробрасываем ошибку для assertions
     task_id = start.json()["task_id"]
     deadline = time.monotonic() + 30.0
     last = {}

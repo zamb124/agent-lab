@@ -25,7 +25,7 @@ log_info "master:  $MASTER"
 log_info "gpu:     $GPU"
 log_info "namespace: $NS, release: $REL"
 
-# Inventory.
+# Инвентаризация.
 log_section "До reset: master snapshot"
 ssh -o BatchMode=yes "$MASTER" "bash -s" <<EOF || log_warn "SSH master не отвечает"
 echo '-- nodes --'

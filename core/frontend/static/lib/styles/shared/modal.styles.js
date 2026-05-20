@@ -1,5 +1,5 @@
 /**
- * Shared Modal Styles
+ * Общие стили модалок
  * Apple Liquid Glass Design (iOS 26 / WWDC 2025)
  * Поддержка темной и светлой темы
  */
@@ -35,7 +35,7 @@ export const modalStyles = css`
         to { opacity: 1; }
     }
     
-    /* Liquid Glass Container */
+    /* Контейнер Liquid Glass */
     .modal-container {
         position: relative;
         width: 90%;
@@ -60,7 +60,7 @@ export const modalStyles = css`
         animation: modalEnter var(--modal-panel-duration, var(--duration-slow)) var(--modal-panel-easing, var(--easing-smooth));
     }
     
-    /* Liquid shine pseudo-element */
+    /* Псевдоэлемент liquid-блеска */
     .modal-container::before {
         content: '';
         position: absolute;
@@ -79,7 +79,7 @@ export const modalStyles = css`
         z-index: 1;
     }
     
-    /* Top highlight for liquid effect */
+    /* Верхний блик для liquid-эффекта */
     .modal-container::after {
         content: '';
         position: absolute;

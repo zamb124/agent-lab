@@ -21,7 +21,7 @@ from core.config import get_settings
 _PLATFORM_FALLBACK_MODEL_BY_CAPABILITY: dict[AICapability, str | None] = {
     AICapability.LLM_CHAT: None,  # из settings.llm.default_model
     AICapability.LLM_SUMMARIZE: "qwen/qwen3.5-397b-a17b",
-    AICapability.LLM_FORMAT_MARKDOWN: None,  # default-route через get_llm(); explicit provider_litserve — LitServe HTTP
+    AICapability.LLM_FORMAT_MARKDOWN: None,  # маршрут по умолчанию через get_llm(); explicit provider_litserve — LitServe HTTP
     AICapability.LLM_CODEGEN: None,  # из settings.llm.default_model
     AICapability.LLM_VISION: "google/gemini-2.5-flash-preview",
     AICapability.IMAGE_GEN: "google/nano-banana",

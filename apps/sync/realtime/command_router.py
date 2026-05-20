@@ -288,7 +288,7 @@ SYNC_OPERATIONS: dict[str, SyncOperation] = {
         payload_model=CallsSignalPayload,
         fn=op_calls_signal,
     ),
-    # calls (read + links + join)
+    # calls (чтение + ссылки + join)
     "sync/calls/get_requested": Operation(
         canonical_type="sync/calls/get_requested",
         payload_model=CallsGetPayload,

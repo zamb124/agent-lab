@@ -2,9 +2,9 @@
  * flows-canvas-context-menu — inline меню по правому клику на канвасе.
  *
  * Меню зависит от target:
- *   - `node`: open / toggle entry / toggle breakpoint / duplicate / delete /
+ *   - `node`: открыть / переключить entry / переключить breakpoint / дублировать / удалить /
  *     advanced (incoming-policy);
- *   - `edge`: edit condition / delete connection;
+ *   - `edge`: редактировать условие / удалить связь;
  *   - `background`: add sticky note / fit view / reset zoom / select all /
  *     show shortcuts.
  *

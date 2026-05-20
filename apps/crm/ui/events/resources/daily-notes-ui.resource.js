@@ -1,5 +1,5 @@
 /**
- * CRM Daily Notes UI — UI-only slice состояния экрана «ежедневник».
+ * CRM Daily Notes UI — slice состояния только для UI экрана «ежедневник».
  *
  * Хранит выбранный диапазон дат `range: { from, to }` (ISO YYYY-MM-DD).
  *

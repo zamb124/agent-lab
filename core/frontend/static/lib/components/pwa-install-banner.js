@@ -1,6 +1,6 @@
 /**
  * PWA Install Banner — показ инструкции установки на iOS и кнопки установки
- * на Android/Desktop. Полностью event-driven: PWA state приходит из state.pwa,
+ * на Android/Десктоп. Полностью event-driven: PWA state приходит из state.pwa,
  * установка инициируется через dispatch('pwa/install/prompt_requested').
  */
 import { html, css } from 'lit';

@@ -1,4 +1,4 @@
-# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+# Добавьте директории или шаблоны файлов, которые нужно игнорировать при индексации (например, foo/ или *.csv)
 *.env
 *.node_modules
 *.hypnosis

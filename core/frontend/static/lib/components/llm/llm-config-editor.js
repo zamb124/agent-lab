@@ -6,7 +6,7 @@
  *
  * Режимы (mode):
  *   - 'company_capability' — карточка capability на /settings (selector провайдеров с
- *      платформенными + custom; BYOK поля при не-custom; read-only платформенная модель;
+ *      платформенными + custom; BYOK поля при не-custom; платформенная модель только для чтения;
  *      бейдж cost_origin; кнопка очистки override; никаких advanced полей).
  *   - 'flow_node' / 'flow_resource' — TODO: миграция flows-llm-config-editor сюда.
  *
@@ -16,7 +16,7 @@
  *   .mode             = 'company_capability' | 'flow_node' | 'flow_resource' (см. выше).
  *   .capability       = строка (для mode=company_capability).
  *   .providerCatalog  = [{ value, label, kind: 'platform'|'custom'|'policy', custom_id? }].
- *   .platformModel    = string | null   — read-only платформенная модель.
+ *   .platformModel    = string | null   — платформенная модель только для чтения.
  *   .costOrigin       = 'platform' | 'company' | null.
  *   .keyMasked        = string | null   — текущий замаскированный ключ ('**** abcd').
  *   .clearable        = boolean         — показывать кнопку «Сбросить override».

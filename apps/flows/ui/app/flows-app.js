@@ -53,7 +53,7 @@ import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../event
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
 import { asObject, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
-import { applyTenantHostRedirectIfNeeded } from '@platform/lib/utils/tenant-host-guard.js';
+import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/flows-catalog-list.js';
@@ -307,7 +307,7 @@ export class FlowsApp extends PlatformApp {
             return;
         }
         const auth = this._authSelect.value;
-        applyTenantHostRedirectIfNeeded(
+        applyCompanyHostRedirectIfNeeded(
             auth,
             this._companiesListSel.value,
             this._companiesLoadingSel.value,

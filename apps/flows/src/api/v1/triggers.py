@@ -154,7 +154,7 @@ class TriggerVerifyResponse(BaseModel):
     error_message: str | None = None
 
 
-# CRUD endpoints
+# CRUD-endpoints
 
 @router.get("/flows/{flow_id}/triggers")
 async def list_triggers(flow_id: str, container: ContainerDep) -> list[TriggerResponse]:
@@ -513,7 +513,7 @@ async def delete_trigger(flow_id: str, trigger_id: str, container: ContainerDep)
     return {"status": "deleted", "trigger_id": trigger_id}
 
 
-# Webhook endpoints
+# Webhook-endpoints
 
 @router.post("/triggers/telegram/{flow_id}/{trigger_id}")
 async def telegram_webhook(
@@ -695,7 +695,7 @@ async def generic_webhook(
     )
 
 
-# Test endpoint
+# Тестовый endpoint
 
 @router.post("/flows/{flow_id}/triggers/{trigger_id}/test")
 async def test_trigger(

@@ -16,7 +16,7 @@
  *
  * `crm/entities_list` — основная cursor-лента с фильтрами namespace/типа/тегов/
  *   диапазона дат/режима поиска (text|semantic|hybrid).
- * `crm/entity_update` — отдельный AsyncOp с PUT (default ResourceCollection
+ * `crm/entity_update` — отдельный AsyncOp с PUT (ResourceCollection по умолчанию
  *   шлёт PATCH, что CRM не принимает).
  * `crm/entity_bulk_update`/`crm/entity_bulk_delete` — массовые операции.
  * `crm/entity_aggregate` — фасетная сводка для счётчиков и таймлайна.

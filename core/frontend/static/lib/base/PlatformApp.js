@@ -23,7 +23,7 @@
  *   - static bottomNavHideOnRoutes = []  — список routeKeys, на которых bottom-nav
  *     дополнительно скрывается (полноэкранные редакторы: flow_editor, document_editor).
  *   - static topBarEnabled = false    — рендерит <platform-top-bar> сверху на мобиле.
- *     Default false — сервисы, у которых страницы уже рендерят `<page-header>` со sticky-mobile,
+ *     По умолчанию false — сервисы, у которых страницы уже рендерят `<page-header>` со sticky-mobile,
  *     могут адоптировать постепенно. Включи `true` при отказе от per-page sticky-header.
  *   - static topBarHideOnRoutes = []  — список routeKeys, на которых top-bar скрыт.
  *   - static routeMotionEnabled = true — route changes используют View Transition API,
@@ -222,7 +222,7 @@ export class PlatformApp extends PlatformElement {
             .catch((error) => {
                 const name = error && typeof error.name === 'string' ? error.name : '';
                 if (name !== 'AbortError' && name !== 'InvalidStateError') {
-                    // Keep unexpected transition failures visible without surfacing benign aborts as uncaught promises.
+                    // Оставляем неожиданные ошибки transition видимыми, но не показываем штатные abort как uncaught promise.
                     console.warn('PlatformApp route transition failed', error);
                 }
             })

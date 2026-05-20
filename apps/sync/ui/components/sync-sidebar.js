@@ -9,9 +9,9 @@
  * (`crm.namespace`-modal); sync редактирует только `Namespace.sync_settings`
  * через карандаш на выбранном namespace (`sync.namespace_settings`).
  *
- * Slots `<platform-service-sidebar>`:
- *   - header: <sync-chat-list> header (через slot 'header' внутри sync-chat-list).
- *   - default (nav): <sync-chat-list> body.
+ * Слоты `<platform-service-sidebar>`:
+ *   - header: header из <sync-chat-list> (через slot 'header' внутри sync-chat-list).
+ *   - default (nav): body из <sync-chat-list>.
  *   - footer: <platform-user block>.
  */
 

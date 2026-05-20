@@ -11,7 +11,7 @@
  *   - Code: функция `check(args, state)` в языке isolated runner → сохраняется
  *     как `{type: 'code', language, code}`.
  *
- * Skip-link очищает условие (`null`).
+ * Ссылка пропуска очищает условие (`null`).
  *
  * Сохранение идёт в editor-resource: `updateBranchData` с новым
  * `edges[edgeIndex].condition` + `setDirty: true`. UI читает legacy `type=python`,

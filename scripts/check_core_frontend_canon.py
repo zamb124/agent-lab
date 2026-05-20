@@ -252,7 +252,7 @@ def check_components_zone() -> None:
     # ОБЯЗАНЫ иметь `static bottomSheetKind = '<scope>.<entity>'` + парный
     # `registerBottomSheetKind`. Базовые компоненты исключены.
     base_sheets = {
-        "platform-bottom-sheet.js",          # base class
+        "platform-bottom-sheet.js",          # базовый класс
         "platform-bottom-sheet-stack.js",    # рендерер стека
     }
     sheet_files = [

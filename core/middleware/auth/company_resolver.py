@@ -9,7 +9,7 @@ from fastapi import HTTPException, Request
 from core.config import settings
 from core.logging import get_logger
 from core.models.identity_models import Company
-from core.utils.domain import extract_subdomain, extract_tenant_subdomain
+from core.utils.domain import extract_company_subdomain, extract_subdomain
 from core.utils.tokens import TokenData
 
 logger = get_logger(__name__)
@@ -32,14 +32,14 @@ class CompanyResolver:
         context_type: str = "frontend",
     ) -> Optional[Company]:
         """
-        Субдомен Host кодирует тенант: для всех не-anonymous контекстов компания субдомена
+        Субдомен Host кодирует company context: для всех не-anonymous контекстов компания субдомена
         имеет приоритет над JWT / X-Company-Id, с проверкой membership.
 
         Публичные anonymous-роуты: компания с субдомена по возможности, без membership.
         """
         if context_type == "anonymous":
             return await self._resolve_anonymous(request)
-        return await self._resolve_tenant(request, token_data, context_type)
+        return await self._resolve_company_from_host(request, token_data, context_type)
 
     async def _resolve_anonymous(self, request: Request) -> Optional[Company]:
         company_repo = self.container.company_repository
@@ -74,7 +74,7 @@ class CompanyResolver:
         logger.debug("Anonymous: company_id в реестре, запись company не найдена")
         return None
 
-    async def _assert_subdomain_tenant(
+    async def _assert_subdomain_company_membership(
         self,
         request: Request,
         company_id: str,
@@ -102,22 +102,22 @@ class CompanyResolver:
             detail=f"У вас нет доступа к компании {subdomain}",
         )
 
-    def _x_company_id_must_match_tenant(
-        self, request: Request, tenant_company_id: str
+    def _x_company_id_must_match_company_subdomain(
+        self, request: Request, subdomain_company_id: str
     ) -> None:
         override = request.headers.get("X-Company-Id")
         if not override:
             return
-        if override != tenant_company_id:
+        if override != subdomain_company_id:
             logger.warning(
-                f"X-Company-Id ({override}) не совпадает с компанией субдомена ({tenant_company_id})"
+                f"X-Company-Id ({override}) не совпадает с компанией субдомена ({subdomain_company_id})"
             )
             raise HTTPException(
                 status_code=403,
                 detail="X-Company-Id не соответствует хосту субдомена",
             )
 
-    async def _resolve_tenant(
+    async def _resolve_company_from_host(
         self,
         request: Request,
         token_data: Optional[TokenData],
@@ -126,13 +126,13 @@ class CompanyResolver:
         company_repo = self.container.company_repository
         subdomain_repo = self.container.subdomain_repository
         host = request.headers.get("host", "")
-        subdomain = extract_tenant_subdomain(host)
+        subdomain = extract_company_subdomain(host)
 
         if subdomain:
             company_id = await subdomain_repo.get_company_id(subdomain)
             if company_id:
-                self._x_company_id_must_match_tenant(request, company_id)
-                await self._assert_subdomain_tenant(
+                self._x_company_id_must_match_company_subdomain(request, company_id)
+                await self._assert_subdomain_company_membership(
                     request, company_id, subdomain, token_data
                 )
                 company = await company_repo.get(company_id)
@@ -155,7 +155,7 @@ class CompanyResolver:
             )
 
         if context_type == "frontend":
-            logger.info(f"Тенант frontend без субдомена (host={host}) -> None")
+            logger.info(f"Frontend company context без субдомена (host={host}) -> None")
             return None
 
         override_company_id = request.headers.get("X-Company-Id")

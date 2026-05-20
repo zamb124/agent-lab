@@ -22,7 +22,7 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
 from core.models import StrictBaseModel
-from core.urn import extract_id
+from core.urn import extract_resource_id
 
 from .enums import MergeMode, TestTargetType
 from .flow_speech_settings import FlowSpeechSettings
@@ -34,7 +34,7 @@ Permission = str | list[str] | None
 
 
 class FlowType(str, Enum):
-    """Тип агента"""
+    """Тип flow"""
     LOCAL = "local"
     EXTERNAL = "external"
 
@@ -394,7 +394,7 @@ class FlowConfig(StrictBaseModel):
     @classmethod
     def validate_flow_id(cls, v: str) -> str:
         """Принимает URN или plain ID, извлекает ID."""
-        return extract_id(v)
+        return extract_resource_id(v)
 
     description: str = Field(default="", description="Описание flow")
 

@@ -1,8 +1,8 @@
 /**
- * Core motion helpers.
+ * Хелперы core motion.
  *
- * CSS owns the animation. JS only coordinates lifecycle boundaries so stack
- * components can keep DOM mounted until browser-driven exit motion completes.
+ * Анимацией владеет CSS. JS только координирует границы жизненного цикла, чтобы stack
+ * компоненты держали DOM смонтированным до завершения браузерной exit-анимации.
  */
 
 export const PLATFORM_MOTION_REDUCED_QUERY = '(prefers-reduced-motion: reduce)';

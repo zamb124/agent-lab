@@ -145,7 +145,7 @@ class BaseRepository(ABC, Generic[T]):
                 f"(is_global=False)"
             )
 
-        # Используем subdomain если есть, иначе fallback на company_id
+        # Используем subdomain если есть, иначе company_id
         company_identifier = context.active_company.subdomain or context.active_company.company_id
         return f"company:{company_identifier}:{key}"
 
@@ -165,7 +165,7 @@ class BaseRepository(ABC, Generic[T]):
         if not context or not context.active_company:
             return None
 
-        # Используем subdomain если есть, иначе fallback на company_id
+        # Используем subdomain если есть, иначе company_id
         company_identifier = context.active_company.subdomain or context.active_company.company_id
         prefix = self._get_prefix()
         return f"company:{company_identifier}:{prefix}"

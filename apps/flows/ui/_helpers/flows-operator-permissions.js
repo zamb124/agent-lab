@@ -1,5 +1,5 @@
 /**
- * Operator permissions for flows UI.
+ * Права оператора для UI flows.
  */
 
 import { isPlainObject } from './flows-resolvers.js';

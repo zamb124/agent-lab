@@ -408,8 +408,8 @@ class SessionWorkerManager:
 
         self._terminate_process_group_or_pid(pid)
 
-        # Service-specific safety net for old workers that were started before
-        # process groups were used. Do not add broad multiprocessing patterns:
+        # Сервисная страховка для старых воркеров, запущенных до того, как
+        # начали использоваться process groups. Не добавляйте широкие multiprocessing-паттерны:
         # they kill children of other worker services under xdist.
         print(f"🧹 Очистка оставшихся процессов {self.name}...")
         for pattern in self.cleanup_patterns:

@@ -10,7 +10,7 @@
  *   - 'open'           → setActiveCatalog + navigate('documents_list')
  *   - 'manage-members' → openModal('office.catalog_members')
  *   - 'edit'           → openModal('office.catalog_edit')
- *   - 'delete'         → confirm + useResource('office/catalogs').remove
+ *   - 'delete'         → подтверждение + useResource('office/catalogs').remove
  *
  * Реакция на смену namespace: `useEvent(UI_DOCUMENTS_RELOAD_REQUESTED)` —
  * перезагружаем список каталогов; новый namespace полностью перерисует grid.

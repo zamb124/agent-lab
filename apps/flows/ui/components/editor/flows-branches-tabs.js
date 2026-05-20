@@ -4,9 +4,9 @@
  * Источник: useResource('flows/flows').get(flowId) → flow.branches (объект).
  *
  * Actions:
- *   - select branch → this.navigate('flow_editor' | 'flow_editor_branch', ...)
- *   - delete branch → useOp('flows/branch_remove').run({ flow_id, branch_id })
- *   - create branch → this.openModal('flows.branch_create', { flowId })
+ *   - выбрать branch → this.navigate('flow_editor' | 'flow_editor_branch', ...)
+ *   - удалить branch → useOp('flows/branch_remove').run({ flow_id, branch_id })
+ *   - создать branch → this.openModal('flows.branch_create', { flowId })
  *
  * `base` — синтетическая базовая ветка, не редактируется и не удаляется.
  */

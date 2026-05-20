@@ -16,7 +16,7 @@ class TestCodeNodeOverrides:
     @pytest.mark.asyncio
     async def test_function_code_override_changes_behavior(self):
         """Переопределение code в function node меняет поведение."""
-        # Base agent
+        # Базовый agent
         flow_default = await Flow.from_config(
             config={
                 "id": "test_fn",
@@ -42,7 +42,7 @@ class TestCodeNodeOverrides:
         ))
         assert state.route == "default"
 
-        # Skill override
+        # Переопределение skill
         flow_skill = await Flow.from_config(
             config={
                 "id": "test_fn",
@@ -202,7 +202,7 @@ async def run(args, state):
     @pytest.mark.asyncio
     async def test_skill_variables_override_base(self):
         """Skill variables переопределяют base."""
-        # Base variables
+        # Базовые variables
         flow_base = await Flow.from_config(
             config={
                 "id": "test_vars",
@@ -232,7 +232,7 @@ async def run(args, state):
         ))
         assert state_base["max_len"] == 500
 
-        # Skill override
+        # Переопределение skill
         flow_skill = await Flow.from_config(
             config={
                 "id": "test_vars",
@@ -280,7 +280,7 @@ class TestEntryOverrideE2E:
             }
         }
 
-        # Default entry
+        # Entry по умолчанию
         flow_default = await Flow.from_config(
             config={
                 "id": "test_entry",
@@ -412,7 +412,7 @@ class TestGraphOverridesE2E:
     @pytest.mark.asyncio
     async def test_fast_track_skill_skips_formatter(self):
         """Skill fast_track пропускает formatter node."""
-        # Base flow: classifier -> processor -> formatter -> end
+        # Базовый flow: classifier -> processor -> formatter -> end
         config_base = {
             "id": "test_graph",
             "name": "Test",
@@ -448,7 +448,7 @@ class TestGraphOverridesE2E:
 
         assert state.step == ["classifier", "processor", "formatter"]
 
-        # Fast track: classifier -> processor -> end (skip formatter)
+        # Быстрый путь: classifier -> processor -> end (пропускаем formatter)
         config_fast = {
             "id": "test_graph",
             "name": "Test",
@@ -559,7 +559,7 @@ class TestMultipleNodesOverrideE2E:
     @pytest.mark.asyncio
     async def test_override_multiple_nodes_in_pipeline(self):
         """Переопределение нескольких нод в pipeline."""
-        # Base pipeline
+        # Базовый pipeline
         flow_base = await Flow.from_config(
             config={
                 "id": "test_pipeline",
@@ -589,7 +589,7 @@ class TestMultipleNodesOverrideE2E:
         assert state.v2 == "base2"
         assert state.v3 == "base3"
 
-        # Override step1 and step3
+        # Переопределяем step1 и step3
         flow_override = await Flow.from_config(
             config={
                 "id": "test_pipeline",

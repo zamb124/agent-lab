@@ -70,6 +70,86 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нати
 - Одна доменная сущность — одна модель. Не плодить «почти такие же» Pydantic-классы; общий контракт выносится в `core/` или сервисный `models/`, слой-специфичные patch/request модели допускаются только если форма реально другая.
 - Проверка локальных импортов: `uv run python analyze_imports.py`. Ожидание для `core/` + `apps/`: `Total local imports: 0`.
 
+## Глобальный naming contract
+
+`main.mdc` — главный словарь имён платформы. Новая доменная сущность, атрибут, id-поле, event payload или DB/API-поле не добавляются без проверки этого раздела. Если нужен новый термин — сначала правится glossary, затем код.
+
+### Единый смысл, разный casing
+
+Смысловой токен один. Разрешена только механическая смена casing по слою:
+
+| Слой | Форма |
+|---|---|
+| Python, Pydantic, SQLAlchemy, Alembic, API JSON, logs, traces | `snake_case` (`company_id`, `flow_id`) |
+| JS локальные переменные/props route params | `lowerCamel` того же токена (`companyId`, `flowId`) |
+| DOM attributes | `kebab-case` того же токена (`company-id`, `flow-id`) |
+| UI event/factory names | `<service>/<canonical_entity>_<verb>` (`flows/flow_update`, `crm/entity_merge`) |
+| External specs | имя спеки сохраняется, рядом сразу нормализуется в платформенный термин |
+
+Нельзя вводить второй термин для того же смысла. `company`, `tenant`, `workspace`, `space`, `namespace`, `organization` не взаимозаменяемы.
+
+### Канонические платформенные сущности
+
+| Сущность | Канонические имена | Главные атрибуты / запреты |
+|---|---|---|
+| User | `user_id`, `User` | `name`, `first_name`, `last_name`, `emails`, `phones`, `companies`, `active_company_id`, `attrs`; не `id` для пользователя. |
+| Company | `company_id`, `Company` | `name`, `subdomain`, `owner_user_id`, `members`, `tariff_plan`, `balance`; host/subdomain helpers называют `company_subdomain`, `company_host`, `company_host_context`; не `tenant_id`, не `workspace_id`, не `org_id`. |
+| Namespace | `namespace`, `Namespace` | Человеческое workspace/space имя внутри `company_id`; UI может писать "workspace/space" только в текстах и названиях компонентов. Код/API/DB — `namespace`. |
+| RAG/vector namespace | `namespace_id` | Только технический id индекса/векторного хранилища, обычно производный от `company_id` + `namespace`. Не подменяет CRM/Sync/Office `namespace`. |
+| Flow | `flow_id`, `FlowConfig`, `flow` | Исполняемый граф. Не `agent_id`; термин `agent` допустим только в A2A spec (`agent-card`, `Role.agent`, `new_agent_text_message`) и legacy test names до миграции. |
+| Branch | `branch_id`, `BranchConfig`, `branch` | Вариант графа внутри `flow_id`; не `skill_id`, не `scenario_id`. |
+| Node | `node_id`, `NodeConfig`, `node` | `node_type` для типа ноды; не голый `id`, не голый `type` в доменном коде. |
+| Tool | `tool_id`, `ToolReference`, `tool` | `parameters_schema` — JSON Schema, `args_schema` — legacy плоская схема; не смешивать. |
+| Resource | `resource_id`, `ResourceDefinition`, `resource_type` | `resource_type` вместо голого `type`; `resource_id` вместо `id`. |
+| LLM | `provider`, `model`, `llm_*` только где перечислено ниже | См. LLM naming glossary; `model_name` не вводить внутри реализации. |
+| Runtime session | `session_id`, `context_id`, `task_id` | `session_id = flow_id:context_id` для исполнения flow; auth-session — отдельный `AuthSession.session_id`. |
+| Request/trace/span | `request_id`, `trace_id`, `span_id`, `parent_span_id` | `request_id` — request/log scope, не доменная заявка. Для CRM access request целевое имя — `access_request_id` при миграции. |
+| File | `file_id`, `FileRecord` | `original_name`, `content_type`, `file_size`, `checksum`, `storage_url`, `company_id`; не `document_id` для платформенного файла. |
+| RAG document | `document_id`, `VectorDocument`, `DocumentProcessingStatus` | `namespace_id`, `document_name`, `chunk_index`, `metadata`; не `file_id`, если запись уже в индексе. |
+| Calendar event | `event_id`, `CalendarEvent` | `source`, `source_id`, `namespace`, `start_at`, `end_at`, `external_refs`; `source` — происхождение, не provider. |
+| Integration credential | `credential_id`, `provider`, `service` | `provider` — внешний вендор, `service` — область использования; токены только в credential/secrets. |
+| Billing usage | `usage_id`, `UsageRecord` | `usage_type`, `resource_name`, `quantity`, `cost`, `metadata`; не `data`. |
+| Payment transaction | `transaction_id`, `Transaction` | `payment_provider`, `external_payment_id`, `payment_url`; не `payment_id`. |
+| API key | `key_id`, `ApiKeyRecord` | `key_hash`, `key_prefix`, `scopes`, `created_by`; не `id`. |
+| Schedule | `schedule_task_id`, `schedule_id`, `PlatformScheduledTask` | `schedule_task_id` — запись платформенного scheduler, `schedule_id` — логический id расписания; голый `id` в scheduler-моделях — migration debt. |
+| UI event | `UIEvent.id`, `type`, `payload`, `meta` | `payload` разрешён только для event envelope/transport. Доменную часть внутри payload называть конкретно. |
+| Operator queue/task | `queue_id`, `operator_task_id` | `operator_queue_slug`, `claimed_by_user_id`, `a2a_task_id`; role `"agent"` допустима как операторская роль до отдельной миграции. |
+| CRM entity | `entity_id`, `CRMEntity`, `entity_type`, `entity_subtype` | `attributes` — доменные кастомные поля; `type_id` только для каталога `EntityType`/`RelationshipType`. |
+| CRM relationship | `relationship_id`, `relationship_type` | `source_entity_id`, `target_entity_id`, `weight`, `confidence`, `attributes`; не `edge_id` вне graph DTO. |
+| CRM namespace template | `template_id`, `template_key` | `template_key` — DB primary key, `template_id` — продуктовый slug шаблона; не смешивать. |
+| CRM task/suggest | `task_id`, `suggest_id` | `CRMTask.task_id`; у `CRMSuggest` целевое имя `suggest_id` при миграции вместо голого `id`. |
+| Sync channel/thread/message | `channel_id`, `thread_id`, `message_id` | API response с голым `id` — migration debt; новый код использует конкретный id. |
+| Sync call | `call_id`, `recording_id`, `link_token` | `participant_identity` — LiveKit identity, не `user_id`. |
+| Git resource ref | `git_ref_id`, `GitResourceRef` | `provider`, `kind`, `project_key`, `external_id`, `url`; API response с голым `id` — migration debt. |
+| Office catalog/document | `catalog_id`, `binding_id`, `file_id` | `binding_id` — связь документа Office с файлом; `document_type` — word/cell/slide, не MIME. |
+| Capability | `capability_name`, `execution_token` | В manifest поле `name` — имя capability по контракту; в runtime рядом использовать `capability_name`. |
+| Voice provider | `provider`, `model`, `voice`, `language`, `sample_rate` | `kind ∈ stt/tts/vad`; `company_voice_providers.kind` не заменять на `type`. |
+| Browser runtime | `session_id`, `page_id`, `lease_id` | Browser/CDP термины не смешивать с auth/flow session без префикса. |
+
+### Запрещённые разночтения
+
+| Если смысл | Использовать | Не использовать |
+|---|---|---|
+| Изоляция компании | `company_id` | `tenant_id`, `org_id`, `workspace_id` |
+| Host/subdomain компании | `company_subdomain`, `company_host`, `company_host_context` | `tenant_subdomain`, `tenant_host`, `tenant_slug` |
+| Tenant как внешний/prose concept | `tenant` только в OTel `platform.tenant.*`, external headers/specs, fixture env и текстах "tenant isolation" | app-owned функции, параметры, файлы и доменные модели `tenant*` |
+| Пространство работы | `namespace` | `space_id`, `workspace_id`; `space/workspace` только UI-copy/component name |
+| Внешняя организация в CRM | `entity_type="organization"` | `company_id`/`Company` |
+| Идентификатор сущности | `<entity>_id` | голый `id` в доменных моделях/API |
+| Тип сущности | `<entity>_type` или `kind` по закрытому enum | голый `type` в доменной модели, кроме внешней спеки |
+| Произвольные кастомные поля | `attributes` | `attrs`, `data`, `payload`, если это не envelope |
+| Служебные метаданные | `metadata` | `data`, `attrs` |
+| Event/transport body | `payload` | `data`, если это platform `UIEvent`/WS envelope |
+| HTTP request/response JSON | `request_body`, `response_payload` | `data`, `result`, `raw`, `response` без уточнения |
+
+### Порядок миграции имён
+
+1. Выбрать одну сущность и перечислить её canonical id/attributes.
+2. Найти все usages в `core/`, затем `apps/`, затем tests/UI/i18n.
+3. Переименовать все слои одной сущности: модель, репозиторий, API, service, frontend factory/state, tests.
+4. Не оставлять compatibility alias, если нет внешней спеки или явного публичного API. Если alias временно необходим — он должен быть записан в glossary как migration debt с точкой удаления.
+5. После Python-правок: `uv run ruff check .`, `uv run basedpyright core apps`; после архитектурной миграции также `uv run python analyze_imports.py` и целевые тесты.
+
 ## Границы `core/` ↔ `apps/`
 
 `core/` **никогда** не импортирует `apps/`. Зависимость строго `apps/ → core/`.

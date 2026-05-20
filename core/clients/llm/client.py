@@ -679,7 +679,7 @@ class LLMClient:
             user = await llm.chat("Extract: John is 25", response_model=User)
             print(user.name, user.age)
 
-            # Function calling
+            # Вызов функций
             msg = await llm.chat(messages, tools=[...])
             if msg.metadata and msg.metadata.get("tool_calls"):
                 ...

@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # pgvector extension
+    # расширение pgvector
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     # vector_documents -- единое хранилище для RAG, CRM, Agents

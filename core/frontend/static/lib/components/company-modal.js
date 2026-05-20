@@ -14,7 +14,7 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from './glass-form-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
-import { formatCompanySubdomainLabel } from '../utils/tenant-url.js';
+import { formatCompanySubdomainLabel } from '../utils/company-url.js';
 
 const TRANSLIT = {
     'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',

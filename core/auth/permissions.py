@@ -70,6 +70,5 @@ class PermissionChecker:
         return self.check(user_groups, required)
 
 
-# Singleton
+# Singleton-экземпляр
 permission_checker = PermissionChecker()
-

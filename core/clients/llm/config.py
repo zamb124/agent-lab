@@ -40,7 +40,7 @@ class LLMCallConfig(StrictBaseModel):
     extra_request_body: Optional[Dict[str, Any]] = Field(default=None)
     extra_request_headers: Optional[Dict[str, str]] = Field(default=None)
 
-    # Runtime metadata used by the core LLM client for resolved attempts.
+    # Runtime-метаданные, которые core LLM client использует для resolved attempts.
     default_headers: Dict[str, str] = Field(default_factory=dict, exclude=True)
     source: str = Field(default="explicit", exclude=True)
     supported_parameters: FrozenSet[str] = Field(default_factory=frozenset, exclude=True)

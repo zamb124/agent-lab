@@ -18,12 +18,12 @@ async def test_main_page_no_redirect_to_select_company(client: AsyncClient):
     """
     response = await client.get("/")
 
-    # Ожидаем успешный ответ (SPA fallback на index.html)
+    # Ожидаем успешный ответ (SPA-резерв на index.html)
     assert response.status_code == 200, f"GET / вернул {response.status_code}, ожидался 200"
 
     # Проверяем что нет редиректа на /select-company
     assert response.status_code != 307, "GET / не должен редиректить на /select-company"
     assert response.status_code != 302, "GET / не должен редиректить"
 
-    # В тестовом окружении может возвращаться JSON вместо HTML (SPA fallback), это нормально
+    # В тестовом окружении может возвращаться JSON вместо HTML (SPA-резерв), это нормально
     # Главное — отсутствие редиректа на /select-company

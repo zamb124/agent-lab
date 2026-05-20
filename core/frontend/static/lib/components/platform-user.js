@@ -26,7 +26,7 @@ import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { CoreEvents } from '../events/contract.js';
 import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
-import { buildCompanySubdomainUrl } from '../utils/tenant-url.js';
+import { buildCompanySubdomainUrl } from '../utils/company-url.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';

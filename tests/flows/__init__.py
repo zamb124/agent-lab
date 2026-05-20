@@ -1,2 +1,2 @@
-# Tests for platform platform
+# Тесты платформы
 

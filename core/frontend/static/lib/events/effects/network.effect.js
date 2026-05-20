@@ -1,5 +1,5 @@
 /**
- * Network effect.
+ * Эффект сети.
  *
  * Подписка на window online/offline с эмиссией NETWORK_ONLINE / NETWORK_OFFLINE.
  * Подключается один раз на бутстрапе.

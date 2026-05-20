@@ -132,7 +132,7 @@ def resolve_llm_config_stream_kwargs(
     return out
 
 
-# Backward-compatible import aliases for older tests/modules.
+# Обратно совместимые alias-импорты для старых тестов/модулей.
 split_llm_override_for_client = split_llm_config_for_client
 stream_kwargs_from_override = stream_kwargs_from_llm_config
 client_kwargs_from_override = client_kwargs_from_llm_config

@@ -1,5 +1,5 @@
 /**
- * Network slice.
+ * Slice сети.
  *
  * Поля state.network:
  *   online:        boolean

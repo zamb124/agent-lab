@@ -1,5 +1,5 @@
 /**
- * Shared Sidebar Styles
+ * Общие стили сайдбара
  * Стили для элементов sidebar - классы, без :host
  * :host стили находятся в platform-sidebar.js
  */

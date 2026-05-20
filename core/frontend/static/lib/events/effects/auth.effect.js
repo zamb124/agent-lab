@@ -16,7 +16,7 @@
 
 import { CoreEvents } from '../contract.js';
 import { httpRequest, HttpError } from '../http.js';
-import { getPlatformApexOriginUrl } from '../../utils/tenant-url.js';
+import { getPlatformApexOriginUrl } from '../../utils/company-url.js';
 
 export const CoreAuthEvents = Object.freeze({
     USER_LOAD_REQUESTED:           'auth/user/load_requested',

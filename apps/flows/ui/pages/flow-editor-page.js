@@ -1,8 +1,8 @@
 /**
  * FlowEditorPage — визуальный редактор flow.
  *
- * Layout:
- *   <flows-editor-header />          — back / save / theme
+ * Макет:
+ *   <flows-editor-header />          — назад / сохранить / тема
  *   <flows-branches-tabs />            — табы веток
  *   .editor-shell:
  *     <flows-node-types-sidebar />    — drag-source типов нод
