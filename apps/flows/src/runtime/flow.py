@@ -28,7 +28,7 @@ from apps.flows.src.runtime.exceptions import (
     EdgeConditionError,
     FlowInterrupt,
 )
-from apps.flows.src.state.cancellation import check_cancellation
+from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.streaming.memory import InMemoryEmitter
@@ -108,6 +108,15 @@ class Flow:
 
     async def _emit_pending_ui_events(self, emitter: Emitter | InMemoryEmitter, state: ExecutionState) -> None:
         await emit_pending_ui_events(emitter=emitter, state=state)
+
+    async def _checkpoint_state(self, state: ExecutionState) -> None:
+        if self.container is None:
+            return
+        if getattr(state, "_skip_hot_state_checkpoint", False):
+            return
+        if state.session_flow_id != self.flow_id:
+            return
+        await self.container.state_manager.save_state(state.session_id, state)
 
     async def _emit_edge_condition_error_artifact(
         self, emitter: Emitter | InMemoryEmitter, ece: EdgeConditionError
@@ -321,6 +330,7 @@ class Flow:
 
                     # Проверка breakpoint
                     if await self._check_breakpoint(state, node_id, node_type, emitter):
+                        await self._checkpoint_state(state)
                         return state
 
                 for node_id in current_nodes:
@@ -359,14 +369,55 @@ class Flow:
                         for nid in current_nodes:
                             run_states[nid] = state
 
+                    async def _run_captured(
+                        node_id: str,
+                        run_state: ExecutionState,
+                    ) -> tuple[str, ExecutionState | None, Exception | None]:
+                        try:
+                            return node_id, await _run(node_id, run_state), None
+                        except FlowCancelled:
+                            raise
+                        except Exception as exc:
+                            return node_id, None, exc
+
                     tasks = [
-                        _run(node_id, run_states[node_id])
+                        _run_captured(node_id, run_states[node_id])
                         for node_id in current_nodes
                     ]
-                    results = await asyncio.gather(*tasks)
-                    state = self._merge_results(state, results)
+                    outcomes = await asyncio.gather(*tasks)
+                    results = [
+                        result
+                        for _, result, exc in outcomes
+                        if exc is None and result is not None
+                    ]
+                    if results:
+                        state = self._merge_results(state, results)
+
+                    interrupts = [
+                        (node_id, exc)
+                        for node_id, _, exc in outcomes
+                        if isinstance(exc, FlowInterrupt)
+                    ]
+                    if interrupts:
+                        node_id, interrupt = interrupts[0]
+                        logger.info(
+                            f"Flow {self.flow_id}: interrupt at '{node_id}': {interrupt.question}"
+                        )
+                        InterruptManager.apply_interrupt(
+                            state,
+                            interrupt.body,
+                            interrupt.tool_call,
+                            getattr(interrupt, "correlation_id", None),
+                        )
+                        state.current_nodes = current_nodes
+                        await self._checkpoint_state(state)
+                        return state
+
+                    errors = [exc for _, _, exc in outcomes if exc is not None]
+                    if errors:
+                        raise errors[0]
                 except FlowInterrupt as e:
-                    node_id = current_nodes[0]  # interrupt от первой ноды
+                    node_id = current_nodes[0]
                     logger.info(f"Flow {self.flow_id}: interrupt at '{node_id}': {e.question}")
                     InterruptManager.apply_interrupt(
                         state,
@@ -375,6 +426,7 @@ class Flow:
                         getattr(e, "correlation_id", None),
                     )
                     state.current_nodes = current_nodes
+                    await self._checkpoint_state(state)
                     return state
 
                 for node_id in current_nodes:
@@ -386,6 +438,7 @@ class Flow:
                 if state.interrupt:
                     logger.info(f"Flow {self.flow_id}: interrupted")
                     state.current_nodes = current_nodes
+                    await self._checkpoint_state(state)
                     return state
 
                 try:
@@ -397,12 +450,15 @@ class Flow:
                         await self._raise_if_premature_completion(current_nodes, state)
                         logger.debug(f"Flow {self.flow_id}: completed")
                         state.current_nodes = []
+                        await self._checkpoint_state(state)
                         return state
 
                     for edge_idx, from_n, to_n in edge_activations:
                         await emitter.emit_edge_executed(edge_idx, from_n, to_n)
 
                     current_nodes = list(next_nodes)
+                    state.current_nodes = current_nodes
+                    await self._checkpoint_state(state)
                 except EdgeConditionError as ece:
                     await self._emit_edge_condition_error_artifact(emitter, ece)
                     raise ece.original from ece

@@ -199,11 +199,12 @@ async def crm_companies_initialized(app, auth_token_system, auth_token_company2)
     from apps.crm.container import get_crm_container
     from core.context import clear_context, set_context
     from core.models.context_models import Context
-    from core.models.identity_models import Company, User
+    from core.models.identity_models import User
+    from tests.fixtures.ai_provider_defaults import make_test_company
 
     set_context(Context(
         user=User(user_id="test_user", name="Test User"),
-        active_company=Company(company_id="system", name="System"),
+        active_company=make_test_company(company_id="system", name="System"),
         session_id="test_session",
         channel="test",
         metadata={"user_id": "test_user", "email": "test@example.com", "grps": []},
@@ -214,7 +215,7 @@ async def crm_companies_initialized(app, auth_token_system, auth_token_company2)
 
     set_context(Context(
         user=User(user_id="test_user", name="Test User"),
-        active_company=Company(company_id="company2", name="Company2"),
+        active_company=make_test_company(company_id="company2", name="Company2"),
         session_id="test_session",
         channel="test",
         metadata={"user_id": "test_user", "email": "test@example.com", "grps": []},

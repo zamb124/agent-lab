@@ -216,6 +216,11 @@ class TestProcessAgentTask:
         )
 
         assert result["status"] == "completed"
+        set_context(mock_context)
+        persisted = await container.state_repository.get(session_id)
+        assert persisted is not None
+        assert persisted.terminal_status == "completed"
+        assert await container.redis_client.get(container.state_manager._state_key(session_id)) is None
 
     @pytest.mark.asyncio
     async def test_process_flow_task_raises_on_unknown_flow(self, app, container, unique_id, mock_context):
@@ -231,6 +236,59 @@ class TestProcessAgentTask:
                 content="Test",
                 context_data=mock_context.model_dump(),
             )
+
+        set_context(mock_context)
+        persisted = await container.state_repository.get(session_id)
+        assert persisted is not None
+        assert persisted.terminal_status == "failed"
+        assert await container.redis_client.get(container.state_manager._state_key(session_id)) is None
+
+    @pytest.mark.asyncio
+    async def test_process_flow_task_persists_failed_terminal_state(
+        self, app, container, unique_id, mock_context
+    ):
+        """При падении runtime terminal failed сохраняется в БД, hot state удаляется из Redis."""
+        from apps.flows.src.models import FlowConfig
+
+        flow_id = f"failed_terminal_flow_{unique_id}"
+        session_id = f"{flow_id}:ctx-{unique_id}"
+        flow_config = FlowConfig(
+            flow_id=flow_id,
+            name="Failed Terminal Flow",
+            entry="main",
+            nodes={
+                "main": {
+                    "type": "flow",
+                    "config": {},
+                }
+            },
+            edges=[{"from": "main", "to": None}],
+        )
+        await container.flow_repository.set(flow_config)
+        mock_context.session_id = session_id
+        mock_context.flow_id = flow_id
+        mock_context.user.user_id = "test-user-1"
+
+        try:
+            with pytest.raises(ValueError, match="flow_id required"):
+                await process_flow_task(
+                    flow_id=flow_id,
+                    session_id=session_id,
+                    user_id="test-user-1",
+                    content="Test",
+                    context_data=mock_context.model_dump(),
+                )
+
+            set_context(mock_context)
+            persisted = await container.state_repository.get(session_id)
+            assert persisted is not None
+            assert persisted.terminal_status == "failed"
+            assert "flow_id required" in (persisted.terminal_error or "")
+            assert await container.redis_client.get(container.state_manager._state_key(session_id)) is None
+        finally:
+            set_context(mock_context)
+            await container.state_manager.delete_state(session_id)
+            await container.flow_repository.delete(flow_id)
 
 
 class TestProcessAgentTaskResume:

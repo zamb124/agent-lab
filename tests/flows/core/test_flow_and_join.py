@@ -5,8 +5,23 @@
 import pytest
 
 from apps.flows.src.runtime.flow import Flow
-from apps.flows.src.runtime.nodes import CodeNode
+from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.nodes import BaseNode, CodeNode
 from core.errors import FlowPrematureCompletionError
+
+
+class _SetVariableNode(BaseNode):
+    async def _run_impl(self, state, inputs):
+        state.variables = {**state.variables, self.node_id: "done"}
+        return {}
+
+
+class _InterruptNode(BaseNode):
+    async def _run_impl(self, state, inputs):
+        raise FlowInterrupt(
+            question=f"question from {self.node_id}",
+            tool_call={"name": f"ask_{self.node_id}"},
+        )
 
 
 def _bump_node_code(node_id: str) -> str:
@@ -58,6 +73,33 @@ async def test_incoming_policy_all_waits_all_predecessors(make_test_state) -> No
     out = await flow.run(state)
     hits = out.variables.get("hits") or {}
     assert hits.get("3") == 1, f"expected node 3 once, got {hits!r}"
+
+
+@pytest.mark.asyncio
+async def test_parallel_wave_interrupt_keeps_completed_sibling_state(make_test_state) -> None:
+    nodes = {
+        "start": _SetVariableNode("start", {"type": "test"}),
+        "left": _SetVariableNode("left", {"type": "test"}),
+        "right": _InterruptNode("right", {"type": "test"}),
+    }
+    flow = Flow(
+        flow_id="parallel_interrupt",
+        name="parallel_interrupt",
+        entry="start",
+        nodes=nodes,
+        edges=[
+            {"from": "start", "to": "left"},
+            {"from": "start", "to": "right"},
+            {"from": "left", "to": None},
+            {"from": "right", "to": None},
+        ],
+    )
+
+    out = await flow.run(make_test_state())
+
+    assert out.variables["left"] == "done"
+    assert out.interrupt is not None
+    assert out.interrupt.question == "question from right"
 
 
 @pytest.mark.asyncio

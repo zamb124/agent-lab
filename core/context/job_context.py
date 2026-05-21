@@ -39,18 +39,15 @@ def build_job_context(
         company_id=cid,
         roles=roles,
     )
+    context_user = user.model_copy(update={"active_company_id": cid})
     return Context(
-        user=User(user_id=user.user_id, name=user.name or user.user_id, groups=user.groups),
+        user=context_user,
         host=host,
         session_id=session_id,
         channel=channel,
         language=Language.RU,
-        active_company=Company(
-            company_id=company.company_id,
-            name=company.name,
-            subdomain=company.subdomain,
-        ),
-        user_companies=[],
+        active_company=company,
+        user_companies=[company],
         trace_id=trace_id,
         auth_token=auth_token,
     )

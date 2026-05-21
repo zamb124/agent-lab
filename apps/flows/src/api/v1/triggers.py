@@ -69,6 +69,39 @@ def _webhook_secret_from_request(request: Request) -> str | None:
             return v
     return request.query_params.get("secret")
 
+
+async def _resolve_company_from_flow_storage_identifier(
+    container: Any,
+    company_identifier: str,
+) -> Company:
+    """
+    Восстанавливает полную Company для публичного webhook-контекста.
+
+    Flow keys используют `active_company.subdomain or company_id`, поэтому
+    company_identifier из unscoped flow lookup может быть как company_id, так
+    и subdomain. В контекст нужно класть persisted Company целиком: metadata
+    содержит AI provider overrides и другие per-company настройки.
+    """
+    company = await container.company_repository.get(company_identifier)
+    if company is not None:
+        return company
+
+    company_id = await container.subdomain_repository.get_company_id(company_identifier)
+    if company_id:
+        company = await container.company_repository.get(company_id)
+        if company is not None:
+            return company
+
+    logger.warning(
+        "Flow storage company identifier has no persisted Company; using minimal context",
+        company_identifier=company_identifier,
+    )
+    return Company(
+        company_id=company_identifier,
+        subdomain=company_identifier,
+        name=company_identifier,
+    )
+
 router = APIRouter(tags=["triggers"])
 
 
@@ -537,10 +570,9 @@ async def telegram_webhook(
             flow_config = None
         else:
             flow_config, company_identifier = unscoped
-            comp = Company(
-                company_id=company_identifier,
-                subdomain=company_identifier,
-                name=company_identifier,
+            company = await _resolve_company_from_flow_storage_identifier(
+                container,
+                company_identifier,
             )
             inbound_user = User(
                 user_id="telegram_inbound",
@@ -554,8 +586,8 @@ async def telegram_webhook(
                     session_id=ctx.session_id if ctx and ctx.session_id else "telegram_inbound",
                     channel="triggers/telegram",
                     language=ctx.language if ctx else Language.RU,
-                    active_company=comp,
-                    user_companies=[comp],
+                    active_company=company,
+                    user_companies=[company],
                     trace_id=ctx.trace_id if ctx else None,
                     metadata={**(ctx.metadata if ctx else {}), "inbound": "telegram"},
                 )

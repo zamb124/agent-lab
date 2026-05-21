@@ -10,6 +10,7 @@ from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.container import get_container
 from apps.flows.src.state import StateManager
+from core.state import ExecutionState
 
 
 def _msg(text: str, role: Role = Role.user) -> Message:
@@ -26,9 +27,9 @@ class TestStateManager:
 
     @pytest.fixture
     def state_manager(self, app) -> StateManager:
-        """StateManager с реальной БД."""
+        """Production StateManager с реальными Redis и БД."""
         container = get_container()
-        return StateManager(container.state_repository)
+        return container.state_manager
 
     @pytest.mark.asyncio
     async def test_get_state_returns_none_for_new_session(self, state_manager: StateManager):
@@ -229,3 +230,102 @@ class TestStateManager:
 
         # Cleanup
         await state_manager.delete_state(session_id)
+
+
+class TestRedisBackedStateManager:
+    """Проверки production lifecycle: real Redis для hot state, real DB для terminal."""
+
+    @pytest.mark.asyncio
+    async def test_intermediate_state_is_stored_in_real_redis_only(self, app):
+        container = get_container()
+        manager = container.state_manager
+        repo = container.state_repository
+        session_id = f"redis_hot_flow:{uuid.uuid4().hex}"
+        state = ExecutionState(
+            task_id=f"task-{uuid.uuid4().hex}",
+            context_id=session_id.split(":", 1)[1],
+            user_id="test-user",
+            session_id=session_id,
+            content="draft",
+        )
+
+        try:
+            await manager.save_state(session_id, state)
+
+            assert await repo.get(session_id) is None
+            assert await container.redis_client.get(manager._state_key(session_id)) is not None
+
+            loaded = await manager.get_state(session_id)
+            assert loaded is not None
+            assert loaded.content == "draft"
+            assert (
+                await manager.resolve_session_id_by_flow_and_identifier(
+                    "redis_hot_flow", state.task_id
+                )
+                == session_id
+            )
+            assert (
+                await manager.resolve_session_id_by_flow_and_identifier(
+                    "redis_hot_flow", state.context_id
+                )
+                == session_id
+            )
+        finally:
+            await manager.delete_state(session_id)
+
+    @pytest.mark.asyncio
+    async def test_terminal_state_is_stored_in_db_and_clears_real_redis(self, app):
+        container = get_container()
+        manager = container.state_manager
+        repo = container.state_repository
+        session_id = f"redis_terminal_flow:{uuid.uuid4().hex}"
+        state = ExecutionState(
+            task_id=f"task-{uuid.uuid4().hex}",
+            context_id=session_id.split(":", 1)[1],
+            user_id="test-user",
+            session_id=session_id,
+            response="done",
+        )
+
+        try:
+            await manager.save_state(session_id, state)
+            task_key, context_key = manager._index_keys(state)
+
+            await manager.save_terminal_state(session_id, state, "completed")
+
+            assert await container.redis_client.get(manager._state_key(session_id)) is None
+            assert await container.redis_client.get(task_key) is None
+            assert await container.redis_client.get(context_key) is None
+
+            persisted = await repo.get(session_id)
+            assert persisted is not None
+            assert persisted.terminal_status == "completed"
+
+            loaded = await manager.get_state(session_id)
+            assert loaded is not None
+            assert loaded.terminal_status == "completed"
+            assert loaded.response == "done"
+        finally:
+            await manager.delete_state(session_id)
+
+    @pytest.mark.asyncio
+    async def test_db_fallback_ignores_non_terminal_snapshot_when_real_redis_is_empty(self, app):
+        container = get_container()
+        manager = container.state_manager
+        repo = container.state_repository
+        session_id = f"redis_stale_db_flow:{uuid.uuid4().hex}"
+        state = ExecutionState(
+            task_id=f"task-{uuid.uuid4().hex}",
+            context_id=session_id.split(":", 1)[1],
+            user_id="test-user",
+            session_id=session_id,
+            content="old-db-checkpoint",
+        )
+
+        try:
+            await repo.set(session_id, state)
+
+            assert await container.redis_client.get(manager._state_key(session_id)) is None
+            assert await manager.get_state(session_id) is None
+        finally:
+            await manager.delete_state(session_id)

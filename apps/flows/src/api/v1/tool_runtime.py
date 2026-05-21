@@ -77,23 +77,31 @@ async def _with_system_context_if_missing(container: Any):
     previous_context = get_context()
     if previous_context is not None and previous_context.active_company is not None:
         return previous_context, False
+    system_company = await container.company_repository.get("system")
+    if system_company is None:
+        system_company = Company(
+            company_id="system",
+            name="System",
+            subdomain="system",
+        )
     set_context(
         Context(
-            user=User(user_id="system", name="System", groups=["admin"]),
+            user=User(
+                user_id="system",
+                name="System",
+                groups=["admin"],
+                companies={"system": ["admin"]},
+                active_company_id="system",
+            ),
             host="system",
             session_id="tool-runtime-manifest",
             channel="internal",
             language=Language.RU,
-            active_company=Company(
-                company_id="system",
-                name="System",
-                subdomain="system",
-            ),
-            user_companies=[],
+            active_company=system_company,
+            user_companies=[system_company],
             trace_id="tool-runtime:manifest",
         )
     )
-    _ = container
     return previous_context, True
 
 

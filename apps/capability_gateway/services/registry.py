@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import re
@@ -33,6 +34,7 @@ from core.capabilities import (
     JsonValue,
     verify_execution_context,
 )
+from core.clients.service_client import ServiceClientError
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
 from core.clients.voice_resolver import get_stt_client, get_tts_client
@@ -737,11 +739,32 @@ class CapabilityRegistry:
         return lines
 
     async def _load_tool_definitions(self) -> dict[str, CapabilityDefinition]:
-        raw_manifest = await self._container.service_client.get(
-            "flows",
-            TOOL_RUNTIME_MANIFEST_PATH,
-            timeout=30.0,
-        )
+        retry_delays = (0.2, 0.5, 1.0)
+        raw_manifest: object | None = None
+        last_error: ServiceClientError | None = None
+        for attempt, retry_delay in enumerate((*retry_delays, None), start=1):
+            try:
+                raw_manifest = await self._container.service_client.get(
+                    "flows",
+                    TOOL_RUNTIME_MANIFEST_PATH,
+                    timeout=30.0,
+                )
+                break
+            except ServiceClientError as exc:
+                last_error = exc
+                if retry_delay is None:
+                    raise
+                logger.warning(
+                    "capability_gateway.tool_manifest.retry",
+                    attempt=attempt,
+                    retry_delay=retry_delay,
+                    error=str(exc),
+                )
+                await asyncio.sleep(retry_delay)
+        if raw_manifest is None:
+            if last_error is not None:
+                raise last_error
+            raise ServiceClientError("flows tool-runtime manifest returned empty response")
         manifest = CapabilityManifest.model_validate(raw_manifest)
         return {capability.name: capability for capability in manifest.capabilities}
 

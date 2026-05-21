@@ -242,9 +242,19 @@ async def run(args, state):
     results["channel.send_with_buttons"] = channel_buttons["queued"]
     trace_event = await call("trace.event", {"event_type": "capability.test", "attributes": {"language": "python"}})
     results["trace.event"] = trace_event["recorded"]
-    summary = await call("text.summarize", {"text": "Capability smoke text", "max_output_tokens": 32})
+    summary = await call("text.summarize", {
+        "text": "Capability smoke text",
+        "provider": "mock",
+        "model": "mock-gpt-4",
+        "max_output_tokens": 32,
+    })
     results["text.summarize"] = summary["summary"]
-    markdown = await call("text.format_markdown", {"text": "Title\\nItem one", "max_chunk_chars": 512})
+    markdown = await call("text.format_markdown", {
+        "text": "Title\\nItem one",
+        "provider": "mock",
+        "model": "mock-gpt-4",
+        "max_chunk_chars": 512,
+    })
     results["text.format_markdown"] = markdown["markdown"]
     speech = await call("voice.synthesize_speech", {
         "text": "Capability smoke speech",
@@ -316,9 +326,19 @@ async function run(args, state) {
   results["channel.send"] = (await call("channel.send", {content: "queued message"})).queued;
   results["channel.send_with_buttons"] = (await call("channel.send_with_buttons", {content: "queued buttons", buttons: ["A", "B"]})).queued;
   results["trace.event"] = (await call("trace.event", {event_type: "capability.test", attributes: {language: "javascript"}})).recorded;
-  const summary = await call("text.summarize", {text: "Capability smoke text", max_output_tokens: 32});
+  const summary = await call("text.summarize", {
+    text: "Capability smoke text",
+    provider: "mock",
+    model: "mock-gpt-4",
+    max_output_tokens: 32,
+  });
   results["text.summarize"] = summary.summary;
-  const markdown = await call("text.format_markdown", {text: "Title\\nItem one", max_chunk_chars: 512});
+  const markdown = await call("text.format_markdown", {
+    text: "Title\\nItem one",
+    provider: "mock",
+    model: "mock-gpt-4",
+    max_chunk_chars: 512,
+  });
   results["text.format_markdown"] = markdown.markdown;
   const speech = await call("voice.synthesize_speech", {
     text: "Capability smoke speech",
@@ -483,6 +503,8 @@ func Run(args map[string]any, state map[string]any) (any, error) {
 
     summary, err := callObj("text.summarize", map[string]any{
         "text": "Capability smoke text",
+        "provider": "mock",
+        "model": "mock-gpt-4",
         "max_output_tokens": 32,
     })
     if err != nil {
@@ -492,6 +514,8 @@ func Run(args map[string]any, state map[string]any) (any, error) {
 
     markdown, err := callObj("text.format_markdown", map[string]any{
         "text": "Title\\nItem one",
+        "provider": "mock",
+        "model": "mock-gpt-4",
         "max_chunk_chars": 512,
     })
     if err != nil {
@@ -639,12 +663,16 @@ async Task<object?> Run(Dictionary<string, object?> args, Dictionary<string, obj
 
     var summary = await CallObj("text.summarize", new Dictionary<string, object?> {
         ["text"] = "Capability smoke text",
+        ["provider"] = "mock",
+        ["model"] = "mock-gpt-4",
         ["max_output_tokens"] = 32,
     });
     results["text.summarize"] = summary["summary"];
 
     var markdown = await CallObj("text.format_markdown", new Dictionary<string, object?> {
         ["text"] = "Title\\nItem one",
+        ["provider"] = "mock",
+        ["model"] = "mock-gpt-4",
         ["max_chunk_chars"] = 512,
     });
     results["text.format_markdown"] = markdown["markdown"];

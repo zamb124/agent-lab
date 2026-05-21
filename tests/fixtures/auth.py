@@ -19,8 +19,12 @@ import pytest_asyncio
 
 from core.context import clear_context, set_context
 from core.models.context_models import Context
-from core.models.identity_models import Company, User
+from core.models.identity_models import User
 from core.utils.tokens import get_token_service
+from tests.fixtures.ai_provider_defaults import (
+    company_with_test_ai_provider_defaults,
+    make_test_company,
+)
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -36,7 +40,7 @@ async def auth_token_system(frontend_container):
     # Создаем или получаем компанию system
     existing_company = await frontend_container.company_repository.get(company_id)
     if not existing_company:
-        company = Company(
+        company = make_test_company(
             company_id=company_id,
             name="System Company",
             owner_user_id=user_id,
@@ -44,9 +48,10 @@ async def auth_token_system(frontend_container):
         )
         await frontend_container.company_repository.set(company)
     else:
+        existing_company = company_with_test_ai_provider_defaults(existing_company)
         if user_id not in existing_company.members:
             existing_company.members[user_id] = ["owner", "admin"]
-            await frontend_container.company_repository.set(existing_company)
+        await frontend_container.company_repository.set(existing_company)
 
     # Создаем пользователя
     user = User(
@@ -114,12 +119,13 @@ async def auth_token_system_user2(frontend_container):
     # Компания system уже должна существовать (создана в auth_token_system)
     existing_company = await frontend_container.company_repository.get(company_id)
     if existing_company:
+        existing_company = company_with_test_ai_provider_defaults(existing_company)
         if user_id not in existing_company.members:
             existing_company.members[user_id] = ["member"]
-            await frontend_container.company_repository.set(existing_company)
+        await frontend_container.company_repository.set(existing_company)
     else:
         # Если почему-то не существует - создаем
-        company = Company(
+        company = make_test_company(
             company_id=company_id,
             name="System Company",
             owner_user_id=user_id,
@@ -186,7 +192,7 @@ async def auth_token_company2(frontend_container):
     # Создаем компанию company2
     existing_company = await frontend_container.company_repository.get(company_id)
     if not existing_company:
-        company = Company(
+        company = make_test_company(
             company_id=company_id,
             name="Company 2",
             owner_user_id=user_id,
@@ -194,9 +200,10 @@ async def auth_token_company2(frontend_container):
         )
         await frontend_container.company_repository.set(company)
     else:
+        existing_company = company_with_test_ai_provider_defaults(existing_company)
         if user_id not in existing_company.members:
             existing_company.members[user_id] = ["owner", "admin"]
-            await frontend_container.company_repository.set(existing_company)
+        await frontend_container.company_repository.set(existing_company)
 
     # Создаем пользователя
     user = User(
@@ -246,12 +253,13 @@ async def auth_token_company2_user2(frontend_container):
     # Компания company2 уже должна существовать (создана в auth_token_company2)
     existing_company = await frontend_container.company_repository.get(company_id)
     if existing_company:
+        existing_company = company_with_test_ai_provider_defaults(existing_company)
         if user_id not in existing_company.members:
             existing_company.members[user_id] = ["member"]
-            await frontend_container.company_repository.set(existing_company)
+        await frontend_container.company_repository.set(existing_company)
     else:
         # Если почему-то не существует - создаем
-        company = Company(
+        company = make_test_company(
             company_id=company_id,
             name="Company 2",
             owner_user_id=user_id,
@@ -307,7 +315,7 @@ def service_client_asgi_auth_context(auth_headers: dict[str, str]):
     set_context(
         Context(
             user=User(user_id=token_data.user_id, name="test"),
-            active_company=Company(company_id=company_id, name="test"),
+            active_company=make_test_company(company_id=company_id, name="test"),
             channel="test",
             session_id="test",
             auth_token=raw,
@@ -317,4 +325,3 @@ def service_client_asgi_auth_context(auth_headers: dict[str, str]):
         yield
     finally:
         clear_context()
-

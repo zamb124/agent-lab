@@ -150,6 +150,24 @@ class ExecutionState(FlexibleBaseModel):
         default=None,
         description="Версия FlowConfig в flows_versions; None = при выполнении брать последнюю из flows",
     )
+    terminal_status: Optional[
+        Literal[
+            "completed",
+            "input-required",
+            "canceled",
+            "failed",
+            "rejected",
+            "auth-required",
+            "unknown",
+        ]
+    ] = Field(
+        default=None,
+        description="Финальный A2A status, сохранённый в БД только на terminal boundary.",
+    )
+    terminal_error: Optional[str] = Field(
+        default=None,
+        description="Текст ошибки для terminal_status='failed'/'rejected'/'unknown'.",
+    )
 
     # ========================================================================
     # Системные поля - опциональные

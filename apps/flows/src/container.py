@@ -85,7 +85,10 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def state_manager(self):
-        return StateManager(state_repository=self.state_repository)
+        return StateManager(
+            state_repository=self.state_repository,
+            redis_client=self.redis_client,
+        )
 
     @lazy
     def redis_client(self):

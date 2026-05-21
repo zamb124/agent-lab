@@ -8,9 +8,12 @@
 ПРАВИЛО: Мок только LLM. Tools, state, flow - реальные.
 """
 
+import pytest
+
 
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
+from core.errors import FlowExecutionError
 from core.state import ExecutionState
 
 # Inline tool конфиги для тестов
@@ -780,7 +783,7 @@ class TestReactLoopModeMaxIterations:
         self, app, unique_id, mock_llm_with_queue
     ):
         """
-        Агент завершается при достижении max_iterations.
+        Агент падает явно при достижении max_iterations без exit tool.
         """
         flow_id = f"test_max_iter_{unique_id}"
         container = get_container()
@@ -826,10 +829,8 @@ class TestReactLoopModeMaxIterations:
             session_id="test-agent:test-context",
             content="Loop"
         )
-        result = await flow.run(state)
-
-        # Агент должен завершиться (либо по finish, либо по max_iterations)
-        assert result.node_history
+        with pytest.raises(FlowExecutionError):
+            await flow.run(state)
 
         await container.flow_repository.delete(flow_id)
 
@@ -1208,4 +1209,3 @@ async def execute(args: dict, state: dict = None):
         assert result["response"] == "Текстовый ответ в auto режиме"
 
         await container.flow_repository.delete(flow_id)
-

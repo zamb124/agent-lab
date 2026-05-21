@@ -146,6 +146,27 @@ class TelegramDevPolling:
         self._task: asyncio.Task[None] | None = None
         self._scan_interval = 10  # секунд между сканированиями
 
+    async def _resolve_company_for_subdomain(self, container: Any, subdomain: str) -> Company:
+        company_id = await container.subdomain_repository.get_company_id(subdomain)
+        if company_id:
+            company = await container.company_repository.get(company_id)
+            if company is not None:
+                return company
+
+        company = await container.company_repository.get(subdomain)
+        if company is not None:
+            return company
+
+        logger.warning(
+            "Dev polling subdomain has no persisted Company; using minimal context",
+            subdomain=subdomain,
+        )
+        return Company(
+            company_id=subdomain,
+            subdomain=subdomain,
+            name=f"{subdomain} Company",
+        )
+
     async def _get_telegram_triggers(self) -> list[dict[str, Any]]:
         """Собирает все Telegram триггеры из агентов всех компаний."""
         triggers = []
@@ -155,16 +176,17 @@ class TelegramDevPolling:
         subdomains = await self._get_all_subdomains(container)
         logger.info(f"Scanning subdomains: {subdomains}")
 
-        dev_user = User(user_id="system", name="System")
-
         for subdomain in subdomains:
             logger.info(f"Processing subdomain: {subdomain}")
             try:
                 # Устанавливаем контекст для каждой компании
-                company = Company(
-                    company_id=subdomain,
-                    subdomain=subdomain,
-                    name=f"{subdomain} Company",
+                company = await self._resolve_company_for_subdomain(container, subdomain)
+                dev_user = User(
+                    user_id="system",
+                    name="System",
+                    groups=["admin"],
+                    companies={company.company_id: ["admin"]},
+                    active_company_id=company.company_id,
                 )
                 context = Context(
                     user=dev_user,

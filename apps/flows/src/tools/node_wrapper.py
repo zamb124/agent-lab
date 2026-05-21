@@ -276,6 +276,7 @@ class NodeAsToolWrapper(BaseTool):
         if is_resume:
             # Resume: загружаем сохраненный state субагента
             nested_state = InterruptManager.load_nested_state(parent_state, node_id)
+            object.__setattr__(nested_state, "_skip_hot_state_checkpoint", True)
             # Передаем ответ пользователя
             nested_state.content = parent_state.content
             # Передаем оставшийся путь interrupt (без первого элемента)
@@ -347,6 +348,7 @@ class NodeAsToolWrapper(BaseTool):
             branch_id=parent_state.branch_id,
             flow_config_version=parent_state.flow_config_version,
         )
+        object.__setattr__(nested_state, "_skip_hot_state_checkpoint", True)
 
         # Записываем args в nested_state
         for key, value in args.items():

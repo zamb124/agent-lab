@@ -438,6 +438,7 @@ class BaseNode(ABC):
 
         # Сбрасываем current_nodes — вложенный flow начнёт со своего entry
         new_state.current_nodes = []
+        object.__setattr__(new_state, "_skip_hot_state_checkpoint", True)
 
         return new_state
 

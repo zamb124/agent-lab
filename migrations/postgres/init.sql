@@ -18,10 +18,25 @@ GRANT ALL PRIVILEGES ON DATABASE platform_office TO platform_user;
 GRANT ALL PRIVILEGES ON DATABASE platform_tracing TO platform_user;
 
 \connect platform_shared
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 CREATE EXTENSION IF NOT EXISTS vector;
+
+\connect platform_agents
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 \connect platform_crm
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 CREATE EXTENSION IF NOT EXISTS vector;
 
+\connect platform_sync
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
 \connect platform_rag
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 CREATE EXTENSION IF NOT EXISTS vector;
+
+\connect platform_office
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+\connect platform_tracing
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;

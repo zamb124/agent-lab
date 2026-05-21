@@ -19,6 +19,7 @@ async def test_build_job_context_signs_jwt_for_member(frontend_container, unique
         name="JobCtx",
         owner_user_id=uid,
         members={uid: ["owner"]},
+        metadata={"ai_providers": {"embedding": {"provider": "openrouter"}}},
         balance=5.0,
     )
     await frontend_container.user_repository.set(user)
@@ -35,10 +36,16 @@ async def test_build_job_context_signs_jwt_for_member(frontend_container, unique
     assert ctx.user.user_id == uid
     assert ctx.active_company is not None
     assert ctx.active_company.company_id == cid
+    assert ctx.active_company.metadata == company.metadata
+    assert ctx.active_company.balance == 5.0
+    assert ctx.user.companies == user.companies
+    assert ctx.user.active_company_id == cid
+    assert ctx.user_companies == [company]
     assert ctx.host == "reembed_job"
     assert ctx.channel == "test_worker"
     assert ctx.trace_id == f"trace:{unique_id}"
     assert ctx.session_id == f"sess:{unique_id}"
+    assert ctx.auth_token is not None
     token = get_token_service().validate_token(ctx.auth_token)
     assert token is not None
     assert token.user_id == uid

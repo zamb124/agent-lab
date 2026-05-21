@@ -42,6 +42,46 @@ class _ReadableSpan(Protocol):
     parent: _SpanParentContext | None
     status: Status
     attributes: Mapping[str, Any] | None
+    events: Any
+
+
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    return str(value)
+
+
+def _span_event_timestamp(timestamp: Any) -> str | Any:
+    if isinstance(timestamp, int):
+        return datetime.fromtimestamp(timestamp / 1_000_000_000, tz=timezone.utc).isoformat()
+    return timestamp
+
+
+def _serialize_span_events(readable_span: _ReadableSpan) -> list[dict[str, Any]]:
+    events = []
+    for event in getattr(readable_span, "events", None) or []:
+        events.append(
+            {
+                "name": str(getattr(event, "name", "")),
+                "timestamp": _span_event_timestamp(getattr(event, "timestamp", None)),
+                "attributes": _json_safe(dict(getattr(event, "attributes", None) or {})),
+            }
+        )
+    return events
+
+
+def _is_control_flow_exception(error: Exception) -> bool:
+    exc_type = type(error)
+    return exc_type.__name__ in {
+        "FlowInterrupt",
+        "BreakpointInterrupt",
+        "FlowCancelled",
+    } and exc_type.__module__.startswith("apps.flows.")
+
 
 # При закрытии async generators (GeneratorExit) OpenTelemetry пытается detach
 # контекст который был создан в другом async контексте. Это безопасно игнорировать.
@@ -222,7 +262,7 @@ class PlatformTracer:
             "resource_type": all_attrs.get(attr.ATTR_RESOURCE_TYPE),
             "resource_id": all_attrs.get(attr.ATTR_RESOURCE_ID),
             "attributes": all_attrs,
-            "events": None,
+            "events": _serialize_span_events(readable_span),
         }
 
         await _span_repository.save_span(span_data)
@@ -309,9 +349,14 @@ class PlatformTracer:
             name=f"request.{method}",
             kind=SpanKind.SERVER,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
                 await self._save_span(span, f"request.{method}", "SERVER", start_time, trace_ctx)
 
@@ -336,9 +381,14 @@ class PlatformTracer:
             name=f"flow.{flow_id}",
             kind=SpanKind.INTERNAL,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
                 await self._save_span(span, f"flow.{flow_id}", "INTERNAL", start_time, trace_ctx)
 
@@ -371,9 +421,14 @@ class PlatformTracer:
             name=operation_name,
             kind=SpanKind.INTERNAL,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
                 await self._save_span(span, operation_name, "INTERNAL", start_time, trace_ctx)
 
@@ -411,9 +466,14 @@ class PlatformTracer:
             name=operation_name,
             kind=SpanKind.INTERNAL,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
                 await self._save_span(span, operation_name, "INTERNAL", start_time, trace_ctx)
 
@@ -438,11 +498,18 @@ class PlatformTracer:
             name=f"node.{node_type}.{node_id}",
             kind=SpanKind.INTERNAL,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
-                await self._save_span(span, f"node.{node_type}.{node_id}", "INTERNAL", start_time, trace_ctx)
+                await self._save_span(
+                    span, f"node.{node_type}.{node_id}", "INTERNAL", start_time, trace_ctx
+                )
 
     @asynccontextmanager
     async def llm_node_span(
@@ -469,11 +536,18 @@ class PlatformTracer:
             name=f"llm_node.{node_label}",
             kind=SpanKind.INTERNAL,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
-                await self._save_span(span, f"llm_node.{node_label}", "INTERNAL", start_time, trace_ctx)
+                await self._save_span(
+                    span, f"llm_node.{node_label}", "INTERNAL", start_time, trace_ctx
+                )
 
     @asynccontextmanager
     async def react_iteration_span(
@@ -496,11 +570,18 @@ class PlatformTracer:
             name=f"react.iteration.{iteration}",
             kind=SpanKind.INTERNAL,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
-                await self._save_span(span, f"react.iteration.{iteration}", "INTERNAL", start_time, trace_ctx)
+                await self._save_span(
+                    span, f"react.iteration.{iteration}", "INTERNAL", start_time, trace_ctx
+                )
 
     @asynccontextmanager
     async def llm_call_span(
@@ -530,9 +611,14 @@ class PlatformTracer:
             name=f"llm.{model}",
             kind=SpanKind.CLIENT,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
                 await self._save_span(
                     span,
@@ -668,9 +754,14 @@ class PlatformTracer:
             name=f"tool.{tool_name}",
             kind=SpanKind.INTERNAL,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
                 await self._save_span(span, f"tool.{tool_name}", "INTERNAL", start_time, trace_ctx)
 
@@ -699,9 +790,7 @@ class PlatformTracer:
         state_dict = state.model_dump(exclude_none=False)
 
         snapshot = {
-            k: v
-            for k, v in state_dict.items()
-            if not k.startswith("__") or k == "__tools__"
+            k: v for k, v in state_dict.items() if not k.startswith("__") or k == "__tools__"
         }
         snapshot_str = json.dumps(snapshot, ensure_ascii=False, default=str)[:4000]
         span.set_attribute(attr.ATTR_STATE_SNAPSHOT, snapshot_str)
@@ -730,9 +819,14 @@ class PlatformTracer:
             name="interrupt.ask_user",
             kind=SpanKind.INTERNAL,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
                 await self._save_span(span, "interrupt.ask_user", "INTERNAL", start_time, trace_ctx)
 
@@ -757,7 +851,8 @@ class PlatformTracer:
 
         # Фильтруем переменные - оставляем только скалярные значения
         safe_vars = {
-            k: v for k, v in variables.items()
+            k: v
+            for k, v in variables.items()
             if isinstance(v, (str, int, float, bool)) or v is None
         }
         variables_str = json.dumps(safe_vars, ensure_ascii=False, default=str)[:2000]
@@ -767,11 +862,18 @@ class PlatformTracer:
             name=f"prompt.build.{node_id}",
             kind=SpanKind.INTERNAL,
             attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
         ) as span:
             try:
                 yield span
+            except Exception as exc:
+                self.set_error(span, exc)
+                raise
             finally:
-                await self._save_span(span, f"prompt.build.{node_id}", "INTERNAL", start_time, trace_ctx)
+                await self._save_span(
+                    span, f"prompt.build.{node_id}", "INTERNAL", start_time, trace_ctx
+                )
 
     def record_prompt_result(
         self,
@@ -802,6 +904,8 @@ class PlatformTracer:
 
     def set_error(self, span: Span, error: Exception) -> None:
         """Помечает span как ошибку."""
+        if _is_control_flow_exception(error):
+            return
         span.set_status(Status(StatusCode.ERROR, str(error)))
         span.set_attribute(attr.ATTR_ERROR_MESSAGE, str(error))
         span.set_attribute(attr.ATTR_ERROR_TYPE, type(error).__name__)

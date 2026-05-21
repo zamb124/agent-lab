@@ -70,7 +70,7 @@ from core.clients.llm import (
 from core.company_ai import COST_ORIGIN_COMPANY
 from core.config import get_settings
 from core.context import get_context
-from core.errors import ToolExecutionError
+from core.errors import FlowExecutionError, ToolExecutionError
 from core.logging import get_logger
 from core.state import (
     ExecutionExceptionRecord,
@@ -134,6 +134,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             for tool in self.tools:
                 if hasattr(tool, "container") and getattr(tool, "container", None) is None:
                     setattr(tool, "container", container)
+
+    async def _checkpoint_state(self, state: ExecutionState) -> None:
+        if self.container is None:
+            return
+        if getattr(state, "_skip_hot_state_checkpoint", False):
+            return
+        await self.container.state_manager.save_state(state.session_id, state)
 
     def _resolve_tool_by_call_name(self, call_name: str):
         """Резолвит tool по имени вызова, включая API-совместимую санитизацию."""
@@ -223,6 +230,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 await self._handle_resume(
                     state, user_content, interrupt_path, context_id, task_id
                 )
+                await self._checkpoint_state(state)
             else:
                 InterruptManager.clear_interrupt_path(state)
         elif user_content:
@@ -231,6 +239,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     user_content, sid, context_id=context_id, task_id=task_id
                 )
             )
+            await self._checkpoint_state(state)
 
         async for event in self._react_loop(
             state, llm_node_label, context_id, task_id, emitter
@@ -355,6 +364,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 InterruptManager.apply_interrupt(
                     state, e.body, tool_call, getattr(e, "correlation_id", None)
                 )
+                await self._checkpoint_state(state)
                 raise
         else:
             self._ensure_assistant_tool_calls(
@@ -371,6 +381,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             )
 
         InterruptManager.clear_interrupt_path(state)
+        await self._checkpoint_state(state)
 
     def _append_interrupted_stream_assistant(
         self,
@@ -685,6 +696,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                                 state.response = final_response
                                 InterruptManager.clear_interrupt_path(state)
+                                await self._checkpoint_state(state)
                                 break
 
                             state.messages.append(
@@ -750,9 +762,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     state.pending_reasoning = None
 
                                 await self._emit_pending_ui_events(emitter, state)
+                                await self._checkpoint_state(state)
 
                             except FlowInterrupt as e:
-                                interrupted_tc = tool_calls[0]
+                                interrupted_tc = e.tool_call or tool_calls[0]
                                 logger.info(
                                     f"[llm_node:{llm_node_label}] Interrupt: tool={interrupted_tc['name']}"
                                 )
@@ -778,6 +791,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         interrupted_tc,
                                         getattr(e, "correlation_id", None),
                                     )
+                                await self._checkpoint_state(state)
                                 raise
                         else:
                             # Structured Output - всегда завершаем после первого ответа
@@ -799,6 +813,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     )
                                 )
                                 InterruptManager.clear_interrupt_path(state)
+                                await self._checkpoint_state(state)
                                 break
 
                             if loop_mode == ReactLoopMode.AUTO:
@@ -812,6 +827,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     )
                                 )
                                 InterruptManager.clear_interrupt_path(state)
+                                await self._checkpoint_state(state)
                                 break
                             else:
                                 if not strict:
@@ -825,6 +841,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         )
                                     )
                                     InterruptManager.clear_interrupt_path(state)
+                                    await self._checkpoint_state(state)
                                     break
 
                                 logger.warning(
@@ -856,13 +873,28 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         source_node_id=sid,
                                     )
                                 )
+                                await self._checkpoint_state(state)
+                if not final_response:
+                    raise FlowExecutionError(
+                        message=(
+                            f"LLM node '{llm_node_label}' reached max_iterations={max_iterations} "
+                            "without final response"
+                        ),
+                        payload={
+                            "node_id": sid,
+                            "max_iterations": max_iterations,
+                            "loop_mode": getattr(loop_mode, "value", str(loop_mode)),
+                        },
+                    )
             except FlowInterrupt:
+                await self._checkpoint_state(state)
                 tracer.record_state_snapshot(llm_node_span, state)
                 raise
             finally:
                 if final_response:
                     state.response = final_response
                     tracer.record_state_snapshot(llm_node_span, state)
+                    await self._checkpoint_state(state)
 
     def _resolve_llm_client(
         self,
@@ -909,11 +941,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         for attempt in range(1, self.MAX_STREAM_IDLE_RETRIES + 2):  # +2: 1 original + N retries
             try:
                 async for event in llm.stream(
-                    messages,
-                    tools,
-                    response_format,
-                    task_id,
-                    context_id,
+                    messages=messages,
+                    tools=tools,
+                    response_format=response_format,
+                    task_id=task_id,
+                    context_id=context_id,
                     max_tokens=max_tok,
                     stream_cancel_poll=_stream_cancel_poll,
                     **stream_kw,
@@ -978,18 +1010,25 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Собираем результаты и мержим state
-        tool_results = []
-        for i, (tc, result, state_copy) in enumerate(zip(tool_calls, results, state_copies)):
+        tool_results: list[dict[str, str]] = []
+        deferred_interrupt: FlowInterrupt | None = None
+        deferred_error: Exception | None = None
+        for tc, result, state_copy in zip(tool_calls, results, state_copies):
             tool_name = tc["name"]
             tool_call_id = tc.get("id", tool_name)
 
             if isinstance(result, BaseException):
+                if isinstance(result, FlowCancelled):
+                    raise result
                 if not isinstance(result, Exception):
                     raise result
                 if isinstance(result, FlowInterrupt):
-                    raise result
+                    result.tool_call = result.tool_call or tc
+                    deferred_interrupt = deferred_interrupt or result
+                    continue
                 if isinstance(result, ToolExecutionError):
-                    raise result
+                    deferred_error = deferred_error or result
+                    continue
                 enabled, allow_types = self._exception_policy_from_node_config()
                 if should_absorb_exception(
                     result, enabled=enabled, allow_types=allow_types
@@ -1007,7 +1046,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     )
                     continue
                 logger.error(f"Tool {tool_name} failed: {result}")
-                raise ToolExecutionError(tool_name, result)
+                deferred_error = deferred_error or ToolExecutionError(tool_name, result)
+                continue
 
             # Мержим state: messages extend, остальное перезаписываем
             new_messages = state_copy.messages[original_msg_count:]
@@ -1034,6 +1074,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     setattr(state, ek, ev)
 
             tool_results.extend(result)
+
+        if deferred_interrupt is not None:
+            raise deferred_interrupt
+        if deferred_error is not None:
+            raise deferred_error
 
         return tool_results
 

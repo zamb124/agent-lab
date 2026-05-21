@@ -14,6 +14,7 @@ import keyword
 import re
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Response
@@ -1058,6 +1059,7 @@ def _compute_diff(old: dict[str, Any], new: dict[str, Any], path: str = "") -> l
         "pending_reasoning", "breakpoint_hit", "breakpoint_state", "interrupt",
         "join_arrived_preds", "hitl_handoff_correlation_id",
         "flow_deadline_monotonic", "flow_timeout_effective_seconds",
+        "terminal_status", "terminal_error",
     }
     all_keys = set(old.keys()) | set(new.keys())
 
@@ -1148,8 +1150,9 @@ async def validate_code(container: ContainerDep, request: ValidateRequest) -> Va
 
     validate_remote = getattr(runner, "validate_remote", None)
     if callable(validate_remote):
+        validate_remote_call = cast(Callable[..., Awaitable[Any]], validate_remote)
         try:
-            validation = await validate_remote(
+            validation = await validate_remote_call(
                 code=code,
                 entrypoint=entrypoint_for_validation,
                 kind=validation_kind,

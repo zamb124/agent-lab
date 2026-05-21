@@ -43,6 +43,7 @@ from core.clients.llm.factory import (  # noqa: E402
     _resolve_var,
     get_llm,
 )
+from core.context import clear_context  # noqa: E402
 from core.pagination import OffsetPage  # noqa: E402
 from core.scheduler.models import PlatformScheduledTask  # noqa: E402
 from core.state import ExecutionState  # noqa: E402
@@ -359,6 +360,7 @@ class TestLlmNodeLLMConfig:
         with patch("apps.flows.src.runtime.nodes.get_llm") as mock_get_llm:
             mock_get_llm.return_value = MagicMock()
 
+            clear_context()
             node._get_llm(state)
 
             mock_get_llm.assert_called_once_with(**_expected_get_llm_kwargs(
@@ -401,6 +403,7 @@ class TestLlmNodeLLMConfig:
         with patch("apps.flows.src.runtime.nodes.get_llm") as mock_get_llm:
             mock_get_llm.return_value = MagicMock()
 
+            clear_context()
             node._get_llm(state)
 
             mock_get_llm.assert_called_once_with(**_expected_get_llm_kwargs(

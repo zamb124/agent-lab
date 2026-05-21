@@ -103,8 +103,9 @@ import apps.flows_worker.broker as platform_broker_module  # noqa: E402, F401
 from apps.flows.main import app as fastapi_app  # noqa: E402
 from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
 from core.clients.llm import MockLLM, get_global_mock_llm, setup_mock_responses  # noqa: E402
-from core.context import Company, Context, User  # noqa: E402
+from core.context import Context, User  # noqa: E402
 from core.tracing.provider import shutdown_tracing  # noqa: E402
+from tests.fixtures.ai_provider_defaults import make_test_company  # noqa: E402
 
 if id(process_flow_task.broker) != id(platform_broker_module.broker):
     raise RuntimeError(
@@ -120,6 +121,8 @@ def pytest_sessionfinish(session, exitstatus):
 _DB_SETUP_LOCK = "/tmp/platform_test_db_setup.lock"
 # Один gw держит lock на DROP + run_migrations_async по всем сервисам; при -n auto остальные ждут дольше 120s.
 _DB_SETUP_LOCK_TIMEOUT_SEC = int(os.environ.get("PLATFORM_TEST_DB_LOCK_TIMEOUT", "1800"))
+_PORT_CLEANUP_LOCK = "/tmp/platform_test_port_cleanup.lock"
+_PORT_CLEANUP_DONE = "/tmp/platform_test_port_cleanup.done"
 
 
 def _real_taskiq_mock_llm_lane(node: Node) -> str:
@@ -487,26 +490,34 @@ async def setup_database_before_tests():
     Если все актуальны — пропуск. Если отстают — инкрементальный upgrade по каждому.
     Если БД пуста (нет alembic_version) — полный дроп + upgrade.
     """
+    from pathlib import Path
+
     from filelock import FileLock
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    test_ports = [9001, 9002, 9003, 9004, 9005, 9008, 9016, 9017, 9018, 9019, 9020]
-    print(f"\n Освобождаем тестовые порты: {test_ports}...")
-    for port in test_ports:
-        try:
-            result = subprocess.run(
-                f"lsof -ti:{port} | xargs kill -9 2>/dev/null",
-                shell=True,
-                capture_output=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                print(f"   Порт {port} освобожден")
-        except Exception:
-            pass
-    time.sleep(0.35)
-    print("Все тестовые порты свободны!\n")
+    port_cleanup_done = Path(_PORT_CLEANUP_DONE)
+    with FileLock(_PORT_CLEANUP_LOCK, timeout=_DB_SETUP_LOCK_TIMEOUT_SEC):
+        if not port_cleanup_done.exists():
+            test_ports = [9001, 9002, 9003, 9004, 9005, 9008, 9016, 9017, 9018, 9019, 9020]
+            print(f"\n Освобождаем тестовые порты: {test_ports}...")
+            for port in test_ports:
+                try:
+                    result = subprocess.run(
+                        f"lsof -ti:{port} | xargs kill -9 2>/dev/null",
+                        shell=True,
+                        capture_output=True,
+                        timeout=5,
+                    )
+                    if result.returncode == 0:
+                        print(f"   Порт {port} освобожден")
+                except Exception:
+                    pass
+            time.sleep(0.35)
+            for marker in _TEST_SERVER_MARKERS:
+                Path(marker).unlink(missing_ok=True)
+            port_cleanup_done.touch()
+            print("Все тестовые порты свободны!\n")
 
     shared_db_url = os.environ.get(
         "DATABASE__SHARED_URL", TEST_DATABASE_ENV["DATABASE__SHARED_URL"]
@@ -611,6 +622,33 @@ _TASKIQ_WORKER_PID = "/tmp/platform_test_taskiq_worker.pid"
 _RAG_WORKER_LOCK = "/tmp/platform_test_rag_worker.lock"
 _RAG_WORKER_PID = "/tmp/platform_test_rag_worker.pid"
 
+_TEST_SERVER_MARKERS = (
+    "/tmp/platform_test_flows_server.pid",
+    "/tmp/platform_test_flows_server.pid.ref_count",
+    "/tmp/platform_test_rag_server.pid",
+    "/tmp/platform_test_rag_server.pid.ref_count",
+    "/tmp/platform_test_crm_server.pid",
+    "/tmp/platform_test_crm_server.pid.ref_count",
+    "/tmp/platform_test_frontend_server.pid",
+    "/tmp/platform_test_frontend_server.pid.ref_count",
+    "/tmp/platform_test_sync_server.pid",
+    "/tmp/platform_test_sync_server.pid.ref_count",
+    "/tmp/platform_test_office_server.pid",
+    "/tmp/platform_test_office_server.pid.ref_count",
+    "/tmp/platform_test_voice_server.pid",
+    "/tmp/platform_test_voice_server.pid.ref_count",
+    "/tmp/platform_test_capability_gateway_server.pid",
+    "/tmp/platform_test_capability_gateway_server.pid.ref_count",
+    "/tmp/platform_test_code_runner_python_server.pid",
+    "/tmp/platform_test_code_runner_python_server.pid.ref_count",
+    "/tmp/platform_test_code_runner_node_server.pid",
+    "/tmp/platform_test_code_runner_node_server.pid.ref_count",
+    "/tmp/platform_test_code_runner_go_server.pid",
+    "/tmp/platform_test_code_runner_go_server.pid.ref_count",
+    "/tmp/platform_test_code_runner_csharp_server.pid",
+    "/tmp/platform_test_code_runner_csharp_server.pid.ref_count",
+)
+
 
 def pytest_configure(config):
     """Очистка маркеров синхронизации при старте тестов."""
@@ -622,6 +660,8 @@ def pytest_configure(config):
 
     for marker in [
         _DB_SETUP_LOCK,
+        _PORT_CLEANUP_LOCK,
+        _PORT_CLEANUP_DONE,
         _APP_INIT_LOCK,
         _APP_INIT_DONE,
         _TASKIQ_WORKER_LOCK,
@@ -632,28 +672,18 @@ def pytest_configure(config):
         f"{_RAG_WORKER_PID}.refs",
         "/tmp/platform_test_sync_taskiq_worker.pid.refs",
         "/tmp/platform_test_crm_taskiq_worker.pid.refs",
-        "/tmp/platform_test_flows_server.pid.ref_count",
-        "/tmp/platform_test_rag_server.pid.ref_count",
-        "/tmp/platform_test_crm_server.pid.ref_count",
-        "/tmp/platform_test_frontend_server.pid.ref_count",
-        "/tmp/platform_test_sync_server.pid.ref_count",
-        "/tmp/platform_test_capability_gateway_server.pid",
-        "/tmp/platform_test_capability_gateway_server.pid.ref_count",
-        "/tmp/platform_test_code_runner_python_server.pid",
-        "/tmp/platform_test_code_runner_python_server.pid.ref_count",
-        "/tmp/platform_test_code_runner_node_server.pid",
-        "/tmp/platform_test_code_runner_node_server.pid.ref_count",
-        "/tmp/platform_test_code_runner_go_server.pid",
-        "/tmp/platform_test_code_runner_go_server.pid.ref_count",
-        "/tmp/platform_test_code_runner_csharp_server.pid",
-        "/tmp/platform_test_code_runner_csharp_server.pid.ref_count",
+        *_TEST_SERVER_MARKERS,
     ]:
         path = pathlib.Path(marker)
-        if path.exists():
-            age = time.time() - path.stat().st_mtime
-            # Master процесс удаляет всегда, worker только если файл старый
-            if not hasattr(config, "workerinput") or age > max_age_seconds:
-                path.unlink(missing_ok=True)
+        try:
+            marker_stat = path.stat()
+        except FileNotFoundError:
+            continue
+
+        age = time.time() - marker_stat.st_mtime
+        # Master процесс удаляет всегда, worker только если файл старый
+        if not hasattr(config, "workerinput") or age > max_age_seconds:
+            path.unlink(missing_ok=True)
 
     # Создаём директорию для junit.xml если указана опция
     junitxml_path = config.getoption("--junitxml", default=None)
@@ -742,11 +772,11 @@ def test_context(request):
 
     from core.context import clear_context, set_context
     from core.models.context_models import Context
-    from core.models.identity_models import Company, User
+    from core.models.identity_models import User
 
     test_ctx = Context(
         user=User(user_id="test_user", name="Test User"),
-        active_company=Company(company_id="system", name="System"),
+        active_company=make_test_company(company_id="system", name="System"),
         session_id="test_session",
         channel="test",
         metadata={"user_id": "test_user", "email": "test@example.com", "grps": []},
@@ -775,7 +805,7 @@ def mock_context() -> Context:
     """
     return Context(
         user=User(user_id="test_user", name="Test User"),
-        active_company=Company(company_id="system", name="System"),
+        active_company=make_test_company(company_id="system", name="System"),
         session_id="test_session",
         channel="test",
         metadata={
@@ -1093,7 +1123,7 @@ def sync_tools(request, monkeypatch):
             if "context_data" not in kwargs:
                 mock_ctx = Context(
                     user=User(user_id="test_user", name="Test User"),
-                    active_company=Company(company_id="system", name="System"),
+                    active_company=make_test_company(company_id="system", name="System"),
                     session_id="test_session",
                     channel="test",
                     metadata={

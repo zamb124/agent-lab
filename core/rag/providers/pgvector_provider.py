@@ -60,6 +60,7 @@ class DeterministicEmbeddingService(EmbeddingService):
 
             for token in tokens:
                 add_feature(token)
+            add_feature(f"__document__:{source_text}", weight=0.125)
             norm = math.sqrt(sum(value * value for value in vector))
             if norm == 0.0:
                 raise ValueError("Mock embedding norm is zero")

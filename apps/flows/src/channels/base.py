@@ -315,9 +315,26 @@ class BaseChannel(ABC):
         return await container.state_manager.get_state(session_id)
 
     async def _save_state(self, session_id: str, state: ExecutionState) -> None:
-        """Сохраняет state в StateManager."""
+        """Сохраняет промежуточный state в Redis через StateManager."""
         container = self.container
         await container.state_manager.save_state(session_id, state)
+
+    async def _save_terminal_state(
+        self,
+        session_id: str,
+        state: ExecutionState,
+        status: str,
+        *,
+        error: str | None = None,
+    ) -> None:
+        """Сохраняет terminal snapshot в БД через StateManager."""
+        container = self.container
+        await container.state_manager.save_terminal_state(
+            session_id,
+            state,
+            status,
+            error=error,
+        )
 
     async def _resolve_session_id_for_a2a_lookup(self, lookup_id: str) -> str | None:
         """А2A ``tasks/get`` / ``tasks/cancel`` передают ``id`` (= task_id из стрима или context_id).
@@ -604,17 +621,55 @@ class BaseChannel(ABC):
             background_kind="flow_stream",
         )
 
+        user_id = ctx.user.user_id if ctx.user else params.user_id
+        user_groups = ctx.metadata.get("grps", []) or []
+        state = saved_state
+        state_is_new = state is None
+
+        if state_is_new:
+            state = create_initial_state(
+                task_id=effective_task_id,
+                context_id=params.context_id,
+                user_id=user_id,
+                session_id=params.session_id,
+                content=params.content,
+                branch_id=params.branch_id,
+            )
+            logger.info(f"[state] Created hot state for session {params.session_id}")
+        else:
+            messages_count = len(state.messages)
+            logger.info(
+                f"[state] Loaded state for session {params.session_id}: "
+                f"messages={messages_count}, current_nodes={state.current_nodes}, "
+                f"interrupt={bool(state.interrupt)}, breakpoint_hit={state.breakpoint_hit}, "
+                f"terminal_status={state.terminal_status}"
+            )
+            # При breakpoint resume НЕ перезаписываем content - используем оригинальный
+            if not state.breakpoint_hit:
+                state.content = params.content
+            state.task_id = effective_task_id
+            state.context_id = params.context_id
+            state.session_id = params.session_id
+
+        state.terminal_status = None
+        state.terminal_error = None
+        state.user_id = user_id
+        state.user_groups = user_groups
+
+        if params.files_data:
+            state.files = list(state.files) + params.files_data
+
         try:
+            await self._save_state(params.session_id, state)
+
             pinned_version = saved_state.flow_config_version if saved_state else None
             try:
                 runtime_flow = await container.flow_factory.get_flow(
                     self.flow_id, params.branch_id, config_version=pinned_version
                 )
-            except ValueError as verr:
-                await emitter.emit_error(str(verr))
+            except ValueError:
                 raise
             if runtime_flow is None:
-                await emitter.emit_error(f"Flow не найден: {self.flow_id}")
                 raise ValueError(f"Flow не найден: {self.flow_id}")
 
             # Переопределяем variables из metadata если переданы
@@ -640,42 +695,9 @@ class BaseChannel(ABC):
             if identity_vars:
                 runtime_flow.variables = {**runtime_flow.variables, **identity_vars}
 
-            user_id = ctx.user.user_id if ctx.user else params.user_id
-            user_groups = ctx.metadata.get("grps", []) or []
-
-            state = saved_state
-
-            if state is None:
-                state = create_initial_state(
-                    task_id=effective_task_id,
-                    context_id=params.context_id,
-                    user_id=user_id,
-                    session_id=params.session_id,
-                    content=params.content,
-                    branch_id=params.branch_id,
-                )
+            if state_is_new:
                 cfg_nodes = (runtime_flow.config or {}).get("nodes") or {}
                 state.files = collect_flow_node_files(cfg_nodes)
-                logger.info(f"[state] Created new state for session {params.session_id}")
-            else:
-                messages_count = len(state.messages)
-                logger.info(
-                    f"[state] Loaded state for session {params.session_id}: "
-                    f"messages={messages_count}, current_nodes={state.current_nodes}, "
-                    f"interrupt={bool(state.interrupt)}, breakpoint_hit={state.breakpoint_hit}"
-                )
-                # При breakpoint resume НЕ перезаписываем content - используем оригинальный
-                if not state.breakpoint_hit:
-                    state.content = params.content
-                state.task_id = effective_task_id
-                state.context_id = params.context_id
-                state.session_id = params.session_id
-
-            state.user_id = user_id
-            state.user_groups = user_groups
-
-            if params.files_data:
-                state.files = list(state.files) + params.files_data
 
             state.variables = {**state.variables, **runtime_flow.variables}
 
@@ -765,7 +787,7 @@ class BaseChannel(ABC):
             except FlowCancelled:
                 logger.info(f"Flow cancelled: task_id={effective_task_id}")
                 setattr(state, "_cancelled", True)
-                await self._save_state(params.session_id, state)
+                await self._save_terminal_state(params.session_id, state, "canceled")
                 await emitter.emit_cancelled()
                 return {"response": "", "status": "canceled"}
             finally:
@@ -780,9 +802,8 @@ class BaseChannel(ABC):
 
                 breakpoint_node = runtime_flow.nodes.get(node_id)
                 node_type = breakpoint_node.config.get("type", "unknown") if breakpoint_node else "unknown"
+                await self._save_terminal_state(params.session_id, state, "input-required")
                 await emitter.emit_breakpoint(node_id, node_type, state.breakpoint_state or {})
-
-                await self._save_state(params.session_id, state)
                 return {
                     "response": "",
                     "breakpoint_hit": node_id,
@@ -795,6 +816,7 @@ class BaseChannel(ABC):
                     context_id=params.context_id,
                     task_id=effective_task_id,
                 )
+                await self._save_terminal_state(params.session_id, state, "input-required")
                 await emitter.emit_interrupt(state.interrupt)
                 await self._send_push_notification(
                     params.task_id,
@@ -807,28 +829,27 @@ class BaseChannel(ABC):
                 has_artifact = json_data is not None
                 if has_artifact:
                     await emitter.emit_artifact(json.dumps(json_data, ensure_ascii=False))
+                await self._run_trigger_output_actions_if_applicable(params, state, flow_config)
+                await self._save_terminal_state(params.session_id, state, "completed")
                 await emitter.emit_complete(final_response, has_artifact=has_artifact)
                 await self._send_push_notification(
                     params.task_id, params.context_id, "completed", final_response
                 )
-                await self._run_trigger_output_actions_if_applicable(params, state, flow_config)
 
             messages_count = len(state.messages)
 
             logger.info(
-                f"[state] Saving state for session {params.session_id}: "
+                f"[state] Terminal state saved for session {params.session_id}: "
                 f"messages={messages_count}, current_nodes={state.current_nodes}, "
                 f"interrupt={bool(state.interrupt)}"
             )
-            await self._save_state(params.session_id, state)
+            status = "input-required" if state.interrupt else "completed"
 
             # Сериализация interrupt
             if state.interrupt:
                 interrupt_dict = interrupt_to_response_dict(state.interrupt)
             else:
                 interrupt_dict = None
-
-            status = "input-required" if state.interrupt else "completed"
 
             return {
                 "response": final_response,
@@ -838,12 +859,24 @@ class BaseChannel(ABC):
 
         except BillingBalanceBlockedError as e:
             logger.error(f"Billing balance blocked: {e}")
+            await self._save_terminal_state(
+                params.session_id,
+                state,
+                "failed",
+                error=str(e),
+            )
             await emitter.emit_error(str(e))
             await self._send_push_notification(params.task_id, params.context_id, "failed", str(e))
             raise
 
         except Exception as e:
             logger.error(f"Error in process_task: {e}")
+            await self._save_terminal_state(
+                params.session_id,
+                state,
+                "failed",
+                error=str(e),
+            )
             await emitter.emit_error(str(e))
             await self._send_push_notification(params.task_id, params.context_id, "failed", str(e))
             raise
@@ -914,7 +947,17 @@ class BaseChannel(ABC):
         if state is None:
             return None
 
-        if state.interrupt:
+        if state.terminal_status:
+            task_state = TaskState(state.terminal_status)
+            if task_state == TaskState.input_required and state.interrupt:
+                response = state.interrupt.question
+            elif task_state == TaskState.canceled:
+                response = "Task cancelled"
+            elif task_state == TaskState.failed:
+                response = state.terminal_error or "Task failed"
+            else:
+                response = state.response or state.terminal_error or ""
+        elif state.interrupt:
             task_state = TaskState.input_required
             response = state.interrupt.question
         elif getattr(state, "_cancelled", False):
@@ -951,7 +994,7 @@ class BaseChannel(ABC):
             return None
 
         setattr(state, "_cancelled", True)
-        await self._save_state(session_id, state)
+        await self._save_terminal_state(session_id, state, "canceled")
 
         return Task(
             id=state.task_id,

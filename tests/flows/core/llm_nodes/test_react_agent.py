@@ -9,9 +9,28 @@ State и messages - A2A типы.
 import pytest
 
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
+from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.tools.base import BaseTool
 from apps.flows.tools.math_tools import calculator
 from core.state import ExecutionState
+
+
+class _StateWritingTool(BaseTool):
+    name = "state_writer"
+    description = "Writes to state variables"
+
+    async def _run_impl(self, args, state):
+        state.variables = {**state.variables, self.name: args["value"]}
+        return args["value"]
+
+
+class _InterruptingTool(BaseTool):
+    name = "ask_user"
+    description = "Raises FlowInterrupt"
+
+    async def _run_impl(self, args, state):
+        raise FlowInterrupt(question=args["question"])
 
 
 async def run_agent_to_completion(runner, input_data, state):
@@ -119,6 +138,48 @@ class TestToolExecution:
         result = await calculator.run({"expression": "sin(pi/2)"}, state=state)
         # sin(pi/2) = 1.0
         assert "1" in result
+
+    @pytest.mark.asyncio
+    async def test_parallel_tool_interrupt_keeps_completed_sibling_state(self):
+        """При parallel tools interrupt не теряет state успешных соседних tools."""
+        node_config = NodeConfig(
+            node_id="test_agent",
+            type="llm_node",
+            name="Test Agent",
+            prompt="Test",
+        )
+        runner = LlmNodeRunner(
+            node_config=node_config,
+            tools=[_InterruptingTool(), _StateWritingTool()],
+            llm=None,
+            prompt="Test",
+        )
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-agent:test-context",
+        )
+
+        with pytest.raises(FlowInterrupt) as exc_info:
+            await runner._execute_tools_parallel(
+                [
+                    {
+                        "name": "ask_user",
+                        "arguments": {"question": "Need input"},
+                        "id": "call_interrupt",
+                    },
+                    {
+                        "name": "state_writer",
+                        "arguments": {"value": "done"},
+                        "id": "call_writer",
+                    },
+                ],
+                state,
+            )
+
+        assert state.variables["state_writer"] == "done"
+        assert exc_info.value.tool_call["name"] == "ask_user"
 
     @pytest.mark.asyncio
     async def test_calculator_tool_raises_on_invalid_expression(self):

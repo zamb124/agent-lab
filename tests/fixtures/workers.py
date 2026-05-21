@@ -16,7 +16,9 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, List
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
+from urllib.request import urlopen
 
 import pytest
 import redis.asyncio as redis_asyncio
@@ -792,6 +794,7 @@ class SessionServerManager:
         log_file: str = None,
         err_file: str = None,
         env: Dict[str, str] = None,
+        readiness_path: str | None = "/health",
     ):
         """
         Args:
@@ -805,6 +808,7 @@ class SessionServerManager:
             log_file: Путь к файлу логов
             err_file: Путь к файлу ошибок
             env: Дополнительные переменные окружения
+            readiness_path: HTTP endpoint, который должен ответить после ASGI startup
         """
         self.name = name
         self.lock_file = lock_file
@@ -817,6 +821,7 @@ class SessionServerManager:
         self.log_file = log_file or f"/tmp/{name.lower()}_server_test.log"
         self.err_file = err_file or f"/tmp/{name.lower()}_server_test_err.log"
         self.env = env or {}
+        self.readiness_path = readiness_path
         # xdist: первый gw держит lock на весь _start_server() (до startup_wait + cleanup);
         # timeout=60 даёт массовый filelock.Timeout при параллельном старте flows на 9001.
         _lock_timeout_sec = max(300, int(startup_wait) + 180)
@@ -872,6 +877,10 @@ class SessionServerManager:
                     self.pid_path.unlink(missing_ok=True)
                     self.ref_count_path.unlink(missing_ok=True)
                     return False
+                if self.readiness_path is not None and not self._wait_for_readiness(timeout=2.0):
+                    self.pid_path.unlink(missing_ok=True)
+                    self.ref_count_path.unlink(missing_ok=True)
+                    return False
                 return True
             except (OSError, ValueError):
                 self.pid_path.unlink(missing_ok=True)
@@ -893,6 +902,40 @@ class SessionServerManager:
                     return True
             except (socket.error, OSError):
                 time.sleep(0.1)
+        return False
+
+    def _readiness_url(self) -> str:
+        if self.readiness_path is None:
+            raise ValueError(f"{self.name}: readiness_path is not configured")
+        readiness_path = self.readiness_path
+        if not readiness_path.startswith("/"):
+            readiness_path = f"/{readiness_path}"
+        return f"http://{self.host}:{self.port}{readiness_path}"
+
+    def _wait_for_readiness(
+        self,
+        timeout: float = 30.0,
+        process: subprocess.Popen | None = None,
+    ) -> bool:
+        """Ждёт HTTP readiness после ASGI lifespan startup."""
+        if self.readiness_path is None:
+            return True
+
+        url = self._readiness_url()
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if process is not None and process.poll() is not None:
+                return False
+            try:
+                with urlopen(url, timeout=1.0) as response:
+                    if 200 <= response.status < 500:
+                        return True
+            except HTTPError as exc:
+                if 400 <= exc.code < 500:
+                    return True
+            except (URLError, TimeoutError, OSError):
+                pass
+            time.sleep(0.1)
         return False
 
     def _wait_port_free(self, timeout: float = 5.0) -> bool:
@@ -990,6 +1033,31 @@ class SessionServerManager:
             )
             raise RuntimeError(
                 f"{self.name} server failed to start "
+                f"(port {self.port}, timeout {self.startup_wait}s). {detail}"
+            )
+
+        if not self._wait_for_readiness(timeout=self.startup_wait, process=server_process):
+            exit_code = server_process.poll()
+            if exit_code is None:
+                _terminate_process_group_or_pid(server_process.pid)
+                try:
+                    server_process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    server_process.kill()
+                    server_process.wait(timeout=2)
+            server_log.close()
+            server_err.close()
+            with open(self.err_file, "r") as f:
+                err_content = f.read()
+            with open(self.log_file, "r") as f:
+                log_content = f.read()
+            detail = (
+                f"exit_code={exit_code}, readiness_url={self._readiness_url()}, "
+                f"stderr:\n{err_content or '(empty)'}\n"
+                f"stdout:\n{log_content or '(empty)'}"
+            )
+            raise RuntimeError(
+                f"{self.name} server failed readiness check "
                 f"(port {self.port}, timeout {self.startup_wait}s). {detail}"
             )
 
