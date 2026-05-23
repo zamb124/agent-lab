@@ -17,7 +17,6 @@ import shutil  # noqa: E402
 import subprocess  # noqa: E402
 import tempfile  # noqa: E402
 from pathlib import Path  # noqa: E402
-from typing import Optional, Tuple  # noqa: E402
 
 
 def audio_needs_ios_compatible_transcode(content_type: str) -> bool:
@@ -38,7 +37,7 @@ def audio_needs_ios_compatible_transcode(content_type: str) -> bool:
     return False
 
 
-def sniff_ios_incompatible_audio_magic(data: bytes) -> Optional[str]:
+def sniff_ios_incompatible_audio_magic(data: bytes) -> str | None:
     """
     Определяет WebM (EBML) или Ogg по сигнатуре, если Content-Type неверен.
 
@@ -58,7 +57,7 @@ def resolve_ios_transcode_source(
     content_type: str,
     original_name: str,
     data: bytes,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     """
     Нужно ли перекодировать загрузку в AAC/M4A и с каким суффиксом исходника вызывать ffmpeg.
 

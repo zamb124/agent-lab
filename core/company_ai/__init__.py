@@ -54,6 +54,7 @@ from core.company_ai.schema import (
     CompanyLLMOverride,
     CompanyRerankOverride,
     CompanyVoiceOverride,
+    LLMContextPatch,
 )
 
 __all__ = [
@@ -65,6 +66,7 @@ __all__ = [
     "CompanyLLMOverride",
     "CompanyRerankOverride",
     "CompanyVoiceOverride",
+    "LLMContextPatch",
     "COST_ORIGIN_COMPANY",
     "COST_ORIGIN_PLATFORM",
     "CostOrigin",

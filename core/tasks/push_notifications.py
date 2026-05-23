@@ -5,7 +5,7 @@
 
 import json
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from a2a.types import (
     DeleteTaskPushNotificationConfigParams,
@@ -24,7 +24,7 @@ REDIS_TTL = 86400 * 7  # 7 days
 
 logger = get_logger(__name__)
 # Singleton-экземпляр redis_client для core-задач
-_redis_client: Optional[RedisClient] = None
+_redis_client: RedisClient | None = None
 
 def _get_redis() -> RedisClient:
     """Получает или создает изолированный RedisClient для push уведомлений."""
@@ -34,7 +34,7 @@ def _get_redis() -> RedisClient:
         _redis_client = RedisClient(settings.database.redis_url)
     return _redis_client
 
-async def set_push_config(params: TaskPushNotificationConfig) -> Dict[str, Any]:
+async def set_push_config(params: TaskPushNotificationConfig) -> dict[str, Any]:
     """Сохраняет конфигурацию push notification."""
     redis = _get_redis()
 
@@ -72,7 +72,7 @@ async def set_push_config(params: TaskPushNotificationConfig) -> Dict[str, Any]:
     logger.info(f"Push config saved: task={task_id}, config={config_id}")
     return data
 
-async def get_push_config(params: GetTaskPushNotificationConfigParams) -> Optional[Dict[str, Any]]:
+async def get_push_config(params: GetTaskPushNotificationConfigParams) -> dict[str, Any] | None:
     """Получает конфигурацию push notification."""
     redis = _get_redis()
     task_id = params.id
@@ -96,7 +96,7 @@ async def get_push_config(params: GetTaskPushNotificationConfigParams) -> Option
     data = await redis.get(key)
     return json.loads(data) if data else None
 
-async def list_push_configs(params: ListTaskPushNotificationConfigParams) -> List[Dict[str, Any]]:
+async def list_push_configs(params: ListTaskPushNotificationConfigParams) -> list[dict[str, Any]]:
     """Список конфигураций для задачи."""
     redis = _get_redis()
     task_id = params.id
@@ -139,10 +139,10 @@ async def delete_push_config(params: DeleteTaskPushNotificationConfigParams) -> 
 
 async def send_webhook(
     url: str,
-    payload: Dict[str, Any],
-    token: Optional[str] = None,
-    credentials: Optional[str] = None,
-) -> Dict[str, Any]:
+    payload: dict[str, Any],
+    token: str | None = None,
+    credentials: str | None = None,
+) -> dict[str, Any]:
     """Отправляет webhook."""
     headers = {"Content-Type": "application/json"}
 
@@ -161,7 +161,7 @@ async def send_webhook(
         return {"success": True, "status_code": response.status_code}
 
 async def process_send_task_update(
-    task_id: str, context_id: str, state: str, message: Optional[str], is_final: bool, webhook_trigger_func
+    task_id: str, context_id: str, state: str, message: str | None, is_final: bool, webhook_trigger_func
 ) -> None:
     """Отправляет уведомление всем подписчикам задачи.
     `webhook_trigger_func` - это kiq-вызов, чтобы мы могли ретраить webhooks средствами брокера через worker."""

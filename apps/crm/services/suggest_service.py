@@ -1,6 +1,5 @@
 import uuid
 from datetime import UTC, date, datetime
-from typing import cast as type_cast
 
 from apps.crm.db.models import CRMEntity, CRMSuggest
 from apps.crm.db.repositories.entity_repository import EntityRepository
@@ -10,6 +9,7 @@ from apps.crm.models.api import EntityMergeRequest, MergeSide
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.note_processing_service import NoteProcessingService
 from apps.crm.types import JsonObject
+from core.types import require_json_object
 
 _DUPLICATE_SIMILARITY_THRESHOLD = 0.85
 _SUGGEST_SCAN_LIMIT = 50
@@ -42,14 +42,10 @@ class SuggestService:
 
     @staticmethod
     def _as_json_object(value: object) -> JsonObject | None:
-        if not isinstance(value, dict):
+        try:
+            return require_json_object(value, "suggest json object")
+        except ValueError:
             return None
-        result: JsonObject = {}
-        for key, item in type_cast(dict[object, object], value).items():
-            if not isinstance(key, str):
-                return None
-            result[key] = item
-        return result
 
     async def list_suggests(
         self,

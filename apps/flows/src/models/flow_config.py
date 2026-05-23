@@ -14,14 +14,16 @@ Zero-Guess Architecture:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from enum import Enum
-from typing import Any, ClassVar, Literal
+from typing import ClassVar, Literal, cast
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from apps.flows.src.constants.execution_limits import get_flow_execution_wall_time_cap_seconds
 from core.models import StrictBaseModel
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 from core.urn import extract_resource_id
 
 from .enums import MergeMode, TestTargetType
@@ -31,6 +33,62 @@ from .trigger_config import TriggerConfig
 
 # Тип для permission: строка или список строк
 Permission = str | list[str] | None
+
+
+def _normalize_flow_variables(data: object) -> object:
+    """Нормализует scalar JSON variables в строгий FlowVariableConfig payload."""
+    if not isinstance(data, dict):
+        return data
+    raw = cast(Mapping[str, object], data)
+    variables = raw.get("variables")
+    if not isinstance(variables, dict):
+        return dict(raw)
+
+    normalized: dict[str, object] = {}
+    for key, value in cast(Mapping[object, object], variables).items():
+        if not isinstance(key, str):
+            raise ValueError(f"variables key must be str, got {type(key).__name__}")
+        if isinstance(value, FlowVariableConfig):
+            normalized[key] = value
+        elif isinstance(value, dict) and "value" in value:
+            normalized[key] = dict(cast(Mapping[str, object], value))
+        else:
+            normalized[key] = {
+                "value": require_json_value(cast(object, value), f"variables.{key}"),
+                "public": False,
+            }
+
+    out = dict(raw)
+    out["variables"] = normalized
+    return out
+
+
+def _node_payload_to_json_object(value: object, field_name: str) -> JsonObject | None | object:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return require_json_object(cast(object, value), field_name)
+    if isinstance(value, BaseModel):
+        return require_json_object(cast(object, value.model_dump(mode="json")), field_name)
+    return value
+
+
+def _parse_flow_config_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name}: ожидается целое число, получено bool")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError(f"{field_name}: ожидается целое число, получена пустая строка")
+        try:
+            return int(stripped, 10)
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name}: ожидается целое число, получено {value!r}"
+            ) from exc
+    raise ValueError(f"{field_name}: ожидается целое число, получено {type(value).__name__}")
 
 
 class FlowType(str, Enum):
@@ -65,7 +123,7 @@ class FlowVariableConfig(StrictBaseModel):
     }
     """
 
-    value: Any = Field(..., description="Значение переменной")
+    value: JsonValue = Field(..., description="Значение переменной")
     secret: bool = Field(default=False, description="Скрывать значение в UI (симметрично company Variable.secret)")
     public: bool = Field(default=False, description="Публичная переменная для agent-card (A2A)")
     title: str | None = Field(default=None, description="Заголовок переменной")
@@ -88,7 +146,7 @@ class Edge(StrictBaseModel):
 
     from_node: str = Field(..., alias="from", description="ID исходной ноды")
     to_node: str | None = Field(..., alias="to", description="ID целевой ноды (null = конец)")
-    condition: str | dict[str, Any] | None = Field(
+    condition: str | JsonObject | None = Field(
         default=None,
         description=(
             "Условие перехода. Строковое выражение, объект simple "
@@ -102,7 +160,7 @@ class Edge(StrictBaseModel):
         ),
     )
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(populate_by_name=True)
 
 
 class InputType(str, Enum):
@@ -133,23 +191,15 @@ class InputConfig(StrictBaseModel):
     value: str = Field(default="", description="Текст | inline код | node_id")
     language: str = Field(default="python", description="Язык inline code: python, javascript, typescript, go, csharp")
     entrypoint: str | None = Field(default=None, description="Имя entrypoint-функции inline code; null = первая функция")
-    node: dict[str, Any] | None = Field(
+    node: JsonObject | None = Field(
         default=None, description="Inline нода как dict (будет преобразована в NodeConfig)"
     )
 
     @field_validator("node", mode="before")
     @classmethod
-    def convert_node_to_dict(cls, v):
+    def convert_node_to_dict(cls, v: object) -> JsonObject | None | object:
         """Преобразует NodeConfig в dict, если передан объект."""
-        if v is None:
-            return v
-        # Если это уже dict, возвращаем как есть
-        if isinstance(v, dict):
-            return v
-        # Если это NodeConfig (или любой объект с model_dump), преобразуем в dict
-        if hasattr(v, "model_dump"):
-            return v.model_dump()
-        return v
+        return _node_payload_to_json_object(v, "input.node")
 
 
 class CheckConfig(StrictBaseModel):
@@ -166,23 +216,15 @@ class CheckConfig(StrictBaseModel):
     value: str = Field(default="", description="Checker expr | inline код | node_id")
     language: str = Field(default="python", description="Язык inline code: python, javascript, typescript, go, csharp")
     entrypoint: str | None = Field(default=None, description="Имя entrypoint-функции inline code; null = первая функция")
-    node: dict[str, Any] | None = Field(
+    node: JsonObject | None = Field(
         default=None, description="Inline нода-судья как dict (будет преобразована в NodeConfig)"
     )
 
     @field_validator("node", mode="before")
     @classmethod
-    def convert_node_to_dict(cls, v):
+    def convert_node_to_dict(cls, v: object) -> JsonObject | None | object:
         """Преобразует NodeConfig в dict, если передан объект."""
-        if v is None:
-            return v
-        # Если это уже dict, возвращаем как есть
-        if isinstance(v, dict):
-            return v
-        # Если это NodeConfig (или любой объект с model_dump), преобразуем в dict
-        if hasattr(v, "model_dump"):
-            return v.model_dump()
-        return v
+        return _node_payload_to_json_object(v, "check.node")
 
 
 class TestTurn(StrictBaseModel):
@@ -218,7 +260,7 @@ class TestTarget(StrictBaseModel):
     branch_id: str | None = Field(default="default", description="ID ветки графа (branch)")
 
     # NODE -- только inline конфиг ноды
-    node_config: dict[str, Any] | None = Field(
+    node_config: JsonObject | None = Field(
         default=None, description="Inline конфиг ноды для тестирования"
     )
 
@@ -246,7 +288,7 @@ class TestCaseConfig(StrictBaseModel):
         default=None,
         description="Цель тестирования. None = flow из контекста"
     )
-    initial_state: dict[str, Any] | None = Field(
+    initial_state: JsonObject | None = Field(
         default=None,
         description="Начальное состояние для теста (переменные, данные)"
     )
@@ -290,7 +332,7 @@ class BranchConfig(StrictBaseModel):
     entry: str | None = Field(default=None, description="Точка входа")
 
     # Ноды
-    nodes: dict[str, dict[str, Any]] | None = Field(default=None, description="Ноды ветки")
+    nodes: dict[str, JsonObject] | None = Field(default=None, description="Ноды ветки")
     nodes_mode: MergeMode = Field(
         default=MergeMode.REPLACE, description="Режим применения nodes: 'merge' или 'replace'"
     )
@@ -302,7 +344,7 @@ class BranchConfig(StrictBaseModel):
     )
 
     # Переменные
-    variables: dict[str, FlowVariableConfig | Any] = Field(
+    variables: dict[str, FlowVariableConfig] = Field(
         default_factory=dict, description="Переменные ветки с метаданными"
     )
     variables_mode: MergeMode = Field(
@@ -310,7 +352,7 @@ class BranchConfig(StrictBaseModel):
     )
 
     # Mock конфигурация
-    mock: dict[str, Any] | None = Field(
+    mock: JsonObject | None = Field(
         default=None,
         description="Mock конфигурация для ветки. Переопределяет mock flow.",
     )
@@ -332,34 +374,9 @@ class BranchConfig(StrictBaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _normalize_variables(cls, data: Any) -> Any:
+    def _normalize_variables(cls, data: object) -> object:
         """Нормализует variables: простые значения -> FlowVariableConfig."""
-        if isinstance(data, dict) and "variables" in data:
-            variables = data["variables"]
-            if isinstance(variables, dict):
-                normalized = {}
-                for key, value in variables.items():
-                    if isinstance(value, dict) and "value" in value:
-                        normalized[key] = value
-                    else:
-                        normalized[key] = {"value": value, "public": False}
-                data["variables"] = normalized
-        return data
-
-    @model_validator(mode="after")
-    def _convert_variables_to_objects(self) -> "BranchConfig":
-        """Конвертирует variables в FlowVariableConfig объекты."""
-        if isinstance(self.variables, dict):
-            converted = {}
-            for key, value in self.variables.items():
-                if isinstance(value, FlowVariableConfig):
-                    converted[key] = value
-                elif isinstance(value, dict):
-                    converted[key] = FlowVariableConfig(**value)
-                else:
-                    converted[key] = FlowVariableConfig(value=value, public=False)
-            object.__setattr__(self, "variables", converted)
-        return self
+        return _normalize_flow_variables(data)
 
 
 class FlowConfig(StrictBaseModel):
@@ -383,7 +400,7 @@ class FlowConfig(StrictBaseModel):
     }
     """
 
-    model_config = ConfigDict(json_schema_extra={"storage_prefix": "flow"})
+    model_config: ClassVar[ConfigDict] = ConfigDict(json_schema_extra={"storage_prefix": "flow"})
 
     # ОБЯЗАТЕЛЬНЫЕ ПОЛЯ - БЕЗ DEFAULTS!
     flow_id: str = Field(..., description="Уникальный идентификатор flow")
@@ -406,7 +423,7 @@ class FlowConfig(StrictBaseModel):
 
     # LOCAL FLOW ПОЛЯ - обязательны для LOCAL, опциональны для EXTERNAL
     entry: str | None = Field(default=None, description="ID стартовой ноды - ОБЯЗАТЕЛЬНО для LOCAL")
-    nodes: dict[str, dict[str, Any]] | None = Field(
+    nodes: dict[str, JsonObject] | None = Field(
         default=None,
         description="Ноды графа - ОБЯЗАТЕЛЬНО для LOCAL"
     )
@@ -424,7 +441,7 @@ class FlowConfig(StrictBaseModel):
     last_health_check: datetime | None = Field(
         default=None, description="Время последней проверки здоровья"
     )
-    agent_card: dict[str, Any] | None = Field(default=None, description="Кэш agent-card.json")
+    agent_card: JsonObject | None = Field(default=None, description="Кэш agent-card.json")
     permission: list[str] = Field(
         default_factory=list,
         description="Группы с доступом. Пустой список = доступ для всех",
@@ -442,10 +459,10 @@ class FlowConfig(StrictBaseModel):
 
     @field_validator("timeout", mode="before")
     @classmethod
-    def validate_flow_timeout_seconds(cls, v: Any) -> int | None:
+    def validate_flow_timeout_seconds(cls, v: object) -> int | None:
         if v is None:
             return None
-        iv = int(v)
+        iv = _parse_flow_config_int(v, "timeout")
         if iv < 1:
             raise ValueError(f"timeout: ожидается >= 1, получено {iv}")
         cap = get_flow_execution_wall_time_cap_seconds()
@@ -457,12 +474,12 @@ class FlowConfig(StrictBaseModel):
     version: str = Field(default="", description="Версия flow (timestamp)")
     tags: list[str] = Field(default_factory=list, description="Теги для группировки")
 
-    variables: dict[str, FlowVariableConfig | Any] = Field(
+    variables: dict[str, FlowVariableConfig] = Field(
         default_factory=dict,
         description="Переменные flow с метаданными. @var:key резолвятся из БД",
     )
 
-    metadata: dict[str, Any] = Field(
+    metadata: JsonObject = Field(
         default_factory=dict,
         description=(
             "UI-метаданные flow editor (sticky_notes, layout-подсказки и пр.). "
@@ -473,45 +490,18 @@ class FlowConfig(StrictBaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _normalize_variables(cls, data: Any) -> Any:
+    def _normalize_variables(cls, data: object) -> object:
         """Нормализует variables: простые значения -> FlowVariableConfig."""
-        if isinstance(data, dict) and "variables" in data:
-            variables = data["variables"]
-            if isinstance(variables, dict):
-                normalized = {}
-                for key, value in variables.items():
-                    if isinstance(value, FlowVariableConfig):
-                        normalized[key] = value
-                    elif isinstance(value, dict) and "value" in value:
-                        normalized[key] = value
-                    else:
-                        normalized[key] = {"value": value, "public": False}
-                data["variables"] = normalized
-        return data
-
-    @model_validator(mode="after")
-    def _convert_variables_to_objects(self) -> "FlowConfig":
-        """Конвертирует variables в FlowVariableConfig объекты."""
-        if isinstance(self.variables, dict):
-            converted = {}
-            for key, value in self.variables.items():
-                if isinstance(value, FlowVariableConfig):
-                    converted[key] = value
-                elif isinstance(value, dict):
-                    converted[key] = FlowVariableConfig(**value)
-                else:
-                    converted[key] = FlowVariableConfig(value=value, public=False)
-            object.__setattr__(self, "variables", converted)
-        return self
+        return _normalize_flow_variables(data)
 
     branches: dict[str, BranchConfig] = Field(
         default_factory=dict,
         description="Ветки flow (варианты графа). Если пусто — автоматически default-ветка",
     )
-    channels: dict[str, dict[str, Any]] = Field(
+    channels: dict[str, JsonObject] = Field(
         default_factory=lambda: {"a2a": {}}, description="Каналы"
     )
-    store: dict[str, Any] = Field(default_factory=dict, description="Начальные данные")
+    store: JsonObject = Field(default_factory=dict, description="Начальные данные")
     timeout: int | None = Field(
         default=None,
         description="Wall-clock лимит одного run flow (сек), верх снимается с flow_execution_wall_time_cap_seconds; None = default_flow_timeout_seconds",
@@ -531,7 +521,7 @@ class FlowConfig(StrictBaseModel):
     )
 
     # Mock конфигурация
-    mock: dict[str, Any] | None = Field(
+    mock: JsonObject | None = Field(
         default=None,
         description="Mock конфигурация (tools, flows, nodes, llm)"
     )

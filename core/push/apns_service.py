@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 import jwt
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 APNS_PROD_HOST = "https://api.push.apple.com"
 APNS_SANDBOX_HOST = "https://api.sandbox.push.apple.com"
 
-_apns_push_service: Optional["ApnsPushService"] = None
+_apns_push_service: ApnsPushService | None = None
 
 
 class ApnsPushService:
@@ -42,7 +42,7 @@ class ApnsPushService:
         self._private_key_pem = pem
         self._bundle_id = bundle_id
         self._base_url = APNS_SANDBOX_HOST if use_sandbox else APNS_PROD_HOST
-        self._jwt_token: Optional[str] = None
+        self._jwt_token: str | None = None
         self._jwt_expires_at: float = 0.0
 
     @property
@@ -72,9 +72,9 @@ class ApnsPushService:
         device_token_hex: str,
         title: str,
         body: str,
-        url: Optional[str] = None,
-        tag: Optional[str] = None,
-        extra: Optional[dict[str, Any]] = None,
+        url: str | None = None,
+        tag: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> tuple[bool, bool]:
         """
         Returns:
@@ -149,5 +149,5 @@ def init_apns_push_service(
     return _apns_push_service
 
 
-def get_apns_push_service() -> Optional[ApnsPushService]:
+def get_apns_push_service() -> ApnsPushService | None:
     return _apns_push_service

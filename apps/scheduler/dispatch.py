@@ -22,6 +22,7 @@ from apps.rag_worker.broker import broker as rag_broker
 from apps.sync.realtime.broker import broker as sync_broker
 from core.logging import get_logger
 from core.logging.attributes import EVENT_TASK_SCHEDULED
+from core.scheduler.payload import normalize_schedule_task_payload
 from core.scheduler.source import get_schedule_source
 
 logger = get_logger(__name__)
@@ -133,7 +134,7 @@ class QueueAwareTaskiqScheduler(TaskiqScheduler):
                 .with_task_id(task_id=task.task_id)
                 .kiq(
                     *task.args,
-                    **task.kwargs,
+                    **normalize_schedule_task_payload(task.kwargs),
                 )
             )
             await maybe_awaitable(source.post_send(task))

@@ -20,6 +20,7 @@
  *   this.useFacets(name)                               — FacetsController по имени фабрики
  *   this.useSlice(name)                                — SliceController по имени фабрики
  *   this.toast(i18n_key, {type?, vars?, duration?})    — toast через UI_TOAST_SHOW
+ *   this.openFile(fileOrId, options?)                  — глобальный OnlyOffice viewer для FileRecord
  *   this.openModal(kindOrClass, props?)                — UI_MODAL_OPEN
  *   this.closeModal(kind?)                             — UI_MODAL_CLOSE
  *   this.openSidebar()                                 — UI_SIDEBAR_OPEN_REQUESTED
@@ -47,6 +48,7 @@ import { SelectController } from '../events/select-controller.js';
 // Не использовать ../events/index.js: barrel подтягивает модули с bare import `lit` (ложится на автономный embed).
 import { CoreEvents, assertEventType } from '../events/contract.js';
 import { CoreAuthEvents } from '../events/effects/auth.effect.js';
+import { FILES_EVENTS } from '../events/reducers/files.js';
 import { translate } from '../events/effects/i18n.effect.js';
 import { getFactory } from '../events/factory-registry.js';
 import { getDefaultI18nNamespace } from '../utils/i18n-namespace.js';
@@ -205,6 +207,29 @@ export class PlatformElement extends LitElement {
         }
         const modalProps = props === undefined ? null : props;
         this.dispatch(CoreEvents.UI_MODAL_OPEN, { kind, props: modalProps });
+    }
+
+    openFile(fileOrId, options) {
+        let file;
+        if (typeof fileOrId === 'string') {
+            if (fileOrId.length === 0) {
+                throw new Error('PlatformElement.openFile: file id must be non-empty string');
+            }
+            file = { file_id: fileOrId };
+        } else if (fileOrId && typeof fileOrId === 'object') {
+            const rawId = fileOrId.file_id || fileOrId.id;
+            if (typeof rawId !== 'string' || rawId.length === 0) {
+                throw new Error('PlatformElement.openFile: file.file_id or file.id required');
+            }
+            file = { ...fileOrId, file_id: rawId };
+        } else {
+            throw new Error('PlatformElement.openFile: file object or file id required');
+        }
+        const opts = options && typeof options === 'object' ? options : {};
+        this.dispatch(FILES_EVENTS.OPEN_REQUESTED, {
+            file,
+            source: typeof opts.source === 'string' && opts.source.length > 0 ? opts.source : null,
+        });
     }
 
     closeModal(target) {

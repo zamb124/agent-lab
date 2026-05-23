@@ -14,7 +14,7 @@ import json
 import logging
 import os
 import sys
-from typing import Any, Optional
+from typing import Any
 
 import structlog
 
@@ -65,7 +65,7 @@ def _safe_env(name: str) -> str:
 def _build_processors_chain(
     *,
     service_name: str,
-    service_version: Optional[str],
+    service_version: str | None,
     environment: str,
     sample_rate_info: float,
     sampled_loggers: list[str],
@@ -111,7 +111,7 @@ def _build_renderer(format_name: str, console_colors: bool) -> Any:
 
 def _build_foreign_pre_chain(
     service_name: str,
-    service_version: Optional[str],
+    service_version: str | None,
     environment: str,
 ) -> list[Any]:
     """
@@ -235,7 +235,7 @@ def setup_logging(service_name: str, logging_config=None) -> None:
     _initialized_for = (service_name, format_name)
 
 
-def _resolve_service_version() -> Optional[str]:
+def _resolve_service_version() -> str | None:
     settings = get_settings()
     server = getattr(settings, "server", None)
     if server is None:

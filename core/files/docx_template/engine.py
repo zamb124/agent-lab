@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import zipfile
+from collections.abc import Mapping
 from io import BytesIO
-from typing import Any, Mapping
+from typing import Any
 
 from docxtpl import DocxTemplate
 from jinja2 import Environment, StrictUndefined

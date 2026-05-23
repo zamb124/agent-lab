@@ -6,7 +6,7 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -41,21 +41,21 @@ class FileRecord(BaseModel):
     original_name: str = Field(description="Оригинальное имя файла")
     s3_key: str = Field(description="Ключ файла в S3")
     s3_bucket: str = Field(description="Ключ bucket в settings.s3.buckets (не физическое имя в S3)")
-    s3_endpoint: Optional[str] = Field(default=None, description="Endpoint URL провайдера")
-    storage_url: Optional[str] = Field(default=None, description="Прямой URL источника файла для proxy-download")
+    s3_endpoint: str | None = Field(default=None, description="Endpoint URL провайдера")
+    storage_url: str | None = Field(default=None, description="Прямой URL источника файла для proxy-download")
     content_type: str = Field(description="MIME тип файла")
     file_size: int = Field(description="Размер файла в байтах")
-    checksum: Optional[str] = Field(
+    checksum: str | None = Field(
         default=None,
         description="SHA-256 hex содержимого файла (как при upload в core.files.api)",
     )
     status: FileStatus = Field(default=FileStatus.UPLOADING, description="Статус файла")
-    uploaded_by: Optional[str] = Field(default=None, description="ID пользователя который загрузил")
-    company_id: Optional[str] = Field(default=None, description="ID компании владельца файла")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Дополнительные метаданные файла")
-    tags: List[str] = Field(default_factory=list, description="Теги для категоризации")
+    uploaded_by: str | None = Field(default=None, description="ID пользователя который загрузил")
+    company_id: str | None = Field(default=None, description="ID компании владельца файла")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Дополнительные метаданные файла")
+    tags: list[str] = Field(default_factory=list, description="Теги для категоризации")
     is_public: bool = Field(default=False, description="Доступен ли файл без авторизации")
-    download_url: Optional[str] = Field(
+    download_url: str | None = Field(
         default=None,
         description=(
             "Same-origin URL для скачивания через API (устанавливается сервисом при загрузке). "
@@ -70,7 +70,7 @@ class FileRecord(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         description="Время обновления файла"
     )
-    deleted_at: Optional[datetime] = Field(default=None, description="Время удаления файла")
+    deleted_at: datetime | None = Field(default=None, description="Время удаления файла")
 
     @property
     def key(self) -> str:
@@ -103,7 +103,7 @@ class FileResponse(BaseModel):
     content_type: str
     file_size: int
     url: str
-    checksum: Optional[str] = None
+    checksum: str | None = None
     is_public: bool
     created_at: datetime
 
@@ -127,24 +127,24 @@ class AudioRecord(FileRecord):
     Наследуется от FileRecord, добавляя специфичные для аудио поля.
     """
 
-    duration_ms: Optional[int] = Field(default=None, description="Длительность аудио в миллисекундах")
-    language: Optional[str] = Field(default=None, description="Язык аудио (ru, en, ...)")
-    sample_rate: Optional[int] = Field(default=None, description="Частота дискретизации в Гц")
-    channels: Optional[int] = Field(default=None, description="Количество аудио каналов (1, 2)")
-    audio_format: Optional[str] = Field(default=None, description="Формат аудио (mp3, wav, ogg)")
+    duration_ms: int | None = Field(default=None, description="Длительность аудио в миллисекундах")
+    language: str | None = Field(default=None, description="Язык аудио (ru, en, ...)")
+    sample_rate: int | None = Field(default=None, description="Частота дискретизации в Гц")
+    channels: int | None = Field(default=None, description="Количество аудио каналов (1, 2)")
+    audio_format: str | None = Field(default=None, description="Формат аудио (mp3, wav, ogg)")
     transcription_status: AudioTranscriptionStatus = Field(
         default=AudioTranscriptionStatus.IDLE,
         description="Текущий статус расшифровки аудио."
     )
-    transcription_text: Optional[str] = Field(
+    transcription_text: str | None = Field(
         default=None,
         description="Результат распознавания речи."
     )
-    transcription_error: Optional[str] = Field(
+    transcription_error: str | None = Field(
         default=None,
         description="Текст ошибки расшифровки."
     )
-    transcription_provider: Optional[str] = Field(
+    transcription_provider: str | None = Field(
         default=None,
         description="Идентификатор STT-провайдера, обработавшего аудио."
     )
@@ -187,9 +187,9 @@ class FileReadPreviewResponse(BaseModel):
     truncated: bool = Field(description="Усечён ли текст по лимиту превью")
     page_count: int = Field(default=0, description="Число страниц после чтения")
     detected_kind: str = Field(description="Тип файла по FileReader")
-    content_type: Optional[str] = Field(default=None, description="Content-Type после распознавания")
-    warnings: List[str] = Field(default_factory=list, description="Предупреждения парсера")
-    preview_note: Optional[str] = Field(
+    content_type: str | None = Field(default=None, description="Content-Type после распознавания")
+    warnings: list[str] = Field(default_factory=list, description="Предупреждения парсера")
+    preview_note: str | None = Field(
         default=None,
         description="Пояснение для пользователя (например для изображений)",
     )

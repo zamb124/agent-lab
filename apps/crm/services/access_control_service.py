@@ -3,7 +3,6 @@
 """
 
 from datetime import UTC, date, datetime
-from typing import cast as type_cast
 
 from apps.crm.db.models import AccessGrant, CRMEntity
 from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
@@ -11,6 +10,7 @@ from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.types import JsonObject
 from core.context import get_context
 from core.logging import get_logger
+from core.types import require_json_object, require_json_value
 
 logger = get_logger(__name__)
 
@@ -293,14 +293,10 @@ class AccessControlService:
 
     @staticmethod
     def _as_nested_json_object(value: object) -> JsonObject | None:
-        if not isinstance(value, dict):
+        try:
+            return require_json_object(value, "nested access object")
+        except ValueError:
             return None
-        result: JsonObject = {}
-        for key, item in type_cast(dict[object, object], value).items():
-            if not isinstance(key, str):
-                return None
-            result[key] = item
-        return result
 
     def _set_nested_value(self, obj: JsonObject, path: str, value: object) -> None:
         """Установить значение по пути"""
@@ -309,13 +305,14 @@ class AccessControlService:
             return
         if isinstance(value, date | datetime):
             value = value.isoformat()
+        json_value = require_json_value(value, f"public field {path}")
         for key in keys[:-1]:
             nested = self._as_nested_json_object(obj.get(key))
             if nested is None:
                 nested = {}
                 obj[key] = nested
             obj = nested
-        obj[keys[-1]] = value
+        obj[keys[-1]] = json_value
 
     async def batch_filter_readable(
         self,

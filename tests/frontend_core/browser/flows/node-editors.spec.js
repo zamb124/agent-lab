@@ -93,7 +93,8 @@ describe('node editors — top-level NodeConfig contract', () => {
         const base = el.shadowRoot.querySelector('flows-base-node-editor');
         expect(base).to.not.be.null;
         const blocks = base.querySelectorAll('section.block');
-        expect(blocks.length).to.be.greaterThanOrEqual(5);
+        expect(blocks.length).to.be.greaterThanOrEqual(6);
+        expect(base.querySelector('platform-llm-context-editor')).to.not.be.null;
         const detailsLeftover = base.querySelectorAll('details');
         expect(detailsLeftover.length).to.equal(0);
     });
@@ -108,7 +109,33 @@ describe('node editors — top-level NodeConfig contract', () => {
         await elementUpdated(el);
         const base = el.shadowRoot.querySelector('flows-base-node-editor');
         const titles = Array.from(base.querySelectorAll('section.block .block-title')).map((s) => s.textContent);
-        expect(titles.length).to.be.lessThanOrEqual(5);
+        expect(titles.length).to.be.lessThanOrEqual(6);
+        expect(titles.some((title) => title.includes('section_react') || title.includes('ReAct'))).to.equal(false);
+        expect(base.querySelector('platform-llm-context-editor')).to.not.be.null;
+    });
+
+    it('flows-base-node-editor очищает llm_context_resource_key при удалении context resource', async () => {
+        const node = {
+            node_id: 'a',
+            type: 'llm_node',
+            name: 'A',
+            resources: { ctx: { resource_id: 'ctx' } },
+            llm_context_resource_key: 'ctx',
+        };
+        const el = await fixture(html`
+            <flows-llm-node-editor .nodeId=${'a'} .flowId=${'demo'} .branchId=${'base'}
+                .nodeConfig=${node} .nodeType=${'llm_node'} .flowVariables=${{}} .graphNodes=${[]}>
+            </flows-llm-node-editor>
+        `);
+        await elementUpdated(el);
+
+        let last = null;
+        el.addEventListener('change', (e) => { last = e.detail; });
+        const base = el.shadowRoot.querySelector('flows-base-node-editor');
+        base._onRemoveResource('ctx');
+
+        expect(last.patch.resources).to.deep.equal({});
+        expect(last.patch.llm_context_resource_key).to.equal(null);
     });
 
     it('flows-code-node-editor — вкладки Код / Схема', async () => {

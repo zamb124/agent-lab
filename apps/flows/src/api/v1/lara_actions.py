@@ -2,12 +2,11 @@
 REST: подтверждение Lara pending-actions из embed/UI без повторного tool-call через LLM.
 """
 
-from typing import Any
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.services.lara_action_engine import LaraPendingAction
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -22,7 +21,10 @@ class LaraPendingActionsApplyBody(BaseModel):
 
 
 @router.post("/pending-actions/apply")
-async def lara_pending_actions_apply(body: LaraPendingActionsApplyBody, container: ContainerDep) -> dict[str, Any]:
+async def lara_pending_actions_apply(
+    body: LaraPendingActionsApplyBody,
+    container: ContainerDep,
+) -> LaraPendingAction:
     facade = container.lara_facade
     try:
         return await facade.apply_pending_action_from_http(

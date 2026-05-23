@@ -13,7 +13,7 @@ Quickpay для приема, OAuth API для сверки транзакций
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 from urllib.parse import urlencode
 
 from pydantic import Field
@@ -43,9 +43,9 @@ class YooMoneyConfig(PaymentProviderConfig[Literal["yoomoney"]]):
         default="https://yoomoney.ru/quickpay/confirm.xml",
         description="URL формы оплаты Quickpay"
     )
-    client_id: Optional[str] = Field(default=None, description="OAuth client_id приложения")
-    client_secret: Optional[str] = Field(default=None, description="OAuth client_secret приложения")
-    access_token: Optional[str] = Field(default=None, description="OAuth access_token (из env, загружается в storage при старте)")
+    client_id: str | None = Field(default=None, description="OAuth client_id приложения")
+    client_secret: str | None = Field(default=None, description="OAuth client_secret приложения")
+    access_token: str | None = Field(default=None, description="OAuth access_token (из env, загружается в storage при старте)")
     api_url: str = Field(
         default="https://yoomoney.ru/api",
         description="URL YooMoney API"
@@ -90,7 +90,7 @@ async def save_access_token(storage: Any, token: str) -> YooMoneyTokenData:
     logger.info("YooMoney access_token сохранён в storage, истекает %s", token_data.expires_at.isoformat())
     return token_data
 
-async def load_access_token(storage: Any) -> Optional[YooMoneyTokenData]:
+async def load_access_token(storage: Any) -> YooMoneyTokenData | None:
     """Загружает access_token из storage. Возвращает None если токена нет."""
     raw = await storage.get(YOOMONEY_TOKEN_STORAGE_KEY, force_global=True)
     if not raw:
@@ -111,7 +111,7 @@ class YooMoneyProvider(BasePaymentProvider):
     def __init__(self, config: YooMoneyConfig):
         super().__init__(config)
         self.config: YooMoneyConfig = config
-        self._access_token: Optional[str] = None
+        self._access_token: str | None = None
         logger.info("Инициализирован YooMoney провайдер: кошелек=%s", config.account_number)
 
     async def _get_access_token(self, storage: Any) -> str:
@@ -166,7 +166,7 @@ class YooMoneyProvider(BasePaymentProvider):
             }
         )
 
-    async def verify_webhook(self, webhook_data: Dict[str, Any]) -> WebhookVerificationResult:
+    async def verify_webhook(self, webhook_data: dict[str, Any]) -> WebhookVerificationResult:
         """
         Проверяет подпись YooMoney HTTP-уведомления.
 
@@ -244,8 +244,8 @@ class YooMoneyProvider(BasePaymentProvider):
         return status
 
     async def sync_pending_transactions(
-        self, pending_transactions: List[Dict[str, Any]], storage: Any = None,
-    ) -> List[Dict[str, Any]]:
+        self, pending_transactions: list[dict[str, Any]], storage: Any = None,
+    ) -> list[dict[str, Any]]:
         """
         Сверяет pending транзакции через YooMoney operation-history API.
 
@@ -259,7 +259,7 @@ class YooMoneyProvider(BasePaymentProvider):
 
         access_token = await self._get_access_token(storage)
 
-        found: List[Dict[str, Any]] = []
+        found: list[dict[str, Any]] = []
 
         for txn in pending_transactions:
             transaction_id = txn["transaction_id"]

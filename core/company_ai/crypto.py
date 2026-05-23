@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -69,7 +68,7 @@ def decrypt_secret(token: str) -> str:
     return plain.decode("utf-8")
 
 
-def mask_secret_plaintext(plaintext: Optional[str]) -> str:
+def mask_secret_plaintext(plaintext: str | None) -> str:
     """Возвращает '**** abcd' (последние 4 символа). Для None/пусто — '****'."""
     if plaintext is None or not str(plaintext).strip():
         return "****"
@@ -78,7 +77,7 @@ def mask_secret_plaintext(plaintext: Optional[str]) -> str:
     return f"**** {tail}"
 
 
-def mask_encrypted_secret(token: Optional[str]) -> str:
+def mask_encrypted_secret(token: str | None) -> str:
     """Расшифровывает и маскирует — для GET ответов API. Token=None → '****'."""
     if token is None or not str(token).strip():
         return "****"

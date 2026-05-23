@@ -10,7 +10,6 @@
 """
 
 from collections.abc import Awaitable, Callable
-from typing import Optional
 
 import redis.asyncio as redis
 from redis.exceptions import ResponseError as RedisResponseError
@@ -29,9 +28,9 @@ logger = get_logger(__name__)
 
 
 def create_broker(
-    queue_name: Optional[str] = None,
+    queue_name: str | None = None,
     *,
-    service_name: Optional[str] = None,
+    service_name: str | None = None,
 ) -> RedisStreamBroker:
     """
     Создает TaskIQ broker с общими настройками.

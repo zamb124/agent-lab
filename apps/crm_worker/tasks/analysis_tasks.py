@@ -8,7 +8,7 @@ TaskIQ: анализ заметки (analyze / apply / process).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -20,7 +20,7 @@ from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresErr
 from apps.crm.taskiq_analyze_errors import format_validation_for_taskiq
 from apps.crm_worker.broker import broker
 from apps.crm_worker.task_names import CRM_PROCESS_NOTE_TASK_NAME
-from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
+from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -72,14 +72,14 @@ async def process_note_task(
     note_id: str,
     company_id: str,
     namespace: str,
-    auth_token: Optional[str],
+    auth_token: str | None,
     user_id: str,
     interface_language: str,
     config_payload: dict[str, Any],
     mode: str,
 ) -> dict[str, Any]:
     """mode: 'analyze' | 'apply' | 'process'."""
-    await _set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
+    await set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
     container = get_crm_container()
     repo = container.task_repository
     pipeline = container.note_processing_service

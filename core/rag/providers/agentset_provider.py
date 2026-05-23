@@ -5,7 +5,7 @@ RAG провайдер на базе Agentset.ai.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import unquote, urlparse
 
 import httpx
@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 class AgentsetRAGProvider(BaseRAGProvider):
     """RAG провайдер на базе Agentset.ai"""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
 
         self.api_key = config.get("api_key")
@@ -61,7 +61,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
     async def create_namespace(
         self,
         name: str,
-        description: Optional[str] = None,
+        description: str | None = None,
         **kwargs
     ) -> RAGNamespace:
         """
@@ -125,7 +125,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             metadata={"agentset_data": data, "slug": data.get("slug")}
         )
 
-    async def get_namespace(self, namespace_id: str) -> Optional[RAGNamespace]:
+    async def get_namespace(self, namespace_id: str) -> RAGNamespace | None:
         """Получает namespace из Agentset"""
         response = await self._client.get(f"/v1/namespace/{namespace_id}")
 
@@ -145,7 +145,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             metadata={"agentset_data": data}
         )
 
-    async def list_namespaces(self) -> List[RAGNamespace]:
+    async def list_namespaces(self) -> list[RAGNamespace]:
         """Список namespaces"""
         response = await self._client.get("/v1/namespace")
         response.raise_for_status()
@@ -186,8 +186,8 @@ class AgentsetRAGProvider(BaseRAGProvider):
         namespace_id: str,
         file_url: str,
         document_name: str,
-        metadata: Optional[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any] | None
+    ) -> dict[str, Any]:
         """
         Создает ingest job из URL файла.
 
@@ -226,8 +226,8 @@ class AgentsetRAGProvider(BaseRAGProvider):
         self,
         namespace_id: str,
         file_path: str,
-        document_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        document_name: str | None = None,
+        metadata: dict[str, Any] | None = None,
         **kwargs
     ) -> RAGDocument:
         """
@@ -272,10 +272,10 @@ class AgentsetRAGProvider(BaseRAGProvider):
         self,
         namespace_id: str,
         s3_key: str,
-        document_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        document_name: str | None = None,
+        metadata: dict[str, Any] | None = None,
         *,
-        upload_profile: Optional[object] = None,
+        upload_profile: object | None = None,
         **kwargs,
     ) -> RAGDocument:
         """
@@ -327,8 +327,8 @@ class AgentsetRAGProvider(BaseRAGProvider):
         self,
         namespace_id: str,
         text: str,
-        document_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        document_name: str | None = None,
+        metadata: dict[str, Any] | None = None,
         **kwargs
     ) -> RAGDocument:
         """
@@ -374,7 +374,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         self,
         namespace_id: str,
         document_id: str
-    ) -> Optional[RAGDocument]:
+    ) -> RAGDocument | None:
         """Получает информацию о документе"""
         response = await self._client.get(f"/v1/namespace/{namespace_id}/documents/{document_id}")
 
@@ -399,7 +399,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         self,
         namespace_id: str,
         limit: int = 100
-    ) -> List[RAGDocument]:
+    ) -> list[RAGDocument]:
         """Список документов в namespace"""
         response = await self._client.get(
             f"/v1/namespace/{namespace_id}/documents",
@@ -468,9 +468,9 @@ class AgentsetRAGProvider(BaseRAGProvider):
     async def list_documents_with_filters(
         self,
         namespace_id: str,
-        where: Optional[Dict[str, Any]] = None,
+        where: dict[str, Any] | None = None,
         limit: int = 100,
-    ) -> List[RAGDocument]:
+    ) -> list[RAGDocument]:
         if where:
             validate_metadata_filters(where)
             raise ValueError("AgentsetRAGProvider не поддерживает list_documents_with_filters")
@@ -497,9 +497,9 @@ class AgentsetRAGProvider(BaseRAGProvider):
         namespace_id: str,
         query: str,
         limit: int = 5,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         **kwargs
-    ) -> List[RAGSearchResult]:
+    ) -> list[RAGSearchResult]:
         """Семантический поиск в Agentset"""
         ch = kwargs.get("channels")
         if isinstance(ch, dict) and bool(ch.get("lexical", False)):

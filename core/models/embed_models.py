@@ -4,7 +4,6 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -49,7 +48,7 @@ class EmbedConfig(BaseModel):
         title="Ветка графа",
         description="Точка входа ветки flow (metadata.branch в A2A); для внешних агентов обычно default",
     )
-    allowed_origins: List[str] = Field(
+    allowed_origins: list[str] = Field(
         default_factory=list,
         title="Разрешенные домены",
         description="Список доменов, где можно использовать виджет (пусто = любой)",
@@ -91,12 +90,12 @@ class EmbedConfig(BaseModel):
         title="Основной цвет",
         description="Основной цвет интерфейса (HEX)",
     )
-    greeting_message: Optional[str] = Field(
+    greeting_message: str | None = Field(
         default=None,
         title="Приветствие",
         description="Приветственное сообщение при загрузке чата",
     )
-    assistant_title: Optional[str] = Field(
+    assistant_title: str | None = Field(
         default=None,
         title="Имя ассистента",
         description="Кастомное имя ассистента в шапке embed-чата",
@@ -121,7 +120,7 @@ class EmbedConfig(BaseModel):
         title="Показ в каталоге лендинга",
         description="Публичный каталог демо-агентов (только привязка компании system и отдельный публичный API)",
     )
-    landing_card_image_url: Optional[str] = Field(
+    landing_card_image_url: str | None = Field(
         default=None,
         title="Картинка карточки на лендинге",
         description="URL изображения для карточки демо-сотрудника (обязателен при landing_visible)",
@@ -131,7 +130,7 @@ class EmbedConfig(BaseModel):
         title="Порядок в каталоге лендинга",
         description="Меньше — выше в списке",
     )
-    guest_max_user_messages: Optional[int] = Field(
+    guest_max_user_messages: int | None = Field(
         default=None,
         title="Лимит сообщений гостя (embed-session)",
         description=(
@@ -168,7 +167,7 @@ class EmbedConfig(BaseModel):
         description="Счетчик использований виджета",
         json_schema_extra={"readonly": True},
     )
-    last_used_at: Optional[datetime] = Field(
+    last_used_at: datetime | None = Field(
         default=None,
         title="Последнее использование",
         description="Время последнего использования",

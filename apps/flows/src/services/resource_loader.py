@@ -120,14 +120,7 @@ class ResourceLoader:
                 resource_id=tool_id,
             )
 
-        # Создаём inline tool из config
-        return await self.tool_registry.create_tool({
-            "tool_id": config.tool_id,
-            "code": config.code,
-            "title": config.title,
-            "description": config.description,
-            "args_schema": config.args_schema,
-        })
+        return await self.tool_registry.create_tool(config)
 
     async def _instantiate_node(self, node_class: type[Any], config: NodeConfig) -> BaseNode:
         """

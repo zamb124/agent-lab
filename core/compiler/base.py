@@ -8,7 +8,7 @@ Zero-Guess: все ошибки обнаруживаются на этапе к�
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic import Field
 
@@ -26,8 +26,8 @@ class CompiledEdge(StrictBaseModel):
     """Скомпилированная связь между нодами"""
 
     from_node: str = Field(..., description="ID исходной ноды")
-    to_node: Optional[str] = Field(..., description="ID целевой ноды (null = конец)")
-    condition: Optional[Union[str, Dict[str, Any]]] = Field(
+    to_node: str | None = Field(..., description="ID целевой ноды (null = конец)")
+    condition: str | dict[str, Any] | None = Field(
         default=None,
         description="Условие перехода: строка или объект {type: simple|python, ...}.",
     )
@@ -52,9 +52,9 @@ class CompiledGraph(StrictBaseModel):
     branch_id: str = Field(default="default", description="ID применённой ветки")
     entry_node: str = Field(..., description="Стартовая нода")
 
-    nodes: Dict[str, Dict[str, Any]] = Field(..., description="Ноды графа")
-    edges: List[CompiledEdge] = Field(..., description="Связи между нодами")
-    variables: Dict[str, Any] = Field(default_factory=dict, description="Резолвнутые переменные")
+    nodes: dict[str, dict[str, Any]] = Field(..., description="Ноды графа")
+    edges: list[CompiledEdge] = Field(..., description="Связи между нодами")
+    variables: dict[str, Any] = Field(default_factory=dict, description="Резолвнутые переменные")
 
     # Метаданные компиляции
     compiled_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Время компиляции")
@@ -95,8 +95,8 @@ class GraphCompiler:
     def compile(
         self,
         flow_config: Any,  # FlowConfig
-        branch_config: Optional[Any] = None,  # BranchConfig
-        variables: Optional[Dict[str, Any]] = None,
+        branch_config: Any | None = None,  # BranchConfig
+        variables: dict[str, Any] | None = None,
     ) -> CompiledGraph:
         """
         Компилирует агента в неизменяемый граф.
@@ -163,8 +163,8 @@ class GraphCompiler:
     def _apply_branch(
         self,
         flow_config: Any,
-        branch_config: Optional[Any],
-    ) -> Dict[str, Any]:
+        branch_config: Any | None,
+    ) -> dict[str, Any]:
         """
         Применяет ветку к базовой конфигурации агента.
 
@@ -177,7 +177,7 @@ class GraphCompiler:
             "edges": list(flow_config.edges),
         }
 
-    def _validate_entry_node(self, config: Dict[str, Any]) -> None:
+    def _validate_entry_node(self, config: dict[str, Any]) -> None:
         """
         Проверяет что entry нода существует в графе.
 
@@ -193,7 +193,7 @@ class GraphCompiler:
                 payload={"entry": entry, "available_nodes": list(nodes.keys())},
             )
 
-    def _validate_edges(self, config: Dict[str, Any]) -> None:
+    def _validate_edges(self, config: dict[str, Any]) -> None:
         """
         Проверяет что все ноды в edges существуют.
 
@@ -219,7 +219,7 @@ class GraphCompiler:
                     payload={"to_node": to_node, "available_nodes": list(nodes.keys())},
                 )
 
-    def _check_for_cycles(self, config: Dict[str, Any]) -> None:
+    def _check_for_cycles(self, config: dict[str, Any]) -> None:
         """
         Проверяет граф на циклы без выхода.
 
@@ -245,7 +245,7 @@ class GraphCompiler:
         visited = set()
         rec_stack = set()
 
-        def dfs(node: str, path: List[str]) -> None:
+        def dfs(node: str, path: list[str]) -> None:
             visited.add(node)
             rec_stack.add(node)
             path.append(node)
@@ -270,7 +270,7 @@ class GraphCompiler:
             except CyclicDependencyError:
                 raise
 
-    def _check_reachability(self, config: Dict[str, Any]) -> None:
+    def _check_reachability(self, config: dict[str, Any]) -> None:
         """
         Проверяет что все ноды достижимы от entry ноды.
 
@@ -316,7 +316,7 @@ class GraphCompiler:
                 f"Если они используются как tools - это нормально."
             )
 
-    def _calculate_checksum(self, config: Dict[str, Any]) -> str:
+    def _calculate_checksum(self, config: dict[str, Any]) -> str:
         """
         Вычисляет checksum конфигурации для кеширования.
 

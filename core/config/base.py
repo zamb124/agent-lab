@@ -2,11 +2,12 @@
 Базовая конфигурация приложения.
 """
 
-from typing import Self
+from typing import ClassVar, Self, override
 
 from pydantic import Field, model_validator
+from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings as PydanticBaseSettings
-from pydantic_settings import SettingsConfigDict
+from pydantic_settings import PydanticBaseSettingsSource, SettingsConfigDict
 
 from core.config.loader import load_merged_config
 from core.config.models import (
@@ -36,9 +37,30 @@ from core.config.models import (
     WhatsAppConfig,
     WorkerConfig,
 )
+from core.llm_context.models import LLMContextConfig
 from core.logging import get_logger
+from core.types import JsonObject, JsonValue
 
 logger = get_logger(__name__)
+
+
+class MergedJsonConfigSettingsSource(PydanticBaseSettingsSource):
+    """Pydantic settings source backed by merged project JSON config."""
+
+    @override
+    def get_field_value(
+        self,
+        field: FieldInfo,
+        field_name: str,
+    ) -> tuple[JsonValue | None, str, bool]:
+        _ = field
+        return None, field_name, False
+
+    @override
+    def __call__(self) -> JsonObject:
+        return load_merged_config(silent=True)
+
+
 class BaseSettings(PydanticBaseSettings):
     """
     Базовые настройки приложения.
@@ -55,6 +77,7 @@ class BaseSettings(PydanticBaseSettings):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    llm_context: LLMContextConfig = Field(default_factory=LLMContextConfig)
     provider_litserve: ProviderLitserveConfig = Field(default_factory=ProviderLitserveConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
@@ -104,23 +127,36 @@ class BaseSettings(PydanticBaseSettings):
         min_ttl = int(2 * self.ws_presence_heartbeat_interval_seconds) + 1
         if self.ws_presence_ttl_seconds < min_ttl:
             raise ValueError(
-                f"ws_presence_ttl_seconds ({self.ws_presence_ttl_seconds}) должен быть >= {min_ttl} "
-                "(удвоенный heartbeat + 1 с)."
+                f"ws_presence_ttl_seconds ({self.ws_presence_ttl_seconds}) должен быть >= {min_ttl} (удвоенный heartbeat + 1 с)."
             )
         return self
 
-    model_config = SettingsConfigDict(
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=[".env"],
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
         env_ignore_empty=True,
-        extra="allow"
+        extra="allow",
     )
 
-    def __init__(self, **data):
-        json_config = load_merged_config(silent=True)
-        merged_data = {**json_config, **data}
-        super().__init__(**merged_data)
+    @classmethod
+    @override
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[PydanticBaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        _ = cls
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            MergedJsonConfigSettingsSource(settings_cls),
+            file_secret_settings,
+        )
 
 _settings_instance = None
 
@@ -148,13 +184,20 @@ class _SettingsProxy:
     Позволяет импортировать settings на уровне модуля и получать актуальные значения.
     """
 
-    def __getattr__(self, name):
-        return getattr(get_settings(), name)
+    @property
+    def server(self) -> ServerConfig:
+        return get_settings().server
 
-    def __repr__(self):
+    def __getattr__(self, name: str) -> object:
+        value: object = object.__getattribute__(get_settings(), name)
+        return value
+
+    @override
+    def __repr__(self) -> str:
         return repr(get_settings())
 
-    def __str__(self):
+    @override
+    def __str__(self) -> str:
         return str(get_settings())
 
 settings = _SettingsProxy()

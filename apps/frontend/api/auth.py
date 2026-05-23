@@ -2,7 +2,6 @@
 Роутер авторизации для Frontend сервиса
 """
 
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -25,7 +24,7 @@ async def auth_callback(
     code: str = Query(...),
     state: str = Query(...),
     provider: str | None = Query(default=None),
-    apple_oauth_user_json: Optional[str] = Query(None, alias="user"),
+    apple_oauth_user_json: str | None = Query(None, alias="user"),
 ):
     """Callback после OAuth авторизации"""
     auth_service: AuthService = container.auth_service

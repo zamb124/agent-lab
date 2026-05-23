@@ -4,7 +4,6 @@ GitHub OAuth провайдер авторизации.
 АДАПТИРОВАНО: убраны локальные импорты, try-except блоки
 """
 
-from typing import Optional, Tuple
 from urllib.parse import urlencode
 
 from core.config.models import AuthProviderConfig
@@ -27,7 +26,7 @@ class GithubProvider(BaseAuthProvider):
 
     async def exchange_code_for_token(
         self, code: str, redirect_uri: str
-    ) -> Tuple[str, Optional[str]]:
+    ) -> tuple[str, str | None]:
         """Обменивает авторизационный код на токен доступа"""
         data = self._build_token_data(code, redirect_uri)
 
@@ -59,7 +58,7 @@ class GithubProvider(BaseAuthProvider):
         return access_token, refresh_token
 
     async def get_user_info(
-        self, access_token: str, first_login_user_json: Optional[str] = None
+        self, access_token: str, first_login_user_json: str | None = None
     ) -> ProviderUserInfo:
         """Получает информацию о пользователе из GitHub"""
         headers = {

@@ -17,12 +17,13 @@ from typing import Any
 
 from apps.flows.src.state.node_files import validate_node_files_list
 from core.logging import get_logger
+from core.types import JsonObject
 from core.urn import extract_resource_id
 
 logger = get_logger(__name__)
 
 
-def _edge_endpoint_ids(edge: dict[str, Any]) -> tuple[str | None, str | None]:
+def _edge_endpoint_ids(edge: JsonObject) -> tuple[str | None, str | None]:
     """from_node/to_node или legacy from/to."""
     fn = edge.get("from_node")
     if fn is None:
@@ -51,7 +52,7 @@ class FlowValidationError:
     message: str
     severity: ValidationSeverity = ValidationSeverity.ERROR
     node_id: str | None = None
-    details: dict[str, Any] | None = None
+    details: JsonObject | None = None
 
 
 @dataclass
@@ -69,7 +70,7 @@ class FlowValidationResult:
         message: str,
         severity: ValidationSeverity = ValidationSeverity.ERROR,
         node_id: str | None = None,
-        details: dict[str, Any] | None = None,
+        details: JsonObject | None = None,
     ):
         self.errors.append(FlowValidationError(
             code=code,
@@ -99,10 +100,10 @@ class FlowValidator:
 
     async def validate(
         self,
-        nodes: dict[str, dict[str, Any]],
-        edges: list[dict[str, Any]],
+        nodes: dict[str, JsonObject],
+        edges: list[JsonObject],
         entry: str,
-        variables: dict[str, Any],
+        variables: JsonObject,
         flow_id: str | None = None,
     ) -> FlowValidationResult:
         """

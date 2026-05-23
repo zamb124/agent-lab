@@ -10,7 +10,7 @@ import secrets
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 
@@ -61,7 +61,7 @@ class AuthService:
         self._company_repository = company_repository
         self._auth_session_repository = auth_session_repository
         self._storage = user_repository._storage
-        self._providers: Dict[AuthProvider, BaseAuthProvider] = {}
+        self._providers: dict[AuthProvider, BaseAuthProvider] = {}
         self._initialize_providers()
 
     def _initialize_providers(self):
@@ -101,7 +101,7 @@ class AuthService:
     def storage_configured(self) -> bool:
         return self._storage is not None
 
-    def get_provider(self, provider_name: AuthProvider) -> Optional[BaseAuthProvider]:
+    def get_provider(self, provider_name: AuthProvider) -> BaseAuthProvider | None:
         """Получает провайдер по имени"""
         return self._providers.get(provider_name)
 
@@ -262,7 +262,7 @@ class AuthService:
 
         return AuthResult(success=True, user=user, session=session, token=jwt_token)
 
-    async def get_user_by_session(self, session_id: str) -> Optional[User]:
+    async def get_user_by_session(self, session_id: str) -> User | None:
         """Получает пользователя по ID сессии"""
         session = await self.get_session(session_id)
         if not session:
@@ -296,7 +296,7 @@ class AuthService:
         key = f"auth_state:{state}"
         await self._storage.set(key, json.dumps(state_data), ttl=600)
 
-    async def _get_auth_state(self, state: str) -> Optional[dict[str, Any]]:
+    async def _get_auth_state(self, state: str) -> dict[str, Any] | None:
         """Получает временное состояние авторизации"""
         if not state:
             return None
@@ -383,7 +383,7 @@ class AuthService:
             logger.info(f"Создан новый пользователь {user_info.email}")
             return user
 
-    async def _find_user_by_provider_id(self, provider_user_id: str) -> Optional[str]:
+    async def _find_user_by_provider_id(self, provider_user_id: str) -> str | None:
         """Находит user_id по provider_user_id через индекс JSONB"""
         async with self._storage.get_session() as session:
             query = text("""
@@ -442,7 +442,7 @@ class AuthService:
         logger.info(f"Связан провайдер {provider} с пользователем {user_info.email}")
         return True
 
-    async def _get_user(self, user_id: str) -> Optional[User]:
+    async def _get_user(self, user_id: str) -> User | None:
         """Получает пользователя по ID"""
         return await self._user_repository.get(user_id)
 
@@ -450,7 +450,7 @@ class AuthService:
         self,
         user_id: str,
         provider: AuthProvider,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Получает информацию о провайдере пользователя"""
         providers_key = f"user_providers:{user_id}"
         providers_data = await self._storage.get(providers_key)
@@ -468,7 +468,7 @@ class AuthService:
 
         return None
 
-    async def get_all_user_providers_info(self, user_id: str) -> Optional[dict[str, Any]]:
+    async def get_all_user_providers_info(self, user_id: str) -> dict[str, Any] | None:
         """Получает информацию о всех провайдерах пользователя"""
         providers_key = f"user_providers:{user_id}"
         providers_data = await self._storage.get(providers_key)
@@ -482,7 +482,7 @@ class AuthService:
         return providers
 
     async def _create_session(
-        self, user: User, provider: AuthProvider, access_token: str, refresh_token: Optional[str]
+        self, user: User, provider: AuthProvider, access_token: str, refresh_token: str | None
     ) -> AuthSession:
         """Создает новую сессию для пользователя"""
         settings = get_settings()
@@ -506,7 +506,7 @@ class AuthService:
         logger.info(f"Создана сессия {session_id} для пользователя {user.user_id}")
         return session
 
-    async def get_session(self, session_id: str) -> Optional[AuthSession]:
+    async def get_session(self, session_id: str) -> AuthSession | None:
         """Получает сессию по ID"""
         return await self._auth_session_repository.get(session_id)
 

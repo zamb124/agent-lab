@@ -59,8 +59,9 @@ from apps.crm.constants_graph import (
     NOTE_ROOT_ENTITY_TYPE_ID,
     TASK_ROOT_ENTITY_TYPE_ID,
 )
+from core.types import JsonObject
 
-FieldSpec = dict[str, object]
+FieldSpec = JsonObject
 
 
 class EntityTypeTemplate(TypedDict):
@@ -69,8 +70,8 @@ class EntityTypeTemplate(TypedDict):
     description: str
     parent_type_id: NotRequired[str | None]
     prompt: NotRequired[str | None]
-    required_fields: NotRequired[dict[str, object]]
-    optional_fields: NotRequired[dict[str, object]]
+    required_fields: NotRequired[JsonObject]
+    optional_fields: NotRequired[JsonObject]
     icon: NotRequired[str | None]
     color: NotRequired[str | None]
     is_system: NotRequired[bool]
@@ -106,7 +107,7 @@ class NamespaceTemplateSeed(TypedDict):
     description: str
     icon: str
     types: list[NamespaceTemplateTypeSpec]
-    crm_settings: NotRequired[dict[str, object]]
+    crm_settings: NotRequired[JsonObject]
 
 
 # ----------------------------------------------------------------------

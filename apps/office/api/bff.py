@@ -45,6 +45,7 @@ from apps.office.models.api import (
     OfficeDocumentSyncRequest,
     OfficeEditorConfigResponse,
     OfficeEmptyCreateRequest,
+    OfficeFileEditorSyncResponse,
     OfficeIntegrationStatusResponse,
     OfficeNamespaceCreateRequest,
     OfficeNamespaceCreateResponse,
@@ -80,12 +81,14 @@ from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import Context, get_context
+from core.files.models import FileRecord
 from core.files.s3_client import S3ClientFactory
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.pagination import OffsetPage
+from core.types import require_json_array
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
@@ -221,6 +224,11 @@ def _onlyoffice_document_key(binding_id: str, checksum: str | None) -> str:
     if not safe_checksum:
         return binding_id
     return f"{binding_id}_{safe_checksum}"
+
+
+def _file_viewer_binding_id(file_id: str) -> str:
+    digest = hashlib.sha256(file_id.encode("utf-8")).hexdigest()[:40]
+    return f"file_{digest}"
 
 def _onlyoffice_request_payload(token_payload: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
     """
@@ -480,6 +488,84 @@ def _integration_configured() -> tuple[bool, str]:
         return False, "Не задан office.callback_public_base_url (доступен с контейнера Document Server)"
     return True, ""
 
+
+def _build_onlyoffice_editor_config_response(
+    *,
+    request: Request,
+    ctx: _AuthenticatedOfficeContext,
+    meta: FileRecord,
+    binding_id: str,
+    binding_kind: str,
+    namespace: str | None,
+    title: str,
+    document_type: str,
+) -> OfficeEditorConfigResponse:
+    integ = get_office_settings().office
+    base = integ.callback_public_base_url.rstrip("/")
+    dl = encode_download_token(
+        file_id=meta.file_id,
+        company_id=ctx.active_company.company_id,
+        binding_id=binding_id,
+        binding_kind=binding_kind,
+        secret=integ.jwt_secret,
+        ttl_seconds=integ.download_token_ttl_seconds,
+    )
+    download_url = f"{base}/documents/api/v1/office-download?token={quote(dl, safe='')}"
+    cb_ctx = encode_callback_context_token(
+        binding_id=binding_id,
+        company_id=ctx.active_company.company_id,
+        namespace=namespace,
+        file_id=meta.file_id if binding_kind == "file" else None,
+        binding_kind=binding_kind,
+        secret=integ.jwt_secret,
+        ttl_seconds=3600,
+    )
+    callback_url = f"{base}/documents/api/v1/onlyoffice/callback?token={quote(cb_ctx, safe='')}"
+
+    doc_key = _onlyoffice_document_key(binding_id, meta.checksum)
+    editor_document_type = resolve_onlyoffice_document_type_for_editor(
+        document_type,
+        meta.original_name,
+    )
+    file_type = onlyoffice_file_type_for_binding(editor_document_type, meta.original_name)
+    user_name = ctx.user.name or ctx.user.email or ctx.user.user_id
+    editor_lang = ctx.language.value if ctx.language else Language.EN.value
+    config = {
+        "type": "desktop",
+        "width": "100%",
+        "height": "100%",
+        "document": {
+            "fileType": file_type,
+            "key": doc_key,
+            "title": title,
+            "url": download_url,
+            "permissions": {
+                "comment": True,
+                "copy": True,
+                "download": True,
+                "edit": True,
+                "fillForms": True,
+                "modifyContentControl": True,
+                "modifyFilter": True,
+                "print": True,
+                "review": True,
+            },
+        },
+        "documentType": editor_document_type,
+        "editorConfig": {
+            "mode": "edit",
+            "callbackUrl": callback_url,
+            "user": {"id": ctx.user.user_id, "name": user_name},
+            "lang": editor_lang,
+            "coEditing": {"mode": "fast"},
+            "customization": _onlyoffice_editor_customization_payload(),
+        },
+    }
+    token = encode_editor_config(config, integ.jwt_secret)
+    ds = _browser_document_server_url(integ.document_server_public_url, request)
+    return OfficeEditorConfigResponse(document_server_url=ds, token=token)
+
+
 async def _require_explicit_namespace(container: OfficeContainer) -> str:
     """
     Жёсткая привязка documents к namespace.
@@ -523,6 +609,113 @@ async def integration_status(container: ContainerDep) -> OfficeIntegrationStatus
     ok, detail = _integration_configured()
     return OfficeIntegrationStatusResponse(configured=ok, detail=detail)
 
+
+@router.get("/files/{file_id}/editor-config", response_model=OfficeEditorConfigResponse)
+async def file_editor_config(
+    file_id: str,
+    container: ContainerDep,
+    request: Request,
+) -> OfficeEditorConfigResponse:
+    ctx = _require_office_context()
+    ok, detail = _integration_configured()
+    if not ok:
+        raise HTTPException(status_code=503, detail=detail)
+    meta = await container.file_processor.get_file_record(file_id)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    if meta.company_id != ctx.active_company.company_id:
+        raise HTTPException(status_code=403, detail="Файл не принадлежит компании")
+    try:
+        document_type, _ = onlyoffice_document_type_for_upload(
+            meta.original_name,
+            (meta.content_type or "application/octet-stream").split(";")[0].strip(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    return _build_onlyoffice_editor_config_response(
+        request=request,
+        ctx=ctx,
+        meta=meta,
+        binding_id=_file_viewer_binding_id(meta.file_id),
+        binding_kind="file",
+        namespace=None,
+        title=meta.original_name,
+        document_type=document_type,
+    )
+
+
+@router.post("/files/{file_id}/sync", response_model=OfficeFileEditorSyncResponse)
+async def sync_file_editor_state(
+    file_id: str,
+    container: ContainerDep,
+    body: OfficeDocumentSyncRequest | None = None,
+) -> OfficeFileEditorSyncResponse:
+    ctx = _require_office_context()
+    sync_options = body or OfficeDocumentSyncRequest()
+    binding_id = _file_viewer_binding_id(file_id)
+    async with _document_mutation_lock(binding_id):
+        meta = await container.file_processor.get_file_record(file_id)
+        if meta is None:
+            raise HTTPException(status_code=404, detail="Файл не найден")
+        if meta.company_id != ctx.active_company.company_id:
+            raise HTTPException(status_code=403, detail="Файл не принадлежит компании")
+        try:
+            onlyoffice_document_type_for_upload(
+                meta.original_name,
+                (meta.content_type or "application/octet-stream").split(";")[0].strip(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
+        document_key = _onlyoffice_document_key(binding_id, meta.checksum)
+        if sync_options.settle_ms > 0:
+            await asyncio.sleep(sync_options.settle_ms / 1000)
+        force_code = await _force_save_open_editor_if_needed(
+            binding_id=binding_id,
+            document_key=document_key,
+        )
+        if sync_options.close and force_code == 4:
+            await asyncio.sleep(1.5)
+            force_code = await _force_save_open_editor_if_needed(
+                binding_id=binding_id,
+                document_key=document_key,
+            )
+        logger.info(
+            "OnlyOffice file sync command result binding_id=%s file_id=%s close=%s dirty=%s force_code=%s",
+            binding_id,
+            meta.file_id,
+            sync_options.close,
+            sync_options.dirty,
+            force_code,
+        )
+        if sync_options.close and sync_options.dirty is True and force_code in (1, 4):
+            detail = _ONLYOFFICE_COMMAND_ERROR_DETAILS.get(force_code, "unknown error")
+            raise HTTPException(
+                status_code=409,
+                detail=f"OnlyOffice did not accept pending editor changes yet: error={force_code} ({detail})",
+            )
+        if force_code == 0:
+            await _wait_for_file_change_after_forcesave(
+                container=container,
+                binding_id=binding_id,
+                file_id=meta.file_id,
+                previous_checksum=meta.checksum,
+                previous_file_size=meta.file_size,
+            )
+            meta = await container.file_processor.get_file_record(file_id)
+            if meta is None:
+                raise HTTPException(status_code=404, detail="Файл не найден")
+        if sync_options.close and force_code in (0, 4):
+            await _drop_open_editor_sessions(
+                binding_id=binding_id,
+                document_key=document_key,
+            )
+    return OfficeFileEditorSyncResponse(
+        file_id=meta.file_id,
+        checksum=meta.checksum,
+        file_size=meta.file_size,
+    )
+
+
 @router.get("/namespaces", response_model=OffsetPage[OfficeNamespaceItem])
 async def list_namespaces(container: ContainerDep) -> OffsetPage[OfficeNamespaceItem]:
     ctx = _require_office_context()
@@ -552,9 +745,10 @@ async def list_namespace_templates_proxy(
         raw = await container.service_client.get("crm", path)
     except ServiceClientError as e:
         raise _http_exception_from_service_client("crm", e) from e
-    if not isinstance(raw, dict) or not isinstance(raw.get("items"), list):
+    raw_items_value = raw.get("items") if isinstance(raw, dict) else None
+    if not isinstance(raw_items_value, list):
         raise HTTPException(status_code=502, detail="CRM: неверный формат списка шаблонов namespace")
-    raw_items = raw["items"]
+    raw_items = require_json_array(raw_items_value, "crm.namespace_templates.items")
     out: list[OfficeNamespaceTemplateItem] = []
     for item in raw_items:
         if not isinstance(item, dict):
@@ -1611,14 +1805,21 @@ async def office_download(
         claims = decode_download_token(token, integ.jwt_secret)
     except jwt.PyJWTError as e:
         raise HTTPException(status_code=401, detail="Недействительный токен скачивания") from e
-    file_id = claims["file_id"]
-    company_id = claims["company_id"]
-    binding_id = claims["binding_id"]
-    binding_row = await container.document_binding_repository.get_by_binding_and_company(
-        binding_id,
-        company_id,
-    )
-    if binding_row is None or binding_row.file_id != file_id:
+    file_id = str(claims["file_id"])
+    company_id = str(claims["company_id"])
+    binding_id = str(claims["binding_id"])
+    binding_kind = str(claims.get("binding_kind") or "document")
+    if binding_kind == "document":
+        binding_row = await container.document_binding_repository.get_by_binding_and_company(
+            binding_id,
+            company_id,
+        )
+        if binding_row is None or binding_row.file_id != file_id:
+            raise HTTPException(status_code=403, detail="Доступ запрещён")
+    elif binding_kind == "file":
+        if binding_id != _file_viewer_binding_id(file_id):
+            raise HTTPException(status_code=403, detail="Доступ запрещён")
+    else:
         raise HTTPException(status_code=403, detail="Доступ запрещён")
     meta = await container.file_processor.get_file_record(file_id)
     if meta is None:
@@ -1667,8 +1868,9 @@ async def onlyoffice_callback(
         ctx_cb = decode_callback_context_token(token, integ.jwt_secret)
     except jwt.PyJWTError as e:
         raise HTTPException(status_code=401, detail="Недействительный токен callback") from e
-    binding_id = ctx_cb["binding_id"]
-    company_id = ctx_cb["company_id"]
+    binding_id = str(ctx_cb["binding_id"])
+    company_id = str(ctx_cb["company_id"])
+    binding_kind = str(ctx_cb.get("binding_kind") or "document")
 
     try:
         body = await request.json()
@@ -1691,11 +1893,14 @@ async def onlyoffice_callback(
         raise HTTPException(status_code=401, detail="Недействительный JWT callback") from e
     payload = _onlyoffice_request_payload(token_payload, body)
 
-    namespace = ctx_cb["namespace"]
+    namespace = str(ctx_cb.get("namespace") or "")
+    status_raw = payload.get("status")
+    if status_raw is None:
+        raise HTTPException(status_code=400, detail="Callback status is required")
     try:
-        status_int = int(payload.get("status"))
+        status_int = int(status_raw)
     except (TypeError, ValueError):
-        status_int = 0
+        raise HTTPException(status_code=400, detail="Callback status must be an integer") from None
     logger.info(
         "OnlyOffice callback received binding_id=%s company_id=%s namespace=%s status=%s key=%s",
         binding_id,
@@ -1724,23 +1929,52 @@ async def onlyoffice_callback(
             )
             return OnlyOfficeCallbackResponse(error=0)
 
-        row = await container.document_binding_repository.get_for_company(
-            binding_id,
-            company_id,
-            namespace,
-        )
-        if row is None:
-            logger.error(
-                "OnlyOffice callback: привязка %s не найдена (company=%s ns=%s)",
+        notification_user_id: str | None = None
+        notification_title = "Документ сохранён"
+        notification_message = ""
+        notification_action_url: str | None = None
+        notification_data: dict[str, Any] = {}
+        file_id: str
+
+        if binding_kind == "document":
+            row = await container.document_binding_repository.get_for_company(
                 binding_id,
                 company_id,
                 namespace,
             )
-            raise HTTPException(status_code=404, detail="Привязка не найдена")
+            if row is None:
+                logger.error(
+                    "OnlyOffice callback: привязка %s не найдена (company=%s ns=%s)",
+                    binding_id,
+                    company_id,
+                    namespace,
+                )
+                raise HTTPException(status_code=404, detail="Привязка не найдена")
+            file_id = row.file_id
+            notification_user_id = row.created_by_user_id
+            notification_message = row.title
+            notification_action_url = f"/documents/edit/{binding_id}"
+            notification_data = {"binding_id": binding_id, "company_id": company_id}
+        elif binding_kind == "file":
+            raw_file_id = ctx_cb.get("file_id")
+            if not isinstance(raw_file_id, str) or not raw_file_id:
+                raise HTTPException(status_code=400, detail="В callback-токене нет file_id")
+            file_id = raw_file_id
+            if binding_id != _file_viewer_binding_id(file_id):
+                logger.error(
+                    "OnlyOffice callback: некорректный binding_id для file viewer binding_id=%s file_id=%s",
+                    binding_id,
+                    file_id,
+                )
+                raise HTTPException(status_code=403, detail="Доступ запрещён")
+        else:
+            raise HTTPException(status_code=400, detail="Неверный тип привязки OnlyOffice")
 
-        meta = await container.file_processor.get_file_record(row.file_id)
+        meta = await container.file_processor.get_file_record(file_id)
         if meta is None:
             raise HTTPException(status_code=404, detail="Файл не найден")
+        if meta.company_id != company_id:
+            raise HTTPException(status_code=403, detail="Файл не принадлежит компании")
 
         async with get_httpx_client(timeout=120.0) as client:
             r = await client.get(url)
@@ -1764,9 +1998,10 @@ async def onlyoffice_callback(
         )
         await container.file_processor.file_repository.set(updated)
         logger.info(
-            "OnlyOffice callback saved binding_id=%s file_id=%s status=%s bytes=%s old_size=%s old_checksum=%s new_checksum=%s",
+            "OnlyOffice callback saved binding_kind=%s binding_id=%s file_id=%s status=%s bytes=%s old_size=%s old_checksum=%s new_checksum=%s",
+            binding_kind,
             binding_id,
-            row.file_id,
+            file_id,
             status_int,
             len(new_bytes),
             previous_size,
@@ -1774,17 +2009,18 @@ async def onlyoffice_callback(
             digest,
         )
 
-        await notify_user(
-            row.created_by_user_id,
-            Notification(
-                type=NotificationType.OFFICE_DOCUMENT_SAVED,
-                title="Документ сохранён",
-                message=row.title,
-                service="office",
-                priority="normal",
-                action_url=f"/documents/edit/{binding_id}",
-                data={"binding_id": binding_id, "company_id": company_id},
-            ),
-        )
+        if notification_user_id is not None:
+            await notify_user(
+                notification_user_id,
+                Notification(
+                    type=NotificationType.OFFICE_DOCUMENT_SAVED,
+                    title=notification_title,
+                    message=notification_message,
+                    service="office",
+                    priority="normal",
+                    action_url=notification_action_url,
+                    data=notification_data,
+                ),
+            )
 
     return OnlyOfficeCallbackResponse(error=0)

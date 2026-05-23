@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import tiktoken
@@ -64,10 +64,10 @@ class RerankerHTTPClient:
         cost_per_1m_tokens: float = 5.0,
         platform_markup: float = 1.1,
         billing_resource_id: str = "rerank",
-        billing_service: Optional["BillingService"] = None,
+        billing_service: BillingService | None = None,
         cost_origin: CostOrigin = COST_ORIGIN_PLATFORM,
-        api_key: Optional[str] = None,
-        extra_request_headers: Optional[dict[str, str]] = None,
+        api_key: str | None = None,
+        extra_request_headers: dict[str, str] | None = None,
     ) -> None:
         self._timeout_seconds = timeout_seconds
         self.cost_per_1m_tokens = cost_per_1m_tokens
@@ -79,7 +79,7 @@ class RerankerHTTPClient:
         self.extra_request_headers = dict(extra_request_headers or {}) or None
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
 
-    def count_tokens(self, query: str, passages: List[str]) -> int:
+    def count_tokens(self, query: str, passages: list[str]) -> int:
         total = len(self._tokenizer.encode(query))
         for text in passages:
             total += len(self._tokenizer.encode(text))
@@ -261,11 +261,11 @@ class RerankResolution:
     """Итог резолва rerank: enabled/url/cost_origin/api_key/headers."""
 
     enabled: bool
-    url: Optional[str]
-    max_candidates: Optional[int]
+    url: str | None
+    max_candidates: int | None
     cost_origin: CostOrigin
-    api_key: Optional[str] = None
-    extra_request_headers: Optional[dict[str, str]] = None
+    api_key: str | None = None
+    extra_request_headers: dict[str, str] | None = None
 
 
 def rerank_options(

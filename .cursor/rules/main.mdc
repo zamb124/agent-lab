@@ -59,15 +59,21 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нати
    if not value:
        raise ValueError("value is required")
    ```
-8. **Никаких голых типов.** Полные аннотации публичных API (`dict[str, Any]`, `list[str]`, не голые `dict`/`list`). Доменные модели — Pydantic/`dataclass`, не сырые словари.
+8. **Никаких голых и широких типов.** Публичные API аннотируются конкретными доменными типами. `Any`, `object`, голые `dict`/`list`, `dict[str, Any]`, `list[Any]`, `Callable[..., Any]` запрещены в платформенном коде. Доменные модели — Pydantic/`TypedDict` по смыслу, не сырые словари.
 9. **Никакого дублирования функционала.** Перед реализацией — проверь что нет уже похожего. Дубль запрещён.
 10. **Isolated code execution.** Пользовательский code_node / inline tool / code-condition исполняется только через `RemoteCodeRunner` → `code-runner-*`. Доступ к платформе — только через `capability-gateway`; in-process `eval`/`exec`/`PythonNamespaceBuilder` запрещены. Детали → **`eval.mdc`**.
 
 ## Типизация и import-gate
 
-- `basedpyright core apps` должен иметь `errorCount == 0`. Новые `reportAny`/`reportUnknown*`/`reportMissingParameterType` в затронутом коде не принимаются как «потом».
-- Публичные функции, методы сервисов, репозитории, API payload/response, factories и runtime-узлы — с явными типами. `Any` допустим только на границе JSON/внешнего API и сразу валидируется Pydantic/узким нормализатором.
-- Одна доменная сущность — одна модель. Не плодить «почти такие же» Pydantic-классы; общий контракт выносится в `core/` или сервисный `models/`, слой-специфичные patch/request модели допускаются только если форма реально другая.
+- `basedpyright core apps` должен иметь `errorCount == 0`, а затронутый код — `0` новых warning. Новые `reportAny`/`reportUnknown*`/`reportMissingParameterType` не принимаются как «потом».
+- `Any`, `object`, `Unknown`, голые коллекции и широкие callable-типы не являются решением. Если они появляются — сначала найти источник потери типа: БД, HTTP, SDK, JSON parser, контейнер, registry, event bus, runtime state. Лечить нужно источник и протянуть строгий контракт по всей цепочке.
+- Публичные функции, методы сервисов, репозитории, API payload/response, factories, контейнеры, registries, event handlers и runtime-узлы — с явными доменными типами. Тип не должен теряться между слоями.
+- Граница внешнего мира всегда заканчивается typed boundary: Pydantic-модель, `dataclass`, `TypedDict`, `Protocol` или платформенный JSON-тип. Нельзя возвращать из boundary `Any`/`object` и «дотипизировать потом» в бизнес-логике.
+- Платформенные JSON-типы живут только в `core.types`: `JsonValue`, `JsonObject`, `JsonArray`, `JsonScalar`, `require_json_*`. Новый код импортирует их из `core.types`; `core.capabilities.JsonObject/JsonValue` — только compatibility re-export для существующего capability API.
+- `JsonObject`/`JsonValue` — только для действительно произвольного JSON. Если известны поля, смысл или инварианты — нужна существующая доменная Pydantic-модель/`TypedDict`; если её нет, создать одну каноническую модель на уровне владельца данных и переиспользовать её.
+- `dict[str, JsonValue]` не заменяет модель там, где есть бизнес-сущность. `dict[str, JsonValue]` допустим для словаря однотипных JSON-значений без фиксированных ключей; `JsonObject` — для JSON object без известной схемы; Pydantic-модель — для известной схемы.
+- Одна доменная сущность — одна каноническая модель. Перед созданием модели обязательно проверить `core/`, `apps/*/models/`, API schemas и tests на существующий контракт. Дубли вида `UserResponse`/`UserData`/`UserModel`, если это одна бизнес-сущность, запрещены; слой-специфичные request/patch/response модели допускаются только когда форма реально другая.
+- Запрещены helper-«нормализаторы», conversion-функции и adapter-слои, которые существуют только чтобы замолчать типизацию. Конвертация допустима только на реальной внешней границе или при смене доменной формы; место конвертации должно совпадать с владельцем контракта.
 - Проверка локальных импортов: `uv run python analyze_imports.py`. Ожидание для `core/` + `apps/`: `Total local imports: 0`.
 
 ## Глобальный naming contract
@@ -199,6 +205,13 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 ## LLM, Context, асинхронность
 
 - LLM — только через `core/clients/llm/factory.py::get_llm()`. Прямые импорты LangChain — запрещены. Stream-First для runtime flows → **`streaming.mdc`**.
+- Generic context layer — `core/llm_context/**` + `core/clients/llm/context_layer.py`, не flow-only. `LLMClient.chat/stream/invoke` принимают `llm_context`, `llm_context_blocks`, `llm_context_source_registry`; в `apps/*` не собирать «умный большой prompt» вручную.
+- Иерархия policy: `settings.llm_context` → `CompanyAIProviders.llm_context` → `ResourceType.LLM_CONTEXT` → `NodeConfig.llm_context` → inline `llm.chat(llm_context=...)`. Поздний слой — patch поверх раннего, без fallback-угадываний.
+- First-class profile source — `IdentityLLMContextProfileSource`: явные user/company/runtime профили из `Context` становятся `kind=profile` stable-prefix блоком. Profile ≠ policy profile.
+- Memory recall: RAG/semantic отбирает релевантные эпизоды, но budget-packing и финальный prompt для `kind=memory` идут строго хронологически; не сортировать memory по score при render.
+- Compiler clamp: если у resolved `LLMCallConfig.context_length` известен, `core.llm_context` режет prompt по реальному окну модели и пишет selected/dropped/usage в LLM metadata/traces. Большие `tool` results сжимаются детерминированно внутри context layer, без синхронного LLM-вызова.
+- Prompt caching: compiler отдаёт stable-prefix hash; provider-native controls мержатся только в `core/clients/llm/context_layer.py` для поддержанных transport/provider route, без ad-hoc полей в call-site.
+- Context memory write/compaction — фоновая операция; ошибка записи памяти логируется и не ломает успешный LLM-run.
 - `get_context()` — `user`, `company_id`, `trace_id`. Репозитории берут `company_id` из контекста автоматически.
 - ВСЁ асинхронное: `async/await` для БД/HTTP/LLM/тулов/фабрик.
 
@@ -217,9 +230,13 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 | Per-call HTTP body overlay | `extra_body` | Используется только в `LLMClient.stream/chat/invoke` и transport; не сохраняется в config/resource. |
 | Config-level HTTP headers overlay | `extra_request_headers` | Используется в `LLMCallConfig`, ресурсах, `get_llm(...)`; `@var:` резолвится до transport. |
 | Per-call HTTP headers overlay | `extra_headers` | Используется только в `LLMClient.stream/chat/invoke` и transport; мержится последним. |
+| Model context window | `context_length` | Runtime metadata resolved model window. Используется только для hard clamp context layer; не путать с `max_tokens`. |
 | Вход метода | `messages` | После нормализации — другое имя. |
 | A2A-normalized messages | `normalized_messages` | `normalized` запрещён для LLM messages. |
 | OpenAI-compatible messages | `openai_messages` | Не называть `messages` после конвертации. |
+| LLM context overlay | `llm_context` | Только patch/policy контекстного слоя; не путать с `core.context.Context`. |
+| LLM context candidate block | `llm_context_blocks` / `LLMContextBlock` | Retrieved memory/RAG/tool summary blocks до packing. Не называть `history`, `memory_items`, `chunks`. |
+| LLM context source registry | `llm_context_source_registry` | Registry источников (`memory`, `rag`, custom) для LLMClient. Не создавать отдельные RAG-клиенты в call-site. |
 | Pydantic structured output type | `response_model` | Только high-level `chat()`. |
 | OpenAI request `response_format` | `response_format` | Только transport/OpenAI-compatible request shape; не смешивать с `response_model`. |
 | Non-stream JSON flag | `json_output` | Только `invoke()`/`invoke_once()`. |

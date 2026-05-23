@@ -4,7 +4,7 @@ SQL-репозиторий per-user OAuth credentials (shared БД, таблиц
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
@@ -47,7 +47,7 @@ class IntegrationCredentialRepository:
         user_id: str,
         provider: IntegrationProvider,
         service: str,
-    ) -> Optional[IntegrationCredential]:
+    ) -> IntegrationCredential | None:
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(

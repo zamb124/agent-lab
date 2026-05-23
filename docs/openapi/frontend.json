@@ -5065,6 +5065,66 @@
         ],
         "title": "PronunciationRulesListResponse"
       },
+      "PublicDocsAssistantSessionRequest": {
+        "properties": {
+          "embed_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Embed Id",
+            "default": "docs_assistant"
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin",
+            "description": "window.location.origin",
+            "default": ""
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "maximum": 900.0,
+            "minimum": 60.0,
+            "title": "Expires In Seconds",
+            "default": 300
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PublicDocsAssistantSessionRequest"
+      },
+      "PublicDocsAssistantSessionResponse": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "token_type",
+          "expires_at",
+          "flow_id",
+          "branch_id"
+        ],
+        "title": "PublicDocsAssistantSessionResponse"
+      },
       "PublicLandingAgentCard": {
         "properties": {
           "embed_id": {

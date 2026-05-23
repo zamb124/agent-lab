@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 
-import copy
-from typing import Any
+from collections.abc import Mapping
+
+from core.types import JsonObject, require_json_array, require_json_object
 
 
 def validate_node_files_list(
-    files: Any,
+    files: object,
     *,
     node_id: str,
 ) -> None:
@@ -18,13 +19,9 @@ def validate_node_files_list(
     """
     if files is None:
         return
-    if not isinstance(files, list):
-        raise ValueError(f"Нода '{node_id}': files должен быть списком")
-    for idx, item in enumerate(files):
-        if not isinstance(item, dict):
-            raise ValueError(
-                f"Нода '{node_id}': files[{idx}] должен быть объектом с полями original_name и url"
-            )
+    file_items = require_json_array(files, f"nodes.{node_id}.files")
+    for idx, raw_item in enumerate(file_items):
+        item = require_json_object(raw_item, f"nodes.{node_id}.files[{idx}]")
         original_name = item.get("original_name")
         url = item.get("url")
         if not isinstance(original_name, str) or not original_name.strip():
@@ -37,7 +34,7 @@ def validate_node_files_list(
             )
 
 
-def collect_flow_node_files(nodes: dict[str, Any]) -> list[dict[str, Any]]:
+def collect_flow_node_files(nodes: Mapping[str, JsonObject]) -> list[JsonObject]:
     """
     Объединяет поля files всех нод эффективного графа (порядок: обход по ключам словаря
     nodes в стабильном для JSON порядке — как в объекте; в Python 3.7+ dict сохраняет вставку).
@@ -46,14 +43,13 @@ def collect_flow_node_files(nodes: dict[str, Any]) -> list[dict[str, Any]]:
     """
     if not nodes:
         return []
-    merged: list[dict[str, Any]] = []
-    for node_id, cfg in nodes.items():
-        if not isinstance(cfg, dict):
-            continue
-        raw = cfg.get("files")
-        if not raw:
+    merged: list[JsonObject] = []
+    for node_id, cfg_obj in nodes.items():
+        raw = cfg_obj.get("files")
+        if raw is None:
             continue
         validate_node_files_list(raw, node_id=node_id)
-        for item in raw:
-            merged.append(copy.copy(item))
+        file_items = require_json_array(raw, f"nodes.{node_id}.files")
+        for idx, item in enumerate(file_items):
+            merged.append(require_json_object(item, f"nodes.{node_id}.files[{idx}]"))
     return merged

@@ -11,7 +11,8 @@
 неотрицательное число.
 """
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 
 def resolve_document_ttl_seconds(

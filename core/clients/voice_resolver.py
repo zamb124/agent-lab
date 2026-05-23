@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
 
 from core.clients.speech_override import SpeechOverride
 from core.clients.stt_client import (
@@ -85,11 +85,11 @@ logger = get_logger(__name__)
 
 _COMPANY_CACHE_TTL_S: float = 60.0
 _company_cache: dict[
-    tuple[str, VoiceKind], tuple[float, Optional["_CompanyOverrideRow"]]
+    tuple[str, VoiceKind], tuple[float, _CompanyOverrideRow | None]
 ] = {}
 
 _PRONUNCIATION_CACHE_TTL_S: float = 300.0
-_pronunciation_platform_cache: Optional[tuple[float, CompiledPronunciation]] = None
+_pronunciation_platform_cache: tuple[float, CompiledPronunciation] | None = None
 _pronunciation_company_cache: dict[str, tuple[float, CompiledPronunciation]] = {}
 
 
@@ -98,13 +98,13 @@ class _CompanyOverrideRow:
     """In-memory представление одной строки `company_voice_providers`."""
 
     provider: str
-    model: Optional[str]
-    voice: Optional[str]
-    language: Optional[str]
-    sample_rate: Optional[int]
-    threshold: Optional[float]
-    response_format: Optional[str]
-    secrets: Optional[dict[str, str]]
+    model: str | None
+    voice: str | None
+    language: str | None
+    sample_rate: int | None
+    threshold: float | None
+    response_format: str | None
+    secrets: dict[str, str] | None
 
 
 @dataclass(frozen=True)
@@ -116,7 +116,7 @@ class ResolvedSttSettings:
     """
 
     provider: str
-    model: Optional[str]
+    model: str | None
     language: str
     source_provider: Literal["override", "company", "settings"]
     source_language: Literal["override", "company", "settings"]
@@ -124,8 +124,8 @@ class ResolvedSttSettings:
 
 def _value_source(
     *,
-    override_value: Optional[str],
-    company_value: Optional[str],
+    override_value: str | None,
+    company_value: str | None,
 ) -> Literal["override", "company", "settings"]:
     if override_value is not None and override_value != "":
         return "override"
@@ -134,7 +134,7 @@ def _value_source(
     return "settings"
 
 
-def _coerce_company_voice_secrets(raw: object | None) -> Optional[dict[str, str]]:
+def _coerce_company_voice_secrets(raw: object | None) -> dict[str, str] | None:
     """Нормализует JSONB `secrets`: только строковые ключи и значения."""
     if raw is None:
         return None
@@ -166,7 +166,7 @@ def _get_repo() -> CompanyVoiceProviderRepository:
 
 async def _load_company_override(
     *, company_id: str, kind: Literal["stt", "tts"]
-) -> Optional[_CompanyOverrideRow]:
+) -> _CompanyOverrideRow | None:
     """Прочитать запись `company_voice_providers` с TTL-кэшем."""
     cache_key = (company_id, kind)
     now = time.monotonic()
@@ -176,7 +176,7 @@ async def _load_company_override(
 
     repo = _get_repo()
     record = await repo.get(company_id=company_id, kind=kind)
-    row: Optional[_CompanyOverrideRow]
+    row: _CompanyOverrideRow | None
     if record is None:
         row = None
     else:
@@ -222,7 +222,7 @@ def _validate_company_id(company_id: str) -> None:
         raise ValueError("voice_resolver: company_id не может быть пустым.")
 
 
-def _validate_override(override: Optional[SpeechOverride]) -> SpeechOverride:
+def _validate_override(override: SpeechOverride | None) -> SpeechOverride:
     if override is None:
         return SpeechOverride()
     return override
@@ -230,9 +230,9 @@ def _validate_override(override: Optional[SpeechOverride]) -> SpeechOverride:
 
 def _fallback_litserve_api_model_id(
     *,
-    resolved: Optional[str],
+    resolved: str | None,
     kind: Literal["stt", "tts", "vad"],
-) -> Optional[str]:
+) -> str | None:
     """Если ``voice.<kind>.default_model`` и override/company пусты, берём api id каталога LitServe."""
     if resolved is not None and resolved != "":
         return resolved
@@ -282,8 +282,8 @@ def _pick_tts_api_model_for_synthesis_locale(
 
 def _resolve_str(
     *,
-    override_value: Optional[str],
-    company_value: Optional[str],
+    override_value: str | None,
+    company_value: str | None,
     default_value: str,
 ) -> str:
     if override_value is not None and override_value != "":
@@ -295,10 +295,10 @@ def _resolve_str(
 
 def _resolve_optional_str(
     *,
-    override_value: Optional[str],
-    company_value: Optional[str],
-    default_value: Optional[str],
-) -> Optional[str]:
+    override_value: str | None,
+    company_value: str | None,
+    default_value: str | None,
+) -> str | None:
     if override_value is not None and override_value != "":
         return override_value
     if company_value is not None and company_value != "":
@@ -308,8 +308,8 @@ def _resolve_optional_str(
 
 def _resolve_int(
     *,
-    override_value: Optional[int],
-    company_value: Optional[int],
+    override_value: int | None,
+    company_value: int | None,
     default_value: int,
 ) -> int:
     if override_value is not None:
@@ -321,8 +321,8 @@ def _resolve_int(
 
 def _resolve_float(
     *,
-    override_value: Optional[float],
-    company_value: Optional[float],
+    override_value: float | None,
+    company_value: float | None,
     default_value: float,
 ) -> float:
     if override_value is not None:
@@ -334,9 +334,9 @@ def _resolve_float(
 
 def _resolve_optional_float(
     *,
-    override_value: Optional[float],
-    company_value: Optional[float],
-) -> Optional[float]:
+    override_value: float | None,
+    company_value: float | None,
+) -> float | None:
     if override_value is not None:
         return override_value
     return company_value
@@ -375,7 +375,7 @@ async def resolve_effective_tts_voice_for_ws(
 async def resolve_stt_settings(
     *,
     company_id: str,
-    override: Optional[SpeechOverride] = None,
+    override: SpeechOverride | None = None,
 ) -> ResolvedSttSettings:
     """Tier-резолв STT (`override → company → settings`) без создания клиента.
 
@@ -426,7 +426,7 @@ async def resolve_stt_settings(
 async def get_stt_client(
     *,
     company_id: str,
-    override: Optional[SpeechOverride] = None,
+    override: SpeechOverride | None = None,
 ) -> BaseSTTClient:
     """Получить STT-клиента с применённым tier-резолвом.
 
@@ -540,7 +540,7 @@ async def _load_company_pronunciation(company_id: str) -> CompiledPronunciation:
 async def resolve_tts_pronunciation(
     *,
     company_id: str,
-    override: Optional[SpeechOverride] = None,
+    override: SpeechOverride | None = None,
 ) -> CompiledPronunciation:
     """Каскадный резолв правил произношения TTS для данной компании и call-override.
 
@@ -576,7 +576,7 @@ async def resolve_tts_pronunciation(
 async def get_tts_client(
     *,
     company_id: str,
-    override: Optional[SpeechOverride] = None,
+    override: SpeechOverride | None = None,
 ) -> BaseTTSClient:
     """Получить TTS-клиента с применённым tier-резолвом."""
     _validate_company_id(company_id)
@@ -672,7 +672,7 @@ async def get_tts_client(
 async def get_vad_client(
     *,
     company_id: str,
-    override: Optional[SpeechOverride] = None,
+    override: SpeechOverride | None = None,
 ) -> BaseVADClient:
     """Получить VAD-клиента. Per-company override для VAD не используется — только
     `SpeechOverride` (per-call) и `settings.voice.vad`.
@@ -741,7 +741,7 @@ _TTS_MIME_BY_FORMAT: dict[str, str] = {
 async def get_stt_streamer(
     *,
     company_id: str,
-    override: Optional[SpeechOverride] = None,
+    override: SpeechOverride | None = None,
     sample_rate: int = 16000,
 ) -> BaseSTTStreamer:
     """Получить streaming STT-клиента (tier-резолв как у ``get_stt_client``).
@@ -771,7 +771,7 @@ async def get_stt_streamer(
 async def get_tts_streamer(
     *,
     company_id: str,
-    override: Optional[SpeechOverride] = None,
+    override: SpeechOverride | None = None,
 ) -> BaseTTSStreamer:
     """Получить streaming TTS-клиента (tier-резолв как у ``get_tts_client``).
 

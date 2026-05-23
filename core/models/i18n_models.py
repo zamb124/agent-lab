@@ -4,7 +4,6 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,8 +18,8 @@ class Language(str, Enum):
 class TranslationKey(BaseModel):
     """Ключ перевода с контекстом и метаданными"""
     key: str = Field(description="Уникальный ключ перевода (например: models.user.fields.name)")
-    context: Optional[str] = Field(default=None, description="Контекст использования ключа")
-    source_file: Optional[str] = Field(default=None, description="Исходный файл где найден ключ")
+    context: str | None = Field(default=None, description="Контекст использования ключа")
+    source_file: str | None = Field(default=None, description="Исходный файл где найден ключ")
     default_value: str = Field(description="Значение по умолчанию (обычно на русском)")
     category: str = Field(default="common", description="Категория ключа (models, common, errors, etc)")
 
@@ -60,8 +59,8 @@ class Translation(BaseModel):
 class TranslationSet(BaseModel):
     """Набор переводов для всех языков по одному ключу"""
     key: str = Field(description="Ключ перевода")
-    translations: Dict[Language, str] = Field(default_factory=dict, description="Переводы на разные языки")
-    context: Optional[str] = Field(default=None, description="Контекст использования")
+    translations: dict[Language, str] = Field(default_factory=dict, description="Переводы на разные языки")
+    context: str | None = Field(default=None, description="Контекст использования")
 
     def get_translation(self, language: Language, fallback_language: Language = Language.RU) -> str:
         """Получить перевод с fallback"""
@@ -88,7 +87,7 @@ class TranslationStats(BaseModel):
     """Статистика переводов"""
     total_languages: int = Field(description="Общее количество языков")
     total_keys: int = Field(description="Общее количество ключей")
-    languages_stats: Dict[Language, TranslationFile] = Field(default_factory=dict, description="Статистика по языкам")
+    languages_stats: dict[Language, TranslationFile] = Field(default_factory=dict, description="Статистика по языкам")
 
     def get_overall_completeness(self) -> float:
         """Общий процент завершенности всех переводов"""
@@ -105,7 +104,7 @@ class I18nConfig(BaseModel):
     fallback_language: Language = Field(default=Language.RU, description="Резервный язык")
     auto_generate_missing: bool = Field(default=True, description="Автоматически генерировать отсутствующие ключи")
     auto_generate_on_startup: bool = Field(default=True, description="Генерировать переводы при запуске приложения")
-    scan_directories: List[str] = Field(
+    scan_directories: list[str] = Field(
         default_factory=lambda: ["apps/flows/models", "apps/frontend"],
         description="Директории для сканирования ключей"
     )

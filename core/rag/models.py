@@ -1,73 +1,101 @@
-"""
-Pydantic модели для RAG системы.
-"""
+"""Pydantic модели и публичные контракты RAG системы."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import ClassVar, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict
+from pydantic import Field as PydanticField
 
-from core.fields import Field
+from core.models import StrictBaseModel
+from core.rag_indexing_schema import SearchChannelsDefaults
+from core.types import JsonObject
+
+RAGMetadata: TypeAlias = JsonObject
+RAGMetadataFilter: TypeAlias = JsonObject
 
 
-class RAGDocument(BaseModel):
+class RAGSearchOptions(StrictBaseModel):
+    """Опции retrieval-поиска, общие для API, HTTP client, repository и provider."""
+
+    channels: SearchChannelsDefaults | None = None
+    rrf_k: int | None = PydanticField(default=None, gt=0)
+    per_channel_top_k: int | None = PydanticField(default=None, gt=0)
+    rerank: bool | None = None
+    retrieval: bool | None = None
+
+
+class RAGNamespaceSearchRequest(RAGSearchOptions):
+    """Тело поиска внутри одного RAG namespace."""
+
+    query: str
+    limit: int = PydanticField(default=5, ge=1)
+    filters: RAGMetadataFilter | None = None
+
+
+class RAGGlobalSearchRequest(RAGNamespaceSearchRequest):
+    """Тело поиска по нескольким RAG namespace."""
+
+    namespace_ids: list[str]
+
+
+class RAGDocument(StrictBaseModel):
     """Универсальная модель документа для RAG"""
 
     document_id: str
     name: str
     namespace: str
-    content: Optional[str] = None
-    metadata: Dict[str, Any] = {}
+    content: str | None = None
+    metadata: RAGMetadata = PydanticField(default_factory=dict)
     status: str = "processing"
-    created_at: Optional[str] = None
-    chunks_count: Optional[int] = None
-    indexing_runs: Optional[int] = None
-    reindex_count: Optional[int] = None
-    split: Optional[Dict[str, Any]] = None
+    created_at: str | None = None
+    chunks_count: int | None = None
+    indexing_runs: int | None = None
+    reindex_count: int | None = None
+    split: RAGMetadata | None = None
 
 
-class RAGSearchResult(BaseModel):
+class RAGSearchResult(StrictBaseModel):
     """Универсальная модель результата поиска"""
 
     content: str
     score: float
     document_id: str
     document_name: str
-    metadata: Dict[str, Any] = {}
+    metadata: RAGMetadata = PydanticField(default_factory=dict)
     namespace: str
-    chunk_id: Optional[str] = None
-    provenance: Dict[str, Any] = {}
+    chunk_id: str | None = None
+    provenance: RAGMetadata = PydanticField(default_factory=dict)
 
 
-class RAGNamespace(BaseModel):
+class RAGNamespace(StrictBaseModel):
     """Универсальная модель namespace"""
 
     namespace_id: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     document_count: int = 0
-    created_at: Optional[str] = None
-    metadata: Dict[str, Any] = {}
+    created_at: str | None = None
+    metadata: RAGMetadata = PydanticField(default_factory=dict)
 
 
-class FlowRAGConfig(BaseModel):
+class FlowRAGConfig(StrictBaseModel):
     """Конфигурация RAG для flow"""
 
     enabled: bool = False
 
-    namespace_scope: Literal["flow", "company", "session"] = Field(
+    namespace_scope: Literal["flow", "company", "session"] = PydanticField(
         default="flow",
         title="Скоуп хранения",
         description="Где хранить документы: company (общие), flow (для этого flow), session (для сессии)",
     )
 
-    search_scopes: List[Literal["flow", "company", "session"]] = Field(
+    search_scopes: list[Literal["flow", "company", "session"]] = PydanticField(
         default_factory=lambda: ["flow"],
         title="Скоупы поиска",
         description="Где искать документы при запросах",
     )
 
-    auto_index_messages: bool = Field(
+    auto_index_messages: bool = PydanticField(
         default=False,
         title="Автоматическая индексация",
         description="Автоматически индексировать сообщения из сессии",
@@ -87,20 +115,20 @@ class DocumentProcessingStatus(BaseModel):
     Первичный ключ в БД — document_id (одна строка на документ).
     """
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True, populate_by_name=True)
 
     document_id: str
     task_id: str
     namespace_id: str
     document_name: str
     status: Literal["pending", "processing", "completed", "failed"]
-    error_message: Optional[str] = None
-    s3_key: Optional[str] = None
-    s3_bucket: Optional[str] = None
-    file_size: Optional[int] = None
-    chunks_count: Optional[int] = None
+    error_message: str | None = None
+    s3_key: str | None = None
+    s3_bucket: str | None = None
+    file_size: int | None = None
+    chunks_count: int | None = None
     created_at: datetime
     updated_at: datetime
-    completed_at: Optional[datetime] = None
-    extra_metadata: Optional[Dict[str, Any]] = None
+    completed_at: datetime | None = None
+    extra_metadata: RAGMetadata | None = None
     ttl_seconds: int = 864000

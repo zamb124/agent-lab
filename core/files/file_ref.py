@@ -8,7 +8,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping, TypeAlias, Union
+from collections.abc import Mapping
+from typing import Any, TypeAlias
 
 from core.files.models import FileRecord, FileResponse
 
@@ -20,7 +21,7 @@ def file_id_from_download_url(url: str) -> str | None:
     return m.group(1) if m else None
 
 
-FileRef: TypeAlias = Union[FileRecord, FileResponse, Mapping[str, Any]]
+FileRef: TypeAlias = FileRecord | FileResponse | Mapping[str, Any]
 
 
 def normalize_file_ref(ref: FileRef) -> dict[str, Any]:

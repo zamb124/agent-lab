@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from apps.flows.config import get_settings
 from apps.flows.src.channels.factory import get_channel as build_channel
-from apps.flows.src.channels.registry import create_default_channel_registry
+from apps.flows.src.channels.registry import ChannelRegistry, create_default_channel_registry
+from apps.flows.src.container_contracts import FlowRuntimeContainer, as_flow_runtime_container
 from apps.flows.src.container_state import (
     get_current_container,
     reset_current_container,
@@ -26,7 +27,7 @@ from apps.flows.src.db.operator_repository import OperatorRepository
 from apps.flows.src.db.scheduled_task_repository import ScheduledTaskRepository
 from apps.flows.src.evaluation.service import EvaluationService
 from apps.flows.src.models import TriggerType
-from apps.flows.src.registry.nodes import create_default_node_registry
+from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_registry
 from apps.flows.src.runners.remote import RemoteCodeRunner
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from apps.flows.src.services.flow_factory import FlowFactory
@@ -56,6 +57,9 @@ from core.db.repositories.embed_config_repository import EmbedConfigRepository
 from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.logging import get_logger
 
+if TYPE_CHECKING:
+    from apps.flows.src.channels.a2a import A2AChannel
+
 logger = get_logger(__name__)
 
 
@@ -67,60 +71,63 @@ class FlowContainer(BaseContainer):
     # False = kiq() выполняет локально (внутри воркера)
     use_worker: bool = True
 
+    def _runtime_contract(self) -> FlowRuntimeContainer:
+        return as_flow_runtime_container(self)
+
     @lazy
-    def flow_repository(self):
+    def flow_repository(self) -> FlowRepository:
         return FlowRepository(storage=self.storage)
 
     @lazy
-    def node_repository(self):
+    def node_repository(self) -> NodeRepository:
         return NodeRepository(storage=self.storage)
 
     @lazy
-    def tool_repository(self):
+    def tool_repository(self) -> ToolRepository:
         return ToolRepository(storage=self.storage)
 
     @lazy
-    def state_repository(self):
+    def state_repository(self) -> DatabaseStateRepository:
         return DatabaseStateRepository(storage=self.storage)
 
     @lazy
-    def state_manager(self):
+    def state_manager(self) -> StateManager:
         return StateManager(
             state_repository=self.state_repository,
             redis_client=self.redis_client,
         )
 
     @lazy
-    def redis_client(self):
+    def redis_client(self) -> RedisClient:
         settings = get_settings()
         redis_url = settings.database.redis_url
         client = RedisClient(redis_url)
         return client
 
     @lazy
-    def evaluation_repository(self):
+    def evaluation_repository(self) -> EvaluationRepository:
         return EvaluationRepository(storage=self.storage)
 
     # push_subscription_repository наследуется из BaseContainer (core/push/)
 
     @lazy
-    def scheduled_task_repository(self):
+    def scheduled_task_repository(self) -> ScheduledTaskRepository:
         return ScheduledTaskRepository(storage=self.storage)
 
     @lazy
-    def mcp_server_repository(self):
+    def mcp_server_repository(self) -> MCPServerRepository:
         return MCPServerRepository(storage=self.storage)
 
     @lazy
-    def resource_repository(self):
+    def resource_repository(self) -> ResourceRepository:
         return ResourceRepository(storage=self.storage)
 
     @lazy
-    def operator_repository(self):
+    def operator_repository(self) -> OperatorRepository:
         return OperatorRepository(storage=self.storage)
 
     @lazy
-    def operator_handoff_service(self):
+    def operator_handoff_service(self) -> OperatorHandoffService:
         return OperatorHandoffService(
             repository=self.operator_repository,
             file_repository=self.file_repository,
@@ -130,11 +137,11 @@ class FlowContainer(BaseContainer):
     # rag_repository наследуется из BaseContainer (core/container/base.py)
 
     @lazy
-    def variables_service(self):
+    def variables_service(self) -> VariablesService:
         return VariablesService(self.variable_repository)
 
     @lazy
-    def evaluation_service(self):
+    def evaluation_service(self) -> EvaluationService:
         return EvaluationService(
             evaluation_repository=self.evaluation_repository,
             flow_repository=self.flow_repository,
@@ -147,7 +154,7 @@ class FlowContainer(BaseContainer):
     # push сервис перенесен в core/push/service.py и инициализируется в factory.py
 
     @lazy
-    def schedule_service(self):
+    def schedule_service(self) -> ScheduleService:
         scheduler_service = None
         if is_testing():
             scheduler_service = get_scheduler_container().scheduler_service
@@ -158,12 +165,12 @@ class FlowContainer(BaseContainer):
         )
 
     @lazy
-    def tempo_client(self):
+    def tempo_client(self) -> TempoClient:
         settings = get_settings()
         return TempoClient(base_url=settings.tracing.tempo_http_url)
 
     @lazy
-    def loki_client(self):
+    def loki_client(self) -> LokiClient | None:
         settings = get_settings()
         base = settings.logging.resolve_loki_query_http_base()
         if not base:
@@ -171,50 +178,53 @@ class FlowContainer(BaseContainer):
         return LokiClient(base_url=base)
 
     @lazy
-    def a2a_client(self):
+    def a2a_client(self) -> A2AClient:
         return A2AClient()
 
     @lazy
-    def flow_discovery(self):
+    def flow_discovery(self) -> FlowDiscoveryService:
         return FlowDiscoveryService(
             repository=self.flow_repository,
             a2a_client=self.a2a_client,
         )
 
     @lazy
-    def node_registry(self):
+    def node_registry(self) -> NodeRegistry:
         return create_default_node_registry()
 
     @lazy
-    def tool_registry(self):
-        registry = ToolRegistry(container=self, node_tool_wrapper_cls=NodeAsToolWrapper)
+    def tool_registry(self) -> ToolRegistry:
+        registry = ToolRegistry(
+            container=self._runtime_contract(),
+            node_tool_wrapper_cls=NodeAsToolWrapper,
+        )
         registry.register_builtin_tools()
         return registry
 
     @lazy
-    def graph_compiler(self):
+    def graph_compiler(self) -> GraphCompiler:
         return GraphCompiler()
 
     @lazy
-    def base_tool_class(self):
+    def base_tool_class(self) -> type[BaseTool]:
         return BaseTool
 
     @lazy
-    def python_code_runner(self):
+    def python_code_runner(self) -> RemoteCodeRunner:
         """Stateless remote Python runner для валидации кода."""
         return RemoteCodeRunner("python")
 
     def get_code_runner(
         self,
         language: str = "python",
-    ):
+    ) -> RemoteCodeRunner:
         """Возвращает runner для указанного языка."""
         if language in CAPABILITY_LANGUAGE_SET:
             return RemoteCodeRunner(language)
         raise ValueError(f"Unsupported language: {language}")
 
     @lazy
-    def resource_loader(self):
+    def resource_loader(self) -> ResourceLoader:
         return ResourceLoader(
             node_registry=self.node_registry,
             tool_registry=self.tool_registry,
@@ -224,39 +234,39 @@ class FlowContainer(BaseContainer):
         )
 
     @lazy
-    def llm_model_repository(self):
+    def llm_model_repository(self) -> LLMModelRepository:
         return LLMModelRepository(storage=self.storage)
 
     @lazy
-    def llm_models_service(self):
+    def llm_models_service(self) -> LLMModelsService:
         return LLMModelsService(
             repository=self.llm_model_repository,
             scheduler_client=self.scheduler_client,
         )
 
     @lazy
-    def lara_action_engine(self):
+    def lara_action_engine(self) -> LaraActionEngine:
         return LaraActionEngine(redis_client=self.redis_client)
 
     @lazy
-    def lara_facade(self):
+    def lara_facade(self) -> LaraFacade:
         return LaraFacade(action_engine=self.lara_action_engine)
 
     @lazy
-    def flow_factory(self):
+    def flow_factory(self) -> FlowFactory:
         return FlowFactory(
             flow_repository=self.flow_repository,
             variables_service=self.variables_service,
             graph_compiler=self.graph_compiler,
-            container=self,
+            container=self._runtime_contract(),
         )
 
     @lazy
-    def trigger_registry(self):
+    def trigger_registry(self) -> TriggerRegistry:
         settings = get_settings()
         base_url = settings.server.get_flows_webhook_public_base_url()
 
-        registry = TriggerRegistry(base_url=base_url, container=self)
+        registry = TriggerRegistry(base_url=base_url, container=self._runtime_contract())
 
         # Регистрируем handlers
         registry.register_handler(TriggerType.TELEGRAM, TelegramTriggerHandler)
@@ -264,21 +274,21 @@ class FlowContainer(BaseContainer):
         return registry
 
     @lazy
-    def channel_registry(self):
+    def channel_registry(self) -> ChannelRegistry:
         return create_default_channel_registry()
 
     @lazy
-    def embed_mapping_repository(self):
+    def embed_mapping_repository(self) -> EmbedMappingRepository:
         """Репозиторий для глобального маппинга embed_id -> company_id"""
         return EmbedMappingRepository(storage=self.shared_storage)
 
     @lazy
-    def embed_config_repository(self):
+    def embed_config_repository(self) -> EmbedConfigRepository:
         """Репозиторий для конфигураций встраиваемых виджетов"""
         return EmbedConfigRepository(storage=self.shared_storage)
 
-    def get_channel(self, name: str, flow_id: str):
-        return build_channel(name, flow_id, container=self)
+    def get_channel(self, name: str, flow_id: str) -> A2AChannel:
+        return build_channel(name, flow_id, container=self._runtime_contract())
 
 
 def get_container() -> FlowContainer:
@@ -293,15 +303,15 @@ def get_container() -> FlowContainer:
         # В тестах по умолчанию без воркера
         if is_testing():
             container.use_worker = False
-        set_current_container(container)
+        set_current_container(as_flow_runtime_container(container))
         logger.info("FlowContainer создан")
         return container
-    return cast(FlowContainer, current)
+    return cast(FlowContainer, cast(object, current))
 
 
 def set_container(container: FlowContainer) -> None:
     """Устанавливает контейнер (для тестов)."""
-    set_current_container(container)
+    set_current_container(as_flow_runtime_container(container))
 
 
 def reset_container() -> None:

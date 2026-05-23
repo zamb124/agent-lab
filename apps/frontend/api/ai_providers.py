@@ -7,6 +7,8 @@ AI providers CRUD: capability override и custom OpenAI-compatible провай�
 Endpoints:
 
 - ``GET    /frontend/api/settings/ai-providers``                — снимок: capabilities + custom + catalog.
+- ``PUT    /frontend/api/settings/ai-providers/llm-context``    — company default контекстного слоя.
+- ``DELETE /frontend/api/settings/ai-providers/llm-context``    — снять company default контекстного слоя.
 - ``PUT    /frontend/api/settings/ai-providers/{capability}``   — задать/обновить capability override.
 - ``DELETE /frontend/api/settings/ai-providers/{capability}``   — снять override capability.
 - ``POST   /frontend/api/settings/ai-providers/custom``         — создать custom-провайдера.
@@ -46,7 +48,10 @@ from core.company_ai import (
     resolve_rerank_for_company,
     resolve_voice_for_company,
 )
+from core.config import get_settings
 from core.context import clear_context, set_context
+from core.llm_context import LLMContextPatch
+from core.llm_context.resolver import resolve_llm_context_policy
 from core.logging import get_logger
 from core.models.context_models import Context
 
@@ -340,6 +345,19 @@ def _public_capabilities(aip: CompanyAIProviders) -> list[dict[str, Any]]:
     return items
 
 
+def _public_llm_context(aip: CompanyAIProviders) -> dict[str, Any]:
+    settings = get_settings().llm_context
+    return {
+        "configured": aip.llm_context is not None,
+        "config": aip.llm_context.model_dump(mode="json", exclude_none=True)
+        if aip.llm_context is not None
+        else {},
+        "default_profile": settings.default_profile,
+        "profiles": list(settings.profiles.keys()),
+        "budgets": list(settings.budgets.keys()),
+    }
+
+
 @router.get("")
 async def get_ai_providers(request: Request, container: ContainerDep):
     _require_admin(request)
@@ -348,7 +366,46 @@ async def get_ai_providers(request: Request, container: ContainerDep):
         "capabilities": _public_capabilities(aip),
         "custom_providers": [_custom_provider_to_public(p) for p in aip.custom_providers],
         "catalog": _provider_catalog(aip),
+        "llm_context": _public_llm_context(aip),
     }
+
+
+@router.put("/llm-context")
+async def put_llm_context(
+    payload: LLMContextPatch,
+    request: Request,
+    container: ContainerDep,
+):
+    _require_admin(request)
+    aip = _load_aip(request)
+    try:
+        patch = LLMContextPatch.model_validate(payload.model_dump(mode="python", exclude_none=True))
+        resolve_llm_context_policy(config=get_settings().llm_context, company=patch)
+        new_aip = aip.model_copy(update={"llm_context": patch})
+        new_aip = CompanyAIProviders.model_validate(new_aip.model_dump())
+    except (ValueError, ValidationError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _save_aip(request, container, new_aip)
+    logger.info(
+        "ai_providers PUT llm_context company=%s",
+        request.state.company.company_id,
+    )
+    return {"success": True}
+
+
+@router.delete("/llm-context")
+async def delete_llm_context(request: Request, container: ContainerDep):
+    _require_admin(request)
+    aip = _load_aip(request)
+    new_aip = aip.model_copy(update={"llm_context": None})
+    new_aip = CompanyAIProviders.model_validate(new_aip.model_dump())
+    await _save_aip(request, container, new_aip)
+    logger.info(
+        "ai_providers DELETE llm_context company=%s",
+        request.state.company.company_id,
+    )
+    return {"success": True}
 
 
 @router.put("/{capability}")

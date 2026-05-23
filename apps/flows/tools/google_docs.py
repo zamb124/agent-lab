@@ -32,6 +32,10 @@ logger = get_logger(__name__)
 JsonDict = dict[str, Any]
 
 
+def _optional_state_string(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
 # ── описания ─────────────────────────────────────────────────────
 
 _CREATE_DESCRIPTION = """
@@ -216,9 +220,9 @@ def _require_state(state: ExecutionState | None) -> ExecutionState:
 
 async def _get_docs_client(state: ExecutionState | None) -> GoogleDocsClient:
     execution_state = _require_state(state)
-    credentials_json = execution_state.variables.get("google_service_account")
-    access_token = execution_state.variables.get("google_access_token")
-    subject = execution_state.variables.get("google_impersonate_email")
+    credentials_json = _optional_state_string(execution_state.variables.get("google_service_account"))
+    access_token = _optional_state_string(execution_state.variables.get("google_access_token"))
+    subject = _optional_state_string(execution_state.variables.get("google_impersonate_email"))
 
     if not credentials_json and not access_token:
         access_token = await get_google_oauth_token(execution_state, service="docs")

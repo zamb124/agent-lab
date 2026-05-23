@@ -22,7 +22,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any, Optional
+from typing import Any
 
 import redis.asyncio as aioredis
 from fastapi import WebSocket
@@ -52,7 +52,7 @@ class NotificationManager:
         self._connection_lock = asyncio.Lock()
         self._redis_task: asyncio.Task[None] | None = None
         self._redis_client: aioredis.Redis | None = None
-        self._redis_pubsub: Optional[Any] = None
+        self._redis_pubsub: Any | None = None
         self._connect_hooks: list[ConnectionHook] = []
         self._disconnect_hooks: list[ConnectionHook] = []
 

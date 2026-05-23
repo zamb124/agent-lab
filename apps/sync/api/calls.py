@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -183,7 +183,7 @@ async def get_link_info(link_token: str, container: ContainerDep) -> CallLinkInf
 async def join_via_link(
     link_token: str,
     container: ContainerDep,
-    body: Optional[GuestJoinRequest] = None,
+    body: GuestJoinRequest | None = None,
 ) -> JoinResponse:
     user = require_current_user()
     return await op_calls_join_accept(

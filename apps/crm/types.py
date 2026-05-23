@@ -1,4 +1,5 @@
-"""Shared CRM type aliases."""
+"""Shared CRM aliases for platform JSON contracts."""
 
-type JsonValue = object
-type JsonObject = dict[str, object]
+from core.types import JsonArray, JsonObject, JsonValue
+
+__all__ = ("JsonArray", "JsonObject", "JsonValue")

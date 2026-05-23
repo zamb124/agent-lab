@@ -2,7 +2,7 @@
 API для семантического поиска.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -32,17 +32,17 @@ class SearchRequest(BaseModel):
 
     query: str
     limit: int = 5
-    filters: Optional[Dict[str, Any]] = None
-    channels: Optional[Dict[str, Any]] = None
-    rrf_k: Optional[int] = None
-    per_channel_top_k: Optional[int] = None
-    rerank: Optional[bool] = None
-    retrieval: Optional[bool] = None
+    filters: dict[str, Any] | None = None
+    channels: dict[str, Any] | None = None
+    rrf_k: int | None = None
+    per_channel_top_k: int | None = None
+    rerank: bool | None = None
+    retrieval: bool | None = None
 
 
 class SearchResponse(BaseModel):
     """Ответ с результатами поиска"""
-    results: List[RAGSearchResult]
+    results: list[RAGSearchResult]
     query: str
     namespace_id: str
     provider: str
@@ -53,7 +53,7 @@ async def search_in_namespace(
     namespace_id: str,
     request: SearchRequest,
     container: ContainerDep,
-    provider: Optional[str] = Query(None, description="RAG provider"),
+    provider: str | None = Query(None, description="RAG provider"),
 ) -> SearchResponse:
     """
     Выполняет семантический поиск в namespace.
@@ -76,7 +76,7 @@ async def search_in_namespace(
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         provider_name = provider or settings.rag.default_provider
 
-        search_kwargs: Dict[str, Any] = {}
+        search_kwargs: dict[str, Any] = {}
         if request.channels is not None:
             search_kwargs["channels"] = request.channels
         if request.rrf_k is not None:
@@ -128,19 +128,19 @@ class GlobalSearchRequest(BaseModel):
     """Запрос на глобальный поиск (опции поиска совпадают с namespace search, кроме namespace_id)."""
 
     query: str
-    namespace_ids: List[str]
+    namespace_ids: list[str]
     limit: int = 5
-    filters: Optional[Dict[str, Any]] = None
-    channels: Optional[Dict[str, Any]] = None
-    rrf_k: Optional[int] = None
-    per_channel_top_k: Optional[int] = None
-    rerank: Optional[bool] = None
-    retrieval: Optional[bool] = None
+    filters: dict[str, Any] | None = None
+    channels: dict[str, Any] | None = None
+    rrf_k: int | None = None
+    per_channel_top_k: int | None = None
+    rerank: bool | None = None
+    retrieval: bool | None = None
 
 
 class GlobalSearchResponse(BaseModel):
     """Ответ с результатами глобального поиска"""
-    results: Dict[str, List[RAGSearchResult]]
+    results: dict[str, list[RAGSearchResult]]
     query: str
     provider: str
 
@@ -149,7 +149,7 @@ class GlobalSearchResponse(BaseModel):
 async def global_search(
     request: GlobalSearchRequest,
     container: ContainerDep,
-    provider: Optional[str] = Query(None, description="RAG provider"),
+    provider: str | None = Query(None, description="RAG provider"),
 ) -> GlobalSearchResponse:
     """
     Выполняет поиск по нескольким namespace текущей компании.
@@ -179,7 +179,7 @@ async def global_search(
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
         provider_name = provider or settings.rag.default_provider
 
-        search_kwargs: Dict[str, Any] = {}
+        search_kwargs: dict[str, Any] = {}
         if request.filters is not None:
             validate_metadata_filters(request.filters)
         if request.channels is not None:

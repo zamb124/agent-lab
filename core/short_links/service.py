@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import secrets
 from datetime import UTC, datetime
-from typing import Optional
 from urllib.parse import quote
 
 from core.config import get_settings
@@ -33,8 +32,8 @@ def require_platform_public_base_url() -> str:
 class ShortLinkService:
     def __init__(
         self,
-        db_url: Optional[str] = None,
-        repository: Optional[ShortLinkRepository] = None,
+        db_url: str | None = None,
+        repository: ShortLinkRepository | None = None,
     ) -> None:
         self._repo = repository if repository is not None else ShortLinkRepository(db_url=db_url)
 
@@ -101,7 +100,7 @@ class ShortLinkService:
 
         raise RuntimeError("Не удалось выделить уникальный код короткой ссылки")
 
-    async def resolve_absolute_redirect_url(self, code: str) -> Optional[str]:
+    async def resolve_absolute_redirect_url(self, code: str) -> str | None:
         row = await self._repo.get_by_code(code)
         if row is None:
             return None
@@ -132,7 +131,7 @@ class ShortLinkService:
     async def delete_sync_by_link_token(self, link_token: str) -> int:
         return await self._repo.delete_sync_by_link_token(link_token)
 
-    async def get_invite_jwt_by_code(self, code: str) -> Optional[str]:
+    async def get_invite_jwt_by_code(self, code: str) -> str | None:
         """JWT для accept после проверки срока и kind."""
         row = await self._repo.get_by_code(code)
         if row is None:

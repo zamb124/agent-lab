@@ -5,7 +5,7 @@
 """
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -48,7 +48,7 @@ class Storage(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("key", name="uq_storage_key"),
@@ -87,7 +87,7 @@ class Users(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("key", name="uq_users_key"),
@@ -128,7 +128,7 @@ class Variables(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("key", name="uq_variables_key"),
@@ -160,7 +160,7 @@ class Usage(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("key", name="uq_usage_key"),
@@ -188,7 +188,7 @@ class Namespaces(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -217,21 +217,21 @@ class CalendarEventRecord(Base):
     company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     source: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     source_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    namespace: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    namespace: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    location: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     all_day: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     attendees: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    recurrence_rule: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    recurrence_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
-    series_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
-    deep_link: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    recurrence_rule: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recurrence_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    series_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    deep_link: Mapped[str | None] = mapped_column(Text, nullable=True)
     external_refs: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         "metadata",
@@ -239,8 +239,8 @@ class CalendarEventRecord(Base):
         nullable=False,
         server_default=text("'{}'::jsonb"),
     )
-    created_by_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
-    updated_by_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    updated_by_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -300,10 +300,10 @@ class IntegrationCredentialRecord(Base):
     provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     service: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     access_token: Mapped[str] = mapped_column(Text, nullable=False)
-    refresh_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    scope: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    token_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scope: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
@@ -332,18 +332,18 @@ class SchedulerTaskRecord(Base):
 
     schedule_task_id: Mapped[str] = mapped_column("id", String(255), primary_key=True, index=True)
     company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    schedule_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    schedule_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     target_service: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     task_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    queue_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    queue_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     schedule_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    cron: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    interval_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cron: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True, default="pending")
-    created_by_user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -353,9 +353,9 @@ class SchedulerTaskRecord(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
-    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    next_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_scheduler_tasks_company_status", "company_id", "status"),
@@ -374,8 +374,8 @@ class PushSubscription(Base):
     user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     endpoint: Mapped[str] = mapped_column(String(2048), nullable=False, unique=True)
     keys: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    user_agent: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    platform: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    platform: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -409,7 +409,7 @@ class ApiKeyRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
-    last_used: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_api_keys_company_id", "company_id"),
@@ -436,13 +436,13 @@ class CompanyVoiceProvider(Base):
     company_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     kind: Mapped[str] = mapped_column(String, primary_key=True)
     provider: Mapped[str] = mapped_column(String, nullable=False)
-    model: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    voice: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    language: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    sample_rate: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    response_format: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    secrets: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    voice: Mapped[str | None] = mapped_column(String, nullable=True)
+    language: Mapped[str | None] = mapped_column(String, nullable=True)
+    sample_rate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    response_format: Mapped[str | None] = mapped_column(String, nullable=True)
+    secrets: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -497,13 +497,13 @@ class PlatformPronunciationRule(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     pattern: Mapped[str] = mapped_column(Text, nullable=False)
     replacement: Mapped[str] = mapped_column(Text, nullable=False)
-    language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    language: Mapped[str | None] = mapped_column(String(16), nullable=True)
     case_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     word_boundary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    providers: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
-    voices: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    providers: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    voices: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -538,13 +538,13 @@ class CompanyPronunciationRule(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     pattern: Mapped[str] = mapped_column(Text, nullable=False)
     replacement: Mapped[str] = mapped_column(Text, nullable=False)
-    language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    language: Mapped[str | None] = mapped_column(String(16), nullable=True)
     case_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     word_boundary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    providers: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
-    voices: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    providers: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    voices: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )

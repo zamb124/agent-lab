@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.container import get_crm_container
@@ -11,7 +11,7 @@ from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm_worker.broker import broker
 from apps.crm_worker.task_names import CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN_TASK_NAME
-from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
+from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
 from core.config import get_settings
 from core.logging import get_logger
 from core.text_transforms import TextTransformService
@@ -37,14 +37,14 @@ def _parse_expected_updated_at(raw: str) -> datetime:
 async def _journal_terminal_markdown(
     *,
     container,
-    task_id: Optional[str],
+    task_id: str | None,
     company_id: str,
     snapshot_user_id: str,
     status: str,
     stage: str,
     progress_pct: int,
-    error_message: Optional[str] = None,
-    data_patch: Optional[dict[str, Any]] = None,
+    error_message: str | None = None,
+    data_patch: dict[str, Any] | None = None,
 ) -> None:
     if not task_id:
         return
@@ -77,14 +77,14 @@ async def format_note_description_markdown_task(
     user_id: str,
     interface_language: str,
     expected_updated_at_iso: str,
-    task_id: Optional[str] = None,
+    task_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Форматирует заметку через общий TextTransformService. По умолчанию это платформенный
     платформенный LLM default-route с candidate/fallback логикой; явный LitServe остаётся
     доступен на уровне TextTransformService/provider override.
     """
-    await _set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
+    await set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
     container = get_crm_container()
     repo = container.task_repository
     snapshot_user_id = user_id

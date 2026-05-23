@@ -9,8 +9,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 HUMANITEC_LLM_PROVIDER = "humanitec_llm"
 HUMANITEC_LLM_AUTO_MODEL = "auto"
 
@@ -27,13 +25,13 @@ LLM_ROUTING_PROVIDER_SLUGS = frozenset(
 )
 
 
-def _provider_field_set(provider: Optional[str]) -> bool:
+def _provider_field_set(provider: str | None) -> bool:
     return provider is not None and str(provider).strip() != ""
 
 
 def split_provider_prefixed_model(
-    provider: Optional[str], model: Optional[str]
-) -> tuple[Optional[str], Optional[str]]:
+    provider: str | None, model: str | None
+) -> tuple[str | None, str | None]:
     """
     Если ``provider`` не задан, а ``model`` вида ``openrouter:openai/gpt-4o``,
     возвращает ``(openrouter, openai/gpt-4o)``. Иначе ``(provider, model)`` без изменений

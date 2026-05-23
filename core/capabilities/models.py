@@ -5,11 +5,10 @@ from __future__ import annotations
 from typing import ClassVar, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic import JsonValue as PydanticJsonValue
 
-JsonScalar: TypeAlias = str | int | float | bool | None
-JsonValue: TypeAlias = PydanticJsonValue
-JsonObject: TypeAlias = dict[str, JsonValue]
+from core.types import JsonObject as JsonObject
+from core.types import JsonScalar as JsonScalar
+from core.types import JsonValue as JsonValue
 
 CapabilityLanguage: TypeAlias = Literal[
     "python",

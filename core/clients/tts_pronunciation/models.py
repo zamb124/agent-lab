@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,7 +29,7 @@ class PronunciationRule(BaseModel):
     kind: PronunciationRuleKind = Field(description="Тип правила.")
     pattern: str = Field(min_length=1, description="Искомое слово / regex-паттерн.")
     replacement: str = Field(description="Замена; для stress — с символом '+' перед ударной гласной.")
-    language: Optional[str] = Field(
+    language: str | None = Field(
         default=None,
         description="BCP-47 язык (только ISO 639-1, например 'ru'); None — любой.",
     )
@@ -38,16 +38,16 @@ class PronunciationRule(BaseModel):
         default=True,
         description="Только для alias/stress: совпадение только на границах слова.",
     )
-    providers: Optional[list[str]] = Field(
+    providers: list[str] | None = Field(
         default=None,
         description="Whitelist провайдеров; None — все совместимые.",
     )
-    voices: Optional[list[str]] = Field(
+    voices: list[str] | None = Field(
         default=None,
         description="Whitelist голосов (имён); None — любые.",
     )
     enabled: bool = Field(default=True)
-    note: Optional[str] = Field(default=None, description="Комментарий для администратора.")
+    note: str | None = Field(default=None, description="Комментарий для администратора.")
 
 
 class NormalizationConfig(BaseModel):
@@ -125,9 +125,9 @@ def get_provider_capabilities(provider: str) -> ProviderCapabilities:
 class _CompiledRegexRule:
     pattern: re.Pattern[str]
     replacement: str
-    providers: Optional[frozenset[str]]
-    voices: Optional[frozenset[str]]
-    language: Optional[str]
+    providers: frozenset[str] | None
+    voices: frozenset[str] | None
+    language: str | None
 
 
 @dataclass
@@ -136,9 +136,9 @@ class _CompiledAliasRule:
     replacement: str
     word_boundary: bool
     case_sensitive: bool
-    providers: Optional[frozenset[str]]
-    voices: Optional[frozenset[str]]
-    language: Optional[str]
+    providers: frozenset[str] | None
+    voices: frozenset[str] | None
+    language: str | None
     is_stress: bool
 
 

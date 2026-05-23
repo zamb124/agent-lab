@@ -5,7 +5,7 @@
 """
 
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any
 
 from sqlalchemy import DateTime, cast, select
 
@@ -62,14 +62,14 @@ class UsageRepository(BaseRepository[UsageRecord]):
     async def admin_search_usage_records(
         self,
         *,
-        company_id: Optional[str] = None,
-        usage_type: Optional[str] = None,
-        resource_name: Optional[str] = None,
-        from_time: Optional[datetime] = None,
-        to_time: Optional[datetime] = None,
+        company_id: str | None = None,
+        usage_type: str | None = None,
+        resource_name: str | None = None,
+        from_time: datetime | None = None,
+        to_time: datetime | None = None,
         limit: int = 200,
         offset: int = 0,
-    ) -> List[UsageRecord]:
+    ) -> list[UsageRecord]:
         """
         Все компании: выборка из таблицы usage по полям JSON value (только админ API system).
         """
@@ -97,7 +97,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
             result = await session.execute(stmt)
             rows = result.scalars().all()
 
-        records: List[UsageRecord] = []
+        records: list[UsageRecord] = []
         for row in rows:
             raw: Any = row.value
             if not isinstance(raw, dict):
@@ -108,9 +108,9 @@ class UsageRepository(BaseRepository[UsageRecord]):
     async def admin_facet_distinct_usage_types(
         self,
         *,
-        q: Optional[str] = None,
+        q: str | None = None,
         limit: int = ADMIN_FACETS_MAX_LIMIT,
-    ) -> List[str]:
+    ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         col = Usage.value["usage_type"].astext
@@ -126,9 +126,9 @@ class UsageRepository(BaseRepository[UsageRecord]):
     async def admin_facet_distinct_resource_names(
         self,
         *,
-        q: Optional[str] = None,
+        q: str | None = None,
         limit: int = ADMIN_FACETS_MAX_LIMIT,
-    ) -> List[str]:
+    ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         col = Usage.value["resource_name"].astext

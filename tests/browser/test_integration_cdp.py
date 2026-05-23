@@ -8,6 +8,7 @@ import uuid
 
 import pytest
 
+from apps.browser.contracts.control_types import BrowserCapabilityError
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
@@ -90,7 +91,7 @@ async def test_acquire_fetch_release() -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_control_adapter_navigate_and_run_action_after_fetch() -> None:
+async def test_control_adapter_navigate_disables_arbitrary_action_after_fetch() -> None:
     uid = uuid.uuid4().hex
     async with ensure_cdp_url() as url:
         view = BrowserRuntimeSettingsView(
@@ -120,8 +121,8 @@ async def test_control_adapter_navigate_and_run_action_after_fetch() -> None:
             out = await facade.control_adapter.navigate(res.page, fr)
             assert out.status_code == 200
             assert "example.com" in out.final_url
-            r = await facade.control_adapter.run_action(res.page, "return 1;", timeout_ms=5_000)
-            assert r["ok"] is True
+            with pytest.raises(BrowserCapabilityError, match="Arbitrary in-process browser actions are disabled"):
+                await facade.control_adapter.run_action(res.page, "return 1;", timeout_ms=5_000)
         finally:
             await facade.interactor.release(res.page)
             await facade.stop()

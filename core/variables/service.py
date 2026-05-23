@@ -6,16 +6,20 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, overload
 
 from core.db.repositories.variable_repository import Variable
 from core.logging import get_logger
+from core.types import JsonArray, JsonObject, JsonValue
 from core.variables.resolver import VarResolver
 
 if TYPE_CHECKING:
     from core.db.repositories.variable_repository import VariableRepository
 
 logger = get_logger(__name__)
+
+
 class VariablesService:
     """Управление переменными компании с поддержкой ссылок @var:key"""
 
@@ -24,7 +28,7 @@ class VariablesService:
         Args:
             variable_repository: Репозиторий для работы с переменными
         """
-        self._variable_repository = variable_repository
+        self._variable_repository: VariableRepository = variable_repository
 
     async def set_var(
         self,
@@ -78,25 +82,22 @@ class VariablesService:
         """Удаляет переменную компании"""
         return await self._variable_repository.delete(key)
 
-    async def list_vars(self) -> dict[str, Any]:
+    async def list_vars(self) -> dict[str, Variable]:
         """Получает все переменные компании"""
         all_variables = await self._variable_repository.get_variables()
 
-        result: dict[str, Any] = {}
+        result: dict[str, Variable] = {}
         for key, variable in all_variables.items():
-            result[key] = {
-                "value": variable.value if not variable.secret else "***",
-                "secret": variable.secret,
-                "groups": variable.groups,
-                "description": variable.description
-            }
+            result[key] = variable.model_copy(
+                update={"value": "***"} if variable.secret else {}
+            )
 
         return result
 
     async def resolve_variables(
         self,
         text: str,
-        context_vars: dict[str, str] | None = None
+        context_vars: Mapping[str, JsonValue] | None = None
     ) -> str:
         """
         Резолвит @var:key ссылки в тексте.
@@ -127,15 +128,23 @@ class VariablesService:
 
         resolved: dict[str, str] = {}
         for key, var_data in all_vars.items():
-            if var_data.get("secret"):
+            if var_data.secret:
                 resolved[key] = "***"
             else:
-                value = var_data["value"]
-                resolved[key] = await self.resolve_variables(value, resolved)
+                resolved[key] = await self.resolve_variables(var_data.value, resolved)
 
         return resolved
 
-    async def resolve(self, value: Any) -> Any:
+    @overload
+    async def resolve(self, value: JsonObject) -> JsonObject: ...
+
+    @overload
+    async def resolve(self, value: JsonArray) -> JsonArray: ...
+
+    @overload
+    async def resolve(self, value: JsonValue) -> JsonValue: ...
+
+    async def resolve(self, value: JsonValue) -> JsonValue:
         """
         Резолвит значение:
         - @var:key → загружает переменную компании
@@ -148,12 +157,12 @@ class VariablesService:
         variables_map = await self.get_company_variables_map()
         return VarResolver.resolve_deep(value, variables_map)
 
-    async def get_company_variables_map(self) -> dict[str, Any]:
+    async def get_company_variables_map(self) -> dict[str, str]:
         """Возвращает словарь переменных компании в формате key -> value."""
         all_variables = await self._variable_repository.get_variables()
         return {key: variable.value for key, variable in all_variables.items()}
 
-    def extract_variable_keys(self, value: Any) -> set[str]:
+    def extract_variable_keys(self, value: JsonValue) -> set[str]:
         """
         Извлекает все ключи переменных из значения.
 
@@ -202,7 +211,7 @@ class VariablesService:
 
         if tag not in variable.groups:
             variable.groups.append(tag)
-            await self._variable_repository.set(variable)
+            _ = await self._variable_repository.set(variable)
             logger.info(f"Тег '{tag}' добавлен к переменной '{var_key}'")
             return True
         else:
@@ -212,7 +221,7 @@ class VariablesService:
     async def tag_variables_for_entity(
         self,
         entity_name: str,
-        data_sources: list[Any],
+        data_sources: list[JsonValue],
     ) -> int:
         """
         Добавляет теги к переменным используемым в сущности (агент/flow).
@@ -224,7 +233,7 @@ class VariablesService:
         Returns:
             Количество переменных с добавленными тегами
         """
-        all_var_keys = set()
+        all_var_keys: set[str] = set()
 
         for source in data_sources:
             if source:

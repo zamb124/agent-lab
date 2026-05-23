@@ -9,7 +9,7 @@ import re
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import cast
 from urllib.parse import urlparse
 
 import httpx
@@ -45,11 +45,13 @@ from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
 from core.files.s3_client import S3ClientFactory
 from core.files.writer import ContentMode, FileWriteError, FileWriter
+from core.http.client import HttpRequestKwargs
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.identity_models import Company
 from core.text_transforms import TextTransformService
 from core.tracing.operation_span import traced_operation
+from core.types import require_json_object, require_json_value
 
 CapabilityHandler = Callable[[CapabilityCallRequest], Awaitable[JsonValue]]
 TOOL_RUNTIME_MANIFEST_PATH = "/flows/api/v1/tool-runtime/manifest"
@@ -62,7 +64,7 @@ logger = get_logger(__name__)
 
 class _CapabilityInterruptFromTool(Exception):
     def __init__(self, interrupt: JsonObject):
-        self.interrupt = interrupt
+        self.interrupt: JsonObject = interrupt
         super().__init__("Tool capability interrupted")
 
 
@@ -142,8 +144,8 @@ def _schema_properties(schema: JsonObject) -> dict[str, dict[str, JsonValue]]:
         return {}
     properties: dict[str, dict[str, JsonValue]] = {}
     for name, raw_schema in raw_properties.items():
-        if isinstance(name, str) and isinstance(raw_schema, dict):
-            properties[name] = cast(dict[str, JsonValue], raw_schema)
+        if isinstance(raw_schema, dict):
+            properties[name] = raw_schema
     return properties
 
 
@@ -203,8 +205,8 @@ def _schema_default(schema: dict[str, JsonValue]) -> tuple[bool, JsonValue]:
 def _schema_field_docs(schema: JsonObject) -> list[CapabilitySchemaFieldDocumentation]:
     fields: list[CapabilitySchemaFieldDocumentation] = []
 
-    def visit(current_schema: dict[str, JsonValue], *, prefix: str, required_names: set[str]) -> None:
-        for name, prop_schema in _schema_properties(cast(JsonObject, current_schema)).items():
+    def visit(current_schema: JsonObject, *, prefix: str, required_names: set[str]) -> None:
+        for name, prop_schema in _schema_properties(current_schema).items():
             path = f"{prefix}.{name}" if prefix else name
             has_default, default_value = _schema_default(prop_schema)
             fields.append(
@@ -219,15 +221,15 @@ def _schema_field_docs(schema: JsonObject) -> list[CapabilitySchemaFieldDocument
                     enum_values=_schema_enum_values(prop_schema),
                 )
             )
-            child_required = _schema_required(cast(JsonObject, prop_schema))
-            if _schema_properties(cast(JsonObject, prop_schema)):
+            child_required = _schema_required(prop_schema)
+            if _schema_properties(prop_schema):
                 visit(prop_schema, prefix=path, required_names=child_required)
                 continue
             raw_items = prop_schema.get("items")
-            if isinstance(raw_items, dict) and _schema_properties(cast(JsonObject, raw_items)):
-                visit(cast(dict[str, JsonValue], raw_items), prefix=f"{path}[]", required_names=_schema_required(cast(JsonObject, raw_items)))
+            if isinstance(raw_items, dict) and _schema_properties(raw_items):
+                visit(raw_items, prefix=f"{path}[]", required_names=_schema_required(raw_items))
 
-    visit(cast(dict[str, JsonValue], schema), prefix="", required_names=_schema_required(schema))
+    visit(schema, prefix="", required_names=_schema_required(schema))
     return fields
 
 
@@ -307,7 +309,7 @@ def _optional_int(value: JsonValue, name: str) -> int | None:
     return value
 
 
-def _optional_object(value: JsonValue, name: str) -> dict[str, Any] | None:
+def _optional_object(value: JsonValue, name: str) -> JsonObject | None:
     if value is None:
         return None
     if not isinstance(value, dict):
@@ -315,7 +317,7 @@ def _optional_object(value: JsonValue, name: str) -> dict[str, Any] | None:
     return dict(value)
 
 
-def _optional_array(value: JsonValue, name: str) -> list[Any] | None:
+def _optional_array(value: JsonValue, name: str) -> list[JsonValue] | None:
     if value is None:
         return None
     if not isinstance(value, list):
@@ -331,6 +333,24 @@ def _optional_bool(value: JsonValue, name: str) -> bool | None:
     return value
 
 
+def _http_headers(headers: JsonObject) -> dict[str, str]:
+    encoded: dict[str, str] = {}
+    for key, value in headers.items():
+        if not isinstance(value, str | int | float | bool):
+            raise TypeError("headers values must be strings, numbers or booleans")
+        encoded[key] = str(value)
+    return encoded
+
+
+def _http_query_params(params: JsonObject) -> dict[str, str]:
+    encoded: dict[str, str] = {}
+    for key, value in params.items():
+        if not isinstance(value, str | int | float | bool):
+            raise TypeError("params values must be strings, numbers or booleans")
+        encoded[key] = str(value)
+    return encoded
+
+
 def _content_mode(value: str) -> ContentMode:
     if value not in {"auto", "markdown", "base64", "raw"}:
         raise ValueError("content_mode must be one of: auto, markdown, base64, raw")
@@ -343,8 +363,8 @@ def _active_company(context: Context) -> Company:
     return context.active_company
 
 
-def _get_nested(data: dict[str, Any], path: str, default: JsonValue = None) -> JsonValue:
-    current: Any = data
+def _get_nested(data: JsonObject, path: str, default: JsonValue = None) -> JsonValue:
+    current: JsonValue = data
     for key in path.split("."):
         if isinstance(current, dict):
             current = current.get(key)
@@ -352,25 +372,27 @@ def _get_nested(data: dict[str, Any], path: str, default: JsonValue = None) -> J
             return default
         if current is None:
             return default
-    return cast(JsonValue, current)
+    return current
 
 
-def _set_nested(data: dict[str, Any], path: str, value: JsonValue) -> None:
+def _set_nested(data: JsonObject, path: str, value: JsonValue) -> None:
     keys = [key for key in path.split(".") if key]
     if not keys:
         raise ValueError("path must be non-empty")
-    current = data
+    current: JsonObject = data
     for key in keys[:-1]:
         next_value = current.get(key)
         if not isinstance(next_value, dict):
-            next_value = {}
-            current[key] = next_value
+            next_object: JsonObject = {}
+            current[key] = next_object
+            current = next_object
+            continue
         current = next_value
     current[keys[-1]] = value
 
 
-def _deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(base)
+def _deep_merge(base: JsonObject, updates: JsonObject) -> JsonObject:
+    merged: JsonObject = dict(base)
     for key, value in updates.items():
         existing = merged.get(key)
         if isinstance(existing, dict) and isinstance(value, dict):
@@ -380,20 +402,20 @@ def _deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]
     return merged
 
 
-def _find_file(files: list[Any], original_name: str | None) -> JsonValue:
+def _find_file(files: list[JsonValue], original_name: str | None) -> JsonValue:
     candidates = [item for item in files if isinstance(item, dict)]
     if not candidates:
         return None
     if original_name is None:
-        return cast(JsonValue, candidates[-1])
+        return candidates[-1]
     for item in candidates:
         if item.get("original_name") == original_name:
-            return cast(JsonValue, item)
+            return item
     name_lower = original_name.lower()
     for item in candidates:
         candidate_name = str(item.get("original_name") or "").lower()
         if name_lower in candidate_name:
-            return cast(JsonValue, item)
+            return item
     return None
 
 
@@ -405,7 +427,7 @@ def _message_dict(*, role: Role, content: str, task_id: str | None) -> JsonObjec
         task_id=task_id,
         metadata={"node_id": MESSAGE_SOURCE_CAPABILITY},
     )
-    return cast(JsonObject, message.model_dump(mode="json"))
+    return require_json_object(message.model_dump(mode="json"), "capability.message")
 
 
 def _append_ui_event(
@@ -448,7 +470,7 @@ class CapabilityRegistry:
         self._container: CapabilityGatewayContainerProtocol = container
         self._context_service: CapabilityContextService = context_service
         self._text_transform_service: TextTransformService = text_transform_service
-        self._manifest_cache = TtlModelCache(
+        self._manifest_cache: TtlModelCache[CapabilityManifest] = TtlModelCache(
             name="capability_gateway.manifest_cache",
             model_type=CapabilityManifest,
             redis_client_factory=lambda: self._container.redis_client,
@@ -533,10 +555,10 @@ class CapabilityRegistry:
             f"Language: `{language_note}`",
             "",
             "User code calls platform SDK namespaces generated from the same manifest: "
-            "`tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, `platform`, `channel`, `flow`.",
+            + "`tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, `platform`, `channel`, `flow`.",
             "The structured `capabilities` and `namespaces` fields in this response are the backend source for editor autocomplete.",
             "If `entrypoint` is omitted, the runner executes the first function declared in the source. "
-            "Node/tool configs may set any valid language function name via `entrypoint`.",
+            + "Node/tool configs may set any valid language function name via `entrypoint`.",
         ]
         if language is not None:
             lines.extend(["", "Entry point:", "", *self._entrypoint_block(language)])
@@ -1539,7 +1561,7 @@ class CapabilityRegistry:
                 raise ValueError(str(exc)) from exc
 
         response = FileResponse.from_record(record)
-        return response.model_dump(mode="json")
+        return require_json_object(response.model_dump(mode="json"), "files.create.response")
 
     async def _files_get_bytes(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)
@@ -1566,7 +1588,10 @@ class CapabilityRegistry:
         record = await self._container.file_repository.get(file_id)
         if record is None:
             raise ValueError(f"File not found: {file_id}")
-        return FileResponse.from_record(record).model_dump(mode="json")
+        return require_json_object(
+            FileResponse.from_record(record).model_dump(mode="json"),
+            "files.get_metadata.response",
+        )
 
     async def _files_read(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)
@@ -1591,7 +1616,7 @@ class CapabilityRegistry:
                 )
             except FileReadError as exc:
                 raise ValueError(str(exc)) from exc
-        return result.model_dump(mode="json")
+        return require_json_object(result.model_dump(mode="json"), "files.read.response")
 
     def _make_http_method_handler(self, method: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
@@ -1624,8 +1649,8 @@ class CapabilityRegistry:
             response = await client.request(
                 method,
                 url,
-                headers={str(k): str(v) for k, v in headers.items()},
-                params=params,
+                headers=_http_headers(headers),
+                params=_http_query_params(params),
                 json=json_body,
                 content=body,
             )
@@ -1651,11 +1676,11 @@ class CapabilityRegistry:
         timeout_seconds = _optional_int(request.kwargs.get("timeout_seconds"), "timeout_seconds") or 30
         if timeout_seconds <= 0 or timeout_seconds > 120:
             raise ValueError("timeout_seconds must be between 1 and 120")
-        kwargs: dict[str, Any] = {}
+        kwargs: HttpRequestKwargs = {}
         if headers is not None:
-            kwargs["headers"] = {str(key): str(value) for key, value in headers.items()}
+            kwargs["headers"] = _http_headers(headers)
         if params is not None:
-            kwargs["params"] = params
+            kwargs["params"] = _http_query_params(params)
         if json_body is not None:
             kwargs["json"] = json_body
         if body is not None:
@@ -1669,7 +1694,7 @@ class CapabilityRegistry:
                 timeout=float(timeout_seconds),
                 **kwargs,
             )
-        return cast(JsonValue, result)
+        return require_json_value(result, "platform.request.response")
 
     def _make_log_handler(self, level: str) -> CapabilityHandler:
         async def _handler(request: CapabilityCallRequest) -> JsonValue:
@@ -1725,7 +1750,7 @@ class CapabilityRegistry:
             raise TypeError("updates must be object")
         merged = _deep_merge(dict(request.state), updates)
         request.state.clear()
-        request.state.update(cast(dict[str, JsonValue], merged))
+        request.state.update(merged)
         return {"state": request.state}
 
     async def _state_get_files(self, request: CapabilityCallRequest) -> JsonValue:
@@ -1799,7 +1824,7 @@ class CapabilityRegistry:
         event = _append_ui_event(
             request.state,
             event_type=event_type,
-            payload=cast(JsonObject, payload),
+            payload=payload,
             event_id=_optional_string(request.kwargs.get("event_id"), "event_id"),
             version=_optional_string(request.kwargs.get("version"), "version") or "1.0.0",
             source=_optional_string(request.kwargs.get("source"), "source") or "assistant",
@@ -1853,7 +1878,8 @@ class CapabilityRegistry:
             if not stripped:
                 continue
             try:
-                return cast(JsonValue, json.loads(stripped))
+                loaded = cast(object, json.loads(stripped))
+                return require_json_value(loaded, "state.extract_json.result")
             except json.JSONDecodeError:
                 continue
         return None
@@ -1979,7 +2005,7 @@ class CapabilityRegistry:
             except ValueError:
                 audio_seconds = 0.0
             if audio_seconds > 0:
-                await record_stt_usage(
+                _ = await record_stt_usage(
                     user=context.user,
                     company=company,
                     provider=result.provider,
@@ -2025,7 +2051,7 @@ class CapabilityRegistry:
                 public=False,
                 download_url_prefix="/flows/api/v1/files/download",
             )
-            await record_tts_usage(
+            _ = await record_tts_usage(
                 user=context.user,
                 company=company,
                 provider=result.provider,
@@ -2043,8 +2069,11 @@ class CapabilityRegistry:
             raise TypeError("arguments must be object")
 
         context = await self._context_service.build_context(request.context)
-        payload = {
-            "context": request.context.model_dump(mode="json"),
+        payload: JsonObject = {
+            "context": require_json_object(
+                request.context.model_dump(mode="json"),
+                "tools.call.context",
+            ),
             "tool_id": tool_id,
             "arguments": arguments_raw,
             "state": request.state,
@@ -2057,23 +2086,23 @@ class CapabilityRegistry:
                 timeout=120.0,
             )
 
-        if not isinstance(raw_response, dict):
-            raise RuntimeError("flows tool-runtime response must be an object")
+        response = require_json_object(raw_response, "flows tool-runtime response")
 
-        returned_state = raw_response.get("state")
+        returned_state = response.get("state")
         if isinstance(returned_state, dict):
             request.state.clear()
             request.state.update(returned_state)
 
-        status = raw_response.get("status")
+        status = response.get("status")
         if status == "interrupt":
-            interrupt = raw_response.get("interrupt")
-            if not isinstance(interrupt, dict):
-                raise RuntimeError("flows tool-runtime interrupt response lacks interrupt envelope")
+            interrupt = require_json_object(
+                response.get("interrupt"),
+                "flows tool-runtime interrupt",
+            )
             raise _CapabilityInterruptFromTool(interrupt)
         if status != "ok":
             raise RuntimeError(f"flows tool-runtime returned invalid status: {status!r}")
-        return raw_response.get("result")
+        return response.get("result")
 
     async def _tools_call_builtin(self, request: CapabilityCallRequest) -> JsonValue:
         self._reject_positional_args(request)
@@ -2083,8 +2112,11 @@ class CapabilityRegistry:
             raise TypeError("arguments must be object")
 
         context = await self._context_service.build_context(request.context)
-        payload = {
-            "context": request.context.model_dump(mode="json"),
+        payload: JsonObject = {
+            "context": require_json_object(
+                request.context.model_dump(mode="json"),
+                "tools.call_builtin.context",
+            ),
             "tool_id": tool_id,
             "arguments": arguments_raw,
             "state": request.state,
@@ -2097,23 +2129,23 @@ class CapabilityRegistry:
                 timeout=120.0,
             )
 
-        if not isinstance(raw_response, dict):
-            raise RuntimeError("flows builtin tool-runtime response must be an object")
+        response = require_json_object(raw_response, "flows builtin tool-runtime response")
 
-        returned_state = raw_response.get("state")
+        returned_state = response.get("state")
         if isinstance(returned_state, dict):
             request.state.clear()
             request.state.update(returned_state)
 
-        status = raw_response.get("status")
+        status = response.get("status")
         if status == "interrupt":
-            interrupt = raw_response.get("interrupt")
-            if not isinstance(interrupt, dict):
-                raise RuntimeError("flows builtin tool-runtime interrupt response lacks interrupt envelope")
+            interrupt = require_json_object(
+                response.get("interrupt"),
+                "flows builtin tool-runtime interrupt",
+            )
             raise _CapabilityInterruptFromTool(interrupt)
         if status != "ok":
             raise RuntimeError(f"flows builtin tool-runtime returned invalid status: {status!r}")
-        return raw_response.get("result")
+        return response.get("result")
 
     def _reject_positional_args(self, request: CapabilityCallRequest) -> None:
         if request.args:

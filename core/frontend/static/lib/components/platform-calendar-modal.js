@@ -1590,6 +1590,9 @@ export class PlatformCalendarModal extends PlatformModal {
             }
 
             .event-compose-attachment-link {
+                border: 0;
+                background: transparent;
+                padding: 0;
                 color: var(--text-primary);
                 font-size: var(--text-sm);
                 text-decoration: none;
@@ -1597,6 +1600,9 @@ export class PlatformCalendarModal extends PlatformModal {
                 text-overflow: ellipsis;
                 white-space: nowrap;
                 max-width: 220px;
+                cursor: pointer;
+                font-family: inherit;
+                text-align: left;
             }
 
             .event-compose-attachment-remove {
@@ -3574,15 +3580,19 @@ export class PlatformCalendarModal extends PlatformModal {
                                             )}
                                             size="14"
                                         ></platform-icon>
-                                        <a
+                                        <button
+                                            type="button"
                                             class="event-compose-attachment-link"
-                                            href=${attachment.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
                                             title=${attachment.name}
+                                            @click=${() => this.openFile({
+                                                file_id: attachment.file_id,
+                                                original_name: attachment.name,
+                                                content_type: typeof attachment.content_type === 'string' ? attachment.content_type : '',
+                                                url: attachment.url,
+                                            }, { source: 'calendar_event_attachment' })}
                                         >
                                             ${attachment.name}
-                                        </a>
+                                        </button>
                                         <button
                                             class="event-compose-attachment-remove"
                                             type="button"

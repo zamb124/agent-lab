@@ -12,8 +12,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from apps.voice.config import get_voice_settings
 from apps.voice.providers.base import (
     BaseSTTProvider,
@@ -51,7 +49,7 @@ class VoiceContainer(BaseContainer):
         self,
         *,
         company_id: str,
-        override: Optional[SpeechOverride] = None,
+        override: SpeechOverride | None = None,
     ) -> BaseVADProvider:
         vad_client = await get_vad_client(company_id=company_id, override=override)
         cfg = self.settings.voice.vad
@@ -69,7 +67,7 @@ class VoiceContainer(BaseContainer):
         self,
         *,
         company_id: str,
-        override: Optional[SpeechOverride] = None,
+        override: SpeechOverride | None = None,
     ) -> BaseSTTProvider:
         resolved = await resolve_stt_settings(company_id=company_id, override=override)
         stt_client = await get_stt_client(company_id=company_id, override=override)
@@ -80,7 +78,7 @@ class VoiceContainer(BaseContainer):
         )
 
 
-_voice_container: Optional[VoiceContainer] = None
+_voice_container: VoiceContainer | None = None
 
 
 def get_voice_container() -> VoiceContainer:

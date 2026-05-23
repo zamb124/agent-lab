@@ -1,6 +1,6 @@
 """STT-провайдер для тестового окружения — возвращает фиксированную транскрипцию."""
 
-from typing import Any, Optional
+from typing import Any
 
 from apps.voice.providers.base import BaseSTTProvider
 from core.clients.stt_client import STTTranscriptionResult
@@ -18,13 +18,13 @@ class MockSTTProvider(BaseSTTProvider):
         self._buffer: bytes = b""
         self._call_count: int = 0
 
-    async def init(self, config: Optional[Any] = None) -> None:
+    async def init(self, config: Any | None = None) -> None:
         pass
 
     async def push_audio(self, chunk: bytes) -> None:
         self._buffer += chunk
 
-    async def flush_buffer(self) -> Optional[STTTranscriptionResult]:
+    async def flush_buffer(self) -> STTTranscriptionResult | None:
         if not self._buffer:
             return None
         self._buffer = b""

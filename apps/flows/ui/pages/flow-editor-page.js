@@ -28,6 +28,7 @@ import '../components/editor/flows-resource-property-panel.js';
 import '../components/editor/flows-bottom-toolbar.js';
 import '../components/editor/flows-execution-panel.js';
 import '../components/editor/flows-floating-panel.js';
+import '../components/editor/flows-node-ai-helper.js';
 import '../components/flow-canvas/flows-flow-canvas.js';
 import '../modals/flows-canvas-help-modal.js';
 import '../modals/flows-preview-share-modal.js';
@@ -46,6 +47,7 @@ export class FlowEditorPage extends PlatformPage {
         flowId: { type: String, attribute: 'flow-id' },
         branchId: { type: String, attribute: 'branch-id' },
         _flowSettingsOpen: { state: true, type: Boolean },
+        _nodeAiHelperOpen: { state: true, type: Boolean },
     };
 
     static styles = [
@@ -108,6 +110,7 @@ export class FlowEditorPage extends PlatformPage {
         this.flowId = '';
         this.branchId = 'base';
         this._flowSettingsOpen = false;
+        this._nodeAiHelperOpen = false;
         this._editor = this.useOp('flows/editor');
         this._flows = this.useResource('flows/flows');
         this._editorStateOp = this.useOp('flows/code_editor_state');
@@ -269,17 +272,35 @@ export class FlowEditorPage extends PlatformPage {
         this._flowSettingsOpen = !this._flowSettingsOpen;
     }
 
+    _onToggleNodeAiHelper() {
+        const state = asObject(this._editor.state);
+        if (!state.selectedNodeId) {
+            return;
+        }
+        this._nodeAiHelperOpen = !this._nodeAiHelperOpen;
+    }
+
+    _onCloseFloatingPanel() {
+        this._nodeAiHelperOpen = false;
+        this._editor.closePanel({});
+    }
+
     _renderFloatingPanelDocked() {
         const header = this._panelHeader();
         if (!header) return '';
         const state = asObject(this._editor.state);
+        const nodeId = typeof state.selectedNodeId === 'string' ? state.selectedNodeId : '';
+        const nodeAiOpen = Boolean(nodeId && this._nodeAiHelperOpen);
         return html`
             <flows-floating-panel
                 dock-stack
                 header-icon=${header.icon}
                 header-title=${header.title}
                 color-token=${header.colorToken}
+                ?ai-enabled=${Boolean(nodeId)}
+                ?ai-active=${nodeAiOpen}
                 ?expanded=${state.panelExpanded}
+                @node-ai-helper-toggle=${this._onToggleNodeAiHelper}
                 @expand-change=${(e) => {
                     const d = e.detail;
                     if (d && typeof d.expanded === 'boolean') {
@@ -288,10 +309,18 @@ export class FlowEditorPage extends PlatformPage {
                         this._editor.togglePanelExpanded({});
                     }
                 }}
-                @close=${() => this._editor.closePanel({})}
+                @close=${this._onCloseFloatingPanel}
             >
-                ${state.selectedNodeId
-                    ? html`<flows-property-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-property-panel>`
+                ${nodeAiOpen
+                    ? html`
+                        <flows-node-ai-helper
+                            .flowId=${this.flowId}
+                            .branchId=${this.branchId}
+                            .nodeId=${nodeId}
+                        ></flows-node-ai-helper>
+                    `
+                    : nodeId
+                        ? html`<flows-property-panel .flowId=${this.flowId} .branchId=${this.branchId}></flows-property-panel>`
                     : html`<flows-resource-property-panel .flowId=${this.flowId}></flows-resource-property-panel>`}
             </flows-floating-panel>
         `;
@@ -316,7 +345,11 @@ export class FlowEditorPage extends PlatformPage {
             ${this._flowSettingsOpen
                 ? html`<div class="flow-settings-dismiss-layer" @click=${() => this._onDismissFlowSettingsBackdrop()}></div>`
                 : ''}
-            <flows-editor-header class=${dismissSafe} .flowId=${this.flowId} .branchId=${this.branchId}></flows-editor-header>
+            <flows-editor-header
+                class=${dismissSafe}
+                .flowId=${this.flowId}
+                .branchId=${this.branchId}
+            ></flows-editor-header>
             <flows-branches-tabs class=${dismissSafe} .flowId=${this.flowId} active-branch-id=${this.branchId}></flows-branches-tabs>
             <div class="editor-shell">
                 <flows-node-types-sidebar

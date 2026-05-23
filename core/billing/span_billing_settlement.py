@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.db.storage import Storage
@@ -43,7 +43,7 @@ class SpanBillingSettlement:
     def _legacy_key(self, span_id: str) -> str:
         return f"{_LEGACY_PREFIX}{span_id}"
 
-    async def get_usage_id(self, span_id: str, rule_id: str) -> Optional[str]:
+    async def get_usage_id(self, span_id: str, rule_id: str) -> str | None:
         raw = await self._storage.get(self._composite_key(span_id, rule_id), force_global=True)
         if raw:
             return _usage_id_from_storage_raw(raw, span_id=span_id, rule_id=rule_id)

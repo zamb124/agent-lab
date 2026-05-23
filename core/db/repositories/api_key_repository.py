@@ -5,7 +5,6 @@ SQL-репозиторий API-ключей компании (shared БД, та�
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from sqlalchemy import select, update
 
@@ -39,7 +38,7 @@ class ApiKeyRepository:
             )
             return list(result.scalars().all())
 
-    async def get(self, key_id: str, company_id: str) -> Optional[ApiKeyRecord]:
+    async def get(self, key_id: str, company_id: str) -> ApiKeyRecord | None:
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -56,7 +55,7 @@ class ApiKeyRepository:
             session.add(record)
             await session.commit()
 
-    async def get_by_hash(self, key_hash: str) -> Optional[ApiKeyRecord]:
+    async def get_by_hash(self, key_hash: str) -> ApiKeyRecord | None:
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(

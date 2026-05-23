@@ -102,18 +102,22 @@ class TestRunner:
 
         turns_count = 0
         step_scores: ScoresType = {}
-        initial_state_dict = test_case.initial_state or {}
+        initial_state_dict: dict[str, object] = {
+            key: value for key, value in (test_case.initial_state or {}).items()
+        }
 
         context_id = str(uuid.uuid4())
         session_id = f"{self.target_id}:{context_id}"
 
-        execution_state = ExecutionState(
-            task_id=task_id,
-            context_id=context_id,
-            session_id=session_id,
-            user_id="evaluation_runner",
-            content="",
-            **initial_state_dict,
+        execution_state = ExecutionState.model_validate(
+            {
+                **initial_state_dict,
+                "task_id": task_id,
+                "context_id": context_id,
+                "session_id": session_id,
+                "user_id": "evaluation_runner",
+                "content": "",
+            }
         )
         response = ""
         dialog: list[dict[str, Any]] = []
@@ -497,7 +501,7 @@ class TestRunner:
     ) -> NodeConfig:
         """Получает конфигурацию ноды: inline dict, из графа flow по session/skill/version или node_repository."""
         if input_config.node:
-            return NodeConfig(**input_config.node)
+            return NodeConfig.model_validate(input_config.node)
 
         node_id = input_config.value
         if node_id and execution_state:
@@ -558,6 +562,7 @@ class TestRunner:
             tools=tools_for_llm,
             task_id=str(uuid.uuid4()),
             context_id="evaluation",
+            llm_context=node_config.llm_context or {"profile": "compact"},
         )
 
         return result.get("content", "").strip()
@@ -597,6 +602,7 @@ class TestRunner:
             tools=None,
             task_id=str(uuid.uuid4()),
             context_id="evaluation",
+            llm_context=judge_config.llm_context or {"profile": "compact"},
         )
 
         response_text = result.get("content", "")
@@ -623,6 +629,7 @@ class TestRunner:
         tools: list[dict[str, Any]] | None,
         task_id: str,
         context_id: str,
+        llm_context: Any | None = None,
     ) -> dict[str, Any]:
         actx = get_context()
         if actx is None or actx.active_company is None:
@@ -680,6 +687,7 @@ class TestRunner:
                 tools=tools or [],
                 task_id=task_id,
                 context_id=context_id,
+                llm_context=llm_context,
             ):
                 if isinstance(event, TaskArtifactUpdateEvent):
                     artifact_name = event.artifact.name
@@ -719,7 +727,7 @@ class TestRunner:
     ) -> NodeConfig:
         """Получает конфигурацию судьи: inline dict, из графа flow по session/skill/version или node_repository."""
         if check_config.node:
-            return NodeConfig(**check_config.node)
+            return NodeConfig.model_validate(check_config.node)
 
         node_id = check_config.value
         if node_id and execution_state:

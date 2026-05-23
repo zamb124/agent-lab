@@ -2,14 +2,15 @@
 Исключения агентов.
 """
 
-from typing import Any
 from uuid import UUID
 
+from core.clients.llm import LLMToolCall
 from core.state.interrupt import (
     InterruptBody,
     UserMessageInterrupt,
     interrupt_body_public_question,
 )
+from core.types import JsonObject
 
 
 class FlowInterrupt(Exception):
@@ -20,7 +21,7 @@ class FlowInterrupt(Exception):
         question: str | None = None,
         *,
         body: InterruptBody | None = None,
-        tool_call: dict[str, Any] | None = None,
+        tool_call: LLMToolCall | None = None,
         flow_id: str = "",
         correlation_id: UUID | None = None,
     ):
@@ -56,7 +57,7 @@ class BreakpointInterrupt(Exception):
         self,
         node_id: str,
         node_type: str,
-        state_snapshot: dict[str, Any],
+        state_snapshot: JsonObject,
         flow_id: str = "",
     ):
         self.node_id = node_id

@@ -55,6 +55,9 @@ LEGAL__COMPANY_NAME_RU=...
 | **`transcribe_audio_redis_lock_ttl_seconds`** | TTL Redis lock авто-STT в sync worker. |
 | **`ws_presence_heartbeat_interval_seconds`** / **`_ttl_seconds`** / **`sync_taskiq_wait_result_timeout_seconds`** | Sync WS presence и `task.wait_result` из HTTP/WS. Валидатор: TTL ≥ 2×heartbeat + 1с. |
 | **`llm`** | `provider`, `default_model`, `openrouter`/`bothub`/`yandex`/…. Опционально `llm.models` — только переопределение `temperature`/`max_tokens` по id; **каталог цен в JSON не храним**. |
+| **`llm_context`** | Platform-default профили/бюджеты контекстного слоя (`core.llm_context.models.LLMContextConfig`). Company default хранится не здесь, а в `CompanyAIProviders.llm_context`. |
+
+`llm.models.<model>.context_length` — опциональное знание платформы о реальном окне модели. Если задано, LLM context layer использует его для hard clamp prompt budget; это не лимит ответа (`max_tokens`) и не должно подменяться эвристикой в call-site.
 | **`billing`** | См. ниже. |
 | **`provider_litserve`** | LitServe OpenAI-совместимый API (`api.base_url` корнем `…/v1`, процесс `apps/provider_litserve/main`). Для RAG-клиентов — `infra.gateway_port`. |
 | **`rag`** | `embedding`/`reranker` — `provider` + вложенный `api`. Локальные веса — `provider: provider_litserve`. `providers.agentset` — `api_key`, `base_url`, опц. `embedding_api_key`. См. `rag.mdc`. |

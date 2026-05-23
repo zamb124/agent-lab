@@ -7,6 +7,7 @@ import { html } from 'lit';
 import { asString, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import '../resources/flows-base-resource-editor.js';
 import '../resources/flows-llm-resource-editor.js';
+import '../resources/flows-llm-context-resource-editor.js';
 import '../resources/flows-code-resource-editor.js';
 import '../resources/flows-files-resource-editor.js';
 
@@ -29,6 +30,10 @@ export function renderResourceDefinitionEditor(resource, onChange, options = {})
             return html`<flows-llm-resource-editor .resourceId=${id} .resource=${resource}
                 .compactHeader=${compactHeader}
                 @change=${onChange}></flows-llm-resource-editor>`;
+        case 'llm_context':
+            return html`<flows-llm-context-resource-editor .resourceId=${id} .resource=${resource}
+                .compactHeader=${compactHeader}
+                @change=${onChange}></flows-llm-context-resource-editor>`;
         case 'code':
             return html`<flows-code-resource-editor .resourceId=${id} .resource=${resource}
                 .compactHeader=${compactHeader}

@@ -7,9 +7,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from collections.abc import Sequence
 
 from a2a.types import Message, Part, Role, TextPart
+
+from core.clients.llm import LLMToolCall
+from core.types import JsonObject
 
 
 def build_user_message(
@@ -32,15 +35,18 @@ def build_user_message(
 def build_assistant_message(
     content: str,
     source_node_id: str,
-    tool_calls: list[dict[str, Any]] | None = None,
+    tool_calls: Sequence[LLMToolCall | JsonObject] | None = None,
     context_id: str | None = None,
     task_id: str | None = None,
     *,
     interrupted: bool = False,
 ) -> Message:
-    meta: dict[str, Any] = {"node_id": source_node_id}
+    meta: JsonObject = {"node_id": source_node_id}
     if tool_calls:
-        meta["tool_calls"] = tool_calls
+        meta["tool_calls"] = [
+            LLMToolCall.model_validate(tool_call).model_dump(mode="json", exclude_none=True)
+            for tool_call in tool_calls
+        ]
     if interrupted:
         meta["interrupted"] = True
     return Message(
@@ -76,7 +82,7 @@ def build_system_message(
     task_id: str | None = None,
     source_node_id: str | None = None,
 ) -> Message:
-    meta: dict[str, Any] = {"system": True}
+    meta: JsonObject = {"system": True}
     if source_node_id is not None:
         meta["node_id"] = source_node_id
     return Message(

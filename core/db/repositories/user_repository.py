@@ -4,7 +4,6 @@
 """
 
 import json
-from typing import Optional
 
 from sqlalchemy import cast, select, text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -39,7 +38,7 @@ class UserRepository(BaseRepository[User]):
     def _extract_entity_id(self, entity: User) -> str:
         return entity.user_id
 
-    async def find_by_email(self, email: str) -> Optional[User]:
+    async def find_by_email(self, email: str) -> User | None:
         """Поиск пользователя по email (JSONB containment по полю emails)."""
         async with self._storage.get_session() as session:
             emails_json = cast(json.dumps([email]), JSONB)

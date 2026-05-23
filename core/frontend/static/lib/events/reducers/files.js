@@ -13,6 +13,11 @@ export const FILES_EVENTS = Object.freeze({
     LOAD_REQUESTED:   'files/file/load_requested',
     LOADED:           'files/file/loaded',
     LOAD_FAILED:      'files/file/load_failed',
+    OPEN_REQUESTED:   'files/file/open_requested',
+    OPEN_FAILED:      'files/file/open_failed',
+    EDITOR_SYNC_REQUESTED: 'files/editor/sync_requested',
+    EDITOR_SYNC_COMPLETED: 'files/editor/sync_completed',
+    EDITOR_SYNC_FAILED:    'files/editor/sync_failed',
 });
 
 export const initialFilesState = Object.freeze({

@@ -58,6 +58,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         getExtraMetadataVariables: { type: Object },
         getContextVariables: { type: Object },
         eventNamespace: { type: String, attribute: 'event-namespace' },
+        conversationKey: { type: String, attribute: 'conversation-key' },
         actionHandlers: { type: Object },
         /** Имя в шапке панели и для внутреннего чата; внешние сайты: атрибут assistant-title или ?embed_assistant_name= */
         assistantTitle: { type: String, attribute: 'assistant-title' },
@@ -371,6 +372,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.getExtraMetadataVariables = undefined;
         this.getContextVariables = undefined;
         this.eventNamespace = 'assistant';
+        this.conversationKey = '';
         this.actionHandlers = {};
         this.toggleEventName = 'humanitec-embed-chat-toggle';
         this.showLocaleControl = false;
@@ -1481,6 +1483,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     .getExtraMetadataVariables=${this.getExtraMetadataVariables}
                     .getContextVariables=${this.getContextVariables}
                     .eventNamespace=${this.eventNamespace || 'assistant'}
+                    conversation-key=${this.conversationKey || ''}
                     .actionHandlers=${this.actionHandlers && typeof this.actionHandlers === 'object'
                         ? this.actionHandlers
                         : {}}

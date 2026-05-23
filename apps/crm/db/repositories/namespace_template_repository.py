@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, select
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import NamespaceTemplate, NamespaceTemplateType
+from apps.crm.types import JsonObject
 from core.db.utils import get_rowcount
 
 
@@ -69,7 +70,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
         icon: str | None = None,
         company_id: str | None = None,
         is_system: bool = False,
-        crm_settings: dict[str, object] | None = None,
+        crm_settings: JsonObject | None = None,
     ) -> NamespaceTemplate:
         template = NamespaceTemplate(
             template_key=str(uuid4()),
@@ -108,8 +109,8 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
         name: str,
         description: str | None,
         prompt: str | None,
-        required_fields: dict[str, object],
-        optional_fields: dict[str, object],
+        required_fields: JsonObject,
+        optional_fields: JsonObject,
         icon: str | None,
         color: str | None,
         is_event: bool,

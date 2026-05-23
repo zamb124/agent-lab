@@ -22,7 +22,7 @@ extra_javascript = [
 homepage = "/"
 platform_home_title = "Home"
 ask_ai_title = "Ask AI"
-ask_ai_aria_label = "Open documentation search"
+ask_ai_aria_label = "Open documentation AI assistant"
 llms_title = "LLMs.txt"
 alternate = [
     { name = "English", link = "/documentation/en/", lang = "en" },

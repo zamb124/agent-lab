@@ -13,7 +13,7 @@ import re
 import time
 import uuid
 from collections import deque
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, ClassVar, Literal, NotRequired, Protocol, TypedDict, cast
 
@@ -82,6 +82,7 @@ from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Namespace, NamespaceCRMSettings
 from core.tasks.kicker import kiq_task_name_with_context
+from core.types import JsonValue, require_json_object, require_json_value
 
 logger = get_logger(__name__)
 from apps.crm.config import get_crm_settings  # noqa: E402
@@ -542,7 +543,7 @@ class EntityService:
         return None
 
     @staticmethod
-    def _coerce_attribute_value_for_schema(value: object, expected_type: str) -> object:
+    def _coerce_attribute_value_for_schema(value: JsonValue, expected_type: str) -> JsonValue:
         """Приводит значение к JSON-типу поля там, где это однозначно (числа из строк)."""
         if expected_type == "integer":
             if isinstance(value, bool):
@@ -1475,7 +1476,7 @@ class EntityService:
     async def update_entity(
         self,
         entity_id: str,
-        updates: JsonObject,
+        updates: Mapping[str, JsonValue | date],
         voice_entity_id: str | None = None,
         voice_entity_in_payload: bool = False,
         context_entity_id: str | None = None,
@@ -3544,24 +3545,27 @@ class EntityService:
         settings = get_settings()
 
         extractable_entity_types = [et for et in entity_types if et.prompt and et.extractable]
-        variables: JsonObject = {
-            **_crm_llm_interface_language_vars(),
-            "text": text,
-            "prompt": prompt,
-            "entity_types": [
-                {
-                    "type": et.type_id,
-                    "prompt": et.prompt or "",
-                    "fields": _extract_entity_type_fields(et),
-                }
-                for et in extractable_entity_types
-            ],
-            "relationship_types": [
-                {"type": rt.type_id, "prompt": rt.prompt or ""}
-                for rt in relationship_types
-                if rt.prompt
-            ],
-        }
+        variables = require_json_object(
+            {
+                **_crm_llm_interface_language_vars(),
+                "text": text,
+                "prompt": prompt,
+                "entity_types": [
+                    {
+                        "type": et.type_id,
+                        "prompt": et.prompt or "",
+                        "fields": _extract_entity_type_fields(et),
+                    }
+                    for et in extractable_entity_types
+                ],
+                "relationship_types": [
+                    {"type": rt.type_id, "prompt": rt.prompt or ""}
+                    for rt in relationship_types
+                    if rt.prompt
+                ],
+            },
+            "crm.analyze.variables",
+        )
 
         if known_entities:
             variables["known_entities"] = known_entities
@@ -3673,11 +3677,13 @@ class EntityService:
 
         entities_data = normalized.get("entities")
         if isinstance(entities_data, list):
-            normalized_entities: list[object] = []
+            normalized_entities: list[JsonValue] = []
             for entity in cast(list[object], entities_data):
                 entity_obj = _as_json_object(entity)
                 normalized_entities.append(
-                    self._normalize_entity_payload(entity_obj) if entity_obj is not None else entity
+                    self._normalize_entity_payload(entity_obj)
+                    if entity_obj is not None
+                    else require_json_value(entity, "analysis.entities[]")
                 )
             normalized["entities"] = normalized_entities
 

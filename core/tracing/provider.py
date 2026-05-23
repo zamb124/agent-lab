@@ -4,7 +4,7 @@
 
 import atexit
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _initialized: bool = False
-_tracer_provider: Optional[TracerProvider] = None
+_tracer_provider: TracerProvider | None = None
 _shutdown_registered: bool = False
 
 
@@ -90,7 +90,7 @@ def shutdown_tracing() -> None:
         pass
 
 
-def get_tracer_provider() -> Optional[TracerProvider]:
+def get_tracer_provider() -> TracerProvider | None:
     """Возвращает TracerProvider или None если не инициализирован."""
     return _tracer_provider
 

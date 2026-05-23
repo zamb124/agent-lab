@@ -22,6 +22,7 @@ import apps.flows.src.tasks.tool_tasks as _flows_tool_tasks  # noqa: E402
 import apps.idle_worker.tasks.calendar_sync_tasks as _idle_calendar_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.llm_models_tasks as _idle_llm_models_tasks  # noqa: E402
 import apps.idle_worker.tasks.openrouter_free_models_tasks as _idle_openrouter_free_models_tasks  # noqa: E402
+import apps.idle_worker.tasks.payment_sync_tasks as _idle_payment_sync_tasks  # noqa: E402
 import apps.idle_worker.tasks.push_notification_tasks as _idle_push_notification_tasks  # noqa: E402
 import apps.idle_worker.tasks.span_billing_settlement_tasks as _idle_span_billing_settlement_tasks  # noqa: E402
 import apps.rag_worker.tasks.maintenance_tasks as _rag_maintenance_tasks  # noqa: E402
@@ -50,6 +51,7 @@ _TASK_REGISTRATION_MODULES = (
     _idle_calendar_sync_tasks,
     _idle_llm_models_tasks,
     _idle_openrouter_free_models_tasks,
+    _idle_payment_sync_tasks,
     _idle_push_notification_tasks,
     _idle_span_billing_settlement_tasks,
     _rag_maintenance_tasks,
@@ -74,6 +76,7 @@ _IDLE_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "send_task_input_required",
     "sync_llm_models_task",
     "refresh_openrouter_free_models_task",
+    "payment_sync_tick",
     "calendar_sync_tick",
     "calendar_sync_meeting_reminder_tick",
     "span_billing_settlement_tick",
@@ -82,6 +85,7 @@ _IDLE_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
 _RAG_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (
     "rag_cleanup_expired_documents_tick",
     "rag_reembed_stale_documents_tick",
+    "rag_cleanup_orphan_company_chunks_tick",
 )
 
 _CRM_SCHEDULER_REQUIRED_TASK_NAMES: tuple[str, ...] = (

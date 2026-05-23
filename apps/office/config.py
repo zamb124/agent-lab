@@ -2,13 +2,13 @@
 Конфигурация сервиса office (Documents / OnlyOffice).
 """
 
-from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 
 from core.config import BaseSettings
 from core.config import set_settings as core_set_settings
 from core.config.loader import load_merged_config
+from core.types import JsonObject, require_json_object
 
 
 class OfficeEditorCustomizationSettings(BaseModel):
@@ -85,18 +85,18 @@ class OfficeSettings(BaseSettings):
         return self
 
 
-_office_settings: Optional[OfficeSettings] = None
+_office_settings: OfficeSettings | None = None
 
 
 def get_office_settings() -> OfficeSettings:
     global _office_settings
     if _office_settings is None:
         merged = load_merged_config(service_name="office", silent=True)
-        server_block = dict(merged.get("server") or {})
+        server_block: JsonObject = require_json_object(merged.get("server") or {}, "server")
         server_block.setdefault("name", "documents")
         server_block.setdefault("port", 8008)
         merged["server"] = server_block
-        _office_settings = OfficeSettings(**merged)
+        _office_settings = OfficeSettings.model_validate(merged)
         core_set_settings(_office_settings)
     return _office_settings
 

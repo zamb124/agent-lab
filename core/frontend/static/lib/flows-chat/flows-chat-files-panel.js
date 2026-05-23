@@ -1,9 +1,6 @@
 import { html, css, nothing, render as litRender } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import '../components/platform-icon.js';
-import { httpRequest } from '../events/http.js';
-import { getActivePlatformNamespaceName } from '../utils/platform-namespace.js';
-import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 
 function asArray(value) {
@@ -836,7 +833,7 @@ export class FlowsChatFilesPanel extends PlatformElement {
     }
 
     _bringEditorToFront() {
-        this._editorZIndex = nextModalLayerZIndex();
+        this._editorZIndex = Math.max(Number(this._editorZIndex) + 1 || 91, 91);
         const shell = this._editorShellEl();
         if (shell) {
             shell.style.zIndex = String(this._editorZIndex);
@@ -1055,62 +1052,24 @@ export class FlowsChatFilesPanel extends PlatformElement {
 
     async _open(file, event = null) {
         this._stopOuterPanelEvent(event);
-        const key = fileKey(file);
-        const isSameOpenEditor = this._editorUrl.length > 0 && this._selectedKey === key;
-        if (!canOpenInDocuments(file)) {
-            const href = fileHref(file);
-            if (href.length > 0) {
-                window.open(href, '_blank', 'noopener');
-            }
+        const cap = documentCapability(file);
+        const fileId = asString(file?.file_id) || asString(cap?.file_id);
+        if (fileId.length > 0 && canOpenInDocuments(file)) {
+            this._editorUrl = '';
+            this._selectedKey = '';
+            this._editorDocument = null;
+            this._clearEditorPortal();
+            this.openFile({
+                ...file,
+                file_id: fileId,
+                original_name: asString(file?.original_name) || asString(cap?.title),
+            }, { source: 'flows_chat_files_panel' });
+            this._expanded = false;
             return;
         }
-        if (this._editorUrl.length > 0 && this._selectedKey.length > 0 && this._selectedKey !== key) {
-            const synced = await this._syncEditorBeforeClose();
-            if (!synced) {
-                return;
-            }
-        }
-        this._selectedKey = key;
-        this._busyKey = key;
-        this._error = '';
-        if (!isSameOpenEditor) {
-            this._editorDirty = false;
-            this._editorDirtyBindingId = '';
-        }
-        try {
-            const existing = documentCapability(file);
-            const existingUrl = existing ? asString(existing.editor_url) : '';
-            if (existingUrl.length > 0) {
-                this._editorDocument = existing;
-                this._editorUrl = editorFrameUrl(existingUrl, this.documentBaseUrl);
-                this._editorCollapsed = false;
-                this._bringEditorToFront();
-                return;
-            }
-            const namespace = getActivePlatformNamespaceName(asString(this.activeCompanyId));
-            const raw = await httpRequest({
-                method: 'POST',
-                url: '/documents/api/v1/documents/from-file',
-                headers: { 'X-Platform-Namespace': namespace },
-                body: {
-                    file_id: asString(file.file_id),
-                    title: asString(file.original_name),
-                },
-            });
-            if (!raw || typeof raw.editor_url !== 'string' || raw.editor_url.length === 0) {
-                throw new Error('documents did not return editor_url');
-            }
-            const enriched = withDocumentCapability(file, raw, namespace);
-            this._editorDocument = documentCapability(enriched);
-            this.emit('files-updated', { files: [enriched] });
-            this._editorUrl = editorFrameUrl(raw.editor_url, this.documentBaseUrl);
-            this._editorCollapsed = false;
-            this._bringEditorToFront();
-        } catch (err) {
-            this._editorUrl = '';
-            this._error = err instanceof Error ? err.message : String(err);
-        } finally {
-            this._busyKey = '';
+        const href = fileHref(file);
+        if (href.length > 0) {
+            window.open(href, '_blank', 'noopener');
         }
     }
 
@@ -1125,33 +1084,7 @@ export class FlowsChatFilesPanel extends PlatformElement {
     }
 
     async _syncEditorBeforeClose() {
-        const selected = this._selectedFile();
-        const doc = documentCapability(selected) || this._editorDocument;
-        const bindingId = asString(doc?.binding_id);
-        if (bindingId.length === 0) {
-            return true;
-        }
-
-        const key = fileKey(selected) || asString(doc?.file_id) || bindingId;
-        const namespace = asString(doc?.namespace) || getActivePlatformNamespaceName(asString(this.activeCompanyId));
-        this._busyKey = key;
-        this._error = '';
-        try {
-            await this._waitForEditorChangesToFlush(bindingId);
-            const editorDirty = this._editorDirty && this._editorDirtyBindingId === bindingId;
-            await httpRequest({
-                method: 'POST',
-                url: `/documents/api/v1/documents/${encodeURIComponent(bindingId)}/sync`,
-                headers: { 'X-Platform-Namespace': namespace },
-                body: { close: true, settle_ms: 900, dirty: editorDirty },
-            });
-            return true;
-        } catch (err) {
-            this._error = err instanceof Error ? err.message : String(err);
-            return false;
-        } finally {
-            this._busyKey = '';
-        }
+        return true;
     }
 
     async _closeEditor() {

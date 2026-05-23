@@ -37,6 +37,7 @@ from apps.frontend.api.platform_pronunciation_rules import (
     router as platform_pronunciation_rules_router,
 )
 from apps.frontend.api.platform_tracing import router as platform_tracing_router
+from apps.frontend.api.public_docs_assistant import router as public_docs_assistant_router
 from apps.frontend.api.public_landing_agents import router as public_landing_agents_router
 from apps.frontend.api.public_site import router as public_site_router
 from apps.frontend.api.scheduler import router as scheduler_router
@@ -48,6 +49,7 @@ from apps.frontend.api.yoomoney_oauth import router as yoomoney_oauth_router
 from apps.frontend.config import FrontendSettings, get_frontend_settings
 from apps.frontend.container import get_frontend_container
 from apps.frontend.dependencies import ContainerDep
+from apps.frontend.services.docs_assistant_bootstrap import schedule_docs_assistant_bootstrap
 from apps.frontend.services.flow_preview_guest_html import (
     build_flow_preview_guest_html,
     build_flow_preview_unavailable_html,
@@ -256,6 +258,11 @@ async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> Non
     PaymentProviderFactory.initialize()
     await PaymentProviderFactory.seed_access_tokens(container.shared_storage)
     logger.info("Платежные провайдеры инициализированы")
+    schedule_docs_assistant_bootstrap(
+        app,
+        container,
+        project_root=Path(__file__).resolve().parents[2],
+    )
 
 # Создаем приложение через фабрику (автоматически подключает middleware, контейнер и т.д.)
 _frontend_settings = get_frontend_settings()
@@ -280,6 +287,7 @@ app = create_service_app(
         voice_providers_catalog_router,
         embed_configs_router,
         public_landing_agents_router,
+        public_docs_assistant_router,
         public_site_router,
         invites_router,
         team_router,

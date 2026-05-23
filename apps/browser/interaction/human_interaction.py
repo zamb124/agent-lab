@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Any
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
+from apps.browser.engine.types import BrowserLocator, BrowserPage
 from apps.browser.interaction.interaction_profiles import InteractionProfile
 
 
@@ -37,7 +37,7 @@ class HumanInteraction:
     """
 
     @staticmethod
-    async def _ensure_in_viewport(locator: Any) -> None:
+    async def _ensure_in_viewport(locator: BrowserLocator) -> None:
         """
         Довести элемент до viewport перед кликом/вводом.
 
@@ -53,7 +53,7 @@ class HumanInteraction:
         )
 
     @staticmethod
-    async def _pause_ms(page: Any, ms: int) -> None:
+    async def _pause_ms(page: BrowserPage, ms: int) -> None:
         if ms <= 0:
             return
         # Playwright: page.wait_for_timeout(ms)
@@ -61,7 +61,7 @@ class HumanInteraction:
 
     async def pre_action_signals(
         self,
-        page: Any,
+        page: BrowserPage,
         *,
         profile: InteractionProfile,
         rnd: InteractionRng,
@@ -79,8 +79,8 @@ class HumanInteraction:
 
     async def click(
         self,
-        page: Any,
-        locator: Any,
+        page: BrowserPage,
+        locator: BrowserLocator,
         *,
         profile: InteractionProfile,
         rnd: InteractionRng,
@@ -100,8 +100,8 @@ class HumanInteraction:
 
     async def type_text(
         self,
-        page: Any,
-        locator: Any,
+        page: BrowserPage,
+        locator: BrowserLocator,
         text: str,
         *,
         profile: InteractionProfile,
@@ -138,7 +138,7 @@ class HumanInteraction:
         await locator.type(text, delay=delay, timeout=timeout_ms)
         await self._pause_ms(page, rnd.randint_range(profile.pause_after_action_ms_range))
 
-    async def press(self, page: Any, key: str, *, profile: InteractionProfile, rnd: InteractionRng) -> None:
+    async def press(self, page: BrowserPage, key: str, *, profile: InteractionProfile, rnd: InteractionRng) -> None:
         if not key:
             raise ValueError("key обязателен")
         if profile.name != "off":
@@ -147,7 +147,7 @@ class HumanInteraction:
         if profile.name != "off":
             await self._pause_ms(page, rnd.randint_range(profile.pause_after_action_ms_range))
 
-    async def post_navigate_signals(self, page: Any, *, profile: InteractionProfile, rnd: InteractionRng) -> None:
+    async def post_navigate_signals(self, page: BrowserPage, *, profile: InteractionProfile, rnd: InteractionRng) -> None:
         """
         Имитация "чтения" и лёгкой прокрутки после navigate.
 
@@ -169,4 +169,3 @@ class HumanInteraction:
                 page,
                 rnd.randint_range(profile.post_navigate_pause_between_scroll_steps_ms_range),
             )
-

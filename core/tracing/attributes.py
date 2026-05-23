@@ -66,6 +66,13 @@ ATTR_LLM_HAS_TOOL_CALLS = "platform.llm.has_tool_calls"
 ATTR_LLM_STREAM = "platform.llm.stream"
 ATTR_LLM_REQUEST = "platform.llm.request"
 ATTR_LLM_RESPONSE = "platform.llm.response"
+ATTR_LLM_CONTEXT = "platform.llm.context"
+ATTR_LLM_CONTEXT_ENABLED = "platform.llm.context.enabled"
+ATTR_LLM_CONTEXT_SELECTED_BLOCKS_COUNT = "platform.llm.context.selected_blocks_count"
+ATTR_LLM_CONTEXT_DROPPED_BLOCKS_COUNT = "platform.llm.context.dropped_blocks_count"
+ATTR_LLM_CONTEXT_TOTAL_INPUT_TOKENS = "platform.llm.context.total_input_tokens"
+ATTR_LLM_CONTEXT_MAX_INPUT_TOKENS = "platform.llm.context.max_input_tokens"
+ATTR_LLM_CONTEXT_MODEL_CONTEXT_LENGTH = "platform.llm.context.model_context_length"
 
 # Tool
 ATTR_TOOL_NAME = "platform.tool.name"

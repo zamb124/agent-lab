@@ -1,6 +1,7 @@
-import { LitElement, html, css } from '../../lit-shim.js';
+import { html, css } from '../../lit-shim.js';
+import { PlatformElement } from '../../platform-element/index.js';
 
-export class FlowsChatUiFileCard extends LitElement {
+export class FlowsChatUiFileCard extends PlatformElement {
     static properties = {
         name: { type: String },
         file_id: { type: String, attribute: 'file-id' },
@@ -37,11 +38,33 @@ export class FlowsChatUiFileCard extends LitElement {
             color: var(--flows-chat-muted, rgba(255, 255, 255, 0.5));
             margin: 2px 0 0 0;
         }
-        a {
+        a,
+        button {
+            border: 0;
+            background: transparent;
+            padding: 0;
+            font-family: inherit;
             font-size: 13px;
             color: var(--flows-chat-accent, #99a6f9);
+            cursor: pointer;
+            text-decoration: underline;
         }
     `;
+
+    _open() {
+        if (this.file_id) {
+            this.openFile({
+                file_id: this.file_id,
+                original_name: this.name,
+                content_type: this.mime_type,
+                url: this.url,
+            }, { source: 'flows_chat_file_card' });
+            return;
+        }
+        if (this.url && typeof window !== 'undefined') {
+            window.open(this.url, '_blank', 'noopener');
+        }
+    }
 
     render() {
         return html`
@@ -50,7 +73,9 @@ export class FlowsChatUiFileCard extends LitElement {
                     <p class="name">${this.name || this.file_id || 'File'}</p>
                     ${this.mime_type ? html`<p class="mime">${this.mime_type}</p>` : ''}
                 </div>
-                ${this.url ? html`<a href=${this.url} target="_blank" rel="noopener noreferrer">Open</a>` : ''}
+                ${this.file_id || this.url
+                    ? html`<button type="button" @click=${this._open}>Open</button>`
+                    : ''}
             </div>
         `;
     }

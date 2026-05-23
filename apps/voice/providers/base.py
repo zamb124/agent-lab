@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from core.clients.stt_client import STTTranscriptionResult
 
@@ -35,7 +35,7 @@ class BaseSTTProvider(ABC):
     """
 
     @abstractmethod
-    async def init(self, config: Optional[Any] = None) -> None:
+    async def init(self, config: Any | None = None) -> None:
         """Инициализировать соединение / загрузить модель."""
 
     @abstractmethod
@@ -43,7 +43,7 @@ class BaseSTTProvider(ABC):
         """Добавить очередной PCM-фрейм в буфер."""
 
     @abstractmethod
-    async def flush_buffer(self) -> Optional[STTTranscriptionResult]:
+    async def flush_buffer(self) -> STTTranscriptionResult | None:
         """Сбросить буфер и вернуть итоговую транскрипцию (или None если нет аудио)."""
 
     @abstractmethod
@@ -52,7 +52,7 @@ class BaseSTTProvider(ABC):
 
     async def peek_transcript(
         self, *, min_buffer_bytes: int = 16000
-    ) -> Optional[STTTranscriptionResult]:
+    ) -> STTTranscriptionResult | None:
         """Получить промежуточный transcript без сброса буфера (chunked-batch).
 
         По умолчанию провайдер не поддерживает partial — возвращает ``None``,
@@ -70,7 +70,7 @@ class BaseTTSProvider(ABC):
     """Синтез речи (Text-to-Speech)."""
 
     @abstractmethod
-    async def init(self, config: Optional[Any] = None) -> None:
+    async def init(self, config: Any | None = None) -> None:
         """Загрузить модель синтезатора."""
 
     @abstractmethod

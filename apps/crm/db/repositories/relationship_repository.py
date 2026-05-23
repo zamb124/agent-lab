@@ -19,6 +19,7 @@ from apps.crm.db.models import Relationship
 from apps.crm.types import JsonObject
 from core.db.utils import get_rowcount
 from core.logging import get_logger
+from core.types import require_json_object
 
 logger = get_logger(__name__)
 
@@ -38,14 +39,7 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
 
     @staticmethod
     def _as_json_object(value: object, context: str) -> JsonObject:
-        if not isinstance(value, dict):
-            raise ValueError(f"{context} must be JSON object")
-        result: JsonObject = {}
-        for key, item in type_cast(dict[object, object], value).items():
-            if not isinstance(key, str):
-                raise ValueError(f"{context} contains non-string key")
-            result[key] = item
-        return result
+        return require_json_object(value, context)
 
     async def get_by_entity(self, entity_id: str) -> list[Relationship]:
         """Получает все связи сущности (source и target)"""

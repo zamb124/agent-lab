@@ -1,5 +1,6 @@
-import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout } from '../helpers/render.js';
+import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout, waitUntil } from '../helpers/render.js';
 import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
+import { FILES_EVENTS } from '@platform/lib/events/index.js';
 import '../../../../core/frontend/static/lib/flows-chat/flows-chat-message.js';
 import '../../../../core/frontend/static/lib/embed-chat/platform-embed-chat.js';
 import '../../../../apps/flows/ui/components/chat/chat-message.js';
@@ -24,21 +25,37 @@ function cleanupEditorPortals() {
     document.body.querySelectorAll('.flows-file-editor-portal').forEach((node) => node.remove());
 }
 
-function lastEditorIframe() {
-    const iframes = Array.from(document.body.querySelectorAll('.flows-file-editor-portal iframe'));
-    return iframes[iframes.length - 1] || null;
+function installDocumentEditorConfigStub() {
+    const previousFetch = window.fetch;
+    window.fetch = async (rawUrl, init = {}) => {
+        const method = (init.method || 'GET').toUpperCase();
+        const url = new URL(String(rawUrl), window.location.href);
+        if (method === 'GET' && /^\/documents\/api\/v1\/files\/[^/]+\/editor-config$/.test(url.pathname)) {
+            return new Response(JSON.stringify({ document_server_url: 'https://docs.example.test', token: 'e30.e30.sig' }), {
+                status: 200,
+                headers: { 'content-type': 'application/json; charset=utf-8' },
+            });
+        }
+        return previousFetch(rawUrl, init);
+    };
+    return () => {
+        window.fetch = previousFetch;
+    };
 }
 
 describe('flows-chat-message shared surface', () => {
     let bus;
+    let restoreFetch;
 
     beforeEach(() => {
         cleanupEditorPortals();
         resetPlatformState();
         bus = bootstrapTestBus();
+        restoreFetch = installDocumentEditorConfigStub();
     });
 
     afterEach(() => {
+        restoreFetch();
         fixtureCleanup();
         cleanupEditorPortals();
     });
@@ -87,6 +104,9 @@ describe('flows-chat-message shared surface', () => {
             ></flows-chat-message>
         `);
         await elementUpdated(el);
+
+        expect(el.shadowRoot.querySelector('.text').textContent).to.equal('Rewrite me');
+        expect(el.shadowRoot.querySelector('.markdown')).to.equal(null);
 
         let detail = null;
         el.addEventListener('compose-edit', (event) => {
@@ -173,7 +193,9 @@ describe('flows-chat-message shared surface', () => {
         expect(el.shadowRoot.querySelector('.msg')).to.equal(null);
     });
 
-    it('app files panel opens existing document capability in the shared iframe editor', async () => {
+    it('app files panel opens existing document capability through the global file viewer event', async () => {
+        const events = [];
+        bus.subscribeType(FILES_EVENTS.OPEN_REQUESTED, (event) => events.push(event));
         const el = await fixture(html`
             <chat-files-panel
                 inline
@@ -197,14 +219,16 @@ describe('flows-chat-message shared surface', () => {
         await elementUpdated(el);
         el.shadowRoot.querySelector('.file-row').click();
         await elementUpdated(el);
-        await aTimeout(0);
+        await waitUntil(() => events.length === 1, 'file open requested');
 
-        const iframe = lastEditorIframe();
-        expect(iframe).to.not.equal(null);
-        expect(iframe.getAttribute('src')).to.equal('about:blank#binding-docx-1');
+        expect(events[0].payload.file.file_id).to.equal('file-docx-1');
+        expect(events[0].payload.file.original_name).to.equal('Contract.docx');
+        expect(events[0].payload.source).to.equal('flows_chat_files_panel');
     });
 
-    it('embed host exposes document file blocks through the same files panel and iframe editor', async () => {
+    it('embed host exposes document file blocks through the same files panel and global file viewer event', async () => {
+        const events = [];
+        bus.subscribeType(FILES_EVENTS.OPEN_REQUESTED, (event) => events.push(event));
         const el = await fixture(html`
             <platform-embed-chat
                 flows-base-url="https://flows.example/flows"
@@ -240,11 +264,11 @@ describe('flows-chat-message shared surface', () => {
         await elementUpdated(panel);
         panel.shadowRoot.querySelector('.file-row').click();
         await elementUpdated(panel);
-        await aTimeout(0);
+        await waitUntil(() => events.length === 1, 'embed file open requested');
 
-        const iframe = lastEditorIframe();
-        expect(iframe).to.not.equal(null);
-        expect(iframe.getAttribute('src')).to.equal('https://platform.example/documents/embed/edit/binding-docx-2?namespace=system');
+        expect(events[0].payload.file.file_id).to.equal('file-docx-2');
+        expect(events[0].payload.file.original_name).to.equal('Offer.docx');
+        expect(events[0].payload.source).to.equal('flows_chat_files_panel');
     });
 
     it('embed host merges A2A files events into the shared files panel', async () => {

@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -52,13 +52,13 @@ class PronunciationRuleDTO(BaseModel):
     kind: Literal["alias", "regex", "stress"]
     pattern: str
     replacement: str
-    language: Optional[str] = None
+    language: str | None = None
     case_sensitive: bool = False
     word_boundary: bool = True
-    providers: Optional[list[str]] = None
-    voices: Optional[list[str]] = None
+    providers: list[str] | None = None
+    voices: list[str] | None = None
     enabled: bool = True
-    note: Optional[str] = None
+    note: str | None = None
 
 
 class PronunciationRuleCreateRequest(BaseModel):
@@ -67,28 +67,28 @@ class PronunciationRuleCreateRequest(BaseModel):
     kind: Literal["alias", "regex", "stress"] = Field(description="Тип правила.")
     pattern: str = Field(min_length=1, description="Искомое слово / regex.")
     replacement: str = Field(description="Замена.")
-    language: Optional[str] = Field(default=None, description="BCP-47 (только ISO 639-1, например 'ru').")
+    language: str | None = Field(default=None, description="BCP-47 (только ISO 639-1, например 'ru').")
     case_sensitive: bool = Field(default=False)
     word_boundary: bool = Field(default=True)
-    providers: Optional[list[str]] = Field(default=None)
-    voices: Optional[list[str]] = Field(default=None)
+    providers: list[str] | None = Field(default=None)
+    voices: list[str] | None = Field(default=None)
     enabled: bool = Field(default=True)
-    note: Optional[str] = Field(default=None)
+    note: str | None = Field(default=None)
 
 
 class PronunciationRuleUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Optional[Literal["alias", "regex", "stress"]] = None
-    pattern: Optional[str] = Field(default=None, min_length=1)
-    replacement: Optional[str] = None
-    language: Optional[str] = None
-    case_sensitive: Optional[bool] = None
-    word_boundary: Optional[bool] = None
-    providers: Optional[list[str]] = None
-    voices: Optional[list[str]] = None
-    enabled: Optional[bool] = None
-    note: Optional[str] = None
+    kind: Literal["alias", "regex", "stress"] | None = None
+    pattern: str | None = Field(default=None, min_length=1)
+    replacement: str | None = None
+    language: str | None = None
+    case_sensitive: bool | None = None
+    word_boundary: bool | None = None
+    providers: list[str] | None = None
+    voices: list[str] | None = None
+    enabled: bool | None = None
+    note: str | None = None
 
 
 class PronunciationRuleTestRequest(BaseModel):
@@ -96,8 +96,8 @@ class PronunciationRuleTestRequest(BaseModel):
 
     text: str = Field(min_length=1, description="Текст для dry-run.")
     provider: str = Field(default="litserve", description="Имя TTS-провайдера.")
-    voice: Optional[str] = Field(default=None)
-    language: Optional[str] = Field(default=None)
+    voice: str | None = Field(default=None)
+    language: str | None = Field(default=None)
 
 
 class PronunciationRuleTestResponse(BaseModel):

@@ -7,12 +7,22 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
+from typing import Literal, TypeAlias
+
+from playwright.async_api import Browser, BrowserContext, Locator, Page, StorageState
+
+from core.types import JsonObject
 
 PageMode = Literal["interactive", "crawl", "lite"]
 SessionMode = Literal["warm", "restore"]
 
 SELECTOR_PREFIX = "selector:"
+
+BrowserHandle: TypeAlias = Browser
+BrowserContextHandle: TypeAlias = BrowserContext
+BrowserPage: TypeAlias = Page
+BrowserLocator: TypeAlias = Locator
+BrowserStorageState: TypeAlias = StorageState
 
 
 @dataclass(frozen=True)
@@ -30,12 +40,12 @@ class ContextSignature:
     """
 
     proxy_policy: str
-    shared_storage_key: Optional[str]
+    shared_storage_key: str | None
     anti_bot_tier: str
     stealth_init_version: str
     locale: str
     timezone_id: str
-    user_agent: Optional[str]
+    user_agent: str | None
     page_mode: PageMode
     permissions_fingerprint: str
 
@@ -80,13 +90,13 @@ class BrowserAcquireRequest:
     task_id: str
     session_id: str
     page_mode: PageMode
-    shared_storage_key: Optional[str]
+    shared_storage_key: str | None
     proxy_policy: str
     anti_bot_tier: str
     timeout_ms: int
     endpoint_key: str
     session_mode: SessionMode
-    restore_state_key: Optional[str]
+    restore_state_key: str | None
     context_signature: ContextSignature
 
 
@@ -108,10 +118,10 @@ class BrowserAcquireResult:
     Переиспользование:
     - Стоит: как стандартный выход acquire вне зависимости от backend-а.
     """
-    page: Any
-    context: Any
+    page: BrowserPage
+    context: BrowserContextHandle
     browser_id: str
-    proxy_id: Optional[str]
+    proxy_id: str | None
     cold_start: bool
     endpoint_key: str
     context_signature_hash: str
@@ -162,13 +172,13 @@ class BrowserFetchResult:
     - Стоит: как внешний контракт control API и внутренних пайплайнов.
     """
     final_url: str
-    status_code: Optional[int]
+    status_code: int | None
     response_headers: dict[str, str]
-    html: Optional[str]
-    screenshot_ref: Optional[str]
-    pdf_ref: Optional[str]
-    snapshot_ref: Optional[str]
-    anti_bot_signals: dict[str, Any]
+    html: str | None
+    screenshot_ref: str | None
+    pdf_ref: str | None
+    snapshot_ref: str | None
+    anti_bot_signals: JsonObject
 
 
 @dataclass
@@ -190,19 +200,19 @@ class SessionStateBlob:
     - Стоит: как переносимый формат save/restore.
     """
     shared_storage_key: str
-    storage_state: dict[str, Any]
+    storage_state: BrowserStorageState
     session_storage_by_origin: dict[str, dict[str, str]]
     current_url: str
     proxy_policy: str
     anti_bot_tier: str
     locale: str
     timezone_id: str
-    user_agent: Optional[str]
+    user_agent: str | None
     page_mode: PageMode
     permissions_fingerprint: str
-    last_snapshot_ref: Optional[str]
-    pause_ttl_soft_sec: Optional[int] = None
-    pause_ttl_hard_sec: Optional[int] = None
+    last_snapshot_ref: str | None
+    pause_ttl_soft_sec: int | None = None
+    pause_ttl_hard_sec: int | None = None
 
 
 ControlBackend = Literal["playwright", "browser_use", "agent_browser"]

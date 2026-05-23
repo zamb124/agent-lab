@@ -31,6 +31,7 @@ from apps.crm.system_templates import (
 )
 from core.db.repositories.company_repository import CompanyRepository
 from core.logging import get_logger
+from core.types import require_json_object
 
 logger = get_logger(__name__)
 
@@ -201,7 +202,12 @@ class CompanyInitService:
     async def _init_namespace_templates(self, company_id: str) -> int:
         created_count = 0
         for seed in NAMESPACE_TEMPLATE_SEEDS:
-            seed_crm_settings = seed.get("crm_settings")
+            raw_crm_settings = seed.get("crm_settings")
+            seed_crm_settings = (
+                require_json_object(raw_crm_settings, "namespace_template.crm_settings")
+                if raw_crm_settings is not None
+                else None
+            )
             existing = await self._namespace_template_repo.get_by_template_id(
                 seed["template_id"], company_id=company_id
             )

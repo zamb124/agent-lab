@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import Field
 
@@ -28,10 +28,10 @@ class IntegrationCredential(StrictBaseModel):
     provider: IntegrationProvider
     service: str
     access_token: str
-    refresh_token: Optional[str] = None
-    expires_at: Optional[datetime] = None
-    scope: Optional[str] = None
-    token_type: Optional[str] = None
+    refresh_token: str | None = None
+    expires_at: datetime | None = None
+    scope: str | None = None
+    token_type: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime

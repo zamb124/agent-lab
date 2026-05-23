@@ -3,7 +3,7 @@
 """
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import HTTPException, Request
 
@@ -124,7 +124,7 @@ class WhatsAppHandler(PlatformHandler):
 
         return user, metadata
 
-def get_platform_handler(platform: str, container) -> Optional[PlatformHandler]:
+def get_platform_handler(platform: str, container) -> PlatformHandler | None:
     """Возвращает обработчик для платформы"""
     handlers = {
         "telegram": TelegramHandler,

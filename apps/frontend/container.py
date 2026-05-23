@@ -2,7 +2,6 @@
 Dependency Injection контейнер для Frontend
 """
 
-from typing import Optional
 
 from apps.flows.src.db.flow_repository import FlowRepository
 from core.clients.redis_client import RedisClient
@@ -82,7 +81,7 @@ class FrontendContainer(BaseContainer):
 
 # === Глобальный контейнер ===
 
-_frontend_container: Optional[FrontendContainer] = None
+_frontend_container: FrontendContainer | None = None
 
 def get_frontend_container() -> FrontendContainer:
     """Получает контейнер (создает при первом вызове)"""

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from apps.voice.providers.base import BaseSTTProvider, BaseVADProvider
 from apps.voice.services.voice_transport_interrupt import (
@@ -79,11 +79,11 @@ class BargeInController:
         session,
         clear_tts_queue: bool = True,
         *,
-        stt_provider: Optional[BaseSTTProvider] = None,
-        vad_provider: Optional[BaseVADProvider] = None,
-        channel: Optional["VoiceClientChannel"] = None,
-        language: Optional[str] = None,
-        peek_min_buffer_bytes: Optional[int] = None,
+        stt_provider: BaseSTTProvider | None = None,
+        vad_provider: BaseVADProvider | None = None,
+        channel: VoiceClientChannel | None = None,
+        language: str | None = None,
+        peek_min_buffer_bytes: int | None = None,
     ) -> None:
         """Остановить TTS, очистить очереди синтеза/исходящего аудио и
         сбросить внутреннее состояние STT/VAD-провайдеров.
@@ -106,5 +106,4 @@ class BargeInController:
             peek_min_buffer_bytes=peek_min_buffer_bytes,
             on_barge_in_timestamp=self.mark_barge_in_executed,
         )
-
 

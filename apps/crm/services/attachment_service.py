@@ -20,6 +20,7 @@ from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
 from core.logging import get_logger
+from core.types import require_json_object
 
 if TYPE_CHECKING:
     from apps.crm.db.repositories.access_grant_repository import AccessGrantRepository
@@ -73,14 +74,7 @@ class AttachmentService:
 
     @staticmethod
     def _as_json_object(value: object, context: str) -> JsonObject:
-        if not isinstance(value, dict):
-            raise ValueError(f"{context} must be a JSON object")
-        result: JsonObject = {}
-        for key, item in type_cast(dict[object, object], value).items():
-            if not isinstance(key, str):
-                raise ValueError(f"{context} contains non-string key")
-            result[key] = item
-        return result
+        return require_json_object(value, context)
 
     @staticmethod
     def _required_string(payload: JsonObject, key: str, context: str) -> str:

@@ -1,6 +1,5 @@
 """Репозиторий для работы с файлами (SQLAlchemy)."""
 
-from typing import Type
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncFile
@@ -14,7 +13,7 @@ class SyncFileRepository(BaseSyncRepository[SyncFile]):
         super().__init__(db=db)
 
     @property
-    def model_class(self) -> Type[SyncFile]:
+    def model_class(self) -> type[SyncFile]:
         return SyncFile
 
     @property

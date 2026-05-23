@@ -5,7 +5,6 @@ SyncContainer - DI контейнер для Sync сервиса.
 Добавляет Sync-специфичные репозитории (SQLAlchemy реляционные).
 """
 
-from typing import Optional
 
 from apps.sync.db.base import SyncDatabase
 from apps.sync.db.repositories.call_repository import CallRepository
@@ -34,7 +33,7 @@ class SyncContainer(BaseContainer):
     - Репозитории для channels, threads, messages, files, git
     """
 
-    def __init__(self, db_url: str, shared_db_url: Optional[str] = None):
+    def __init__(self, db_url: str, shared_db_url: str | None = None):
         super().__init__(db_url=db_url, shared_db_url=shared_db_url)
         self._sync_db_url = db_url
 
@@ -80,7 +79,7 @@ class SyncContainer(BaseContainer):
 
 # === Глобальный контейнер ===
 
-_sync_container: Optional[SyncContainer] = None
+_sync_container: SyncContainer | None = None
 
 def get_sync_container() -> SyncContainer:
     """Получает контейнер (создает при первом вызове)"""

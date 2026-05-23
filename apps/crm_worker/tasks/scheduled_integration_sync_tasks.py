@@ -18,7 +18,7 @@ from apps.crm.scheduled_integration_constants import (
 from apps.crm_worker.broker import broker
 from apps.crm_worker.tasks.daily_summary_tasks import (
     _build_auth_token_for_company,
-    _set_crm_context,
+    set_crm_context,
 )
 from core.logging import get_logger
 
@@ -113,7 +113,7 @@ async def scheduled_namespace_integration_unified_sync(
     )
 
     auth_token = await _build_auth_token_for_company(company_id, uid)
-    await _set_crm_context(
+    await set_crm_context(
         company_id,
         ns,
         auth_token=auth_token,

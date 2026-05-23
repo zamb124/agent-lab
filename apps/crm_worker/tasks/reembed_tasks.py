@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Dict
 
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
@@ -28,7 +27,7 @@ from core.rag.reembed_stale_documents import execute_reembed_tick
 async def crm_reembed_stale_documents_tick(
     schedule_task_id: str,
     company_id: str | None = None,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     """
     ``company_id`` приходит из ``SchedulerService.create`` в ``task.payload``
     для всех cron-задач; reembed группирует чанки по ``vector_documents.company_id``.

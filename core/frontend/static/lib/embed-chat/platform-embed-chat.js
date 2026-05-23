@@ -300,6 +300,7 @@ function _upsertEmbedFiles(existing, incoming) {
  * - getExtraMetadataVariables: async () => Record<string, unknown> — доп. ключи в metadata.variables (мёрж после языка)
  * - getContextVariables: async () => Record<string, unknown> — контекст экрана/сущности для ассистента (мёрж после getExtraMetadataVariables)
  * - eventNamespace: префикс событий для внешнего хоста (по умолчанию assistant)
+ * - conversationKey: ключ хост-контекста; при изменении сбрасывает A2A contextId и локальные сообщения
  * - assistantTitle (assistant-title): имя в шапке; иначе title; иначе labels.title из локали (?embed_assistant_name= на странице — см. drawer)
  * - companyId (company-id), voiceBaseUrl (voice-base-url): для потоковой озвучки A2A без drawer; voiceBaseUrl опционально — из flowsBaseUrl
  *
@@ -328,6 +329,7 @@ export class PlatformEmbedChat extends LitElement {
         voiceBaseUrl: { type: String, attribute: 'voice-base-url' },
         visible: { type: Boolean, reflect: true },
         eventNamespace: { type: String, attribute: 'event-namespace' },
+        conversationKey: { type: String, attribute: 'conversation-key' },
         eventAckRetries: { type: Number, attribute: 'event-ack-retries' },
         eventAckTimeoutMs: { type: Number, attribute: 'event-ack-timeout-ms' },
         getExtraMetadataVariables: { type: Object },
@@ -521,6 +523,7 @@ export class PlatformEmbedChat extends LitElement {
         this.voiceBaseUrl = '';
         this.visible = true;
         this.eventNamespace = 'assistant';
+        this.conversationKey = '';
         this.eventAckRetries = 0;
         this.eventAckTimeoutMs = 2500;
         this.getContextVariables = undefined;
@@ -1559,6 +1562,12 @@ export class PlatformEmbedChat extends LitElement {
         }
         if (changed.has('flowId') || changed.has('branchId')) {
             this._disposeEmbedTtsOnlyStream();
+        }
+        if (changed.has('conversationKey') && changed.get('conversationKey') !== undefined) {
+            if (this._streamAbort !== null) {
+                this._streamAbort.abort();
+            }
+            this._newChat();
         }
         if (changed.has('visible')) {
             this._startGreetingTypingIfNeeded();

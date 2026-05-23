@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+from typing import Any
 
 from apps.voice.providers.base import (
     BaseSTTProvider,
@@ -46,7 +46,7 @@ class StreamingSTTProvider(BaseSTTProvider):
         *,
         stt_client: BaseSTTClient,
         sample_rate: int = 16000,
-        language: Optional[str] = None,
+        language: str | None = None,
     ) -> None:
         if sample_rate <= 0:
             raise ValueError("StreamingSTTProvider: sample_rate должен быть > 0.")
@@ -55,7 +55,7 @@ class StreamingSTTProvider(BaseSTTProvider):
         self._language = language
         self._audio_buffer: bytearray = bytearray()
 
-    async def init(self, config: Optional[Any] = None) -> None:
+    async def init(self, config: Any | None = None) -> None:
         return None
 
     async def push_audio(self, chunk: bytes) -> None:
@@ -63,7 +63,7 @@ class StreamingSTTProvider(BaseSTTProvider):
             return
         self._audio_buffer.extend(chunk)
 
-    async def flush_buffer(self) -> Optional[STTTranscriptionResult]:
+    async def flush_buffer(self) -> STTTranscriptionResult | None:
         if not self._audio_buffer:
             return None
         pcm = bytes(self._audio_buffer)
@@ -78,7 +78,7 @@ class StreamingSTTProvider(BaseSTTProvider):
 
     async def peek_transcript(
         self, *, min_buffer_bytes: int = 16000
-    ) -> Optional[STTTranscriptionResult]:
+    ) -> STTTranscriptionResult | None:
         """Прочитать текущий буфер без его сброса (chunked-batch partial).
 
         Используется `stt_worker` для периодической отправки промежуточных
@@ -125,7 +125,7 @@ class StreamingTTSProvider(BaseTTSProvider):
         self._tts_client = tts_client
         self._initialized = False
 
-    async def init(self, config: Optional[Any] = None) -> None:
+    async def init(self, config: Any | None = None) -> None:
         self._initialized = True
 
     async def synthesize(self, text: str) -> bytes:

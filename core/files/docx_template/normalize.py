@@ -8,16 +8,17 @@ from __future__ import annotations
 
 import datetime
 import decimal
+from collections.abc import Mapping
 from enum import Enum
-from typing import Any, Mapping, Set, Tuple, Type
+from typing import Any
 
 from docxtpl import InlineImage, RichText
 
 from core.files.docx_template.exceptions import DocxTemplateContextError
 
-_PASSTHROUGH_TYPES: Tuple[Type[Any], ...] = (RichText, InlineImage)
+_PASSTHROUGH_TYPES: tuple[type[Any], ...] = (RichText, InlineImage)
 
-_ALLOWED_SCALAR_TYPES: Tuple[Type[Any], ...] = (
+_ALLOWED_SCALAR_TYPES: tuple[type[Any], ...] = (
     str,
     int,
     float,
@@ -37,7 +38,7 @@ def normalize_template_context(
     *,
     date_iso: bool = True,
     _path: str = "$",
-    _seen: Set[int] | None = None,
+    _seen: set[int] | None = None,
 ) -> dict[str, Any]:
     """
     Рекурсивно приводит значения к JSON-подобному виду для Jinja.
@@ -63,7 +64,7 @@ def _normalize_value(
     *,
     date_iso: bool,
     path: str,
-    _seen: Set[int],
+    _seen: set[int],
 ) -> Any:
     if value is None or isinstance(value, _ALLOWED_SCALAR_TYPES):
         return value

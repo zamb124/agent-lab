@@ -3,7 +3,6 @@
 """
 import re
 import uuid
-from typing import Optional
 
 # Таблица транслитерации кириллицы
 TRANSLIT_MAP = {
@@ -108,7 +107,7 @@ def build_subdomain_url(subdomain: str, path: str = "/", env: str = "production"
         return f"http://{subdomain}.lvh.me:{port}{path}"
 
 
-def validate_slug(slug: str) -> tuple[bool, Optional[str]]:
+def validate_slug(slug: str) -> tuple[bool, str | None]:
     """
     Валидирует slug для использования в субдомене
 

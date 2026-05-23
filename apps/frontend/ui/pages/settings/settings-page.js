@@ -17,6 +17,7 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/llm/llm-config-editor.js';
+import '@platform/lib/components/llm/llm-context-editor.js';
 
 const INTEGRATION_LIST = Object.freeze([
     { id: 'crm', route: '/crm' },
@@ -166,6 +167,23 @@ export class FrontendSettingsPage extends PlatformPage {
             .capability-card .desc { color: var(--text-tertiary); font-size: var(--text-xs); }
             .capability-card .actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 
+            .context-card {
+                padding: var(--space-3);
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2);
+                min-width: 0;
+            }
+            .context-card .context-actions {
+                display: flex;
+                justify-content: flex-end;
+                gap: var(--space-2);
+                flex-wrap: wrap;
+            }
+
             .custom-provider-list {
                 display: flex;
                 flex-direction: column;
@@ -213,6 +231,7 @@ export class FrontendSettingsPage extends PlatformPage {
         _metadataJson: { state: true },
         _metadataError: { state: true },
         _capabilityDrafts: { state: true },
+        _llmContextDraft: { state: true },
     };
 
     constructor() {
@@ -222,17 +241,21 @@ export class FrontendSettingsPage extends PlatformPage {
         this._aiLoad = this.useOp('frontend/ai_providers_load');
         this._capPut = this.useOp('frontend/ai_provider_capability_put');
         this._capDelete = this.useOp('frontend/ai_provider_capability_delete');
+        this._contextPut = this.useOp('frontend/ai_provider_llm_context_put');
+        this._contextDelete = this.useOp('frontend/ai_provider_llm_context_delete');
         this._customCreate = this.useOp('frontend/ai_custom_provider_create');
         this._customDelete = this.useOp('frontend/ai_custom_provider_delete');
         this._loaded = false;
         this._aiLoaded = false;
         this._lastSeededCompanyRef = null;
+        this._lastSeededAiRef = null;
         this._activeTab = 'company';
         this._name = '';
         this._monthlyBudget = 0;
         this._metadataJson = '{}';
         this._metadataError = '';
         this._capabilityDrafts = {};
+        this._llmContextDraft = {};
     }
 
     updated() {
@@ -249,6 +272,11 @@ export class FrontendSettingsPage extends PlatformPage {
             this._lastSeededCompanyRef = company;
             this._seedDraft(company);
         }
+        const ai = this._aiLoad.lastResult;
+        if (ai && ai !== this._lastSeededAiRef) {
+            this._lastSeededAiRef = ai;
+            this._seedAiDraft(ai);
+        }
     }
 
     _seedDraft(company) {
@@ -256,6 +284,15 @@ export class FrontendSettingsPage extends PlatformPage {
         this._monthlyBudget = Number(company.monthly_budget || 0);
         const metadata = company.metadata || {};
         this._metadataJson = JSON.stringify(metadata, null, 2);
+    }
+
+    _seedAiDraft(data) {
+        const ctx = data && typeof data === 'object' && data.llm_context && typeof data.llm_context === 'object'
+            ? data.llm_context
+            : {};
+        this._llmContextDraft = ctx.config && typeof ctx.config === 'object' && !Array.isArray(ctx.config)
+            ? { ...ctx.config }
+            : {};
     }
 
     _setTab(tab) {
@@ -428,6 +465,67 @@ export class FrontendSettingsPage extends PlatformPage {
         this._capabilityDrafts = next;
     }
 
+    _saveLlmContext() {
+        const draft = this._llmContextDraft && typeof this._llmContextDraft === 'object'
+            ? this._llmContextDraft
+            : {};
+        if (Object.keys(draft).length === 0) {
+            this._contextDelete.run();
+            return;
+        }
+        this._contextPut.run(draft);
+    }
+
+    _clearLlmContext() {
+        this._llmContextDraft = {};
+        this._contextDelete.run();
+    }
+
+    _renderLlmContextCard(data) {
+        const info = data && typeof data === 'object' && data.llm_context && typeof data.llm_context === 'object'
+            ? data.llm_context
+            : {};
+        const configured = info.configured === true;
+        return html`
+            <section>
+                <h3>${this.t('settings_page.ai_providers.section_context')}</h3>
+                <div class="section-help">${this.t('settings_page.ai_providers.section_context_help')}</div>
+                <div class="context-card">
+                    <platform-llm-context-editor
+                        .config=${this._llmContextDraft}
+                        .profiles=${Array.isArray(info.profiles) ? info.profiles : []}
+                        .budgets=${Array.isArray(info.budgets) ? info.budgets : []}
+                        .clearable=${configured || Object.keys(this._llmContextDraft || {}).length > 0}
+                        @change=${(e) => {
+                            const cfg = e.detail && e.detail.config && typeof e.detail.config === 'object'
+                                ? e.detail.config
+                                : {};
+                            this._llmContextDraft = { ...cfg };
+                        }}
+                        @clear=${() => this._clearLlmContext()}
+                    ></platform-llm-context-editor>
+                    <div class="context-actions">
+                        <glass-button
+                            size="sm"
+                            variant="ghost"
+                            ?disabled=${this._contextDelete.busy}
+                            @click=${() => this._clearLlmContext()}
+                        >
+                            ${this.t('settings_page.ai_providers.clear_context')}
+                        </glass-button>
+                        <glass-button
+                            size="sm"
+                            ?disabled=${this._contextPut.busy}
+                            @click=${() => this._saveLlmContext()}
+                        >
+                            ${this.t('settings_page.ai_providers.save_context')}
+                        </glass-button>
+                    </div>
+                </div>
+            </section>
+        `;
+    }
+
     _renderCapabilityCard(cap, catalog) {
         const draft = this._capabilityDraft(cap);
         const providerCatalog = catalog[cap.capability] || [];
@@ -524,6 +622,8 @@ export class FrontendSettingsPage extends PlatformPage {
         const customProviders = data.custom_providers || [];
         const catalog = data.catalog || {};
         return html`
+            ${this._renderLlmContextCard(data)}
+
             <section>
                 <div class="header">
                     <h3>${this.t('settings_page.ai_providers.section_custom_providers')}</h3>

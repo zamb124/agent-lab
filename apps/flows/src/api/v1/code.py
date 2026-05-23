@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from apps.flows.src.api.v1.flows import inline_tools_list
 from apps.flows.src.container import FlowContainer
+from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.runtime.nodes import create_node
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
@@ -44,6 +45,7 @@ from core.docs.models import (
 from core.errors import CodeExecutionRuntimeError
 from core.logging import get_logger
 from core.state import ExecutionState
+from core.types import require_json_object
 
 router = APIRouter(tags=["code"])
 logger = get_logger(__name__)
@@ -651,7 +653,14 @@ async def get_editor_state(
     if cfg_ver:
         state.flow_config_version = str(cfg_ver)
     state.current_nodes = [runtime_flow.entry]
-    cfg_nodes = (runtime_flow.config or {}).get("nodes") or {}
+    cfg_nodes_raw = (runtime_flow.config or {}).get("nodes") or {}
+    cfg_nodes = {
+        node_id: require_json_object(
+            node_config,
+            f"runtime_flow.config.nodes.{node_id}",
+        )
+        for node_id, node_config in cfg_nodes_raw.items()
+    }
     state.files = collect_flow_node_files(cfg_nodes)
 
     return state.model_dump(mode="json")
@@ -1113,7 +1122,15 @@ async def _merge_execute_state_with_flow(
     if runtime_flow is None:
         raise ValueError(f"Flow не найден: {flow_id}")
 
-    from_graph = collect_flow_node_files(runtime_flow.config.get("nodes") or {})
+    cfg_nodes_raw = runtime_flow.config.get("nodes") or {}
+    cfg_nodes = {
+        node_id: require_json_object(
+            node_config,
+            f"runtime_flow.config.nodes.{node_id}",
+        )
+        for node_id, node_config in cfg_nodes_raw.items()
+    }
+    from_graph = collect_flow_node_files(cfg_nodes)
     req_files = input_state.get("files") or []
     seen = {(f.get("original_name"), f.get("url")) for f in from_graph}
     extra = [f for f in req_files if (f.get("original_name"), f.get("url")) not in seen]
@@ -1367,7 +1384,11 @@ async def _execute_node(
         if tools:
             node_config = {**node_config, "tools": await inline_tools_list(tools, container)}
 
-    node = await create_node("test_node", node_config, container=container)
+    node = await create_node(
+        "test_node",
+        node_config,
+        container=as_flow_runtime_container(container),
+    )
     state = ExecutionState.model_validate(state_data)
     result_state = await node.run(state)
     return result_state.model_dump(exclude_none=False)

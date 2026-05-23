@@ -16,11 +16,11 @@ Browser-объект для endpoint-а.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
 
-from playwright.async_api import async_playwright
+from playwright.async_api import Playwright, async_playwright
 
 from apps.browser.engine.cdp_url_normalize import normalize_playwright_cdp_connect_url
+from apps.browser.engine.types import BrowserHandle
 
 
 class CDPConnectionPool:
@@ -70,15 +70,15 @@ class CDPConnectionPool:
 
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
-        self._playwright: Any = None
-        self._browsers: dict[str, Any] = {}
+        self._playwright: Playwright | None = None
+        self._browsers: dict[str, BrowserHandle] = {}
 
     async def start(self) -> None:
         async with self._lock:
             if self._playwright is None:
                 self._playwright = await async_playwright().start()
 
-    async def acquire_browser(self, endpoint_key: str, cdp_url: str) -> Any:
+    async def acquire_browser(self, endpoint_key: str, cdp_url: str) -> BrowserHandle:
         """
         Вернуть Browser для endpoint-а, создав его при первом обращении.
 
@@ -122,5 +122,5 @@ class CDPConnectionPool:
         return endpoint_key in self._browsers
 
     @property
-    def playwright(self) -> Optional[Any]:
+    def playwright(self) -> Playwright | None:
         return self._playwright

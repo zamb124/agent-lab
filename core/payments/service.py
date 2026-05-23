@@ -4,7 +4,7 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from core.clients.payment.base_provider import (
     BasePaymentProvider,
@@ -39,7 +39,7 @@ class PaymentService:
         user: User,
         amount: float,
         provider: BasePaymentProvider
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Создает транзакцию и генерирует URL для оплаты.
 
@@ -121,8 +121,8 @@ class PaymentService:
         company_id: str,
         amount: float,
         grantor_user_id: str,
-        note: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        note: str | None = None,
+    ) -> dict[str, Any]:
         """
         Начисление баланса без платёжного провайдера (грант из админки system).
         Транзакция сразу success; источник — payment_provider=grant.
@@ -131,7 +131,7 @@ class PaymentService:
             raise ValueError("amount must be at least 0.01")
         now = datetime.now(timezone.utc)
         transaction_id = f"{company_id}:txn_{uuid.uuid4().hex[:16]}"
-        meta: Dict[str, Any] = {
+        meta: dict[str, Any] = {
             "granted_by_user_id": grantor_user_id,
         }
         if note is not None and note != "":
@@ -172,7 +172,7 @@ class PaymentService:
         self,
         verification_result: WebhookVerificationResult,
         provider_name: str,
-        raw_data: Dict[str, Any]
+        raw_data: dict[str, Any]
     ):
         """
         Обрабатывает webhook от платежного провайдера.
@@ -325,7 +325,7 @@ class PaymentService:
             amount=transaction.amount,
         )
 
-    async def get_transaction(self, transaction_id: str) -> Optional[Transaction]:
+    async def get_transaction(self, transaction_id: str) -> Transaction | None:
         """Получает транзакцию по ID"""
         # transaction_id может быть в формате:
         # 1. {company_id}:txn_{uuid} - современный формат
@@ -360,8 +360,8 @@ class PaymentService:
         company_id: str,
         limit: int = 50,
         offset: int = 0,
-        provider_name: Optional[str] = None
-    ) -> List[Transaction]:
+        provider_name: str | None = None
+    ) -> list[Transaction]:
         """
         Получает список транзакций компании.
 

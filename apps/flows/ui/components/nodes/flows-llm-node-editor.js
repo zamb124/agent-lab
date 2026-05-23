@@ -8,14 +8,15 @@
  *      `@var:`, режимами Preview / Split / Fullscreen).
  *   2. LLM (`flows-llm-config-editor`): база — `llm_resource_key` в сайдбаре «Закреплённые ресурсы»;
  *      при заданном ключе форма только для чтения и показывает слитый конфиг ресурса ветки/каталога.
- *   3. Фильтр сообщений (`cfg.messages_filter`: 'all' | 'own' | string[]).
- *   4. Режим вывода — toggle Tools / Structured Output (`cfg.structured_output`).
- *   5a. Tools-режим (`structured_output=false`):
+ *   3. Контекст (`cfg.llm_context`, `cfg.llm_context_resource_key`): company/resource/node overlay.
+ *   4. Фильтр сообщений (`cfg.messages_filter`: 'all' | 'own' | string[]).
+ *   5. Режим вывода — toggle Tools / Structured Output (`cfg.structured_output`).
+ *   6a. Tools-режим (`structured_output=false`):
  *       - ReAct loop (`cfg.react`: loop_mode + max_iterations в одной строке;
  *         при explicit — exit_tool как enum (`finish` + tools ноды, имена совпадают
  *         с LLM-calling именем `sanitize(tool_id)` как в backend) + strict; reminder_message);
  *       - Инструменты (`cfg.tools: ToolReference[]`): chips (иконка + имя) + выбор из библиотеки.
- *   5b. Structured-режим (`structured_output=true`):
+ *   6b. Structured-режим (`structured_output=true`):
  *       - Output JSON Schema (`cfg.output_schema`): при первом включении подставляется
  *         учебный strict-шаблон; пустой конфиг показывает тот же шаблон до сохранения.
  *
@@ -34,6 +35,7 @@ import '@platform/lib/components/prompt-editor.js';
 import '../common/flows-code-language-icon.js';
 import '../editors/flows-llm-config-editor.js';
 import '../editors/flows-json-field-editor.js';
+import '@platform/lib/components/llm/llm-context-editor.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-switch.js';
@@ -344,6 +346,22 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         this._emitPatch({ llm: isEmpty ? null : merged });
     }
 
+    _onLlmContextChange(e) {
+        const cfg = e.detail?.config && typeof e.detail.config === 'object' ? e.detail.config : null;
+        if (cfg === null) return;
+        const isEmpty = Object.keys(cfg).length === 0;
+        this._emitPatch({ llm_context: isEmpty ? null : cfg });
+    }
+
+    _clearLlmContext() {
+        this._emitPatch({ llm_context: null });
+    }
+
+    _onLlmContextResourceChange(e) {
+        const value = typeof e.detail?.value === 'string' ? e.detail.value.trim() : '';
+        this._emitPatch({ llm_context_resource_key: value.length > 0 ? value : null });
+    }
+
     _flowBranchResources() {
         const st = asObject(this._editor.state);
         const bd = st.branchData;
@@ -371,6 +389,70 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         }
         const def = catalog.find((r) => r && r.resource_id === rid);
         return Boolean(def && def.type === 'llm');
+    }
+
+    _branchRefIsLlmContext(refRaw, catalog) {
+        if (!isPlainObject(refRaw)) {
+            return false;
+        }
+        const inlineType = typeof refRaw.type === 'string' ? refRaw.type.trim() : '';
+        if (inlineType === 'llm_context') {
+            return true;
+        }
+        const rid = typeof refRaw.resource_id === 'string' ? refRaw.resource_id.trim() : '';
+        if (rid.length === 0) {
+            return false;
+        }
+        const def = catalog.find((r) => r && r.resource_id === rid);
+        return Boolean(def && def.type === 'llm_context');
+    }
+
+    _llmContextResourceLabel(key, refRaw, catalog) {
+        const rid = isPlainObject(refRaw) && typeof refRaw.resource_id === 'string'
+            ? refRaw.resource_id.trim()
+            : '';
+        const inlineName = isPlainObject(refRaw) && typeof refRaw.name === 'string'
+            ? refRaw.name.trim()
+            : '';
+        const def = rid.length > 0 ? catalog.find((r) => r && r.resource_id === rid) : null;
+        const title = def && typeof def.name === 'string' && def.name.length > 0
+            ? def.name.trim()
+            : (inlineName.length > 0 ? inlineName : (rid.length > 0 ? rid : key));
+        return title === key ? `${key} · llm_context` : `${title} · llm_context · ${key}`;
+    }
+
+    _llmContextResourceOptions() {
+        const values = [{ value: '', label: this.t('llm_node_editor.context_resource_auto') }];
+        const catalog = Array.isArray(this._resources.items) ? this._resources.items : [];
+        const flowRes = this._flowBranchResources();
+        const nodeResources = this.nodeConfig?.resources && typeof this.nodeConfig.resources === 'object'
+            ? this.nodeConfig.resources
+            : {};
+        const seen = new Set();
+
+        for (const [key, ref] of Object.entries(flowRes)) {
+            if (typeof key !== 'string' || key.length === 0 || seen.has(key)) {
+                continue;
+            }
+            if (!this._branchRefIsLlmContext(ref, catalog)) {
+                continue;
+            }
+            seen.add(key);
+            values.push({ value: key, label: this._llmContextResourceLabel(key, ref, catalog) });
+        }
+
+        for (const [key, ref] of Object.entries(nodeResources)) {
+            if (typeof key !== 'string' || key.length === 0 || seen.has(key)) {
+                continue;
+            }
+            if (!this._branchRefIsLlmContext(ref, catalog)) {
+                continue;
+            }
+            seen.add(key);
+            values.push({ value: key, label: this._llmContextResourceLabel(key, ref, catalog) });
+        }
+
+        return { values };
     }
 
     _currentLlmResourceKey() {
@@ -821,6 +903,43 @@ export class FlowsLlmNodeEditor extends PlatformElement {
         `;
     }
 
+    _renderContextSection() {
+        const cfg = this.nodeConfig?.llm_context && typeof this.nodeConfig.llm_context === 'object'
+            ? this.nodeConfig.llm_context
+            : {};
+        const contextResourceKey = typeof this.nodeConfig?.llm_context_resource_key === 'string'
+            ? this.nodeConfig.llm_context_resource_key
+            : '';
+        const contextResourceOptions = this._llmContextResourceOptions();
+        return html`
+            <section class="block">
+                <h4 class="block-title">${this.t('llm_node_editor.section_context')}</h4>
+                <div class="block-card">
+                    ${contextResourceOptions.values.length > 1 || contextResourceKey.length > 0
+                        ? html`
+                            <platform-field
+                                type="enum"
+                                mode="edit"
+                                .label=${this.t('llm_node_editor.context_resource')}
+                                .hint=${this.t('llm_node_editor.context_resource_hint')}
+                                .value=${contextResourceKey}
+                                .config=${contextResourceOptions}
+                                @change=${this._onLlmContextResourceChange}
+                            ></platform-field>
+                        `
+                        : nothing}
+                    <platform-llm-context-editor
+                        compact
+                        .config=${cfg}
+                        .clearable=${Object.keys(cfg).length > 0}
+                        @change=${this._onLlmContextChange}
+                        @clear=${this._clearLlmContext}
+                    ></platform-llm-context-editor>
+                </div>
+            </section>
+        `;
+    }
+
     _renderOutputModeSection() {
         const structured = Boolean(this.nodeConfig?.structured_output);
         return html`
@@ -1020,6 +1139,7 @@ export class FlowsLlmNodeEditor extends PlatformElement {
                 <div slot="settings" class="stack">
                     ${this._renderPromptSection()}
                     ${this._renderLlmSection()}
+                    ${this._renderContextSection()}
                     ${this._renderMessagesFilterSection()}
                     ${this._renderOutputModeSection()}
                     ${this._renderReactSection()}

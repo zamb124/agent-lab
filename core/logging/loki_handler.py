@@ -24,7 +24,9 @@ import json
 import logging
 import sys
 import threading
+from _thread import LockType
 from collections import deque
+from typing import override
 from urllib.parse import urlparse
 
 _FLUSH_INTERVAL_SEC = 1.0
@@ -44,7 +46,7 @@ def _flush_all_on_exit() -> None:
             pass
 
 
-atexit.register(_flush_all_on_exit)
+_ = atexit.register(_flush_all_on_exit)
 
 
 class LokiHandler(logging.Handler):
@@ -65,19 +67,19 @@ class LokiHandler(logging.Handler):
         flush_interval: float = _FLUSH_INTERVAL_SEC,
     ) -> None:
         super().__init__()
-        self._service_name = service_name
-        self._flush_interval = flush_interval
+        self._service_name: str = service_name
+        self._flush_interval: float = flush_interval
 
         parsed = urlparse(loki_url)
-        self._loki_host = parsed.hostname or "localhost"
-        self._loki_port = parsed.port or 3100
-        self._loki_path = parsed.path or "/loki/api/v1/push"
+        self._loki_host: str = parsed.hostname or "localhost"
+        self._loki_port: int = parsed.port or 3100
+        self._loki_path: str = parsed.path or "/loki/api/v1/push"
 
         self._queue: deque[tuple[str, str, str]] = deque(maxlen=_MAX_QUEUE_SIZE)
-        self._lock = threading.Lock()
-        self._shutdown = threading.Event()
+        self._lock: LockType = threading.Lock()
+        self._shutdown: threading.Event = threading.Event()
 
-        self._thread = threading.Thread(
+        self._thread: threading.Thread = threading.Thread(
             target=self._flush_loop,
             name="loki-log-flusher",
             daemon=True,
@@ -87,6 +89,7 @@ class LokiHandler(logging.Handler):
 
     # ── Handler API ─────────────────────────────────────────────────────
 
+    @override
     def emit(self, record: logging.LogRecord) -> None:
         try:
             msg = self.format(record)
@@ -101,7 +104,7 @@ class LokiHandler(logging.Handler):
 
     def _flush_loop(self) -> None:
         while not self._shutdown.is_set():
-            self._shutdown.wait(self._flush_interval)
+            _ = self._shutdown.wait(self._flush_interval)
             try:
                 self._do_flush()
             except Exception:
@@ -123,7 +126,7 @@ class LokiHandler(logging.Handler):
         for ts_ns, level, line in raw:
             by_level.setdefault(level, []).append((ts_ns, line))
 
-        streams = []
+        streams: list[dict[str, object]] = []
         for level, values in by_level.items():
             streams.append({
                 "stream": {
@@ -134,7 +137,7 @@ class LokiHandler(logging.Handler):
                 "values": values,
             })
 
-        payload = {"streams": streams}
+        payload: dict[str, object] = {"streams": streams}
         body = json.dumps(payload).encode("utf-8")
 
         # Если batch превышает лимит размера — не шлём, чтобы не перегружать Loki
@@ -148,7 +151,7 @@ class LokiHandler(logging.Handler):
     def _flush_by_level(self, by_level: dict[str, list[tuple[str, str]]]) -> None:
         for level, values in by_level.items():
             # Отправляем каждый уровень отдельно
-            streams = [{
+            streams: list[dict[str, object]] = [{
                 "stream": {
                     "service": self._service_name,
                     "level": level,
@@ -181,13 +184,14 @@ class LokiHandler(logging.Handler):
                 },
             )
             resp = conn.getresponse()
-            resp.read()
+            _ = resp.read()
             conn.close()
         except (OSError, http.client.HTTPException) as exc:
-            sys.stderr.write(
+            _ = sys.stderr.write(
                 f"[LokiHandler] push failed ({len(body)} bytes): {exc}\n"
             )
 
+    @override
     def close(self) -> None:
         self._shutdown.set()
         self._thread.join(timeout=5.0)

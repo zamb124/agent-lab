@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, List
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from core.clients.llm.config import LLMCallConfig
 from core.clients.llm.openrouter_free_models import (
@@ -52,8 +53,8 @@ def _make_platform_default_candidate_resolver(
     settings: BaseSettings,
     *,
     include_paid_fallback: bool,
-) -> Callable[[], Awaitable[List[LLMCallConfig]]]:
-    async def _resolve() -> List[LLMCallConfig]:
+) -> Callable[[], Awaitable[list[LLMCallConfig]]]:
+    async def _resolve() -> list[LLMCallConfig]:
         candidates: list[LLMCallConfig] = []
         records = await _read_openrouter_free_records()
         for record in records:

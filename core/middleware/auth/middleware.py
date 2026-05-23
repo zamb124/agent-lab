@@ -10,13 +10,13 @@ user/company/session/namespace при успешной авторизации; �
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from core.context import clear_context, set_context
+from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.logging import bind_log_context, get_logger
 from core.logging.attributes import (
     LOG_COMPANY_ID,
@@ -292,7 +292,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Синхронизация активной компании (для всех типов контекста)
         if user and company:
-                await self._sync_active_company(container, user, company)
+            await self._sync_active_company(container, user, company)
 
         return await context_factory.create(
             request, rule.context_type, company, user, token_data,
@@ -335,6 +335,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 owner_user_id=auth.dev_auto_user_id,
                 members={auth.dev_auto_user_id: ["admin"]},
             )
+            await container.company_repository.set(company)
 
         groups = list(dict.fromkeys(auth.dev_auto_groups or ["admin", "developers"]))
         user = User(
@@ -345,6 +346,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
             companies={company.company_id: groups},
             active_company_id=company.company_id,
             emails=[f"{auth.dev_auto_user_id}@dev.local"],
+        )
+        user = await ensure_persisted_runtime_user(
+            container,
+            user_id=user.user_id,
+            company_id=company.company_id,
+            name=user.name,
+            roles=groups,
+            attrs={"kind": "dev_auto_user"},
+            email=user.emails[0] if user.emails else None,
         )
         logger.warning(
             "auth.disabled_auto_context",
@@ -403,7 +413,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self,
         request: Request,
         container,
-    ) -> tuple[Optional[TokenData], Optional[str]]:
+    ) -> tuple[TokenData | None, str | None]:
         """
         Извлекает и валидирует токен из запроса.
 
@@ -473,7 +483,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         container,
         raw_token: str,
         path: str,
-    ) -> Optional[TokenData]:
+    ) -> TokenData | None:
         if not raw_token.startswith("hum_"):
             return None
         key_hash = hashlib.sha256(raw_token.encode()).hexdigest()
@@ -504,9 +514,25 @@ class AuthMiddleware(BaseHTTPMiddleware):
             },
         )
 
-    async def _get_user(self, container, token_data: TokenData) -> Optional[User]:
+    async def _get_user(self, container, token_data: TokenData) -> User | None:
         """Получает пользователя по данным токена"""
         user = await container.user_repository.get(token_data.user_id)
+        if user is None and token_data.token_type == TokenType.EMBED_SESSION:
+            user = await ensure_persisted_runtime_user(
+                container,
+                user_id=token_data.user_id,
+                company_id=token_data.company_id,
+                name="Embed Guest",
+                roles=["guest"],
+                attrs={
+                    "kind": "embed_session_guest",
+                    "token_expires_at": token_data.exp.isoformat(),
+                    "embed_id": token_data.metadata.get("embed_id"),
+                    "embed_flow_id": token_data.metadata.get("embed_flow_id"),
+                    "embed_branch_id": token_data.metadata.get("embed_branch_id"),
+                    "issued_by": token_data.metadata.get("issued_by"),
+                },
+            )
         if user:
             logger.debug("auth.user_loaded", user_id=token_data.user_id)
         return user

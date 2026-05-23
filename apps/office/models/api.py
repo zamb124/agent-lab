@@ -3,7 +3,7 @@ Pydantic-модели BFF office.
 """
 
 from datetime import datetime
-from typing import List, Literal, Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -54,6 +54,12 @@ class OfficeDocumentSyncRequest(BaseModel):
     close: bool = False
     settle_ms: int = Field(default=750, ge=0, le=3000)
     dirty: bool | None = None
+
+
+class OfficeFileEditorSyncResponse(BaseModel):
+    file_id: str
+    checksum: str | None = None
+    file_size: int
 
 
 class OfficeDocumentMutationResponse(BaseModel):
@@ -138,7 +144,7 @@ class OfficeNamespaceTemplateItem(BaseModel):
     description: str | None = None
     icon: str | None = None
     is_system: bool = False
-    entity_type_ids: List[str] = Field(default_factory=list)
+    entity_type_ids: list[str] = Field(default_factory=list)
 
 
 class OfficeNamespaceCreateRequest(BaseModel):
@@ -205,4 +211,4 @@ class OfficeCatalogMemberItem(BaseModel):
 
 
 class OfficeCatalogMembersResponse(BaseModel):
-    members: List[OfficeCatalogMemberItem]
+    members: list[OfficeCatalogMemberItem]

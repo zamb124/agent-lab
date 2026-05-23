@@ -6,13 +6,14 @@ import asyncio
 import copy
 import json
 import uuid
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
@@ -22,6 +23,8 @@ from apps.flows.src.models import (
     ExternalAgentStatus,
     FlowConfig,
     FlowType,
+    FlowVariableConfig,
+    GraphNodeConfig,
     MergeMode,
     NodeConfig,
     TriggerConfig,
@@ -32,7 +35,10 @@ from apps.flows.src.services.bundle_node_repair import (
     repair_node_map_with_canonical_top_level,
 )
 from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
-from apps.flows.src.services.flow_dataflow_inspector import inspect_flow_dataflow
+from apps.flows.src.services.flow_dataflow_inspector import (
+    DataflowInspectResult,
+    inspect_flow_dataflow,
+)
 from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
 from apps.flows.src.services.flow_speech_resolve import (
     effective_flow_speech_settings,
@@ -45,16 +51,19 @@ from core.clients.voice_resolver import resolve_effective_tts_voice_for_ws
 from core.config import get_settings
 from core.context import get_context
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
+from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
 from core.pagination import ListResponse, OffsetPage
 from core.short_links.service import require_platform_public_base_url
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 from core.ui_events.dispatcher import publish_ui_event_to_user
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
 
 _FLOW_PREVIEW_SHARE_TTL_SECONDS = 86400
+_GRAPH_NODE_MAP_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(dict[str, GraphNodeConfig])
 
 
 def _preview_share_base_urls(request: Request) -> tuple[str, str]:
@@ -253,10 +262,59 @@ def _generate_flow_url(flow_id: str, flow_kind: FlowType | None = None, external
     return f"https://{settings.server.host}:{settings.server.port}/flows/{flow_id}"
 
 
+def _dataflow_edge_models(raw_edges: object, field_name: str) -> list[Edge]:
+    if raw_edges is None:
+        return []
+    if not isinstance(raw_edges, list):
+        raise ValueError(f"{field_name} must be a list")
+    out: list[Edge] = []
+    for idx, edge in enumerate(cast(list[object], raw_edges)):
+        item_name = f"{field_name}[{idx}]"
+        if isinstance(edge, Edge):
+            out.append(edge)
+        elif isinstance(edge, BaseModel):
+            payload = require_json_object(cast(object, edge.model_dump(mode="json", by_alias=True)), item_name)
+            out.append(Edge.model_validate(payload))
+        else:
+            payload = require_json_value(edge, item_name)
+            out.append(Edge.model_validate(payload))
+    return out
+
+
+def _flow_variable_models(raw_variables: object, field_name: str) -> dict[str, FlowVariableConfig]:
+    if raw_variables is None:
+        return {}
+    if not isinstance(raw_variables, Mapping):
+        raise ValueError(f"{field_name} must be an object")
+    out: dict[str, FlowVariableConfig] = {}
+    for key, raw_value in cast(Mapping[object, object], raw_variables).items():
+        if not isinstance(key, str) or not key:
+            raise ValueError(f"{field_name} keys must be non-empty strings")
+        if isinstance(raw_value, FlowVariableConfig):
+            out[key] = raw_value
+        elif isinstance(raw_value, Mapping):
+            out[key] = FlowVariableConfig.model_validate(dict(raw_value))
+        else:
+            out[key] = FlowVariableConfig(
+                value=require_json_value(raw_value, f"{field_name}.{key}"),
+            )
+    return out
+
+
+def _graph_nodes_payload(nodes: Mapping[str, GraphNodeConfig]) -> dict[str, JsonObject]:
+    return {
+        node_id: require_json_object(
+            cast(object, node.model_dump(mode="json", by_alias=True, exclude_none=True)),
+            f"nodes.{node_id}",
+        )
+        for node_id, node in nodes.items()
+    }
+
+
 async def _inline_tools_in_nodes(
-    nodes: dict[str, dict[str, Any]],
+    nodes: dict[str, JsonObject],
     container: FlowContainer
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, JsonObject]:
     """
     Инлайнит tools в nodes flow.
 
@@ -267,12 +325,14 @@ async def _inline_tools_in_nodes(
     for node_id, node_config in nodes.items():
         # Инлайним tools для llm_node
         tools = node_config.get("tools", [])
-        if tools:
+        if isinstance(tools, list) and tools:
             node_config["tools"] = await inline_tools_list(tools, container)
 
         # Инлайним code для code-нод с tool_id без кода
         if node_config.get("type") == "code" and node_config.get("tool_id") and not node_config.get("code"):
             tool_id = node_config["tool_id"]
+            if not isinstance(tool_id, str):
+                continue
             tool_ref = await container.tool_repository.get(tool_id)
             if tool_ref and tool_ref.code:
                 node_config["code"] = tool_ref.code
@@ -282,16 +342,20 @@ async def _inline_tools_in_nodes(
                         for k, v in tool_ref.args_schema.items()
                     }
                 if tool_ref.parameters_schema:
-                    node_config["parameters_schema"] = tool_ref.parameters_schema
+                    node_config["parameters_schema"] = require_json_object(
+                        cast(object, tool_ref.parameters_schema),
+                        "tool.parameters_schema",
+                    )
                 if tool_ref.description and not node_config.get("description"):
                     node_config["description"] = tool_ref.description
+        nodes[node_id] = node_config
     return nodes
 
 
 async def inline_tools_list(
-    tools: list[Any],
+    tools: Sequence[JsonValue],
     container: FlowContainer
-) -> list[dict[str, Any]]:
+) -> list[JsonValue]:
     """Инлайнит список tools."""
     inlined = []
     for tool in tools:
@@ -302,15 +366,15 @@ async def inline_tools_list(
 
 
 async def _inline_single_tool(
-    tool: Any,
+    tool: JsonValue,
     container: FlowContainer
-) -> dict[str, Any] | None:
+) -> JsonObject | None:
     """Инлайнит один tool."""
     if isinstance(tool, str):
         # tool_id - достаём из библиотеки
         tool_ref = await container.tool_repository.get(tool)
         if tool_ref:
-            return tool_ref.model_dump()
+            return require_json_object(cast(object, tool_ref.model_dump(mode="json")), "tool")
 
         # Может быть node (llm_node as tool)
         node = await container.node_repository.get(tool)
@@ -325,57 +389,70 @@ async def _inline_single_tool(
         raise HTTPException(status_code=400, detail=f"Tool '{tool}' not found in library")
 
     elif isinstance(tool, dict):
-        tool_id = tool.get("tool_id")
+        tool_obj = require_json_object(tool, "tool")
+        tool_id = tool_obj.get("tool_id")
 
         # Если это llm_node - рекурсивно инлайним его tools
-        if tool.get("type") == "llm_node" or tool.get("prompt"):
-            if "tools" in tool:
-                tool["tools"] = await inline_tools_list(tool["tools"], container)
-            return tool
+        if tool_obj.get("type") == "llm_node" or tool_obj.get("prompt"):
+            nested_tools = tool_obj.get("tools")
+            if isinstance(nested_tools, list):
+                tool_obj["tools"] = await inline_tools_list(nested_tools, container)
+            return tool_obj
 
         # Если нет code - дополняем из библиотеки
-        if tool_id and not tool.get("code"):
+        if isinstance(tool_id, str) and tool_id and not tool_obj.get("code"):
             tool_ref = await container.tool_repository.get(tool_id)
             if tool_ref and tool_ref.code:
-                merged = tool_ref.model_dump()
-                merged.update(tool)  # Переопределения из запроса приоритетнее
+                merged = require_json_object(cast(object, tool_ref.model_dump(mode="json")), "tool")
+                merged.update(tool_obj)  # Переопределения из запроса приоритетнее
                 return merged
 
-        return tool
+        return tool_obj
 
     return None
 
 
-async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> dict[str, Any]:
+async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> JsonObject:
     """Конвертирует NodeConfig в inline tool."""
-    result: dict[str, Any] = {
+    result: JsonObject = {
         "tool_id": node.node_id,
-        "type": node.type.value if hasattr(node.type, "value") else node.type,
+        "type": node.type.value,
         "name": node.name,
         "description": node.description,
         "prompt": node.prompt,
     }
     if node.llm:
-        result["llm"] = node.llm.model_dump()
+        result["llm"] = require_json_object(cast(object, node.llm.model_dump(mode="json")), "node.llm")
     if node.code:
         result["code"] = node.code
     if node.tools:
-        tools_list = [t.model_dump() if hasattr(t, "model_dump") else t for t in node.tools]
+        tools_list: list[JsonValue] = []
+        for tool in node.tools:
+            if isinstance(tool, str):
+                tools_list.append(tool)
+            else:
+                tools_list.append(require_json_object(cast(object, tool.model_dump(mode="json")), "node.tools[]"))
         result["tools"] = await inline_tools_list(tools_list, container)
     return result
 
 
-def _flow_config_to_inline_tool(flow_cfg: FlowConfig) -> dict[str, Any]:
+def _flow_config_to_inline_tool(flow_cfg: FlowConfig) -> JsonObject:
     """Конвертирует FlowConfig в inline tool."""
-    return {
-        "tool_id": flow_cfg.flow_id,
-        "type": "flow",
-        "name": flow_cfg.name,
-        "description": flow_cfg.description,
-        "entry": flow_cfg.entry,
-        "nodes": flow_cfg.nodes,
-        "edges": [e.model_dump() for e in flow_cfg.edges] if flow_cfg.edges else [],
-    }
+    return require_json_object(
+        cast(
+            object,
+            {
+                "tool_id": flow_cfg.flow_id,
+                "type": "flow",
+                "name": flow_cfg.name,
+                "description": flow_cfg.description,
+                "entry": flow_cfg.entry,
+                "nodes": flow_cfg.nodes,
+                "edges": [e.model_dump(mode="json", by_alias=True) for e in flow_cfg.edges] if flow_cfg.edges else [],
+            },
+        ),
+        "flow_tool",
+    )
 
 router = APIRouter(tags=["flows"])
 
@@ -652,27 +729,28 @@ class FlowDataflowInspectRequest(BaseModel):
     flow_id: str | None = None
     branch_id: str = "default"
     entry: str | None = None
-    nodes: dict[str, Any] = Field(default_factory=dict)
-    edges: list[Any] = Field(default_factory=list)
-    variables: dict[str, Any] = Field(default_factory=dict)
-    sample_state: dict[str, Any] | None = None
-    observed_runs: dict[str, Any] = Field(default_factory=dict)
+    nodes: dict[str, GraphNodeConfig] = Field(default_factory=dict)
+    edges: list[Edge] = Field(default_factory=list)
+    variables: dict[str, FlowVariableConfig] = Field(default_factory=dict)
+    sample_state: JsonObject | None = None
+    observed_runs: JsonObject = Field(default_factory=dict)
+
+    @field_validator("variables", mode="before")
+    @classmethod
+    def _normalize_variables(cls, value: object) -> dict[str, FlowVariableConfig]:
+        return _flow_variable_models(value, "variables")
 
 
 async def _attach_nested_dataflow_for_editor(
-    nodes: dict[str, Any],
+    nodes: dict[str, JsonObject],
     container: FlowContainer,
     *,
     seen_flow_ids: set[str] | None = None,
-) -> dict[str, Any]:
+) -> dict[str, JsonObject]:
     """Adds one-level static nested-flow summaries used only by the dataflow inspector."""
-    if not isinstance(nodes, dict):
-        return {}
     seen = set(seen_flow_ids or set())
     out = copy.deepcopy(nodes)
     for node_id, node in out.items():
-        if not isinstance(node, dict):
-            continue
         if node.get("type") != "flow":
             continue
         nested_flow_id = node.get("flow_id")
@@ -681,13 +759,16 @@ async def _attach_nested_dataflow_for_editor(
         nested_cfg = await container.flow_repository.get(nested_flow_id)
         if nested_cfg is None:
             continue
-        nested_branch_id = node.get("branch_id") if isinstance(node.get("branch_id"), str) else "default"
+        raw_nested_branch_id = node.get("branch_id")
+        nested_branch_id: str = (
+            raw_nested_branch_id
+            if isinstance(raw_nested_branch_id, str) and raw_nested_branch_id.strip()
+            else "default"
+        )
         nested_effective = container.flow_factory.apply_branch(nested_cfg, nested_branch_id)
-        nested_nodes = nested_effective.get("nodes") or {}
-        nested_edges = [
-            edge.model_dump(mode="json", by_alias=True) if hasattr(edge, "model_dump") else edge
-            for edge in (nested_effective.get("edges") or [])
-        ]
+        nested_graph_nodes = _GRAPH_NODE_MAP_ADAPTER.validate_python(nested_effective.get("nodes") or {})
+        nested_nodes = _graph_nodes_payload(nested_graph_nodes)
+        nested_edges = _dataflow_edge_models(nested_effective.get("edges"), "nested.edges")
         try:
             nested_nodes = await _inline_tools_in_nodes(copy.deepcopy(nested_nodes), container)
         except Exception as exc:
@@ -703,16 +784,23 @@ async def _attach_nested_dataflow_for_editor(
             container,
             seen_flow_ids={*seen, nested_flow_id},
         )
-        node["__dataflow_nested"] = inspect_flow_dataflow(
-            flow_id=nested_flow_id,
-            branch_id=nested_branch_id,
-            entry=nested_effective.get("entry"),
-            nodes=nested_nodes,
-            edges=nested_edges,
-            variables=nested_effective.get("variables") or {},
-            sample_state=None,
-            observed_runs={},
+        node["__dataflow_nested"] = require_json_object(
+            cast(
+                object,
+                inspect_flow_dataflow(
+                    flow_id=nested_flow_id,
+                    branch_id=nested_branch_id,
+                    entry=nested_effective.get("entry"),
+                    nodes=_GRAPH_NODE_MAP_ADAPTER.validate_python(nested_nodes),
+                    edges=nested_edges,
+                    variables=_flow_variable_models(nested_effective.get("variables"), "nested.variables"),
+                    sample_state=None,
+                    observed_runs={},
+                ).model_dump(mode="json"),
+            ),
+            "__dataflow_nested",
         )
+        out[node_id] = node
     return out
 
 
@@ -720,28 +808,27 @@ async def _attach_nested_dataflow_for_editor(
 async def inspect_dataflow(
     request: FlowDataflowInspectRequest,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> DataflowInspectResult:
     """Возвращает статический snapshot того, какие поля state входят и выходят из каждой ноды."""
-    nodes = request.nodes
-    edges = request.edges
+    nodes: dict[str, GraphNodeConfig] = request.nodes
+    edges: list[Edge] = request.edges
     entry = request.entry
-    variables = request.variables
+    variables: dict[str, FlowVariableConfig] = request.variables
 
     if not nodes and request.flow_id:
         flow_cfg = await container.flow_repository.get(request.flow_id)
         if flow_cfg is None:
             raise HTTPException(status_code=404, detail=f"Flow not found: {request.flow_id}")
         effective = container.flow_factory.apply_branch(flow_cfg, request.branch_id or "default")
-        nodes = effective.get("nodes") or {}
-        edges = [
-            edge.model_dump(mode="json", by_alias=True) if hasattr(edge, "model_dump") else edge
-            for edge in (effective.get("edges") or [])
-        ]
-        entry = effective.get("entry")
-        variables = effective.get("variables") or {}
+        nodes = _GRAPH_NODE_MAP_ADAPTER.validate_python(effective.get("nodes") or {})
+        edges = _dataflow_edge_models(effective.get("edges"), "flow.edges")
+        raw_entry = effective.get("entry")
+        entry = raw_entry if isinstance(raw_entry, str) else None
+        variables = _flow_variable_models(effective.get("variables"), "flow.variables")
 
+    node_payloads = _graph_nodes_payload(nodes)
     try:
-        nodes = await _inline_tools_in_nodes(copy.deepcopy(nodes), container)
+        node_payloads = await _inline_tools_in_nodes(copy.deepcopy(node_payloads), container)
     except Exception as exc:
         logger.warning(
             "flows.dataflow.inline_tools_failed",
@@ -749,7 +836,8 @@ async def inspect_dataflow(
             branch_id=request.branch_id,
             exception_type=type(exc).__name__,
         )
-    nodes = await _attach_nested_dataflow_for_editor(nodes, container)
+    node_payloads = await _attach_nested_dataflow_for_editor(node_payloads, container)
+    nodes = _GRAPH_NODE_MAP_ADAPTER.validate_python(node_payloads)
 
     return inspect_flow_dataflow(
         flow_id=request.flow_id,
@@ -965,7 +1053,7 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
 
 
 async def _validate_tool_nodes(
-    nodes: dict[str, dict[str, Any]],
+    nodes: dict[str, JsonObject],
     container: FlowContainer
 ) -> None:
     """Валидирует tool_id в code-нодах при отсутствии inline code."""
@@ -974,7 +1062,7 @@ async def _validate_tool_nodes(
             tool_id = node_config.get("tool_id")
             has_code = "code" in node_config and node_config.get("code")
 
-            if tool_id and not has_code:
+            if isinstance(tool_id, str) and tool_id and not has_code:
                 tool = await container.tool_repository.get(tool_id)
                 if tool is None:
                     node = await container.node_repository.get(tool_id)
@@ -1320,6 +1408,22 @@ async def create_flow_preview_share(
     await container.embed_mapping_repository.set(mapping)
 
     guest_id = f"flow_preview_{uuid.uuid4().hex}"
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=_FLOW_PREVIEW_SHARE_TTL_SECONDS)
+    _ = await ensure_persisted_runtime_user(
+        container,
+        user_id=guest_id,
+        company_id=company_id,
+        name="Flow Preview Guest",
+        roles=["guest"],
+        attrs={
+            "kind": "embed_session_guest",
+            "embed_id": embed_id,
+            "embed_flow_id": flow_id,
+            "embed_branch_id": branch_id,
+            "issued_by": "flows.preview_share",
+            "token_expires_at": expires_at.isoformat(),
+        },
+    )
     token = get_token_service().create_embed_session_token(
         user_id=guest_id,
         company_id=company_id,
@@ -1354,7 +1458,6 @@ async def create_flow_preview_share(
         ttl_seconds=_FLOW_PREVIEW_SHARE_TTL_SECONDS,
     )
 
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=_FLOW_PREVIEW_SHARE_TTL_SECONDS)
     share_url = await container.short_link_service.mint_flow_preview_embed(handoff_id, expires_at)
 
     logger.info(

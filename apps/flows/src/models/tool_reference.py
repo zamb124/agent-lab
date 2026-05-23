@@ -2,11 +2,14 @@
 Модель ToolReference - инструмент с inline кодом или MCP.
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
+from core.types import JsonObject, JsonValue
 
 from .enums import CodeMode, ReactToolRole
 
@@ -25,7 +28,7 @@ class CallParameter(BaseModel):
 class ToolReference(BaseModel):
     """Инструмент с inline кодом"""
 
-    model_config = ConfigDict(json_schema_extra={"storage_prefix": "tool"})
+    model_config: ClassVar[ConfigDict] = ConfigDict(json_schema_extra={"storage_prefix": "tool"})
 
     tool_id: str = Field(..., description="ID инструмента")
     name: str | None = Field(
@@ -34,7 +37,7 @@ class ToolReference(BaseModel):
     )
     title: str | None = Field(default=None, description="Название для отображения")
     description: str | None = Field(default=None, description="Описание инструмента")
-    parameters_schema: dict[str, Any] | None = Field(
+    parameters_schema: JsonObject | None = Field(
         default=None,
         description=(
             "Полная JSON Schema объекта параметров для LLM (type: object, properties, required, "
@@ -45,10 +48,14 @@ class ToolReference(BaseModel):
         default_factory=dict,
         description="Legacy: плоская схема {param_name: CallParameter}; если parameters_schema нет — строится LLM-схема отсюда",
     )
-    mock_map: dict[str, Any] | None = Field(
+    mock_map: JsonObject | None = Field(
         default=None, description="Mock данные для api_call tools"
     )
-    params: dict[str, Any] = Field(default_factory=dict, description="Параметры инструмента")
+    params: JsonObject = Field(default_factory=dict, description="Параметры инструмента")
+    resources: JsonObject = Field(
+        default_factory=dict,
+        description="Декларативные ресурсы tool для runtime-политик",
+    )
     language: str = Field(default="python", description="Язык исполнения code tool")
     entrypoint: str | None = Field(
         default=None,
@@ -62,13 +69,13 @@ class ToolReference(BaseModel):
 
     @field_validator("permission", mode="before")
     @classmethod
-    def convert_none_to_list(cls, v):
+    def convert_none_to_list(cls, v: JsonValue) -> JsonValue:
         if v is None:
             return []
         return v
 
     @model_validator(mode="after")
-    def default_display_name(self):
+    def default_display_name(self) -> Self:
         raw = (self.name or "").strip()
         if raw:
             return self
@@ -106,16 +113,16 @@ class ToolReference(BaseModel):
         description="Имя tool на MCP сервере"
     )
 
-    def effective_parameters_schema(self) -> dict[str, Any]:
+    def effective_parameters_schema(self) -> JsonObject:
         """Схема параметров для LLM: parameters_schema или сборка из args_schema."""
         return resolve_tool_parameters_schema(
             parameters_schema=self.parameters_schema,
             args_schema=self.args_schema,
         )
 
-    def to_registry_format(self) -> dict[str, Any]:
+    def to_registry_format(self) -> JsonObject:
         """Преобразует в формат для registry API (совместимость с platformweb)"""
-        attrs: dict[str, Any] = {
+        attrs: JsonObject = {
             "description": self.description or "",
             "args_schema": {
                 k: {"type": v.type, "description": v.description}

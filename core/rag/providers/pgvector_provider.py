@@ -8,7 +8,7 @@ import math
 import os
 import re
 import uuid
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Literal
 
 import tiktoken
 from sqlalchemy import and_, case, delete, func, or_, select, text, tuple_, update
@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from core.config import get_settings
 from core.config.llm_openai_compat import yandex_provider_http_headers
+from core.config.models import RAGProviderConfig
 from core.config.testing import is_testing
 from core.db.models import VectorDocument
 from core.db.utils import get_rowcount
@@ -24,11 +25,13 @@ from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.logging import get_logger
 from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.embedding_runtime import RagEmbeddingRuntime
-from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
+from core.rag.models import RAGDocument, RAGMetadata, RAGMetadataFilter, RAGNamespace, RAGSearchOptions, RAGSearchResult
 from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
 from core.rag.rrf import reciprocal_rank_fusion
 from core.rag.services.embedding_service import EmbeddingService
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
+from core.rag.upload_profile_binding import UploadProfileBinding
+from core.types import JsonValue, require_json_object
 
 logger = get_logger(__name__)
 # Значения из шаблонного conf.json — не отправлять в OpenRouter как ключ
@@ -43,9 +46,9 @@ _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
 class DeterministicEmbeddingService(EmbeddingService):
     """Детерминированный embedding-сервис для тестов и локального mock-режима."""
 
-    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+    async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         dim = self.get_embedding_dimension()
-        embeddings: List[List[float]] = []
+        embeddings: list[list[float]] = []
         for source_text in texts:
             vector = [0.0] * dim
             tokens = re.findall(r"[\w]+", source_text.lower(), flags=re.UNICODE)
@@ -68,7 +71,7 @@ class DeterministicEmbeddingService(EmbeddingService):
         return embeddings
 
 
-def _normalize_embedding_api_key(raw: Optional[str]) -> str:
+def _normalize_embedding_api_key(raw: str | None) -> str:
     if raw is None:
         return ""
     s = str(raw).strip()
@@ -77,8 +80,8 @@ def _normalize_embedding_api_key(raw: Optional[str]) -> str:
     return s
 
 
-def _resolve_pgvector_embedding_api_key(config: Dict[str, Any]) -> str:
-    key = _normalize_embedding_api_key(config.get("embedding_api_key"))
+def _resolve_pgvector_embedding_api_key(config: RAGProviderConfig) -> str:
+    key = _normalize_embedding_api_key(config.embedding_api_key)
     if key:
         return key
 
@@ -126,12 +129,12 @@ class PgVectorProvider(BaseRAGProvider):
 
     def __init__(
         self,
-        config: Dict[str, Any],
-        embedding_config: Optional[Union[RagEmbeddingRuntime, Dict[str, Any]]] = None,
-    ):
+        config: RAGProviderConfig,
+        embedding_config: RagEmbeddingRuntime | None = None,
+    ) -> None:
         super().__init__(config)
 
-        db_url = config.get("db_url")
+        db_url = config.db_url
         if not db_url:
             settings = get_settings()
             if not settings.database.rag_url:
@@ -152,23 +155,14 @@ class PgVectorProvider(BaseRAGProvider):
 
         api_key = _resolve_pgvector_embedding_api_key(config)
 
-        timeout = config.get("timeout", 60)
+        timeout = config.timeout
 
         if embedding_config is None:
-            emb_cfg: Dict[str, Any] = {}
-        elif isinstance(embedding_config, RagEmbeddingRuntime):
-            emb_cfg = {
-                "model": embedding_config.model,
-                "dimension": embedding_config.dimension,
-                "base_url": embedding_config.base_url,
-                "mrl_output_dimension": embedding_config.mrl_output_dimension,
-            }
-        else:
-            emb_cfg = embedding_config
-        model = emb_cfg.get("model")
-        dimension = emb_cfg.get("dimension")
-        embedding_base_url = emb_cfg.get("base_url")
-        mrl_output_dimension = emb_cfg.get("mrl_output_dimension")
+            raise ValueError("embedding runtime обязателен для pgvector")
+        model = embedding_config.model
+        dimension = embedding_config.dimension
+        embedding_base_url = embedding_config.base_url
+        mrl_output_dimension = embedding_config.mrl_output_dimension
 
         if not model:
             raise ValueError("embedding.model обязателен в конфигурации")
@@ -208,8 +202,8 @@ class PgVectorProvider(BaseRAGProvider):
             logger.info("PgVector провайдер: mock embeddings для тестов")
 
         self._file_reader = FileReader()
-        self._chunk_size = config.get("chunk_size", self.DEFAULT_CHUNK_SIZE)
-        self._chunk_overlap = config.get("chunk_overlap", self.DEFAULT_CHUNK_OVERLAP)
+        self._chunk_size = config.chunk_size
+        self._chunk_overlap = config.chunk_overlap
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
 
         logger.info(f"PgVector провайдер инициализирован: model={model}, dimension={dimension}")
@@ -218,7 +212,7 @@ class PgVectorProvider(BaseRAGProvider):
     def provider_name(self) -> str:
         return "pgvector"
 
-    async def close(self):
+    async def close(self) -> None:
         await self._engine.dispose()
 
     @property
@@ -232,7 +226,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     # -- Чанкинг --
 
-    def _chunk_text(self, text_content: str) -> List[str]:
+    def _chunk_text(self, text_content: str) -> list[str]:
         """Разбивает текст на chunks по токенам."""
         tokens = self._tokenizer.encode(text_content)
         chunks = []
@@ -248,15 +242,15 @@ class PgVectorProvider(BaseRAGProvider):
     def _chunks_from_file_read_result(
         self,
         read_result: FileReadResult,
-    ) -> List[tuple[str, Dict[str, Any]]]:
+    ) -> list[tuple[str, RAGMetadata]]:
         """Чанки для embeddings строго из FileReadResult.pages."""
-        out: List[tuple[str, Dict[str, Any]]] = []
+        out: list[tuple[str, RAGMetadata]] = []
         doc_checksum = read_result.source_checksum or ""
         for page in read_result.pages:
             body = (page.text or "").strip()
             if not body:
                 continue
-            base_meta: Dict[str, Any] = {
+            base_meta: RAGMetadata = {
                 "file_read_page_index": page.index,
                 "file_read_page_label": page.label,
                 "file_read_source_checksum": doc_checksum,
@@ -279,7 +273,7 @@ class PgVectorProvider(BaseRAGProvider):
     # -- Namespaces --
 
     async def create_namespace(
-        self, name: str, description: Optional[str] = None, **kwargs
+        self, name: str, description: str | None = None
     ) -> RAGNamespace:
         """Namespace -- логическое понятие, фильтр по namespace_id."""
         async with self._session_factory() as session:
@@ -298,7 +292,7 @@ class PgVectorProvider(BaseRAGProvider):
             document_count=count,
         )
 
-    async def get_namespace(self, namespace_id: str) -> Optional[RAGNamespace]:
+    async def get_namespace(self, namespace_id: str) -> RAGNamespace | None:
         async with self._session_factory() as session:
             stmt = (
                 select(func.count())
@@ -317,7 +311,7 @@ class PgVectorProvider(BaseRAGProvider):
             document_count=count,
         )
 
-    async def list_namespaces(self) -> List[RAGNamespace]:
+    async def list_namespaces(self) -> list[RAGNamespace]:
         async with self._session_factory() as session:
             stmt = select(
                 VectorDocument.namespace_id,
@@ -351,9 +345,8 @@ class PgVectorProvider(BaseRAGProvider):
         self,
         namespace_id: str,
         file_path: str,
-        document_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs,
+        document_name: str | None = None,
+        metadata: RAGMetadata | None = None,
     ) -> RAGDocument:
         s3_key, bucket_name, original_filename = await self._upload_file_to_s3(
             file_path, namespace_id, public=False
@@ -361,7 +354,7 @@ class PgVectorProvider(BaseRAGProvider):
 
         doc_name = document_name or original_filename
 
-        doc_metadata = metadata or {}
+        doc_metadata = dict(metadata) if metadata is not None else {}
         read_result = await self._file_reader.read(
             file_path,
             file_name=doc_name,
@@ -384,12 +377,14 @@ class PgVectorProvider(BaseRAGProvider):
         self,
         namespace_id: str,
         s3_key: str,
-        document_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs,
+        document_name: str | None = None,
+        metadata: RAGMetadata | None = None,
+        upload_profile: UploadProfileBinding | None = None,
     ) -> RAGDocument:
-        doc_metadata = metadata or {}
+        doc_metadata = dict(metadata) if metadata is not None else {}
         bucket_key = doc_metadata.get("s3_bucket")
+        if bucket_key is not None and not isinstance(bucket_key, str):
+            raise ValueError("metadata.s3_bucket должен быть строкой")
         file_data, bucket_name, original_filename = await self._download_file_from_s3(
             s3_key, bucket_config_key=bucket_key
         )
@@ -413,19 +408,19 @@ class PgVectorProvider(BaseRAGProvider):
             read_result=read_result,
             document_name=filename,
             metadata=doc_metadata,
+            upload_profile=upload_profile,
         )
 
     async def upload_document_from_text(
         self,
         namespace_id: str,
         text: str,
-        document_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs,
+        document_name: str | None = None,
+        metadata: RAGMetadata | None = None,
     ) -> RAGDocument:
         doc_name = document_name or f"text_{uuid.uuid4().hex[:8]}"
 
-        doc_metadata = metadata or {}
+        doc_metadata = dict(metadata) if metadata is not None else {}
         doc_metadata["file_type"] = "text"
 
         return await self._upload_text_internal(
@@ -440,7 +435,8 @@ class PgVectorProvider(BaseRAGProvider):
         namespace_id: str,
         read_result: FileReadResult,
         document_name: str,
-        metadata: Dict[str, Any],
+        metadata: RAGMetadata,
+        upload_profile: UploadProfileBinding | None = None,
     ) -> RAGDocument:
         """Chunk + embed из FileReadResult (единая схема с flows FileReader)."""
         md = dict(metadata)
@@ -454,6 +450,13 @@ class PgVectorProvider(BaseRAGProvider):
             md,
             default_ttl_seconds=get_settings().rag.ttl.default_ttl_seconds,
         )
+        index_profile_config = metadata.get("index_profile_config")
+        if index_profile_config is None and upload_profile is not None:
+            index_profile_config = require_json_object(
+                upload_profile.config.model_dump(mode="json", exclude_none=True),
+                "upload_profile.config",
+            )
+            metadata["index_profile_config"] = index_profile_config
 
         async with self._session_factory() as session:
             stmt = delete(VectorDocument).where(
@@ -470,21 +473,21 @@ class PgVectorProvider(BaseRAGProvider):
         chunks = [pair[0] for pair in chunk_pairs]
         chunk_metas = [pair[1] for pair in chunk_pairs]
 
-        index_profile_config = metadata.get("index_profile_config")
         if index_profile_config is not None and not isinstance(index_profile_config, dict):
             raise ValueError("index_profile_config должен быть объектом")
-        indexing_runtime: Dict[str, Any] = dict(index_profile_config or {})
+        indexing_runtime: RAGMetadata = dict(index_profile_config or {})
 
         # Если embedding-сервис недоступен — сохраняем чанки с embedding=NULL.
         # crm_reembed_stale_documents_tick / rag_reembed_stale_documents_tick подберут их
         # когда сервис восстановится (ищут embedding_model IS NULL).
         try:
             raw_embeddings = await self._embedding_service.generate_embeddings(chunks)
-            embeddings: List[Optional[List[float]]] = list(raw_embeddings)
+            embeddings: list[list[float] | None] = list(raw_embeddings)
             embedding_tokens = self._embedding_service.count_tokens(chunks)
-            embedding_model: Optional[str] = self.embedding_model_name()
-            indexing_runtime["embedding"] = self._embedding_service.runtime_snapshot(
-                embedding_tokens=embedding_tokens
+            embedding_model: str | None = self.embedding_model_name()
+            indexing_runtime["embedding"] = require_json_object(
+                self._embedding_service.runtime_snapshot(embedding_tokens=embedding_tokens),
+                "embedding runtime",
             )
         except Exception as exc:
             logger.warning(
@@ -495,7 +498,11 @@ class PgVectorProvider(BaseRAGProvider):
             embedding_model = None
             indexing_runtime["embedding"] = {"pending": True, "error": str(exc)[:200]}
 
-        rows = []
+        company_id_value = metadata.get("company_id")
+        if company_id_value is not None and not isinstance(company_id_value, str):
+            raise ValueError("metadata.company_id должен быть строкой")
+
+        rows: list[VectorDocument] = []
         for i, (chunk, emb, chunk_meta) in enumerate(zip(chunks, embeddings, chunk_metas)):
             chunk_row_id = uuid.uuid5(
                 uuid.NAMESPACE_URL,
@@ -505,7 +512,7 @@ class PgVectorProvider(BaseRAGProvider):
                 VectorDocument(
                     id=chunk_row_id,
                     namespace_id=namespace_id,
-                    company_id=metadata.get("company_id"),
+                    company_id=company_id_value,
                     document_id=document_id,
                     document_name=document_name,
                     content=chunk,
@@ -548,7 +555,7 @@ class PgVectorProvider(BaseRAGProvider):
         namespace_id: str,
         text_content: str,
         document_name: str,
-        metadata: Dict[str, Any],
+        metadata: RAGMetadata,
     ) -> RAGDocument:
         """Прямой текст (без файла): одна логическая страница в FileReadResult."""
         page = ReadPage(index=0, text=text_content, assets=[], label=None)
@@ -569,7 +576,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     # -- Document CRUD --
 
-    async def get_document(self, namespace_id: str, document_id: str) -> Optional[RAGDocument]:
+    async def get_document(self, namespace_id: str, document_id: str) -> RAGDocument | None:
         async with self._session_factory() as session:
             stmt = (
                 select(VectorDocument)
@@ -593,7 +600,7 @@ class PgVectorProvider(BaseRAGProvider):
             metadata=row.metadata_ or {},
         )
 
-    async def list_documents(self, namespace_id: str, limit: int = 100) -> List[RAGDocument]:
+    async def list_documents(self, namespace_id: str, limit: int = 100) -> list[RAGDocument]:
         async with self._session_factory() as session:
             stmt = (
                 select(
@@ -627,8 +634,8 @@ class PgVectorProvider(BaseRAGProvider):
         return docs
 
     async def list_documents_with_filters(
-        self, namespace_id: str, where: Optional[Dict[str, Any]] = None, limit: int = 100
-    ) -> List[RAGDocument]:
+        self, namespace_id: str, where: RAGMetadataFilter | None = None, limit: int = 100
+    ) -> list[RAGDocument]:
         async with self._session_factory() as session:
             stmt = (
                 select(
@@ -667,7 +674,7 @@ class PgVectorProvider(BaseRAGProvider):
         logger.info(f"Найдено {len(docs)} документов с фильтрами в {namespace_id}")
         return docs
 
-    def _metadata_expr_for_scalar(self, key: str, value: Any):
+    def _metadata_expr_for_scalar(self, key: str, value: JsonValue):
         if isinstance(value, bool):
             return VectorDocument.metadata_[key].as_boolean()
         if isinstance(value, int) and not isinstance(value, bool):
@@ -676,7 +683,7 @@ class PgVectorProvider(BaseRAGProvider):
             return VectorDocument.metadata_[key].as_float()
         return VectorDocument.metadata_[key].as_string()
 
-    def _build_field_operator_expression(self, key: str, operator: str, op_value: Any):
+    def _build_field_operator_expression(self, key: str, operator: str, op_value: JsonValue):
         if operator == "$eq":
             return self._metadata_expr_for_scalar(key, op_value) == op_value
         if operator == "$ne":
@@ -726,11 +733,11 @@ class PgVectorProvider(BaseRAGProvider):
 
         raise ValueError(f"RAG filters: неподдерживаемый оператор {operator}")
 
-    def _build_metadata_filter_expression(self, filters: Dict[str, Any]):
+    def _build_metadata_filter_expression(self, filters: RAGMetadataFilter):
         validate_metadata_filters(filters)
         return self._build_metadata_filter_node(filters)
 
-    def _build_metadata_filter_node(self, node: Dict[str, Any]):
+    def _build_metadata_filter_node(self, node: RAGMetadataFilter):
         if "$and" in node:
             return and_(*[self._build_metadata_filter_node(item) for item in node["$and"]])
         if "$or" in node:
@@ -761,8 +768,8 @@ class PgVectorProvider(BaseRAGProvider):
 
     async def batch_document_semantic_index_status(
         self,
-        keys: List[Tuple[str, str, str]],
-    ) -> Dict[Tuple[str, str, str], Literal["absent", "pending_embedding", "ready"]]:
+        keys: list[tuple[str, str, str]],
+    ) -> dict[tuple[str, str, str], Literal["absent", "pending_embedding", "ready"]]:
         """
         Агрегат по chunk-ам vector_documents для троек ``(namespace_id, document_id, company_id)``.
 
@@ -773,7 +780,7 @@ class PgVectorProvider(BaseRAGProvider):
         if not keys:
             return {}
         unique_keys = list(dict.fromkeys(keys))
-        out: Dict[Tuple[str, str, str], Literal["absent", "pending_embedding", "ready"]] = {
+        out: dict[tuple[str, str, str], Literal["absent", "pending_embedding", "ready"]] = {
             k: "absent" for k in unique_keys
         }
 
@@ -838,7 +845,7 @@ class PgVectorProvider(BaseRAGProvider):
         *,
         limit: int,
         target_embedding_model: str,
-    ) -> List[Tuple[str, str, str]]:
+    ) -> list[tuple[str, str, str]]:
         """
         Кандидаты на перевекторизацию: ``(id, content, company_id)``.
 
@@ -869,7 +876,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     async def write_reembed_chunk_embeddings(
         self,
-        doc_embeddings: List[Tuple[str, List[float]]],
+        doc_embeddings: list[tuple[str, list[float]]],
         target_embedding_model: str,
     ) -> int:
         """Записывает векторы для списка ``(chunk_id, embedding)``."""
@@ -928,28 +935,26 @@ class PgVectorProvider(BaseRAGProvider):
         namespace_id: str,
         query: str,
         limit: int = 5,
-        filters: Optional[Dict[str, Any]] = None,
-        **kwargs,
-    ) -> List[RAGSearchResult]:
+        filters: RAGMetadataFilter | None = None,
+        search_options: RAGSearchOptions | None = None,
+    ) -> list[RAGSearchResult]:
         embedding_model = self.embedding_model_name()
-        channels = kwargs.get("channels")
+        channels = search_options.channels if search_options is not None else None
         use_hybrid_rrf = (
-            isinstance(channels, dict)
-            and bool(channels.get("semantic"))
-            and bool(channels.get("lexical"))
+            channels is not None
+            and channels.semantic
+            and channels.lexical
         )
 
         if use_hybrid_rrf:
-            rrf_k = kwargs.get("rrf_k")
-            per_channel_top_k = kwargs.get("per_channel_top_k")
             return await self._hybrid_search_rrf(
                 namespace_id=namespace_id,
                 query=query,
                 limit=limit,
                 filters=filters,
                 embedding_model=embedding_model,
-                rrf_k=rrf_k,
-                per_channel_top_k=per_channel_top_k,
+                rrf_k=search_options.rrf_k,
+                per_channel_top_k=search_options.per_channel_top_k,
             )
 
         query_embedding = await self._embedding_service.generate_embedding(query)
@@ -982,11 +987,11 @@ class PgVectorProvider(BaseRAGProvider):
         namespace_id: str,
         query: str,
         limit: int,
-        filters: Optional[Dict[str, Any]],
+        filters: RAGMetadataFilter | None,
         embedding_model: str,
-        rrf_k: Any = None,
-        per_channel_top_k: Any = None,
-    ) -> List[RAGSearchResult]:
+        rrf_k: int | None = None,
+        per_channel_top_k: int | None = None,
+    ) -> list[RAGSearchResult]:
         """Двухканальный поиск: семантический (cosine) + лексический (tsquery), слияние RRF."""
         query_embedding = await self._embedding_service.generate_embedding(query)
 
@@ -1043,7 +1048,7 @@ class PgVectorProvider(BaseRAGProvider):
             docs_rows = list((await session.execute(docs_stmt)).scalars().all())
 
         by_id = {doc.id: doc for doc in docs_rows}
-        ordered: List[RAGSearchResult] = []
+        ordered: list[RAGSearchResult] = []
         for doc_id in top_ids:
             doc = by_id.get(doc_id)
             if doc is None:
@@ -1064,10 +1069,10 @@ class PgVectorProvider(BaseRAGProvider):
 
     def _build_search_results(
         self,
-        rows: list[Any],
+        rows: list[tuple[VectorDocument, float | None]],
         namespace_id: str,
-    ) -> List[RAGSearchResult]:
-        search_results: List[RAGSearchResult] = []
+    ) -> list[RAGSearchResult]:
+        search_results: list[RAGSearchResult] = []
         for row in rows:
             doc = row[0]
             score = float(row[1]) if row[1] is not None else 0.0

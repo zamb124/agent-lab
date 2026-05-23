@@ -6,7 +6,8 @@ import asyncio
 import json
 import os
 import uuid
-from typing import Any, AsyncGenerator, Dict, List, Optional, Type, TypeVar, overload
+from collections.abc import AsyncGenerator
+from typing import Any, TypeVar, overload
 
 from a2a.types import (
     Artifact,
@@ -22,6 +23,11 @@ from a2a.types import (
 from a2a.utils.message import get_message_text, new_agent_text_message
 from pydantic import BaseModel
 
+from core.clients.llm.context_layer import (
+    LLMContextInput,
+    llm_context_trace_metadata,
+    prepare_messages_for_context_layer,
+)
 from core.clients.llm.messages import (
     MessageInput,
     StreamEvent,
@@ -29,6 +35,7 @@ from core.clients.llm.messages import (
 from core.clients.llm.messages import (
     normalize_messages as _normalize_messages,
 )
+from core.llm_context import LLMContextBlock, LLMContextSourceRegistry
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -70,7 +77,7 @@ def _mock_capture_key(scope: str) -> str:
 
 _MOCK_CAPTURE_SCOPE_KEY = "mock_llm:capture:active_scope"
 
-_global_mock_registry: Dict[str, "MockLLM"] = {}
+_global_mock_registry: dict[str, "MockLLM"] = {}
 
 # Атомарно: один элемент JSON-массива за вызов (несколько async LLM на одном ключе).
 _MOCK_LLM_REDIS_POP_SCRIPT = """
@@ -108,9 +115,9 @@ class MockLLM:
             raise ValueError("MockLLM model is required")
         self.model = model_name
         self.llm_provider = "mock"
-        self._response_queue: List[Any] = []
-        self._responses: Dict[str, str] = {}
-        self._tool_responses: Dict[str, Dict[str, Any]] = {}
+        self._response_queue: list[Any] = []
+        self._responses: dict[str, str] = {}
+        self._tool_responses: dict[str, dict[str, Any]] = {}
         self._default_response: str = "Mock LLM ответ"
         self._redis_client = None
 
@@ -121,10 +128,10 @@ class MockLLM:
 
     def configure(
         self,
-        response_queue: Optional[List[Any]] = None,
-        tool_responses: Optional[Dict[str, Dict[str, Any]]] = None,
-        responses: Optional[Dict[str, str]] = None,
-        default_response: Optional[str] = None,
+        response_queue: list[Any] | None = None,
+        tool_responses: dict[str, dict[str, Any]] | None = None,
+        responses: dict[str, str] | None = None,
+        default_response: str | None = None,
     ) -> "MockLLM":
         """Настройка mock ответов."""
         if response_queue is not None:
@@ -149,7 +156,7 @@ class MockLLM:
         self._tool_responses = {}
         self._default_response = "Mock LLM ответ"
 
-    async def _get_redis_response(self) -> Optional[Any]:
+    async def _get_redis_response(self) -> Any | None:
         """Получает ответ из Redis (межпроцессная очередь)."""
         if not self._redis_client:
             return None
@@ -174,10 +181,10 @@ class MockLLM:
 
     async def _capture_call_to_redis(
         self,
-        messages: List[Message],
-        tools: Optional[List[Dict[str, Any]]],
-        response_format: Optional[Dict[str, Any]],
-        model: Optional[str] = None,
+        messages: list[Message],
+        tools: list[dict[str, Any]] | None,
+        response_format: dict[str, Any] | None,
+        model: str | None = None,
     ) -> None:
         """
         Если фикстура теста выставила активный capture-scope в Redis,
@@ -228,7 +235,7 @@ class MockLLM:
             )
             raise
 
-    def _get_response(self, messages: List[Message]) -> Dict[str, Any]:
+    def _get_response(self, messages: list[Message]) -> dict[str, Any]:
         """Внутренний метод получения ответа."""
         # Сначала локальная очередь
         if self._response_queue:
@@ -238,7 +245,7 @@ class MockLLM:
 
         return self._generate_from_patterns(messages)
 
-    async def _get_response_async(self, messages: List[Message]) -> Dict[str, Any]:
+    async def _get_response_async(self, messages: list[Message]) -> dict[str, Any]:
         """Асинхронный метод получения ответа с Redis поддержкой."""
         # Локальная очередь приоритетнее Redis: в одном тесте uvicorn ест очередь
         # из configure_mock_llm, а worker — из ключа mock_llm:responses без пересечения.
@@ -253,7 +260,7 @@ class MockLLM:
 
         return self._generate_from_patterns(messages)
 
-    def _process_response(self, mock_response: Any, messages: List[Message]) -> Dict[str, Any]:
+    def _process_response(self, mock_response: Any, messages: list[Message]) -> dict[str, Any]:
         """Обрабатывает ответ из очереди"""
         if isinstance(mock_response, dict):
             if mock_response.get("type") == "tool_call":
@@ -327,7 +334,7 @@ class MockLLM:
         else:
             return {"content": str(mock_response), "reasoning": None, "tool_calls": None}
 
-    def _generate_from_patterns(self, messages: List[Message]) -> Dict[str, Any]:
+    def _generate_from_patterns(self, messages: list[Message]) -> dict[str, Any]:
         """Генерирует ответ на основе паттернов"""
         if not messages:
             return {"content": self._default_response, "reasoning": None, "tool_calls": None}
@@ -370,11 +377,14 @@ class MockLLM:
     async def stream(
         self,
         messages: MessageInput,
-        tools: Optional[List[Dict[str, Any]]] = None,
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        task_id: Optional[str] = None,
-        context_id: Optional[str] = None,
+        tools: list[dict[str, Any]] | None = None,
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
+        llm_context: LLMContextInput | None = None,
+        llm_context_blocks: list[LLMContextBlock] | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
         **_: Any,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
@@ -392,6 +402,15 @@ class MockLLM:
         artifact_id = str(uuid.uuid4())
 
         normalized_messages = _normalize_messages(messages)
+        prepared_context = await prepare_messages_for_context_layer(
+            normalized_messages,
+            tools=tools,
+            llm_context=llm_context,
+            llm_context_blocks=llm_context_blocks,
+            llm_context_source_registry=llm_context_source_registry,
+        )
+        normalized_messages = prepared_context.messages
+        context_metadata = llm_context_trace_metadata(prepared_context.compiled_context)
 
         await self._capture_call_to_redis(
             messages=normalized_messages,
@@ -462,7 +481,11 @@ class MockLLM:
                 message_id=str(uuid.uuid4()),
                 role=Role.agent,
                 parts=[Part(root=TextPart(text=content))],
-                metadata={"tool_calls": tool_calls, "usage": usage_data},
+                metadata={
+                    "tool_calls": tool_calls,
+                    "usage": usage_data,
+                    **({"llm_context": context_metadata} if context_metadata else {}),
+                },
             )
             yield TaskStatusUpdateEvent(
                 context_id=context_id,
@@ -472,7 +495,10 @@ class MockLLM:
             )
             final_message = new_agent_text_message(content) if content else None
             if final_message:
-                final_message.metadata = {"usage": usage_data}
+                final_message.metadata = {
+                    "usage": usage_data,
+                    **({"llm_context": context_metadata} if context_metadata else {}),
+                }
             yield TaskStatusUpdateEvent(
                 context_id=context_id,
                 task_id=task_id,
@@ -490,6 +516,7 @@ class MockLLM:
                     message_id=str(uuid.uuid4()),
                     role=Role.agent,
                     parts=[Part(root=TextPart(text=content))],
+                    metadata={"llm_context": context_metadata} if context_metadata else None,
                 )
             yield TaskStatusUpdateEvent(
                 context_id=context_id,
@@ -500,16 +527,27 @@ class MockLLM:
 
     async def invoke(
         self,
-        messages: List[Message],
+        messages: list[Message],
         json_output: bool = False,
-        max_tokens: Optional[int] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
-        extra_headers: Optional[Dict[str, str]] = None,
-    ) -> str | Dict[str, Any]:
+        max_tokens: int | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        llm_context: LLMContextInput | None = None,
+        llm_context_blocks: list[LLMContextBlock] | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
+    ) -> str | dict[str, Any]:
         """Non-streaming вызов (vision/OCR и др.), совместим с ``LLMClient.invoke``."""
         del max_tokens, extra_body, extra_headers
         normalized_messages = _normalize_messages(messages)
-        response_format: Optional[Dict[str, Any]] = None
+        prepared_context = await prepare_messages_for_context_layer(
+            normalized_messages,
+            tools=None,
+            llm_context=llm_context,
+            llm_context_blocks=llm_context_blocks,
+            llm_context_source_registry=llm_context_source_registry,
+        )
+        normalized_messages = prepared_context.messages
+        response_format: dict[str, Any] | None = None
         if json_output:
             response_format = {"type": "json_object"}
         await self._capture_call_to_redis(
@@ -531,18 +569,22 @@ class MockLLM:
         self,
         messages: MessageInput,
         *,
-        response_model: Type[T],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[str] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
+        response_model: type[T],
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: str | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        llm_context: LLMContextInput | None = None,
+        llm_context_blocks: list[LLMContextBlock] | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
     ) -> T: ...
 
     @overload
@@ -551,40 +593,48 @@ class MockLLM:
         messages: MessageInput,
         *,
         response_model: None = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[str] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: str | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        llm_context: LLMContextInput | None = None,
+        llm_context_blocks: list[LLMContextBlock] | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
     ) -> Message: ...
 
     async def chat(
         self,
         messages: MessageInput,
         *,
-        response_model: Optional[Type[T]] = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[str] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
+        response_model: type[T] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: str | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        llm_context: LLMContextInput | None = None,
+        llm_context_blocks: list[LLMContextBlock] | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
     ) -> Message | T:
         """
         Единый метод вызова MockLLM (совместим с LLMClient.chat).
         """
-        del seed, reasoning_effort, extra_body
+        del seed, reasoning_effort, extra_body, extra_headers
         normalized_messages = _normalize_messages(messages)
 
         response_format = None
@@ -599,8 +649,8 @@ class MockLLM:
                 },
             }
 
-        content_parts: List[str] = []
-        tool_calls: List[Dict[str, Any]] = []
+        content_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
         last_status_text = ""
 
         async for event in self.stream(
@@ -608,6 +658,9 @@ class MockLLM:
             tools=tools if not response_model else None,
             response_format=response_format,
             model=model,
+            llm_context=llm_context,
+            llm_context_blocks=llm_context_blocks,
+            llm_context_source_registry=llm_context_source_registry,
         ):
             if isinstance(event, TaskArtifactUpdateEvent):
                 if (
@@ -648,7 +701,7 @@ class MockLLM:
         )
 
 
-def _normalize_message_for_capture(message: Any) -> Dict[str, Any]:
+def _normalize_message_for_capture(message: Any) -> dict[str, Any]:
     """
     Превращает A2A `Message` (или dict) в JSON-сериализуемое представление
     для журнала MockLLM. Текст склеивается из всех TextPart-ов; FilePart
@@ -665,8 +718,8 @@ def _normalize_message_for_capture(message: Any) -> Dict[str, Any]:
     else:
         return {"role": "user", "text": str(message), "parts": [], "metadata": {}}
 
-    text_parts: List[str] = []
-    serialized_parts: List[Dict[str, Any]] = []
+    text_parts: list[str] = []
+    serialized_parts: list[dict[str, Any]] = []
     for part in parts:
         root = getattr(part, "root", None)
         if root is None and isinstance(part, dict):
@@ -696,7 +749,7 @@ def _normalize_message_for_capture(message: Any) -> Dict[str, Any]:
             serialized_parts.append({"type": "file", "mime_type": mime_type or "application/octet-stream"})
 
     role_str = role.value if hasattr(role, "value") else str(role)
-    safe_metadata: Dict[str, Any] = {}
+    safe_metadata: dict[str, Any] = {}
     for key in ("system", "tool_call_id", "tool_calls"):
         if key in metadata:
             safe_metadata[key] = metadata[key]
@@ -708,12 +761,12 @@ def _normalize_message_for_capture(message: Any) -> Dict[str, Any]:
     }
 
 
-def get_global_mock_llm(model: str = "mock-gpt-4") -> Optional[MockLLM]:
+def get_global_mock_llm(model: str = "mock-gpt-4") -> MockLLM | None:
     """Получает глобальный MockLLM для настройки в тестах"""
     return _global_mock_registry.get(model)
 
 
-def configure_mock_llm_redis(redis_client, model: str = "mock-gpt-4") -> Optional[MockLLM]:
+def configure_mock_llm_redis(redis_client, model: str = "mock-gpt-4") -> MockLLM | None:
     """Настраивает MockLLM для чтения из Redis."""
     mock_llm = get_global_mock_llm(model)
     if mock_llm:
@@ -724,9 +777,9 @@ def configure_mock_llm_redis(redis_client, model: str = "mock-gpt-4") -> Optiona
 
 async def setup_mock_responses_redis(
     redis_client,
-    response_queue: List[Any],
+    response_queue: list[Any],
     *,
-    key_override: Optional[str] = None,
+    key_override: str | None = None,
 ) -> None:
     """
     Записывает mock ответы в Redis для межпроцессного обмена.
@@ -748,7 +801,7 @@ async def setup_mock_responses_redis(
 async def clear_mock_responses_redis(
     redis_client,
     *,
-    key_override: Optional[str] = None,
+    key_override: str | None = None,
 ) -> None:
     """Очищает mock ответы из Redis."""
     key = key_override or _mock_redis_key()
@@ -778,10 +831,10 @@ async def stop_mock_llm_capture(redis_client, scope: str) -> None:
     await redis_client.delete(_mock_capture_key(scope))
 
 
-async def read_mock_llm_capture(redis_client, scope: str) -> List[Dict[str, Any]]:
+async def read_mock_llm_capture(redis_client, scope: str) -> list[dict[str, Any]]:
     """Возвращает все записанные за scope вызовы MockLLM в порядке прихода."""
     capture_payloads = await redis_client.lrange(_mock_capture_key(scope), 0, -1)
-    captured_calls: List[Dict[str, Any]] = []
+    captured_calls: list[dict[str, Any]] = []
     for capture_item in capture_payloads or []:
         if isinstance(capture_item, bytes):
             capture_item = capture_item.decode("utf-8")

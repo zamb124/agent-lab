@@ -11,6 +11,7 @@
 """
 
 from collections.abc import Mapping
+from typing import Unpack
 from typing import cast as type_cast
 
 import httpx
@@ -18,7 +19,9 @@ import httpx
 from core.config import get_settings
 from core.context import get_context
 from core.http import get_httpx_client
+from core.http.client import HttpRequestKwargs
 from core.logging import get_log_context, get_logger
+from core.types import JsonValue, require_json_value
 
 logger = get_logger(__name__)
 
@@ -80,7 +83,9 @@ class ServiceClient:
                 headers[NAMESPACE_HEADER] = context.active_namespace
 
         if not trace_id:
-            trace_id = log_ctx.get("trace_id")
+            log_trace_id = log_ctx.get("trace_id")
+            if isinstance(log_trace_id, str):
+                trace_id = log_trace_id
 
         if trace_id:
             headers[TRACE_ID_HEADER] = trace_id
@@ -95,8 +100,8 @@ class ServiceClient:
         method: str,
         path: str,
         timeout: float = 30.0,
-        **kwargs: object,
-    ) -> object:
+        **kwargs: Unpack[HttpRequestKwargs],
+    ) -> JsonValue:
         """
         Выполняет HTTP запрос к сервису.
 
@@ -121,7 +126,8 @@ class ServiceClient:
         # (httpx сам установит multipart/form-data)
         include_content_type = "files" not in kwargs
         headers = self._build_headers(include_content_type=include_content_type)
-        extra_headers = kwargs.pop("headers", None)
+        request_kwargs = dict(kwargs)
+        extra_headers = request_kwargs.pop("headers", None)
         if extra_headers is not None:
             if not isinstance(extra_headers, Mapping):
                 raise ServiceClientError("headers must be a mapping")
@@ -133,11 +139,19 @@ class ServiceClient:
 
         try:
             async with get_httpx_client(timeout=timeout) as client:
-                response = await client.request(method, url, headers=headers, **kwargs)
+                typed_request_kwargs = type_cast(
+                    HttpRequestKwargs,
+                    type_cast(object, request_kwargs),
+                )
+                typed_request_kwargs["headers"] = headers
+                response = await client.request(method, url, **typed_request_kwargs)
                 response = response.raise_for_status()
 
                 if response.content:
-                    return type_cast(object, response.json())
+                    return require_json_value(
+                        type_cast(object, response.json()),
+                        f"{service} {method} {path} response",
+                    )
                 return None
 
         except httpx.HTTPStatusError as e:
@@ -147,28 +161,52 @@ class ServiceClient:
         except Exception as e:
             raise ServiceClientError(f"Ошибка запроса к {service}: {e}")
 
-    async def get(self, service: str, path: str, timeout: float = 30.0, **kwargs: object) -> object:
+    async def get(
+        self,
+        service: str,
+        path: str,
+        timeout: float = 30.0,
+        **kwargs: Unpack[HttpRequestKwargs],
+    ) -> JsonValue:
         """GET запрос к сервису"""
         return await self.request(service, "GET", path, timeout=timeout, **kwargs)
 
     async def post(
-        self, service: str, path: str, timeout: float = 30.0, **kwargs: object
-    ) -> object:
+        self,
+        service: str,
+        path: str,
+        timeout: float = 30.0,
+        **kwargs: Unpack[HttpRequestKwargs],
+    ) -> JsonValue:
         """POST запрос к сервису"""
         return await self.request(service, "POST", path, timeout=timeout, **kwargs)
 
-    async def put(self, service: str, path: str, timeout: float = 30.0, **kwargs: object) -> object:
+    async def put(
+        self,
+        service: str,
+        path: str,
+        timeout: float = 30.0,
+        **kwargs: Unpack[HttpRequestKwargs],
+    ) -> JsonValue:
         """PUT запрос к сервису"""
         return await self.request(service, "PUT", path, timeout=timeout, **kwargs)
 
     async def patch(
-        self, service: str, path: str, timeout: float = 30.0, **kwargs: object
-    ) -> object:
+        self,
+        service: str,
+        path: str,
+        timeout: float = 30.0,
+        **kwargs: Unpack[HttpRequestKwargs],
+    ) -> JsonValue:
         """PATCH запрос к сервису"""
         return await self.request(service, "PATCH", path, timeout=timeout, **kwargs)
 
     async def delete(
-        self, service: str, path: str, timeout: float = 30.0, **kwargs: object
-    ) -> object:
+        self,
+        service: str,
+        path: str,
+        timeout: float = 30.0,
+        **kwargs: Unpack[HttpRequestKwargs],
+    ) -> JsonValue:
         """DELETE запрос к сервису"""
         return await self.request(service, "DELETE", path, timeout=timeout, **kwargs)

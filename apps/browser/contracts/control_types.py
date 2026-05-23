@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+
+from core.types import JsonObject
 
 
 @dataclass(frozen=True)
@@ -58,14 +59,14 @@ class BrowserCapabilityError(Exception):
         code: str,
         message: str,
         *,
-        details: dict[str, Any] | None = None,
+        details: JsonObject | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.details = details if details is not None else {}
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         return {
             "code": self.code,
             "message": self.message,

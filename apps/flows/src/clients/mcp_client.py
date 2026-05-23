@@ -9,7 +9,8 @@ MCP (Model Context Protocol) использует JSON-RPC 2.0.
 
 import hashlib
 import json
-from typing import Any
+from collections.abc import Mapping
+from typing import cast
 
 import httpx
 
@@ -22,6 +23,7 @@ from apps.flows.src.services.browser_preview import emit_browser_preview_mcp_eve
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject, JsonValue, require_json_object
 from core.variables import VarResolver
 
 logger = get_logger(__name__)
@@ -49,15 +51,15 @@ class MCPClient:
     def __init__(
         self,
         config: MCPServerConfig,
-        variables: dict[str, Any] | None = None,
+        variables: Mapping[str, JsonValue] | None = None,
         timeout: float = 60.0,
     ):
-        self.config = config
-        self.variables = variables or {}
-        self.timeout = timeout
+        self.config: MCPServerConfig = config
+        self.variables: JsonObject = dict(variables or {})
+        self.timeout: float = timeout
         self.session_id: str | None = None  # Получаем от сервера
-        self._request_id = 0
-        self._initialized = False
+        self._request_id: int = 0
+        self._initialized: bool = False
 
     def _next_request_id(self) -> int:
         """Генерирует следующий ID запроса."""
@@ -76,7 +78,7 @@ class MCPClient:
             headers["Mcp-Session-Id"] = self.session_id
 
         for key, value in self.config.headers.items():
-            if isinstance(value, str) and "@var:" in value:
+            if "@var:" in value:
                 headers[key] = VarResolver.resolve_text(value, self.variables)
             else:
                 headers[key] = value
@@ -84,7 +86,7 @@ class MCPClient:
         return headers
 
     @staticmethod
-    def _jsonrpc_envelope_from_body(text: str) -> dict[str, Any] | None:
+    def _jsonrpc_envelope_from_body(text: str) -> JsonObject | None:
         """
         Извлекает один JSON-RPC 2.0 envelope из тела ответа.
 
@@ -98,14 +100,19 @@ class MCPClient:
         s = str(text).strip()
         if s.startswith("{"):
             try:
-                o = json.loads(s)
-            except json.JSONDecodeError:
-                o = None
+                envelope = require_json_object(
+                    cast(JsonValue, json.loads(s)),
+                    "MCP JSON-RPC envelope",
+                )
+            except (json.JSONDecodeError, ValueError):
+                envelope = None
             else:
-                if isinstance(o, dict) and (
-                    o.get("jsonrpc") == "2.0" or "result" in o or "error" in o
+                if (
+                    envelope.get("jsonrpc") == "2.0"
+                    or "result" in envelope
+                    or "error" in envelope
                 ):
-                    return o
+                    return envelope
         for line in str(text).splitlines():
             line = line.strip()
             if not line:
@@ -117,17 +124,22 @@ class MCPClient:
             if not payload or payload == "[DONE]":
                 continue
             try:
-                o = json.loads(payload)
-            except json.JSONDecodeError:
+                envelope = require_json_object(
+                    cast(JsonValue, json.loads(payload)),
+                    "MCP SSE JSON-RPC envelope",
+                )
+            except (json.JSONDecodeError, ValueError):
                 continue
-            if isinstance(o, dict) and (
-                o.get("jsonrpc") == "2.0" or "result" in o or "error" in o
+            if (
+                envelope.get("jsonrpc") == "2.0"
+                or "result" in envelope
+                or "error" in envelope
             ):
-                return o
+                return envelope
         return None
 
     @staticmethod
-    def _trace_text(value: Any, *, limit: int = _TRACE_TEXT_LIMIT) -> str:
+    def _trace_text(value: JsonValue, *, limit: int = _TRACE_TEXT_LIMIT) -> str:
         """
         Trace attributes должны быть компактными и безопасными по кодировке.
         Возвращаем ASCII-строку: unicode будет экранирован как \\uXXXX.
@@ -147,15 +159,15 @@ class MCPClient:
         return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
 
     async def _read_response_text(self, response: httpx.Response) -> str:
-        await response.aread()
+        _ = await response.aread()
         return response.text
 
     async def _rpc_call(
         self,
         method: str,
-        params: dict[str, Any] | None = None,
+        params: JsonObject | None = None,
         include_session: bool = True,
-    ) -> tuple[Any, httpx.Headers]:
+    ) -> tuple[JsonValue, httpx.Headers]:
         """
         Выполняет JSON-RPC 2.0 вызов через HTTP или SSE.
 
@@ -171,12 +183,12 @@ class MCPClient:
             MCPClientError: При ошибке вызова
         """
         request_id = self._next_request_id()
-        payload: dict[str, Any] = {
+        payload: JsonObject = {
             "jsonrpc": "2.0",
             "id": request_id,
             "method": method,
         }
-        if params:
+        if params is not None:
             payload["params"] = params
 
         headers = self._resolve_headers(include_session=include_session)
@@ -209,7 +221,7 @@ class MCPClient:
                 if isinstance(raw_name, str) and raw_name.strip():
                     span.set_attribute("platform.mcp.tool_name", raw_name.strip())
                 if isinstance(raw_args, dict):
-                    keys = [k for k in raw_args.keys() if isinstance(k, str)]
+                    keys = list(raw_args.keys())
                     keys.sort()
                     span.set_attribute("platform.mcp.tool_args_keys", ",".join(keys[:50]))
 
@@ -222,17 +234,25 @@ class MCPClient:
 
                 response_headers = response.headers
                 text = await self._read_response_text(response)
+                response_content_type = cast(
+                    str,
+                    response.headers.get("content-type", ""),
+                )
 
                 span.set_attribute("http.status_code", int(response.status_code))
                 span.set_attribute(
                     "platform.mcp.response_content_type",
-                    str(response.headers.get("content-type", "")).strip(),
+                    response_content_type.strip(),
                 )
                 span.set_attribute("platform.mcp.response_bytes", len(text.encode("utf-8", errors="replace")))
                 span.set_attribute("platform.mcp.response_sha256", MCPClient._sha256_hex(text))
                 span.set_attribute("platform.mcp.response_preview", MCPClient._trace_text(text))
-                sid = response_headers.get("mcp-session-id") or response_headers.get("Mcp-Session-Id")
-                if isinstance(sid, str) and sid.strip():
+                sid = cast(
+                    str | None,
+                    response_headers.get("mcp-session-id")
+                    or response_headers.get("Mcp-Session-Id"),
+                )
+                if sid is not None and sid.strip():
                     span.set_attribute("platform.mcp.response_session_id", sid.strip())
 
                 if response.status_code >= 400:
@@ -243,20 +263,21 @@ class MCPClient:
                 result = self._jsonrpc_envelope_from_body(text)
                 if result is None:
                     snippet = text[:500] if text else ""
-                    ct = response.headers.get("content-type", "")
+                    ct = response_content_type
                     raise MCPClientError(
                         f"MCP: empty response for {method} (content-type={ct!r}, body={snippet!r})"
                     )
 
-        if "error" in result:
-            error = result["error"]
+        error_raw = result.get("error")
+        if error_raw is not None:
+            error = require_json_object(error_raw, "MCP RPC error")
             raise MCPClientError(
                 f"MCP RPC error: {error.get('code')} - {error.get('message')}"
             )
 
         return result.get("result"), response_headers
 
-    async def initialize(self) -> dict[str, Any]:
+    async def initialize(self) -> JsonObject:
         """
         Инициализирует MCP сессию.
 
@@ -269,16 +290,17 @@ class MCPClient:
         if self._initialized:
             return {}
 
+        initialize_params: JsonObject = {
+            "protocolVersion": MCP_PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {
+                "name": "agent-lab",
+                "version": "1.0.0",
+            },
+        }
         result, headers = await self._rpc_call(
             "initialize",
-            {
-                "protocolVersion": MCP_PROTOCOL_VERSION,
-                "capabilities": {},
-                "clientInfo": {
-                    "name": "agent-lab",
-                    "version": "1.0.0",
-                },
-            },
+            initialize_params,
             include_session=False,  # Первый запрос без session
         )
 
@@ -288,7 +310,7 @@ class MCPClient:
         self._initialized = True
         logger.info(f"MCP session initialized: {self.session_id}")
 
-        return result
+        return require_json_object(result, "MCP initialize result")
 
     async def list_tools(self) -> list[MCPToolInfo]:
         """
@@ -298,17 +320,21 @@ class MCPClient:
             Список MCPToolInfo
         """
         if not self._initialized:
-            await self.initialize()
+            _ = await self.initialize()
 
-        result, _ = await self._rpc_call("tools/list")
+        raw_result, _ = await self._rpc_call("tools/list")
+        result = require_json_object(raw_result, "MCP tools/list result")
 
-        tools = []
-        for tool_data in result.get("tools", []):
-            tools.append(MCPToolInfo(
-                name=tool_data.get("name", ""),
-                description=tool_data.get("description"),
-                input_schema=tool_data.get("inputSchema"),
-            ))
+        raw_tools = result.get("tools")
+        if not isinstance(raw_tools, list):
+            raise MCPClientError("MCP tools/list result.tools must be an array")
+        tools: list[MCPToolInfo] = []
+        for index, tool_data in enumerate(raw_tools):
+            tools.append(
+                MCPToolInfo.model_validate(
+                    require_json_object(tool_data, f"MCP tools[{index}]")
+                )
+            )
 
         logger.info(f"MCP server {self.config.server_id}: {len(tools)} tools available")
         return tools
@@ -316,7 +342,7 @@ class MCPClient:
     async def call_tool(
         self,
         tool_name: str,
-        arguments: dict[str, Any] | None = None,
+        arguments: JsonObject | None = None,
     ) -> MCPCallResult:
         """
         Вызывает tool на MCP сервере.
@@ -329,10 +355,10 @@ class MCPClient:
             MCPCallResult с результатом
         """
         if not self._initialized:
-            await self.initialize()
+            _ = await self.initialize()
 
         logger.debug(f"MCP tool call: {tool_name}")
-        args = arguments or {}
+        args: JsonObject = arguments or {}
         await emit_browser_preview_mcp_event(
             config=self.config,
             tool_name=tool_name,
@@ -341,7 +367,7 @@ class MCPClient:
         )
 
         try:
-            result, _ = await self._rpc_call(
+            raw_result, _ = await self._rpc_call(
                 "tools/call",
                 {
                     "name": tool_name,
@@ -358,10 +384,8 @@ class MCPClient:
             )
             raise
 
-        call_result = MCPCallResult(
-            is_error=result.get("isError", False),
-            content=result.get("content", []),
-        )
+        result = require_json_object(raw_result, "MCP tools/call result")
+        call_result = MCPCallResult.model_validate(result)
         await emit_browser_preview_mcp_event(
             config=self.config,
             tool_name=tool_name,
@@ -382,7 +406,7 @@ _client_cache: dict[str, MCPClient] = {}
 
 async def get_mcp_client(
     config: MCPServerConfig,
-    variables: dict[str, Any] | None = None,
+    variables: Mapping[str, JsonValue] | None = None,
     timeout: float = 60.0,
 ) -> MCPClient:
     """
@@ -400,11 +424,11 @@ async def get_mcp_client(
 
     if cache_key in _client_cache:
         client = _client_cache[cache_key]
-        client.variables = variables or {}
+        client.variables = dict(variables or {})
         return client
 
     client = MCPClient(config, variables, timeout)
-    await client.initialize()
+    _ = await client.initialize()
 
     _client_cache[cache_key] = client
     return client
@@ -418,6 +442,6 @@ def clear_mcp_client_cache(server_id: str | None = None) -> None:
         server_id: ID сервера для очистки. None = очистить всё.
     """
     if server_id:
-        _client_cache.pop(server_id, None)
+        _ = _client_cache.pop(server_id, None)
     else:
         _client_cache.clear()

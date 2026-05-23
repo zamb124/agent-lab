@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Any, List, Mapping, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -30,12 +31,12 @@ class ReadAssetKind(StrEnum):
 
 class ReadAsset(BaseModel):
     kind: ReadAssetKind
-    content_type: Optional[str] = None
+    content_type: str | None = None
     checksum: str = Field(description="SHA-256 hex сырых байт фрагмента")
-    file_id: Optional[str] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    bytes_b64: Optional[str] = Field(
+    file_id: str | None = None
+    width: int | None = None
+    height: int | None = None
+    bytes_b64: str | None = Field(
         default=None,
         description="Base64 только при ReadOptions.include_asset_bytes=True",
     )
@@ -43,20 +44,20 @@ class ReadAsset(BaseModel):
 
 class ReadPage(BaseModel):
     index: int = Field(ge=0)
-    label: Optional[str] = None
+    label: str | None = None
     text: str = ""
-    assets: List[ReadAsset] = Field(default_factory=list)
+    assets: list[ReadAsset] = Field(default_factory=list)
 
 
 class FileReadResult(BaseModel):
     file_name: str
-    content_type: Optional[str] = None
+    content_type: str | None = None
     detected_kind: FileReadKind
     page_count: int = Field(ge=0)
-    pages: List[ReadPage] = Field(default_factory=list)
-    warnings: List[str] = Field(default_factory=list)
-    source_file_id: Optional[str] = None
-    source_checksum: Optional[str] = Field(
+    pages: list[ReadPage] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    source_file_id: str | None = None
+    source_checksum: str | None = Field(
         default=None,
         description="SHA-256 hex всего исходного файла",
     )
@@ -64,14 +65,14 @@ class FileReadResult(BaseModel):
 
 class ReadOptions(BaseModel):
     include_asset_bytes: bool = False
-    source_file_id: Optional[str] = None
-    source_checksum: Optional[str] = None
+    source_file_id: str | None = None
+    source_checksum: str | None = None
     vision_model: str = "google/gemini-2.5-flash-preview"
-    vision_prompt: Optional[str] = Field(
+    vision_prompt: str | None = Field(
         default=None,
         description="Текст инструкции для vision-модели при разборе изображений; иначе встроенный промпт извлечения текста.",
     )
-    transcription_company_id: Optional[str] = Field(
+    transcription_company_id: str | None = Field(
         default=None,
         description=(
             "company_id для tier-резолва STT при чтении audio/video; "
@@ -99,5 +100,5 @@ def merge_file_ref_read_options(
 
 class FileTypeInfo(BaseModel):
     detected_kind: FileReadKind
-    content_type: Optional[str] = None
+    content_type: str | None = None
     extension: str = ""

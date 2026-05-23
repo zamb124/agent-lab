@@ -28,7 +28,8 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import Any, Literal
+from types import TracebackType
+from typing import Literal
 
 from core.logging.attributes import (
     LOG_COMPANY_ID,
@@ -84,7 +85,7 @@ class _ScopeToken:
 
     scope_token: Token[LogScope]
     auth_token: Token[bool]
-    snapshot: dict[str, Any]
+    snapshot: dict[str, object]
 
 
 def get_log_scope() -> LogScope:
@@ -103,7 +104,7 @@ def enter_request_scope(
     user_id: str | None = None,
     company_id: str | None = None,
     requires_user: bool = False,
-    **extra: Any,
+    **extra: object,
 ) -> _ScopeToken:
     """
     Перевести логирование в request-скоуп и забиндить обязательные поля.
@@ -121,26 +122,26 @@ def enter_request_scope(
         ValueError: при пустом request_id/trace_id/service_name или при
             requires_user=True и отсутствии user_id/company_id.
     """
-    if not isinstance(request_id, str) or not request_id.strip():
+    if not request_id.strip():
         raise ValueError("enter_request_scope: request_id обязателен и непустой")
-    if not isinstance(trace_id, str) or not trace_id.strip():
+    if not trace_id.strip():
         raise ValueError("enter_request_scope: trace_id обязателен и непустой")
-    if not isinstance(service_name, str) or not service_name.strip():
+    if not service_name.strip():
         raise ValueError("enter_request_scope: service_name обязателен и непустой")
 
     if requires_user:
-        if not isinstance(user_id, str) or not user_id.strip():
+        if user_id is None or not user_id.strip():
             raise ValueError(
                 "enter_request_scope(requires_user=True): user_id обязателен"
             )
-        if not isinstance(company_id, str) or not company_id.strip():
+        if company_id is None or not company_id.strip():
             raise ValueError(
                 "enter_request_scope(requires_user=True): company_id обязателен"
             )
 
     snapshot = get_log_context()
 
-    fields: dict[str, Any] = {
+    fields: dict[str, object] = {
         LOG_REQUEST_ID: request_id,
         LOG_TRACE_ID: trace_id,
         LOG_SERVICE_NAME: service_name,
@@ -186,15 +187,15 @@ class RequestLogScope:
         user_id: str | None = None,
         company_id: str | None = None,
         requires_user: bool = False,
-        **extra: Any,
+        **extra: object,
     ) -> None:
-        self._request_id = request_id
-        self._trace_id = trace_id
-        self._service_name = service_name
-        self._user_id = user_id
-        self._company_id = company_id
-        self._requires_user = requires_user
-        self._extra = extra
+        self._request_id: str = request_id
+        self._trace_id: str = trace_id
+        self._service_name: str = service_name
+        self._user_id: str | None = user_id
+        self._company_id: str | None = company_id
+        self._requires_user: bool = requires_user
+        self._extra: dict[str, object] = extra
         self._token: _ScopeToken | None = None
 
     def __enter__(self) -> "RequestLogScope":
@@ -209,14 +210,24 @@ class RequestLogScope:
         )
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         exit_request_scope(self._token)
         self._token = None
 
     async def __aenter__(self) -> "RequestLogScope":
         return self.__enter__()
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self.__exit__(exc_type, exc, tb)
 
 
@@ -228,11 +239,11 @@ class SystemLogScope:
     в тех местах, где сознательно нет request_id/trace_id.
     """
 
-    def __init__(self, **extra: Any) -> None:
-        self._extra = {k: v for k, v in extra.items() if v not in (None, "")}
+    def __init__(self, **extra: object) -> None:
+        self._extra: dict[str, object] = {k: v for k, v in extra.items() if v not in (None, "")}
         self._scope_token: Token[LogScope] | None = None
         self._auth_token: Token[bool] | None = None
-        self._snapshot: dict[str, Any] = {}
+        self._snapshot: dict[str, object] = {}
 
     def __enter__(self) -> "SystemLogScope":
         self._snapshot = get_log_context()
@@ -242,7 +253,12 @@ class SystemLogScope:
         self._auth_token = _LOG_SCOPE_REQUIRES_USER.set(False)
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         if self._auth_token is not None:
             _LOG_SCOPE_REQUIRES_USER.reset(self._auth_token)
         if self._scope_token is not None:
@@ -252,7 +268,12 @@ class SystemLogScope:
     async def __aenter__(self) -> "SystemLogScope":
         return self.__enter__()
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self.__exit__(exc_type, exc, tb)
 
 

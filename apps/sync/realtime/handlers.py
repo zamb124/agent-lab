@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -550,7 +550,7 @@ async def _ensure_actor_may_send_to_channel(
         raise PermissionError("Гость не в этом звонке.")
 
 
-async def _user_brief(user_repository: Optional[UserRepository], user_id: str) -> UserBrief:
+async def _user_brief(user_repository: UserRepository | None, user_id: str) -> UserBrief:
     display_name = user_id
     avatar_url = None
     if user_repository is not None:
@@ -564,7 +564,7 @@ async def _user_brief(user_repository: Optional[UserRepository], user_id: str) -
 async def _message_read_from_db(
     m: SyncMessage,
     messages: MessageRepository,
-    user_repository: Optional[UserRepository],
+    user_repository: UserRepository | None,
 ) -> MessageRead:
     content_rows = await messages.list_contents(m.message_id)
     contents: list[MessageContentModel] = []
@@ -773,9 +773,9 @@ async def _send_message(
     actor_user_id: str,
     company_id: str,
     messages: MessageRepository,
-    user_repository: Optional[UserRepository] = None,
-    forwarded_from_channel_id: Optional[str] = None,
-    forwarded_from_channel_name: Optional[str] = None,
+    user_repository: UserRepository | None = None,
+    forwarded_from_channel_id: str | None = None,
+    forwarded_from_channel_name: str | None = None,
 ) -> MessageRead:
     message_id = uuid4().hex
     sent_at = datetime.now(tz=UTC)
@@ -904,7 +904,7 @@ async def _create_thread(
     company_id: str,
     threads: ThreadRepository,
     messages: MessageRepository,
-    user_repository: Optional[UserRepository] = None,
+    user_repository: UserRepository | None = None,
 ) -> ThreadRead:
     root = await messages.get(body.root_message_id)
     if root is None:

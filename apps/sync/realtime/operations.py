@@ -35,9 +35,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Awaitable, Callable, Generic, Literal, Optional, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -2142,11 +2143,11 @@ async def op_calls_links_create(
     actor_id = user.user_id
 
     channel_id: str
-    attached_call_id: Optional[str] = None
-    calendar_title: Optional[str] = None
-    cal_start: Optional[datetime] = None
-    cal_end: Optional[datetime] = None
-    cal_event_id: Optional[str] = None
+    attached_call_id: str | None = None
+    calendar_title: str | None = None
+    cal_start: datetime | None = None
+    cal_end: datetime | None = None
+    cal_event_id: str | None = None
     ttl_hours = body.ttl_hours
     is_persistent_channel_link = False
 

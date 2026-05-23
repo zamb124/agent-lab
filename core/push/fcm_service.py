@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 import jwt
@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 FCM_HOST = "https://fcm.googleapis.com"
 FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 
-_fcm_push_service: Optional["FcmPushService"] = None
+_fcm_push_service: FcmPushService | None = None
 
 
 class FcmPushService:
@@ -45,7 +45,7 @@ class FcmPushService:
         self._private_key_pem = private_key_pem
         self._token_uri = token_uri or "https://oauth2.googleapis.com/token"
         self._send_url = f"{FCM_HOST}/v1/projects/{project_id}/messages:send"
-        self._access_token: Optional[str] = None
+        self._access_token: str | None = None
         self._access_token_expires_at: float = 0.0
 
     @property
@@ -102,9 +102,9 @@ class FcmPushService:
         registration_token: str,
         title: str,
         body: str,
-        url: Optional[str] = None,
-        tag: Optional[str] = None,
-        extra: Optional[dict[str, Any]] = None,
+        url: str | None = None,
+        tag: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> tuple[bool, bool]:
         """
         Returns:
@@ -177,7 +177,7 @@ class FcmPushService:
         return False, False
 
 
-def _error_status_from_body(body: str) -> Optional[str]:
+def _error_status_from_body(body: str) -> str | None:
     try:
         parsed = json.loads(body)
     except (ValueError, TypeError):
@@ -213,5 +213,5 @@ def init_fcm_push_service(
     return _fcm_push_service
 
 
-def get_fcm_push_service() -> Optional[FcmPushService]:
+def get_fcm_push_service() -> FcmPushService | None:
     return _fcm_push_service

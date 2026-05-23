@@ -3,7 +3,6 @@
 Использует shared БД, is_global=True (не изолирован по компаниям).
 """
 
-from typing import List
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
@@ -34,7 +33,7 @@ class CompanyRepository(BaseRepository[Company]):
     def _extract_entity_id(self, entity: Company) -> str:
         return entity.company_id
 
-    async def list(self, *, limit: int, offset: int = 0) -> List[Company]:
+    async def list(self, *, limit: int, offset: int = 0) -> list[Company]:
         """
         Возвращает только сущности Company из shared storage.
 
@@ -46,7 +45,7 @@ class CompanyRepository(BaseRepository[Company]):
         table_name = self._get_table_name()
         all_data = await self._storage.get_all_by_prefix_and_table(prefix, table_name, limit, offset)
 
-        entities: List[Company] = []
+        entities: list[Company] = []
         for key, data in all_data.items():
             # Ключ компании должен содержать ровно одно двоеточие: "company:<id>"
             if key.count(":") != 1:

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.services.platform_facades import get_text_transform_service
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
+from core.state import ExecutionState
+from core.types import JsonObject
 
 
 class FormatTextMarkdownArgs(BaseModel):
@@ -50,8 +50,8 @@ async def format_text_markdown(
     provider: str | None = None,
     model: str | None = None,
     max_chunk_chars: int | None = None,
-    state: dict[str, Any] | None = None,
-) -> dict[str, str]:
+    state: ExecutionState | None = None,
+) -> JsonObject:
     del state
     svc = get_text_transform_service()
     markdown = await svc.format_markdown(

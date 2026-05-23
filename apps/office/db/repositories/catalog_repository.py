@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
 
 from sqlalchemy import exists, func, or_, select
 
@@ -56,7 +55,7 @@ class CatalogRepository:
 
     async def get(
         self, catalog_id: str, company_id: str, namespace: str
-    ) -> Optional[OfficeDocumentCatalog]:
+    ) -> OfficeDocumentCatalog | None:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentCatalog).where(
@@ -108,7 +107,7 @@ class CatalogRepository:
         company_id: str,
         namespace: str,
         user_id: str,
-    ) -> List[Tuple[OfficeDocumentCatalog, int]]:
+    ) -> list[tuple[OfficeDocumentCatalog, int]]:
         member_exists = exists(
             select(1)
             .select_from(OfficeCatalogMember)
@@ -175,7 +174,7 @@ class CatalogRepository:
         *,
         title: str | None = None,
         is_public: bool | None = None,
-    ) -> Optional[OfficeDocumentCatalog]:
+    ) -> OfficeDocumentCatalog | None:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentCatalog).where(
@@ -227,7 +226,7 @@ class CatalogRepository:
             await session.commit()
             return True
 
-    async def list_members(self, catalog_id: str) -> List[OfficeCatalogMember]:
+    async def list_members(self, catalog_id: str) -> list[OfficeCatalogMember]:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeCatalogMember).where(

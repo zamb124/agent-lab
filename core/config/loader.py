@@ -5,12 +5,11 @@
 в ключе services.<имя_сервиса> (без отдельных conf.json в apps/).
 """
 
-import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Union
 
 from core.logging import get_logger
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 _PROJECT_ROOT_ENV = "AGENT_LAB_PROJECT_ROOT"
@@ -39,11 +38,10 @@ def get_project_root() -> Path:
             return d
 
     raise RuntimeError(
-        f"Корень репозитория agent-lab не найден (ожидаются pyproject.toml, core/, apps/ вверх по пути от {start}). "
-        f"Задайте {_PROJECT_ROOT_ENV} или запускайте из дерева исходников (uv sync из корня репозитория)."
+        f"Корень репозитория agent-lab не найден (ожидаются pyproject.toml, core/, apps/ вверх по пути от {start}). Задайте {_PROJECT_ROOT_ENV} или запускайте из дерева исходников (uv sync из корня репозитория)."
     )
 
-def load_json_config(config_path: Union[str, Path], *, silent: bool = False) -> Dict[str, Any]:
+def load_json_config(config_path: str | Path, *, silent: bool = False) -> JsonObject:
     config_path = Path(config_path)
 
     if not config_path.exists():
@@ -55,7 +53,7 @@ def load_json_config(config_path: Union[str, Path], *, silent: bool = False) -> 
         return {}
 
     with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
+        config = parse_json_object(f.read(), str(config_path))
         if not silent:
             logger.info(
                 "config.loader.file_loaded",
@@ -64,13 +62,17 @@ def load_json_config(config_path: Union[str, Path], *, silent: bool = False) -> 
         return config
 
 def merge_configs(
-    base_config: Dict[str, Any], override_config: Dict[str, Any]
-) -> Dict[str, Any]:
+    base_config: JsonObject, override_config: JsonObject
+) -> JsonObject:
     result = base_config.copy()
 
     for key, value in override_config.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = merge_configs(result[key], value)
+        base_value = result.get(key)
+        if isinstance(base_value, dict) and isinstance(value, dict):
+            result[key] = merge_configs(
+                require_json_object(base_value, f"config.{key}"),
+                require_json_object(value, f"config.{key}"),
+            )
         else:
             result[key] = value
 
@@ -91,12 +93,12 @@ def get_config_paths() -> list[Path]:
     return config_paths
 
 def remove_env_overridden_values(
-    config: Dict[str, Any],
+    config: JsonObject,
     prefix: str = "",
     *,
     silent: bool = False,
-) -> Dict[str, Any]:
-    result = {}
+) -> JsonObject:
+    result: JsonObject = {}
 
     for key, value in config.items():
         env_key = f"{prefix}__{key}".upper() if prefix else key.upper()
@@ -123,7 +125,7 @@ def load_merged_config(
     service_name: str | None = None,
     *,
     silent: bool = False,
-) -> Dict[str, Any]:
+) -> JsonObject:
     """
     Загружает конфигурацию: conf.json + conf.local.json (+ AGENT_CONFIG_PATH),
     затем при service_name — сливает services.<service_name> поверх общего слоя.
@@ -132,7 +134,7 @@ def load_merged_config(
 
     silent=True — без записей в лог (до setup_logging в HTTP и воркерах).
     """
-    merged: Dict[str, Any] = {}
+    merged: JsonObject = {}
 
     for config_path in get_config_paths():
         config = load_json_config(config_path, silent=silent)
@@ -145,8 +147,15 @@ def load_merged_config(
                 )
 
     if service_name:
-        overrides = merged.get("services", {}).get(service_name, {})
-        if overrides:
+        services_value = merged.get("services")
+        service_overrides_value = (
+            services_value.get(service_name) if isinstance(services_value, dict) else None
+        )
+        if service_overrides_value is not None:
+            overrides = require_json_object(
+                service_overrides_value,
+                f"services.{service_name}",
+            )
             merged = merge_configs(merged, overrides)
             if not silent:
                 logger.info(
@@ -154,14 +163,16 @@ def load_merged_config(
                     service_name=service_name,
                 )
 
-    merged.pop("services", None)
+    _ = merged.pop("services", None)
     merged = remove_env_overridden_values(merged, silent=silent)
 
     return merged
 
-def get_nested_value(config: Dict[str, Any], key_path: str, default: Any = None) -> Any:
+def get_nested_value(
+    config: JsonObject, key_path: str, default: JsonValue | None = None
+) -> JsonValue | None:
     keys = key_path.split(".")
-    current = config
+    current: JsonValue = config
 
     for key in keys:
         if isinstance(current, dict) and key in current:
@@ -171,20 +182,23 @@ def get_nested_value(config: Dict[str, Any], key_path: str, default: Any = None)
 
     return current
 
-def set_nested_value(config: Dict[str, Any], key_path: str, value: Any) -> None:
+def set_nested_value(config: JsonObject, key_path: str, value: JsonValue) -> None:
     keys = key_path.split(".")
     current = config
 
     for key in keys[:-1]:
         if key not in current:
             current[key] = {}
-        current = current[key]
+        next_value = current[key]
+        if not isinstance(next_value, dict):
+            raise ValueError(f"config path {key_path!r} crosses non-object key {key!r}")
+        current = require_json_object(next_value, f"config.{key}")
 
     current[keys[-1]] = value
 
 def get_env_or_config(
-    env_key: str, config_key: str, config: Dict[str, Any], default: Any = None
-) -> Any:
+    env_key: str, config_key: str, config: JsonObject, default: JsonValue | None = None
+) -> JsonValue | None:
     env_value = os.getenv(env_key)
     if env_value is not None:
         return env_value

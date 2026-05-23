@@ -6,14 +6,16 @@ Fallback-режимы запрещены: при недоступности ис
 
 from __future__ import annotations
 
-from typing import Any
+from typing import cast
 
 from apps.browser.contracts.control_types import BrowserCapabilityError
+from apps.browser.engine.types import BrowserPage
+from core.types import JsonObject, require_json_object
 
 
 async def dom_accessibility_tree_dict_from_page(
-    page: Any,
-) -> dict[str, Any]:
+    page: BrowserPage,
+) -> JsonObject:
     """
     Построить browser-use-подобный snapshot интерактивных элементов.
 
@@ -22,8 +24,10 @@ async def dom_accessibility_tree_dict_from_page(
     - children: только интерактивные элементы (link/button/input/...).
     """
     try:
-        data = await page.evaluate(
-            """() => {
+        data = cast(
+            object,
+            await page.evaluate(
+                """() => {
   const normalize = (s) => String(s).trim().replace(/\\s+/g, ' ').slice(0, 300);
 
   const roleOf = (el) => {
@@ -109,6 +113,7 @@ async def dom_accessibility_tree_dict_from_page(
     children,
   };
 }""",
+            ),
         )
     except Exception as exc:
         raise BrowserCapabilityError(
@@ -117,11 +122,11 @@ async def dom_accessibility_tree_dict_from_page(
             details={"error": str(exc)},
         ) from exc
 
-    if not isinstance(data, dict):
+    try:
+        return require_json_object(data, "DOM snapshot")
+    except ValueError as exc:
         raise BrowserCapabilityError(
             "ax_snapshot_invalid",
-            "DOM snapshot вернул не dict",
+            "DOM snapshot вернул не JSON object",
             details={"type": type(data).__name__},
-        )
-    return data
-
+        ) from exc

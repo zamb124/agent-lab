@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import FrozenSet
 from urllib.parse import urlparse
 
 import httpx
@@ -102,7 +101,7 @@ def _is_local_target_for_process(first_path_segment: str, process_service_name: 
     return False
 
 
-_HOP_BY_HOP_REQUEST: FrozenSet[str] = frozenset(
+_HOP_BY_HOP_REQUEST: frozenset[str] = frozenset(
     {
         "connection",
         "keep-alive",
@@ -115,7 +114,7 @@ _HOP_BY_HOP_REQUEST: FrozenSet[str] = frozenset(
     }
 )
 
-_EXCLUDED_RESPONSE_HEADERS: FrozenSet[str] = frozenset(
+_EXCLUDED_RESPONSE_HEADERS: frozenset[str] = frozenset(
     {
         "connection",
         "content-encoding",
@@ -379,7 +378,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
         )
 
 
-_WS_HOP_BY_HOP: FrozenSet[str] = frozenset(
+_WS_HOP_BY_HOP: frozenset[str] = frozenset(
     {
         "host",
         "connection",

@@ -6,7 +6,7 @@
 import inspect
 from collections.abc import Awaitable, Callable, Sequence
 from enum import Enum
-from typing import Annotated, Any, Dict, Generic, List, TypeVar
+from typing import Annotated, Any, Generic, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -62,7 +62,7 @@ class CRUDRouterGenerator(Generic[T]):
         """Добавляет стандартные CRUD эндпоинты"""
         repository_dependency = self._repository_dependency
 
-        @router.get("", response_model=ListResponse[Dict[str, Any]])
+        @router.get("", response_model=ListResponse[dict[str, Any]])
         async def list_entities(
             repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
             limit: int = Query(100, ge=1, le=1000),
@@ -70,9 +70,9 @@ class CRUDRouterGenerator(Generic[T]):
         ):
             """Получить страницу сущностей."""
             entities = await repository.list(limit=limit, offset=offset)
-            return ListResponse[Dict[str, Any]](items=[entity.model_dump() for entity in entities])
+            return ListResponse[dict[str, Any]](items=[entity.model_dump() for entity in entities])
 
-        @router.get("/{entity_id}", response_model=Dict[str, Any])
+        @router.get("/{entity_id}", response_model=dict[str, Any])
         async def get_entity(
             entity_id: str,
             repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
@@ -83,9 +83,9 @@ class CRUDRouterGenerator(Generic[T]):
                 raise HTTPException(status_code=404, detail=f"Entity '{entity_id}' not found")
             return entity.model_dump()
 
-        @router.post("", response_model=Dict[str, Any])
+        @router.post("", response_model=dict[str, Any])
         async def create_or_update_entity(
-            entity_data: Dict[str, Any],
+            entity_data: dict[str, Any],
             repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
         ):
             """Создать или обновить сущность"""
@@ -110,9 +110,9 @@ class CRUDRouterGenerator(Generic[T]):
                 raise HTTPException(status_code=404, detail=f"Entity '{entity_id}' not found")
             return {"success": True, "entity_id": entity_id}
 
-        @router.post("/many", response_model=Dict[str, Dict[str, Any]])
+        @router.post("/many", response_model=dict[str, dict[str, Any]])
         async def get_many_entities(
-            entity_ids: List[str],
+            entity_ids: list[str],
             repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
         ):
             """Получить несколько сущностей по ID"""
@@ -155,7 +155,7 @@ class CRUDRouterGenerator(Generic[T]):
             params = params[1:]
 
         async def method_handler(
-            payload: Dict[str, Any],
+            payload: dict[str, Any],
             repository: Annotated[BaseRepository[T], Depends(repository_dependency)],
         ):
             """Универсальный обработчик для метода репозитория"""

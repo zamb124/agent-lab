@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -16,8 +16,8 @@ ParticipantStatus = Literal["invited", "joined", "declined", "left"]
 class CallParticipantRead(BaseModel):
     user_id: str
     status: ParticipantStatus
-    joined_at: Optional[datetime] = None
-    left_at: Optional[datetime] = None
+    joined_at: datetime | None = None
+    left_at: datetime | None = None
 
 
 class CallRead(BaseModel):
@@ -26,33 +26,33 @@ class CallRead(BaseModel):
     mode: CallMode
     call_type: CallType
     status: CallStatus
-    livekit_room_name: Optional[str] = None
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
+    livekit_room_name: str | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
     created_at: datetime
     created_by_user_id: str
     participants: list[CallParticipantRead] = []
 
 
 class CallLinkCreate(BaseModel):
-    channel_id: Optional[str] = Field(
+    channel_id: str | None = Field(
         default=None,
         description="Канал существующего чата. Не указывать вместе с calendar_event_id.",
     )
     call_type: CallType = "video"
     ttl_hours: int = Field(default=24, ge=1, le=168)
-    call_id: Optional[str] = Field(
+    call_id: str | None = Field(
         default=None,
         description="Текущий звонок: та же LiveKit-комната, что у участников чата.",
     )
-    calendar_event_id: Optional[str] = Field(
+    calendar_event_id: str | None = Field(
         default=None,
         description="ID события platform calendar: создаётся канал calendar_meeting и ссылка.",
     )
-    scheduled_title: Optional[str] = None
-    scheduled_start_at: Optional[datetime] = None
-    scheduled_end_at: Optional[datetime] = None
-    calendar_member_user_ids: Optional[list[str]] = Field(
+    scheduled_title: str | None = None
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
+    calendar_member_user_ids: list[str] | None = Field(
         default=None,
         description="Участники канала встречи (platform user_id), без создателя.",
     )
@@ -95,17 +95,17 @@ class CallLinkRead(BaseModel):
     call_type: CallType
     expires_at: datetime
     join_url: str
-    title: Optional[str] = None
-    scheduled_start_at: Optional[datetime] = None
-    scheduled_end_at: Optional[datetime] = None
-    calendar_event_id: Optional[str] = None
+    title: str | None = None
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
+    calendar_event_id: str | None = None
 
 
 class CallLinkPatch(BaseModel):
-    scheduled_title: Optional[str] = None
-    scheduled_start_at: Optional[datetime] = None
-    scheduled_end_at: Optional[datetime] = None
-    calendar_member_user_ids: Optional[list[str]] = Field(
+    scheduled_title: str | None = None
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
+    calendar_member_user_ids: list[str] | None = Field(
         default=None,
         description="Полная синхронизация участников канала встречи (кроме создателя ссылки).",
     )
@@ -132,7 +132,7 @@ class CallLinkPatch(BaseModel):
 class CallScheduledLinkRead(BaseModel):
     link_token: str
     channel_id: str
-    title: Optional[str]
+    title: str | None
     scheduled_start_at: datetime
     scheduled_end_at: datetime
     calendar_event_id: str
@@ -145,9 +145,9 @@ class CallLinkInfo(BaseModel):
     link_token: str
     company_id: str
     channel_id: str
-    channel_name: Optional[str]
+    channel_name: str | None
     creator_display_name: str
-    creator_avatar_url: Optional[str] = Field(
+    creator_avatar_url: str | None = Field(
         default=None,
         description="URL аватара создателя ссылки (если задан в профиле).",
     )

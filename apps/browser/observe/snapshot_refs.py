@@ -10,7 +10,37 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Literal, NotRequired, TypedDict, TypeGuard, cast
+
+from core.types import JsonObject
+
+InteractiveRole = Literal[
+    "button",
+    "link",
+    "textbox",
+    "searchbox",
+    "checkbox",
+    "radio",
+    "combobox",
+    "listbox",
+    "menuitem",
+    "option",
+    "switch",
+    "tab",
+    "slider",
+    "spinbutton",
+]
+
+
+class InteractiveSnapshotRef(TypedDict):
+    role: InteractiveRole
+    name: str
+    nth: int
+    value: NotRequired[str]
+
+
+RefMap = dict[str, InteractiveSnapshotRef]
 
 
 def parse_ref(value: str) -> str:
@@ -26,7 +56,7 @@ def parse_ref(value: str) -> str:
     return v
 
 
-_INTERACTIVE_ROLES: set[str] = {
+_INTERACTIVE_ROLES: frozenset[InteractiveRole] = frozenset({
     "button",
     "link",
     "textbox",
@@ -41,10 +71,14 @@ _INTERACTIVE_ROLES: set[str] = {
     "tab",
     "slider",
     "spinbutton",
-}
+})
 
 
-def _str(v: Any) -> str:
+def is_interactive_role(value: str) -> TypeGuard[InteractiveRole]:
+    return value in _INTERACTIVE_ROLES
+
+
+def _str(v: object) -> str:
     if v is None:
         return ""
     if isinstance(v, str):
@@ -52,18 +86,18 @@ def _str(v: Any) -> str:
     return str(v)
 
 
-def _iter_children(node: dict[str, Any]) -> Iterable[dict[str, Any]]:
+def _iter_children(node: JsonObject) -> Iterable[JsonObject]:
     ch = node.get("children")
     if not isinstance(ch, list):
         return []
-    out: list[dict[str, Any]] = []
+    out: list[JsonObject] = []
     for c in ch:
         if isinstance(c, dict):
-            out.append(c)
+            out.append(cast(JsonObject, c))
     return out
 
 
-def build_interactive_snapshot_with_refs(ax_tree: dict[str, Any]) -> tuple[str, dict[str, dict[str, Any]]]:
+def build_interactive_snapshot_with_refs(ax_tree: JsonObject) -> tuple[str, RefMap]:
     """
     Построить компактный snapshot из accessibility tree.
 
@@ -73,24 +107,21 @@ def build_interactive_snapshot_with_refs(ax_tree: dict[str, Any]) -> tuple[str, 
 
     nth — индекс среди элементов с тем же (role, name) в рамках текущего snapshot.
     """
-    if not isinstance(ax_tree, dict):
-        raise ValueError("ax_tree должен быть dict")
-
     ref_counter = 0
     seen_counts: dict[tuple[str, str], int] = {}
     lines: list[str] = []
-    refs: dict[str, dict[str, Any]] = {}
+    refs: RefMap = {}
 
     def next_ref() -> str:
         nonlocal ref_counter
         ref_counter += 1
         return f"e{ref_counter}"
 
-    def walk(n: dict[str, Any]) -> None:
+    def walk(n: JsonObject) -> None:
         role = _str(n.get("role")).lower()
         name = _str(n.get("name")).strip()
         value = _str(n.get("value")).strip()
-        if role in _INTERACTIVE_ROLES:
+        if is_interactive_role(role):
             key = (role, name)
             nth = seen_counts.get(key, 0)
             seen_counts[key] = nth + 1
@@ -113,4 +144,3 @@ def build_interactive_snapshot_with_refs(ax_tree: dict[str, Any]) -> tuple[str, 
     if not lines:
         return "(no interactive elements)", {}
     return "\n".join(lines), refs
-

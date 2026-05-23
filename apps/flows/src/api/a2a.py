@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from apps.flows.src.channels import PermissionDenied
 from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.container import FlowContainer
+from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
@@ -360,7 +361,12 @@ async def get_agent_card_well_known(
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
     context = get_context()
-    channel = A2AChannel(flow_id, context=context, flow_config=config, container=container)
+    channel = A2AChannel(
+        flow_id,
+        context=context,
+        flow_config=config,
+        container=as_flow_runtime_container(container),
+    )
     base_url = _get_base_url(request)
     try:
         return await channel.get_agent_card(base_url)
@@ -386,7 +392,12 @@ async def get_agent_card(
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
     context = get_context()
-    channel = A2AChannel(flow_id, context=context, flow_config=config, container=container)
+    channel = A2AChannel(
+        flow_id,
+        context=context,
+        flow_config=config,
+        container=as_flow_runtime_container(container),
+    )
     base_url = _get_base_url(request)
     try:
         return await channel.get_agent_card(base_url)
@@ -585,7 +596,12 @@ async def _json_rpc_handler_internal(
     # Получаем Context из middleware (установлен при авторизации)
     context = get_context()
 
-    handler = A2AChannel(flow_id, context=context, flow_config=config, container=container)
+    handler = A2AChannel(
+        flow_id,
+        context=context,
+        flow_config=config,
+        container=as_flow_runtime_container(container),
+    )
 
     # Группы пользователя для проверки permissions
     # 1. Из metadata (для тестов и internal calls)
@@ -773,7 +789,7 @@ async def json_rpc_embed_handler(
 @router.get("/{flow_id}/branches")
 async def list_branches(flow_id: str, container: ContainerDep) -> list[dict[str, Any]]:
     context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=container)
+    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -783,7 +799,7 @@ async def list_branches(flow_id: str, container: ContainerDep) -> list[dict[str,
 @router.get("/{flow_id}/branches/{branch_id}")
 async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> dict[str, Any]:
     context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=container)
+    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -798,7 +814,7 @@ async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> d
 async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep) -> list[dict[str, Any]]:
     """Получить список tools для ветки с полной информацией."""
     context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=container)
+    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -817,7 +833,7 @@ async def get_branch_schema(flow_id: str, container: ContainerDep) -> dict[str, 
     """Получить JSON Schema для создания ветки в формате ISchema."""
     _ = container
     context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=container)
+    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     try:
         return await channel.get_branch_schema()
     except ValueError as e:
@@ -828,7 +844,7 @@ async def get_branch_schema(flow_id: str, container: ContainerDep) -> dict[str, 
 async def create_branch(flow_id: str, request: Request, container: ContainerDep) -> JSONResponse:
     """Создать новую ветку."""
     context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=container)
+    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -864,7 +880,7 @@ async def create_branch(flow_id: str, request: Request, container: ContainerDep)
 async def update_branch(flow_id: str, branch_id: str, request: Request, container: ContainerDep) -> dict[str, Any]:
     """Обновить существующую ветку."""
     context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=container)
+    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
@@ -896,7 +912,7 @@ async def update_branch(flow_id: str, branch_id: str, request: Request, containe
 async def delete_branch(flow_id: str, branch_id: str, container: ContainerDep) -> dict[str, Any]:
     """Удалить ветку."""
     context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=container)
+    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     config = await _get_flow_config(flow_id, container)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")

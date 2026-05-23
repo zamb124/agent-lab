@@ -5,17 +5,18 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable
-from typing import Any, Optional, Protocol
 
 from playwright._impl._errors import is_target_closed_error
+from playwright.async_api import ProxySettings
 
-from apps.browser.engine.types import ContextSignature
+from apps.browser.engine.types import (
+    BrowserContextHandle,
+    BrowserHandle,
+    BrowserPage,
+    BrowserStorageState,
+    ContextSignature,
+)
 from apps.browser.stealth.playwright_stealth import apply_stealth_to_context
-
-
-class BrowserContextFactoryBrowser(Protocol):
-    def new_context(self, **kwargs: Any) -> Awaitable[Any]: ...
 
 
 def _playwright_transport_gone(exc: BaseException) -> bool:
@@ -37,7 +38,7 @@ def _playwright_transport_gone(exc: BaseException) -> bool:
     )
 
 
-async def _safe_page_close(page: Any) -> None:
+async def _safe_page_close(page: BrowserPage) -> None:
     try:
         await page.close()
     except Exception as exc:
@@ -46,7 +47,7 @@ async def _safe_page_close(page: Any) -> None:
         raise
 
 
-async def _safe_context_close(context: Any) -> None:
+async def _safe_context_close(context: BrowserContextHandle) -> None:
     try:
         await context.close()
     except Exception as exc:
@@ -88,7 +89,7 @@ class ContextFactory:
         self._lock = asyncio.Lock()
 
     @staticmethod
-    def _proxy_config(proxy_policy: str) -> Optional[dict[str, str]]:
+    def _proxy_config(proxy_policy: str) -> ProxySettings | None:
         if not proxy_policy:
             return None
         if (
@@ -101,25 +102,20 @@ class ContextFactory:
 
     async def new_context(
         self,
-        browser: BrowserContextFactoryBrowser,
+        browser: BrowserHandle,
         endpoint_key: str,
         signature: ContextSignature,
-        storage_state: Optional[dict[str, Any]],
-    ) -> Any:
+        storage_state: BrowserStorageState | None,
+    ) -> BrowserContextHandle:
         async with self._lock:
-            kwargs: dict[str, Any] = {
-                "locale": signature.locale,
-                "timezone_id": signature.timezone_id,
-            }
             proxy = self._proxy_config(signature.proxy_policy)
-            if proxy is not None:
-                kwargs["proxy"] = proxy
-            if signature.user_agent is not None:
-                kwargs["user_agent"] = signature.user_agent
-            if storage_state is not None:
-                kwargs["storage_state"] = storage_state
-
-            context = await browser.new_context(**kwargs)
+            context = await browser.new_context(
+                locale=signature.locale,
+                timezone_id=signature.timezone_id,
+                proxy=proxy,
+                user_agent=signature.user_agent,
+                storage_state=storage_state,
+            )
             try:
                 setattr(context, "_browser_runtime_shared_context", True)
             except Exception:
@@ -135,14 +131,14 @@ class ContextFactory:
             await apply_stealth_to_context(context, signature)
             return context
 
-    async def new_page(self, context: Any) -> Any:
+    async def new_page(self, context: BrowserContextHandle) -> BrowserPage:
         async with self._lock:
             page = await context.new_page()
 
             return page
 
-    async def close_page(self, page: Any) -> None:
+    async def close_page(self, page: BrowserPage) -> None:
         await _safe_page_close(page)
 
-    async def close_context(self, context: Any) -> None:
+    async def close_context(self, context: BrowserContextHandle) -> None:
         await _safe_context_close(context)

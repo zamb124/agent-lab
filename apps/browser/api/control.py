@@ -8,7 +8,8 @@ import json
 import random
 import re
 import uuid
-from typing import Any, Literal, Optional
+from collections.abc import Mapping
+from typing import Annotated, ClassVar, Literal, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,6 +19,8 @@ from apps.browser.dependencies import ContainerDep
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
+    BrowserLocator,
+    BrowserPage,
     ContextSignature,
 )
 from apps.browser.interaction.human_interaction import HumanInteraction, InteractionRng
@@ -27,12 +30,73 @@ from apps.browser.interaction.interaction_profiles import (
     get_interaction_profile,
 )
 from apps.browser.observe.ax_snapshot import dom_accessibility_tree_dict_from_page
-from apps.browser.observe.snapshot_refs import build_interactive_snapshot_with_refs, parse_ref
+from apps.browser.observe.session_artifacts import SessionArtifactObject
+from apps.browser.observe.snapshot_refs import (
+    RefMap,
+    build_interactive_snapshot_with_refs,
+    parse_ref,
+)
+from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
+from core.types import JsonObject, require_json_object
 
 router = APIRouter(prefix="/control", tags=["browser-control"])
 
 
-def _format_console_events_text(events: list[dict[str, object]]) -> str:
+class ControlNavigateResponse(TypedDict):
+    final_url: str
+    status_code: int | None
+    response_headers: dict[str, str]
+    screenshot_ref: str | None
+    pdf_ref: str | None
+    snapshot_ref: str | None
+    anti_bot_signals: JsonObject
+
+
+class ControlSnapshotResponse(TypedDict, total=False):
+    schema: str
+    mode: str
+    text: str
+    refs: RefMap
+
+
+class ControlObserveResponse(TypedDict):
+    session_id: str
+    url: str
+    snapshot: ControlSnapshotResponse
+
+
+class ControlOkResponse(TypedDict):
+    ok: bool
+
+
+class ControlPointerClickResponse(TypedDict):
+    ok: bool
+    x: float
+    y: float
+    viewport_width: float
+    viewport_height: float
+    url: str
+
+
+class ControlDeleteResponse(TypedDict):
+    status: str
+
+
+ControlTypedResponse: TypeAlias = (
+    ControlNavigateResponse
+    | ControlSnapshotResponse
+    | ControlObserveResponse
+    | ControlOkResponse
+    | ControlPointerClickResponse
+    | ControlDeleteResponse
+)
+
+
+def _response_artifact(response: ControlTypedResponse) -> JsonObject:
+    return require_json_object(cast(object, response), "response")
+
+
+def _format_console_events_text(events: list[JsonObject]) -> str:
     lines: list[str] = []
     for e in events:
         kind = str(e.get("kind", "") or "")
@@ -42,9 +106,10 @@ def _format_console_events_text(events: list[dict[str, object]]) -> str:
             loc = e.get("location")
             loc_s = ""
             if isinstance(loc, dict):
-                url = loc.get("url")
-                line = loc.get("line")
-                col = loc.get("column")
+                loc_map = cast(Mapping[object, object], loc)
+                url = loc_map.get("url")
+                line = loc_map.get("line")
+                col = loc_map.get("column")
                 if isinstance(url, str) and url:
                     loc_s = url
                     if isinstance(line, int):
@@ -86,7 +151,7 @@ def _format_console_events_text(events: list[dict[str, object]]) -> str:
     return "\n".join(lines).strip() + ("\n" if len(lines) else "")
 
 
-def _write_console_sidecars(*, runtime: Any, session_id: str, event_path: str) -> None:
+def _write_console_sidecars(*, runtime: BrowserRuntimeFacade, session_id: str, event_path: str) -> None:
     events = runtime.lease_manager.drain_console_events(session_id)
     json_path = runtime.session_artifacts.write_sidecar_text_for_event(
         event_json_path=event_path,
@@ -116,7 +181,7 @@ def _write_console_sidecars(*, runtime: Any, session_id: str, event_path: str) -
     )
 
 
-def _extract_page_error_from_html(html: str) -> dict[str, str] | None:
+def _extract_page_error_from_html(html: str) -> JsonObject | None:
     """
     Лучшее усилие: вытащить "ошибку страницы" из HTML.
 
@@ -133,7 +198,7 @@ def _extract_page_error_from_html(html: str) -> dict[str, str] | None:
     body = body_m.group(1).strip() if body_m else ""
     if not title and not body:
         return None
-    out: dict[str, str] = {}
+    out: JsonObject = {}
     if title:
         out["title"] = title
     if body:
@@ -143,13 +208,13 @@ def _extract_page_error_from_html(html: str) -> dict[str, str] | None:
 
 def _write_session_event(
     *,
-    runtime: Any,
+    runtime: BrowserRuntimeFacade,
     session_id: str,
     op: str,
-    request: Any,
-    response: Any,
-    error: Any,
-    meta: dict[str, Any],
+    request: SessionArtifactObject,
+    response: SessionArtifactObject | None,
+    error: SessionArtifactObject | None,
+    meta: JsonObject,
 ) -> str:
     return runtime.session_artifacts.write_event(
         session_id=session_id,
@@ -178,19 +243,19 @@ class ContextSignatureBody(BaseModel):
     Переиспользование:
     - Стоит: как входной DTO для любых API-методов, где нужна сигнатура контекста.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     proxy_policy: str = ""
-    shared_storage_key: Optional[str] = None
+    shared_storage_key: str | None = None
     anti_bot_tier: Literal["white", "gray", "black"] = "white"
     stealth_init_version: str = "v1"
     locale: str = "en-US"
     timezone_id: str = "UTC"
-    user_agent: Optional[str] = None
+    user_agent: str | None = None
     page_mode: Literal["interactive", "crawl", "lite"] = "interactive"
     permissions_fingerprint: str = "default"
     interaction_profile: InteractionProfileName = "human"
-    interaction_seed: Optional[int] = None
+    interaction_seed: int | None = None
 
 
 class ControlSessionCreateBody(BaseModel):
@@ -210,19 +275,19 @@ class ControlSessionCreateBody(BaseModel):
     Переиспользование:
     - Стоит: как единая модель create-session для API и тестов.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    session_id: Optional[str] = None
-    run_id: Optional[str] = None
-    task_id: Optional[str] = None
+    session_id: str | None = None
+    run_id: str | None = None
+    task_id: str | None = None
     page_mode: Literal["interactive", "crawl", "lite"] = "interactive"
-    shared_storage_key: Optional[str] = None
+    shared_storage_key: str | None = None
     proxy_policy: str = ""
     anti_bot_tier: str = "white"
     timeout_ms: int = Field(default=60_000, ge=1000)
-    endpoint_key: Optional[str] = None
+    endpoint_key: str | None = None
     session_mode: Literal["warm", "restore"] = "warm"
-    restore_state_key: Optional[str] = None
+    restore_state_key: str | None = None
     context: ContextSignatureBody = Field(default_factory=ContextSignatureBody)
 
 
@@ -242,7 +307,7 @@ class ControlSessionCreateResponse(BaseModel):
     Переиспользование:
     - Стоит: как каноничный response-model create-session.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
     run_id: str
@@ -269,7 +334,7 @@ class ControlNavigateBody(BaseModel):
     Переиспользование:
     - Стоит: для любых endpoint-ов, выполняющих fetch/navigation.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     url: str
     wait_policy: str = "domcontentloaded"
@@ -289,7 +354,7 @@ class ControlObserveBody(BaseModel):
     после observe; без дубля в JSON ответ меньше по токенам, refs в тексте
     snapshot достаточно модели для выбора @eN.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
     include_snapshot_refs: bool = True
 
 
@@ -310,21 +375,21 @@ class ControlActionBody(BaseModel):
     Переиспользование:
     - Стоит: как единая входная модель для action/exec endpoint-ов.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     code: str
     timeout_ms: int = Field(default=5_000, ge=1000)
 
 
 class ControlClickBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     ref: str
     timeout_ms: int = Field(default=5_000, ge=1000)
 
 
 class ControlPointerClickBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     x: float = Field(ge=0)
     y: float = Field(ge=0)
@@ -335,30 +400,30 @@ class ControlPointerClickBody(BaseModel):
 
 
 class ControlFillBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     ref: str
     text: str
     timeout_ms: int = Field(default=5_000, ge=1000)
-    typing_delay_ms: Optional[int] = Field(default=None, ge=0)
+    typing_delay_ms: int | None = Field(default=None, ge=0)
 
 
 class ControlPressBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     key: str
 
 
 class ControlWaitBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    selector: Optional[str] = None
-    load_state: Optional[Literal["domcontentloaded", "networkidle"]] = None
+    selector: str | None = None
+    load_state: Literal["domcontentloaded", "networkidle"] | None = None
     timeout_ms: int = Field(default=5_000, ge=1000)
 
 
 class ControlSessionStatusResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
     url: str
@@ -366,7 +431,7 @@ class ControlSessionStatusResponse(BaseModel):
     closed: bool = False
 
 
-def _features_dict(runtime: Any) -> dict[str, bool]:
+def _features_dict(runtime: BrowserRuntimeFacade) -> dict[str, bool]:
     f = runtime.control_adapter.features()
     return {
         "supports_js_injection_dom_tree": f.supports_js_injection_dom_tree,
@@ -394,7 +459,7 @@ async def create_control_session(
             status_code=422,
             detail="context.page_mode должен совпадать с page_mode",
         )
-    get_interaction_profile(ctx.interaction_profile)
+    _ = get_interaction_profile(ctx.interaction_profile)
     sig = ContextSignature(
         proxy_policy=ctx.proxy_policy,
         shared_storage_key=ctx.shared_storage_key,
@@ -466,7 +531,7 @@ async def control_navigate(
     session_id: str,
     body: ControlNavigateBody,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> ControlNavigateResponse:
     runtime = container.browser_runtime
     async with runtime.lease_manager.session_navigate_exclusive(session_id):
         if body.new_tab:
@@ -518,7 +583,7 @@ async def control_navigate(
             # Поведенческий слой не должен ломать навигацию: это best-effort сигнал,
             # а не обязательная часть контракта navigate.
             pass
-        payload = {
+        payload: ControlNavigateResponse = {
             "final_url": out.final_url,
             "status_code": out.status_code,
             "response_headers": out.response_headers,
@@ -532,7 +597,7 @@ async def control_navigate(
             session_id=session_id,
             op="control.navigate",
             request=body,
-            response=payload,
+            response=_response_artifact(payload),
             error=None,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/navigate"},
         )
@@ -545,7 +610,7 @@ async def control_observe(
     session_id: str,
     body: ControlObserveBody,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> ControlObserveResponse:
     runtime = container.browser_runtime
     async with runtime.lease_manager.session_navigate_exclusive(session_id):
         try:
@@ -554,7 +619,15 @@ async def control_observe(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        payload: dict[str, Any] = {"session_id": session_id, "url": page.url}
+        payload: ControlObserveResponse = {
+            "session_id": session_id,
+            "url": page.url,
+            "snapshot": {
+                "schema": "browser.control.snapshot.v1",
+                "mode": "interactive",
+                "text": "",
+            },
+        }
 
         # Observe должен работать на "готовой" странице: domcontentloaded достаточно.
         # `networkidle` на Lightpanda и на сайтах с трекерами может не наступать (или падать),
@@ -565,7 +638,7 @@ async def control_observe(
         # без зависимости от Playwright accessibility API и без тяжёлых «сырьевых» деревьев.
         ax = await dom_accessibility_tree_dict_from_page(page)
         snap_text, refs = build_interactive_snapshot_with_refs(ax)
-        snapshot: dict[str, Any] = {
+        snapshot: ControlSnapshotResponse = {
             "schema": "browser.control.snapshot.v1",
             "mode": "interactive",
             "text": snap_text,
@@ -580,7 +653,7 @@ async def control_observe(
             session_id=session_id,
             op="control.observe",
             request=body,
-            response=payload,
+            response=_response_artifact(payload),
             error=None,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/observe"},
         )
@@ -615,7 +688,7 @@ async def control_action(
     session_id: str,
     body: ControlActionBody,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> JsonObject:
     runtime = container.browser_runtime
     async with runtime.lease_manager.session_navigate_exclusive(session_id):
         try:
@@ -655,7 +728,7 @@ async def control_action(
             raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
 
 
-def _locator_from_ref(page: Any, refs: dict[str, dict[str, object]], raw_ref: str) -> Any:
+def _locator_from_ref(page: BrowserPage, refs: RefMap, raw_ref: str) -> BrowserLocator:
     ref = parse_ref(raw_ref)
     if ref not in refs:
         raise HTTPException(status_code=422, detail=f"ref не найден в последнем snapshot: {raw_ref!r}")
@@ -663,11 +736,9 @@ def _locator_from_ref(page: Any, refs: dict[str, dict[str, object]], raw_ref: st
     role = meta.get("role")
     name = meta.get("name")
     nth = meta.get("nth")
-    if not isinstance(role, str) or not role:
+    if not role:
         raise HTTPException(status_code=500, detail=f"refs[{ref}].role должен быть непустой строкой")
-    if not isinstance(name, str):
-        raise HTTPException(status_code=500, detail=f"refs[{ref}].name должен быть строкой")
-    if not isinstance(nth, int) or nth < 0:
+    if nth < 0:
         raise HTTPException(status_code=500, detail=f"refs[{ref}].nth должен быть int >= 0")
     loc = page.get_by_role(role, name=name, exact=True)
     if nth:
@@ -676,7 +747,7 @@ def _locator_from_ref(page: Any, refs: dict[str, dict[str, object]], raw_ref: st
 
 
 def _interaction_for_session(
-    runtime: Any,
+    runtime: BrowserRuntimeFacade,
     session_id: str,
 ) -> tuple[HumanInteraction, InteractionProfile, InteractionRng]:
     try:
@@ -696,7 +767,7 @@ async def control_click(
     session_id: str,
     body: ControlClickBody,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> ControlOkResponse:
     runtime = container.browser_runtime
     async with runtime.lease_manager.session_navigate_exclusive(session_id):
         try:
@@ -713,13 +784,13 @@ async def control_click(
         await loc.wait_for(state="visible", timeout=body.timeout_ms)
         inter, profile, rnd = _interaction_for_session(runtime, session_id)
         await inter.click(page, loc, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
-        out = {"ok": True}
+        out: ControlOkResponse = {"ok": True}
         event_path = _write_session_event(
             runtime=runtime,
             session_id=session_id,
             op="control.click",
             request=body,
-            response=out,
+            response=_response_artifact(out),
             error=None,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/click"},
         )
@@ -728,24 +799,30 @@ async def control_click(
 
 
 async def _viewport_size(
-    page: Any,
+    page: BrowserPage,
     *,
     fallback_width: float,
     fallback_height: float,
 ) -> tuple[float, float]:
     size = page.viewport_size
-    if isinstance(size, dict):
-        width = size.get("width")
-        height = size.get("height")
-        if isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 0 and height > 0:
+    if size is not None:
+        width = size["width"]
+        height = size["height"]
+        if width > 0 and height > 0:
             return float(width), float(height)
-    js_size = await page.evaluate(
-        "() => ({ width: window.innerWidth || document.documentElement.clientWidth,"
-        " height: window.innerHeight || document.documentElement.clientHeight })"
+    js_size = cast(
+        object,
+        await page.evaluate(
+            "() => ({ "
+            + "width: window.innerWidth || document.documentElement.clientWidth, "
+            + "height: window.innerHeight || document.documentElement.clientHeight "
+            + "})"
+        ),
     )
     if isinstance(js_size, dict):
-        width = js_size.get("width")
-        height = js_size.get("height")
+        js_size_map = cast(Mapping[object, object], js_size)
+        width = js_size_map.get("width")
+        height = js_size_map.get("height")
         if isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 0 and height > 0:
             return float(width), float(height)
     return float(fallback_width), float(fallback_height)
@@ -756,7 +833,7 @@ async def control_pointer_click(
     session_id: str,
     body: ControlPointerClickBody,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> ControlPointerClickResponse:
     runtime = container.browser_runtime
     async with runtime.lease_manager.session_navigate_exclusive(session_id):
         try:
@@ -778,20 +855,20 @@ async def control_pointer_click(
             button=body.button,
             click_count=body.click_count,
         )
-        out = {
+        out: ControlPointerClickResponse = {
             "ok": True,
             "x": x,
             "y": y,
             "viewport_width": viewport_width,
             "viewport_height": viewport_height,
-            "url": str(getattr(page, "url", "") or ""),
+            "url": page.url,
         }
         event_path = _write_session_event(
             runtime=runtime,
             session_id=session_id,
             op="control.pointer_click",
             request=body,
-            response=out,
+            response=_response_artifact(out),
             error=None,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/pointer/click"},
         )
@@ -804,7 +881,7 @@ async def control_fill(
     session_id: str,
     body: ControlFillBody,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> ControlOkResponse:
     runtime = container.browser_runtime
     async with runtime.lease_manager.session_navigate_exclusive(session_id):
         try:
@@ -829,13 +906,13 @@ async def control_fill(
             timeout_ms=body.timeout_ms,
             typing_delay_ms=body.typing_delay_ms,
         )
-        out = {"ok": True}
+        out: ControlOkResponse = {"ok": True}
         event_path = _write_session_event(
             runtime=runtime,
             session_id=session_id,
             op="control.fill",
             request=body,
-            response=out,
+            response=_response_artifact(out),
             error=None,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/fill"},
         )
@@ -848,7 +925,7 @@ async def control_press(
     session_id: str,
     body: ControlPressBody,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> ControlOkResponse:
     runtime = container.browser_runtime
     async with runtime.lease_manager.session_navigate_exclusive(session_id):
         try:
@@ -859,13 +936,13 @@ async def control_press(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         inter, profile, rnd = _interaction_for_session(runtime, session_id)
         await inter.press(page, body.key, profile=profile, rnd=rnd)
-        out = {"ok": True}
+        out: ControlOkResponse = {"ok": True}
         event_path = _write_session_event(
             runtime=runtime,
             session_id=session_id,
             op="control.press",
             request=body,
-            response=out,
+            response=_response_artifact(out),
             error=None,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/press"},
         )
@@ -878,7 +955,7 @@ async def control_wait(
     session_id: str,
     body: ControlWaitBody,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> ControlOkResponse:
     runtime = container.browser_runtime
     async with runtime.lease_manager.session_navigate_exclusive(session_id):
         try:
@@ -890,16 +967,16 @@ async def control_wait(
         if body.load_state is not None:
             await page.wait_for_load_state(body.load_state, timeout=body.timeout_ms)
         if body.selector is not None:
-            await page.wait_for_selector(body.selector, timeout=body.timeout_ms)
+            _ = await page.wait_for_selector(body.selector, timeout=body.timeout_ms)
         if body.load_state is None and body.selector is None:
             raise HTTPException(status_code=422, detail="Нужно задать selector и/или load_state")
-        out = {"ok": True}
+        out: ControlOkResponse = {"ok": True}
         event_path = _write_session_event(
             runtime=runtime,
             session_id=session_id,
             op="control.wait",
             request=body,
-            response=out,
+            response=_response_artifact(out),
             error=None,
             meta={"transport": "http", "path": f"/control/sessions/{session_id}/wait"},
         )
@@ -929,7 +1006,7 @@ async def control_session_status(
             title = ""
     return ControlSessionStatusResponse(
         session_id=session_id,
-        url=str(getattr(page, "url", "") or ""),
+        url=page.url,
         title=title,
         closed=closed,
     )
@@ -939,9 +1016,9 @@ async def control_session_status(
 async def control_session_screenshot(
     session_id: str,
     container: ContainerDep,
-    image_format: Literal["jpeg", "png"] = Query(default="jpeg", alias="format"),
-    quality: int = Query(default=70, ge=1, le=100),
-    full_page: bool = Query(default=False),
+    image_format: Annotated[Literal["jpeg", "png"], Query(alias="format")] = "jpeg",
+    quality: Annotated[int, Query(ge=1, le=100)] = 70,
+    full_page: Annotated[bool, Query()] = False,
 ) -> Response:
     runtime = container.browser_runtime
     try:
@@ -953,16 +1030,22 @@ async def control_session_screenshot(
     if page.is_closed():
         raise HTTPException(status_code=410, detail="browser page is closed")
 
-    screenshot_kwargs: dict[str, Any] = {
-        "type": image_format,
-        "full_page": full_page,
-        "timeout": 5_000,
-        "animations": "disabled",
-    }
-    if image_format == "jpeg":
-        screenshot_kwargs["quality"] = quality
     try:
-        body = await page.screenshot(**screenshot_kwargs)
+        if image_format == "jpeg":
+            body = await page.screenshot(
+                type=image_format,
+                full_page=full_page,
+                timeout=5_000,
+                animations="disabled",
+                quality=quality,
+            )
+        else:
+            body = await page.screenshot(
+                type=image_format,
+                full_page=full_page,
+                timeout=5_000,
+                animations="disabled",
+            )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"screenshot failed: {exc}") from exc
     return Response(
@@ -979,7 +1062,7 @@ async def control_session_screenshot(
 async def delete_control_session(
     session_id: str,
     container: ContainerDep,
-) -> dict[str, str]:
+) -> ControlDeleteResponse:
     runtime = container.browser_runtime
     await runtime.lease_manager.kill_session(
         session_id,
@@ -987,13 +1070,13 @@ async def delete_control_session(
     )
     runtime.observe_store.forget(session_id)
     runtime.session_artifacts.forget(session_id)
-    out = {"status": "closed"}
+    out: ControlDeleteResponse = {"status": "closed"}
     event_path = _write_session_event(
         runtime=runtime,
         session_id=session_id,
         op="control.close_session",
         request={"session_id": session_id},
-        response=out,
+        response=_response_artifact(out),
         error=None,
         meta={"transport": "http", "path": f"/control/sessions/{session_id}"},
     )

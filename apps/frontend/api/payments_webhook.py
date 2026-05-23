@@ -10,7 +10,6 @@ YooMoney отправляет POST application/x-www-form-urlencoded,
 ожидает HTTP 200 OK в ответ.
 """
 
-from typing import Optional
 
 from fastapi import APIRouter, Form, HTTPException, Response
 
@@ -34,7 +33,7 @@ async def payment_webhook(
     codepro: str = Form(""),
     sha1_hash: str = Form(""),
     label: str = Form(""),
-    test_notification: Optional[str] = Form(None),
+    test_notification: str | None = Form(None),
 ):
     logger.info(
         "Webhook %s: label=%s, amount=%s, operation_id=%s",

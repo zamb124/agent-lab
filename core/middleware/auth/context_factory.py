@@ -2,7 +2,7 @@
 Фабрика для создания Context.
 """
 
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import HTTPException, Request
 
@@ -26,12 +26,12 @@ class ContextFactory:
         self,
         request: Request,
         context_type: str,
-        company: Optional[Company],
-        user: Optional[User] = None,
-        token_data: Optional[TokenData] = None,
-        platform: Optional[str] = None,
-        auth_token: Optional[str] = None,
-        trace_id: Optional[str] = None,
+        company: Company | None,
+        user: User | None = None,
+        token_data: TokenData | None = None,
+        platform: str | None = None,
+        auth_token: str | None = None,
+        trace_id: str | None = None,
     ) -> Context:
         """
         Создает Context для запроса.
@@ -126,9 +126,9 @@ class ContextFactory:
     async def _create_anonymous_context(
         self,
         request: Request,
-        company: Optional[Company],
+        company: Company | None,
         language: Language,
-        trace_id: Optional[str] = None,
+        trace_id: str | None = None,
     ) -> Context:
         """Создает анонимный контекст"""
         company_id = company.company_id if company else "system"
@@ -172,16 +172,16 @@ class ContextFactory:
     async def _resolve_active_namespace(
         self,
         request: Request,
-        company: Optional[Company],
-        user: Optional[User],
-        user_companies: List[Company],
+        company: Company | None,
+        user: User | None,
+        user_companies: list[Company],
         language: Language,
         host: str,
         metadata: dict[str, Any],
-        token_data: Optional[TokenData],
-        auth_token: Optional[str],
-        trace_id: Optional[str],
-        platform: Optional[str],
+        token_data: TokenData | None,
+        auth_token: str | None,
+        trace_id: str | None,
+        platform: str | None,
         context_type: str,
     ) -> str:
         if not company or not user:
@@ -221,7 +221,7 @@ class ContextFactory:
             )
         return ns.name
 
-    async def _get_user_companies(self, user: User) -> List[Company]:
+    async def _get_user_companies(self, user: User) -> list[Company]:
         """Получает все компании пользователя"""
         company_repo = self.container.company_repository
         companies = []

@@ -6,7 +6,7 @@ API эндпоинты для авторизации.
 """
 
 from datetime import datetime, timezone
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
@@ -26,15 +26,15 @@ router = APIRouter(tags=["auth"])
 
 class UserUpdate(BaseModel):
     """Обновление данных пользователя"""
-    name: Optional[str] = PydanticField(None, max_length=200)
-    first_name: Optional[str] = PydanticField(None, max_length=100)
-    last_name: Optional[str] = PydanticField(None, max_length=100)
-    emails: Optional[List[str]] = None
-    phones: Optional[List[str]] = None
-    messengers: Optional[Dict[str, str]] = None
-    avatar_url: Optional[str] = None
-    bio: Optional[str] = PydanticField(None, max_length=4000)
-    ui_preferences: Optional[Dict[str, Any]] = None
+    name: str | None = PydanticField(None, max_length=200)
+    first_name: str | None = PydanticField(None, max_length=100)
+    last_name: str | None = PydanticField(None, max_length=100)
+    emails: list[str] | None = None
+    phones: list[str] | None = None
+    messengers: dict[str, str] | None = None
+    avatar_url: str | None = None
+    bio: str | None = PydanticField(None, max_length=4000)
+    ui_preferences: dict[str, Any] | None = None
 
 class SwitchCompanyRequest(BaseModel):
     """Переключение активной компании пользователя"""
@@ -77,7 +77,7 @@ def _clear_platform_auth_cookies(response: JSONResponse, request: Request) -> No
         samesite="lax",
     )
 
-def _append_query(url: str, params: Dict[str, str]) -> str:
+def _append_query(url: str, params: dict[str, str]) -> str:
     parsed = urlsplit(url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     query.update(params)
@@ -234,11 +234,11 @@ async def start_auth(
 async def _complete_oauth_callback(
     request: Request,
     provider_name: str,
-    code: Optional[str],
-    state: Optional[str],
+    code: str | None,
+    state: str | None,
     auth_service: AuthService,
-    error: Optional[str] = None,
-    oauth_first_login_user_json: Optional[str] = None,
+    error: str | None = None,
+    oauth_first_login_user_json: str | None = None,
 ) -> RedirectResponse:
     """Общая логика GET/POST callback (Apple form_post передаёт поля в теле формы)."""
     settings = get_settings()
@@ -368,7 +368,7 @@ async def auth_callback(
     state: str,
     auth_service: AuthServiceDep,
     error: str | None = None,
-    user: Optional[str] = None,
+    user: str | None = None,
 ):
     """Callback после OAuth (query); Apple при scope name/email шлёт POST form_post."""
     return await _complete_oauth_callback(
@@ -388,8 +388,8 @@ async def auth_callback_post(
     auth_service: AuthServiceDep,
     code: str = Form(...),
     state: str = Form(...),
-    error: Optional[str] = Form(None),
-    user: Optional[str] = Form(None),
+    error: str | None = Form(None),
+    user: str | None = Form(None),
 ):
     """Sign in with Apple: response_mode=form_post — code/state/user в application/x-www-form-urlencoded."""
     return await _complete_oauth_callback(
@@ -406,7 +406,7 @@ async def auth_callback_post(
 async def logout(
     request: Request,
     auth_service: AuthServiceDep,
-    session_id: Annotated[Optional[str], Query()] = None,
+    session_id: Annotated[str | None, Query()] = None,
 ):
     """
     Завершает сессию: берёт session_id из query (опционально) или из JWT в cookie,
@@ -575,7 +575,7 @@ async def get_service_attrs(
 async def update_service_attrs(
     request: Request,
     service: str,
-    attrs: Dict[str, Any],
+    attrs: dict[str, Any],
     auth_service: AuthServiceDep
 ):
     """

@@ -213,7 +213,7 @@ def get_settings() -> FlowSettings:
         return _settings
 
     merged_config = load_merged_config(service_name="flows", silent=True)
-    _settings = FlowSettings(**merged_config)
+    _settings = FlowSettings.model_validate(merged_config)
     core_set_settings(_settings)
 
     return _settings

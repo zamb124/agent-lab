@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from core.files.models import FileMetadata
 from core.files.processors import FileProcessor
 
@@ -14,7 +12,7 @@ async def write_bytes_via_processor(
     content_type: str,
     original_name: str,
     file_processor: FileProcessor,
-    uploaded_by: Optional[str],
+    uploaded_by: str | None,
     company_id: str,
     download_url_prefix: str,
     content_sha256_hex: str,

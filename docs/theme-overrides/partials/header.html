@@ -68,10 +68,10 @@
     {% if "search" in config.plugins %}
       {% set search = config.plugins["search"] | attr("config") %}
       {% if search.enabled %}
-        <label class="docs-ask-ai" for="__search" aria-label="{{ ask_ai_aria_label }}">
+        <button type="button" class="docs-ask-ai" aria-label="{{ ask_ai_aria_label }}" data-docs-ask-ai>
           <span>{{ ask_ai_title }}</span>
           {% include ".icons/octicons/sparkles-fill-16.svg" %}
-        </label>
+        </button>
       {% endif %}
     {% endif %}
     {% if "search" in config.plugins %}

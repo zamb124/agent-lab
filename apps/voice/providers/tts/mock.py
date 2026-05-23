@@ -1,6 +1,6 @@
 """TTS-провайдер для тестового окружения — возвращает предсказуемые байты."""
 
-from typing import Any, Optional
+from typing import Any
 
 from apps.voice.providers.base import BaseTTSProvider
 
@@ -17,7 +17,7 @@ class MockTTSProvider(BaseTTSProvider):
         self._bytes_per_char = bytes_per_char
         self._synthesized_texts: list[str] = []
 
-    async def init(self, config: Optional[Any] = None) -> None:
+    async def init(self, config: Any | None = None) -> None:
         pass
 
     async def synthesize(self, text: str) -> bytes:

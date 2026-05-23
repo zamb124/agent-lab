@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal, Optional, Union
+from typing import Literal
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -29,7 +29,7 @@ class CompanyVoiceProviderRepository:
             raise ValueError("CompanyVoiceProviderRepository: db_url не может быть пустым.")
         self._db_url = db_url
 
-    async def get(self, *, company_id: str, kind: VoiceKind) -> Optional[CompanyVoiceProvider]:
+    async def get(self, *, company_id: str, kind: VoiceKind) -> CompanyVoiceProvider | None:
         if company_id == "":
             raise ValueError("company_id не может быть пустым.")
         session_factory = await get_session_factory(self._db_url)
@@ -60,13 +60,13 @@ class CompanyVoiceProviderRepository:
         company_id: str,
         kind: VoiceKind,
         provider: str,
-        model: Optional[str] = None,
-        voice: Optional[str] = None,
-        language: Optional[str] = None,
-        sample_rate: Optional[int] = None,
-        threshold: Optional[float] = None,
-        response_format: Optional[str] = None,
-        secrets: Union[dict[str, str], None, object] = unset_secrets_sentinel(),
+        model: str | None = None,
+        voice: str | None = None,
+        language: str | None = None,
+        sample_rate: int | None = None,
+        threshold: float | None = None,
+        response_format: str | None = None,
+        secrets: dict[str, str] | None | object = unset_secrets_sentinel(),
     ) -> CompanyVoiceProvider:
         if company_id == "":
             raise ValueError("company_id не может быть пустым.")
@@ -82,7 +82,7 @@ class CompanyVoiceProviderRepository:
                 )
             )
             existing = result_existing.scalar_one_or_none()
-            secrets_value: Optional[dict[str, str]]
+            secrets_value: dict[str, str] | None
             if is_unset_sentinel(secrets):
                 secrets_value = (
                     dict(existing.secrets) if existing and existing.secrets else None  # type: ignore[arg-type]

@@ -8,11 +8,14 @@ from pathlib import Path
 from core.config.loader import load_merged_config
 from core.config.models import LoggingConfig
 from core.logging.setup import setup_logging
+from core.types import require_json_object
 
 _FLOWS_BOOTSTRAP_MERGED = load_merged_config(service_name="flows", silent=True)
 setup_logging(
     "flows",
-    LoggingConfig.model_validate(dict(_FLOWS_BOOTSTRAP_MERGED.get("logging") or {})),
+    LoggingConfig.model_validate(
+        require_json_object(_FLOWS_BOOTSTRAP_MERGED.get("logging") or {}, "logging")
+    ),
 )
 
 from fastapi import FastAPI, HTTPException  # noqa: E402
@@ -241,7 +244,7 @@ async def on_shutdown(app: FastAPI, container):
         )
 
 
-_flow_settings = FlowSettings(**_FLOWS_BOOTSTRAP_MERGED)
+_flow_settings = FlowSettings.model_validate(_FLOWS_BOOTSTRAP_MERGED)
 _cors_regex = _flow_settings.cors_allow_origin_regex
 if "*" in _flow_settings.cors_allow_origins:
     raise ValueError("flows.cors_allow_origins не может содержать '*' для embed/A2A")

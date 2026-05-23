@@ -6,11 +6,13 @@ MockResolver - резолвер mock конфигурации.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, cast
 
 from apps.flows.config import get_settings
 from core.config.testing import is_testing as is_testing_env
 from core.logging import get_logger
+from core.types import JsonObject, JsonValue, require_json_object
 
 from .config import MockConfig
 
@@ -20,11 +22,16 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _mock_mapping_section(mock_config: Mapping[str, JsonValue], key: str) -> Mapping[str, JsonValue]:
+    section = mock_config.get(key, {})
+    return cast(Mapping[str, JsonValue], section) if isinstance(section, Mapping) else {}
+
+
 def resolve_mock_config(
-    global_mock: dict[str, Any] | None = None,
-    flow_mock: dict[str, Any] | None = None,
-    skill_mock: dict[str, Any] | None = None,
-    request_mock: dict[str, Any] | None = None,
+    global_mock: JsonObject | None = None,
+    flow_mock: JsonObject | None = None,
+    skill_mock: JsonObject | None = None,
+    request_mock: JsonObject | None = None,
 ) -> MockConfig:
     """
     Резолвит итоговый mock конфиг с учётом иерархии.
@@ -44,7 +51,7 @@ def resolve_mock_config(
     Returns:
         Итоговый MockConfig
     """
-    result: dict[str, Any] = {
+    result: JsonObject = {
         "enabled": False,
         "llm": None,
         "tools": {},
@@ -58,10 +65,10 @@ def resolve_mock_config(
         if mock_dict:
             _merge_mock(result, mock_dict)
 
-    return MockConfig(**result)
+    return MockConfig.model_validate(result)
 
 
-def _merge_mock(target: dict[str, Any], source: dict[str, Any]) -> None:
+def _merge_mock(target: JsonObject, source: JsonObject) -> None:
     """
     Мержит source mock в target.
 
@@ -79,23 +86,31 @@ def _merge_mock(target: dict[str, Any], source: dict[str, Any]) -> None:
 
     # Tools: мерж
     if "tools" in source and source["tools"]:
-        target["tools"].update(source["tools"])
+        tools = require_json_object(target["tools"], "mock.tools")
+        tools.update(require_json_object(source["tools"], "mock.tools"))
+        target["tools"] = tools
 
     if "flows" in source and source["flows"]:
-        target["flows"].update(source["flows"])
+        flows = require_json_object(target["flows"], "mock.flows")
+        flows.update(require_json_object(source["flows"], "mock.flows"))
+        target["flows"] = flows
     if "agents" in source and source["agents"]:
-        target["flows"].update(source["agents"])
+        flows = require_json_object(target["flows"], "mock.flows")
+        flows.update(require_json_object(source["agents"], "mock.agents"))
+        target["flows"] = flows
 
     # Nodes: мерж
     if "nodes" in source and source["nodes"]:
-        target["nodes"].update(source["nodes"])
+        nodes = require_json_object(target["nodes"], "mock.nodes")
+        nodes.update(require_json_object(source["nodes"], "mock.nodes"))
+        target["nodes"] = nodes
 
     # Замена групп разрешений
     if "permission_groups" in source:
         target["permission_groups"] = source["permission_groups"]
 
 
-def is_mock_enabled(state_dict: dict[str, Any] | None = None) -> bool:
+def is_mock_enabled(state_dict: JsonObject | None = None) -> bool:
     """
     Проверяет включен ли mock режим.
 
@@ -106,14 +121,19 @@ def is_mock_enabled(state_dict: dict[str, Any] | None = None) -> bool:
         True если mock режим включен
     """
     if state_dict:
-        mock_config = state_dict.get("mock")
+        raw_mock_config = state_dict.get("mock")
+        mock_config = (
+            require_json_object(raw_mock_config, "state.mock")
+            if raw_mock_config is not None
+            else None
+        )
         if mock_config and mock_config.get("enabled"):
             return True
 
     return is_testing_env()
 
 
-def get_mock_for_tool(state: ExecutionState | None, tool_id: str) -> Any | None:
+def get_mock_for_tool(state: ExecutionState | None, tool_id: str) -> JsonValue | None:
     """
     Получает mock ответ для tool.
 
@@ -127,11 +147,11 @@ def get_mock_for_tool(state: ExecutionState | None, tool_id: str) -> Any | None:
     if not state:
         return None
 
-    mock_config = state.mock
+    mock_config = require_json_object(state.mock, "state.mock") if state.mock else None
     if not mock_config or not mock_config.get("enabled"):
         return None
 
-    tools = mock_config.get("tools", {})
+    tools = _mock_mapping_section(mock_config, "tools")
     if tool_id in tools:
         logger.debug(f"Mock для tool '{tool_id}' найден")
         return tools[tool_id]
@@ -139,7 +159,7 @@ def get_mock_for_tool(state: ExecutionState | None, tool_id: str) -> Any | None:
     return None
 
 
-def get_mock_for_flow(state: ExecutionState | None, flow_id: str) -> Any | None:
+def get_mock_for_flow(state: ExecutionState | None, flow_id: str) -> JsonValue | None:
     """
     Получает mock ответ для вложенного flow.
 
@@ -153,11 +173,11 @@ def get_mock_for_flow(state: ExecutionState | None, flow_id: str) -> Any | None:
     if not state:
         return None
 
-    mock_config = state.mock
+    mock_config = require_json_object(state.mock, "state.mock") if state.mock else None
     if not mock_config or not mock_config.get("enabled"):
         return None
 
-    flows = mock_config.get("flows", {})
+    flows = _mock_mapping_section(mock_config, "flows")
     if flow_id in flows:
         logger.debug(f"Mock для flow '{flow_id}' найден")
         return flows[flow_id]
@@ -165,7 +185,7 @@ def get_mock_for_flow(state: ExecutionState | None, flow_id: str) -> Any | None:
     return None
 
 
-def get_mock_for_node(state: ExecutionState | None, node_id: str) -> dict[str, Any] | None:
+def get_mock_for_node(state: ExecutionState | None, node_id: str) -> JsonObject | None:
     """
     Получает mock данные для ноды.
 
@@ -179,19 +199,20 @@ def get_mock_for_node(state: ExecutionState | None, node_id: str) -> dict[str, A
     if not state:
         return None
 
-    mock_config = state.mock
+    mock_config = require_json_object(state.mock, "state.mock") if state.mock else None
     if not mock_config or not mock_config.get("enabled"):
         return None
 
-    nodes = mock_config.get("nodes", {})
+    nodes = _mock_mapping_section(mock_config, "nodes")
     if node_id in nodes:
         logger.debug(f"Mock для node '{node_id}' найден")
-        return nodes[node_id]
+        node_mock = nodes[node_id]
+        return require_json_object(node_mock, f"mock.nodes.{node_id}")
 
     return None
 
 
-def get_mock_for_llm(state: ExecutionState | None) -> list[dict[str, Any]] | None:
+def get_mock_for_llm(state: ExecutionState | None) -> list[JsonObject] | None:
     """
     Получает mock ответы для LLM.
 
@@ -205,7 +226,7 @@ def get_mock_for_llm(state: ExecutionState | None) -> list[dict[str, Any]] | Non
         logger.debug("[mock] get_mock_for_llm: state is None")
         return None
 
-    mock_config = state.mock
+    mock_config = require_json_object(state.mock, "state.mock") if state.mock else None
     if not mock_config:
         logger.debug("[mock] get_mock_for_llm: no mock in state")
         return None
@@ -216,9 +237,14 @@ def get_mock_for_llm(state: ExecutionState | None) -> list[dict[str, Any]] | Non
         return None
 
     llm_responses = mock_config.get("llm")
-    if llm_responses:
+    if isinstance(llm_responses, list) and llm_responses:
         logger.info(f"[mock] Mock для LLM найден: {len(llm_responses)} ответов")
-        return llm_responses
+        responses: list[JsonObject] = []
+        for index, item in enumerate(llm_responses):
+            if not isinstance(item, Mapping):
+                raise ValueError(f"mock.llm[{index}] must be an object")
+            responses.append(require_json_object(item, f"mock.llm[{index}]"))
+        return responses
 
     return None
 
@@ -250,4 +276,3 @@ def check_mock_permission(user_groups: list[str], mock_config: MockConfig) -> bo
             return True
 
     return False
-

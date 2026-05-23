@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -42,13 +42,13 @@ class PlatformPronunciationRuleDTO(BaseModel):
     kind: Literal["alias", "regex", "stress"]
     pattern: str
     replacement: str
-    language: Optional[str] = None
+    language: str | None = None
     case_sensitive: bool = False
     word_boundary: bool = True
-    providers: Optional[list[str]] = None
-    voices: Optional[list[str]] = None
+    providers: list[str] | None = None
+    voices: list[str] | None = None
     enabled: bool = True
-    note: Optional[str] = None
+    note: str | None = None
 
 
 class PlatformPronunciationRuleCreateRequest(BaseModel):
@@ -57,28 +57,28 @@ class PlatformPronunciationRuleCreateRequest(BaseModel):
     kind: Literal["alias", "regex", "stress"]
     pattern: str = Field(min_length=1)
     replacement: str
-    language: Optional[str] = None
+    language: str | None = None
     case_sensitive: bool = False
     word_boundary: bool = True
-    providers: Optional[list[str]] = None
-    voices: Optional[list[str]] = None
+    providers: list[str] | None = None
+    voices: list[str] | None = None
     enabled: bool = True
-    note: Optional[str] = None
+    note: str | None = None
 
 
 class PlatformPronunciationRuleUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Optional[Literal["alias", "regex", "stress"]] = None
-    pattern: Optional[str] = Field(default=None, min_length=1)
-    replacement: Optional[str] = None
-    language: Optional[str] = None
-    case_sensitive: Optional[bool] = None
-    word_boundary: Optional[bool] = None
-    providers: Optional[list[str]] = None
-    voices: Optional[list[str]] = None
-    enabled: Optional[bool] = None
-    note: Optional[str] = None
+    kind: Literal["alias", "regex", "stress"] | None = None
+    pattern: str | None = Field(default=None, min_length=1)
+    replacement: str | None = None
+    language: str | None = None
+    case_sensitive: bool | None = None
+    word_boundary: bool | None = None
+    providers: list[str] | None = None
+    voices: list[str] | None = None
+    enabled: bool | None = None
+    note: str | None = None
 
 
 class PlatformPronunciationRulesListResponse(BaseModel):

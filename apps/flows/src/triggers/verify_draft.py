@@ -49,8 +49,8 @@ async def verify_telegram_config(config: dict[str, Any]) -> VerifyResult:
     base = get_settings().telegram.api_base
     url = f"{base.rstrip('/')}/bot{token_s}/getMe"
     try:
-        async with get_httpx_client() as client:
-            response = await client.get(url, timeout=20.0)
+        async with get_httpx_client(timeout=20.0) as client:
+            response = await client.get(url)
     except Exception as e:
         logger.warning("Telegram getMe request failed: %s", e)
         return False, {}, "http_error", str(e)

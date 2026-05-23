@@ -273,15 +273,19 @@ class A2AChannel(BaseChannel):
             logger.warning("Cannot send_to_user: no context available")
             return
 
-        task_id = self.context.metadata.get("task_id", "")
-        context_id = self.context.metadata.get("context_id", "")
+        task_id = self.context.metadata.get("task_id")
+        if not isinstance(task_id, str) or not task_id:
+            raise ValueError("A2AChannel.send_to_user requires context.metadata.task_id")
+        context_id = self.context.metadata.get("context_id")
+        if not isinstance(context_id, str) or not context_id:
+            raise ValueError("A2AChannel.send_to_user requires context.metadata.context_id")
         session_id = self._generate_session_id(context_id)
 
         exec_state = ExecutionState(
             task_id=task_id,
             context_id=context_id,
             session_id=session_id,
-            user_id=self.context.user.user_id if self.context.user else "system",
+            user_id=self.context.user.user_id,
             user_groups=self._get_user_groups_from_context(self.context)
         )
         emitter = Emitter(self.container.redis_client, exec_state)
@@ -316,9 +320,13 @@ class A2AChannel(BaseChannel):
                         "локальные url в state.files не поддерживаются."
                     )
 
+        operator_task_id = prepared.takeover_operator_task_id
+        if operator_task_id is None:
+            raise ValueError("takeover_operator_task_id is required for takeover user reply")
+
         await svc.receive_user_reply(
             company_id=self.context.active_company.company_id,
-            task_id=prepared.takeover_operator_task_id,
+            task_id=operator_task_id,
             text=prepared.content,
             user_id=prepared.user_id,
             file_ids=file_ids if file_ids else None,
@@ -327,7 +335,7 @@ class A2AChannel(BaseChannel):
             "[on_message_stream] takeover user-reply routed to dialog_log, "
             "task_id=%s, operator_task=%s",
             prepared.task_id,
-            prepared.takeover_operator_task_id,
+            operator_task_id,
         )
         yield TaskStatusUpdateEvent(
             task_id=prepared.task_id,

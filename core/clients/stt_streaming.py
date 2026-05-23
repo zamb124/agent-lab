@@ -29,7 +29,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, Optional
+from collections.abc import AsyncIterator
 
 from core.clients.stt_client import BaseSTTClient, STTTranscriptionResult
 from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
@@ -46,7 +46,7 @@ class BaseSTTStreamer(ABC):
         """Добавить очередной PCM-фрейм в буфер."""
 
     @abstractmethod
-    async def flush(self) -> Optional[STTTranscriptionResult]:
+    async def flush(self) -> STTTranscriptionResult | None:
         """Сбросить буфер и вернуть итоговую транскрипцию (``None`` если аудио нет)."""
 
     @abstractmethod
@@ -88,7 +88,7 @@ class BufferedSTTStreamer(BaseSTTStreamer):
         *,
         stt_client: BaseSTTClient,
         sample_rate: int = 16000,
-        language: Optional[str] = None,
+        language: str | None = None,
     ) -> None:
         if sample_rate <= 0:
             raise ValueError("BufferedSTTStreamer: sample_rate должен быть > 0.")
@@ -102,7 +102,7 @@ class BufferedSTTStreamer(BaseSTTStreamer):
             return
         self._buffer.extend(chunk)
 
-    async def flush(self) -> Optional[STTTranscriptionResult]:
+    async def flush(self) -> STTTranscriptionResult | None:
         if not self._buffer:
             return None
         pcm = bytes(self._buffer)

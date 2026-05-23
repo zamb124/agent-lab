@@ -11,6 +11,6 @@ def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     debug, warning, error, exception, critical). Поддерживает kwargs для
     структурированных полей.
     """
-    if not isinstance(name, str) or not name.strip():
+    if not name.strip():
         raise ValueError("get_logger требует непустое строковое имя (обычно __name__)")
     return structlog.stdlib.get_logger(name)

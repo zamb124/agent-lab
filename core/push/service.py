@@ -2,7 +2,7 @@
 Web Push Service для отправки push-уведомлений
 """
 import json
-from typing import Any, List, Optional
+from typing import Any
 
 from pywebpush import WebPushException, webpush
 
@@ -36,8 +36,8 @@ class WebPushService:
         subscription: PushSubscription,
         title: str,
         message: str,
-        url: Optional[str] = None,
-        tag: Optional[str] = None,
+        url: str | None = None,
+        tag: str | None = None,
         priority: str = "normal",
         data: dict[str, Any] | None = None,
     ) -> bool:
@@ -88,14 +88,14 @@ class WebPushService:
 
     async def send_to_user(
         self,
-        subscriptions: List[PushSubscription],
+        subscriptions: list[PushSubscription],
         title: str,
         message: str,
-        url: Optional[str] = None,
-        tag: Optional[str] = None,
+        url: str | None = None,
+        tag: str | None = None,
         priority: str = "normal",
         data: dict[str, Any] | None = None,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Отправить push на все устройства пользователя
 
@@ -123,7 +123,7 @@ class WebPushService:
 
 
 # Глобальный инстанс
-_web_push_service: Optional[WebPushService] = None
+_web_push_service: WebPushService | None = None
 
 
 def init_web_push_service(
@@ -141,7 +141,7 @@ def init_web_push_service(
     return _web_push_service
 
 
-def get_web_push_service() -> Optional[WebPushService]:
+def get_web_push_service() -> WebPushService | None:
     """Получить глобальный сервис"""
     return _web_push_service
 

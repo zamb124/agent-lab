@@ -403,7 +403,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         """Резолвит @var:key через тот же словарь, что у runtime flow (см. FlowFactory)."""
         try:
             return await resolve_at_var_for_flow(
-                self.container,
+                self.container.flow_factory,
                 flow_id,
                 var_ref,
                 branch_id=branch_id,

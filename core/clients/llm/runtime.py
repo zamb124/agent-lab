@@ -7,7 +7,7 @@ Stream-first architecture: all runtime LLM calls go through ``get_llm`` and
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from core.clients.llm.client import LLMClient
 from core.clients.llm.config import LLMCallConfig, ReasoningEffort
@@ -55,11 +55,11 @@ logger = get_logger(__name__)
 
 def should_use_platform_default_free_pool(
     *,
-    model: Optional[str],
-    provider: Optional[str],
-    api_key: Optional[str],
-    base_url: Optional[str],
-    folder_id: Optional[str],
+    model: str | None,
+    provider: str | None,
+    api_key: str | None,
+    base_url: str | None,
+    folder_id: str | None,
     settings: BaseSettings,
 ) -> bool:
     """Public predicate for callers that must decide billing before creating a client."""
@@ -74,24 +74,24 @@ def should_use_platform_default_free_pool(
 
 
 def get_llm(
-    model_name: Optional[str] = None,
-    temperature: Optional[float] = None,
-    provider: Optional[str] = None,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
-    folder_id: Optional[str] = None,
-    max_tokens: Optional[int] = None,
-    state: Optional["ExecutionState"] = None,
-    fallback_models: Optional[List[LLMCallConfig]] = None,
+    model_name: str | None = None,
+    temperature: float | None = None,
+    provider: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    folder_id: str | None = None,
+    max_tokens: int | None = None,
+    state: ExecutionState | None = None,
+    fallback_models: list[LLMCallConfig] | None = None,
     allow_platform_paid_fallback: bool = True,
-    top_p: Optional[float] = None,
-    top_k: Optional[int] = None,
-    frequency_penalty: Optional[float] = None,
-    presence_penalty: Optional[float] = None,
-    seed: Optional[int] = None,
-    reasoning_effort: Optional[ReasoningEffort] = None,
-    extra_request_body: Optional[Dict[str, Any]] = None,
-    extra_request_headers: Optional[Dict[str, str]] = None,
+    top_p: float | None = None,
+    top_k: int | None = None,
+    frequency_penalty: float | None = None,
+    presence_penalty: float | None = None,
+    seed: int | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
+    extra_request_body: dict[str, Any] | None = None,
+    extra_request_headers: dict[str, str] | None = None,
 ) -> LLMClient | MockLLM:
     """
     Создает LLM клиент.
@@ -176,6 +176,7 @@ def get_llm(
             reasoning_effort=reasoning_effort,
             extra_request_body=extra_request_body,
             extra_request_headers=_resolve_headers_vars(extra_request_headers, state),
+            context_length=primary_candidate.context_length,
         )
 
     if testing and _is_humanitec_llm_provider(provider):
@@ -236,6 +237,7 @@ def get_llm(
         reasoning_effort=reasoning_effort,
         extra_request_body=extra_request_body,
         extra_request_headers=extra_request_headers,
+        context_length=model_config.context_length if model_config else None,
         source="explicit",
     )
     candidates = _resolved_llm_configs(
@@ -273,28 +275,29 @@ def get_llm(
         reasoning_effort=reasoning_effort,
         extra_request_body=extra_request_body,
         extra_request_headers=_resolve_headers_vars(extra_request_headers, state),
+        context_length=primary_candidate.context_length,
     )
 
 
 def get_llm_for_state(
-    state: Optional["ExecutionState"] = None,
-    model_name: Optional[str] = None,
-    temperature: Optional[float] = None,
-    provider: Optional[str] = None,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
-    folder_id: Optional[str] = None,
-    max_tokens: Optional[int] = None,
-    fallback_models: Optional[List[LLMCallConfig]] = None,
+    state: ExecutionState | None = None,
+    model_name: str | None = None,
+    temperature: float | None = None,
+    provider: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    folder_id: str | None = None,
+    max_tokens: int | None = None,
+    fallback_models: list[LLMCallConfig] | None = None,
     allow_platform_paid_fallback: bool = True,
-    top_p: Optional[float] = None,
-    top_k: Optional[int] = None,
-    frequency_penalty: Optional[float] = None,
-    presence_penalty: Optional[float] = None,
-    seed: Optional[int] = None,
-    reasoning_effort: Optional[ReasoningEffort] = None,
-    extra_request_body: Optional[Dict[str, Any]] = None,
-    extra_request_headers: Optional[Dict[str, str]] = None,
+    top_p: float | None = None,
+    top_k: int | None = None,
+    frequency_penalty: float | None = None,
+    presence_penalty: float | None = None,
+    seed: int | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
+    extra_request_body: dict[str, Any] | None = None,
+    extra_request_headers: dict[str, str] | None = None,
 ) -> LLMClient | MockLLM:
     """Создает LLM клиент с учётом mock конфига из state."""
     if state:
@@ -333,10 +336,10 @@ def get_llm_for_state(
 
 
 def setup_mock_responses(
-    responses: Optional[Dict[str, str]] = None,
-    tool_responses: Optional[Dict[str, Dict[str, Any]]] = None,
-    default_response: Optional[str] = None,
-    response_queue: Optional[List[Any]] = None,
+    responses: dict[str, str] | None = None,
+    tool_responses: dict[str, dict[str, Any]] | None = None,
+    default_response: str | None = None,
+    response_queue: list[Any] | None = None,
     model_name: str = "mock-gpt-4",
 ) -> MockLLM:
     """Настройка mock ответов для тестов (локальная очередь)."""

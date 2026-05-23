@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -59,13 +59,13 @@ def _short_id_fragment(entity_id: str) -> str:
     return f"{entity_id[:_ID_SHORT_LEN]}..."
 
 
-def _company_facet_label(company_id: str, name: Optional[str]) -> str:
+def _company_facet_label(company_id: str, name: str | None) -> str:
     if name:
         return f"{name} ({_short_id_fragment(company_id)})"
     return company_id
 
 
-def _user_facet_item_label(u: Optional[User], user_id: str) -> str:
+def _user_facet_item_label(u: User | None, user_id: str) -> str:
     if u is None:
         return user_id
     if u.emails:
@@ -105,8 +105,8 @@ def _tracing_company_facet_sort_key(c: Company, frag: str) -> tuple[int, str]:
 
 async def _resolve_company_id_query_to_exact_match(
     container: "FrontendContainer",
-    company_id_query: Optional[str],
-) -> Optional[str]:
+    company_id_query: str | None,
+) -> str | None:
     """
     Один однозначный company_id для точного фильтра по spans: id, subdomain (хранилище),
     единственная компания по правилам billing-фасета. Иначе None — остаётся ILIKE по company_id в spans.
@@ -133,8 +133,8 @@ async def _resolve_company_id_query_to_exact_match(
 
 async def _resolve_user_id_query_to_exact_match(
     container: "FrontendContainer",
-    user_id_query: Optional[str],
-) -> Optional[str]:
+    user_id_query: str | None,
+) -> str | None:
     """
     Один user_id для точного фильтра: совпадение с id, полный email, единственный find_all_by_email_ci.
     """
@@ -188,7 +188,7 @@ async def _enrich_span_items(
 async def facet_companies(
     request: Request,
     container: ContainerDep,
-    q: Optional[str] = Query(default=None),
+    q: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetItemsResponse:
     _require_system(request)
@@ -219,7 +219,7 @@ async def facet_companies(
     meta_matched.sort(key=lambda c: _tracing_company_facet_sort_key(c, frag))
 
     seen: set[str] = set()
-    ordered_ids: List[str] = []
+    ordered_ids: list[str] = []
     for cid in ids_by_span_column:
         if cid not in seen and len(ordered_ids) < limit:
             seen.add(cid)
@@ -246,9 +246,9 @@ async def facet_companies(
 async def facet_users(
     request: Request,
     container: ContainerDep,
-    q: Optional[str] = Query(default=None),
-    company_id: Optional[str] = Query(default=None),
-    namespace: Optional[str] = Query(default=None),
+    q: str | None = Query(default=None),
+    company_id: str | None = Query(default=None),
+    namespace: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetItemsResponse:
     _require_system(request)
@@ -290,7 +290,7 @@ async def facet_users(
     meta.sort(key=lambda u: _user_facet_match_sort_key(frag, u))
 
     seen: set[str] = set()
-    ordered_ids: List[str] = []
+    ordered_ids: list[str] = []
     for u in meta:
         if u.user_id not in seen and len(ordered_ids) < limit:
             seen.add(u.user_id)
@@ -315,9 +315,9 @@ async def facet_users(
 async def facet_services(
     request: Request,
     container: ContainerDep,
-    q: Optional[str] = Query(default=None),
-    company_id: Optional[str] = Query(default=None),
-    namespace: Optional[str] = Query(default=None),
+    q: str | None = Query(default=None),
+    company_id: str | None = Query(default=None),
+    namespace: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetsResponse:
     _require_system(request)
@@ -335,9 +335,9 @@ async def facet_services(
 async def facet_event_types(
     request: Request,
     container: ContainerDep,
-    q: Optional[str] = Query(default=None),
-    company_id: Optional[str] = Query(default=None),
-    namespace: Optional[str] = Query(default=None),
+    q: str | None = Query(default=None),
+    company_id: str | None = Query(default=None),
+    namespace: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetsResponse:
     _require_system(request)
@@ -355,8 +355,8 @@ async def facet_event_types(
 async def facet_namespaces(
     request: Request,
     container: ContainerDep,
-    q: Optional[str] = Query(default=None),
-    company_id: Optional[str] = Query(default=None),
+    q: str | None = Query(default=None),
+    company_id: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetsResponse:
     _require_system(request)
@@ -373,9 +373,9 @@ async def facet_namespaces(
 async def facet_operations(
     request: Request,
     container: ContainerDep,
-    q: Optional[str] = Query(default=None),
-    company_id: Optional[str] = Query(default=None),
-    namespace: Optional[str] = Query(default=None),
+    q: str | None = Query(default=None),
+    company_id: str | None = Query(default=None),
+    namespace: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetsResponse:
     _require_system(request)
@@ -393,19 +393,19 @@ async def facet_operations(
 async def list_spans(
     request: Request,
     container: ContainerDep,
-    service_name: Optional[str] = Query(default=None),
-    company_id: Optional[str] = Query(default=None),
-    user_id: Optional[str] = Query(default=None),
-    namespace: Optional[str] = Query(default=None),
-    from_time: Optional[datetime] = Query(default=None),
-    to_time: Optional[datetime] = Query(default=None),
-    company_id_query: Optional[str] = Query(default=None),
-    user_id_query: Optional[str] = Query(default=None),
-    operation_name_query: Optional[str] = Query(default=None),
-    event_type_query: Optional[str] = Query(default=None),
-    namespace_query: Optional[str] = Query(default=None),
-    service_name_query: Optional[str] = Query(default=None),
-    cursor: Optional[str] = Query(default=None),
+    service_name: str | None = Query(default=None),
+    company_id: str | None = Query(default=None),
+    user_id: str | None = Query(default=None),
+    namespace: str | None = Query(default=None),
+    from_time: datetime | None = Query(default=None),
+    to_time: datetime | None = Query(default=None),
+    company_id_query: str | None = Query(default=None),
+    user_id_query: str | None = Query(default=None),
+    operation_name_query: str | None = Query(default=None),
+    event_type_query: str | None = Query(default=None),
+    namespace_query: str | None = Query(default=None),
+    service_name_query: str | None = Query(default=None),
+    cursor: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=ADMIN_SPANS_MAX_LIMIT),
 ) -> CursorPage[dict[str, Any]]:
     _require_system(request)

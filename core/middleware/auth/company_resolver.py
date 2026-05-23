@@ -2,7 +2,6 @@
 Определение компании из запроса.
 """
 
-from typing import Optional
 
 from fastapi import HTTPException, Request
 
@@ -28,9 +27,9 @@ class CompanyResolver:
     async def resolve(
         self,
         request: Request,
-        token_data: Optional[TokenData] = None,
+        token_data: TokenData | None = None,
         context_type: str = "frontend",
-    ) -> Optional[Company]:
+    ) -> Company | None:
         """
         Субдомен Host кодирует company context: для всех не-anonymous контекстов компания субдомена
         имеет приоритет над JWT / X-Company-Id, с проверкой membership.
@@ -41,7 +40,7 @@ class CompanyResolver:
             return await self._resolve_anonymous(request)
         return await self._resolve_company_from_host(request, token_data, context_type)
 
-    async def _resolve_anonymous(self, request: Request) -> Optional[Company]:
+    async def _resolve_anonymous(self, request: Request) -> Company | None:
         company_repo = self.container.company_repository
         subdomain_repo = self.container.subdomain_repository
         host = request.headers.get("host", "")
@@ -79,7 +78,7 @@ class CompanyResolver:
         request: Request,
         company_id: str,
         subdomain: str,
-        token_data: Optional[TokenData],
+        token_data: TokenData | None,
     ) -> None:
         if not token_data or not token_data.user_id:
             return
@@ -120,9 +119,9 @@ class CompanyResolver:
     async def _resolve_company_from_host(
         self,
         request: Request,
-        token_data: Optional[TokenData],
+        token_data: TokenData | None,
         context_type: str,
-    ) -> Optional[Company]:
+    ) -> Company | None:
         company_repo = self.container.company_repository
         subdomain_repo = self.container.subdomain_repository
         host = request.headers.get("host", "")
@@ -199,7 +198,7 @@ class CompanyResolver:
 
         return None
 
-    def _extract_subdomain(self, host: str) -> Optional[str]:
+    def _extract_subdomain(self, host: str) -> str | None:
         return extract_subdomain(host)
 
     def has_subdomain(self, request: Request) -> bool:

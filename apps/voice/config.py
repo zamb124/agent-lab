@@ -8,8 +8,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import Field
 
 from core.config import BaseSettings
@@ -27,14 +25,14 @@ class VoiceServiceSettings(BaseSettings):
     queue: VoiceQueueSettings = Field(default_factory=VoiceQueueSettings)
 
 
-_voice_settings: Optional[VoiceServiceSettings] = None
+_voice_settings: VoiceServiceSettings | None = None
 
 
 def get_voice_settings() -> VoiceServiceSettings:
     global _voice_settings
     if _voice_settings is None:
         merged_config = load_merged_config(service_name="voice", silent=True)
-        _voice_settings = VoiceServiceSettings(**merged_config)
+        _voice_settings = VoiceServiceSettings.model_validate(merged_config)
     return _voice_settings
 
 

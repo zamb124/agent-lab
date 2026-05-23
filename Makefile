@@ -406,10 +406,13 @@ doc:
 	rm -rf documentation-dist build/documentation-ru build/documentation-en build/zensical-en-out
 	uv run python scripts/extract_openapi.py
 	uv run python scripts/docs_prepare.py
+	uv run python scripts/check_docs_locale_parity.py
 	uv run --group docs zensical build --clean --config-file zensical.ru.toml
 	uv run --group docs zensical build --clean --config-file zensical.en.toml
 	mkdir -p documentation-dist/en
 	cp -a build/zensical-en-out/. documentation-dist/en/
+	uv run python scripts/docs_postprocess.py
+	uv run python scripts/check_docs_locale_parity.py --site documentation-dist
 	@echo "Документация: documentation-dist/ и documentation-dist/en/ (монтирование /documentation/)"
 
 doc-serve:

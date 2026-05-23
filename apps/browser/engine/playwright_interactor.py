@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Optional
 
 from apps.browser.engine.cdp_pool import CDPConnectionPool
 from apps.browser.engine.page_lease_manager import PageLeaseManager
@@ -15,9 +14,13 @@ from apps.browser.engine.types import (
     SELECTOR_PREFIX,
     BrowserAcquireRequest,
     BrowserAcquireResult,
+    BrowserContextHandle,
     BrowserFetchRequest,
     BrowserFetchResult,
+    BrowserPage,
     BrowserRuntimeSettingsView,
+    BrowserStorageState,
+    ContextSignature,
 )
 
 
@@ -76,7 +79,7 @@ class PlaywrightBrowserInteractor:
         return url
 
     @staticmethod
-    def _proxy_id(proxy_policy: str) -> Optional[str]:
+    def _proxy_id(proxy_policy: str) -> str | None:
         if (
             proxy_policy.startswith("http://")
             or proxy_policy.startswith("https://")
@@ -89,7 +92,7 @@ class PlaywrightBrowserInteractor:
         await self._leases.sweep_expired(warm_idle_sec=self._settings.warm_idle_sec)
         cdp_url = self._cdp_url(req.endpoint_key)
         browser = await self._pool.acquire_browser(req.endpoint_key, cdp_url)
-        storage_state: Optional[dict[str, Any]] = None
+        storage_state: BrowserStorageState | None = None
         if req.restore_state_key is not None:
             blob = self._store.get(req.restore_state_key)
             if blob.proxy_policy != req.context_signature.proxy_policy:
@@ -135,7 +138,7 @@ class PlaywrightBrowserInteractor:
             context_signature_hash=req.context_signature.stable_hash(),
         )
 
-    async def fetch(self, page: Any, req: BrowserFetchRequest) -> BrowserFetchResult:
+    async def fetch(self, page: BrowserPage, req: BrowserFetchRequest) -> BrowserFetchResult:
         wait_policy = req.wait_policy
         timeout = req.navigation_timeout_ms
         if wait_policy.startswith(SELECTOR_PREFIX):
@@ -167,19 +170,19 @@ class PlaywrightBrowserInteractor:
             )
 
         final_url = page.url
-        status_code: Optional[int] = None
+        status_code: int | None = None
         response_headers: dict[str, str] = {}
         if response is not None:
             status_code = response.status
             response_headers = dict(response.headers)
 
-        html: Optional[str] = await page.content()
+        html: str | None = await page.content()
 
         artifacts_root = Path(self._settings.artifacts_dir)
         artifacts_root.mkdir(parents=True, exist_ok=True)
-        shot_ref: Optional[str] = None
-        pdf_ref: Optional[str] = None
-        snap_ref: Optional[str] = None
+        shot_ref: str | None = None
+        pdf_ref: str | None = None
+        snap_ref: str | None = None
         token = uuid.uuid4().hex
         if req.screenshot:
             shot_ref = None
@@ -203,23 +206,23 @@ class PlaywrightBrowserInteractor:
             anti_bot_signals={},
         )
 
-    async def save_state(self, context: Any, shared_storage_key: str) -> str:
+    async def save_state(self, context: BrowserContextHandle, shared_storage_key: str) -> str:
         pages = context.pages
         if len(pages) == 0:
             raise RuntimeError("Нет страниц в контексте для сохранения состояния")
         page = pages[0]
-        sig = getattr(context, "_browser_runtime_signature", None)
-        if sig is None:
+        sig_raw: object = getattr(context, "_browser_runtime_signature", None)
+        if not isinstance(sig_raw, ContextSignature):
             raise RuntimeError("Context не содержит _browser_runtime_signature для сохранения состояния")
         return await self._store.capture_from(
             context,
             page,
             shared_storage_key=shared_storage_key,
-            context_signature=sig,
+            context_signature=sig_raw,
             last_snapshot_ref=None,
         )
 
-    async def restore_state(self, context: Any, state_key: str) -> None:
+    async def restore_state(self, context: BrowserContextHandle, state_key: str) -> None:
         for p in context.pages:
             url = p.url
             if url.startswith("about:"):
@@ -237,7 +240,7 @@ class PlaywrightBrowserInteractor:
                 entries,
             )
 
-    async def _apply_session_storage(self, page: Any, state_key: str) -> None:
+    async def _apply_session_storage(self, page: BrowserPage, state_key: str) -> None:
         origin = origin_from_url(page.url)
         entries = self._store.session_storage_for_origin(state_key, origin)
         if len(entries) == 0:
@@ -251,7 +254,7 @@ class PlaywrightBrowserInteractor:
             entries,
         )
 
-    async def release(self, page: Any) -> None:
+    async def release(self, page: BrowserPage) -> None:
         await self._leases.release_page(
             page,
             warm_idle_sec=self._settings.warm_idle_sec,

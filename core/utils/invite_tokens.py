@@ -7,7 +7,6 @@
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 import jwt
 import redis.asyncio as aioredis
@@ -149,7 +148,7 @@ async def invite_jti_already_used(jti: str) -> bool:
     finally:
         await client.aclose()
 
-_invite_token_service: Optional[InviteTokenService] = None
+_invite_token_service: InviteTokenService | None = None
 
 def get_invite_token_service() -> InviteTokenService:
     """Получает глобальный экземпляр сервиса инвайт-токенов"""

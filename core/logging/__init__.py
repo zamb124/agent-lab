@@ -29,7 +29,6 @@ from core.logging.contract import (
     LoggingMisconfigured,
     LogRecordPayload,
 )
-from .logger import get_logger
 from core.logging.scope import (
     LogContractViolation,
     RequestLogScope,
@@ -39,6 +38,8 @@ from core.logging.scope import (
     get_log_scope,
     get_log_scope_requires_user,
 )
+
+from .logger import get_logger
 
 __all__ = [
     "LogContextScope",

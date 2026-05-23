@@ -2,7 +2,6 @@
 Репозиторий для глобального маппинга embed_id -> company_id.
 """
 
-from typing import Optional
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
@@ -35,7 +34,7 @@ class EmbedMappingRepository(BaseRepository[EmbedMapping]):
     def _extract_entity_id(self, entity: EmbedMapping) -> str:
         return entity.embed_id
 
-    async def get_company_id(self, embed_id: str) -> Optional[str]:
+    async def get_company_id(self, embed_id: str) -> str | None:
         """
         Получение company_id по embed_id.
 

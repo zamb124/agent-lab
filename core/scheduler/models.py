@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
@@ -35,7 +35,7 @@ class ScheduledTaskInfo(FlexibleBaseModel):
     """Информация о scheduled task для ExecutionState."""
 
     schedule_task_id: str = Field(..., description="ID записи платформенного scheduler")
-    schedule_id: Optional[str] = Field(default=None, description="ID в RedisScheduleSource")
+    schedule_id: str | None = Field(default=None, description="ID в RedisScheduleSource")
     flow_id: str = Field(..., description="ID агента")
     session_id: str = Field(..., description="ID сессии")
     user_id: str = Field(..., description="ID пользователя")
@@ -44,20 +44,20 @@ class ScheduledTaskInfo(FlexibleBaseModel):
     content_type: ContentType = Field(..., description="Тип контента")
 
     # Конфигурация расписания
-    cron: Optional[str] = Field(default=None, description="Cron выражение")
-    interval_minutes: Optional[int] = Field(default=None, description="Интервал в минутах")
-    run_at: Optional[datetime] = Field(default=None, description="Время запуска (one_time)")
+    cron: str | None = Field(default=None, description="Cron выражение")
+    interval_minutes: int | None = Field(default=None, description="Интервал в минутах")
+    run_at: datetime | None = Field(default=None, description="Время запуска (one_time)")
 
     # Контент
     content: str = Field(..., description="Сообщение или имя tool")
-    tool_args: Optional[Dict[str, Any]] = Field(default=None, description="Аргументы для tool_call")
-    description: Optional[str] = Field(default=None, description="Описание задачи")
+    tool_args: dict[str, Any] | None = Field(default=None, description="Аргументы для tool_call")
+    description: str | None = Field(default=None, description="Описание задачи")
 
     status: ScheduledTaskStatus = Field(default=ScheduledTaskStatus.PENDING)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    executed_at: Optional[datetime] = Field(default=None)
-    next_run: Optional[datetime] = Field(default=None, description="Следующий запуск")
-    error_message: Optional[str] = Field(default=None, description="Сообщение об ошибке при FAILED")
+    executed_at: datetime | None = Field(default=None)
+    next_run: datetime | None = Field(default=None, description="Следующий запуск")
+    error_message: str | None = Field(default=None, description="Сообщение об ошибке при FAILED")
 
 
 class PlatformScheduleType(str, Enum):
@@ -73,13 +73,13 @@ class PlatformScheduleCreateRequest(FlexibleBaseModel):
 
     target_service: str = Field(..., min_length=1, description="Сервис-назначение task")
     task_name: str = Field(..., min_length=1, description="Полное имя taskiq task")
-    queue_name: Optional[str] = Field(default=None, description="Очередь broker (если нужна)")
+    queue_name: str | None = Field(default=None, description="Очередь broker (если нужна)")
     schedule_type: PlatformScheduleType = Field(..., description="Тип расписания")
-    cron: Optional[str] = Field(default=None, description="Cron expression")
-    interval_seconds: Optional[int] = Field(default=None, ge=1, description="Интервал в секундах")
-    run_at: Optional[datetime] = Field(default=None, description="Время запуска для one-time")
+    cron: str | None = Field(default=None, description="Cron expression")
+    interval_seconds: int | None = Field(default=None, ge=1, description="Интервал в секундах")
+    run_at: datetime | None = Field(default=None, description="Время запуска для one-time")
     timezone: str = Field(default="UTC", min_length=1)
-    payload: Dict[str, Any] = Field(default_factory=dict, description="kwargs для задачи")
+    payload: dict[str, Any] = Field(default_factory=dict, description="kwargs для задачи")
 
     @model_validator(mode="after")
     def validate_schedule_fields(self) -> "PlatformScheduleCreateRequest":
@@ -97,7 +97,7 @@ class PlatformScheduleCreateRequest(FlexibleBaseModel):
 
     @field_validator("run_at")
     @classmethod
-    def validate_run_at_timezone(cls, value: Optional[datetime]) -> Optional[datetime]:
+    def validate_run_at_timezone(cls, value: datetime | None) -> datetime | None:
         if value is None:
             return None
         if value.tzinfo is None:
@@ -108,15 +108,15 @@ class PlatformScheduleCreateRequest(FlexibleBaseModel):
 class PlatformScheduleUpdateStatusRequest(FlexibleBaseModel):
     """Запрос на смену состояния расписания."""
 
-    reason: Optional[str] = Field(default=None, description="Причина операции")
+    reason: str | None = Field(default=None, description="Причина операции")
 
 
 class PlatformScheduleFilter(FlexibleBaseModel):
     """Фильтры списка расписаний."""
 
-    status: Optional[ScheduledTaskStatus] = Field(default=None)
-    target_service: Optional[str] = Field(default=None)
-    task_name: Optional[str] = Field(default=None)
+    status: ScheduledTaskStatus | None = Field(default=None)
+    target_service: str | None = Field(default=None)
+    task_name: str | None = Field(default=None)
     limit: int = Field(default=100, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
 
@@ -126,23 +126,23 @@ class PlatformScheduledTask(FlexibleBaseModel):
 
     schedule_task_id: str
     company_id: str
-    schedule_id: Optional[str] = None
+    schedule_id: str | None = None
     target_service: str
     task_name: str
-    queue_name: Optional[str] = None
+    queue_name: str | None = None
     schedule_type: PlatformScheduleType
-    cron: Optional[str] = None
-    interval_seconds: Optional[int] = None
-    run_at: Optional[datetime] = None
+    cron: str | None = None
+    interval_seconds: int | None = None
+    run_at: datetime | None = None
     timezone: str = "UTC"
-    payload: Dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
     status: ScheduledTaskStatus = ScheduledTaskStatus.PENDING
-    created_by_user_id: Optional[str] = None
+    created_by_user_id: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    last_run_at: Optional[datetime] = None
-    next_run_at: Optional[datetime] = None
-    error_message: Optional[str] = None
+    last_run_at: datetime | None = None
+    next_run_at: datetime | None = None
+    error_message: str | None = None
 
     def next_run_for_interval(self) -> datetime:
         if self.interval_seconds is None:
@@ -155,17 +155,17 @@ class PlatformRedisScheduleSnapshot(FlexibleBaseModel):
 
     schedule_task_id: str
     company_id: str
-    schedule_id: Optional[str] = None
+    schedule_id: str | None = None
     exists_in_redis: bool
     status: ScheduledTaskStatus
     task_name: str
-    cron: Optional[str] = None
-    interval_seconds: Optional[int] = None
-    run_at: Optional[datetime] = None
-    taskiq_task_id: Optional[str] = None
-    kwargs: Dict[str, Any] = Field(default_factory=dict)
-    labels: Dict[str, Any] = Field(default_factory=dict)
-    missing_reason: Optional[str] = None
+    cron: str | None = None
+    interval_seconds: int | None = None
+    run_at: datetime | None = None
+    taskiq_task_id: str | None = None
+    kwargs: dict[str, Any] = Field(default_factory=dict)
+    labels: dict[str, Any] = Field(default_factory=dict)
+    missing_reason: str | None = None
 
 
 __all__ = [

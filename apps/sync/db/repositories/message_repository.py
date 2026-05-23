@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Type
+from typing import Any
 
 from sqlalchemy import and_, func, literal, or_, select, text, tuple_, update
 from sqlalchemy import delete as sql_delete
@@ -30,7 +30,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         super().__init__(db=db)
 
     @property
-    def model_class(self) -> Type[SyncMessage]:
+    def model_class(self) -> type[SyncMessage]:
         return SyncMessage
 
     @property
@@ -42,8 +42,8 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         channel_id: str,
         limit: int = 50,
         offset: int = 0,
-        company_id: Optional[str] = None,
-    ) -> List[SyncMessage]:
+        company_id: str | None = None,
+    ) -> list[SyncMessage]:
         """Сообщения основной ленты канала: thread_id IS NULL, не удалённые, включая ответы (parent_message_id)."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -68,7 +68,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         channel_id: str,
         call_id: str,
         company_id: str,
-    ) -> List[SyncMessage]:
+    ) -> list[SyncMessage]:
         """Сообщения основной ленты канала с привязкой к звонку, по времени (для агрегата транскрипции)."""
         async with self._db.session() as session:
             stmt = (
@@ -90,8 +90,8 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         thread_id: str,
         limit: int = 50,
         offset: int = 0,
-        company_id: Optional[str] = None,
-    ) -> List[SyncMessage]:
+        company_id: str | None = None,
+    ) -> list[SyncMessage]:
         """Сообщения в треде."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -207,7 +207,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                 has_more_newer=False,
             )
 
-    async def get_thread_root(self, message_id: str) -> Optional[SyncMessage]:
+    async def get_thread_root(self, message_id: str) -> SyncMessage | None:
         """Находит корневое сообщение треда через рекурсивный CTE."""
         async with self._db.session() as session:
             cte_query = text("""
@@ -231,7 +231,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                 return None
             return await self.get(root_id)
 
-    async def list_contents(self, message_id: str) -> List[SyncMessageContent]:
+    async def list_contents(self, message_id: str) -> list[SyncMessageContent]:
         """Контент-блоки сообщения."""
         async with self._db.session() as session:
             stmt = (
@@ -248,15 +248,15 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         message_id: str,
         company_id: str,
         channel_id: str,
-        thread_id: Optional[str],
-        parent_message_id: Optional[str],
-        call_id: Optional[str] = None,
+        thread_id: str | None,
+        parent_message_id: str | None,
+        call_id: str | None = None,
         sender_user_id: str,
         status: str,
         sent_at: datetime,
-        contents: List[MessageContentModel],
-        forwarded_from_channel_id: Optional[str] = None,
-        forwarded_from_channel_name: Optional[str] = None,
+        contents: list[MessageContentModel],
+        forwarded_from_channel_id: str | None = None,
+        forwarded_from_channel_name: str | None = None,
     ) -> SyncMessage:
         """Создаёт сообщение с контент-блоками в одной транзакции."""
         async with self._db.session() as session:
@@ -294,7 +294,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         self,
         message_id: str,
         company_id: str,
-    ) -> Optional[SyncMessage]:
+    ) -> SyncMessage | None:
         async with self._db.session() as session:
             stmt = select(SyncMessage).where(
                 SyncMessage.message_id == message_id,
@@ -306,7 +306,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
     async def replace_message_contents(
         self,
         message_id: str,
-        contents: List[MessageContentModel],
+        contents: list[MessageContentModel],
         edited_at: datetime,
     ) -> None:
         async with self._db.session() as session:
@@ -354,7 +354,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         channel_id: str,
         *,
         company_id: str,
-    ) -> Optional[datetime]:
+    ) -> datetime | None:
         """Максимальное sent_at среди корневых сообщений канала (основная лента)."""
         async with self._db.session() as session:
             stmt = select(func.max(SyncMessage.sent_at)).where(
@@ -372,11 +372,11 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         company_id: str,
         channel_ids: list[str],
         viewer_user_id: str,
-    ) -> Dict[str, ChannelLaneSummary]:
+    ) -> dict[str, ChannelLaneSummary]:
         """Сводка по основной ленте для списка каналов: непрочитанные и превью последнего сообщения."""
         if not channel_ids:
             return {}
-        base: Dict[str, ChannelLaneSummary] = {
+        base: dict[str, ChannelLaneSummary] = {
             cid: ChannelLaneSummary(
                 unread_count=0,
                 last_message_preview=None,

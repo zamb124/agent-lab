@@ -6,7 +6,7 @@ import html
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -106,7 +106,7 @@ def _build_embed_integration_snippets(
 def _validate_landing_catalog_fields(
     *,
     landing_visible: bool,
-    landing_card_image_url: Optional[str],
+    landing_card_image_url: str | None,
     company_id: str,
 ) -> None:
     if not landing_visible:
@@ -124,7 +124,7 @@ def _validate_landing_catalog_fields(
         )
 
 
-def _validate_guest_max_user_messages(value: Optional[int]) -> None:
+def _validate_guest_max_user_messages(value: int | None) -> None:
     if value is None:
         return
     if value < 1 or value > 500:
@@ -180,15 +180,15 @@ class CreateEmbedConfigRequest(BaseModel):
     name: str = Field(description="Название виджета")
     flow_id: str = Field(description="ID агента")
     branch_id: str = Field(default="default", description="Skill flow (LOCAL); для EXTERNAL не используется")
-    allowed_origins: List[str] = Field(default_factory=list, description="Разрешенные домены")
+    allowed_origins: list[str] = Field(default_factory=list, description="Разрешенные домены")
     theme: str = Field(default="dark", description="Тема оформления")
     position: str = Field(default="bottom-right", description="Позиция на странице")
     show_launcher: bool = Field(default=True, description="Показывать встроенную кнопку запуска")
     show_reasoning: bool = Field(default=False, description="Показывать reasoning")
     show_tool_calls: bool = Field(default=False, description="Показывать tool calls")
     primary_color: str = Field(default="#6366f1", description="Основной цвет")
-    greeting_message: Optional[str] = Field(default=None, description="Приветственное сообщение")
-    assistant_title: Optional[str] = Field(default=None, description="Имя ассистента в шапке")
+    greeting_message: str | None = Field(default=None, description="Приветственное сообщение")
+    assistant_title: str | None = Field(default=None, description="Имя ассистента в шапке")
     interface_locale: str = Field(default="auto", description="Язык интерфейса embed-чата (auto, ru, en)")
     placeholder: str = Field(
         default=DEFAULT_EMBED_INPUT_PLACEHOLDER,
@@ -196,9 +196,9 @@ class CreateEmbedConfigRequest(BaseModel):
     )
     branding: bool = Field(default=True, description="Показывать брендинг")
     landing_visible: bool = Field(default=False, description="Показ в публичном каталоге лендинга (только company system)")
-    landing_card_image_url: Optional[str] = Field(default=None, description="Картинка карточки на лендинге")
+    landing_card_image_url: str | None = Field(default=None, description="Картинка карточки на лендинге")
     landing_sort_order: int = Field(default=0, description="Порядок в каталоге (меньше — выше)")
-    guest_max_user_messages: Optional[int] = Field(
+    guest_max_user_messages: int | None = Field(
         default=None,
         description="Лимит пользовательских сообщений на диалог (embed-session); не задан — без лимита",
     )
@@ -213,28 +213,28 @@ class CreateEmbedConfigRequest(BaseModel):
 
 class UpdateEmbedConfigRequest(BaseModel):
     """Запрос на обновление конфигурации виджета"""
-    name: Optional[str] = None
-    flow_id: Optional[str] = None
-    branch_id: Optional[str] = None
-    allowed_origins: Optional[List[str]] = None
-    status: Optional[EmbedStatus] = None
-    theme: Optional[str] = None
-    position: Optional[str] = None
-    show_launcher: Optional[bool] = None
-    show_reasoning: Optional[bool] = None
-    show_tool_calls: Optional[bool] = None
-    primary_color: Optional[str] = None
-    greeting_message: Optional[str] = None
-    assistant_title: Optional[str] = None
-    interface_locale: Optional[str] = None
-    placeholder: Optional[str] = None
-    branding: Optional[bool] = None
-    landing_visible: Optional[bool] = None
-    landing_card_image_url: Optional[str] = None
-    landing_sort_order: Optional[int] = None
-    guest_max_user_messages: Optional[int] = None
-    voice_enabled: Optional[bool] = None
-    voice_default_on: Optional[bool] = None
+    name: str | None = None
+    flow_id: str | None = None
+    branch_id: str | None = None
+    allowed_origins: list[str] | None = None
+    status: EmbedStatus | None = None
+    theme: str | None = None
+    position: str | None = None
+    show_launcher: bool | None = None
+    show_reasoning: bool | None = None
+    show_tool_calls: bool | None = None
+    primary_color: str | None = None
+    greeting_message: str | None = None
+    assistant_title: str | None = None
+    interface_locale: str | None = None
+    placeholder: str | None = None
+    branding: bool | None = None
+    landing_visible: bool | None = None
+    landing_card_image_url: str | None = None
+    landing_sort_order: int | None = None
+    guest_max_user_messages: int | None = None
+    voice_enabled: bool | None = None
+    voice_default_on: bool | None = None
 
 class EmbedConfigResponse(BaseModel):
     """Ответ с конфигурацией виджета"""
@@ -242,7 +242,7 @@ class EmbedConfigResponse(BaseModel):
     name: str
     flow_id: str
     branch_id: str
-    allowed_origins: List[str]
+    allowed_origins: list[str]
     status: EmbedStatus
     theme: str
     position: str
@@ -250,20 +250,20 @@ class EmbedConfigResponse(BaseModel):
     show_reasoning: bool
     show_tool_calls: bool
     primary_color: str
-    greeting_message: Optional[str]
-    assistant_title: Optional[str]
+    greeting_message: str | None
+    assistant_title: str | None
     interface_locale: str
     placeholder: str
     branding: bool
     landing_visible: bool
-    landing_card_image_url: Optional[str]
+    landing_card_image_url: str | None
     landing_sort_order: int
-    guest_max_user_messages: Optional[int]
+    guest_max_user_messages: int | None
     voice_enabled: bool
     voice_default_on: bool
     preview_share_link: bool
     usage_count: int
-    last_used_at: Optional[datetime]
+    last_used_at: datetime | None
     created_at: datetime
     created_by: str
     updated_at: datetime
@@ -277,10 +277,10 @@ class EmbedCodeResponse(BaseModel):
     token_endpoint: str
     backend_proxy_code: str
     browser_to_host_backend_code: str
-    allowed_origins: List[str]
+    allowed_origins: list[str]
 
 class EmbedSessionTokenRequest(BaseModel):
-    origin: Optional[str] = Field(default=None, description="Origin внешнего сайта")
+    origin: str | None = Field(default=None, description="Origin внешнего сайта")
     expires_in_seconds: int = Field(default=300, ge=60, le=900, description="TTL токена в секундах")
 
 class EmbedSessionTokenResponse(BaseModel):

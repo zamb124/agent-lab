@@ -23,11 +23,13 @@ from apps.flows.config import get_settings
 from apps.flows.src.channels import PermissionDenied
 from apps.flows.src.channels.websocket import WebSocketChannel
 from apps.flows.src.container import FlowContainer
+from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import FlowConfig
 from core.auth.utils import get_token_info
 from core.context import Context, User, set_context
 from core.logging import get_logger
+from core.types import JsonArray
 
 logger = get_logger(__name__)
 JsonDict = dict[str, Any]
@@ -141,15 +143,22 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
         if token_info:
             user_id = str(token_info.get("id", user_id))
 
+    user_groups_payload: JsonArray = []
+    user_groups_payload.extend(user_groups)
+
     context = Context(
         user=User(user_id=user_id, name="WebSocket User"),
         channel="websocket",
         flow_id=flow_id,
-        metadata={"user_groups": user_groups},
+        metadata={"user_groups": user_groups_payload},
     )
     set_context(context)
 
-    handler = WebSocketChannel(flow_id, context=context, container=container)
+    handler = WebSocketChannel(
+        flow_id,
+        context=context,
+        container=as_flow_runtime_container(container),
+    )
 
     try:
         while True:

@@ -223,7 +223,8 @@ class TelegramDevPolling:
                         if trigger_type != "telegram" or not trigger.enabled:
                             continue
 
-                        bot_token = trigger.config.get("bot_token", "")
+                        raw_bot_token = trigger.config.get("bot_token", "")
+                        bot_token = raw_bot_token if isinstance(raw_bot_token, str) else ""
 
                         # Резолвим @var:
                         if bot_token.startswith("@var:"):
@@ -231,13 +232,9 @@ class TelegramDevPolling:
                             var_config = flow_cfg.variables.get(var_name)
                             if var_config is None:
                                 bot_token = ""
-                            elif isinstance(var_config, dict):
-                                bot_token = var_config.get("value", "")
-                            elif hasattr(var_config, 'value'):
-                                # Pydantic model (VariableConfig)
-                                bot_token = var_config.value or ""
                             else:
-                                bot_token = str(var_config)
+                                value = var_config.value
+                                bot_token = value if isinstance(value, str) else ""
 
                         if not bot_token:
                             logger.warning(f"[{flow_cfg.flow_id}:{trigger_id}] No bot_token found, config={trigger.config}")

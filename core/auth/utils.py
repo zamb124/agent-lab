@@ -6,7 +6,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any
 
 import bcrypt
 from jose import JWTError, jwt
@@ -20,7 +20,7 @@ def get_token_info(
     token: str,
     jwt_secret: str,
     jwt_algorithm: str,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Валидирует access token и возвращает хранящуюся в нем информацию"""
     try:
         payload = jwt.decode(
@@ -61,7 +61,7 @@ def generate_access_token(
     jwt_secret: str,
     jwt_algorithm: str,
     token_exp_minutes: int,
-    grps: Optional[list[str]] = None,
+    grps: list[str] | None = None,
 ) -> str:
     """Генерирует access token"""
     expire = datetime.now(timezone.utc) + timedelta(minutes=token_exp_minutes)
@@ -91,7 +91,7 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
-def compare_passwords(incoming_password: str, password_hash: Optional[str]) -> bool:
+def compare_passwords(incoming_password: str, password_hash: str | None) -> bool:
     """Сравнивает входящий пароль и хэш через bcrypt"""
     if not password_hash:
         return False

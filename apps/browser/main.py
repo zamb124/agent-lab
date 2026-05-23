@@ -7,17 +7,18 @@ from fastapi import FastAPI
 from apps.browser.api.control import router as browser_control_router
 from apps.browser.api.mcp import router as browser_mcp_router
 from apps.browser.config import BrowserSettings, get_browser_settings
-from apps.browser.container import get_browser_container
+from apps.browser.container import BrowserContainer, get_browser_container
+from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 from core.app import create_service_app
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-async def on_shutdown(app: FastAPI, container) -> None:
+async def on_shutdown(app: FastAPI, container: BrowserContainer) -> None:
     _ = app
     cached = getattr(container, "_cached_browser_runtime", None)
-    if cached is not None:
+    if isinstance(cached, BrowserRuntimeFacade):
         await cached.stop()
         logger.info("BrowserRuntimeFacade остановлен")
 

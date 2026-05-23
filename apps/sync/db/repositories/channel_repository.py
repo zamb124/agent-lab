@@ -1,7 +1,6 @@
 """Репозиторий для работы с каналами (SQLAlchemy)."""
 
 from datetime import datetime
-from typing import List, Optional, Type
 
 from sqlalchemy import exists, nullslast, select, update
 from sqlalchemy.orm import aliased
@@ -18,7 +17,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         super().__init__(db=db)
 
     @property
-    def model_class(self) -> Type[SyncChannel]:
+    def model_class(self) -> type[SyncChannel]:
         return SyncChannel
 
     @property
@@ -30,8 +29,8 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         namespace: str,
         limit: int = 100,
         offset: int = 0,
-        company_id: Optional[str] = None,
-    ) -> List[SyncChannel]:
+        company_id: str | None = None,
+    ) -> list[SyncChannel]:
         """Каналы в namespace."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -49,11 +48,11 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         self,
         user_id: str,
         *,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
         limit: int = 100,
         offset: int = 0,
-        company_id: Optional[str] = None,
-    ) -> List[SyncChannel]:
+        company_id: str | None = None,
+    ) -> list[SyncChannel]:
         """Каналы, в которых состоит пользователь."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -89,8 +88,8 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         *,
         limit: int = 200,
         offset: int = 0,
-        company_id: Optional[str] = None,
-    ) -> List[SyncChannel]:
+        company_id: str | None = None,
+    ) -> list[SyncChannel]:
         """Каналы, в которых состоят оба пользователя (пересечение членства)."""
         cid = company_id or self._get_company_id()
         mv = aliased(SyncChannelMember)
@@ -120,8 +119,8 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
     async def list_member_user_ids(
         self,
         channel_id: str,
-        company_id: Optional[str] = None,
-    ) -> List[str]:
+        company_id: str | None = None,
+    ) -> list[str]:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = select(SyncChannelMember.user_id).where(
@@ -135,7 +134,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         self,
         channel_id: str,
         user_id: str,
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
     ) -> bool:
         """Проверяет членство пользователя в канале (в рамках компании)."""
         cid = company_id or self._get_company_id()
@@ -150,7 +149,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             result = await session.execute(stmt)
             return result.scalar() or False
 
-    async def upsert_member(self, channel_id: str, user_id: str, role: str, company_id: Optional[str] = None) -> None:
+    async def upsert_member(self, channel_id: str, user_id: str, role: str, company_id: str | None = None) -> None:
         """Добавляет или обновляет роль участника канала."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -168,7 +167,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
                 session.add(member)
             await session.commit()
 
-    async def add_member_if_missing(self, channel_id: str, user_id: str, role: str, company_id: Optional[str] = None) -> None:
+    async def add_member_if_missing(self, channel_id: str, user_id: str, role: str, company_id: str | None = None) -> None:
         """Добавляет участника, если его ещё нет."""
         cid = company_id or self._get_company_id()
         is_already = await self.is_member(channel_id, user_id, company_id=cid)
@@ -179,7 +178,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         self,
         channel_id: str,
         user_id: str,
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
     ) -> bool:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -190,7 +189,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
             await session.commit()
             return True
 
-    async def get_member_role(self, channel_id: str, user_id: str) -> Optional[str]:
+    async def get_member_role(self, channel_id: str, user_id: str) -> str | None:
         async with self._db.session() as session:
             row = await session.get(SyncChannelMember, (channel_id, user_id))
             if row is None:
@@ -201,8 +200,8 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         self,
         channel_id: str,
         *,
-        company_id: Optional[str] = None,
-    ) -> List[tuple[str, str]]:
+        company_id: str | None = None,
+    ) -> list[tuple[str, str]]:
         """Список (user_id, role) участников канала в компании."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -222,7 +221,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         channel_id: str,
         user_id: str,
         at: datetime,
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
     ) -> None:
         """Курсор прочитанного в основной ленте для участника канала."""
         cid = company_id or self._get_company_id()
@@ -243,7 +242,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         self,
         channel_id: str,
         user_id: str,
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
     ) -> bool:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -259,7 +258,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         channel_id: str,
         user_id: str,
         muted: bool,
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
     ) -> None:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -275,8 +274,8 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         self,
         channel_id: str,
         viewer_user_id: str,
-        company_id: Optional[str] = None,
-    ) -> Optional[datetime]:
+        company_id: str | None = None,
+    ) -> datetime | None:
         """Курсор прочитанного участника, отличного от viewer (для direct-канала)."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
@@ -296,7 +295,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
         self,
         channel_id: str,
         message_ids: list[str],
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
     ) -> None:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:

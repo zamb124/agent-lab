@@ -7,7 +7,7 @@
  *   }
  *
  * Используется страницей `<office-document-editor-page>` и компонентом
- * `<onlyoffice-host>` (последний получает `result` как prop `.config` и
+ * `<platform-onlyoffice-host>` (последний получает `result` как prop `.config` и
  * монтирует DocsAPI.DocEditor поверх iframe-портала).
  */
 

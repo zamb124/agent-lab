@@ -9,6 +9,7 @@ from typing import Any
 
 from docx import Document
 from openpyxl import load_workbook
+from openpyxl.cell.cell import Cell
 from openpyxl.utils.cell import coordinate_to_tuple
 
 
@@ -82,6 +83,8 @@ def _mutate_xlsx_replace(data: bytes, find: str, replace: str, *, match_case: bo
     for ws in wb.worksheets:
         for row in ws.iter_rows():
             for cell in row:
+                if not isinstance(cell, Cell):
+                    continue
                 if isinstance(cell.value, str):
                     next_text, changed = _replace_text(cell.value, find, replace, match_case=match_case)
                     if changed:
@@ -141,6 +144,8 @@ def update_spreadsheet_cells(
             ws = wb[sheet]
         else:
             ws = wb.active
+            if ws is None:
+                raise DocumentMutationError("active sheet not found")
         for coord, value in cells.items():
             ws[str(coord).upper()] = value
         out = BytesIO()

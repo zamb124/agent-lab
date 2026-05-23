@@ -1,6 +1,5 @@
 """MediaTranscriber — единая точка входа для транскрипции аудио и видео."""
 
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -19,8 +18,8 @@ class TranscriptionResult(BaseModel):
     """Результат транскрипции медиафайла."""
 
     text: str = Field(description="Распознанный текст.")
-    language: Optional[str] = Field(default=None, description="Язык распознавания.")
-    provider: Optional[str] = Field(default=None, description="Идентификатор STT провайдера.")
+    language: str | None = Field(default=None, description="Язык распознавания.")
+    provider: str | None = Field(default=None, description="Идентификатор STT провайдера.")
 
 
 class MediaTranscriber:

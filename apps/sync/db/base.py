@@ -6,7 +6,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Generic, List, Optional, Type, TypeVar
+from typing import Generic, Optional, TypeVar
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -44,7 +44,7 @@ class SyncDatabase:
         )
 
     @classmethod
-    def get_instance(cls, db_url: Optional[str] = None) -> "SyncDatabase":
+    def get_instance(cls, db_url: str | None = None) -> "SyncDatabase":
         """Singleton для Sync database"""
         if cls._instance is None:
             if db_url is None:
@@ -81,7 +81,7 @@ class BaseSyncRepository(ABC, Generic[T]):
 
     @property
     @abstractmethod
-    def model_class(self) -> Type[T]:
+    def model_class(self) -> type[T]:
         """Класс SQLAlchemy модели"""
         pass
 
@@ -92,7 +92,7 @@ class BaseSyncRepository(ABC, Generic[T]):
         pass
 
     @property
-    def company_id_field(self) -> Optional[str]:
+    def company_id_field(self) -> str | None:
         """Имя поля company_id (None если таблица без изоляции)"""
         return "company_id"
 
@@ -104,14 +104,14 @@ class BaseSyncRepository(ABC, Generic[T]):
             return None
         return getattr(self.model_class, self.company_id_field, None)
 
-    async def get(self, entity_id: str) -> Optional[T]:
+    async def get(self, entity_id: str) -> T | None:
         """Получает запись по ID"""
         async with self._db.session() as session:
             stmt = select(self.model_class).where(self._get_id_column() == entity_id)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def get_many(self, entity_ids: List[str]) -> List[T]:
+    async def get_many(self, entity_ids: list[str]) -> list[T]:
         """Получает несколько записей по списку ID"""
         if not entity_ids:
             return []
@@ -150,7 +150,7 @@ class BaseSyncRepository(ABC, Generic[T]):
         *,
         limit: int,
         offset: int = 0,
-        company_id: Optional[str] = None,
+        company_id: str | None = None,
     ) -> list[T]:
         """Возвращает страницу записей, фильтруя по company_id."""
         cid = company_id or self._get_company_id()
@@ -164,7 +164,7 @@ class BaseSyncRepository(ABC, Generic[T]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def count(self, company_id: Optional[str] = None) -> int:
+    async def count(self, company_id: str | None = None) -> int:
         """Считает количество записей для компании."""
         cid = company_id or self._get_company_id()
 

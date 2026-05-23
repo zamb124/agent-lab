@@ -14,7 +14,6 @@ from tests.ui.personas import ANONYMOUS_UI_USER, UiPersona, UiTestUser, ui_test_
 from tests.ui.scenario_doc import ScenarioRecorder
 from tests.ui.subdomain_setup import ensure_ui_subdomain_mappings
 
-
 _FORCE_LIGHT_THEME_INIT_SCRIPT = """
 (() => {
     try {

@@ -5,9 +5,9 @@
 readonly: True — поле выставляет рантайм/граф; во inline-коде обычно только читают.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
-STATE_FIELDS: List[Dict[str, Any]] = [
+STATE_FIELDS: list[dict[str, Any]] = [
     {
         "name": "task_id",
         "type": "str",

@@ -41,6 +41,7 @@ _DEFAULT_SUMMARY_INSTRUCTION = (
     "Summarize the following text clearly and concisely. Preserve the original language. "
     "Output only the summary, no preamble."
 )
+_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT = {"profile": "off", "budget": "max"}
 
 
 class TextTransformService:
@@ -107,7 +108,7 @@ class TextTransformService:
                 parts=[Part(root=TextPart(text=sys_text + "\n\n" + stripped))],
             ),
         ]
-        out = await llm.chat(messages)
+        out = await llm.chat(messages, llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT)
         if not isinstance(out, Message):
             raise TypeError("summarize: ожидан Message от LLM")
         summary = get_message_text(out).strip()
@@ -190,7 +191,7 @@ class TextTransformService:
                     Part(root=TextPart(text=_MARKDOWN_TO_MD_SYSTEM + "\n\n" + user_prompt)),
                 ],
             )
-            out = await llm.chat([msg])
+            out = await llm.chat([msg], llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT)
             if not isinstance(out, Message):
                 raise TypeError("format_markdown: ожидан Message от LLM")
             piece = get_message_text(out).strip()

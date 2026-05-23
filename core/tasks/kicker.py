@@ -24,13 +24,13 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
-from taskiq import AsyncBroker, AsyncTaskiqDecoratedTask
+from taskiq import AsyncBroker, AsyncTaskiqDecoratedTask, AsyncTaskiqTask
 from taskiq.kicker import AsyncKicker
 
 from core.config import get_settings
 from core.logging import get_log_context
+from core.types import JsonValue
 
 _LABEL_REQUEST_ID = "request_id"
 _LABEL_TRACE_ID = "trace_id"
@@ -90,15 +90,15 @@ def build_log_labels(
 
 
 async def kiq_with_context(
-    task: AsyncTaskiqDecoratedTask[..., Any],
-    *args: Any,
+    task: AsyncTaskiqDecoratedTask[..., JsonValue],
+    *args: JsonValue,
     override_request_id: str | None = None,
     override_trace_id: str | None = None,
     service_name: str | None = None,
     background_kind: str | None = None,
     extra_labels: dict[str, str] | None = None,
-    **kwargs: Any,
-) -> Any:
+    **kwargs: JsonValue,
+) -> AsyncTaskiqTask[JsonValue]:
     """Поставить задачу в очередь, прикрепив обязательные лог-метки."""
     labels = build_log_labels(
         override_request_id=override_request_id,
@@ -108,7 +108,7 @@ async def kiq_with_context(
     )
     if extra_labels:
         for key, value in extra_labels.items():
-            if not isinstance(value, str) or not value.strip():
+            if not value.strip():
                 raise ValueError(
                     f"kiq_with_context: label {key!r} должен быть непустой строкой"
                 )
@@ -125,9 +125,9 @@ def kicker_for_task_name_with_log_labels(
     service_name: str | None = None,
     background_kind: str | None = None,
     extra_labels: dict[str, str] | None = None,
-) -> AsyncKicker[..., Any]:
+) -> AsyncKicker[..., JsonValue]:
     """Вернуть AsyncKicker для task-name contract без импорта worker implementation."""
-    if not isinstance(task_name, str) or not task_name.strip():
+    if not task_name.strip():
         raise ValueError("kicker_for_task_name_with_log_labels: task_name пустой")
     labels = build_log_labels(
         override_request_id=override_request_id,
@@ -137,7 +137,7 @@ def kicker_for_task_name_with_log_labels(
     )
     if extra_labels:
         for key, value in extra_labels.items():
-            if not isinstance(value, str) or not value.strip():
+            if not value.strip():
                 raise ValueError(
                     f"kicker_for_task_name_with_log_labels: label {key!r} должен быть непустой строкой"
                 )
@@ -148,14 +148,14 @@ def kicker_for_task_name_with_log_labels(
 async def kiq_task_name_with_context(
     task_name: str,
     broker: AsyncBroker,
-    *args: Any,
+    *args: JsonValue,
     override_request_id: str | None = None,
     override_trace_id: str | None = None,
     service_name: str | None = None,
     background_kind: str | None = None,
     extra_labels: dict[str, str] | None = None,
-    **kwargs: Any,
-) -> Any:
+    **kwargs: JsonValue,
+) -> AsyncTaskiqTask[JsonValue]:
     """Поставить TaskIQ задачу по имени, не импортируя модуль-исполнитель."""
     kicker = kicker_for_task_name_with_log_labels(
         task_name,
@@ -170,14 +170,14 @@ async def kiq_task_name_with_context(
 
 
 def kicker_with_log_labels(
-    task: AsyncTaskiqDecoratedTask[..., Any],
+    task: AsyncTaskiqDecoratedTask[..., JsonValue],
     *,
     override_request_id: str | None = None,
     override_trace_id: str | None = None,
     service_name: str | None = None,
     background_kind: str | None = None,
     extra_labels: dict[str, str] | None = None,
-) -> AsyncKicker[..., Any]:
+) -> AsyncKicker[..., JsonValue]:
     """
     Вернуть AsyncKicker уже с прикреплёнными log-labels.
 
@@ -191,7 +191,7 @@ def kicker_with_log_labels(
     )
     if extra_labels:
         for key, value in extra_labels.items():
-            if not isinstance(value, str) or not value.strip():
+            if not value.strip():
                 raise ValueError(
                     f"kicker_with_log_labels: label {key!r} должен быть непустой строкой"
                 )
@@ -201,21 +201,19 @@ def kicker_with_log_labels(
 
 def _resolve_id(
     override: str | None,
-    from_ctx: Any,
+    from_ctx: object,
     *,
     background_kind: str | None,
 ) -> str:
     if override is not None:
-        if not isinstance(override, str) or not override.strip():
+        if not override.strip():
             raise ValueError("override id должен быть непустой строкой или None")
         return override.strip()
     if isinstance(from_ctx, str) and from_ctx.strip():
         return from_ctx.strip()
     if not background_kind or not background_kind.strip():
         raise ValueError(
-            "kiq_with_context: вне request-скоупа (нет request_id/trace_id в "
-            "лог-контексте) обязателен background_kind, например "
-            "'background', 'sched', 'cron'."
+            "kiq_with_context: вне request-скоупа (нет request_id/trace_id в лог-контексте) обязателен background_kind, например 'background', 'sched', 'cron'."
         )
     prefix = background_kind.strip()
     return f"{prefix}:{uuid.uuid4().hex}"

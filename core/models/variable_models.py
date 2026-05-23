@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -23,7 +23,7 @@ class VariableDefinition(BaseModel):
         title="Описание",
         description="Описание переменной для пользователя"
     )
-    default_value: Optional[str] = Field(
+    default_value: str | None = Field(
         default=None,
         title="Значение по умолчанию",
         description="Предлагаемое значение по умолчанию"
@@ -41,5 +41,4 @@ class VariableDefinition(BaseModel):
 
 
 # Type alias для гибкого определения переменных
-VariableDefinitionInput = Union[VariableDefinition, Dict[str, Any]]
-
+VariableDefinitionInput = VariableDefinition | dict[str, Any]

@@ -4,17 +4,27 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict, Field
 
-from core.fields import Field
+from core.models.base import StrictBaseModel
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from core.types import JsonObject, require_json_object
 
 
-class Context(BaseModel):
+class Context(StrictBaseModel):
     """Глобальный контекст запроса с изолированными сервисами"""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+        use_enum_values=False,
+        str_strip_whitespace=True,
+        validate_default=True,
+        arbitrary_types_allowed=True,
+    )
 
     user: User = Field(
         title="Пользователь",
@@ -25,26 +35,27 @@ class Context(BaseModel):
         title="Host",
         description="Host header из запроса (для построения URL)",
     )
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         default=None,
         title="ID сессии",
         description="Идентификатор сессии",
     )
     channel: str = Field(
+        default="unknown",
         title="Канал",
         description="Канал откуда поступил запрос (a2a, telegram, whatsapp)",
     )
-    flow_id: Optional[str] = Field(
+    flow_id: str | None = Field(
         default=None,
         title="ID агента",
         description="ID текущего агента",
     )
-    active_company: Optional[Company] = Field(
+    active_company: Company | None = Field(
         default=None,
         title="Активная компания",
         description="Текущая активная компания пользователя",
     )
-    user_companies: List[Company] = Field(
+    user_companies: list[Company] = Field(
         default_factory=list,
         title="Компании пользователя",
         description="Все доступные компании пользователя",
@@ -54,7 +65,7 @@ class Context(BaseModel):
         title="Активный namespace",
         description="Имя активного namespace (без префикса company_id)",
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: JsonObject = Field(
         default_factory=dict,
         title="Метаданные",
         description="Дополнительные метаданные контекста",
@@ -64,69 +75,81 @@ class Context(BaseModel):
         title="Язык пользователя",
         description="Предпочитаемый язык интерфейса пользователя",
     )
-    flow_variables: Dict[str, Any] = Field(
+    flow_variables: JsonObject = Field(
         default_factory=dict,
         title="Переменные flow",
         description="Переменные доступные во flow и агентах",
     )
-    company_variables: Dict[str, Any] = Field(
+    company_variables: JsonObject = Field(
         default_factory=dict,
         title="Переменные компании",
         description="Переменные компании для использования в промптах",
     )
-    flow_config: Optional[Any] = Field(
+    flow_config: JsonObject | None = Field(
         default=None,
         title="Конфигурация агента",
         description="FlowConfig для текущего запроса",
     )
-    state: Optional[Dict[str, Any]] = Field(
+    state: JsonObject | None = Field(
         default=None,
         title="Runtime state",
         description="Текущее runtime-состояние выполнения; не сериализуется между процессами.",
         exclude=True,
     )
-    auth_token: Optional[str] = Field(
+    auth_token: str | None = Field(
         default=None,
         title="JWT токен",
         description="JWT токен для межсервисной авторизации (передается в HTTPRepositoryProxy)",
         exclude=True,
     )
-    trace_id: Optional[str] = Field(
+    trace_id: str | None = Field(
         default=None,
         title="Trace ID",
         description="Идентификатор трассировки для межсервисного взаимодействия (формат: service:uuid)",
     )
 
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True
-    )
-
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         """
         Сериализует Context в dict для передачи через TaskIQ.
 
         Returns:
             Dict с данными контекста
         """
-        return {
-            "user": self.user.model_dump() if self.user else None,
-            "active_company": self.active_company.model_dump() if self.active_company else None,
-            "user_companies": [c.model_dump() for c in self.user_companies],
-            "session_id": self.session_id,
-            "channel": self.channel,
-            "flow_id": self.flow_id,
-            "host": self.host,
-            "flow_variables": self.flow_variables,
-            "company_variables": self.company_variables,
-            "metadata": self.metadata,
-            "language": self.language.value if self.language else "ru",
-            "trace_id": self.trace_id,
-            "active_namespace": self.active_namespace,
-            "auth_token": self.auth_token,
-        }
+        return require_json_object(
+            {
+                "user": require_json_object(self.user.model_dump(mode="json"), "Context.user"),
+                "active_company": (
+                    require_json_object(
+                        self.active_company.model_dump(mode="json"),
+                        "Context.active_company",
+                    )
+                    if self.active_company
+                    else None
+                ),
+                "user_companies": [
+                    require_json_object(
+                        company.model_dump(mode="json"),
+                        "Context.user_companies[]",
+                    )
+                    for company in self.user_companies
+                ],
+                "session_id": self.session_id,
+                "channel": self.channel,
+                "flow_id": self.flow_id,
+                "host": self.host,
+                "flow_variables": self.flow_variables,
+                "company_variables": self.company_variables,
+                "metadata": self.metadata,
+                "language": self.language.value,
+                "trace_id": self.trace_id,
+                "active_namespace": self.active_namespace,
+                "auth_token": self.auth_token,
+            },
+            "Context",
+        )
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Context":
+    def from_dict(cls, data: JsonObject) -> "Context":
         """
         Восстанавливает Context из dict (после передачи через TaskIQ).
 
@@ -136,25 +159,6 @@ class Context(BaseModel):
         Returns:
             Восстановленный Context
         """
-        user_data = data.get("user")
-        if user_data is None:
+        if data.get("user") is None:
             raise ValueError("Context.user is required")
-        active_company_data = data.get("active_company")
-        user_companies_data = data.get("user_companies", [])
-
-        return cls(
-            user=User.model_validate(user_data),
-            active_company=Company.model_validate(active_company_data) if active_company_data else None,
-            user_companies=[Company.model_validate(c) for c in user_companies_data],
-            session_id=data.get("session_id"),
-            channel=data.get("channel", "unknown"),
-            flow_id=data.get("flow_id"),
-            host=data.get("host", ""),
-            flow_variables=data.get("flow_variables", {}),
-            company_variables=data.get("company_variables", {}),
-            metadata=data.get("metadata", {}),
-            language=Language(data.get("language", "ru")),
-            trace_id=data.get("trace_id"),
-            active_namespace=data.get("active_namespace", "default"),
-            auth_token=data.get("auth_token"),
-        )
+        return cls.model_validate(data)

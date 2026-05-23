@@ -28,7 +28,7 @@ class OfficeDatabase:
         )
 
     @classmethod
-    def get_instance(cls, db_url: Optional[str] = None) -> "OfficeDatabase":
+    def get_instance(cls, db_url: str | None = None) -> "OfficeDatabase":
         if cls._instance is None:
             if db_url is None:
                 settings = get_settings()

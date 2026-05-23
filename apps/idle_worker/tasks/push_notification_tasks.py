@@ -3,7 +3,7 @@ TaskIQ tasks для push notifications.
 Проксирует вызовы в core.tasks.push_notifications (где изолирована логика).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from a2a.types import (
     DeleteTaskPushNotificationConfigParams,
@@ -37,19 +37,19 @@ from core.tasks.push_notifications import (
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_SET, queue_name="idle")
-async def set_config(params: TaskPushNotificationConfig) -> Dict[str, Any]:
+async def set_config(params: TaskPushNotificationConfig) -> dict[str, Any]:
     """Сохраняет конфигурацию push notification."""
     return await set_push_config(params)
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_GET, queue_name="idle")
-async def get_config(params: GetTaskPushNotificationConfigParams) -> Optional[Dict[str, Any]]:
+async def get_config(params: GetTaskPushNotificationConfigParams) -> dict[str, Any] | None:
     """Получает конфигурацию push notification."""
     return await get_push_config(params)
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_LIST, queue_name="idle")
-async def list_configs(params: ListTaskPushNotificationConfigParams) -> List[Dict[str, Any]]:
+async def list_configs(params: ListTaskPushNotificationConfigParams) -> list[dict[str, Any]]:
     """Список конфигураций для задачи."""
     return await list_push_configs(params)
 
@@ -69,10 +69,10 @@ async def delete_config(params: DeleteTaskPushNotificationConfigParams) -> None:
 )
 async def send_webhook(
     url: str,
-    payload: Dict[str, Any],
-    token: Optional[str] = None,
-    credentials: Optional[str] = None,
-) -> Dict[str, Any]:
+    payload: dict[str, Any],
+    token: str | None = None,
+    credentials: str | None = None,
+) -> dict[str, Any]:
     """Отправляет webhook с ретраями чере TaskIQ."""
     return await core_send_webhook(url, payload, token, credentials)
 
@@ -84,7 +84,7 @@ async def send_webhook(
     queue_name="idle"
 )
 async def send_task_update(
-    task_id: str, context_id: str, state: str, message: Optional[str] = None, is_final: bool = False
+    task_id: str, context_id: str, state: str, message: str | None = None, is_final: bool = False
 ) -> None:
     """Отправляет уведомление всем подписчикам задачи."""
     await process_send_task_update(

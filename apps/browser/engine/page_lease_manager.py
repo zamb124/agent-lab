@@ -6,12 +6,37 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Callable, Optional
+
+from playwright.async_api import (
+    ConsoleMessage,
+    Request,
+    Response,
+    SourceLocation,
+)
+from playwright.async_api import (
+    Error as PlaywrightError,
+)
 
 from apps.browser.engine.context_factory import ContextFactory
-from apps.browser.engine.types import ContextSignature, SessionMode
+from apps.browser.engine.types import (
+    BrowserContextHandle,
+    BrowserHandle,
+    BrowserPage,
+    BrowserStorageState,
+    ContextSignature,
+    SessionMode,
+)
+from core.types import JsonObject
+
+ConsoleHandler = Callable[[ConsoleMessage], None]
+PageErrorHandler = Callable[[PlaywrightError], None]
+RequestHandler = Callable[[Request], None]
+ResponseHandler = Callable[[Response], None]
+PageEventListeners = tuple[ConsoleHandler, PageErrorHandler, RequestHandler, ResponseHandler]
+PageEventLogger = Callable[[str, JsonObject], None]
 
 
 @dataclass
@@ -41,7 +66,7 @@ class LeaseRecord:
     session_id: str
     endpoint_key: str
     context_signature: ContextSignature
-    page: Any
+    page: BrowserPage
     acquired_monotonic: float
     ttl_sec: int
     session_mode: SessionMode
@@ -58,8 +83,8 @@ class SessionContextRecord:
     session_id: str
     endpoint_key: str
     context_signature: ContextSignature
-    context: Any
-    idle_deadline_monotonic: Optional[float]
+    context: BrowserContextHandle
+    idle_deadline_monotonic: float | None
     session_mode: SessionMode
 
 
@@ -116,7 +141,7 @@ class PageLeaseManager:
         self,
         context_factory: ContextFactory,
         *,
-        page_event_logger: Callable[[str, dict[str, object]], None] | None = None,
+        page_event_logger: PageEventLogger | None = None,
     ) -> None:
         self._factory = context_factory
         self._lock = asyncio.Lock()
@@ -127,24 +152,18 @@ class PageLeaseManager:
         self._session_contexts: dict[str, SessionContextRecord] = {}
         # События для дебага страницы: console/pageerror/network.
         # Пишутся в artifacts как sidecar и используются для triage.
-        self._console_events_by_session: dict[str, list[dict[str, object]]] = {}
-        self._console_listeners_by_page: dict[int, tuple[object, object, object, object]] = {}
+        self._console_events_by_session: dict[str, list[JsonObject]] = {}
+        self._console_listeners_by_page: dict[int, PageEventListeners] = {}
         self._page_event_logger = page_event_logger
         self._navigate_locks: dict[str, asyncio.Lock] = {}
 
     @staticmethod
-    def _console_location(msg: Any) -> dict[str, object]:
+    def _console_location(msg: ConsoleMessage) -> JsonObject:
         """
         Нормализовать location console-msg, если движок поддерживает.
         """
-        loc: Any = None
-        try:
-            loc = msg.location()  # type: ignore[attr-defined]
-        except Exception:
-            loc = None
-        if not isinstance(loc, dict):
-            return {}
-        out: dict[str, object] = {}
+        loc: SourceLocation = msg.location
+        out: JsonObject = {}
         url = loc.get("url")
         line = loc.get("lineNumber")
         col = loc.get("columnNumber")
@@ -156,102 +175,60 @@ class PageLeaseManager:
             out["column"] = col
         return out
 
-    def _append_console_event(self, session_id: str, event: dict[str, object]) -> None:
+    def _append_console_event(self, session_id: str, event: JsonObject) -> None:
         if not session_id:
             raise ValueError("session_id обязателен")
         self._console_events_by_session.setdefault(session_id, []).append(event)
         if self._page_event_logger is not None:
-            payload = dict(event)
+            payload: JsonObject = dict(event)
             payload["ts_ms"] = int(time.time() * 1000)
             self._page_event_logger(session_id, payload)
 
-    def _attach_console_listeners(self, *, session_id: str, page: Any) -> None:
+    def _attach_console_listeners(self, *, session_id: str, page: BrowserPage) -> None:
         pid = id(page)
         if pid in self._console_listeners_by_page:
             raise RuntimeError("Console listeners уже зарегистрированы для страницы")
 
-        def on_console(msg: Any) -> None:
-            try:
-                msg_type = str(getattr(msg, "type", "") or "")
-            except Exception:
-                msg_type = ""
-            try:
-                text = str(getattr(msg, "text", "") or "")
-            except Exception:
-                text = ""
+        def on_console(msg: ConsoleMessage) -> None:
             self._append_console_event(
                 session_id,
                 {
                     "kind": "console",
-                    "type": msg_type,
-                    "text": text,
+                    "type": msg.type,
+                    "text": msg.text,
                     "location": self._console_location(msg),
                 },
             )
 
-        def on_page_error(err: Any) -> None:
-            try:
-                message = str(err)
-            except Exception:
-                message = ""
-            stack = ""
-            try:
-                stack = str(getattr(err, "stack", "") or "")
-            except Exception:
-                stack = ""
-            payload: dict[str, object] = {"kind": "pageerror", "message": message}
+        def on_page_error(err: PlaywrightError) -> None:
+            message = err.message
+            stack = err.stack or ""
+            payload: JsonObject = {"kind": "pageerror", "message": message}
             if stack:
                 payload["stack"] = stack
             self._append_console_event(session_id, payload)
 
-        def on_request_failed(req: Any) -> None:
-            url = ""
-            method = ""
-            failure = ""
-            try:
-                url = str(getattr(req, "url", "") or "")
-            except Exception:
-                url = ""
-            try:
-                method = str(getattr(req, "method", "") or "")
-            except Exception:
-                method = ""
-            try:
-                failure_obj = req.failure()  # type: ignore[attr-defined]
-                if isinstance(failure_obj, dict):
-                    failure = str(failure_obj.get("errorText", "") or "")
-                else:
-                    failure = str(failure_obj or "")
-            except Exception:
-                failure = ""
+        def on_request_failed(req: Request) -> None:
+            failure = req.failure or ""
             self._append_console_event(
                 session_id,
                 {
                     "kind": "requestfailed",
-                    "url": url,
-                    "method": method,
+                    "url": req.url,
+                    "method": req.method,
                     "failure": failure,
                 },
             )
 
-        def on_response(resp: Any) -> None:
-            url = ""
-            status: int | None = None
-            try:
-                url = str(getattr(resp, "url", "") or "")
-            except Exception:
-                url = ""
-            try:
-                status = int(getattr(resp, "status", 0) or 0)
-            except Exception:
-                status = None
-            if status is None or status < 400:
+        def on_response(resp: Response) -> None:
+            status = resp.status
+            if status < 400:
                 return
             self._append_console_event(
                 session_id,
                 {
                     "kind": "http_error",
-                    "url": url,
+                    "url": resp.url,
                     "status": status,
                 },
             )
@@ -262,7 +239,7 @@ class PageLeaseManager:
         page.on("response", on_response)
         self._console_listeners_by_page[pid] = (on_console, on_page_error, on_request_failed, on_response)
 
-    def _detach_console_listeners(self, page: Any) -> None:
+    def _detach_console_listeners(self, page: BrowserPage) -> None:
         pid = id(page)
         listeners = self._console_listeners_by_page.pop(pid, None)
         if listeners is None:
@@ -288,7 +265,7 @@ class PageLeaseManager:
         async with lock:
             yield
 
-    async def swap_active_page_for_session(self, session_id: str) -> Any:
+    async def swap_active_page_for_session(self, session_id: str) -> BrowserPage:
         """
         Закрыть текущую вкладку сессии, открыть новую в том же BrowserContext и вернуть page.
 
@@ -335,7 +312,7 @@ class PageLeaseManager:
             self._session_pages[session_id] = {new_pid}
         return new_page
 
-    def drain_console_events(self, session_id: str) -> list[dict[str, object]]:
+    def drain_console_events(self, session_id: str) -> list[JsonObject]:
         """
         Слить накопленные debug-события страницы для session_id и очистить буфер.
 
@@ -373,16 +350,16 @@ class PageLeaseManager:
 
     async def lease_page(
         self,
-        browser: Any,
+        browser: BrowserHandle,
         endpoint_key: str,
         signature: ContextSignature,
         session_id: str,
         *,
-        storage_state: Optional[dict[str, Any]],
+        storage_state: BrowserStorageState | None,
         session_mode: SessionMode,
         page_ttl_sec: int,
         warm_idle_sec: int,
-    ) -> tuple[Any, Any, bool]:
+    ) -> tuple[BrowserContextHandle, BrowserPage, bool]:
         if not self._allow_acquire:
             raise RuntimeError("Новые lease запрещены (drain)")
         if endpoint_key in self._draining_endpoints:
@@ -445,13 +422,13 @@ class PageLeaseManager:
 
     async def release_page(
         self,
-        page: Any,
+        page: BrowserPage,
         *,
         warm_idle_sec: int,
-        session_mode_override: Optional[SessionMode] = None,
+        session_mode_override: SessionMode | None = None,
     ) -> None:
         pid = id(page)
-        ctx_to_close: Any | None = None
+        ctx_to_close: BrowserContextHandle | None = None
         async with self._lock:
             rec = self._leases.pop(pid, None)
             if rec is None:
@@ -582,7 +559,7 @@ class PageLeaseManager:
     def total_active_leases(self) -> int:
         return len(self._leases)
 
-    async def get_page_for_session(self, session_id: str) -> Any:
+    async def get_page_for_session(self, session_id: str) -> BrowserPage:
         """
         Одна активная страница на session_id для Browser Control HTTP API.
         При нуле или нескольких страницах — ошибка (zero-guess).

@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from apps.browser.contracts.control_types import BrowserCapabilityError, BrowserControlFeatures
 from apps.browser.contracts.runtime import BrowserInteractor
 from apps.browser.engine.types import (
@@ -13,7 +11,9 @@ from apps.browser.engine.types import (
     BrowserAcquireResult,
     BrowserFetchRequest,
     BrowserFetchResult,
+    BrowserPage,
 )
+from core.types import JsonObject
 
 
 class PlaywrightAdapter:
@@ -54,10 +54,10 @@ class PlaywrightAdapter:
     async def start(self, req: BrowserAcquireRequest) -> BrowserAcquireResult:
         return await self._interactor.acquire(req)
 
-    async def navigate(self, page: Any, req: BrowserFetchRequest) -> BrowserFetchResult:
+    async def navigate(self, page: BrowserPage, req: BrowserFetchRequest) -> BrowserFetchResult:
         return await self._interactor.fetch(page, req)
 
-    async def run_action(self, page: Any, code: str, *, timeout_ms: int) -> dict[str, Any]:
+    async def run_action(self, page: BrowserPage, code: str, *, timeout_ms: int) -> JsonObject:
         _ = page, code, timeout_ms
         raise BrowserCapabilityError(
             code="browser_action_disabled",
@@ -67,5 +67,5 @@ class PlaywrightAdapter:
             ),
         )
 
-    async def stop(self, page: Any) -> None:
+    async def stop(self, page: BrowserPage) -> None:
         await self._interactor.release(page)

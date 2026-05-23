@@ -30,10 +30,12 @@ from core.clients.llm.model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_L
 from core.config import BaseSettings, get_settings, set_settings
 from core.config.models import (
     LLMConfig,
+    ModelConfig,
     OpenAIProviderConfig,
     OpenRouterFreePoolConfig,
     OpenRouterProviderConfig,
 )
+from core.llm_context import LLMContextBudget, LLMContextProfile, LLMContextRetrievalPolicy
 
 
 @dataclass(frozen=True)
@@ -191,11 +193,13 @@ def _candidate(
     model: str,
     *,
     base_url: str,
+    provider: str = "openai",
     supported_parameters: frozenset[str] = frozenset(),
     source: str = "test",
+    context_length: int | None = None,
 ) -> LLMCallConfig:
     return LLMCallConfig(
-        provider="openai",
+        provider=provider,
         model=model,
         api_key="test-key",
         base_url=base_url,
@@ -203,6 +207,7 @@ def _candidate(
         supported_parameters=supported_parameters,
         input_modalities=frozenset({"text"}),
         output_modalities=frozenset({"text"}),
+        context_length=context_length,
     )
 
 
@@ -216,6 +221,26 @@ def _client_for(server: _OpenAICompatibleTestServer, candidates: list[LLMCallCon
         first_token_timeout=0.05,
         candidate_cooldown_seconds=0.0,
         timeout=2.0,
+    )
+
+
+def _context_profile() -> LLMContextProfile:
+    return LLMContextProfile(
+        mode="window",
+        budget=LLMContextBudget(
+            max_input_tokens=200,
+            output_reserve_tokens=2,
+            reasoning_reserve_tokens=0,
+            safety_buffer_tokens=1,
+            active_window_tokens=160,
+            memory_tokens=10,
+            rag_tokens=10,
+            tool_result_tokens=8,
+        ),
+        memory="off",
+        retrieval=LLMContextRetrievalPolicy(mode="off", rerank=False),
+        compaction="auto",
+        cache="auto",
     )
 
 
@@ -321,6 +346,93 @@ async def test_stream_status_metadata_uses_resolved_candidate_model_provider_and
         assert final_metadata["model"] == "fallback-fast"
         assert final_metadata["provider"] == "openai"
         assert final_metadata["source"] == "fallback-source"
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_stream_context_layer_clamps_to_candidate_context_length_and_reports_metadata() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "small-context": lambda writer: _write_sse_text(writer, "ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = _client_for(
+            server,
+            [
+                _candidate(
+                    "small-context",
+                    base_url=server.base_url,
+                    context_length=32,
+                ),
+            ],
+        )
+        messages = [
+            Message(
+                messageId="system-message",
+                role=Role.user,
+                parts=[Part(root=TextPart(text="strict rules"))],
+                metadata={"system": True},
+            ),
+            _message(" ".join(f"old{i}" for i in range(160))),
+            _message("current"),
+        ]
+
+        events = []
+        async for event in client.stream(messages, llm_context=_context_profile()):
+            events.append(event)
+
+        body_messages = server.requests[0].body["messages"]
+        assert body_messages == [
+            {"role": "system", "content": "strict rules"},
+            {"role": "user", "content": "current"},
+        ]
+        status_events = [event for event in events if isinstance(event, TaskStatusUpdateEvent)]
+        final_metadata = status_events[-1].status.message.metadata
+        llm_context = final_metadata["llm_context"]
+        assert llm_context["usage"]["max_input_tokens"] == 32
+        assert llm_context["usage"]["model_context_length"] == 32
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_stream_context_layer_adds_openrouter_anthropic_cache_control() -> None:
+    server = _OpenAICompatibleTestServer(
+        {
+            "anthropic/claude-sonnet-4.5": lambda writer: _write_sse_text(writer, "ok"),
+        }
+    )
+    await server.start()
+    try:
+        client = _client_for(
+            server,
+            [
+                _candidate(
+                    "anthropic/claude-sonnet-4.5",
+                    provider="openrouter",
+                    base_url=server.base_url,
+                ),
+            ],
+        )
+        messages = [
+            Message(
+                messageId="system-message",
+                role=Role.user,
+                parts=[Part(root=TextPart(text="stable rules"))],
+                metadata={"system": True},
+            ),
+            _message("current"),
+        ]
+
+        events = []
+        async for event in client.stream(messages, llm_context=_context_profile()):
+            events.append(event)
+
+        assert events
+        assert server.requests[0].body["cache_control"] == {"type": "ephemeral"}
     finally:
         await server.close()
 
@@ -638,6 +750,9 @@ def test_get_llm_builds_explicit_fallback_candidates_from_real_settings() -> Non
             temperature=0.2,
             max_tokens=4096,
             timeout=10.0,
+            models={
+                "openrouter/primary": ModelConfig(context_length=65_536),
+            },
             openrouter=OpenRouterProviderConfig(
                 api_key="sk-openrouter",
                 base_url="https://openrouter.ai/api/v1",
@@ -690,6 +805,7 @@ def test_get_llm_builds_explicit_fallback_candidates_from_real_settings() -> Non
         "openai",
     ]
     assert client._static_candidates[0].api_key == "sk-openrouter"
+    assert client._static_candidates[0].context_length == 65_536
     assert client._static_candidates[1].api_key == "sk-openrouter"
     assert client._static_candidates[2].api_key == "sk-openai"
     assert client._static_candidates[1].temperature == 0.7

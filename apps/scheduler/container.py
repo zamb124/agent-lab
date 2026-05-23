@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from apps.crm_worker.broker import broker as crm_broker
 from apps.flows_worker.broker import broker as flows_broker
@@ -51,7 +51,7 @@ class SchedulerContainer(BaseContainer):
         )
 
 
-_scheduler_container: Optional[SchedulerContainer] = None
+_scheduler_container: SchedulerContainer | None = None
 
 
 def get_scheduler_container() -> SchedulerContainer:

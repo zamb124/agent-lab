@@ -2,7 +2,7 @@
 Модели данных для Frontend сервиса
 """
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -15,9 +15,9 @@ class ApiKey(BaseModel):
     key_id: str = Field(description="ID ключа")
     name: str = Field(description="Название ключа")
     key_prefix: str = Field(description="Префикс ключа (первые 8 символов)")
-    scopes: List[str] = Field(description="Разрешения ключа")
+    scopes: list[str] = Field(description="Разрешения ключа")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    last_used: Optional[datetime] = Field(default=None, description="Время последнего использования")
+    last_used: datetime | None = Field(default=None, description="Время последнего использования")
     company_id: str = Field(description="ID компании")
     created_by: str = Field(description="ID пользователя, создавшего ключ")
 
@@ -25,7 +25,7 @@ class ApiKey(BaseModel):
 class ApiKeyCreate(BaseModel):
     """Запрос на создание API ключа"""
     name: str = Field(description="Название ключа")
-    scopes: List[str] = Field(description="Разрешения")
+    scopes: list[str] = Field(description="Разрешения")
 
 
 class ApiKeyUpdate(BaseModel):
@@ -38,7 +38,7 @@ class ApiKeyCreated(BaseModel):
     key_id: str
     name: str
     secret: str
-    scopes: List[str]
+    scopes: list[str]
     message: str = "Сохраните секрет - он больше не будет показан"
 
 
@@ -46,15 +46,15 @@ class TeamMemberInfo(BaseModel):
     """Информация об участнике команды"""
     user_id: str = Field(description="ID пользователя")
     name: str = Field(description="Имя")
-    email: Optional[str] = Field(default=None, description="Email")
-    roles: List[str] = Field(description="Роли в компании")
-    joined_at: Optional[datetime] = Field(default=None, description="Дата вступления")
-    avatar_url: Optional[str] = Field(default=None, description="URL аватара")
+    email: str | None = Field(default=None, description="Email")
+    roles: list[str] = Field(description="Роли в компании")
+    joined_at: datetime | None = Field(default=None, description="Дата вступления")
+    avatar_url: str | None = Field(default=None, description="URL аватара")
 
 
 class TeamMemberUpdate(BaseModel):
     """Обновление участника"""
-    roles: List[str] = Field(description="Новые роли")
+    roles: list[str] = Field(description="Новые роли")
 
 
 class CompanySettingsUpdate(BaseModel):
@@ -65,9 +65,9 @@ class CompanySettingsUpdate(BaseModel):
     ``crm_summarize_provider``) удалены вместе с парсерами в ``core.company_ai``.
     """
 
-    name: Optional[str] = Field(default=None, description="Название компании")
-    monthly_budget: Optional[float] = Field(default=None, description="Месячный лимит")
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Дополнительные данные")
+    name: str | None = Field(default=None, description="Название компании")
+    monthly_budget: float | None = Field(default=None, description="Месячный лимит")
+    metadata: dict[str, Any] | None = Field(default=None, description="Дополнительные данные")
 
 
 # === AI providers (capabilities + custom OpenAI-compatible) ===
@@ -84,15 +84,15 @@ class AIProvidersCapabilityUpdate(BaseModel):
     """
 
     provider: str = Field(min_length=1)
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    folder_id: Optional[str] = None
-    extra_request_headers: Optional[Dict[str, str]] = None
-    model: Optional[str] = None
-    fallback_models: Optional[List[LLMCallConfig]] = None
-    voice: Optional[str] = None
-    language: Optional[str] = None
-    sample_rate: Optional[int] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    folder_id: str | None = None
+    extra_request_headers: dict[str, str] | None = None
+    model: str | None = None
+    fallback_models: list[LLMCallConfig] | None = None
+    voice: str | None = None
+    language: str | None = None
+    sample_rate: int | None = None
 
 
 class CustomProviderCreate(BaseModel):
@@ -102,24 +102,24 @@ class CustomProviderCreate(BaseModel):
     label: str = Field(min_length=1, max_length=128)
     base_url: str
     api_key: str
-    extra_request_headers: Optional[Dict[str, str]] = None
-    extra_request_body: Optional[Dict[str, Any]] = None
-    rerank_path: Optional[str] = None
-    capabilities: List[CapabilityLiteral] = Field(default_factory=list)
-    model_by_capability: Dict[str, str] = Field(default_factory=dict)
+    extra_request_headers: dict[str, str] | None = None
+    extra_request_body: dict[str, Any] | None = None
+    rerank_path: str | None = None
+    capabilities: list[CapabilityLiteral] = Field(default_factory=list)
+    model_by_capability: dict[str, str] = Field(default_factory=dict)
 
 
 class CustomProviderUpdate(BaseModel):
     """PATCH /api/settings/ai-providers/custom/{id}."""
 
-    label: Optional[str] = Field(default=None, min_length=1, max_length=128)
-    base_url: Optional[str] = None
-    api_key: Optional[str] = None
-    extra_request_headers: Optional[Dict[str, str]] = None
-    extra_request_body: Optional[Dict[str, Any]] = None
-    rerank_path: Optional[str] = None
-    capabilities: Optional[List[CapabilityLiteral]] = None
-    model_by_capability: Optional[Dict[str, str]] = None
+    label: str | None = Field(default=None, min_length=1, max_length=128)
+    base_url: str | None = None
+    api_key: str | None = None
+    extra_request_headers: dict[str, str] | None = None
+    extra_request_body: dict[str, Any] | None = None
+    rerank_path: str | None = None
+    capabilities: list[CapabilityLiteral] | None = None
+    model_by_capability: dict[str, str] | None = None
 
 
 class ServiceStatus(BaseModel):
@@ -127,7 +127,7 @@ class ServiceStatus(BaseModel):
     name: str
     status: str  # healthy, unhealthy, unknown
     url: str
-    response_time: Optional[float] = None
+    response_time: float | None = None
 
 
 class BillingSubscription(BaseModel):
@@ -145,15 +145,15 @@ class BillingUsageResourceBucket(BaseModel):
 
 
 class BillingUsageUserBucket(BillingUsageResourceBucket):
-    user_name: Optional[str] = None
+    user_name: str | None = None
 
 
 class BillingUsage(BaseModel):
     """Статистика использования"""
     total_cost: float
     total_calls: int
-    by_resource: Dict[str, BillingUsageResourceBucket]
-    by_user: Dict[str, BillingUsageUserBucket]
+    by_resource: dict[str, BillingUsageResourceBucket]
+    by_user: dict[str, BillingUsageUserBucket]
 
 
 class ChangePlanRequest(BaseModel):
@@ -171,13 +171,13 @@ class PlatformTracingFacetItem(BaseModel):
 class PlatformTracingFacetsResponse(BaseModel):
     """Подсказки для автокомплита (distinct значения)."""
 
-    items: List[str]
+    items: list[str]
 
 
 class PlatformTracingFacetItemsResponse(BaseModel):
     """Подсказки company/user: value = id, label = имя + короткий id."""
 
-    items: List[PlatformTracingFacetItem]
+    items: list[PlatformTracingFacetItem]
 
 
 
@@ -185,33 +185,33 @@ class PlatformTracingFacetItemsResponse(BaseModel):
 class PlatformBillingPricesResponse(BaseModel):
     """Эффективный прайс (конфиг + override) и сырой override из shared storage."""
 
-    static_base: Dict[str, Dict[str, float]]
-    effective: Dict[str, Dict[str, float]]
-    storage_override: Optional[Dict[str, Dict[str, float]]] = None
+    static_base: dict[str, dict[str, float]]
+    effective: dict[str, dict[str, float]]
+    storage_override: dict[str, dict[str, float]] | None = None
 
 
 class PlatformBillingUsageReportResponse(BaseModel):
     """Строки usage из shared БД для админки."""
 
-    items: List[Dict[str, Any]]
+    items: list[dict[str, Any]]
 
 
 class PlatformBillingSettlementRulesResponse(BaseModel):
     """Документ правил span settlement (JSON)."""
 
-    document: Dict[str, Any]
+    document: dict[str, Any]
 
 
 class PlatformBillingCompanyPricesResponse(BaseModel):
     """Эффективный прайс для компании с учетом override и тарифного множителя."""
 
     company_id: str
-    static_base: Dict[str, Dict[str, float]]
-    effective: Dict[str, Dict[str, float]]
-    unit_effective: Optional[Dict[str, Dict[str, float]]] = None
-    tariff_plan: Optional[str] = None
-    tariff_multipliers: Dict[str, Dict[str, float]] = Field(default_factory=dict)
-    storage_override: Optional[Dict[str, Dict[str, float]]] = None
+    static_base: dict[str, dict[str, float]]
+    effective: dict[str, dict[str, float]]
+    unit_effective: dict[str, dict[str, float]] | None = None
+    tariff_plan: str | None = None
+    tariff_multipliers: dict[str, dict[str, float]] = Field(default_factory=dict)
+    storage_override: dict[str, dict[str, float]] | None = None
 
 
 class PlatformBillingCompanyResolveResponse(BaseModel):
@@ -219,7 +219,7 @@ class PlatformBillingCompanyResolveResponse(BaseModel):
 
     company_id: str
     name: str
-    subdomain: Optional[str] = None
+    subdomain: str | None = None
 
 
 class PlatformBillingCompanyOverviewItem(BaseModel):
@@ -227,7 +227,7 @@ class PlatformBillingCompanyOverviewItem(BaseModel):
 
     company_id: str
     name: str
-    subdomain: Optional[str] = None
+    subdomain: str | None = None
     status: str
     tariff_plan: str
     balance: float
@@ -238,7 +238,7 @@ class PlatformBillingCompanyOverviewItem(BaseModel):
 class PlatformBillingCompaniesOverviewResponse(BaseModel):
     """Страница списка компаний с полями биллинга."""
 
-    items: List[PlatformBillingCompanyOverviewItem]
+    items: list[PlatformBillingCompanyOverviewItem]
     has_more: bool
 
 
@@ -251,7 +251,7 @@ class PlatformBillingBalanceGrantRequest(BaseModel):
         le=10_000_000.0,
         description="Сумма в RUB",
     )
-    note: Optional[str] = Field(
+    note: str | None = Field(
         default=None,
         max_length=2000,
         description="Комментарий к гранту (аудит)",

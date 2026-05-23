@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any
 
 from sqlalchemy import bindparam, delete, func, literal_column, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -40,7 +40,7 @@ class DocumentStatusRepository:
         task_id: str,
         namespace_id: str,
         document_name: str,
-        file_size: Optional[int] = None,
+        file_size: int | None = None,
         ttl_seconds: int = 864000,
         extra_metadata: dict[str, Any] | None = None,
     ) -> DocumentStatusModel:
@@ -144,7 +144,7 @@ class DocumentStatusRepository:
         document_id: str,
         chunks: int,
         *,
-        indexing_runtime: Optional[dict[str, Any]] = None,
+        indexing_runtime: dict[str, Any] | None = None,
     ) -> DocumentStatusModel:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
@@ -201,7 +201,7 @@ class DocumentStatusRepository:
                 msg,
             )
 
-    async def get_by_document_id(self, document_id: str) -> Optional[DocumentStatusModel]:
+    async def get_by_document_id(self, document_id: str) -> DocumentStatusModel | None:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             result = await session.execute(
@@ -213,7 +213,7 @@ class DocumentStatusRepository:
                 return DocumentStatusModel.model_validate(db_status)
             return None
 
-    async def get_by_task_id(self, task_id: str) -> Optional[DocumentStatusModel]:
+    async def get_by_task_id(self, task_id: str) -> DocumentStatusModel | None:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             result = await session.execute(
@@ -229,10 +229,10 @@ class DocumentStatusRepository:
         self,
         document_id: str,
         status: str,
-        error: Optional[str] = None,
-        s3_key: Optional[str] = None,
-        s3_bucket: Optional[str] = None,
-        chunks_count: Optional[int] = None,
+        error: str | None = None,
+        s3_key: str | None = None,
+        s3_bucket: str | None = None,
+        chunks_count: int | None = None,
     ) -> DocumentStatusModel:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
@@ -281,7 +281,7 @@ class DocumentStatusRepository:
     async def get_latest_by_namespace_and_document_ids(
         self,
         namespace_id: str,
-        document_ids: List[str],
+        document_ids: list[str],
     ) -> dict[str, DocumentStatusModel]:
         """Строки статуса по паре (namespace_id, document_id)."""
         if not document_ids:
@@ -312,7 +312,7 @@ class DocumentStatusRepository:
         )
 
     async def count_effective_document_status_for_namespaces(
-        self, namespace_ids: List[str]
+        self, namespace_ids: list[str]
     ) -> dict[str, dict[str, int]]:
         """По каждому namespace_id — счётчики pending, processing, completed, failed."""
         keys = ("pending", "processing", "completed", "failed")
@@ -376,9 +376,9 @@ class DocumentStatusRepository:
     async def list_by_namespace(
         self,
         namespace_id: str,
-        status: Optional[List[str]] = None,
+        status: list[str] | None = None,
         limit: int = 100,
-    ) -> List[DocumentStatusModel]:
+    ) -> list[DocumentStatusModel]:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             q = select(DBDocumentStatus).where(DBDocumentStatus.namespace_id == namespace_id)
@@ -393,7 +393,7 @@ class DocumentStatusRepository:
     async def count_chunks_by_namespace_and_document_ids(
         self,
         namespace_id: str,
-        document_ids: List[str],
+        document_ids: list[str],
     ) -> dict[str, int]:
         """Число строк vector_documents (чанков) на документ в namespace."""
         if not document_ids:
@@ -432,7 +432,7 @@ class DocumentStatusRepository:
         *,
         utc_now: datetime,
         limit: int,
-    ) -> List[tuple[str, str]]:
+    ) -> list[tuple[str, str]]:
         """
         Пары (namespace_id, document_id) с истёкшим TTL (UTC).
 
@@ -464,7 +464,7 @@ class DocumentStatusRepository:
             from_status_rows = [(str(ns), str(d)) for ns, d in r1.all()]
 
         remain = limit - len(from_status_rows)
-        from_vector_rows: List[tuple[str, str]] = []
+        from_vector_rows: list[tuple[str, str]] = []
         if remain > 0:
             orphan_sql = text(
                 """
@@ -496,7 +496,7 @@ class DocumentStatusRepository:
                 )
                 from_vector_rows = [(str(row[0]), str(row[1])) for row in r2.all()]
 
-        merged: List[tuple[str, str]] = []
+        merged: list[tuple[str, str]] = []
 
         merged.extend(from_status_rows)
         merged.extend(from_vector_rows)

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
 
 from sqlalchemy import delete, func, select
 
@@ -47,7 +46,7 @@ class PlatformPronunciationRuleRepository:
             )
             return list(result.scalars().all())
 
-    async def get(self, rule_id: str) -> Optional[PlatformPronunciationRule]:
+    async def get(self, rule_id: str) -> PlatformPronunciationRule | None:
         if rule_id == "":
             raise ValueError("rule_id не может быть пустым.")
         session_factory = await get_session_factory(self._db_url)
@@ -63,13 +62,13 @@ class PlatformPronunciationRuleRepository:
         kind: str,
         pattern: str,
         replacement: str,
-        language: Optional[str] = None,
+        language: str | None = None,
         case_sensitive: bool = False,
         word_boundary: bool = True,
-        providers: Optional[list[str]] = None,
-        voices: Optional[list[str]] = None,
+        providers: list[str] | None = None,
+        voices: list[str] | None = None,
         enabled: bool = True,
-        note: Optional[str] = None,
+        note: str | None = None,
     ) -> PlatformPronunciationRule:
         if pattern == "":
             raise ValueError("pattern не может быть пустым.")
@@ -100,17 +99,17 @@ class PlatformPronunciationRuleRepository:
         self,
         rule_id: str,
         *,
-        kind: Optional[str] = None,
-        pattern: Optional[str] = None,
-        replacement: Optional[str] = None,
-        language: Optional[str] = None,
-        case_sensitive: Optional[bool] = None,
-        word_boundary: Optional[bool] = None,
-        providers: Optional[list[str]] = None,
-        voices: Optional[list[str]] = None,
-        enabled: Optional[bool] = None,
-        note: Optional[str] = None,
-    ) -> Optional[PlatformPronunciationRule]:
+        kind: str | None = None,
+        pattern: str | None = None,
+        replacement: str | None = None,
+        language: str | None = None,
+        case_sensitive: bool | None = None,
+        word_boundary: bool | None = None,
+        providers: list[str] | None = None,
+        voices: list[str] | None = None,
+        enabled: bool | None = None,
+        note: str | None = None,
+    ) -> PlatformPronunciationRule | None:
         if rule_id == "":
             raise ValueError("rule_id не может быть пустым.")
         session_factory = await get_session_factory(self._db_url)
@@ -203,7 +202,7 @@ class CompanyPronunciationRuleRepository:
             )
             return list(result.scalars().all())
 
-    async def get(self, *, company_id: str, rule_id: str) -> Optional[CompanyPronunciationRule]:
+    async def get(self, *, company_id: str, rule_id: str) -> CompanyPronunciationRule | None:
         if company_id == "":
             raise ValueError("company_id не может быть пустым.")
         if rule_id == "":
@@ -225,13 +224,13 @@ class CompanyPronunciationRuleRepository:
         kind: str,
         pattern: str,
         replacement: str,
-        language: Optional[str] = None,
+        language: str | None = None,
         case_sensitive: bool = False,
         word_boundary: bool = True,
-        providers: Optional[list[str]] = None,
-        voices: Optional[list[str]] = None,
+        providers: list[str] | None = None,
+        voices: list[str] | None = None,
         enabled: bool = True,
-        note: Optional[str] = None,
+        note: str | None = None,
         max_rules: int = 1000,
     ) -> CompanyPronunciationRule:
         if company_id == "":
@@ -273,17 +272,17 @@ class CompanyPronunciationRuleRepository:
         *,
         company_id: str,
         rule_id: str,
-        kind: Optional[str] = None,
-        pattern: Optional[str] = None,
-        replacement: Optional[str] = None,
-        language: Optional[str] = None,
-        case_sensitive: Optional[bool] = None,
-        word_boundary: Optional[bool] = None,
-        providers: Optional[list[str]] = None,
-        voices: Optional[list[str]] = None,
-        enabled: Optional[bool] = None,
-        note: Optional[str] = None,
-    ) -> Optional[CompanyPronunciationRule]:
+        kind: str | None = None,
+        pattern: str | None = None,
+        replacement: str | None = None,
+        language: str | None = None,
+        case_sensitive: bool | None = None,
+        word_boundary: bool | None = None,
+        providers: list[str] | None = None,
+        voices: list[str] | None = None,
+        enabled: bool | None = None,
+        note: str | None = None,
+    ) -> CompanyPronunciationRule | None:
         if company_id == "":
             raise ValueError("company_id не может быть пустым.")
         if rule_id == "":

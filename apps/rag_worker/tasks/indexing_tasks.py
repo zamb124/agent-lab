@@ -2,7 +2,7 @@
 Tasks для индексации документов через pgvector.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import core.tracing.attributes as trace_attributes
 from apps.rag.container import get_rag_container
@@ -55,8 +55,8 @@ async def index_rag_document_s3_task(
     namespace_id: str,
     s3_key: str,
     document_name: str,
-    metadata: Dict[str, Any],
-) -> Dict[str, Any]:
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
     """
     Одна TaskIQ-задача: индексация S3-файла с конфигом ``rag.document_indexing`` (settings).
     """
@@ -153,7 +153,7 @@ async def delete_document_task(
     document_id: str,
     company_id: str,
     user_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Удаление документа из vector_documents.
 
@@ -204,8 +204,8 @@ async def process_document_upload(
     namespace_id: str,
     file_data: bytes,
     document_name: str,
-    metadata: Dict[str, Any],
-) -> Dict[str, Any]:
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
     """
     Полная обработка загрузки документа:
     1. Загрузка в S3

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from pydantic import ValidationError
@@ -44,7 +44,7 @@ _BILLING_COMPANY_LIST_CAP = 2000
 _COMPANIES_OVERVIEW_MAX_LIMIT = 500
 
 
-def _billing_overview_subdomain(c: Company) -> Optional[str]:
+def _billing_overview_subdomain(c: Company) -> str | None:
     """Для system без subdomain в storage отдаём каноническое значение (админка биллинга)."""
     if c.company_id != SYSTEM_COMPANY_ID:
         return c.subdomain
@@ -128,10 +128,10 @@ def _require_system(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Доступно только для компании system")
 
 
-def _validate_price_catalog(data: Any) -> Dict[str, Dict[str, float]]:
+def _validate_price_catalog(data: Any) -> dict[str, dict[str, float]]:
     if not isinstance(data, dict):
         raise HTTPException(status_code=422, detail="Тело запроса должно быть JSON-объектом категорий")
-    out: Dict[str, Dict[str, float]] = {}
+    out: dict[str, dict[str, float]] = {}
     for cat, resources in data.items():
         if not isinstance(cat, str):
             raise HTTPException(status_code=422, detail=f"Ключ категории должен быть строкой: {cat!r}")
@@ -142,7 +142,7 @@ def _validate_price_catalog(data: Any) -> Dict[str, Dict[str, float]]:
             )
         if not isinstance(resources, dict):
             raise HTTPException(status_code=422, detail=f"Категория {cat!r} должна быть объектом resource->price")
-        bucket: Dict[str, float] = {}
+        bucket: dict[str, float] = {}
         for res_name, price in resources.items():
             if not isinstance(res_name, str):
                 raise HTTPException(status_code=422, detail=f"Имя ресурса в {cat!r} должно быть строкой")
@@ -251,7 +251,7 @@ async def resolve_billing_company(
 async def facet_billing_companies(
     request: Request,
     container: ContainerDep,
-    q: Optional[str] = Query(default=None),
+    q: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetItemsResponse:
     _require_system(request)
@@ -286,7 +286,7 @@ async def facet_billing_companies(
 async def get_billing_prices(request: Request, container: ContainerDep) -> PlatformBillingPricesResponse:
     _require_system(request)
     raw = await container.shared_storage.get(_STORAGE_PRICES_KEY, force_global=True)
-    override: Optional[Dict[str, Dict[str, float]]] = None
+    override: dict[str, dict[str, float]] | None = None
     if raw:
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):
@@ -304,7 +304,7 @@ async def get_billing_prices(request: Request, container: ContainerDep) -> Platf
 async def put_billing_prices(
     request: Request,
     container: ContainerDep,
-    body: Dict[str, Any] = Body(...),
+    body: dict[str, Any] = Body(...),
 ) -> dict[str, str]:
     _require_system(request)
     catalog = _validate_price_catalog(body)
@@ -356,7 +356,7 @@ async def put_settlement_rules(
     request: Request,
     container: ContainerDep,
     company_id: str,
-    body: Dict[str, Any] = Body(...),
+    body: dict[str, Any] = Body(...),
 ) -> dict[str, str]:
     _require_system(request)
     cid = company_id.strip()
@@ -395,7 +395,7 @@ async def get_company_billing_prices(
         raise HTTPException(status_code=422, detail="company_id не может быть пустым")
     key = company_resource_prices_storage_key(cid)
     raw = await container.shared_storage.get(key, force_global=True)
-    override: Optional[Dict[str, Dict[str, float]]] = None
+    override: dict[str, dict[str, float]] | None = None
     if raw:
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):
@@ -430,7 +430,7 @@ async def put_company_billing_prices(
     request: Request,
     container: ContainerDep,
     company_id: str,
-    body: Dict[str, Any] = Body(...),
+    body: dict[str, Any] = Body(...),
 ) -> dict[str, str]:
     _require_system(request)
     cid = company_id.strip()
@@ -449,7 +449,7 @@ async def put_company_billing_prices(
 async def facet_usage_types(
     request: Request,
     container: ContainerDep,
-    q: Optional[str] = Query(default=None),
+    q: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetItemsResponse:
     _require_system(request)
@@ -473,7 +473,7 @@ async def facet_usage_types(
 async def facet_resource_names(
     request: Request,
     container: ContainerDep,
-    q: Optional[str] = Query(default=None),
+    q: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
 ) -> PlatformTracingFacetItemsResponse:
     _require_system(request)
@@ -487,11 +487,11 @@ async def facet_resource_names(
 async def get_usage_report(
     request: Request,
     container: ContainerDep,
-    company_id: Optional[str] = Query(default=None),
-    usage_type: Optional[str] = Query(default=None),
-    resource_name: Optional[str] = Query(default=None),
-    from_time: Optional[datetime] = Query(default=None, alias="from"),
-    to_time: Optional[datetime] = Query(default=None, alias="to"),
+    company_id: str | None = Query(default=None),
+    usage_type: str | None = Query(default=None),
+    resource_name: str | None = Query(default=None),
+    from_time: datetime | None = Query(default=None, alias="from"),
+    to_time: datetime | None = Query(default=None, alias="to"),
     limit: int = Query(default=200, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
 ) -> PlatformBillingUsageReportResponse:

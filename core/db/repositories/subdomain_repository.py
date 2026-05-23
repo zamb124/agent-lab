@@ -3,7 +3,6 @@
 Использует shared БД, is_global=True (не изолирован по компаниям).
 """
 
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -40,7 +39,7 @@ class SubdomainRepository(BaseRepository[SubdomainMapping]):
     def _extract_entity_id(self, entity: SubdomainMapping) -> str:
         return entity.subdomain
 
-    async def get_company_id(self, subdomain: str) -> Optional[str]:
+    async def get_company_id(self, subdomain: str) -> str | None:
         """
         Получает company_id по subdomain.
 

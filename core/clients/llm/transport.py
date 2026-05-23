@@ -7,8 +7,9 @@ import json
 import re
 import time
 import uuid
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
-from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional
+from typing import Any, cast
 
 import httpx
 from a2a.types import (
@@ -33,7 +34,7 @@ from core.clients.llm.errors import (
     LLMStreamUserCancelledError,
 )
 from core.clients.llm.logging import log_llm_stream_response
-from core.clients.llm.messages import StreamEvent
+from core.clients.llm.messages import LLMToolCall, LLMToolCallFunction, StreamEvent
 from core.clients.llm.messages import messages_to_openai as _messages_to_openai
 from core.clients.llm.openai_compat import (
     masked_headers as _masked_headers,
@@ -50,6 +51,7 @@ from core.http.egress_route_preference import (
     normalized_http_origin,
 )
 from core.logging import get_logger
+from core.types import JsonValue, require_json_object
 from core.utils.background import run_with_log_context
 
 logger = get_logger(__name__)
@@ -57,22 +59,22 @@ logger = get_logger(__name__)
 
 async def stream_once(
     client: Any,
-    messages: List[Message],
-    tools: Optional[List[Dict[str, Any]]] = None,
-    response_format: Optional[Dict[str, Any]] = None,
-    task_id: Optional[str] = None,
-    context_id: Optional[str] = None,
-    temperature: Optional[float] = None,
-    top_p: Optional[float] = None,
-    top_k: Optional[int] = None,
-    max_tokens: Optional[int] = None,
-    frequency_penalty: Optional[float] = None,
-    presence_penalty: Optional[float] = None,
-    seed: Optional[int] = None,
-    reasoning_effort: Optional[str] = None,
-    extra_body: Optional[Dict[str, Any]] = None,
-    extra_headers: Optional[Dict[str, str]] = None,
-    stream_cancel_poll: Optional[Callable[[], Awaitable[bool]]] = None,
+    messages: list[Message],
+    tools: list[dict[str, Any]] | None = None,
+    response_format: dict[str, Any] | None = None,
+    task_id: str | None = None,
+    context_id: str | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    top_k: int | None = None,
+    max_tokens: int | None = None,
+    frequency_penalty: float | None = None,
+    presence_penalty: float | None = None,
+    seed: int | None = None,
+    reasoning_effort: str | None = None,
+    extra_body: dict[str, Any] | None = None,
+    extra_headers: dict[str, str] | None = None,
+    stream_cancel_poll: Callable[[], Awaitable[bool]] | None = None,
 ) -> AsyncGenerator[StreamEvent, None]:
     """
     Stream-first метод вызова LLM.
@@ -101,7 +103,7 @@ async def stream_once(
 
     openai_messages = _messages_to_openai(messages)
 
-    headers: Dict[str, str] = {
+    headers: dict[str, str] = {
         "Authorization": f"Bearer {client.api_key}",
         "Content-Type": "application/json",
     }
@@ -112,7 +114,7 @@ async def stream_once(
     request_temperature = temperature if temperature is not None else client.temperature
     request_max_tokens = max_tokens if max_tokens is not None else client.max_tokens
 
-    body: Dict[str, Any] = {
+    body: dict[str, Any] = {
         "model": client.model,
         "messages": openai_messages,
         "temperature": request_temperature,
@@ -170,8 +172,8 @@ async def stream_once(
 
     full_content = ""
     full_reasoning = ""
-    tool_calls_buffer: Dict[int, Dict[str, Any]] = {}
-    usage_data: Dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    tool_calls_buffer: dict[int, dict[str, Any]] = {}
+    usage_data: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     stream_start_time = time.monotonic()
 
     async with get_httpx_client(timeout=client.timeout, strategy=ProxyStrategy.SMART) as http_client:
@@ -237,7 +239,7 @@ async def stream_once(
                 # Shared mutable: watchdog обновляет/читает last_chunk_time
                 last_chunk_time = time.monotonic()
                 chunks_received = 0
-                idle_watch_task: Optional[asyncio.Task[None]] = None
+                idle_watch_task: asyncio.Task[None] | None = None
 
                 async def _watch_idle_and_cancel() -> None:
                     """Watchdog: отмена по poll + idle timeout."""
@@ -469,12 +471,12 @@ async def stream_once(
             raise
 
     if tool_calls_buffer:
-        parsed_tool_calls = []
+        parsed_tool_calls: list[LLMToolCall] = []
         for tool_call_index in sorted(tool_calls_buffer.keys()):
             tool_call_buffer_entry = tool_calls_buffer[tool_call_index]
             try:
-                tool_call_arguments = (
-                    json.loads(tool_call_buffer_entry["arguments"])
+                parsed_arguments = (
+                    cast(JsonValue, json.loads(tool_call_buffer_entry["arguments"]))
                     if tool_call_buffer_entry["arguments"]
                     else {}
                 )
@@ -483,17 +485,21 @@ async def stream_once(
                     "LLM tool call arguments must be valid JSON: "
                     f"{tool_call_buffer_entry['name']}"
                 ) from exc
+            tool_call_arguments = require_json_object(
+                parsed_arguments,
+                f"llm.tool_calls[{tool_call_index}].arguments",
+            )
             parsed_tool_calls.append(
-                {
-                    "id": tool_call_buffer_entry["id"],
-                    "type": "function",
-                    "function": {
-                        "name": tool_call_buffer_entry["name"],
-                        "arguments": tool_call_buffer_entry["arguments"],
-                    },
-                    "name": tool_call_buffer_entry["name"],
-                    "arguments": tool_call_arguments,
-                }
+                LLMToolCall(
+                    id=tool_call_buffer_entry["id"],
+                    type="function",
+                    function=LLMToolCallFunction(
+                        name=tool_call_buffer_entry["name"],
+                        arguments=tool_call_buffer_entry["arguments"],
+                    ),
+                    name=tool_call_buffer_entry["name"],
+                    arguments=tool_call_arguments,
+                )
             )
 
         message = Message(
@@ -501,7 +507,10 @@ async def stream_once(
             role=Role.agent,
             parts=[Part(root=TextPart(text=full_content))],
             metadata={
-                "tool_calls": parsed_tool_calls,
+                "tool_calls": [
+                    tool_call.model_dump(mode="json", exclude_none=True)
+                    for tool_call in parsed_tool_calls
+                ],
                 "usage": usage_data,
                 "model": client.model,
                 "provider": client.llm_provider,
@@ -563,12 +572,12 @@ async def stream_once(
 
 async def invoke_once(
     client: Any,
-    messages: List[Message],
+    messages: list[Message],
     json_output: bool = False,
-    max_tokens: Optional[int] = None,
-    extra_body: Optional[Dict[str, Any]] = None,
-    extra_headers: Optional[Dict[str, str]] = None,
-) -> str | Dict[str, Any]:
+    max_tokens: int | None = None,
+    extra_body: dict[str, Any] | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> str | dict[str, Any]:
     """
     Non-streaming вызов LLM.
 
@@ -586,7 +595,7 @@ async def invoke_once(
     """
     openai_messages = _messages_to_openai(messages)
 
-    headers: Dict[str, str] = {
+    headers: dict[str, str] = {
         "Authorization": f"Bearer {client.api_key}",
         "Content-Type": "application/json",
     }
@@ -594,7 +603,7 @@ async def invoke_once(
     if extra_headers:
         headers.update(extra_headers)
 
-    body: Dict[str, Any] = {
+    body: dict[str, Any] = {
         "model": client.model,
         "messages": openai_messages,
         "temperature": client.temperature,

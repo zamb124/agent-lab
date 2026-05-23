@@ -3,20 +3,20 @@ TraceContext для propagation между процессами (API → TaskIQ 
 """
 
 from contextvars import ContextVar
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
 # ContextVar для хранения trace context в worker
-_trace_context_var: ContextVar[Optional[Dict[str, Any]]] = ContextVar("trace_context", default=None)
+_trace_context_var: ContextVar[dict[str, Any] | None] = ContextVar("trace_context", default=None)
 
 
-def get_current_trace_context() -> Optional[Dict[str, Any]]:
+def get_current_trace_context() -> dict[str, Any] | None:
     """Получает текущий trace context из ContextVar."""
     return _trace_context_var.get()
 
 
-def set_current_trace_context(trace_context: Optional[Dict[str, Any]]) -> None:
+def set_current_trace_context(trace_context: dict[str, Any] | None) -> None:
     """Устанавливает trace context в ContextVar."""
     _trace_context_var.set(trace_context)
 
@@ -30,31 +30,31 @@ class TraceContext(BaseModel):
 
     trace_id: str
     span_id: str
-    parent_span_id: Optional[str] = None
+    parent_span_id: str | None = None
 
     # Данные пользователя для записи в spans
-    user_id: Optional[str] = None
-    user_name: Optional[str] = None
-    user_groups: List[str] = Field(default_factory=list)
+    user_id: str | None = None
+    user_name: str | None = None
+    user_groups: list[str] = Field(default_factory=list)
 
     # Сессии
-    session_auth: Optional[str] = None
-    session_agent: Optional[str] = None
+    session_auth: str | None = None
+    session_agent: str | None = None
 
     # Идентификаторы запроса
-    task_id: Optional[str] = None
-    context_id: Optional[str] = None
-    flow_id: Optional[str] = None
-    branch_id: Optional[str] = None
-    channel: Optional[str] = None
+    task_id: str | None = None
+    context_id: str | None = None
+    flow_id: str | None = None
+    branch_id: str | None = None
+    channel: str | None = None
     is_resume: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Сериализует контекст для передачи через TaskIQ."""
         return self.model_dump()
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TraceContext":
+    def from_dict(cls, data: dict[str, Any]) -> "TraceContext":
         """Восстанавливает контекст из dict."""
         return cls.model_validate(data)
 

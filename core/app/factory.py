@@ -21,9 +21,10 @@
     )
 """
 
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -101,7 +102,7 @@ def load_service_settings(
 
     merged_config = load_merged_config(service_name=service_name, silent=True)
 
-    settings = settings_class(**merged_config)
+    settings = settings_class.model_validate(merged_config)
 
     return settings, project_root
 

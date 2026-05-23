@@ -7,7 +7,7 @@ Resource = переиспользуемый компонент доступны�
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Self
+from typing import ClassVar, Self, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -16,13 +16,18 @@ from core.clients.llm.config import (
     ReasoningEffort,
     validate_fallback_model_configs,
 )
+from core.llm_context.models import LLMContextPatch
 from core.models import StrictBaseModel
+from core.rag.rag_resource_bind import RagResourceBindParams
+from core.types import JsonObject, JsonValue, require_json_object
 
 
 class ResourceType(str, Enum):
     """Типы ресурсов."""
 
     LLM = "llm"
+    LLM_CONTEXT = "llm_context"
+    RAG = "rag"
     FILES = "files"
 
 
@@ -63,7 +68,7 @@ class LLMResourcePatch(StrictBaseModel):
     Все поля опциональны; неизвестные ключи в JSON запрещены (extra=forbid).
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: str | None = Field(default=None)
     model: str | None = Field(default=None)
@@ -79,7 +84,7 @@ class LLMResourcePatch(StrictBaseModel):
     api_key: str | None = Field(default=None)
     folder_id: str | None = Field(default=None)
     base_url: str | None = Field(default=None)
-    extra_request_body: dict[str, Any] | None = Field(default=None)
+    extra_request_body: JsonObject | None = Field(default=None)
     extra_request_headers: dict[str, str] | None = Field(default=None)
 
     @field_validator("fallback_models")
@@ -92,30 +97,32 @@ class LLMResourcePatch(StrictBaseModel):
 
     @field_validator("extra_request_body", mode="before")
     @classmethod
-    def _extra_body_must_be_object(cls, v: Any) -> Any:
-        if v is None:
+    def _extra_body_must_be_object(cls, value: JsonValue) -> JsonObject | None:
+        if value is None:
             return None
-        if isinstance(v, dict):
-            return v
+        if isinstance(value, dict):
+            return require_json_object(value, "extra_request_body")
         raise ValueError("extra_request_body должен быть объектом JSON, не массивом и не скаляром")
 
     @field_validator("extra_request_headers", mode="before")
     @classmethod
-    def _extra_headers_must_be_object(cls, v: Any) -> Any:
-        if v is None:
+    def _extra_headers_must_be_object(cls, value: JsonValue) -> dict[str, str] | None:
+        if value is None:
             return None
-        if not isinstance(v, dict):
+        if not isinstance(value, dict):
             raise ValueError("extra_request_headers должен быть объектом JSON, не массивом и не скаляром")
-        for key, val in v.items():
-            if not isinstance(key, str) or not key.strip():
+        headers: dict[str, str] = {}
+        for key, val in value.items():
+            if not key.strip():
                 raise ValueError("extra_request_headers: ключи — непустые строки")
             if not isinstance(val, str):
                 raise ValueError("extra_request_headers: значения должны быть строками")
-        return v
+            headers[key] = val
+        return headers
 
 
 
-ResourceConfigUnion = LLMResourceConfig | dict[str, Any]
+ResourceConfigUnion: TypeAlias = LLMResourceConfig | LLMContextPatch | RagResourceBindParams | JsonObject
 
 
 class ResourceDefinition(StrictBaseModel):
@@ -131,7 +138,7 @@ class ResourceDefinition(StrictBaseModel):
     type: ResourceType = Field(..., description="Тип ресурса")
     name: str | None = Field(default=None, description="Название для отображения")
     description: str | None = Field(default=None, description="Описание ресурса")
-    config: dict[str, Any] = Field(..., description="Конфигурация ресурса")
+    config: JsonObject = Field(..., description="Конфигурация ресурса")
     tags: list[str] = Field(default_factory=list, description="Теги для группировки")
     permission: list[str] = Field(
         default_factory=list,
@@ -150,21 +157,24 @@ class ResourceDefinition(StrictBaseModel):
             return [v]
         return v
 
-    def get_typed_config(self) -> LLMResourceConfig:
+    def get_typed_config(self) -> ResourceConfigUnion:
         """Возвращает типизированный конфиг."""
         return parse_typed_resource_config(self.type, self.config)
 
 
 def parse_typed_resource_config(
     resource_type: ResourceType,
-    config: dict[str, Any],
+    config: JsonObject,
 ) -> ResourceConfigUnion:
     """Строгая материализация config по ResourceType."""
     if resource_type == ResourceType.LLM:
         return LLMResourceConfig.model_validate(config)
+    if resource_type == ResourceType.LLM_CONTEXT:
+        return LLMContextPatch.model_validate(config)
+    if resource_type == ResourceType.RAG:
+        return RagResourceBindParams.model_validate(config)
     if resource_type == ResourceType.FILES:
         return dict(config)
-    raise ValueError(f"Unknown resource type: {resource_type!r}")
 
 
 class ResourceReference(BaseModel):
@@ -184,7 +194,7 @@ class ResourceReference(BaseModel):
 
     type: ResourceType | None = Field(default=None, description="Тип ресурса (для inline)")
     resource_id: str | None = Field(default=None, description="ID shared ресурса из БД")
-    config: dict[str, Any] | None = Field(default=None, description="Конфигурация или override")
+    config: JsonObject | None = Field(default=None, description="Конфигурация или override")
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
 
@@ -210,12 +220,19 @@ class ResourceReference(BaseModel):
         return self.resource_id is not None
 
 
+ResourceReferenceInput: TypeAlias = ResourceReference | JsonObject
+ResourceMapInput: TypeAlias = dict[str, ResourceReferenceInput]
+
+
 __all__ = [
     "ResourceType",
     "LLMResourceConfig",
     "LLMResourcePatch",
+    "RagResourceBindParams",
     "ResourceConfigUnion",
     "parse_typed_resource_config",
     "ResourceDefinition",
     "ResourceReference",
+    "ResourceReferenceInput",
+    "ResourceMapInput",
 ]

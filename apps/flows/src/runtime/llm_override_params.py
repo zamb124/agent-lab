@@ -2,14 +2,45 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, TypedDict
 
 from apps.flows.src.models.node_config import NodeLLMConfig
-from core.clients.llm.config import LLMCallConfig
+from core.clients.llm.config import LLMCallConfig, ReasoningEffort
+from core.types import JsonObject, require_json_object
 from core.variables import VariableResolutionError, VarResolver
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
+
+
+class LLMStreamKwargs(TypedDict, total=False):
+    top_p: float
+    top_k: int
+    frequency_penalty: float
+    presence_penalty: float
+    seed: int
+    reasoning_effort: ReasoningEffort
+    extra_body: JsonObject
+    extra_headers: dict[str, str]
+
+
+class LLMClientKwargs(TypedDict, total=False):
+    model_name: str | None
+    temperature: float | None
+    provider: str | None
+    api_key: str | None
+    base_url: str | None
+    folder_id: str | None
+    max_tokens: int | None
+    fallback_models: list[LLMCallConfig] | None
+    top_p: float | None
+    top_k: int | None
+    frequency_penalty: float | None
+    presence_penalty: float | None
+    seed: int | None
+    reasoning_effort: ReasoningEffort | None
+    extra_request_body: JsonObject | None
+    extra_request_headers: dict[str, str] | None
 
 
 def split_llm_config_for_client(
@@ -39,7 +70,7 @@ def split_llm_config_for_client(
     )
 
 
-def stream_kwargs_from_llm_config(config: NodeLLMConfig | None) -> dict[str, Any]:
+def stream_kwargs_from_llm_config(config: NodeLLMConfig | None) -> LLMStreamKwargs:
     """
     Именованные аргументы для LLMClient.stream (и MockLLM.stream игнорирует лишнее).
 
@@ -47,7 +78,7 @@ def stream_kwargs_from_llm_config(config: NodeLLMConfig | None) -> dict[str, Any
     """
     if not config:
         return {}
-    out: dict[str, Any] = {}
+    out: LLMStreamKwargs = {}
     if config.top_p is not None:
         out["top_p"] = config.top_p
     if config.top_k is not None:
@@ -61,18 +92,21 @@ def stream_kwargs_from_llm_config(config: NodeLLMConfig | None) -> dict[str, Any
     if config.reasoning_effort is not None:
         out["reasoning_effort"] = config.reasoning_effort
     if config.extra_request_body:
-        out["extra_body"] = dict(config.extra_request_body)
+        out["extra_body"] = require_json_object(
+            config.extra_request_body,
+            "llm.extra_request_body",
+        )
     return out
 
 
 def client_kwargs_from_llm_config(
     config: NodeLLMConfig | None,
     state: ExecutionState | None,
-) -> dict[str, Any]:
+) -> LLMClientKwargs:
     """Arguments for get_llm/get_llm_for_state from the full LLM config."""
     if not config:
         return {}
-    out: dict[str, Any] = {
+    out: LLMClientKwargs = {
         "model_name": config.model,
         "temperature": config.temperature,
         "provider": config.provider,
@@ -87,7 +121,11 @@ def client_kwargs_from_llm_config(
         "presence_penalty": config.presence_penalty,
         "seed": config.seed,
         "reasoning_effort": config.reasoning_effort,
-        "extra_request_body": config.extra_request_body,
+        "extra_request_body": (
+            require_json_object(config.extra_request_body, "llm.extra_request_body")
+            if config.extra_request_body
+            else None
+        ),
     }
     if config.extra_request_headers:
         out["extra_request_headers"] = {
@@ -116,7 +154,7 @@ def _resolve_str_var(value: str, state: ExecutionState | None) -> str:
 def resolve_llm_config_stream_kwargs(
     config: NodeLLMConfig | None,
     state: ExecutionState | None,
-) -> dict[str, Any]:
+) -> LLMStreamKwargs:
     """
     stream_kwargs_from_llm_config + резолв @var: в extra_request_headers.
     extra_headers мержится в LLMClient последним (перекрывает Authorization и default_headers).
@@ -127,9 +165,8 @@ def resolve_llm_config_stream_kwargs(
     hdrs: dict[str, str] = {}
     for k, v in config.extra_request_headers.items():
         hdrs[k] = _resolve_str_var(v, state)
-    out = dict(kw)
-    out["extra_headers"] = hdrs
-    return out
+    kw["extra_headers"] = hdrs
+    return kw
 
 
 # Обратно совместимые alias-импорты для старых тестов/модулей.

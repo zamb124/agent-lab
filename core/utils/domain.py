@@ -6,14 +6,13 @@
 from __future__ import annotations
 
 import ipaddress
-from typing import Optional
 from urllib.parse import urlparse
 
 PRIMARY_DOMAIN = "humanitec.ru"
 SUPPORTED_DOMAINS = ["humanitec.ru", "agents-lab.ru"]
 
 
-def split_host_port(host: str) -> tuple[str, Optional[str]]:
+def split_host_port(host: str) -> tuple[str, str | None]:
     """
     Разбор Host header: имя и опциональный порт.
 
@@ -38,7 +37,7 @@ def split_host_port(host: str) -> tuple[str, Optional[str]]:
     return host.lower(), None
 
 
-def _ip_dev_base(hostname: str) -> Optional[str]:
+def _ip_dev_base(hostname: str) -> str | None:
     """Loopback / private / link-local IP для локальной разработки и LAN."""
     try:
         ip = ipaddress.ip_address(hostname)

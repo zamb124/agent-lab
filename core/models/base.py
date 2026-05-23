@@ -5,6 +5,8 @@ StrictBaseModel - базовый класс с extra='forbid' для Zero-Guess 
 FlexibleBaseModel - базовый класс с extra='allow' для runtime данных.
 """
 
+from typing import ClassVar
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -31,7 +33,7 @@ class StrictBaseModel(BaseModel):
         >>> UserConfig(name="Bob", age=25, extra_field="value")  # ❌ ValidationError
     """
 
-    model_config = ConfigDict(
+    model_config: ClassVar[ConfigDict] = ConfigDict(
         extra='forbid',              # Запрещаем неизвестные поля
         validate_assignment=True,    # Валидация при присваивании
         use_enum_values=True,        # Используем значения Enum
@@ -57,7 +59,7 @@ class FlexibleBaseModel(BaseModel):
     Конфигурация должна быть строгой (StrictBaseModel).
     """
 
-    model_config = ConfigDict(
+    model_config: ClassVar[ConfigDict] = ConfigDict(
         extra='allow',                # Разрешаем дополнительные поля
         validate_assignment=False,    # Без валидации при присваивании (производительность)
         use_enum_values=True,

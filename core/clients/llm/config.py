@@ -7,7 +7,7 @@ it from core without creating a core -> apps dependency.
 
 from __future__ import annotations
 
-from typing import Any, Dict, FrozenSet, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -24,29 +24,29 @@ class LLMCallConfig(StrictBaseModel):
     overrides; by the time the HTTP client attempts a call, both are resolved.
     """
 
-    provider: Optional[str] = Field(default=None)
-    model: Optional[str] = Field(default=None)
-    temperature: Optional[float] = Field(default=None)
-    max_tokens: Optional[int] = Field(default=None)
-    api_key: Optional[str] = Field(default=None)
-    folder_id: Optional[str] = Field(default=None)
-    base_url: Optional[str] = Field(default=None)
-    top_p: Optional[float] = Field(default=None)
-    top_k: Optional[int] = Field(default=None)
-    frequency_penalty: Optional[float] = Field(default=None)
-    presence_penalty: Optional[float] = Field(default=None)
-    seed: Optional[int] = Field(default=None)
-    reasoning_effort: Optional[ReasoningEffort] = Field(default=None)
-    extra_request_body: Optional[Dict[str, Any]] = Field(default=None)
-    extra_request_headers: Optional[Dict[str, str]] = Field(default=None)
+    provider: str | None = Field(default=None)
+    model: str | None = Field(default=None)
+    temperature: float | None = Field(default=None)
+    max_tokens: int | None = Field(default=None)
+    api_key: str | None = Field(default=None)
+    folder_id: str | None = Field(default=None)
+    base_url: str | None = Field(default=None)
+    top_p: float | None = Field(default=None)
+    top_k: int | None = Field(default=None)
+    frequency_penalty: float | None = Field(default=None)
+    presence_penalty: float | None = Field(default=None)
+    seed: int | None = Field(default=None)
+    reasoning_effort: ReasoningEffort | None = Field(default=None)
+    extra_request_body: dict[str, Any] | None = Field(default=None)
+    extra_request_headers: dict[str, str] | None = Field(default=None)
 
     # Runtime-метаданные, которые core LLM client использует для resolved attempts.
-    default_headers: Dict[str, str] = Field(default_factory=dict, exclude=True)
+    default_headers: dict[str, str] = Field(default_factory=dict, exclude=True)
     source: str = Field(default="explicit", exclude=True)
-    supported_parameters: FrozenSet[str] = Field(default_factory=frozenset, exclude=True)
-    input_modalities: FrozenSet[str] = Field(default_factory=frozenset, exclude=True)
-    output_modalities: FrozenSet[str] = Field(default_factory=frozenset, exclude=True)
-    context_length: Optional[int] = Field(default=None, exclude=True)
+    supported_parameters: frozenset[str] = Field(default_factory=frozenset, exclude=True)
+    input_modalities: frozenset[str] = Field(default_factory=frozenset, exclude=True)
+    output_modalities: frozenset[str] = Field(default_factory=frozenset, exclude=True)
+    context_length: int | None = Field(default=None, exclude=True)
 
     @field_validator("provider", "model", "api_key", "folder_id", "base_url", mode="before")
     @classmethod
@@ -110,8 +110,8 @@ class LLMCallConfig(StrictBaseModel):
 
 
 def validate_fallback_model_configs(
-    configs: Optional[list[LLMCallConfig]],
-) -> Optional[list[LLMCallConfig]]:
+    configs: list[LLMCallConfig] | None,
+) -> list[LLMCallConfig] | None:
     if configs is None:
         return None
     for fallback_index, fallback_config in enumerate(configs):

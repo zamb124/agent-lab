@@ -24,7 +24,8 @@ Real-time длительность voice-сессии и поминутный у
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from core.billing import get_billing_service
 from core.billing.service import COST_ORIGIN_COMPANY, COST_ORIGIN_PLATFORM
@@ -35,7 +36,7 @@ from core.models.identity_models import Company, User
 logger = get_logger(__name__)
 
 
-def _resolve_actor(*, user: Optional[User], company: Optional[Company]) -> tuple[User, Company]:
+def _resolve_actor(*, user: User | None, company: Company | None) -> tuple[User, Company]:
     if user is None:
         raise ValueError("voice_usage: user обязателен.")
     if company is None:
@@ -49,7 +50,7 @@ async def record_stt_usage(
     company: Company,
     provider: str,
     audio_seconds: float,
-    metadata: Optional[Mapping[str, Any]] = None,
+    metadata: Mapping[str, Any] | None = None,
     cost_origin: str = COST_ORIGIN_PLATFORM,
 ) -> str:
     """Записать списание за STT-вызов.
@@ -97,7 +98,7 @@ async def record_tts_usage(
     company: Company,
     provider: str,
     char_count: int,
-    metadata: Optional[Mapping[str, Any]] = None,
+    metadata: Mapping[str, Any] | None = None,
     cost_origin: str = COST_ORIGIN_PLATFORM,
 ) -> str:
     """Записать списание за TTS-вызов; при ``cost_origin=company`` cost=0."""

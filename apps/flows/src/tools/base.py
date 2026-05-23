@@ -13,9 +13,10 @@ from __future__ import annotations
 import hashlib
 import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar
+from collections.abc import Awaitable, Callable, Mapping
+from typing import TYPE_CHECKING, ClassVar, TypeAlias, override
 
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel
 
 from apps.flows.config import get_settings
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
@@ -27,6 +28,7 @@ from core.auth import permission_checker
 from core.config.testing import is_testing
 from core.logging import get_logger
 from core.state import parse_interrupt_body_from_external_dict
+from core.types import JsonArray, JsonObject, JsonValue, require_json_object, require_json_value
 
 
 def sanitize_tool_name(name: str) -> str:
@@ -52,35 +54,48 @@ logger = get_logger(__name__)
 
 # Тип для permission: строка или список строк
 Permission = str | list[str] | None
+ToolArguments: TypeAlias = JsonObject
+ToolResult: TypeAlias = JsonValue
+ToolFunctionResult: TypeAlias = ToolResult | Awaitable[ToolResult]
+ToolMockResponse: TypeAlias = ToolResult | Callable[..., ToolFunctionResult]
+ToolParametersSchema: TypeAlias = JsonObject
+OpenAIToolSchema: TypeAlias = JsonObject
 
 
-def _external_api_flat_args_schema_to_model(schema: dict[str, Any]) -> type[BaseModel]:
-    """Плоский {name: {type, description, default?}} -> Pydantic-модель для BaseTool.parameters."""
-    fields = {}
-    for name, meta in schema.items():
-        if not isinstance(meta, dict):
+def _external_api_flat_args_schema_to_parameters_schema(
+    schema: Mapping[str, JsonValue],
+) -> ToolParametersSchema:
+    """Плоский {name: {type, description, default?}} -> JSON Schema параметров tool."""
+    properties: JsonObject = {}
+    required: JsonArray = []
+
+    for name, raw_meta in schema.items():
+        if not isinstance(raw_meta, dict):
             raise ValueError(
-                f"ExternalAPITool args_schema['{name}'] must be a dict, got {type(meta).__name__}"
+                f"ExternalAPITool args_schema['{name}'] must be a dict, got {type(raw_meta).__name__}"
             )
-        field_type: type = str
-        type_str = meta.get("type", "string")
-        if type_str == "integer":
-            field_type = int
-        elif type_str == "number":
-            field_type = float
-        elif type_str == "boolean":
-            field_type = bool
-        elif type_str == "array":
-            field_type = list
-        elif type_str == "object":
-            field_type = dict
-        description = meta.get("description", "")
-        default = meta.get("default", ...)
-        if default is ...:
-            fields[name] = (field_type, Field(description=description))
+        meta = require_json_object(raw_meta, f"ExternalAPITool args_schema.{name}")
+        raw_type = meta.get("type", "string")
+        if not isinstance(raw_type, str):
+            raise ValueError(f"ExternalAPITool args_schema['{name}'].type must be a string")
+        if raw_type not in {"string", "integer", "number", "boolean", "array", "object"}:
+            raise ValueError(
+                f"ExternalAPITool args_schema['{name}'].type has unsupported value: {raw_type}"
+            )
+        raw_description = meta.get("description", "")
+        if not isinstance(raw_description, str):
+            raise ValueError(
+                f"ExternalAPITool args_schema['{name}'].description must be a string"
+            )
+
+        entry: JsonObject = {"type": raw_type, "description": raw_description}
+        if "default" in meta:
+            entry["default"] = meta["default"]
         else:
-            fields[name] = (field_type, Field(default=default, description=description))
-    return create_model("ExternalAPIToolArgs", **fields)
+            required.append(name)
+        properties[name] = entry
+
+    return {"type": "object", "properties": properties, "required": required}
 
 
 def is_test_mode() -> bool:
@@ -120,18 +135,21 @@ class BaseTool(ABC):
     react_role: ReactToolRole = ReactToolRole.STANDARD
 
     # Mock ответ для тестов (переопределить в наследниках)
-    mock_response: Any = "mock_result"
+    mock_response: ToolMockResponse | None = "mock_result"
 
     def get_tags(self) -> list[str]:
         """Возвращает теги/группы тула."""
         return self.tags if self.tags else ["misc"]
 
     @property
-    def parameters(self) -> dict[str, Any]:
+    def parameters(self) -> ToolParametersSchema:
         """Генерирует JSON схему из args_schema или возвращает пустую."""
         if self.args_schema:
-            schema = self.args_schema.model_json_schema()
-            schema.pop("title", None)
+            schema = require_json_object(
+                self.args_schema.model_json_schema(),
+                f"{self.__class__.__name__}.args_schema",
+            )
+            _ = schema.pop("title", None)
             return schema
         return {"type": "object", "properties": {}, "required": []}
 
@@ -152,9 +170,13 @@ class BaseTool(ABC):
         if state.user_groups:
             return state.user_groups
 
-        user = getattr(state, "user", None)
-        if isinstance(user, dict) and "grps" in user:
-            return user["grps"]
+        extra = require_json_object(state.model_extra or {}, "state.extra")
+        raw_user = extra.get("user")
+        if isinstance(raw_user, Mapping):
+            user = require_json_object(raw_user, "state.user")
+            raw_groups = user.get("grps")
+            if isinstance(raw_groups, list) and all(isinstance(group, str) for group in raw_groups):
+                return [group for group in raw_groups if isinstance(group, str)]
 
         return []
 
@@ -186,7 +208,7 @@ class BaseTool(ABC):
 
         return None
 
-    async def run(self, args: dict[str, Any], state: "ExecutionState") -> Any:
+    async def run(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
         """
         Единственная точка входа для выполнения tool.
 
@@ -204,11 +226,14 @@ class BaseTool(ABC):
         if check_result is not None:
             return check_result
 
-        return await self._run_impl(args, state)
+        return require_json_value(
+            await self._run_impl(args, state),
+            f"tool.{self.name}.result",
+        )
 
     async def _check_before_run(
-        self, args: dict[str, Any], state: "ExecutionState"
-    ) -> Any | None:
+        self, args: ToolArguments, state: "ExecutionState"
+    ) -> ToolResult | None:
         """
         Проверки перед выполнением: permissions, mock.
 
@@ -223,7 +248,7 @@ class BaseTool(ABC):
         mock_result = get_mock_for_tool(state, self.name)
         if mock_result is not None:
             logger.debug(f"Tool {self.name}: using mock from state")
-            return mock_result
+            return require_json_value(mock_result, f"mock.tools.{self.name}")
 
         if is_test_mode() and self._has_custom_mock():
             logger.debug(f"Tool {self.name}: mock mode (TESTING env)")
@@ -232,7 +257,7 @@ class BaseTool(ABC):
         return None
 
     @abstractmethod
-    async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
         """
         Реальное выполнение инструмента.
 
@@ -247,7 +272,7 @@ class BaseTool(ABC):
         """
         pass
 
-    async def execute_mock(self, args: dict[str, Any], state: "ExecutionState") -> Any:
+    async def execute_mock(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
         """
         Mock выполнение для тестов.
 
@@ -258,16 +283,20 @@ class BaseTool(ABC):
         Returns:
             Mock результат
         """
-        return self.mock_response
+        _ = args
+        _ = state
+        if callable(self.mock_response):
+            raise TypeError("BaseTool mock_response must be a JSON value")
+        return require_json_value(self.mock_response, f"tool.{self.name}.mock_response")
 
-    def to_openai_schema(self) -> dict[str, Any]:
+    def to_openai_schema(self) -> OpenAIToolSchema:
         """
         Возвращает схему инструмента для OpenAI.
 
         Returns:
             OpenAI tool schema
         """
-        return {
+        schema: OpenAIToolSchema = {
             "type": "function",
             "function": {
                 "name": sanitize_tool_name(self.name),
@@ -275,7 +304,9 @@ class BaseTool(ABC):
                 "parameters": self.parameters,
             },
         }
+        return schema
 
+    @override
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(name={self.name})"
 
@@ -303,25 +334,34 @@ class ExternalAPITool(BaseTool):
         tags: list[str] | None = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
         *,
-        flat_args_schema: dict[str, Any] | None = None,
+        flat_args_schema: JsonObject | None = None,
     ):
-        self.api_id = api_id
-        self.name = api_id
-        self.description = description or f"External API: {api_id}"
-        self.permission = permission
-        self.tags = tags or ["api"]
-        self.react_role = react_role
-        self._url = url
-        self._method = method
-        self._headers = headers or {}
-        self._body_template = body_template if isinstance(body_template, str) else "{}"
-        self._timeout = timeout
-        self._response_mapping = response_mapping or {}
-        self.args_schema = (
-            _external_api_flat_args_schema_to_model(flat_args_schema) if flat_args_schema else None
+        self.api_id: str = api_id
+        self.name: str = api_id
+        self.description: str = description or f"External API: {api_id}"
+        self.permission: Permission = permission
+        self.tags: list[str] = tags or ["api"]
+        self.react_role: ReactToolRole = react_role
+        self._url: str = url
+        self._method: str = method
+        self._headers: dict[str, str] = headers or {}
+        self._body_template: str = body_template
+        self._timeout: float = timeout
+        self._response_mapping: dict[str, str] = response_mapping or {}
+        self._parameters_schema: ToolParametersSchema = (
+            _external_api_flat_args_schema_to_parameters_schema(flat_args_schema)
+            if flat_args_schema
+            else {"type": "object", "properties": {}, "required": []}
         )
 
-    async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
+    @property
+    @override
+    def parameters(self) -> ToolParametersSchema:
+        """JSON Schema параметров внешнего API tool."""
+        return self._parameters_schema
+
+    @override
+    async def _run_impl(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
         """Вызывает внешний API."""
         api_config = ExternalAPIConfig(
             api_id=self.api_id,
@@ -337,7 +377,10 @@ class ExternalAPITool(BaseTool):
         variables = state.variables
 
         client = ExternalAPIClient(timeout=self._timeout)
-        result = await client.call(api_config, args, variables, state)
+        result = require_json_object(
+            await client.call(api_config, args, variables, state),
+            f"external_api.{self.api_id}.response",
+        )
 
         if result.get("status") == "waiting_input" and result.get("interrupt"):
             raw = result["interrupt"]
@@ -355,10 +398,14 @@ class ExternalAPITool(BaseTool):
 
         for response_field, output_name in self._response_mapping.items():
             if isinstance(data, dict) and response_field in data:
-                return {output_name: data[response_field]}
+                return require_json_value(
+                    {output_name: data[response_field]},
+                    f"external_api.{self.api_id}.mapped_response",
+                )
 
-        return data
+        return require_json_value(data, f"external_api.{self.api_id}.data")
 
-    async def execute_mock(self, args: dict[str, Any], state: "ExecutionState") -> Any:
+    @override
+    async def execute_mock(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
         """Mock - возвращает пустой успешный ответ."""
         return {"status": "completed", "data": {}}

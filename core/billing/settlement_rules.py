@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import re
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -24,19 +24,19 @@ class SettlementApplicationMode(str, Enum):
 class SettlementRuleMatch(BaseModel):
     """Условия на поля span; заданные поля объединяются через AND."""
 
-    operation_name_prefix: Optional[str] = None
-    operation_name_equals: Optional[str] = None
-    operation_name_regex: Optional[str] = None
-    service_name_equals: Optional[str] = None
-    service_name_regex: Optional[str] = None
-    event_type_equals: Optional[str] = None
-    event_type_regex: Optional[str] = None
-    attribute_equals: Dict[str, Any] = Field(default_factory=dict)
-    attribute_regex: Dict[str, str] = Field(
+    operation_name_prefix: str | None = None
+    operation_name_equals: str | None = None
+    operation_name_regex: str | None = None
+    service_name_equals: str | None = None
+    service_name_regex: str | None = None
+    event_type_equals: str | None = None
+    event_type_regex: str | None = None
+    attribute_equals: dict[str, Any] = Field(default_factory=dict)
+    attribute_regex: dict[str, str] = Field(
         default_factory=dict,
         description="Все перечисленные attributes должны матчить regex через re.search(str(value))",
     )
-    attribute_keys_present: List[str] = Field(
+    attribute_keys_present: list[str] = Field(
         default_factory=list,
         description="Все перечисленные ключи должны быть в attributes и не None",
     )
@@ -63,7 +63,7 @@ class SettlementRule(BaseModel):
     rule_id: str = Field(min_length=1)
     enabled: bool = True
     priority: int = 100
-    exclusive_group: Optional[str] = None
+    exclusive_group: str | None = None
     resource_name: str = Field(min_length=3)
     usage_type: str = Field(min_length=1)
     quantity_from: str = Field(default="const:1")
@@ -89,7 +89,7 @@ class SettlementRule(BaseModel):
 class SettlementRulesDocument(BaseModel):
     version: int = 1
     application_mode: SettlementApplicationMode = SettlementApplicationMode.ALL_MATCHING
-    rules: List[SettlementRule] = Field(default_factory=list)
+    rules: list[SettlementRule] = Field(default_factory=list)
 
 
 def parse_settlement_rules_json(raw: str) -> SettlementRulesDocument:
@@ -99,13 +99,13 @@ def parse_settlement_rules_json(raw: str) -> SettlementRulesDocument:
     return SettlementRulesDocument.model_validate(data)
 
 
-def _attr_value(attrs: Dict[str, Any], key: str) -> Any:
+def _attr_value(attrs: dict[str, Any], key: str) -> Any:
     if key in attrs:
         return attrs[key]
     return None
 
 
-def _regex_matches(pattern: Optional[str], value: Any) -> bool:
+def _regex_matches(pattern: str | None, value: Any) -> bool:
     if not pattern:
         return True
     if value is None:
@@ -116,7 +116,7 @@ def _regex_matches(pattern: Optional[str], value: Any) -> bool:
         raise ValueError(f"невалидный regex {pattern!r}: {e}") from e
 
 
-def rule_matches_span(rule: SettlementRule, span_dict: Dict[str, Any]) -> bool:
+def rule_matches_span(rule: SettlementRule, span_dict: dict[str, Any]) -> bool:
     m = rule.match
     if m.operation_name_prefix:
         op = span_dict.get("operation_name") or ""
@@ -152,20 +152,20 @@ def rule_matches_span(rule: SettlementRule, span_dict: Dict[str, Any]) -> bool:
     return True
 
 
-def resolve_matched_rules(doc: SettlementRulesDocument, span_dict: Dict[str, Any]) -> List[SettlementRule]:
+def resolve_matched_rules(doc: SettlementRulesDocument, span_dict: dict[str, Any]) -> list[SettlementRule]:
     matched = [r for r in doc.rules if r.enabled and rule_matches_span(r, span_dict)]
     if not matched:
         return []
 
-    by_group: Dict[Optional[str], List[SettlementRule]] = {}
-    standalone: List[SettlementRule] = []
+    by_group: dict[str | None, list[SettlementRule]] = {}
+    standalone: list[SettlementRule] = []
     for r in matched:
         if r.exclusive_group is None:
             standalone.append(r)
         else:
             by_group.setdefault(r.exclusive_group, []).append(r)
 
-    after_groups: List[SettlementRule] = list(standalone)
+    after_groups: list[SettlementRule] = list(standalone)
     for _g, items in by_group.items():
         items_sorted = sorted(items, key=lambda x: x.priority)
         after_groups.append(items_sorted[0])
@@ -176,7 +176,7 @@ def resolve_matched_rules(doc: SettlementRulesDocument, span_dict: Dict[str, Any
     return after_groups
 
 
-def quantity_from_span(quantity_from: str, span_dict: Dict[str, Any]) -> int:
+def quantity_from_span(quantity_from: str, span_dict: dict[str, Any]) -> int:
     if quantity_from.startswith("const:"):
         rest = quantity_from[len("const:") :].strip()
         q = int(rest)

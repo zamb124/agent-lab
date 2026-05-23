@@ -5,13 +5,15 @@ Zero-Guess: все методы работают с ExecutionState.
 Stream-first: LLM ВСЕГДА вызывается как stream.
 """
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import json
 import time
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
-from typing import Any
+from typing import ClassVar, cast, override
 
 from a2a.types import (
     Message,
@@ -21,7 +23,7 @@ from a2a.types import (
 )
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.models import ReactLoopMode
+from apps.flows.src.models import NodeConfig, ReactLoopMode
 from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.runtime.a2a_messages import (
     build_assistant_message as new_assistant_message,
@@ -41,6 +43,10 @@ from apps.flows.src.runtime.effective_llm_config import (
 )
 from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.llm_context_memory import (
+    prune_state_messages_to_memory_cursor_for_runtime,
+    schedule_state_messages_to_memory_for_runtime,
+)
 from apps.flows.src.runtime.llm_override_params import (
     client_kwargs_from_llm_config,
     split_llm_config_for_client,
@@ -54,7 +60,7 @@ from apps.flows.src.state.cancellation import (
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import BaseEmitter, Emitter, InMemoryEmitter
 from apps.flows.src.streaming.ui_events import emit_pending_ui_events
-from apps.flows.src.tools.base import sanitize_tool_name
+from apps.flows.src.tools.base import BaseTool, OpenAIToolSchema, ToolArguments, sanitize_tool_name
 from apps.flows.src.variables import VariableResolver
 from core.billing import get_cbr_usd_to_rub_rate
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
@@ -62,6 +68,7 @@ from core.clients.llm import (
     LLMClient,
     LLMStreamIdleTimeoutError,
     LLMStreamUserCancelledError,
+    LLMToolCall,
     MockLLM,
     StreamEvent,
     get_llm_for_state,
@@ -71,6 +78,11 @@ from core.company_ai import COST_ORIGIN_COMPANY
 from core.config import get_settings
 from core.context import get_context
 from core.errors import FlowExecutionError, ToolExecutionError
+from core.llm_context import (
+    LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION,
+    LLMContextProfile,
+    LLMContextSourceRegistry,
+)
 from core.logging import get_logger
 from core.state import (
     ExecutionExceptionRecord,
@@ -81,8 +93,9 @@ from core.state import (
 from core.state.mutation_policy import FROZEN_STATE_FIELDS, USER_TOOL_PARALLEL_STATE_MERGE_FIELDS
 from core.tracing import TraceContext, get_tracer
 from core.tracing.context import get_current_trace_context
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
-from .base_runner import BaseLlmNodeRunner
+from .base_runner import BaseLlmNodeRunner, LlmNodeRunnerHost
 
 logger = get_logger(__name__)
 
@@ -94,13 +107,26 @@ def _get_trace_ctx_from_state() -> TraceContext | None:
     return None
 
 
-def _get_message_metadata(msg) -> dict[str, Any]:
+def _get_message_metadata(msg: Message) -> JsonObject:
     """Получает metadata из Message."""
-    if hasattr(msg, "metadata"):
-        return msg.metadata or {}
-    if isinstance(msg, dict):
-        return msg.get("metadata") or {}
-    return {}
+    raw_metadata = msg.metadata
+    if raw_metadata is None:
+        return {}
+    return require_json_object(raw_metadata, "message.metadata")
+
+
+def _get_tool_calls_metadata(metadata: JsonObject, field_name: str) -> list[LLMToolCall] | None:
+    raw_tool_calls = metadata.get("tool_calls")
+    if raw_tool_calls is None:
+        return None
+    if not isinstance(raw_tool_calls, list):
+        raise ValueError(f"{field_name}.tool_calls must be a list")
+    tool_calls: list[LLMToolCall] = []
+    for index, item in enumerate(raw_tool_calls):
+        if not isinstance(item, dict):
+            raise ValueError(f"{field_name}.tool_calls[{index}] must be an object")
+        tool_calls.append(LLMToolCall.model_validate(item))
+    return tool_calls
 
 
 class LlmNodeRunner(BaseLlmNodeRunner):
@@ -109,18 +135,20 @@ class LlmNodeRunner(BaseLlmNodeRunner):
     Stream-first: ТОЛЬКО STREAM!
     """
 
-    MAX_ITERATIONS = 10
-    MAX_STREAM_IDLE_RETRIES = 4  # При idle timeout 10с — макс 50с ожидания (5 попыток × 10с)
+    MAX_ITERATIONS: ClassVar[int] = 10
+    MAX_STREAM_IDLE_RETRIES: ClassVar[int] = 4  # При idle timeout 10с — макс 50с ожидания (5 попыток × 10с)
 
     def __init__(
         self,
-        node_config,
-        tools: list[Any],
-        llm,
+        node_config: NodeConfig,
+        tools: list[BaseTool],
+        llm: LLMClient | MockLLM | None,
         prompt: str,
-        llm_node=None,
+        llm_node: LlmNodeRunnerHost | None = None,
         *,
         container: FlowRuntimeContainer | None = None,
+        llm_context_policy: LLMContextProfile | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
     ):
         super().__init__(
             node_config=node_config,
@@ -129,7 +157,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             prompt=prompt,
             llm_node=llm_node,
         )
-        self.container = container
+        self.container: FlowRuntimeContainer | None = container
+        self.llm_context_policy: LLMContextProfile | None = llm_context_policy
+        self.llm_context_source_registry: LLMContextSourceRegistry | None = llm_context_source_registry
         if container is not None:
             for tool in self.tools:
                 if hasattr(tool, "container") and getattr(tool, "container", None) is None:
@@ -140,9 +170,48 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             return
         if getattr(state, "_skip_hot_state_checkpoint", False):
             return
-        await self.container.state_manager.save_state(state.session_id, state)
+        _ = await self.container.state_manager.save_state(state.session_id, state)
 
-    def _resolve_tool_by_call_name(self, call_name: str):
+    def _schedule_context_memory_window_close(self, state: ExecutionState) -> None:
+        if self.container is None or self.llm_context_policy is None:
+            return
+        if getattr(state, "_skip_hot_state_checkpoint", False):
+            return
+
+        async def after_memory_write() -> None:
+            if self._context_memory_uses_full_state_messages():
+                _ = prune_state_messages_to_memory_cursor_for_runtime(state)
+            await self._checkpoint_state(state)
+
+        _ = schedule_state_messages_to_memory_for_runtime(
+            store=self.container.llm_context_memory_store,
+            state=state,
+            node_id=self._source_node_id(),
+            policy=self.llm_context_policy,
+            messages=self._messages_for_llm_context(state),
+            summarize_episode=self._summarize_context_memory_episode,
+            after_write=after_memory_write,
+        )
+
+    def _context_memory_uses_full_state_messages(self) -> bool:
+        if self.llm_node is None:
+            return True
+        return getattr(self.llm_node, "messages_filter", "all") == "all"
+
+    async def _summarize_context_memory_episode(self, text: str) -> str:
+        if self.container is None:
+            raise RuntimeError("LLM context memory summarization requires FlowContainer")
+        effective = resolve_effective_llm_config_for_node(self.node_config)
+        llm_config = effective.config
+        return await self.container.text_transform_service.summarize(
+            text,
+            max_output_tokens=700,
+            instruction=LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION,
+            provider=llm_config.provider,
+            model=llm_config.model,
+        )
+
+    def _resolve_tool_by_call_name(self, call_name: str) -> BaseTool | None:
         """Резолвит tool по имени вызова, включая API-совместимую санитизацию."""
         exact_tool = next((t for t in self.tools if t.name == call_name), None)
         if exact_tool:
@@ -192,12 +261,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
     def _messages_for_llm_context(self, state: ExecutionState) -> list[Message]:
         if self.llm_node is not None:
-            return self.llm_node._get_filtered_messages(state)
+            return self.llm_node.get_filtered_messages(state)
         return list(state.messages)
 
+    @override
     async def run(
         self,
-        input_data: dict[str, Any],
+        input_data: JsonObject,
         state: ExecutionState,
         emitter: BaseEmitter | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
@@ -219,7 +289,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             else:
                 emitter = InMemoryEmitter(state)
 
-        user_content = input_data.get("content", "")
+        raw_user_content = input_data.get("content", "")
+        if not isinstance(raw_user_content, str):
+            raise ValueError("llm input_data.content must be a string")
+        user_content = raw_user_content
         llm_node_label = self.node_config.name if self.node_config else "unknown"
         sid = self._source_node_id()
 
@@ -246,16 +319,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         ):
             yield event
 
-    def _messages_to_dict(self, messages: list[Message]) -> list[dict[str, Any]]:
+    def _messages_to_dict(self, messages: list[Message]) -> list[JsonObject]:
         """Конвертирует Message объекты в dict для трейсинга."""
-        result = []
+        result: list[JsonObject] = []
         for msg in messages:
-            if hasattr(msg, "model_dump"):
-                result.append(msg.model_dump())
-            elif isinstance(msg, dict):
-                result.append(msg)
-            else:
-                result.append({"role": "unknown", "content": str(msg)})
+            result.append(require_json_object(msg.model_dump(mode="json"), "llm.message"))
         return result
 
     def _get_react_config(self) -> tuple[ReactLoopMode, str, int, bool, str | None]:
@@ -266,33 +334,33 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         return ReactLoopMode.AUTO, "finish", self.MAX_ITERATIONS, True, None
 
     def _find_exit_tool_call(
-        self, tool_calls: list[dict[str, Any]], exit_tool: str
-    ) -> dict[str, Any] | None:
+        self, tool_calls: list[LLMToolCall], exit_tool: str
+    ) -> LLMToolCall | None:
         """Ищет exit tool среди tool_calls."""
         for tc in tool_calls:
-            if tc.get("name") == exit_tool:
+            if tc.name == exit_tool:
                 return tc
         return None
 
     def _find_tool_call_in_messages(
         self, messages: list[Message], tool_name: str
-    ) -> dict[str, Any]:
+    ) -> LLMToolCall | None:
         """Ищет tool_call по имени в последнем assistant сообщении."""
         for msg in reversed(messages):
             metadata = _get_message_metadata(msg)
-            tool_calls = metadata.get("tool_calls")
+            tool_calls = _get_tool_calls_metadata(metadata, "message.metadata")
             if tool_calls:
                 for tc in tool_calls:
-                    if tc.get("name") == tool_name:
+                    if tc.name == tool_name:
                         return tc
                 break
-        return {}
+        return None
 
     def _ensure_assistant_tool_calls(
         self,
         state: ExecutionState,
         tool_call_id: str,
-        tool_call: dict[str, Any],
+        tool_call: LLMToolCall,
         context_id: str,
         task_id: str | None = None,
     ) -> None:
@@ -300,9 +368,10 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         sid = self._source_node_id()
         for msg in reversed(state.messages):
             metadata = _get_message_metadata(msg)
-            if metadata.get("tool_calls"):
-                for tc in metadata["tool_calls"]:
-                    if tc.get("id") == tool_call_id:
+            tool_calls = _get_tool_calls_metadata(metadata, "message.metadata")
+            if tool_calls:
+                for tc in tool_calls:
+                    if tc.id == tool_call_id:
                         return
                 break
         state.messages.append(
@@ -326,17 +395,19 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         next_call = interrupt_path[0]
         call_type = next_call.type
         call_id = next_call.id
-        tool_call = next_call.tool_call or {}
+        tool_call = next_call.tool_call
 
-        if not tool_call:
+        if tool_call is None:
             tool_call = self._find_tool_call_in_messages(state.messages, call_id)
+        if tool_call is None:
+            tool_call = LLMToolCall(id=call_id, name=call_id, arguments={})
 
-        tool_call_id = tool_call.get("id", call_id)
+        tool_call_id = tool_call.id
         sid = self._source_node_id()
 
         logger.info(
             f"Resume: type={call_type}, id={call_id}, tool_call_id={tool_call_id}, "
-            f"path_len={len(interrupt_path)}, answer={user_answer[:50]}..."
+            + f"path_len={len(interrupt_path)}, answer={user_answer[:50]}..."
         )
 
         if call_type == NodeType.LLM_NODE.value:
@@ -346,7 +417,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
             try:
                 tool_results = await self._execute_tools_parallel(
-                    [{"name": call_id, "id": tool_call_id, "arguments": {"query": user_answer}}],
+                    [LLMToolCall(name=call_id, id=tool_call_id, arguments={"query": user_answer})],
                     state,
                 )
                 for tr in tool_results:
@@ -426,7 +497,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         actx = get_context()
         if actx is None or actx.active_company is None:
             raise ValueError("Контекст с active_company обязателен для LLM-ноды")
-        if actx.user is None or not str(actx.user.user_id).strip():
+        if not str(actx.user.user_id).strip():
             raise ValueError("Контекст с user обязателен для LLM-ноды (биллинг и уведомления)")
         container = self.container
         if container is None:
@@ -478,14 +549,17 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
         if structured_output and output_schema:
             tools_schema = None
-            response_format = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "structured_response",
-                    "strict": True,
-                    "schema": output_schema
-                }
-            }
+            response_format: JsonObject | None = require_json_object(
+                {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "structured_response",
+                        "strict": True,
+                        "schema": output_schema,
+                    },
+                },
+                "llm.response_format",
+            )
             schema_properties = output_schema.get("properties")
             schema_keys = list(schema_properties.keys()) if isinstance(schema_properties, dict) else []
             logger.info(
@@ -524,7 +598,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     ):
                         llm_messages = [system_msg] + messages
                         content = ""
-                        tool_calls = None
+                        tool_calls: list[LLMToolCall] | None = None
                         llm_start = time.time()
                         input_tokens = 0
                         output_tokens = 0
@@ -534,8 +608,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         resolved_llm_model: str | None = None
                         resolved_llm_provider: str | None = None
                         resolved_llm_source: str | None = None
+                        llm_context_trace: JsonObject | None = None
 
-                        llm, stream_kw, max_tok = self._resolve_llm_client(
+                        llm, max_tok = self._resolve_llm_client(
                             state,
                             effective_llm=effective_llm,
                             allow_platform_paid_fallback=allow_platform_paid_fallback,
@@ -556,7 +631,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             try:
                                 async for event in self._call_llm(
                                     llm,
-                                    stream_kw,
                                     max_tok,
                                     llm_messages,
                                     tools_schema,
@@ -582,8 +656,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                                     if isinstance(event, TaskStatusUpdateEvent):
                                         if event.status.message and event.status.message.metadata:
-                                            md = event.status.message.metadata
-                                            tc = md.get("tool_calls")
+                                            md = require_json_object(
+                                                event.status.message.metadata,
+                                                "llm.event.metadata",
+                                            )
+                                            tc = _get_tool_calls_metadata(md, "llm.event.metadata")
                                             if tc:
                                                 tool_calls = tc
                                             md_model = md.get("model")
@@ -595,10 +672,23 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             md_source = md.get("source")
                                             if isinstance(md_source, str) and md_source.strip():
                                                 resolved_llm_source = md_source.strip()
-                                            usage = md.get("usage")
-                                            if usage:
-                                                input_tokens = usage.get("input_tokens", 0)
-                                                output_tokens = usage.get("output_tokens", 0)
+                                            context_raw = md.get("llm_context")
+                                            if isinstance(context_raw, dict):
+                                                llm_context_trace = require_json_object(
+                                                    context_raw,
+                                                    "llm.event.metadata.llm_context",
+                                                )
+                                            usage_raw = md.get("usage")
+                                            if isinstance(usage_raw, dict):
+                                                usage = require_json_object(usage_raw, "llm.event.metadata.usage")
+                                                raw_input_tokens = usage.get("input_tokens", 0)
+                                                raw_output_tokens = usage.get("output_tokens", 0)
+                                                if isinstance(raw_input_tokens, bool) or not isinstance(raw_input_tokens, int):
+                                                    raise ValueError("usage.input_tokens must be an integer")
+                                                if isinstance(raw_output_tokens, bool) or not isinstance(raw_output_tokens, int):
+                                                    raise ValueError("usage.output_tokens must be an integer")
+                                                input_tokens = raw_input_tokens
+                                                output_tokens = raw_output_tokens
                                                 prc = usage.get("provider_reported_cost")
                                                 if isinstance(prc, (int, float)):
                                                     provider_reported_cost = float(prc)
@@ -643,7 +733,13 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 has_tool_calls=bool(tool_calls),
                                 duration_ms=llm_duration,
                                 response_content=content,
-                                tool_calls=tool_calls,
+                                tool_calls=[
+                                    require_json_object(
+                                        tool_call.model_dump(mode="json", exclude_none=True),
+                                        "llm.tool_call",
+                                    )
+                                    for tool_call in tool_calls
+                                ] if tool_calls else None,
                                 llm_provider=resolved_llm_provider or llm_provider,
                                 llm_model=resolved_llm_model,
                                 candidate_source=resolved_llm_source,
@@ -651,16 +747,17 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                 provider_upstream_inference_cost=provider_upstream_inference_cost,
                                 settlement_quantity_rub=settlement_quantity_rub,
                                 billing_resource_name=billing_res,
+                                llm_context=llm_context_trace,
                             )
 
                         if tool_calls:
-                            tool_names = [tc.get("name", "?") for tc in tool_calls]
+                            tool_names = [tc.name for tc in tool_calls]
                             logger.info(f"[llm_node:{llm_node_label}] Вызов tools: {tool_names}")
 
                             exit_call = self._find_exit_tool_call(tool_calls, exit_tool_name)
 
                             if exit_call and loop_mode == ReactLoopMode.EXPLICIT:
-                                exit_args = exit_call.get("arguments", {})
+                                exit_args = exit_call.arguments
                                 exit_tool = next(t for t in self.tools if t.name == exit_tool_name)
                                 result = await exit_tool.run(exit_args, state)
                                 final_response = str(result) if not isinstance(result, str) else result
@@ -679,7 +776,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     )
                                 )
 
-                                exit_call_id = exit_call.get("id", exit_tool_name)
+                                exit_call_id = exit_call.id
                                 await emitter.emit_tool_call(exit_tool_name, exit_args, exit_call_id)
 
                                 state.messages.append(
@@ -710,9 +807,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             )
 
                             for tc in tool_calls:
-                                tool_call_id = tc.get("id", tc.get("name", "unknown"))
-                                tool_name = tc.get("name", "unknown")
-                                tool_args = tc.get("arguments", {})
+                                tool_call_id = tc.id
+                                tool_name = tc.name
+                                tool_args = tc.arguments
 
                                 tool_obj = self._resolve_tool_by_call_name(tool_name)
                                 react_role = (
@@ -743,9 +840,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     tool_call_id = tr["tool_call_id"]
                                     tool_name = next(
                                         (
-                                            tc.get("name", "unknown")
+                                            tc.name
                                             for tc in tool_calls
-                                            if tc.get("id") == tool_call_id
+                                            if tc.id == tool_call_id
                                         ),
                                         "unknown",
                                     )
@@ -767,11 +864,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             except FlowInterrupt as e:
                                 interrupted_tc = e.tool_call or tool_calls[0]
                                 logger.info(
-                                    f"[llm_node:{llm_node_label}] Interrupt: tool={interrupted_tc['name']}"
+                                    f"[llm_node:{llm_node_label}] Interrupt: tool={interrupted_tc.name}"
                                 )
 
                                 async with tracer.interrupt_span(
-                                    e.question, interrupted_tc["name"], trace_ctx=trace_ctx
+                                    e.question, interrupted_tc.name, trace_ctx=trace_ctx
                                 ):
                                     # Добавляем элемент в путь только если это первичный interrupt
                                     # (не от вложенного субагента)
@@ -780,7 +877,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                             state,
                                             InterruptPathItem(
                                                 type="tool",
-                                                id=interrupted_tc["name"],
+                                                id=interrupted_tc.name,
                                                 tool_call=interrupted_tc,
                                             ),
                                         )
@@ -797,11 +894,19 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             # Structured Output - всегда завершаем после первого ответа
                             if structured_output and output_schema:
                                 try:
-                                    parsed_output = json.loads(content)
+                                    parsed_output = require_json_value(
+                                        cast(JsonValue, json.loads(content)),
+                                        "llm.structured_output",
+                                    )
                                     setattr(state, "structured_output_result", parsed_output)
                                     final_response = content
+                                    parsed_output_keys: list[str] = (
+                                        list(parsed_output.keys())
+                                        if isinstance(parsed_output, dict)
+                                        else []
+                                    )
                                     logger.info(
-                                        f"[llm_node:{llm_node_label}] Structured Output получен: {list(parsed_output.keys()) if isinstance(parsed_output, dict) else type(parsed_output)}"
+                                        f"[llm_node:{llm_node_label}] Structured Output получен: {parsed_output_keys or type(parsed_output)}"
                                     )
                                 except json.JSONDecodeError as e:
                                     logger.error(f"[llm_node:{llm_node_label}] Ошибка парсинга structured output: {e}")
@@ -846,7 +951,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
                                 logger.warning(
                                     f"[llm_node:{llm_node_label}] EXPLICIT strict: LLM вернул текст без "
-                                    f"exit_tool '{exit_tool_name}', добавляем reminder"
+                                    + f"exit_tool '{exit_tool_name}', добавляем reminder"
                                 )
                                 state.messages.append(
                                     new_assistant_message(content, sid, None, context_id=context_id, task_id=task_id)
@@ -894,6 +999,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 if final_response:
                     state.response = final_response
                     tracer.record_state_snapshot(llm_node_span, state)
+                    self._schedule_context_memory_window_close(state)
                     await self._checkpoint_state(state)
 
     def _resolve_llm_client(
@@ -902,27 +1008,26 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         *,
         effective_llm: EffectiveLLMConfig,
         allow_platform_paid_fallback: bool = True,
-    ) -> tuple[LLMClient | MockLLM, dict[str, Any], int | None]:
+    ) -> tuple[LLMClient | MockLLM, int | None]:
         llm_config = effective_llm.config
-        max_tok = llm_config.max_tokens if llm_config is not None else None
+        max_tok = llm_config.max_tokens
         client_kwargs = client_kwargs_from_llm_config(llm_config, state)
         llm = get_llm_for_state(
             state,
             **client_kwargs,
             allow_platform_paid_fallback=allow_platform_paid_fallback,
         )
-        return llm, {}, max_tok
+        return llm, max_tok
 
     async def _call_llm(
         self,
         llm: LLMClient | MockLLM,
-        stream_kw: dict[str, Any],
         max_tok: int | None,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None,
+        tools: list[OpenAIToolSchema] | None,
         context_id: str,
         task_id: str,
-        response_format: dict[str, Any] | None,
+        response_format: JsonObject | None,
         state: ExecutionState,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Вызывает LLM — ТОЛЬКО STREAM.
@@ -947,8 +1052,9 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     task_id=task_id,
                     context_id=context_id,
                     max_tokens=max_tok,
+                    llm_context=self.llm_context_policy or self.node_config.llm_context or {},
+                    llm_context_source_registry=self.llm_context_source_registry,
                     stream_cancel_poll=_stream_cancel_poll,
-                    **stream_kw,
                 ):
                     await check_cancellation(state)
                     yield event
@@ -960,7 +1066,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 if attempt <= self.MAX_STREAM_IDLE_RETRIES:
                     logger.warning(
                         "LLM stream idle timeout (attempt %d/%d), retrying: "
-                        "idle=%.1fs, chunks=%d",
+                        + "idle=%.1fs, chunks=%d",
                         attempt,
                         self.MAX_STREAM_IDLE_RETRIES + 1,
                         e.idle_seconds,
@@ -970,14 +1076,14 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 # Все retry исчерпаны
                 logger.error(
                     "LLM stream idle timeout after %d attempts, giving up: "
-                    "idle=%.1fs, chunks=%d",
+                    + "idle=%.1fs, chunks=%d",
                     attempt, e.idle_seconds, e.chunks_received,
                 )
                 raise
 
     async def _execute_tools_parallel(
         self,
-        tool_calls: list[dict[str, Any]],
+        tool_calls: list[LLMToolCall],
         state: ExecutionState,
         trace_ctx: TraceContext | None = None,
         emitter: BaseEmitter | None = None,
@@ -1014,8 +1120,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         deferred_interrupt: FlowInterrupt | None = None
         deferred_error: Exception | None = None
         for tc, result, state_copy in zip(tool_calls, results, state_copies):
-            tool_name = tc["name"]
-            tool_call_id = tc.get("id", tool_name)
+            tool_name = tc.name
+            tool_call_id = tc.id
 
             if isinstance(result, BaseException):
                 if isinstance(result, FlowCancelled):
@@ -1057,16 +1163,19 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             state.tool_results.update(state_copy.tool_results)
 
             for field in USER_TOOL_PARALLEL_STATE_MERGE_FIELDS:
+                if field == "variables":
+                    merged_vars = dict(state.variables)
+                    merged_vars.update(state_copy.variables)
+                    state.variables = merged_vars
+                    continue
                 value = getattr(state_copy, field, None)
                 if value is not None:
-                    if field == "variables" and isinstance(value, dict):
-                        merged_vars = dict(state.variables)
-                        merged_vars.update(value)
-                        state.variables = merged_vars
-                    else:
-                        setattr(state, field, value)
+                    setattr(state, field, value)
 
-            extra_src = getattr(state_copy, "__pydantic_extra__", None) or {}
+            extra_src = require_json_object(
+                state_copy.__pydantic_extra__ or {},
+                "state.extra",
+            )
             for ek, ev in extra_src.items():
                 if ek in FROZEN_STATE_FIELDS:
                     continue
@@ -1084,16 +1193,16 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
     async def _execute_single_tool(
         self,
-        tc: dict[str, Any],
+        tc: LLMToolCall,
         state: ExecutionState,
         trace_ctx: TraceContext | None = None,
         emitter: BaseEmitter | None = None,
     ) -> list[dict[str, str]]:
         """Выполняет один tool."""
         tracer = get_tracer()
-        tool_name = tc["name"]
-        tool_args = tc.get("arguments", {})
-        tool_call_id = tc.get("id", tool_name)
+        tool_name = tc.name
+        tool_args: ToolArguments = tc.arguments
+        tool_call_id = tc.id
 
         tool = self._resolve_tool_by_call_name(tool_name)
         if not tool:
@@ -1171,14 +1280,20 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         """Рендерит промпт с переменными и сохраняет в историю."""
         prompt_template = self.prompt
         flow_variables = self.get_variables(state)
-        variables = {**flow_variables, **(self.node_config.local_variables if self.node_config else {})}
+        variables: JsonObject = {
+            **flow_variables,
+            **(self.node_config.local_variables if self.node_config else {}),
+        }
 
         if self.llm_node:
             prompt_template, variables = await self.llm_node.before_prompt_render(
                 prompt_template, state, variables
             )
 
-        resolved_vars = VariableResolver.resolve_all(local_vars=variables)
+        resolved_vars = require_json_object(
+            VariableResolver.resolve_all(local_vars=variables),
+            "prompt.variables",
+        )
 
         tracer = get_tracer()
         trace_ctx = _get_trace_ctx_from_state()
@@ -1205,7 +1320,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         state: ExecutionState,
         template: str,
         rendered: str,
-        variables: dict[str, Any],
+        variables: JsonObject,
         node_id: str,
     ) -> None:
         """Сохраняет промпт в историю если он изменился."""
@@ -1216,7 +1331,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             if last.prompt_hash == prompt_hash:
                 return
 
-        safe_vars = {
+        safe_vars: JsonObject = {
             k: v for k, v in variables.items()
             if isinstance(v, (str, int, float, bool)) or v is None
         }
@@ -1231,23 +1346,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         )
         state.prompt_history.append(item)
 
-    def _build_tools_schema(self) -> list[dict[str, Any]]:
+    def _build_tools_schema(self) -> list[OpenAIToolSchema]:
         """Строит схему инструментов для LLM."""
-        schema = []
+        schema: list[OpenAIToolSchema] = []
         for tool in self.tools:
-            if hasattr(tool, "to_openai_schema"):
-                schema.append(tool.to_openai_schema())
-            elif hasattr(tool, "name") and hasattr(tool, "description"):
-                schema.append(
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "parameters": getattr(tool, "parameters", {}),
-                        },
-                    }
-                )
+            schema.append(tool.to_openai_schema())
         return schema
 
     async def _emit_pending_ui_events(

@@ -4,8 +4,8 @@
 
 import pytest
 
-from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, CodeNode
 from core.errors import FlowPrematureCompletionError
 

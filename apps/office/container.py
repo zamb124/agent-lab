@@ -2,7 +2,6 @@
 Контейнер зависимостей office.
 """
 
-from typing import Optional
 
 from apps.office.db.base import OfficeDatabase
 from apps.office.db.repositories.catalog_repository import CatalogRepository
@@ -15,7 +14,7 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 class OfficeContainer(BaseContainer):
-    def __init__(self, db_url: str, shared_db_url: Optional[str] = None) -> None:
+    def __init__(self, db_url: str, shared_db_url: str | None = None) -> None:
         super().__init__(db_url=db_url, shared_db_url=shared_db_url)
         self._office_db_url = db_url
 
@@ -46,7 +45,7 @@ class OfficeContainer(BaseContainer):
     def file_processor(self):
         return FileProcessor(file_repository=self.file_repository)
 
-_office_container: Optional[OfficeContainer] = None
+_office_container: OfficeContainer | None = None
 
 def get_office_container() -> OfficeContainer:
     global _office_container

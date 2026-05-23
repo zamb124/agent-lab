@@ -12,7 +12,7 @@ import json
 import random
 import sys
 import zlib
-from typing import Callable
+from collections.abc import Callable
 
 import structlog
 from opentelemetry import trace as otel_trace

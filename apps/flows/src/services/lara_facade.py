@@ -4,19 +4,27 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from typing import Any
+from typing import ClassVar, Protocol
 from urllib.parse import quote
 
-from apps.flows.src.services.lara_action_engine import LaraActionEngine
+from apps.crm.models.api import EntityCreate, EntityResponse
+from apps.flows.src.models.flow_config import FlowConfig
+from apps.flows.src.services.lara_action_engine import LaraActionEngine, LaraPendingAction
 from core.clients.service_client import ServiceClient
 from core.context import get_context
+from core.types import JsonObject, require_json_object
+
+
+class LaraToolState(Protocol):
+    context_id: str
 
 
 class _MinimalLaraToolState:
     """Минимальный state для LaraFacade при HTTP/embed apply (нужен только context_id)."""
 
-    __slots__ = ("context_id",)
+    __slots__: ClassVar[tuple[str]] = ("context_id",)
+
+    context_id: str
 
     def __init__(self, context_id: str) -> None:
         cid = str(context_id).strip()
@@ -29,28 +37,43 @@ class LaraFacade:
     """Безопасный фасад для тулов: preview/apply через LaraActionEngine."""
 
     def __init__(self, action_engine: LaraActionEngine):
-        self._action_engine = action_engine
-        self._client = ServiceClient()
+        self._action_engine: LaraActionEngine = action_engine
+        self._client: ServiceClient = ServiceClient()
 
     @staticmethod
     def _encode_flow_id(flow_id: str) -> str:
         return quote(flow_id, safe="")
 
     @staticmethod
-    def _require_runtime_ids(state: Any) -> tuple[str, str, str]:
+    def _require_runtime_ids(state: LaraToolState) -> tuple[str, str, str]:
         ctx = get_context()
         if ctx is None:
             raise RuntimeError("Context is not set")
         if ctx.active_company is None:
             raise RuntimeError("Active company is required")
-        if ctx.user is None:
-            raise RuntimeError("User is required")
-        if state is None:
-            raise ValueError("state is required")
-        context_id = getattr(state, "context_id", None)
-        if not isinstance(context_id, str) or not context_id:
+        context_id = state.context_id
+        if not context_id:
             raise ValueError("state.context_id is required")
         return ctx.active_company.company_id, ctx.user.user_id, context_id
+
+    @staticmethod
+    def _resolve_graph_nodes(
+        flow_config: FlowConfig,
+        *,
+        flow_id: str,
+        branch_id: str,
+    ) -> dict[str, JsonObject]:
+        if branch_id == "base":
+            if flow_config.nodes is None:
+                raise ValueError(f"Flow '{flow_id}' has no base nodes")
+            return flow_config.nodes
+
+        branch_cfg = flow_config.branches.get(branch_id)
+        if branch_cfg is None:
+            raise ValueError(f"Branch '{branch_id}' not found in flow '{flow_id}'")
+        if branch_cfg.nodes is None:
+            raise ValueError(f"Branch '{branch_id}' has no nodes")
+        return branch_cfg.nodes
 
     async def preview_crm_create_note(
         self,
@@ -59,18 +82,18 @@ class LaraFacade:
         description: str,
         note_date: str | None,
         namespace: str,
-        state: Any,
+        state: LaraToolState,
         idempotency_key: str | None,
-    ) -> dict[str, Any]:
+    ) -> LaraPendingAction:
         company_id, user_id, context_id = self._require_runtime_ids(state)
-        payload = {
+        payload: JsonObject = {
             "name": name,
             "description": description,
             "namespace": namespace,
         }
         if note_date is not None:
             payload["note_date"] = note_date
-        preview = {
+        preview: JsonObject = {
             "summary": "Создать заметку в CRM",
             "fields": payload,
         }
@@ -93,24 +116,30 @@ class LaraFacade:
         self,
         *,
         pending_action_id: str,
-        state: Any,
+        state: LaraToolState,
         idempotency_key: str | None,
-    ) -> dict[str, Any]:
+    ) -> LaraPendingAction:
         company_id, user_id, context_id = self._require_runtime_ids(state)
 
-        async def _apply(action: dict[str, Any]) -> dict[str, Any]:
-            payload = action["payload"]
-            body: dict[str, Any] = {
-                "name": payload["name"],
-                "entity_type": "note",
-                "description": payload["description"],
-                "namespace": payload["namespace"],
-            }
-            if "note_date" in payload:
-                body["note_date"] = payload["note_date"]
+        async def _apply(action: LaraPendingAction) -> JsonObject:
+            entity_create = EntityCreate.model_validate(
+                {
+                    "entity_type": "note",
+                    **action.payload,
+                }
+            )
+            body = require_json_object(
+                entity_create.model_dump(mode="json", exclude_none=True),
+                "crm.note.create.body",
+            )
             response = await self._client.post("crm", "/crm/api/v1/entities", json=body)
+            entity = EntityResponse.model_validate(response)
+            entity_payload = require_json_object(
+                entity.model_dump(mode="json"),
+                "crm.note.create.response",
+            )
             return {
-                "entity": response,
+                "entity": entity_payload,
                 "message": "Заметка создана",
             }
 
@@ -128,35 +157,26 @@ class LaraFacade:
         *,
         flow_id: str,
         node_id: str,
-        patch: dict[str, Any],
+        patch: JsonObject,
         branch_id: str | None,
-        state: Any,
+        state: LaraToolState,
         idempotency_key: str | None,
-    ) -> dict[str, Any]:
+    ) -> LaraPendingAction:
         company_id, user_id, context_id = self._require_runtime_ids(state)
         encoded_flow_id = self._encode_flow_id(flow_id)
-        flow_config = await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
-        if not isinstance(flow_config, dict):
-            raise ValueError("Flow config is missing in response")
+        flow_config = FlowConfig.model_validate(
+            await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
+        )
         resolved_branch_id = branch_id or "base"
-        if resolved_branch_id == "base":
-            graph_nodes = flow_config.get("nodes")
-            if not isinstance(graph_nodes, dict) or node_id not in graph_nodes:
-                raise ValueError(f"Node '{node_id}' not found in flow '{flow_id}'")
-            node_before = graph_nodes[node_id]
-        else:
-            branches = flow_config.get("branches")
-            if not isinstance(branches, dict) or resolved_branch_id not in branches:
-                raise ValueError(f"Branch '{resolved_branch_id}' not found in flow '{flow_id}'")
-            branch_cfg = branches[resolved_branch_id]
-            if not isinstance(branch_cfg, dict):
-                raise ValueError(f"Branch '{resolved_branch_id}' payload is invalid")
-            graph_nodes = branch_cfg.get("nodes")
-            if not isinstance(graph_nodes, dict) or node_id not in graph_nodes:
-                raise ValueError(f"Node '{node_id}' not found in branch '{resolved_branch_id}'")
-            node_before = graph_nodes[node_id]
-        node_after = deepcopy(node_before)
-        node_after.update(patch)
+        graph_nodes = self._resolve_graph_nodes(
+            flow_config,
+            flow_id=flow_id,
+            branch_id=resolved_branch_id,
+        )
+        node_before = graph_nodes.get(node_id)
+        if node_before is None:
+            raise ValueError(f"Node '{node_id}' not found in branch '{resolved_branch_id}'")
+        node_after: JsonObject = {**node_before, **patch}
         action = await self._action_engine.preview_action(
             company_id=company_id,
             user_id=user_id,
@@ -180,43 +200,50 @@ class LaraFacade:
         self,
         *,
         pending_action_id: str,
-        state: Any,
+        state: LaraToolState,
         idempotency_key: str | None,
-    ) -> dict[str, Any]:
+    ) -> LaraPendingAction:
         company_id, user_id, context_id = self._require_runtime_ids(state)
 
-        async def _apply(action: dict[str, Any]) -> dict[str, Any]:
-            target = action["target"]
-            payload = action["payload"]
-            flow_id = target["flow_id"]
-            node_id = target["node_id"]
-            branch_id = target.get("branch_id") or "base"
+        async def _apply(action: LaraPendingAction) -> JsonObject:
+            flow_id_raw = action.target.get("flow_id")
+            node_id_raw = action.target.get("node_id")
+            branch_id_raw = action.target.get("branch_id")
+            patch_raw = action.payload.get("patch")
+            if not isinstance(flow_id_raw, str) or not flow_id_raw.strip():
+                raise ValueError("Pending action target.flow_id is missing")
+            if not isinstance(node_id_raw, str) or not node_id_raw.strip():
+                raise ValueError("Pending action target.node_id is missing")
+            if branch_id_raw is not None and not isinstance(branch_id_raw, str):
+                raise ValueError("Pending action target.branch_id must be a string")
+            if not isinstance(patch_raw, dict):
+                raise ValueError("Pending action payload.patch is missing")
+            flow_id = flow_id_raw.strip()
+            node_id = node_id_raw.strip()
+            branch_id = branch_id_raw.strip() if isinstance(branch_id_raw, str) and branch_id_raw.strip() else "base"
+            patch = require_json_object(patch_raw, "pending_action.payload.patch")
             encoded_flow_id = self._encode_flow_id(flow_id)
-            flow_config = await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
-            if not isinstance(flow_config, dict):
-                raise ValueError("Flow config is missing in response")
-            if branch_id == "base":
-                graph_nodes = flow_config.get("nodes")
-                if not isinstance(graph_nodes, dict) or node_id not in graph_nodes:
-                    raise ValueError(f"Node '{node_id}' not found in flow '{flow_id}'")
-                graph_nodes[node_id].update(payload["patch"])
-            else:
-                branches = flow_config.get("branches")
-                if not isinstance(branches, dict) or branch_id not in branches:
-                    raise ValueError(f"Branch '{branch_id}' not found in flow '{flow_id}'")
-                branch_cfg = branches[branch_id]
-                if not isinstance(branch_cfg, dict):
-                    raise ValueError(f"Branch '{branch_id}' payload is invalid")
-                graph_nodes = branch_cfg.get("nodes")
-                if not isinstance(graph_nodes, dict) or node_id not in graph_nodes:
-                    raise ValueError(f"Node '{node_id}' not found in branch '{branch_id}'")
-                graph_nodes[node_id].update(payload["patch"])
-            await self._client.put(
+            flow_config = FlowConfig.model_validate(
+                await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
+            )
+            graph_nodes = self._resolve_graph_nodes(
+                flow_config,
+                flow_id=flow_id,
+                branch_id=branch_id,
+            )
+            node_before = graph_nodes.get(node_id)
+            if node_before is None:
+                raise ValueError(f"Node '{node_id}' not found in branch '{branch_id}'")
+            graph_nodes[node_id] = {**node_before, **patch}
+            _ = await self._client.put(
                 "flows",
                 f"/flows/api/v1/flows/{encoded_flow_id}",
-                json=flow_config,
+                json=require_json_object(
+                    flow_config.model_dump(mode="json"),
+                    "flows.node.patch.flow_config",
+                ),
             )
-            return {"flow_id": flow_id, "node_id": node_id, "patch": payload["patch"]}
+            return {"flow_id": flow_id, "node_id": node_id, "patch": patch}
 
         return await self._action_engine.apply_action(
             company_id=company_id,
@@ -231,17 +258,24 @@ class LaraFacade:
         self,
         *,
         flow_id: str,
-        patch: dict[str, Any],
-        state: Any,
+        patch: JsonObject,
+        state: LaraToolState,
         idempotency_key: str | None,
-    ) -> dict[str, Any]:
+    ) -> LaraPendingAction:
         company_id, user_id, context_id = self._require_runtime_ids(state)
         encoded_flow_id = self._encode_flow_id(flow_id)
-        flow_before = await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
-        if not isinstance(flow_before, dict):
-            raise ValueError("Flow payload is missing in response")
-        flow_after = deepcopy(flow_before)
-        flow_after.update(patch)
+        flow_before = FlowConfig.model_validate(
+            await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
+        )
+        flow_before_payload = require_json_object(
+            flow_before.model_dump(mode="json"),
+            "flows.flow.patch.before",
+        )
+        flow_after = FlowConfig.model_validate({**flow_before_payload, **patch})
+        flow_after_payload = require_json_object(
+            flow_after.model_dump(mode="json"),
+            "flows.flow.patch.after",
+        )
         action = await self._action_engine.preview_action(
             company_id=company_id,
             user_id=user_id,
@@ -252,8 +286,8 @@ class LaraFacade:
             payload={"patch": patch},
             preview={
                 "summary": "Изменение метаданных flow",
-                "flow_before": flow_before,
-                "flow_after": flow_after,
+                "flow_before": flow_before_payload,
+                "flow_after": flow_after_payload,
             },
             risk="medium",
             requires_confirmation=True,
@@ -265,24 +299,36 @@ class LaraFacade:
         self,
         *,
         pending_action_id: str,
-        state: Any,
+        state: LaraToolState,
         idempotency_key: str | None,
-    ) -> dict[str, Any]:
+    ) -> LaraPendingAction:
         company_id, user_id, context_id = self._require_runtime_ids(state)
 
-        async def _apply(action: dict[str, Any]) -> dict[str, Any]:
-            flow_id = action["target"]["flow_id"]
-            patch = action["payload"]["patch"]
+        async def _apply(action: LaraPendingAction) -> JsonObject:
+            flow_id_raw = action.target.get("flow_id")
+            patch_raw = action.payload.get("patch")
+            if not isinstance(flow_id_raw, str) or not flow_id_raw.strip():
+                raise ValueError("Pending action target.flow_id is missing")
+            if not isinstance(patch_raw, dict):
+                raise ValueError("Pending action payload.patch is missing")
+            flow_id = flow_id_raw.strip()
+            patch = require_json_object(patch_raw, "pending_action.payload.patch")
             encoded_flow_id = self._encode_flow_id(flow_id)
-            flow_before = await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
-            if not isinstance(flow_before, dict):
-                raise ValueError("Flow payload is missing in response")
-            flow_after = deepcopy(flow_before)
-            flow_after.update(patch)
-            await self._client.put(
+            flow_before = FlowConfig.model_validate(
+                await self._client.get("flows", f"/flows/api/v1/flows/{encoded_flow_id}")
+            )
+            flow_before_payload = require_json_object(
+                flow_before.model_dump(mode="json"),
+                "flows.flow.patch.before",
+            )
+            flow_after = FlowConfig.model_validate({**flow_before_payload, **patch})
+            _ = await self._client.put(
                 "flows",
                 f"/flows/api/v1/flows/{encoded_flow_id}",
-                json=flow_after,
+                json=require_json_object(
+                    flow_after.model_dump(mode="json"),
+                    "flows.flow.patch.after",
+                ),
             )
             return {"flow_id": flow_id, "patch": patch}
 
@@ -301,15 +347,15 @@ class LaraFacade:
         pending_action_id: str,
         context_id: str,
         idempotency_key: str | None,
-    ) -> dict[str, Any]:
+    ) -> LaraPendingAction:
         pid = pending_action_id.strip()
         if not pid:
             raise ValueError("pending_action_id is required")
         state = _MinimalLaraToolState(context_id)
         company_id, _, _ = self._require_runtime_ids(state)
         peek = await self._action_engine.get_action(company_id=company_id, pending_action_id=pid)
-        capability = peek.get("capability")
-        operation = peek.get("operation")
+        capability = peek.capability
+        operation = peek.operation
         if capability == "crm.note" and operation == "create":
             return await self.apply_crm_create_note(
                 pending_action_id=pid,

@@ -4,8 +4,8 @@
 Каждый сервис регистрирует свои модели, функцию получения URL и путь к Alembic-дереву.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, List
 
 from core.logging import get_logger
 
@@ -19,7 +19,7 @@ class ServiceDBConfig:
     models_module: str
     alembic_script_location: str   # путь к папке с env.py и versions/
 
-_registry: List[ServiceDBConfig] = []
+_registry: list[ServiceDBConfig] = []
 
 def register_service(
     name: str,
@@ -44,7 +44,7 @@ def register_service(
     _registry.append(ServiceDBConfig(name, get_db_url, models_module, location))
     logger.debug(f"Service '{name}' registered for migrations (tree: {location})")
 
-def get_all_services() -> List[ServiceDBConfig]:
+def get_all_services() -> list[ServiceDBConfig]:
     """Возвращает все зарегистрированные сервисы."""
     return _registry.copy()
 
@@ -55,14 +55,14 @@ def get_service_by_name(name: str) -> ServiceDBConfig:
             return svc
     raise KeyError(f"Сервис БД не зарегистрирован: {name!r}")
 
-def get_unique_db_urls() -> dict[str, List[str]]:
+def get_unique_db_urls() -> dict[str, list[str]]:
     """
     Возвращает уникальные URL БД с именами сервисов.
 
     Returns:
         dict: {db_url: [service_names]}
     """
-    urls: dict[str, List[str]] = {}
+    urls: dict[str, list[str]] = {}
 
     for svc in _registry:
         url = svc.get_db_url()

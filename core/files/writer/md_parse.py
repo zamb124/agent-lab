@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 from core.files.writer.exceptions import FileWriteError
 
@@ -12,15 +12,15 @@ _MD_IMG = re.compile(
 )
 
 
-def split_text_and_tables(text: str) -> List[Dict[str, Any]]:
+def split_text_and_tables(text: str) -> list[dict[str, Any]]:
     """Делит фрагмент markdown на блоки text и table (GFM-строки с |)."""
     lines = text.split("\n")
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     i = 0
     n = len(lines)
     while i < n:
         if lines[i].strip().startswith("|"):
-            block: List[str] = []
+            block: list[str] = []
             while i < n and lines[i].strip().startswith("|"):
                 block.append(lines[i])
                 i += 1
@@ -36,11 +36,11 @@ def split_text_and_tables(text: str) -> List[Dict[str, Any]]:
     return out
 
 
-def flatten_markdown_segments(md: str) -> List[Dict[str, Any]]:
+def flatten_markdown_segments(md: str) -> list[dict[str, Any]]:
     """
     Порядок как в исходном markdown: чередование текста (с таблицами) и картинок ![]().
     """
-    segments: List[Dict[str, Any]] = []
+    segments: list[dict[str, Any]] = []
     pos = 0
     for m in _MD_IMG.finditer(md):
         before = md[pos : m.start()]
@@ -55,9 +55,9 @@ def flatten_markdown_segments(md: str) -> List[Dict[str, Any]]:
     return segments
 
 
-def parse_gfm_table(raw: str) -> List[List[str]]:
+def parse_gfm_table(raw: str) -> list[list[str]]:
     """Парсит GFM-таблицу в матрицу ячеек; строку-разделитель |---| пропускает."""
-    rows: List[List[str]] = []
+    rows: list[list[str]] = []
     for line in raw.strip().split("\n"):
         line_st = line.strip()
         if not line_st.startswith("|"):

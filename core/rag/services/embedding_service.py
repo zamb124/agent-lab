@@ -6,7 +6,7 @@
 Биллинг: span'ы с billing_pending_settlement — фоновая джоба settlement.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import tiktoken
 
@@ -65,12 +65,12 @@ class EmbeddingService:
     def __init__(
         self,
         api_key: str,
-        models: Optional[List[str]] = None,
-        base_url: Optional[str] = None,
+        models: list[str] | None = None,
+        base_url: str | None = None,
         timeout: int = 15,
-        dimension: Optional[int] = None,
-        mrl_output_dimension: Optional[int] = None,
-        extra_headers: Optional[Dict[str, str]] = None,
+        dimension: int | None = None,
+        mrl_output_dimension: int | None = None,
+        extra_headers: dict[str, str] | None = None,
     ):
         if not api_key:
             raise ValueError("API key обязателен для EmbeddingService")
@@ -88,7 +88,7 @@ class EmbeddingService:
                 )
 
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
-        self._extra_headers: Dict[str, str] = dict(extra_headers) if extra_headers else {}
+        self._extra_headers: dict[str, str] = dict(extra_headers) if extra_headers else {}
 
         # Список моделей для fallback
         if models:
@@ -97,8 +97,8 @@ class EmbeddingService:
             self.models = ["openai/text-embedding-3-small"]
 
         # Текущая активная модель (будет определена при первом запросе)
-        self._active_model: Optional[str] = None
-        self._active_dimension: Optional[int] = None
+        self._active_model: str | None = None
+        self._active_dimension: int | None = None
 
         if base_url:
             self.api_url = base_url.rstrip("/")
@@ -142,13 +142,13 @@ class EmbeddingService:
         """Текущая активная модель"""
         return self._active_model or self.models[0]
 
-    def count_tokens(self, texts: List[str]) -> int:
+    def count_tokens(self, texts: list[str]) -> int:
         total = 0
         for text in texts:
             total += len(self._tokenizer.encode(text))
         return total
 
-    async def _try_model(self, model: str, texts: List[str]) -> Optional[List[List[float]]]:
+    async def _try_model(self, model: str, texts: list[str]) -> list[list[float]] | None:
         """
         Пробует сгенерировать embeddings с указанной моделью.
 
@@ -200,7 +200,7 @@ class EmbeddingService:
             logger.warning(f"Model {model} failed: {e}")
             return None
 
-    async def _generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+    async def _generate_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
         """
         Генерирует embeddings для одного батча текстов с fallback.
         """
@@ -230,7 +230,7 @@ class EmbeddingService:
             "Проверьте доступность сервиса, модель и ключ (если провайдер его требует)."
         )
 
-    async def generate_embedding(self, text: str) -> List[float]:
+    async def generate_embedding(self, text: str) -> list[float]:
         """
         Генерирует embedding для одного текста.
 
@@ -243,7 +243,7 @@ class EmbeddingService:
         embeddings = await self.generate_embeddings([text])
         return embeddings[0]
 
-    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+    async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """
         Генерирует embeddings для списка текстов (batch).
         Автоматически разбивает на батчи если текстов много.
@@ -293,7 +293,7 @@ class EmbeddingService:
         ) as span:
             logger.info(f"Генерация embeddings для {len(texts)} текстов ({token_count} токенов)")
 
-            all_embeddings: List[List[float]] = []
+            all_embeddings: list[list[float]] = []
             total_batches = (len(texts) + self.BATCH_SIZE - 1) // self.BATCH_SIZE
 
             for i in range(0, len(texts), self.BATCH_SIZE):
@@ -323,8 +323,8 @@ class EmbeddingService:
 
     def _truncate_vectors(
         self,
-        vectors: List[List[float]],
-    ) -> List[List[float]]:
+        vectors: list[list[float]],
+    ) -> list[list[float]]:
         """
         MRL: первые ``mrl_output_dimension`` компонент — L2 по префиксу.
 
@@ -335,7 +335,7 @@ class EmbeddingService:
             return vectors
         n = self.mrl_output_dimension
         dense_storage = self.dimension is not None and self.dimension == n
-        padded: List[List[float]] = []
+        padded: list[list[float]] = []
         for vec in vectors:
             if len(vec) < n:
                 raise ValueError(
@@ -372,7 +372,7 @@ class EmbeddingService:
             "Не задана размерность embedding: укажите dimension в конфиге или используйте модель из MODEL_DIMENSIONS"
         )
 
-    def get_active_model(self) -> Optional[str]:
+    def get_active_model(self) -> str | None:
         """Возвращает текущую активную модель (или None если ещё не определена)"""
         return self._active_model
 

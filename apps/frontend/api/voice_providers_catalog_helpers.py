@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import FrozenSet
-
 from pydantic import BaseModel, ConfigDict
 
 from core.clients.speech_provider_catalog import (
@@ -33,7 +31,7 @@ __all__ = [
 ]
 
 
-def allowed_secret_keys(kind: str, provider: str) -> FrozenSet[str]:
+def allowed_secret_keys(kind: str, provider: str) -> frozenset[str]:
     """Допустимые ключи в JSONB secrets для связки kind + provider."""
     _ = kind
     if provider == "litserve" or provider == "silero_local" or provider == "mock":

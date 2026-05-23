@@ -1,6 +1,5 @@
 """Репозиторий для работы с Git-ресурсами (SQLAlchemy)."""
 
-from typing import Type
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncGitResourceRef
@@ -14,7 +13,7 @@ class GitResourceRefRepository(BaseSyncRepository[SyncGitResourceRef]):
         super().__init__(db=db)
 
     @property
-    def model_class(self) -> Type[SyncGitResourceRef]:
+    def model_class(self) -> type[SyncGitResourceRef]:
         return SyncGitResourceRef
 
     @property

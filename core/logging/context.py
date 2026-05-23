@@ -11,12 +11,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from contextlib import AbstractContextManager
+from types import TracebackType
+from typing import cast
 
 import structlog
 
 
-def bind_log_context(**fields: Any) -> None:
+def bind_log_context(**fields: object) -> None:
     """
     Добавить поля в лог-контекст текущей contextvar-копии.
 
@@ -26,7 +28,7 @@ def bind_log_context(**fields: Any) -> None:
     cleaned = {key: value for key, value in fields.items() if value not in (None, "")}
     if not cleaned:
         return
-    structlog.contextvars.bind_contextvars(**cleaned)
+    _ = structlog.contextvars.bind_contextvars(**cleaned)
 
 
 def unbind_log_context(*keys: str) -> None:
@@ -41,16 +43,16 @@ def clear_log_context() -> None:
     structlog.contextvars.clear_contextvars()
 
 
-def get_log_context() -> dict[str, Any]:
+def get_log_context() -> dict[str, object]:
     """Вернуть копию текущего лог-контекста (для отладки и тестов)."""
-    return dict(structlog.contextvars.get_contextvars())
+    return cast(dict[str, object], dict(structlog.contextvars.get_contextvars()))
 
 
-def restore_log_context(snapshot: dict[str, Any]) -> None:
+def restore_log_context(snapshot: dict[str, object]) -> None:
     """Восстановить лог-контекст из snapshot (используется при выходе из скоупа)."""
     structlog.contextvars.clear_contextvars()
     if snapshot:
-        structlog.contextvars.bind_contextvars(**snapshot)
+        _ = structlog.contextvars.bind_contextvars(**snapshot)
 
 
 class LogContextScope:
@@ -63,23 +65,38 @@ class LogContextScope:
             await do_work()
     """
 
-    def __init__(self, **fields: Any) -> None:
-        self._fields = {key: value for key, value in fields.items() if value not in (None, "")}
-        self._cm = None
+    def __init__(self, **fields: object) -> None:
+        self._fields: dict[str, object] = {
+            key: value for key, value in fields.items() if value not in (None, "")
+        }
+        self._cm: AbstractContextManager[object] | None = None
 
     def __enter__(self) -> "LogContextScope":
         if self._fields:
-            self._cm = structlog.contextvars.bound_contextvars(**self._fields)
-            self._cm.__enter__()
+            self._cm = cast(
+                AbstractContextManager[object],
+                structlog.contextvars.bound_contextvars(**self._fields),
+            )
+            _ = self._cm.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         if self._cm is not None:
-            self._cm.__exit__(exc_type, exc, tb)
+            _ = self._cm.__exit__(exc_type, exc, tb)
             self._cm = None
 
     async def __aenter__(self) -> "LogContextScope":
         return self.__enter__()
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self.__exit__(exc_type, exc, tb)

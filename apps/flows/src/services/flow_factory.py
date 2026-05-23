@@ -3,11 +3,12 @@ FlowFactory - создание flow из БД.
 """
 
 import copy
-from typing import Any, TypedDict
+from collections.abc import Mapping
+from typing import Any, TypedDict, overload
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.db import FlowRepository
-from apps.flows.src.models import BranchConfig, FlowConfig
+from apps.flows.src.models import BranchConfig, FlowConfig, ResourceMapInput, ResourceReference
 from apps.flows.src.models.enums import MergeMode
 from apps.flows.src.models.flow_config import Edge, FlowVariableConfig
 from apps.flows.src.runtime.flow import Flow
@@ -16,6 +17,7 @@ from apps.flows.src.utils.merge import deep_merge
 from apps.flows.src.variables import VariablesService
 from core.compiler import GraphCompiler
 from core.logging import get_logger
+from core.types import JsonArray, JsonObject, JsonValue, require_json_object, require_json_value
 from core.variables import VarResolver
 
 logger = get_logger(__name__)
@@ -24,7 +26,7 @@ class EffectiveFlowConfig(TypedDict):
     entry: str | None
     nodes: dict[str, dict[str, Any]]
     edges: list[Edge]
-    variables: dict[str, Any]
+    variables: JsonObject
 
 
 class FlowFactory:
@@ -43,18 +45,14 @@ class FlowFactory:
         self.container = container
 
     @staticmethod
-    def _resource_map_to_plain(ref_map: dict[str, Any] | None) -> dict[str, Any]:
+    def _resource_map_to_plain(ref_map: dict[str, ResourceReference] | None) -> ResourceMapInput:
         """ResourceReference и dict в плоский dict для ResourceResolver."""
-        out: dict[str, Any] = {}
+        out: ResourceMapInput = {}
         for key, value in (ref_map or {}).items():
-            if hasattr(value, "model_dump"):
-                out[key] = value.model_dump()
-            elif isinstance(value, dict):
-                out[key] = value
-            else:
-                raise TypeError(
-                    f"resource '{key}': ожидается ResourceReference или dict, получен {type(value)}"
-                )
+            out[key] = require_json_object(
+                value.model_dump(mode="json", exclude_none=True),
+                f"resources.{key}",
+            )
         return out
 
     @staticmethod
@@ -108,7 +106,7 @@ class FlowFactory:
         flow_id: str,
         branch_id: str,
         config_version: str | None = None,
-    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    ) -> tuple[ResourceMapInput, ResourceMapInput | None]:
         """
         Ресурсы уровня flow и skill из БД (без inline state.flow_config).
 
@@ -124,7 +122,7 @@ class FlowFactory:
             return {}, None
 
         flow_resources = self._resource_map_to_plain(config.resources)
-        skill_resources: dict[str, Any] | None = None
+        skill_resources: ResourceMapInput | None = None
         if branch_id and branch_id != "default" and config.branches and branch_id in config.branches:
             sk = config.branches[branch_id]
             raw_skill_res = sk.resources or {}
@@ -160,7 +158,7 @@ class FlowFactory:
         branch_id: str = "default",
         *,
         config_version: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """
         Словарь resolved variables для flow+skill — тот же, что попадает в ``Flow.variables``
         (после ``apply_branch`` и ``_resolve_variables``), без сборки графа.
@@ -235,12 +233,12 @@ class FlowFactory:
             Dict с effective конфигом (entry, nodes, edges, variables)
         """
         # Извлекаем значения из FlowVariableConfig объектов
-        variables_dict: dict[str, Any] = {}
+        variables_dict: JsonObject = {}
         for key, value in config.variables.items():
             if isinstance(value, FlowVariableConfig):
                 variables_dict[key] = value.value
             else:
-                variables_dict[key] = value
+                variables_dict[key] = require_json_value(value, f"variables.{key}")
 
         result: EffectiveFlowConfig = {
             "entry": config.entry,
@@ -278,12 +276,12 @@ class FlowFactory:
 
         # Variables
         if branch.variables:
-            branch_vars = {}
+            branch_vars: JsonObject = {}
             for key, value in branch.variables.items():
                 if isinstance(value, FlowVariableConfig):
                     branch_vars[key] = value.value
                 else:
-                    branch_vars[key] = value
+                    branch_vars[key] = require_json_value(value, f"branches.{branch_id}.variables.{key}")
 
             if branch.variables_mode == MergeMode.MERGE:
                 result["variables"].update(branch_vars)
@@ -318,7 +316,7 @@ class FlowFactory:
         base_edges.extend(filtered)
         base_edges.extend(skill_edges)
 
-    async def _resolve_variables(self, variables: dict[str, Any]) -> dict[str, Any]:
+    async def _resolve_variables(self, variables: JsonObject) -> JsonObject:
         """
         Резолвит @var:key ссылки в переменных и извлекает значения из FlowVariableConfig.
 
@@ -336,7 +334,7 @@ class FlowFactory:
             company_variables=company_variables,
         )
 
-        result = {}
+        result: JsonObject = {}
         for key, value in resolved.items():
             if isinstance(value, dict) and "value" in value:
                 result[key] = value["value"]
@@ -345,11 +343,32 @@ class FlowFactory:
 
         return result
 
+    @overload
     def _resolve_flow_variables(
         self,
-        value: Any,
-        company_variables: dict[str, Any],
-    ) -> Any:
+        value: JsonObject,
+        company_variables: Mapping[str, JsonValue],
+    ) -> JsonObject: ...
+
+    @overload
+    def _resolve_flow_variables(
+        self,
+        value: JsonArray,
+        company_variables: Mapping[str, JsonValue],
+    ) -> JsonArray: ...
+
+    @overload
+    def _resolve_flow_variables(
+        self,
+        value: JsonValue,
+        company_variables: Mapping[str, JsonValue],
+    ) -> JsonValue: ...
+
+    def _resolve_flow_variables(
+        self,
+        value: JsonValue,
+        company_variables: Mapping[str, JsonValue],
+    ) -> JsonValue:
         if isinstance(value, dict):
             return {
                 key: self._resolve_flow_variables(item, company_variables)

@@ -2,13 +2,20 @@
 MCP Tool Wrapper - обёртка для вызова MCP tools через MCPClient.
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, override
 
 from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import MCPServerConfig
 from apps.flows.src.models.tool_reference import CallParameter
-from apps.flows.src.tools.base import BaseTool, sanitize_tool_name
+from apps.flows.src.tools.base import (
+    BaseTool,
+    ToolArguments,
+    ToolParametersSchema,
+    ToolResult,
+    sanitize_tool_name,
+)
 from core.logging import get_logger
+from core.types import JsonObject, JsonValue, require_json_object
 
 if TYPE_CHECKING:
     from apps.flows.src.state import ExecutionState
@@ -23,9 +30,6 @@ class MCPTool(BaseTool):
     Вызывает tool на удалённом MCP сервере через MCPClient.
     """
 
-    name: str = "mcp_tool"
-    description: str = "MCP tool"
-
     def __init__(
         self,
         tool_id: str,
@@ -33,27 +37,28 @@ class MCPTool(BaseTool):
         mcp_tool_name: str,
         description: str | None = None,
         parameters: dict[str, CallParameter] | None = None,
-        parameters_schema: dict[str, Any] | None = None,
+        parameters_schema: JsonObject | None = None,
         tags: list[str] | None = None,
     ):
-        self.name = sanitize_tool_name(tool_id)
-        self.description = description or f"MCP tool: {mcp_tool_name}"
-        self._mcp_server_config = mcp_server_config
-        self._mcp_tool_name = mcp_tool_name
-        self._parameters = parameters or {}
-        self._parameters_schema = parameters_schema
-        self.tags = tags or ["mcp"]
+        self.name: str = sanitize_tool_name(tool_id)
+        self.description: str = description or f"MCP tool: {mcp_tool_name}"
+        self._mcp_server_config: MCPServerConfig = mcp_server_config
+        self._mcp_tool_name: str = mcp_tool_name
+        self._parameters: dict[str, CallParameter] = parameters or {}
+        self._parameters_schema: JsonObject | None = parameters_schema
+        self.tags: list[str] = tags or ["mcp"]
 
     @property
-    def parameters(self) -> dict[str, Any]:
+    @override
+    def parameters(self) -> ToolParametersSchema:
         """JSON Schema параметров."""
         if self._parameters_schema is not None:
             return self._parameters_schema
         if not self._parameters:
             return {"type": "object", "properties": {}, "required": []}
 
-        properties = {}
-        required = []
+        properties: JsonObject = {}
+        required: list[JsonValue] = []
 
         for param_name, param in self._parameters.items():
             properties[param_name] = {
@@ -69,7 +74,8 @@ class MCPTool(BaseTool):
             "required": required,
         }
 
-    async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
+    @override
+    async def _run_impl(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
         """
         Вызывает MCP tool на удалённом сервере.
 
@@ -80,7 +86,7 @@ class MCPTool(BaseTool):
         Returns:
             Текстовый результат от MCP tool
         """
-        variables = state.variables if hasattr(state, 'variables') else {}
+        variables = require_json_object(state.variables, "state.variables")
 
         client = MCPClient(
             config=self._mcp_server_config,

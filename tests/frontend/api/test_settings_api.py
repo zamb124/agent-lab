@@ -45,6 +45,81 @@ class TestSettingsAPI:
         assert "llm_summarize" in body["catalog"]
         prov_items = body["catalog"]["llm_summarize"]
         assert any(p.get("kind") == "platform" for p in prov_items)
+        assert body["llm_context"]["configured"] is False
+        assert body["llm_context"]["config"] == {}
+        assert "standard" in body["llm_context"]["profiles"]
+        assert "large" in body["llm_context"]["budgets"]
+
+    async def test_update_ai_provider_llm_context_default(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers,
+        frontend_container
+    ):
+        """Company default контекстного слоя сохраняется в реальной БД и снимается DELETE."""
+        from core.company_ai import CompanyAIProviders
+        from core.utils.tokens import get_token_service
+
+        token_service = get_token_service()
+        token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
+        company_id = token_data.company_id
+
+        payload = {
+            "profile": "agent",
+            "memory": "session",
+            "retrieval": {"mode": "hybrid", "top_k": 24, "rerank": True},
+            "budget": "large",
+            "cache": "provider_hints",
+        }
+        response = await frontend_client.put(
+            "/frontend/api/settings/ai-providers/llm-context",
+            headers=auth_headers,
+            json=payload,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+
+        company = await frontend_container.company_repository.get(company_id)
+        aip = CompanyAIProviders.from_metadata(company.metadata or {})
+        assert aip.llm_context is not None
+        assert aip.llm_context.profile == "agent"
+        assert aip.llm_context.retrieval is not None
+        assert aip.llm_context.retrieval.top_k == 24
+
+        snapshot = await frontend_client.get(
+            "/frontend/api/settings/ai-providers",
+            headers=auth_headers,
+        )
+        assert snapshot.status_code == 200
+        body = snapshot.json()["llm_context"]
+        assert body["configured"] is True
+        assert body["config"]["profile"] == "agent"
+        assert body["config"]["retrieval"]["rerank"] is True
+
+        cleared = await frontend_client.delete(
+            "/frontend/api/settings/ai-providers/llm-context",
+            headers=auth_headers,
+        )
+        assert cleared.status_code == 200
+        company = await frontend_container.company_repository.get(company_id)
+        aip = CompanyAIProviders.from_metadata(company.metadata or {})
+        assert aip.llm_context is None
+
+    async def test_update_ai_provider_llm_context_rejects_unknown_profile(
+        self,
+        frontend_client: AsyncClient,
+        auth_headers,
+    ):
+        """Company default валидируется против platform profiles сразу в Settings API."""
+        response = await frontend_client.put(
+            "/frontend/api/settings/ai-providers/llm-context",
+            headers=auth_headers,
+            json={"profile": "missing-profile"},
+        )
+
+        assert response.status_code == 400
+        assert "missing-profile" in response.json()["detail"]
 
     async def test_get_company_settings_unauthorized(self, frontend_client: AsyncClient):
         """Попытка получить настройки без авторизации"""
@@ -315,4 +390,3 @@ class TestSettingsAPI:
         assert company.monthly_budget == 3000.0
         assert "updated" in company.metadata
         assert company.metadata["updated"] is True
-

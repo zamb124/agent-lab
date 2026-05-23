@@ -5,13 +5,15 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import ClassVar, Literal, Protocol
 from uuid import uuid4
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -32,12 +34,52 @@ class LaraActionRedisClient(Protocol):
     async def delete(self, *keys: str) -> int: ...
 
 
+class LaraActionOwner(BaseModel):
+    """Владелец pending-action: ровно тот runtime-контекст, которому разрешён apply/reject."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    company_id: str
+    user_id: str
+    context_id: str
+
+
+class LaraPendingAction(BaseModel):
+    """Канонический контракт confirm-first действия Lara, сохраняемый в Redis."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    schema_version: str = ACTION_SCHEMA_VERSION
+    action_id: str
+    pending_action_id: str
+    action_kind: Literal["apply"] = "apply"
+    idempotency_key: str
+    status: Literal["previewed", "applied", "rejected"]
+    requires_confirmation: bool
+    capability: str
+    operation: str
+    target: JsonObject = Field(default_factory=dict)
+    payload: JsonObject = Field(default_factory=dict)
+    preview: JsonObject = Field(default_factory=dict)
+    risk: str
+    owner: LaraActionOwner
+    created_at: str
+    updated_at: str
+    result: JsonObject | None = None
+    applied_at: str | None = None
+    rejected_at: str | None = None
+    reject_reason: str | None = None
+
+
+LaraApplyFn = Callable[[LaraPendingAction], Awaitable[JsonObject]]
+
+
 class LaraActionEngine:
     """Серверный движок действий Lara c pending-actions в Redis."""
 
     def __init__(self, redis_client: LaraActionRedisClient, ttl_seconds: int = 3600):
-        self._redis = redis_client
-        self._ttl_seconds = ttl_seconds
+        self._redis: LaraActionRedisClient = redis_client
+        self._ttl_seconds: int = ttl_seconds
 
     @staticmethod
     def _now_iso() -> str:
@@ -52,15 +94,13 @@ class LaraActionEngine:
         return f"assistant:pending_apply_lock:{company_id}:{pending_action_id}"
 
     @staticmethod
-    def _validate_owner(action: dict[str, Any], company_id: str, user_id: str, context_id: str) -> None:
-        owner = action.get("owner")
-        if not isinstance(owner, dict):
-            raise ValueError("Pending action owner is invalid")
-        if owner.get("company_id") != company_id:
+    def _validate_owner(action: LaraPendingAction, company_id: str, user_id: str, context_id: str) -> None:
+        owner = action.owner
+        if owner.company_id != company_id:
             raise PermissionError("Pending action company mismatch")
-        if owner.get("user_id") != user_id:
+        if owner.user_id != user_id:
             raise PermissionError("Pending action user mismatch")
-        if owner.get("context_id") != context_id:
+        if owner.context_id != context_id:
             raise PermissionError("Pending action context mismatch")
 
     async def preview_action(
@@ -71,13 +111,13 @@ class LaraActionEngine:
         context_id: str,
         capability: str,
         operation: str,
-        target: dict[str, Any],
-        payload: dict[str, Any],
-        preview: dict[str, Any],
+        target: JsonObject,
+        payload: JsonObject,
+        preview: JsonObject,
         risk: str,
         requires_confirmation: bool = True,
         idempotency_key: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> LaraPendingAction:
         if not company_id:
             raise ValueError("company_id is required")
         if not user_id:
@@ -88,41 +128,32 @@ class LaraActionEngine:
             raise ValueError("capability is required")
         if not operation:
             raise ValueError("operation is required")
-        if not isinstance(target, dict):
-            raise ValueError("target must be an object")
-        if not isinstance(payload, dict):
-            raise ValueError("payload must be an object")
-        if not isinstance(preview, dict):
-            raise ValueError("preview must be an object")
-
         action_id = str(uuid4())
         pending_action_id = str(uuid4())
         resolved_idempotency_key = idempotency_key or action_id
         now_iso = self._now_iso()
-        action: dict[str, Any] = {
-            "schema_version": ACTION_SCHEMA_VERSION,
-            "action_id": action_id,
-            "pending_action_id": pending_action_id,
-            "action_kind": "apply",
-            "idempotency_key": resolved_idempotency_key,
-            "status": "previewed",
-            "requires_confirmation": requires_confirmation,
-            "capability": capability,
-            "operation": operation,
-            "target": target,
-            "payload": payload,
-            "preview": preview,
-            "risk": risk,
-            "owner": {
-                "company_id": company_id,
-                "user_id": user_id,
-                "context_id": context_id,
-            },
-            "created_at": now_iso,
-            "updated_at": now_iso,
-        }
+        action = LaraPendingAction(
+            action_id=action_id,
+            pending_action_id=pending_action_id,
+            idempotency_key=resolved_idempotency_key,
+            status="previewed",
+            requires_confirmation=requires_confirmation,
+            capability=capability,
+            operation=operation,
+            target=target,
+            payload=payload,
+            preview=preview,
+            risk=risk,
+            owner=LaraActionOwner(
+                company_id=company_id,
+                user_id=user_id,
+                context_id=context_id,
+            ),
+            created_at=now_iso,
+            updated_at=now_iso,
+        )
         key = self._pending_key(company_id, pending_action_id)
-        is_saved = await self._redis.set(key, json.dumps(action, ensure_ascii=False), ttl=self._ttl_seconds)
+        is_saved = await self._redis.set(key, action.model_dump_json(), ttl=self._ttl_seconds)
         if not is_saved:
             raise RuntimeError("Failed to persist pending action")
         logger.info(
@@ -134,15 +165,12 @@ class LaraActionEngine:
         )
         return action
 
-    async def get_action(self, *, company_id: str, pending_action_id: str) -> dict[str, Any]:
+    async def get_action(self, *, company_id: str, pending_action_id: str) -> LaraPendingAction:
         key = self._pending_key(company_id, pending_action_id)
         raw = await self._redis.get(key)
         if raw is None:
             raise ValueError(f"Pending action '{pending_action_id}' not found or expired")
-        parsed = json.loads(raw)
-        if not isinstance(parsed, dict):
-            raise ValueError("Pending action payload is invalid")
-        return parsed
+        return LaraPendingAction.model_validate_json(raw)
 
     async def _wait_apply_or_raise_contention(
         self,
@@ -152,18 +180,17 @@ class LaraActionEngine:
         context_id: str,
         pending_action_id: str,
         idempotency_key: str | None,
-    ) -> dict[str, Any]:
+    ) -> LaraPendingAction:
         for _ in range(_APPLY_CONTENTION_MAX_POLLS):
             await asyncio.sleep(_APPLY_CONTENTION_POLL_SEC)
             action = await self.get_action(company_id=company_id, pending_action_id=pending_action_id)
             self._validate_owner(action, company_id, user_id, context_id)
-            st = action.get("status")
-            if st == "applied":
-                if idempotency_key and action.get("idempotency_key") != idempotency_key:
+            if action.status == "applied":
+                if idempotency_key and action.idempotency_key != idempotency_key:
                     raise ValueError("idempotency_key mismatch for already applied action")
                 return action
-            if st != "previewed":
-                raise ValueError(f"Unsupported pending action status: {action.get('status')}")
+            if action.status != "previewed":
+                raise ValueError(f"Unsupported pending action status: {action.status}")
         raise ValueError("Timeout waiting for concurrent Lara pending-action apply")
 
     async def apply_action(
@@ -174,8 +201,8 @@ class LaraActionEngine:
         context_id: str,
         pending_action_id: str,
         idempotency_key: str | None,
-        apply_fn: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]],
-    ) -> dict[str, Any]:
+        apply_fn: LaraApplyFn,
+    ) -> LaraPendingAction:
         lock_key = self._apply_lock_key(company_id, pending_action_id)
         lock_ok = await self._redis.set_nx(lock_key, "1", _APPLY_LOCK_TTL_SECONDS)
         if not lock_ok:
@@ -190,37 +217,39 @@ class LaraActionEngine:
             action = await self.get_action(company_id=company_id, pending_action_id=pending_action_id)
             self._validate_owner(action, company_id, user_id, context_id)
 
-            if action.get("status") == "applied":
-                if idempotency_key and action.get("idempotency_key") != idempotency_key:
+            if action.status == "applied":
+                if idempotency_key and action.idempotency_key != idempotency_key:
                     raise ValueError("idempotency_key mismatch for already applied action")
                 return action
-            if action.get("status") != "previewed":
-                raise ValueError(f"Unsupported pending action status: {action.get('status')}")
+            if action.status != "previewed":
+                raise ValueError(f"Unsupported pending action status: {action.status}")
 
-            resolved_idempotency_key = idempotency_key or action.get("idempotency_key")
-            if resolved_idempotency_key != action.get("idempotency_key"):
+            resolved_idempotency_key = idempotency_key or action.idempotency_key
+            if resolved_idempotency_key != action.idempotency_key:
                 raise ValueError("idempotency_key mismatch")
 
             result = await apply_fn(action)
-            if not isinstance(result, dict):
-                raise ValueError("apply_fn must return an object")
-
-            action["status"] = "applied"
-            action["result"] = result
-            action["applied_at"] = self._now_iso()
-            action["updated_at"] = self._now_iso()
+            now_iso = self._now_iso()
+            action = action.model_copy(
+                update={
+                    "status": "applied",
+                    "result": result,
+                    "applied_at": now_iso,
+                    "updated_at": now_iso,
+                }
+            )
             key = self._pending_key(company_id, pending_action_id)
-            is_saved = await self._redis.set(key, json.dumps(action, ensure_ascii=False), ttl=self._ttl_seconds)
+            is_saved = await self._redis.set(key, action.model_dump_json(), ttl=self._ttl_seconds)
             if not is_saved:
                 raise RuntimeError("Failed to persist applied action")
             logger.info(
                 "lara_action_applied action_id=%s pending_action_id=%s",
-                action.get("action_id"),
+                action.action_id,
                 pending_action_id,
             )
             return action
         finally:
-            await self._redis.delete(lock_key)
+            _ = await self._redis.delete(lock_key)
 
     async def reject_action(
         self,
@@ -230,23 +259,28 @@ class LaraActionEngine:
         context_id: str,
         pending_action_id: str,
         reason: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> LaraPendingAction:
         action = await self.get_action(company_id=company_id, pending_action_id=pending_action_id)
         self._validate_owner(action, company_id, user_id, context_id)
-        if action.get("status") == "applied":
+        if action.status == "applied":
             raise ValueError("Applied action cannot be rejected")
-        action["status"] = "rejected"
-        action["rejected_at"] = self._now_iso()
-        action["updated_at"] = self._now_iso()
-        action["reject_reason"] = reason or "rejected_by_user"
+        now_iso = self._now_iso()
+        action = action.model_copy(
+            update={
+                "status": "rejected",
+                "rejected_at": now_iso,
+                "updated_at": now_iso,
+                "reject_reason": reason or "rejected_by_user",
+            }
+        )
         key = self._pending_key(company_id, pending_action_id)
-        is_saved = await self._redis.set(key, json.dumps(action, ensure_ascii=False), ttl=self._ttl_seconds)
+        is_saved = await self._redis.set(key, action.model_dump_json(), ttl=self._ttl_seconds)
         if not is_saved:
             raise RuntimeError("Failed to persist rejected action")
         logger.info(
             "lara_action_rejected action_id=%s pending_action_id=%s reason=%s",
-            action.get("action_id"),
+            action.action_id,
             pending_action_id,
-            action["reject_reason"],
+            action.reject_reason,
         )
         return action

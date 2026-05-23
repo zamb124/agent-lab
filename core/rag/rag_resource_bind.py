@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import Field
 
@@ -18,25 +18,41 @@ class RagResourceBindParams(StrictBaseModel):
 
     namespace: str = Field(..., description="ID или scope namespace")
     provider: str = Field(default="pgvector", description="RAG провайдер")
-    default_top_k: int = Field(default=5, description="Дефолтное количество результатов поиска")
-    company_id: Optional[str] = Field(
+    default_top_k: int = Field(default=5, ge=1, description="Дефолтное количество результатов поиска")
+    company_id: str | None = Field(
         default=None,
         description=(
             "Явный X-Company-Id для HTTP-вызовов RAG API (поиск). "
             "Если не задан — из get_context().active_company при выполнении flow."
         ),
     )
-    search_options: Optional[Dict[str, Any]] = Field(
+    search_options: dict[str, Any] | None = Field(
         default=None,
         description=(
             "Параметры поиска для вызовов search (как у POST /rag/.../search без query, limit, filters): "
             "channels, rrf_k, per_channel_top_k, rerank и пр."
         ),
     )
-    index_profile_config: Optional[Dict[str, Any]] = Field(
+    filters: dict[str, Any] | None = Field(
+        default=None,
+        description="Дефолтные metadata-фильтры ресурса; call-level filters перекрывают совпадающие ключи.",
+    )
+    index_profile_config: dict[str, Any] | None = Field(
         default=None,
         description=(
             "Частичный профиль индексации (как у IndexProfileConfig): split, parsing, lexical, "
             "опционально search_defaults. Сливается с rag.document_indexing при записи документа."
         ),
     )
+
+
+class RagResourceBindPatch(StrictBaseModel):
+    """Partial overlay for a shared RAG resource reference."""
+
+    namespace: str | None = Field(default=None, description="ID или scope namespace")
+    provider: str | None = Field(default=None, description="RAG провайдер")
+    default_top_k: int | None = Field(default=None, ge=1)
+    company_id: str | None = None
+    search_options: dict[str, Any] | None = None
+    filters: dict[str, Any] | None = None
+    index_profile_config: dict[str, Any] | None = None

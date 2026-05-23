@@ -4,7 +4,7 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -64,12 +64,12 @@ class Transaction(BaseModel):
         title="Платежный провайдер",
         description="Через какой провайдер производится оплата"
     )
-    external_payment_id: Optional[str] = Field(
+    external_payment_id: str | None = Field(
         default=None,
         title="ID платежа у провайдера",
         description="ID операции в системе платежного провайдера"
     )
-    payment_url: Optional[str] = Field(
+    payment_url: str | None = Field(
         default=None,
         title="URL для оплаты",
         description="Ссылка для перехода на страницу оплаты"
@@ -80,13 +80,13 @@ class Transaction(BaseModel):
         description="Время создания транзакции",
         readonly=True
     )
-    completed_at: Optional[datetime] = Field(
+    completed_at: datetime | None = Field(
         default=None,
         title="Завершено",
         description="Время завершения транзакции",
         readonly=True
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         title="Метаданные",
         description="Дополнительные данные о транзакции"
@@ -111,16 +111,16 @@ class PaymentNotification(BaseModel):
         title="Провайдер",
         description="От какого провайдера пришло уведомление"
     )
-    transaction_id: Optional[str] = Field(
+    transaction_id: str | None = Field(
         default=None,
         title="ID транзакции",
         description="ID транзакции в нашей системе"
     )
-    external_payment_id: Optional[str] = Field(
+    external_payment_id: str | None = Field(
         default=None,
         title="ID платежа у провайдера"
     )
-    raw_data: Dict[str, Any] = Field(
+    raw_data: dict[str, Any] = Field(
         default_factory=dict,
         title="Сырые данные",
         description="Полные данные webhook для отладки"
@@ -144,7 +144,7 @@ class CreatePaymentRequest(BaseModel):
         le=1000000.0,
         description="Сумма пополнения (мин. 100₽, макс. 1,000,000₽)"
     )
-    provider: Optional[str] = Field(
+    provider: str | None = Field(
         default=None,
         description="Платежный провайдер (если None - используется дефолтный)"
     )
@@ -166,10 +166,10 @@ class TransactionResponse(BaseModel):
     amount: float
     status: PaymentStatus
     payment_provider: PaymentProviderType
-    external_payment_id: Optional[str]
+    external_payment_id: str | None
     created_at: datetime
-    completed_at: Optional[datetime]
-    metadata: Dict[str, Any] = Field(
+    completed_at: datetime | None
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Аудит и комментарии (для гранта: granted_by_user_id, note)",
     )

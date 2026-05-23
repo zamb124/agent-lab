@@ -2,7 +2,9 @@
 Декораторы для авторизации.
 """
 
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from functools import wraps
+from typing import Concatenate, ParamSpec, TypeVar, cast
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -13,8 +15,25 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
+P = ParamSpec("P")
+R = TypeVar("R")
 
-def require_admin(handler):
+
+def _string_list(value: object) -> list[str]:
+    if isinstance(value, str | bytes) or not isinstance(value, Sequence):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _user_email(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    return "unknown"
+
+
+def require_admin(
+    handler: Callable[Concatenate[Request, P], Awaitable[R]],
+) -> Callable[Concatenate[Request, P], Awaitable[R | JSONResponse]]:
     """
     Декоратор для защищённых admin endpoints.
     Проверяет, что пользователь авторизован (если проверка permissions отключена).
@@ -22,12 +41,13 @@ def require_admin(handler):
     """
 
     @wraps(handler)
-    async def wrapper(request: Request, *args, **kwargs):
+    async def wrapper(request: Request, *args: P.args, **kwargs: P.kwargs) -> R | JSONResponse:
 
         settings = get_settings()
 
         # Проверяем, что пользователь авторизован
-        if not hasattr(request.state, "user") or request.state.user is None:
+        user: object | None = getattr(request.state, "user", None)
+        if user is None:
             logger.warning("require_admin: no user in request.state")
             return JSONResponse(
                 {"error": "Unauthorized: invalid or missing Authorization header"},
@@ -39,13 +59,15 @@ def require_admin(handler):
             return await handler(request, *args, **kwargs)
 
         # Если permissions включены - проверяем группу admin
-        user = request.state.user
-        if isinstance(user, dict):
-            user_groups = user.get("grps", []) or user.get("groups", []) or []
-            user_email = user.get("email", "unknown")
+        if isinstance(user, Mapping):
+            user_mapping = cast(Mapping[object, object], user)
+            user_groups = _string_list(user_mapping.get("grps") or user_mapping.get("groups") or [])
+            user_email = _user_email(user_mapping.get("email"))
         else:
-            user_groups = getattr(user, "grps", []) or getattr(user, "groups", []) or []
-            user_email = getattr(user, "email", "unknown")
+            user_groups = _string_list(
+                getattr(user, "grps", None) or getattr(user, "groups", None) or []
+            )
+            user_email = _user_email(getattr(user, "email", None))
 
         logger.info(f"require_admin: user={user_email}, groups={user_groups}")
 
@@ -62,15 +84,18 @@ def require_admin(handler):
     return wrapper
 
 
-def require_auth(handler):
+def require_auth(
+    handler: Callable[Concatenate[Request, P], Awaitable[R]],
+) -> Callable[Concatenate[Request, P], Awaitable[R | JSONResponse]]:
     """
     Декоратор для проверки наличия авторизованного пользователя.
     Проверяет наличие request.state.user (устанавливается AuthMiddleware).
     """
 
     @wraps(handler)
-    async def wrapper(request: Request, *args, **kwargs):
-        if not hasattr(request.state, "user") or request.state.user is None:
+    async def wrapper(request: Request, *args: P.args, **kwargs: P.kwargs) -> R | JSONResponse:
+        user: object | None = getattr(request.state, "user", None)
+        if user is None:
             return JSONResponse(
                 {"error": "Unauthorized"},
                 status_code=401,
@@ -81,17 +106,19 @@ def require_auth(handler):
     return wrapper
 
 
-def validate_body(schema: type[BaseModel]):
+def validate_body(
+    schema: type[BaseModel],
+) -> Callable[[Callable[..., Awaitable[R]]], Callable[..., Awaitable[R | JSONResponse]]]:
     """
     Декоратор для валидации тела запроса через Pydantic-схему.
     Передаёт провалидированный объект как аргумент `body`.
     """
 
-    def decorator(handler):
+    def decorator(handler: Callable[..., Awaitable[R]]) -> Callable[..., Awaitable[R | JSONResponse]]:
         @wraps(handler)
-        async def wrapper(request: Request, *args, **kwargs):
+        async def wrapper(request: Request, *args: object, **kwargs: object) -> R | JSONResponse:
             try:
-                body_data = await request.json()
+                body_data = cast(object, await request.json())
                 validated = schema.model_validate(body_data)
             except ValidationError as e:
                 return JSONResponse(
@@ -112,15 +139,17 @@ def validate_body(schema: type[BaseModel]):
     return decorator
 
 
-def validate_params(schema: type[BaseModel]):
+def validate_params(
+    schema: type[BaseModel],
+) -> Callable[[Callable[..., Awaitable[R]]], Callable[..., Awaitable[R | JSONResponse]]]:
     """
     Декоратор для валидации query-параметров через Pydantic-схему.
     Передаёт провалидированный объект как аргумент `params`.
     """
 
-    def decorator(handler):
+    def decorator(handler: Callable[..., Awaitable[R]]) -> Callable[..., Awaitable[R | JSONResponse]]:
         @wraps(handler)
-        async def wrapper(request: Request, *args, **kwargs):
+        async def wrapper(request: Request, *args: object, **kwargs: object) -> R | JSONResponse:
             query_dict = dict(request.query_params)
             try:
                 validated = schema.model_validate(query_dict, strict=False)

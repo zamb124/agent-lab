@@ -6,7 +6,7 @@ A2A Client - HTTP клиент для взаимодействия с внешн
 
 import json
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
 
@@ -17,7 +17,7 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _extract_task_status_message(status_obj: Dict[str, Any]) -> Optional[str]:
+def _extract_task_status_message(status_obj: dict[str, Any]) -> str | None:
     """Текст из A2A TaskStatus.message (строка или объект с parts)."""
     if not isinstance(status_obj, dict):
         return None
@@ -67,8 +67,8 @@ class A2AClient:
     async def get_agent_card(
         self,
         base_url: str,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """
         Получает agent-card.json от внешнего агента.
 
@@ -102,13 +102,13 @@ class A2AClient:
         self,
         base_url: str,
         content: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         branch_id: str = "default",
-        metadata: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
+        metadata: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
         *,
-        timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         """
         Отправляет задачу внешнему агенту.
 
@@ -200,7 +200,7 @@ class A2AClient:
         except ValueError as e:
             raise A2AClientError(f"Invalid JSON response from {url}: {e}")
 
-    def _parse_a2a_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_a2a_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """
         Парсит A2A JSONRPC ответ и извлекает response из artifacts.
 
@@ -252,7 +252,7 @@ class A2AClient:
     async def check_health(
         self,
         base_url: str,
-        headers: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> bool:
         """
         Проверяет доступность агента.

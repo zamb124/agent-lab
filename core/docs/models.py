@@ -2,7 +2,7 @@
 Модели для сервиса документации.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -17,12 +17,12 @@ class PlatformToolDoc(BaseModel):
         description="database — запись в БД компании; registry_only — только процессный реестр",
     )
     description: str = ""
-    tags: List[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
     args_schema_json: str = "{}"
-    code_mode: Optional[str] = None
-    mcp_server_id: Optional[str] = None
-    mcp_tool_name: Optional[str] = None
-    code_preview: Optional[str] = None
+    code_mode: str | None = None
+    mcp_server_id: str | None = None
+    mcp_tool_name: str | None = None
+    code_preview: str | None = None
 
 
 class GlobalVariable(BaseModel):
@@ -31,8 +31,8 @@ class GlobalVariable(BaseModel):
     name: str
     type: str
     doc: str
-    perspective: Optional[List[str]] = None  # в каких ракурсах доступна
-    tags: Optional[List[str]] = None
+    perspective: list[str] | None = None  # в каких ракурсах доступна
+    tags: list[str] | None = None
 
 
 class DocumentationQuery(BaseModel):
@@ -45,13 +45,13 @@ class DocumentationQuery(BaseModel):
     perspective: str = Field(default="editor", description="editor, flow, tool, node")
 
     # Фильтры
-    categories: Optional[List[str]] = Field(
+    categories: list[str] | None = Field(
         default=None,
         description="http, llm, data, files, interaction, state, logic, basic",
     )
-    groups: Optional[List[str]] = Field(default=None, description="Группы tools")
-    tags: Optional[List[str]] = Field(default=None, description="Произвольные теги")
-    node_type: Optional[str] = Field(
+    groups: list[str] | None = Field(default=None, description="Группы tools")
+    tags: list[str] | None = Field(default=None, description="Произвольные теги")
+    node_type: str | None = Field(
         default=None,
         description="function, tool, llm_node, external_api",
     )
@@ -77,9 +77,9 @@ class DocumentationQuery(BaseModel):
     include_platform_tools: bool = True
 
     # Заполняется вызывающим кодом (flows API): реестр + БД компании
-    platform_tools: Optional[List[PlatformToolDoc]] = None
+    platform_tools: list[PlatformToolDoc] | None = None
     # Заполняется только из apps/flows (там же строится список без импорта core→apps)
-    runtime_namespace_extras: Optional[List[GlobalVariable]] = Field(
+    runtime_namespace_extras: list[GlobalVariable] | None = Field(
         default=None,
         description="Дополнительные runtime symbols для редактора, если вызывающий сервис их поддерживает.",
     )
@@ -103,8 +103,8 @@ class ModuleMethod(BaseModel):
 class ModuleDoc(BaseModel):
     """Документация модуля."""
     name: str
-    methods: List[ModuleMethod] = []
-    description: Optional[str] = None
+    methods: list[ModuleMethod] = []
+    description: str | None = None
 
 
 class CodeTemplate(BaseModel):
@@ -115,10 +115,10 @@ class CodeTemplate(BaseModel):
     code: str
     category: str
     node_type: str = "tool"  # tool или function
-    tags: Optional[List[str]] = None
+    tags: list[str] | None = None
     language: str = "python"
-    args_schema: Optional[Dict[str, Any]] = None
-    parameters_schema: Optional[Dict[str, Any]] = None
+    args_schema: dict[str, Any] | None = None
+    parameters_schema: dict[str, Any] | None = None
 
 
 class DocumentationResponse(BaseModel):
@@ -126,11 +126,11 @@ class DocumentationResponse(BaseModel):
     language: str
     perspective: str
 
-    modules: List[str] = []  # список доступных модулей
-    module_methods: Dict[str, List[ModuleMethod]] = {}  # методы модулей
-    globals: List[GlobalVariable] = []
-    builtins: List[str] = []
-    state_fields: List[StateField] = []
-    templates: List[CodeTemplate] = []
-    platform_tools: List[PlatformToolDoc] = Field(default_factory=list)
-    runtime_namespace_extras: Optional[List[GlobalVariable]] = None
+    modules: list[str] = []  # список доступных модулей
+    module_methods: dict[str, list[ModuleMethod]] = {}  # методы модулей
+    globals: list[GlobalVariable] = []
+    builtins: list[str] = []
+    state_fields: list[StateField] = []
+    templates: list[CodeTemplate] = []
+    platform_tools: list[PlatformToolDoc] = Field(default_factory=list)
+    runtime_namespace_extras: list[GlobalVariable] | None = None

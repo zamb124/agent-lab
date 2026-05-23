@@ -14,8 +14,6 @@ cost_origin:
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from core.clients.llm.config import LLMCallConfig
@@ -55,14 +53,14 @@ class ResolvedLLM(_FrozenModel):
 
     provider: str
     model: str
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    folder_id: Optional[str] = None
-    extra_request_headers: Optional[dict[str, str]] = None
-    extra_request_body: Optional[dict[str, object]] = None
-    fallback_models: Optional[tuple[LLMCallConfig, ...]] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    folder_id: str | None = None
+    extra_request_headers: dict[str, str] | None = None
+    extra_request_body: dict[str, object] | None = None
+    fallback_models: tuple[LLMCallConfig, ...] | None = None
     cost_origin: CostOrigin = COST_ORIGIN_PLATFORM
-    custom_provider_id: Optional[str] = None
+    custom_provider_id: str | None = None
 
     @computed_field  # type: ignore[misc]
     @property
@@ -78,12 +76,12 @@ class ResolvedEmbedding(_FrozenModel):
     provider: str
     model: str
     base_url: str
-    api_key: Optional[str] = None
-    extra_request_headers: Optional[dict[str, str]] = None
+    api_key: str | None = None
+    extra_request_headers: dict[str, str] | None = None
     cost_origin: CostOrigin = COST_ORIGIN_PLATFORM
-    custom_provider_id: Optional[str] = None
-    dimension: Optional[int] = None
-    mrl_output_dimension: Optional[int] = None
+    custom_provider_id: str | None = None
+    dimension: int | None = None
+    mrl_output_dimension: int | None = None
 
     @computed_field  # type: ignore[misc]
     @property
@@ -97,12 +95,12 @@ class ResolvedRerank(_FrozenModel):
     """Политика реранка после применения company override."""
 
     enabled: bool
-    url: Optional[str] = None
-    api_key: Optional[str] = None
-    extra_request_headers: Optional[dict[str, str]] = None
+    url: str | None = None
+    api_key: str | None = None
+    extra_request_headers: dict[str, str] | None = None
     cost_origin: CostOrigin = COST_ORIGIN_PLATFORM
     billing_resource_id: str = "rerank"
-    custom_provider_id: Optional[str] = None
+    custom_provider_id: str | None = None
 
     @computed_field  # type: ignore[misc]
     @property
@@ -116,16 +114,16 @@ class ResolvedVoice(_FrozenModel):
     """Резолв провайдера речи (STT/TTS/VAD)."""
 
     provider: str
-    model: Optional[str] = None
-    voice: Optional[str] = None
-    language: Optional[str] = None
-    sample_rate: Optional[int] = None
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    folder_id: Optional[str] = None
-    extra_request_headers: Optional[dict[str, str]] = None
+    model: str | None = None
+    voice: str | None = None
+    language: str | None = None
+    sample_rate: int | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    folder_id: str | None = None
+    extra_request_headers: dict[str, str] | None = None
     cost_origin: CostOrigin = COST_ORIGIN_PLATFORM
-    custom_provider_id: Optional[str] = None
+    custom_provider_id: str | None = None
 
 
 def load_company_ai_providers() -> CompanyAIProviders:
@@ -146,7 +144,7 @@ def _resolve_custom_provider(
     return aip.find_custom(cid)
 
 
-def _decrypt_or_none(token: Optional[str]) -> Optional[str]:
+def _decrypt_or_none(token: str | None) -> str | None:
     if token is None or not str(token).strip():
         return None
     return decrypt_secret(token)
@@ -157,8 +155,8 @@ def _resolve_llm_fallback_models(
     capability: AICapability,
     *,
     primary: ResolvedLLM,
-    fallback_models: Optional[list[LLMCallConfig]],
-) -> Optional[tuple[LLMCallConfig, ...]]:
+    fallback_models: list[LLMCallConfig] | None,
+) -> tuple[LLMCallConfig, ...] | None:
     """Разворачивает company-level fallback policy в конкретные LLMCallConfig.
 
     Не читает конфиг ноды/ресурса: fallback chain для компании существует только
@@ -243,9 +241,9 @@ def _with_company_fallbacks(
 def resolve_llm_for_capability(
     capability: AICapability,
     *,
-    fallback_provider: Optional[str] = None,
-    fallback_model: Optional[str] = None,
-) -> Optional[ResolvedLLM]:
+    fallback_provider: str | None = None,
+    fallback_model: str | None = None,
+) -> ResolvedLLM | None:
     """
     Резолв LLM-капасити: возвращает ResolvedLLM или None если у компании нет override
     и платформа сама задаёт provider/model на месте вызова (например LLM_CHAT в bundle).
@@ -370,7 +368,7 @@ def resolve_custom_llm_provider_ref(
     provider_ref: str,
     *,
     capability: AICapability = AICapability.LLM_CHAT,
-    model: Optional[str] = None,
+    model: str | None = None,
 ) -> ResolvedLLM:
     """
     Разворачивает прямой ``custom:<id>`` ref в параметры ``get_llm``.
@@ -414,7 +412,7 @@ def resolve_custom_llm_provider_ref(
     )
 
 
-def resolve_embedding_for_company() -> Optional[ResolvedEmbedding]:
+def resolve_embedding_for_company() -> ResolvedEmbedding | None:
     """Резолв embedding override (provider + опц. ключ + URL); None если override не задан."""
     aip = load_company_ai_providers()
     if aip.embedding is None:
@@ -453,7 +451,7 @@ def resolve_embedding_for_company() -> Optional[ResolvedEmbedding]:
     )
 
 
-def resolve_rerank_for_company() -> Optional[ResolvedRerank]:
+def resolve_rerank_for_company() -> ResolvedRerank | None:
     """
     Резолв rerank override.
 
@@ -461,7 +459,7 @@ def resolve_rerank_for_company() -> Optional[ResolvedRerank]:
     либо ``ResolvedRerank(enabled=False)`` для policy=none, либо параметры HTTP-клиента.
     """
     aip = load_company_ai_providers()
-    ov: Optional[CompanyRerankOverride] = aip.rerank
+    ov: CompanyRerankOverride | None = aip.rerank
     if ov is None:
         return None
 
@@ -503,7 +501,7 @@ def resolve_rerank_for_company() -> Optional[ResolvedRerank]:
     raise ValueError(f"resolve_rerank_for_company: непредвиденный policy={pol!r}")
 
 
-def resolve_voice_for_company(capability: AICapability) -> Optional[ResolvedVoice]:
+def resolve_voice_for_company(capability: AICapability) -> ResolvedVoice | None:
     """Резолв voice override (stt/tts/vad). None если override не задан."""
     if capability not in (AICapability.VOICE_STT, AICapability.VOICE_TTS, AICapability.VOICE_VAD):
         raise ValueError(f"resolve_voice_for_company: capability {capability} не voice")

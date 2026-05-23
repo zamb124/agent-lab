@@ -25,7 +25,7 @@ import asyncio
 import json
 import os
 import time
-from typing import Any, Optional
+from typing import Any
 
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -92,7 +92,7 @@ class _UplinkDump:
             self._buffer.extend(pcm_chunk[:remaining])
             self._truncated = True
 
-    def finalize(self) -> Optional[str]:
+    def finalize(self) -> str | None:
         if not self._buffer:
             return None
         os.makedirs(self._dump_dir, exist_ok=True)
@@ -117,7 +117,7 @@ class _UplinkDump:
         return path
 
 
-def _build_uplink_dump(session_id: str) -> Optional[_UplinkDump]:
+def _build_uplink_dump(session_id: str) -> _UplinkDump | None:
     cfg = get_settings().voice.diagnostics
     if cfg.uplink_dump_dir is None or cfg.uplink_dump_dir == "":
         return None

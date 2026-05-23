@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -29,6 +29,7 @@ from core.clients.llm.model_routing import (
     HUMANITEC_LLM_PROVIDER,
     LLM_ROUTING_PROVIDER_SLUGS,
 )
+from core.llm_context.models import LLMContextPatch
 
 METADATA_KEY = "ai_providers"
 
@@ -121,12 +122,12 @@ class CompanyLLMOverride(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: str
-    api_key_encrypted: Optional[str] = None
-    base_url: Optional[str] = None
-    folder_id: Optional[str] = None
-    extra_request_headers: Optional[Dict[str, str]] = None
-    model: Optional[str] = None
-    fallback_models: Optional[List[LLMCallConfig]] = Field(
+    api_key_encrypted: str | None = None
+    base_url: str | None = None
+    folder_id: str | None = None
+    extra_request_headers: dict[str, str] | None = None
+    model: str | None = None
+    fallback_models: list[LLMCallConfig] | None = Field(
         default=None,
         description=(
             "Явная company-level fallback policy для capability. Допускается только "
@@ -142,7 +143,7 @@ class CompanyLLMOverride(BaseModel):
 
     @field_validator("base_url")
     @classmethod
-    def _v_base_url(cls, v: Optional[str]) -> Optional[str]:
+    def _v_base_url(cls, v: str | None) -> str | None:
         if v is None:
             return None
         s = v.strip()
@@ -210,9 +211,9 @@ class CompanyEmbeddingOverride(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: str
-    api_key_encrypted: Optional[str] = None
-    base_url: Optional[str] = None
-    extra_request_headers: Optional[Dict[str, str]] = None
+    api_key_encrypted: str | None = None
+    base_url: str | None = None
+    extra_request_headers: dict[str, str] | None = None
 
     @field_validator("provider")
     @classmethod
@@ -265,14 +266,14 @@ class CompanyVoiceOverride(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: str
-    api_key_encrypted: Optional[str] = None
-    base_url: Optional[str] = None
-    folder_id: Optional[str] = None
-    extra_request_headers: Optional[Dict[str, str]] = None
-    model: Optional[str] = None
-    voice: Optional[str] = None
-    language: Optional[str] = None
-    sample_rate: Optional[int] = None
+    api_key_encrypted: str | None = None
+    base_url: str | None = None
+    folder_id: str | None = None
+    extra_request_headers: dict[str, str] | None = None
+    model: str | None = None
+    voice: str | None = None
+    language: str | None = None
+    sample_rate: int | None = None
 
     @field_validator("provider")
     @classmethod
@@ -298,11 +299,11 @@ class CompanyCustomOpenAICompatibleProvider(BaseModel):
     label: Annotated[str, Field(min_length=1, max_length=128)]
     base_url: str
     api_key_encrypted: str
-    extra_request_headers: Optional[Dict[str, str]] = None
-    extra_request_body: Optional[Dict[str, Any]] = None
-    rerank_path: Optional[str] = None
-    capabilities: List[CapabilityLiteral] = Field(default_factory=list)
-    model_by_capability: Dict[str, str] = Field(default_factory=dict)
+    extra_request_headers: dict[str, str] | None = None
+    extra_request_body: dict[str, Any] | None = None
+    rerank_path: str | None = None
+    capabilities: list[CapabilityLiteral] = Field(default_factory=list)
+    model_by_capability: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("id")
     @classmethod
@@ -322,7 +323,7 @@ class CompanyCustomOpenAICompatibleProvider(BaseModel):
 
     @field_validator("rerank_path")
     @classmethod
-    def _v_rerank_path(cls, v: Optional[str]) -> Optional[str]:
+    def _v_rerank_path(cls, v: str | None) -> str | None:
         if v is None:
             return None
         s = v.strip()
@@ -347,19 +348,20 @@ class CompanyAIProviders(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    custom_providers: List[CompanyCustomOpenAICompatibleProvider] = Field(default_factory=list)
+    custom_providers: list[CompanyCustomOpenAICompatibleProvider] = Field(default_factory=list)
 
-    llm_chat: Optional[CompanyLLMOverride] = None
-    llm_summarize: Optional[CompanyLLMOverride] = None
-    llm_format_markdown: Optional[CompanyLLMOverride] = None
-    llm_codegen: Optional[CompanyLLMOverride] = None
-    llm_vision: Optional[CompanyLLMOverride] = None
-    embedding: Optional[CompanyEmbeddingOverride] = None
-    rerank: Optional[CompanyRerankOverride] = None
-    image_gen: Optional[CompanyLLMOverride] = None
-    voice_stt: Optional[CompanyVoiceOverride] = None
-    voice_tts: Optional[CompanyVoiceOverride] = None
-    voice_vad: Optional[CompanyVoiceOverride] = None
+    llm_chat: CompanyLLMOverride | None = None
+    llm_summarize: CompanyLLMOverride | None = None
+    llm_format_markdown: CompanyLLMOverride | None = None
+    llm_codegen: CompanyLLMOverride | None = None
+    llm_vision: CompanyLLMOverride | None = None
+    embedding: CompanyEmbeddingOverride | None = None
+    rerank: CompanyRerankOverride | None = None
+    llm_context: LLMContextPatch | None = None
+    image_gen: CompanyLLMOverride | None = None
+    voice_stt: CompanyVoiceOverride | None = None
+    voice_tts: CompanyVoiceOverride | None = None
+    voice_vad: CompanyVoiceOverride | None = None
 
     @model_validator(mode="after")
     def _v_unique_custom_ids_and_refs(self) -> "CompanyAIProviders":
@@ -377,7 +379,7 @@ class CompanyAIProviders(BaseModel):
             "llm_vision",
             "image_gen",
         ):
-            ov: Optional[CompanyLLMOverride] = getattr(self, cap)
+            ov: CompanyLLMOverride | None = getattr(self, cap)
             if ov is None:
                 continue
             self._check_provider_ref(ov.provider, capability=cap, custom_index=custom_index)
@@ -398,7 +400,7 @@ class CompanyAIProviders(BaseModel):
             if _is_custom_ref(pol):
                 self._check_provider_ref(pol, capability="rerank", custom_index=custom_index)
         for cap in ("voice_stt", "voice_tts"):
-            ov_v: Optional[CompanyVoiceOverride] = getattr(self, cap)
+            ov_v: CompanyVoiceOverride | None = getattr(self, cap)
             if ov_v is None:
                 continue
             if _is_custom_ref(ov_v.provider):
@@ -415,7 +417,7 @@ class CompanyAIProviders(BaseModel):
         ref: str,
         *,
         capability: str,
-        custom_index: Dict[str, CompanyCustomOpenAICompatibleProvider],
+        custom_index: dict[str, CompanyCustomOpenAICompatibleProvider],
     ) -> None:
         if not _is_custom_ref(ref):
             return
@@ -432,7 +434,7 @@ class CompanyAIProviders(BaseModel):
             )
 
     @classmethod
-    def from_metadata(cls, metadata: Dict[str, Any]) -> "CompanyAIProviders":
+    def from_metadata(cls, metadata: dict[str, Any]) -> "CompanyAIProviders":
         """Парсит ``metadata['ai_providers']``; пустой/отсутствующий → пустая модель."""
         if not isinstance(metadata, dict):
             raise ValueError("metadata должен быть dict")
@@ -443,7 +445,7 @@ class CompanyAIProviders(BaseModel):
             raise ValueError(f"company.metadata[{METADATA_KEY!r}] должен быть object")
         return cls.model_validate(raw)
 
-    def to_metadata_dict(self) -> Dict[str, Any]:
+    def to_metadata_dict(self) -> dict[str, Any]:
         """Сериализация для записи в ``Company.metadata[METADATA_KEY]``."""
         return self.model_dump(mode="json", exclude_none=True)
 
@@ -455,7 +457,7 @@ class CompanyAIProviders(BaseModel):
 
     def get_capability_override(
         self, capability: AICapability
-    ) -> Optional["CompanyLLMOverride | CompanyEmbeddingOverride | CompanyRerankOverride | CompanyVoiceOverride"]:
+    ) -> CompanyLLMOverride | CompanyEmbeddingOverride | CompanyRerankOverride | CompanyVoiceOverride | None:
         return getattr(self, capability.value)
 
 
@@ -466,6 +468,7 @@ __all__ = [
     "CompanyCustomOpenAICompatibleProvider",
     "CompanyEmbeddingOverride",
     "CompanyLLMOverride",
+    "LLMContextPatch",
     "CompanyRerankOverride",
     "CompanyVoiceOverride",
     "CUSTOM_PROVIDER_REF_PREFIX",

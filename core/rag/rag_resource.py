@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
@@ -41,9 +41,10 @@ class RAGResource:
         *,
         provider: str = RAG_IN_PROCESS_PROVIDER_ID,
         default_top_k: int = 5,
-        company_id: Optional[str] = None,
-        search_options: Optional[Dict[str, Any]] = None,
-        index_profile_config: Optional[Dict[str, Any]] = None,
+        company_id: str | None = None,
+        search_options: dict[str, Any] | None = None,
+        filters: dict[str, Any] | None = None,
+        index_profile_config: dict[str, Any] | None = None,
     ):
         self._container = container
         self._bind = RagResourceBindParams(
@@ -52,6 +53,7 @@ class RAGResource:
             default_top_k=default_top_k,
             company_id=company_id,
             search_options=search_options,
+            filters=filters,
             index_profile_config=index_profile_config,
         )
 
@@ -66,9 +68,9 @@ class RAGResource:
     async def search(
         self,
         query: str,
-        top_k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        top_k: int | None = None,
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Поиск по документам namespace через ``RAGRepository.search_namespace``.
         """
@@ -87,7 +89,7 @@ class RAGResource:
         if raw_results is None:
             raise ServiceClientError("rag search: в ответе нет поля results")
 
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for item in raw_results:
             if not isinstance(item, dict):
                 raise ServiceClientError("rag search: элемент results должен быть объектом")
@@ -110,11 +112,11 @@ class RAGResource:
         self,
         document_id: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        name: Optional[str] = None,
+        metadata: dict[str, Any] | None = None,
+        name: str | None = None,
         *,
-        index_profile_config: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        index_profile_config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Загрузить текст документа в namespace."""
         repo = self._container.rag_repository
         context = get_context()

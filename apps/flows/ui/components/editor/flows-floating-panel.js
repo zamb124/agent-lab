@@ -26,6 +26,8 @@ export class FlowsFloatingPanel extends PlatformElement {
         colorToken: { type: String, attribute: 'color-token' },
         dockStack: { type: Boolean, attribute: 'dock-stack', reflect: true },
         expanded: { type: Boolean, reflect: true },
+        aiEnabled: { type: Boolean, attribute: 'ai-enabled' },
+        aiActive: { type: Boolean, attribute: 'ai-active', reflect: true },
         _laraGlow: { state: true },
     };
 
@@ -154,6 +156,13 @@ export class FlowsFloatingPanel extends PlatformElement {
                 color: var(--text-primary);
             }
             .panel-btn.expand:hover { color: var(--accent); }
+            .panel-btn.ai[aria-pressed="true"] {
+                color: var(--accent);
+                background: var(--accent-subtle);
+            }
+            .panel-btn.ai:hover {
+                color: var(--accent);
+            }
 
             .panel-body {
                 flex: 1;
@@ -194,6 +203,8 @@ export class FlowsFloatingPanel extends PlatformElement {
         this.colorToken = 'var(--accent)';
         this.dockStack = false;
         this.expanded = false;
+        this.aiEnabled = false;
+        this.aiActive = false;
         this._laraGlow = false;
         this.useEvent('flows/lara/node_updated', () => {
             this._laraGlow = true;
@@ -210,6 +221,10 @@ export class FlowsFloatingPanel extends PlatformElement {
         this.emit('close');
     }
 
+    _toggleNodeAiHelper() {
+        this.emit('node-ai-helper-toggle', { open: !this.aiActive });
+    }
+
     render() {
         return html`
             <div class="panel-backdrop" @click=${() => this.emit('expand-change', { expanded: false })}></div>
@@ -222,6 +237,18 @@ export class FlowsFloatingPanel extends PlatformElement {
                 </div>
                 <div class="panel-actions">
                     <div class="header-actions-host"></div>
+                    ${this.aiEnabled ? html`
+                        <button
+                            class="panel-btn ai"
+                            type="button"
+                            title=${this.t(this.aiActive ? 'floating_panel.close_node_ai' : 'floating_panel.open_node_ai')}
+                            aria-label=${this.t(this.aiActive ? 'floating_panel.close_node_ai' : 'floating_panel.open_node_ai')}
+                            aria-pressed=${this.aiActive ? 'true' : 'false'}
+                            @click=${this._toggleNodeAiHelper}
+                        >
+                            <platform-icon name="ai" size="14"></platform-icon>
+                        </button>
+                    ` : ''}
                     <button class="panel-btn expand" type="button" title=${this.t(this.expanded ? 'floating_panel.collapse' : 'floating_panel.expand')} @click=${this._toggleExpand}>
                         <platform-icon name=${this.expanded ? 'minimize' : 'fullscreen'} size="14"></platform-icon>
                     </button>

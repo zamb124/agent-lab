@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, FrozenSet
+from typing import Any
 
 _UNSET_MARKER = object()
 
@@ -20,7 +20,7 @@ def merge_secrets(
     *,
     existing: dict[str, Any] | None,
     patch: dict[str, str | None] | None,
-    allowed_keys: FrozenSet[str],
+    allowed_keys: frozenset[str],
 ) -> dict[str, str]:
     """Слить patch в existing (только allowed_keys).
 

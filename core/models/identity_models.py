@@ -4,7 +4,7 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -49,13 +49,13 @@ class User(BaseModel):
         placeholder="Иван Иванов",
         max_length=200,
     )
-    first_name: Optional[str] = Field(
+    first_name: str | None = Field(
         default=None,
         title="Имя",
         description="Имя для профиля и сопоставления на графе",
         max_length=100,
     )
-    last_name: Optional[str] = Field(
+    last_name: str | None = Field(
         default=None,
         title="Фамилия",
         description="Фамилия для профиля и сопоставления на графе",
@@ -67,13 +67,13 @@ class User(BaseModel):
         description="Статус пользователя",
         groups={"admin": {"editable_in_table": True}, "user": {"readonly": True}},
     )
-    groups: List[str] = Field(
+    groups: list[str] = Field(
         default=["user"],
         title="Группы",
         description="Группы пользователя (admin, user, bot_editor, guest)",
         groups={"admin": {"readonly": False}, "user": {"readonly": True}},
     )
-    companies: Dict[str, List[str]] = Field(
+    companies: dict[str, list[str]] = Field(
         default_factory=dict,
         title="Компании и роли",
         description="company_id -> [role1, role2]",
@@ -85,7 +85,7 @@ class User(BaseModel):
         description="ID текущей активной компании",
         groups={"admin": {"readonly": False}, "user": {"readonly": True}},
     )
-    emails: List[str] = Field(
+    emails: list[str] = Field(
         default_factory=list, title="Email адреса", description="Список email адресов пользователя"
     )
 
@@ -96,30 +96,30 @@ class User(BaseModel):
             return ""
         return self.emails[0]
 
-    phones: List[str] = Field(
+    phones: list[str] = Field(
         default_factory=list, title="Телефоны", description="Список телефонных номеров"
     )
-    messengers: Dict[str, str] = Field(
+    messengers: dict[str, str] = Field(
         default_factory=dict,
         title="Мессенджеры",
         description="Контакты в мессенджерах: {telegram: @username, whatsapp: +123, slack: U12345}",
     )
-    avatar_url: Optional[str] = Field(
+    avatar_url: str | None = Field(
         default=None, title="Аватар", description="URL аватара пользователя"
     )
-    bio: Optional[str] = Field(
+    bio: str | None = Field(
         default=None,
         title="О себе",
         description="Биография пользователя для ИИ и интерфейса",
         max_length=4000,
     )
-    ui_preferences: Dict[str, Any] = Field(
+    ui_preferences: dict[str, Any] = Field(
         default_factory=dict, title="UI настройки", description="Настройки интерфейса пользователя"
     )
-    attrs: Dict[str, Any] = Field(
+    attrs: dict[str, Any] = Field(
         default_factory=dict, title="Атрибуты", description="Дополнительные service-specific данные"
     )
-    password_hash: Optional[str] = Field(
+    password_hash: str | None = Field(
         default=None,
         title="Хеш пароля",
         description="Bcrypt-хеш; используется только для демо-учётки (auth.demo), не для OAuth",
@@ -157,19 +157,19 @@ class Company(BaseModel):
         description="Название компании",
         placeholder="Моя компания",
     )
-    subdomain: Optional[str] = Field(
+    subdomain: str | None = Field(
         default=None,
         title="Поддомен",
         description="Поддомен компании (company.humanitec.ru)",
         groups={"admin": {"readonly": False}, "user": {"readonly": True}},
     )
-    owner_user_id: Optional[str] = Field(
+    owner_user_id: str | None = Field(
         default=None,
         title="Владелец",
         description="ID пользователя-владельца компании",
         groups={"admin": {"readonly": False}, "user": {"readonly": True}},
     )
-    members: Dict[str, List[str]] = Field(
+    members: dict[str, list[str]] = Field(
         default_factory=dict,
         title="Участники",
         description="user_id -> [role1, role2]",
@@ -181,7 +181,7 @@ class Company(BaseModel):
         description="Статус компании (active, suspended)",
         groups={"admin": {"editable_in_table": True}, "user": {"readonly": True}},
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         title="Метаданные",
         description="Дополнительные данные компании",
@@ -247,19 +247,19 @@ class AuthSession(BaseModel):
     provider: AuthProvider = Field(
         title="Провайдер", description="Провайдер авторизации", readonly=True
     )
-    access_token: Optional[str] = Field(
+    access_token: str | None = Field(
         default=None,
         title="Токен доступа",
         description="Токен доступа от провайдера",
         groups={"admin": {"hidden": False}, "user": {"hidden": True}},
     )
-    refresh_token: Optional[str] = Field(
+    refresh_token: str | None = Field(
         default=None,
         title="Refresh токен",
         description="Refresh токен от провайдера",
         groups={"admin": {"hidden": False}, "user": {"hidden": True}},
     )
-    expires_at: Optional[str] = Field(
+    expires_at: str | None = Field(
         default=None,
         title="Истекает",
         description="Время истечения сессии (ISO строка)",
@@ -277,7 +277,7 @@ class AuthSession(BaseModel):
         description="Время последней активности",
         readonly=True,
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         title="Метаданные",
         description="Дополнительные данные сессии",
@@ -291,8 +291,8 @@ class ProviderUserInfo(BaseModel):
     provider_user_id: str = Field(description="ID пользователя у провайдера")
     email: str = Field(description="Email пользователя")
     name: str = Field(description="Имя пользователя")
-    avatar_url: Optional[str] = Field(default=None, description="URL аватара")
-    raw_data: Dict[str, Any] = Field(default_factory=dict, description="Сырые данные от провайдера")
+    avatar_url: str | None = Field(default=None, description="URL аватара")
+    raw_data: dict[str, Any] = Field(default_factory=dict, description="Сырые данные от провайдера")
 
 
 class AuthRequest(BaseModel):
@@ -301,8 +301,8 @@ class AuthRequest(BaseModel):
     provider: AuthProvider = Field(description="Провайдер авторизации")
     code: str = Field(description="Код авторизации от провайдера")
     state: str = Field(description="State для проверки CSRF")
-    redirect_uri: Optional[str] = Field(default=None, description="URI для редиректа")
-    oauth_first_login_user_json: Optional[str] = Field(
+    redirect_uri: str | None = Field(default=None, description="URI для редиректа")
+    oauth_first_login_user_json: str | None = Field(
         default=None,
         description="Apple: JSON из query-параметра user при первой авторизации (имя)",
     )
@@ -319,7 +319,7 @@ class BoardStage(BaseModel):
         description="Стабильный идентификатор стадии (snake_case)",
     )
     label: str = Field(min_length=1, description="Подпись колонки в UI")
-    color: Optional[str] = Field(default=None, description="Опциональный CSS-цвет")
+    color: str | None = Field(default=None, description="Опциональный CSS-цвет")
 
 
 class TaskBoardPreset(BaseModel):
@@ -327,7 +327,7 @@ class TaskBoardPreset(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    stages: List[BoardStage] = Field(min_length=1, description="Упорядоченные стадии слева направо")
+    stages: list[BoardStage] = Field(min_length=1, description="Упорядоченные стадии слева направо")
 
     @model_validator(mode="after")
     def _unique_stage_ids(self) -> "TaskBoardPreset":
@@ -344,13 +344,13 @@ class SidebarNavEntry(BaseModel):
 
     id: str = Field(min_length=1, description="Стабильный id для active state и редактора")
     label: str = Field(description="Подпись пункта")
-    icon: Optional[str] = Field(default=None, description="Имя иконки platform-icon")
-    route_key: Optional[str] = Field(default=None, description="Ключ маршрута SPA (лист)")
+    icon: str | None = Field(default=None, description="Имя иконки platform-icon")
+    route_key: str | None = Field(default=None, description="Ключ маршрута SPA (лист)")
     search: str = Field(
         default="",
         description="Query с ведущим ? для history",
     )
-    children: List["SidebarNavEntry"] = Field(default_factory=list)
+    children: list["SidebarNavEntry"] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _leaf_or_group(self) -> "SidebarNavEntry":
@@ -377,7 +377,7 @@ class NamespaceAutomationRule(BaseModel):
     entity_type: str = Field(min_length=1)
     trigger: str = Field(min_length=1, description="entity_created | stage_changed | …")
     action: str = Field(min_length=1, description="run_flow | notify | …")
-    flow_id: Optional[str] = Field(default=None)
+    flow_id: str | None = Field(default=None)
 
 
 class SuggestsSettings(BaseModel):
@@ -385,7 +385,7 @@ class SuggestsSettings(BaseModel):
 
     enabled: bool = Field(default=False, title="Включить фоновый поиск саджестов")
     cron: str = Field(default="0 2 * * *", title="Cron-расписание для генерации")
-    schedule_task_id: Optional[str] = Field(
+    schedule_task_id: str | None = Field(
         default=None, description="ID платформенной задачи расписания"
     )
 
@@ -398,11 +398,11 @@ class NamespaceCRMSettings(BaseModel):
         default="self",
         title="Голос по умолчанию для новой заметки",
     )
-    default_context_entity_id: Optional[str] = Field(
+    default_context_entity_id: str | None = Field(
         default=None,
         title="Якорь контекста по умолчанию",
     )
-    integrations: Dict[str, Dict[str, Any]] = Field(
+    integrations: dict[str, dict[str, Any]] = Field(
         default_factory=dict,
         title="Метаданные интеграций по ключу провайдера",
         description=(
@@ -411,17 +411,17 @@ class NamespaceCRMSettings(BaseModel):
             "auto_sync_timezone, auto_sync_schedule_task_id, auto_sync_oauth_user_id."
         ),
     )
-    sidebar_navigation: Optional[List[SidebarNavEntry]] = Field(
+    sidebar_navigation: list[SidebarNavEntry] | None = Field(
         default=None,
         title="Дерево основного меню сайдбара",
         description="None: клиент строит меню из типов пространства",
     )
-    default_flow_by_entity_type: Dict[str, str] = Field(
+    default_flow_by_entity_type: dict[str, str] = Field(
         default_factory=dict,
         title="Идентификатор flow по умолчанию для типа сущности",
     )
-    automation_rules: List[NamespaceAutomationRule] = Field(default_factory=list)
-    pipeline_stage_presets: Dict[str, TaskBoardPreset] = Field(
+    automation_rules: list[NamespaceAutomationRule] = Field(default_factory=list)
+    pipeline_stage_presets: dict[str, TaskBoardPreset] = Field(
         default_factory=dict,
         title="Пресеты колонок доски задач",
         description="Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор.",
@@ -498,7 +498,7 @@ class Namespace(BaseModel):
 
     name: str = Field(title="Название", description="Имя namespace (например 'default', 'sales')")
     company_id: str = Field(title="ID компании", description="ID компании-владельца")
-    description: Optional[str] = Field(
+    description: str | None = Field(
         default=None, title="Описание", description="Описание namespace"
     )
     is_default: bool = Field(
@@ -506,12 +506,12 @@ class Namespace(BaseModel):
         title="По умолчанию",
         description="Является ли namespace дефолтным для компании",
     )
-    crm_settings: Optional[NamespaceCRMSettings] = Field(
+    crm_settings: NamespaceCRMSettings | None = Field(
         default=None,
         title="Настройки CRM",
         description="Опционально: UI заметок и значения по умолчанию",
     )
-    sync_settings: Optional[NamespaceSyncSettings] = Field(
+    sync_settings: NamespaceSyncSettings | None = Field(
         default=None,
         title="Настройки Sync",
         description="Опционально: дефолты транскрипции и речи в ленту для каналов пространства",
@@ -532,11 +532,11 @@ class AuthResult(BaseModel):
     """Результат авторизации"""
 
     success: bool = Field(description="Успешность авторизации")
-    user: Optional[User] = Field(default=None, description="Авторизованный пользователь")
-    session: Optional[AuthSession] = Field(default=None, description="Сессия авторизации")
-    token: Optional[str] = Field(default=None, description="JWT токен")
-    error_message: Optional[str] = Field(default=None, description="Сообщение об ошибке")
-    redirect_url: Optional[str] = Field(default=None, description="URL для редиректа")
+    user: User | None = Field(default=None, description="Авторизованный пользователь")
+    session: AuthSession | None = Field(default=None, description="Сессия авторизации")
+    token: str | None = Field(default=None, description="JWT токен")
+    error_message: str | None = Field(default=None, description="Сообщение об ошибке")
+    redirect_url: str | None = Field(default=None, description="URL для редиректа")
 
 
 SidebarNavEntry.model_rebuild()

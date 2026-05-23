@@ -7,7 +7,6 @@ import io
 import pstats
 import time
 from contextvars import ContextVar
-from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -16,7 +15,7 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 profiling_enabled: ContextVar[bool] = ContextVar("profiling_enabled", default=False)
-profiler_output: ContextVar[Optional[str]] = ContextVar("profiler_output", default=None)
+profiler_output: ContextVar[str | None] = ContextVar("profiler_output", default=None)
 
 class ProfilingMiddleware(BaseHTTPMiddleware):
     """Middleware для профилирования запросов"""

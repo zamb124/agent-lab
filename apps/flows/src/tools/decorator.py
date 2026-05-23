@@ -9,16 +9,25 @@ from __future__ import annotations
 import inspect
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints
+from types import FunctionType
+from typing import TYPE_CHECKING, TypeAlias, TypeVar, cast, get_type_hints, override
 
 from pydantic import BaseModel
 
 from apps.flows.src.mock import get_mock_for_tool
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.tool_reference import CallParameter
-from apps.flows.src.tools.base import BaseTool
+from apps.flows.src.tools.base import (
+    BaseTool,
+    ToolArguments,
+    ToolFunctionResult,
+    ToolMockResponse,
+    ToolParametersSchema,
+    ToolResult,
+)
 from core.config.testing import is_testing
 from core.logging import get_logger
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -26,7 +35,8 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 Permission = str | list[str] | None
 
-F = TypeVar("F", bound=Callable[..., Any])
+ToolFunction: TypeAlias = Callable[..., ToolFunctionResult]
+F = TypeVar("F", bound=ToolFunction)
 
 
 def is_test_mode() -> bool:
@@ -43,11 +53,11 @@ class FunctionTool(BaseTool):
 
     def __init__(
         self,
-        func: Callable[..., Any],
+        func: ToolFunction,
         name: str,
         description: str,
         tags: list[str],
-        mock_response: Any = None,
+        mock_response: ToolMockResponse | None = None,
         permission: Permission = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
         cost: float = 0.0,
@@ -56,30 +66,33 @@ class FunctionTool(BaseTool):
         tariff_limits: dict[str, int] | None = None,
         args_schema: type[BaseModel] | None = None,
     ):
-        self._func = func
-        self.name = name
-        self.description = description
-        self.tags = tags
-        self._mock_response = mock_response
-        self.permission = permission
-        self.react_role = react_role
-        self.args_schema = args_schema
-        self._parameters = {} if args_schema is not None else self._extract_parameters(func)
+        self._func: ToolFunction = func
+        self.name: str = name
+        self.description: str = description
+        self.tags: list[str] = tags
+        self._mock_response: ToolMockResponse | None = mock_response
+        self.mock_response: ToolMockResponse | None = mock_response
+        self.permission: Permission = permission
+        self.react_role: ReactToolRole = react_role
+        self.args_schema: type[BaseModel] | None = args_schema
+        self._parameters: dict[str, CallParameter] = (
+            {} if args_schema is not None else self._extract_parameters(func)
+        )
 
-        self.cost = cost
-        self.billing_name = billing_name or name
-        self.free_for_plans = free_for_plans or []
-        self.tariff_limits = tariff_limits or {}
+        self.cost: float = cost
+        self.billing_name: str = billing_name or name
+        self.free_for_plans: list[str] = free_for_plans or []
+        self.tariff_limits: dict[str, int] = tariff_limits or {}
 
-    def _extract_parameters(self, func: Callable[..., Any]) -> dict[str, CallParameter]:
+    def _extract_parameters(self, func: ToolFunction) -> dict[str, CallParameter]:
         """Извлекает параметры из type hints функции."""
         try:
-            hints = get_type_hints(func)
+            hints = cast(dict[str, type], get_type_hints(func))
         except Exception:
-            hints = {}
+            hints: dict[str, type] = {}
 
         sig = inspect.signature(func)
-        params = {}
+        params: dict[str, CallParameter] = {}
 
         for param_name, param in sig.parameters.items():
             # Пропускаем state - это служебный параметр
@@ -89,7 +102,7 @@ class FunctionTool(BaseTool):
             param_type = hints.get(param_name, str)
 
             # Определяем тип для JSON schema
-            type_mapping = {
+            type_mapping: dict[type, str] = {
                 str: "string",
                 int: "integer",
                 float: "number",
@@ -102,7 +115,8 @@ class FunctionTool(BaseTool):
             description = f"Параметр {param_name}"
 
             # Проверяем обязательность параметра
-            required = param.default is inspect.Parameter.empty
+            default_value = cast(JsonValue | type, param.default)
+            required = default_value is inspect.Signature.empty
 
             params[param_name] = CallParameter(
                 type=type_name,
@@ -113,15 +127,19 @@ class FunctionTool(BaseTool):
         return params
 
     @property
-    def parameters(self) -> dict[str, Any]:
+    @override
+    def parameters(self) -> ToolParametersSchema:
         """JSON схема параметров для LLM."""
         if self.args_schema is not None:
-            schema = self.args_schema.model_json_schema()
-            schema.pop("title", None)
+            schema = require_json_object(
+                self.args_schema.model_json_schema(),
+                f"{self.name}.args_schema",
+            )
+            _ = schema.pop("title", None)
             return schema
 
-        properties = {}
-        required = []
+        properties: JsonObject = {}
+        required: list[JsonValue] = []
 
         for name, param in self._parameters.items():
             properties[name] = {
@@ -133,7 +151,8 @@ class FunctionTool(BaseTool):
 
         return {"type": "object", "properties": properties, "required": required}
 
-    async def run(self, args: dict[str, Any], state: "ExecutionState") -> Any:
+    @override
+    async def run(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
         """
         Единственная точка входа для выполнения tool.
 
@@ -144,7 +163,7 @@ class FunctionTool(BaseTool):
         mock_result = get_mock_for_tool(state, self.name)
         if mock_result is not None:
             logger.debug(f"Tool {self.name}: using mock from state")
-            return mock_result
+            return require_json_value(mock_result, f"mock.tools.{self.name}")
 
         if is_test_mode() and self._mock_response is not None:
             logger.debug(f"Tool {self.name}: using mock from decorator")
@@ -154,54 +173,59 @@ class FunctionTool(BaseTool):
                     result = self._mock_response(args, state=state)
                 else:
                     result = self._mock_response(args)
-                if inspect.iscoroutine(result):
-                    return await result
-                return result
-            return self._mock_response
+                if inspect.isawaitable(result):
+                    result = await result
+                return require_json_value(result, f"tool.{self.name}.mock_response")
+            return require_json_value(self._mock_response, f"tool.{self.name}.mock_response")
 
         logger.debug(f"Tool {self.name}: real mode")
-        return await self._run_impl(args, state)
+        return require_json_value(
+            await self._run_impl(args, state),
+            f"tool.{self.name}.result",
+        )
 
-    async def _run_impl(self, args: dict[str, Any], state: "ExecutionState") -> Any:
+    @override
+    async def _run_impl(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
         """Выполняет функцию. State передается как ExecutionState."""
         sig = inspect.signature(self._func)
         if self.args_schema is not None:
             validated = self.args_schema.model_validate(args)
-            call_kw = validated.model_dump()
+            call_kw = require_json_object(
+                validated.model_dump(mode="json"),
+                f"tool.{self.name}.validated_args",
+            )
         else:
             call_kw = dict(args)
 
         if "state" in sig.parameters:
-            if inspect.iscoroutinefunction(self._func):
-                result = await self._func(**call_kw, state=state)
-            else:
-                result = self._func(**call_kw, state=state)
-            return result
-
-        if inspect.iscoroutinefunction(self._func):
-            return await self._func(**call_kw)
-        return self._func(**call_kw)
+            result = self._func(**call_kw, state=state)
+        else:
+            result = self._func(**call_kw)
+        if inspect.isawaitable(result):
+            result = await result
+        return require_json_value(result, f"tool.{self.name}.result")
 
     def get_source_code(self) -> str:
         """Возвращает исходный код функции."""
         return inspect.getsource(self._func)
 
     @property
+    def source_function(self) -> FunctionType:
+        """Оригинальная Python-функция для анализа исходного модуля."""
+        if not isinstance(self._func, FunctionType):
+            raise TypeError(f"Tool '{self.name}' source is not a Python function")
+        return self._func
+
+    @property
     def call_parameters(self) -> dict[str, CallParameter]:
         """Параметры вызова, извлечённые из сигнатуры функции."""
         return dict(self._parameters)
-
-    @property
-    def mock_response(self) -> Any:
-        """Mock-ответ, заданный в декораторе tool."""
-        return self._mock_response
-
 
 def tool(
     name: str,
     description: str,
     tags: list[str],
-    mock_response: Any = None,
+    mock_response: ToolMockResponse | None = None,
     permission: Permission = None,
     react_role: ReactToolRole = ReactToolRole.STANDARD,
     cost: float = 0.0,

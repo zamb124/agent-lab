@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Protocol, runtime_checkable
+from typing import ClassVar, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,7 +36,7 @@ class BrowserRuntimeIntegrationConfig(BaseModel):
     Переиспользование:
     - Стоит: для всех окружений (dev/test/prod), где нужен единый контракт настроек.
     """
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     default_endpoint_key: str = Field(default="default")
     cdp_url: str = Field(default="")
@@ -97,14 +97,14 @@ class HasBrowserRuntimeConfig(Protocol):
     browser: BrowserRuntimeIntegrationConfig
 
 
-_browser_settings: Optional[BrowserSettings] = None
+_browser_settings: BrowserSettings | None = None
 
 
 def get_browser_settings() -> BrowserSettings:
     global _browser_settings
     if _browser_settings is None:
         merged = load_merged_config(service_name="browser", silent=True)
-        _browser_settings = BrowserSettings(**merged)
+        _browser_settings = BrowserSettings.model_validate(merged)
     return _browser_settings
 
 
@@ -121,7 +121,7 @@ def settings_to_runtime_view(settings: HasBrowserRuntimeConfig) -> BrowserRuntim
     if len(endpoints) == 0:
         raise ValueError(
             "Не задан CDP endpoint: укажите browser.cdp_url или browser.cdp_endpoints "
-            "(например ENV BROWSER__CDP_URL)."
+            + "(например ENV BROWSER__CDP_URL)."
         )
     if cfg.default_endpoint_key not in endpoints:
         raise ValueError(

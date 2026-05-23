@@ -1,6 +1,5 @@
 """Репозиторий для работы с тредами (SQLAlchemy)."""
 
-from typing import List, Optional, Type
 
 from sqlalchemy import select
 
@@ -16,7 +15,7 @@ class ThreadRepository(BaseSyncRepository[SyncThread]):
         super().__init__(db=db)
 
     @property
-    def model_class(self) -> Type[SyncThread]:
+    def model_class(self) -> type[SyncThread]:
         return SyncThread
 
     @property
@@ -28,8 +27,8 @@ class ThreadRepository(BaseSyncRepository[SyncThread]):
         channel_id: str,
         limit: int = 100,
         offset: int = 0,
-        company_id: Optional[str] = None,
-    ) -> List[SyncThread]:
+        company_id: str | None = None,
+    ) -> list[SyncThread]:
         """Треды в канале."""
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:

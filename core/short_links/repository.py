@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -15,7 +14,7 @@ from core.short_links.kinds import SHORT_LINK_KIND_SYNC_CALL_JOIN
 class ShortLinkRepository:
     """platform_short_links в shared БД."""
 
-    def __init__(self, db_url: Optional[str] = None) -> None:
+    def __init__(self, db_url: str | None = None) -> None:
         self._db_url = db_url
 
     async def insert_try(
@@ -38,7 +37,7 @@ class ShortLinkRepository:
                 await session.rollback()
                 return False
 
-    async def get_by_code(self, code: str) -> Optional[PlatformShortLink]:
+    async def get_by_code(self, code: str) -> PlatformShortLink | None:
         factory = await get_session_factory(self._db_url)
         async with factory() as session:
             res = await session.execute(
@@ -46,7 +45,7 @@ class ShortLinkRepository:
             )
             return res.scalar_one_or_none()
 
-    async def find_sync_by_link_token(self, link_token: str) -> Optional[PlatformShortLink]:
+    async def find_sync_by_link_token(self, link_token: str) -> PlatformShortLink | None:
         factory = await get_session_factory(self._db_url)
         async with factory() as session:
             stmt = (
@@ -80,7 +79,7 @@ class ShortLinkRepository:
 
     async def delete_by_code_and_kind_returning(
         self, code: str, kind: str
-    ) -> Optional[PlatformShortLink]:
+    ) -> PlatformShortLink | None:
         """Атомарно удаляет строку только при совпадении kind; иначе ничего не удаляет."""
         factory = await get_session_factory(self._db_url)
         async with factory() as session:

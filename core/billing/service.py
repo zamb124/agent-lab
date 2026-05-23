@@ -7,7 +7,7 @@ import copy
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Optional, TypedDict
 
 import core.tracing.attributes as trace_attr
 from core.context import get_context
@@ -90,11 +90,11 @@ class BillingService:
         company_repository: "CompanyRepository",
         user_repository: "UserRepository",
         usage_repository: "UsageRepository",
-        tariff_prices: Optional[Dict[TariffPlan, Dict[str, Dict[str, float]]]] = None,
-        resource_base_prices: Optional[Dict[str, Dict[str, float]]] = None,
+        tariff_prices: dict[TariffPlan, dict[str, dict[str, float]]] | None = None,
+        resource_base_prices: dict[str, dict[str, float]] | None = None,
         shared_storage: Optional["Storage"] = None,
         balance_enforcement_enabled: bool = True,
-        balance_enforcement_exempt_company_ids: Optional[list[str]] = None,
+        balance_enforcement_exempt_company_ids: list[str] | None = None,
     ):
         if not company_repository:
             raise ValueError("company_repository обязателен для BillingService")
@@ -263,7 +263,7 @@ class BillingService:
 
         return True, ""
 
-    async def get_effective_resource_base_prices(self) -> Dict[str, Dict[str, float]]:
+    async def get_effective_resource_base_prices(self) -> dict[str, dict[str, float]]:
         merged = copy.deepcopy(self._resource_base_prices_static)
         if self._shared_storage is None:
             return merged
@@ -284,22 +284,22 @@ class BillingService:
         merged.pop("tool", None)
         return merged
 
-    def get_static_resource_base_prices(self) -> Dict[str, Dict[str, float]]:
+    def get_static_resource_base_prices(self) -> dict[str, dict[str, float]]:
         return copy.deepcopy(self._resource_base_prices_static)
 
-    def get_tariff_multipliers_for_plan(self, plan: TariffPlan) -> Dict[str, Dict[str, float]]:
+    def get_tariff_multipliers_for_plan(self, plan: TariffPlan) -> dict[str, dict[str, float]]:
         return copy.deepcopy(self._tariff_prices.get(plan, {}))
 
     def apply_tariff_multipliers_to_base_prices(
         self,
-        base_prices: Dict[str, Dict[str, float]],
+        base_prices: dict[str, dict[str, float]],
         plan: TariffPlan,
-    ) -> Dict[str, Dict[str, float]]:
+    ) -> dict[str, dict[str, float]]:
         tariff_prices = self._tariff_prices.get(plan, {})
-        out: Dict[str, Dict[str, float]] = {}
+        out: dict[str, dict[str, float]] = {}
         for category, resources in base_prices.items():
             category_multipliers = tariff_prices.get(category, {})
-            out_bucket: Dict[str, float] = {}
+            out_bucket: dict[str, float] = {}
             for resource, base_cost in resources.items():
                 if base_cost == 0:
                     out_bucket[resource] = 0.0
@@ -315,7 +315,7 @@ class BillingService:
         out.pop("tool", None)
         return out
 
-    async def get_effective_resource_base_prices_for_company(self, company_id: str) -> Dict[str, Dict[str, float]]:
+    async def get_effective_resource_base_prices_for_company(self, company_id: str) -> dict[str, dict[str, float]]:
         merged = await self.get_effective_resource_base_prices()
         if self._shared_storage is None:
             return merged
@@ -411,7 +411,7 @@ class BillingService:
         cost: float,
         usage_type: UsageType = UsageType.TOOL_CALL,
         quantity: int = 1,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         cost_origin: str = COST_ORIGIN_PLATFORM,
     ) -> str:
         """Записывает использование ресурса. Возвращает usage_id.
@@ -492,7 +492,7 @@ class BillingService:
     async def settle_span_charge(
         self,
         *,
-        span_dict: Dict[str, Any],
+        span_dict: dict[str, Any],
         settlement: SpanBillingSettlement,
         fallback_user_id: str,
     ) -> str:
@@ -548,7 +548,7 @@ class BillingService:
         cost = unit_cost * quantity
 
         cost_origin = attrs.get(trace_attr.ATTR_BILLING_COST_ORIGIN, COST_ORIGIN_PLATFORM)
-        meta: Dict[str, Any] = {
+        meta: dict[str, Any] = {
             "span_id": span_id,
             "trace_id": span_dict.get("trace_id"),
             "settlement_source": "span_billing_job",
@@ -573,7 +573,7 @@ class BillingService:
     async def settle_span_rule_charge(
         self,
         *,
-        span_dict: Dict[str, Any],
+        span_dict: dict[str, Any],
         rule: SettlementRule,
         settlement: SpanBillingSettlement,
         fallback_user_id: str,
@@ -619,7 +619,7 @@ class BillingService:
         attrs = span_dict.get("attributes") or {}
         cost_origin = attrs.get(trace_attr.ATTR_BILLING_COST_ORIGIN, COST_ORIGIN_PLATFORM)
         custom_pid = attrs.get(trace_attr.ATTR_BILLING_CUSTOM_PROVIDER_ID)
-        meta: Dict[str, Any] = {
+        meta: dict[str, Any] = {
             "span_id": span_id,
             "trace_id": span_dict.get("trace_id"),
             "rule_id": rule.rule_id,
@@ -644,7 +644,7 @@ class BillingService:
     async def settle_pending_span_in_job(
         self,
         *,
-        span_dict: Dict[str, Any],
+        span_dict: dict[str, Any],
         settlement: SpanBillingSettlement,
         fallback_user_id: str,
         rules_doc: SettlementRulesDocument,

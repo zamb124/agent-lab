@@ -4,7 +4,7 @@
 
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import jwt
 from pydantic import BaseModel, Field
@@ -24,13 +24,13 @@ class TokenData(BaseModel):
 
     user_id: str = Field(description="ID пользователя")
     company_id: str = Field(description="ID компании")
-    roles: List[str] = Field(default_factory=list, description="Роли пользователя в компании")
+    roles: list[str] = Field(default_factory=list, description="Роли пользователя в компании")
     token_type: TokenType = Field(default=TokenType.SESSION, description="Тип токена")
     exp: datetime = Field(description="Время истечения")
     iat: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Время создания")
-    session_id: Optional[str] = Field(default=None, description="ID OAuth сессии (опционально)")
+    session_id: str | None = Field(default=None, description="ID OAuth сессии (опционально)")
     email: str = Field(default="", description="Email пользователя")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Дополнительные данные")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Дополнительные данные")
 
 class TokenService:
     """Единый сервис управления токенами"""
@@ -53,11 +53,11 @@ class TokenService:
         self,
         user_id: str,
         company_id: str = "",
-        roles: Optional[List[str]] = None,
+        roles: list[str] | None = None,
         token_type: TokenType = TokenType.SESSION,
-        expires_in: Optional[int] = None,
-        session_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        expires_in: int | None = None,
+        session_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
         email: str = "",
     ) -> str:
         """
@@ -114,7 +114,7 @@ class TokenService:
         self,
         user_id: str,
         company_id: str,
-        roles: Optional[List[str]] = None,
+        roles: list[str] | None = None,
         expires_in: int = API_TOKEN_EXPIRES,
     ) -> str:
         """
@@ -142,9 +142,9 @@ class TokenService:
         *,
         user_id: str,
         company_id: str,
-        roles: Optional[List[str]] = None,
+        roles: list[str] | None = None,
         expires_in: int = EMBED_SESSION_EXPIRES,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Создает короткоживущий токен для внешнего embed-чата."""
         return self.create_token(
@@ -156,7 +156,7 @@ class TokenService:
             metadata=metadata,
         )
 
-    def validate_token(self, token: str) -> Optional[TokenData]:
+    def validate_token(self, token: str) -> TokenData | None:
         """
         Проверяет JWT токен и возвращает данные.
 
@@ -194,7 +194,7 @@ class TokenService:
 
         return token_data
 
-_token_service: Optional[TokenService] = None
+_token_service: TokenService | None = None
 
 def get_token_service() -> TokenService:
     """Получает глобальный экземпляр сервиса токенов"""

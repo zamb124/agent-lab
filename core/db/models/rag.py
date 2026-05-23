@@ -6,7 +6,7 @@
 """
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -39,11 +39,11 @@ class DocumentProcessingStatus(Base):
     namespace_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     document_name: Mapped[str] = mapped_column(String(500), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    error_message: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    s3_key: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
-    s3_bucket: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    chunks_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    s3_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    s3_bucket: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chunks_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -52,8 +52,8 @@ class DocumentProcessingStatus(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    extra_metadata: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     ttl_seconds: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -79,16 +79,16 @@ class VectorDocument(Base):
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
     namespace_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    company_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    company_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     document_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    document_name: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    document_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     content_tsv: Mapped[Any] = mapped_column(
         TSVECTOR,
         Computed("to_tsvector('simple', coalesce(content, ''))", persisted=True),
     )
     embedding = mapped_column(Vector(1024), nullable=True)
-    embedding_model: Mapped[Optional[str]] = mapped_column(
+    embedding_model: Mapped[str | None] = mapped_column(
         String(255), nullable=True, default=None, index=True,
         comment="Идентификатор модели эмбеддинга (напр. qwen/qwen3-embedding-0.6b)."
     )

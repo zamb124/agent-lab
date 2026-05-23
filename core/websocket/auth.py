@@ -2,7 +2,6 @@
 Авторизация WebSocket-подключений по cookie auth_token.
 """
 
-from typing import Optional
 
 from fastapi import WebSocket
 
@@ -13,7 +12,7 @@ from core.utils.tokens import get_token_service
 logger = get_logger(__name__)
 
 
-async def get_user_from_websocket(websocket: WebSocket) -> Optional[User]:
+async def get_user_from_websocket(websocket: WebSocket) -> User | None:
     """Извлечь пользователя из cookie auth_token; вернуть None при отсутствии/невалидности."""
     auth_token = websocket.cookies.get("auth_token")
     if not auth_token:

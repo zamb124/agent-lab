@@ -3,7 +3,6 @@
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
@@ -46,7 +45,7 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
 
     async def get_for_company_identifier(
         self, company_identifier: str, embed_id: str
-    ) -> Optional[EmbedConfig]:
+    ) -> EmbedConfig | None:
         final_key = self._final_key_for_company_identifier(company_identifier.strip(), embed_id)
         table_name = self._get_table_name()
         data = await self._storage.get_with_session_and_table(final_key, table_name)
@@ -56,13 +55,13 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
 
     async def list_for_company_identifier(
         self, company_identifier: str, *, limit: int, offset: int = 0
-    ) -> List[EmbedConfig]:
+    ) -> list[EmbedConfig]:
         final_prefix = self._final_prefix_for_company_identifier(company_identifier.strip())
         table_name = self._get_table_name()
         all_data = await self._storage.get_all_by_prefix_and_table(
             final_prefix, table_name, limit, offset
         )
-        entities: List[EmbedConfig] = []
+        entities: list[EmbedConfig] = []
         for key, data in all_data.items():
             try:
                 entity = self.model_class.model_validate_json(data)

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Protocol
 
 from apps.browser.contracts.control_types import BrowserControlFeatures
 from apps.browser.engine.types import (
@@ -12,7 +12,9 @@ from apps.browser.engine.types import (
     BrowserAcquireResult,
     BrowserFetchRequest,
     BrowserFetchResult,
+    BrowserPage,
 )
+from core.types import JsonObject
 
 
 class BrowserControlAdapter(Protocol):
@@ -34,10 +36,10 @@ class BrowserControlAdapter(Protocol):
     """
     async def start(self, req: BrowserAcquireRequest) -> BrowserAcquireResult: ...
 
-    async def navigate(self, page: Any, req: BrowserFetchRequest) -> BrowserFetchResult: ...
+    async def navigate(self, page: BrowserPage, req: BrowserFetchRequest) -> BrowserFetchResult: ...
 
-    async def run_action(self, page: Any, code: str, *, timeout_ms: int) -> dict[str, Any]: ...
+    async def run_action(self, page: BrowserPage, code: str, *, timeout_ms: int) -> JsonObject: ...
 
-    async def stop(self, page: Any) -> None: ...
+    async def stop(self, page: BrowserPage) -> None: ...
 
     def features(self) -> BrowserControlFeatures: ...

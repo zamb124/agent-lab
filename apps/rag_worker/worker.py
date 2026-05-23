@@ -10,7 +10,7 @@ from core.config.loader import load_merged_config
 from core.tasks.logging_init import setup_worker_logging_early
 
 _merged_rag_worker = load_merged_config(service_name="rag_worker", silent=True)
-_rag_worker_settings = RAGWorkerSettings(**_merged_rag_worker)
+_rag_worker_settings = RAGWorkerSettings.model_validate(_merged_rag_worker)
 setup_worker_logging_early("rag_worker", logging_config=_rag_worker_settings.logging)
 set_settings(_rag_worker_settings)
 

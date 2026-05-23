@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
-
 from pydantic import Field
 
 from core.models import FlexibleBaseModel
@@ -20,11 +18,11 @@ class TriggerRuntimeSnapshot(FlexibleBaseModel):
     context — поля, явно вынесенные в output_mapping (левая часть: context.*).
     """
 
-    payload: Dict[str, Any] = Field(
+    payload: dict[str, object] = Field(
         ...,
         description="Сырой payload события триггера",
     )
-    context: Dict[str, Any] = Field(
+    context: dict[str, object] = Field(
         default_factory=dict,
         description="Нормализованные поля из output_mapping (chat_id, user_id, …)",
     )

@@ -6,16 +6,10 @@ import asyncio
 import json
 import time
 import uuid
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
 from typing import (
     Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Type,
     TypeVar,
     overload,
 )
@@ -39,6 +33,12 @@ from core.clients.llm.candidates import (
     candidate_supports_request as _candidate_supports_request,
 )
 from core.clients.llm.config import LLMCallConfig, ReasoningEffort
+from core.clients.llm.context_layer import (
+    LLMContextInput,
+    llm_context_trace_metadata,
+    merge_provider_cache_hints,
+    prepare_messages_for_context_layer,
+)
 from core.clients.llm.errors import (
     LLMStreamIdleTimeoutError,
 )
@@ -62,6 +62,7 @@ from core.clients.llm.transport import (
 from core.clients.llm.transport import (
     stream_once as _transport_stream_once,
 )
+from core.llm_context import LLMContextBlock, LLMContextSourceRegistry
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -79,27 +80,28 @@ class LLMClient:
         self,
         model: str,
         api_key: str,
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
         temperature: float = 0.2,
-        max_tokens: Optional[int] = None,
-        default_headers: Optional[Dict[str, str]] = None,
+        max_tokens: int | None = None,
+        default_headers: dict[str, str] | None = None,
         timeout: float = 120.0,
-        llm_provider: Optional[str] = None,
-        candidates: Optional[List[LLMCallConfig]] = None,
-        candidate_resolver: Optional[Callable[[], Awaitable[List[LLMCallConfig]]]] = None,
-        first_token_timeout: Optional[float] = None,
+        llm_provider: str | None = None,
+        candidates: list[LLMCallConfig] | None = None,
+        candidate_resolver: Callable[[], Awaitable[list[LLMCallConfig]]] | None = None,
+        first_token_timeout: float | None = None,
         candidate_cooldown_seconds: float = 0.0,
         platform_default_free_pool: bool = False,
         platform_paid_fallback_enabled: bool = True,
-        llm_source: Optional[str] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[ReasoningEffort] = None,
-        extra_request_body: Optional[Dict[str, Any]] = None,
-        extra_request_headers: Optional[Dict[str, str]] = None,
+        llm_source: str | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        extra_request_body: dict[str, Any] | None = None,
+        extra_request_headers: dict[str, str] | None = None,
+        context_length: int | None = None,
     ):
         self.model = model
         self.api_key = api_key
@@ -111,9 +113,10 @@ class LLMClient:
         self.frequency_penalty = frequency_penalty
         self.presence_penalty = presence_penalty
         self.seed = seed
-        self.reasoning_effort: Optional[ReasoningEffort] = reasoning_effort
+        self.reasoning_effort: ReasoningEffort | None = reasoning_effort
         self.extra_request_body = dict(extra_request_body) if extra_request_body else None
         self.extra_request_headers = dict(extra_request_headers) if extra_request_headers else None
+        self.context_length = context_length
         self.default_headers = default_headers or {}
         self.timeout = timeout
         self.llm_provider = (
@@ -135,6 +138,7 @@ class LLMClient:
             reasoning_effort=reasoning_effort,
             extra_request_body=dict(extra_request_body) if extra_request_body else None,
             extra_request_headers=dict(extra_request_headers) if extra_request_headers else None,
+            context_length=context_length,
             default_headers=dict(self.default_headers),
             source=self.llm_source,
         )
@@ -171,6 +175,7 @@ class LLMClient:
             reasoning_effort=candidate.reasoning_effort,
             extra_request_body=candidate.extra_request_body,
             extra_request_headers=candidate.extra_request_headers,
+            context_length=candidate.context_length,
         )
 
     def _candidate_with_client_defaults(self, candidate: LLMCallConfig) -> LLMCallConfig:
@@ -214,17 +219,22 @@ class LLMClient:
                     if candidate.extra_request_headers is not None
                     else self.extra_request_headers
                 ),
+                "context_length": (
+                    candidate.context_length
+                    if candidate.context_length is not None
+                    else self.context_length
+                ),
             }
         )
 
     async def _resolve_candidates(
         self,
         *,
-        openai_messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]],
-        response_format: Optional[Dict[str, Any]],
-        model_override: Optional[str] = None,
-    ) -> List[LLMCallConfig]:
+        openai_messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        response_format: dict[str, Any] | None,
+        model_override: str | None = None,
+    ) -> list[LLMCallConfig]:
         if model_override is not None:
             model = model_override.strip()
             if not model:
@@ -249,6 +259,7 @@ class LLMClient:
                     extra_request_headers=dict(self.extra_request_headers)
                     if self.extra_request_headers
                     else None,
+                    context_length=self.context_length,
                     default_headers=dict(self.default_headers),
                     source=self.llm_source,
                 )
@@ -327,12 +338,12 @@ class LLMClient:
 
     @staticmethod
     def _merge_optional_dicts(
-        base: Optional[Dict[str, Any]],
-        overlay: Optional[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
+        base: dict[str, Any] | None,
+        overlay: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
         if not base and not overlay:
             return None
-        merged: Dict[str, Any] = {}
+        merged: dict[str, Any] = {}
         if base:
             merged.update(base)
         if overlay:
@@ -342,22 +353,25 @@ class LLMClient:
     async def stream(
         self,
         messages: MessageInput,
-        tools: Optional[List[Dict[str, Any]]] = None,
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        task_id: Optional[str] = None,
-        context_id: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[ReasoningEffort] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
-        extra_headers: Optional[Dict[str, str]] = None,
-        stream_cancel_poll: Optional[Callable[[], Awaitable[bool]]] = None,
+        tools: list[dict[str, Any]] | None = None,
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        llm_context: LLMContextInput | None = None,
+        llm_context_blocks: list[LLMContextBlock] | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
+        stream_cancel_poll: Callable[[], Awaitable[bool]] | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Stream-first LLM call with universal candidate fallback.
 
@@ -369,19 +383,39 @@ class LLMClient:
         credentials and base URL without mutating ``self.model``.
         """
         normalized_messages = _normalize_messages(messages)
-        openai_messages = _messages_to_openai(normalized_messages)
+        base_openai_messages = _messages_to_openai(normalized_messages)
         candidates = await self._resolve_candidates(
-            openai_messages=openai_messages,
+            openai_messages=base_openai_messages,
             tools=tools,
             response_format=response_format,
             model_override=model,
         )
+        prepared_context = await prepare_messages_for_context_layer(
+            normalized_messages,
+            tools=tools,
+            llm_context=llm_context,
+            llm_context_blocks=llm_context_blocks,
+            llm_context_source_registry=llm_context_source_registry,
+            model_context_length=_strictest_context_length(candidates),
+            output_token_reserve=_max_output_token_reserve(candidates, max_tokens),
+        )
+        normalized_messages = prepared_context.messages
         last_error: BaseException | None = None
         for candidate_index, candidate in enumerate(candidates):
             attempt = self._client_for_candidate(candidate)
             merged_extra_body = self._merge_optional_dicts(
                 candidate.extra_request_body,
                 extra_body,
+            )
+            merged_extra_body = merge_provider_cache_hints(
+                provider=candidate.provider,
+                model=candidate.model,
+                extra_body=merged_extra_body,
+                provider_hints=(
+                    prepared_context.compiled_context.provider_hints
+                    if prepared_context.compiled_context is not None
+                    else None
+                ),
             )
             merged_extra_headers = self._merge_optional_dicts(
                 candidate.extra_request_headers,
@@ -434,9 +468,15 @@ class LLMClient:
                                 source=candidate.source,
                                 attempt=candidate_index + 1,
                             )
-                        yield event
+                        yield _attach_llm_context_metadata(
+                            event,
+                            prepared_context.compiled_context,
+                        )
                     else:
-                        yield await agen.__anext__()
+                        yield _attach_llm_context_metadata(
+                            await agen.__anext__(),
+                            prepared_context.compiled_context,
+                        )
             except StopAsyncIteration:
                 return
             except asyncio.TimeoutError as exc:
@@ -481,22 +521,22 @@ class LLMClient:
 
     async def _stream_once(
         self,
-        messages: List[Message],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        response_format: Optional[Dict[str, Any]] = None,
-        task_id: Optional[str] = None,
-        context_id: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[ReasoningEffort] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
-        extra_headers: Optional[Dict[str, str]] = None,
-        stream_cancel_poll: Optional[Callable[[], Awaitable[bool]]] = None,
+        messages: list[Message],
+        tools: list[dict[str, Any]] | None = None,
+        response_format: dict[str, Any] | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        stream_cancel_poll: Callable[[], Awaitable[bool]] | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         async for event in _transport_stream_once(
             self,
@@ -521,28 +561,59 @@ class LLMClient:
 
     async def invoke(
         self,
-        messages: List[Message],
+        messages: list[Message],
         json_output: bool = False,
-        max_tokens: Optional[int] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
-        extra_headers: Optional[Dict[str, str]] = None,
-    ) -> str | Dict[str, Any]:
-        openai_messages = _messages_to_openai(messages)
+        max_tokens: int | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        llm_context: LLMContextInput | None = None,
+        llm_context_blocks: list[LLMContextBlock] | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
+    ) -> str | dict[str, Any]:
+        base_openai_messages = _messages_to_openai(messages)
         candidates = await self._resolve_candidates(
-            openai_messages=openai_messages,
+            openai_messages=base_openai_messages,
             tools=None,
             response_format={"type": "json_object"} if json_output else None,
         )
+        prepared_context = await prepare_messages_for_context_layer(
+            messages,
+            tools=None,
+            llm_context=llm_context,
+            llm_context_blocks=llm_context_blocks,
+            llm_context_source_registry=llm_context_source_registry,
+            model_context_length=_strictest_context_length(candidates),
+            output_token_reserve=_max_output_token_reserve(candidates, max_tokens),
+        )
+        prepared_messages = prepared_context.messages
         last_error: BaseException | None = None
         for candidate_index, candidate in enumerate(candidates):
             attempt = self._client_for_candidate(candidate)
+            merged_extra_body = self._merge_optional_dicts(
+                candidate.extra_request_body,
+                extra_body,
+            )
+            merged_extra_body = merge_provider_cache_hints(
+                provider=candidate.provider,
+                model=candidate.model,
+                extra_body=merged_extra_body,
+                provider_hints=(
+                    prepared_context.compiled_context.provider_hints
+                    if prepared_context.compiled_context is not None
+                    else None
+                ),
+            )
+            merged_extra_headers = self._merge_optional_dicts(
+                candidate.extra_request_headers,
+                extra_headers,
+            )
             try:
                 return await attempt._invoke_once(
-                    messages,
+                    prepared_messages,
                     json_output=json_output,
                     max_tokens=max_tokens,
-                    extra_body=extra_body,
-                    extra_headers=extra_headers,
+                    extra_body=merged_extra_body,
+                    extra_headers=merged_extra_headers,
                 )
             except (httpx.HTTPError, OSError, json.JSONDecodeError) as exc:
                 last_error = exc
@@ -564,12 +635,12 @@ class LLMClient:
 
     async def _invoke_once(
         self,
-        messages: List[Message],
+        messages: list[Message],
         json_output: bool = False,
-        max_tokens: Optional[int] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
-        extra_headers: Optional[Dict[str, str]] = None,
-    ) -> str | Dict[str, Any]:
+        max_tokens: int | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> str | dict[str, Any]:
         return await _transport_invoke_once(
             self,
             messages=messages,
@@ -584,19 +655,22 @@ class LLMClient:
         self,
         messages: MessageInput,
         *,
-        response_model: Type[T],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[ReasoningEffort] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
-        extra_headers: Optional[Dict[str, str]] = None,
+        response_model: type[T],
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        llm_context: LLMContextInput | None = None,
+        llm_context_blocks: list[LLMContextBlock] | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
     ) -> T: ...
 
     @overload
@@ -605,37 +679,43 @@ class LLMClient:
         messages: MessageInput,
         *,
         response_model: None = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[ReasoningEffort] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
-        extra_headers: Optional[Dict[str, str]] = None,
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        llm_context: LLMContextInput | None = None,
+        llm_context_blocks: list[LLMContextBlock] | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
     ) -> Message: ...
 
     async def chat(
         self,
         messages: MessageInput,
         *,
-        response_model: Optional[Type[T]] = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        top_k: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        frequency_penalty: Optional[float] = None,
-        presence_penalty: Optional[float] = None,
-        seed: Optional[int] = None,
-        reasoning_effort: Optional[ReasoningEffort] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
-        extra_headers: Optional[Dict[str, str]] = None,
+        response_model: type[T] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+        extra_body: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        llm_context: LLMContextInput | None = None,
+        llm_context_blocks: list[LLMContextBlock] | None = None,
+        llm_context_source_registry: LLMContextSourceRegistry | None = None,
     ) -> Message | T:
         """
         Единый метод вызова LLM.
@@ -660,6 +740,9 @@ class LLMClient:
             max_tokens: Максимальное количество токенов
             frequency_penalty: Штраф за частоту токенов (-2.0-2.0)
             presence_penalty: Штраф за присутствие токенов (-2.0-2.0)
+            llm_context: Inline patch профиля контекстного слоя
+            llm_context_blocks: Уже извлеченные блоки памяти/RAG/tool summaries
+            llm_context_source_registry: Registry backend-источников контекстных блоков
 
         Returns:
             Message или экземпляр response_model
@@ -698,8 +781,8 @@ class LLMClient:
                 },
             }
 
-        content_parts: List[str] = []
-        tool_calls: List[Dict[str, Any]] = []
+        content_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
         last_status_text = ""
 
         async for event in self.stream(
@@ -717,6 +800,9 @@ class LLMClient:
             reasoning_effort=reasoning_effort,
             extra_body=extra_body,
             extra_headers=extra_headers,
+            llm_context=llm_context,
+            llm_context_blocks=llm_context_blocks,
+            llm_context_source_registry=llm_context_source_registry,
         ):
             if isinstance(event, TaskArtifactUpdateEvent):
                 if event.artifact and event.artifact.name != "reasoning" and event.artifact.parts:
@@ -751,6 +837,43 @@ class LLMClient:
             parts=[Part(root=TextPart(text=content))],
             metadata={"tool_calls": tool_calls} if tool_calls else None,
         )
+
+
+def _strictest_context_length(candidates: list[LLMCallConfig]) -> int | None:
+    lengths = [
+        candidate.context_length
+        for candidate in candidates
+        if isinstance(candidate.context_length, int) and candidate.context_length > 0
+    ]
+    return min(lengths) if lengths else None
+
+
+def _max_output_token_reserve(
+    candidates: list[LLMCallConfig],
+    max_tokens_override: int | None,
+) -> int | None:
+    token_limits: list[int] = []
+    if isinstance(max_tokens_override, int) and max_tokens_override >= 0:
+        token_limits.append(max_tokens_override)
+    for candidate in candidates:
+        if isinstance(candidate.max_tokens, int) and candidate.max_tokens >= 0:
+            token_limits.append(candidate.max_tokens)
+    return max(token_limits) if token_limits else None
+
+
+def _attach_llm_context_metadata(
+    event: StreamEvent,
+    compiled_context: Any,
+) -> StreamEvent:
+    metadata = llm_context_trace_metadata(compiled_context)
+    if not metadata or not isinstance(event, TaskStatusUpdateEvent):
+        return event
+    if event.status is None or event.status.message is None:
+        return event
+    event_metadata = dict(event.status.message.metadata or {})
+    event_metadata.setdefault("llm_context", metadata)
+    event.status.message.metadata = event_metadata
+    return event
 
 
 __all__ = ["LLMClient"]

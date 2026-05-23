@@ -4,7 +4,6 @@ API для управления namespaces.
 
 import asyncio
 import traceback
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -27,13 +26,13 @@ router = APIRouter(tags=["namespaces"])
 class NamespaceCreateRequest(BaseModel):
     """Запрос на создание namespace"""
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 @router.get("/namespaces", response_model=OffsetPage[Namespace])
 async def list_namespaces(
     container: ContainerDep,
-    provider: Optional[str] = Query(None, description="RAG provider (pgvector, agentset)"),
+    provider: str | None = Query(None, description="RAG provider (pgvector, agentset)"),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> OffsetPage[Namespace]:
@@ -62,7 +61,7 @@ async def list_namespaces(
 async def create_namespace(
     request: NamespaceCreateRequest,
     container: ContainerDep,
-    provider: Optional[str] = Query(None, description="RAG provider"),
+    provider: str | None = Query(None, description="RAG provider"),
 ) -> Namespace:
     """
     Создает новый namespace для текущей компании.
@@ -110,7 +109,7 @@ async def create_namespace(
 async def delete_namespace(
     namespace_id: str,
     container: ContainerDep,
-    provider: Optional[str] = Query(None, description="RAG provider"),
+    provider: str | None = Query(None, description="RAG provider"),
 ):
     """
     Удаляет namespace и все его документы.

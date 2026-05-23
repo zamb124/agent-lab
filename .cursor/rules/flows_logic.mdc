@@ -55,6 +55,8 @@ Merge:
 - Режимы `own` и список учитывают **только** `metadata.node_id` (и user, и agent). Сообщения другой ноды с `role=user` в срез не попадают — иначе при нескольких LLM-нодах дублировался бы один и тот же ввод.
 - Новые реплики ReAct пишутся в **`state.messages`** с `metadata.node_id` = `node_id` этой `llm_node`.
 - `FlowValidator`: элементы списка `messages_filter` должны быть **существующими** `node_id` графа.
+- `messages_filter` — hot-input slice, не memory/RAG. Долгая память и RAG-подмешивание идут через generic `llm_context` layer: `node.llm_context`, `llm_context_resource_key`, company default и inline `llm.chat(llm_context=...)`.
+- Сборка context layer всегда через `LLMClient`/`core.llm_context`: active window + retrieved memory/RAG blocks + token budget. В prompt ноды не добавлять самодельные history headers.
 
 ## BaseNode — фильтрация для прочих нод
 

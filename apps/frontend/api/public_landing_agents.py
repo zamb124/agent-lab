@@ -4,7 +4,6 @@
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -15,6 +14,7 @@ from apps.frontend.services.landing_demo_seed import (
     public_landing_demo_card_url,
 )
 from core.identity.landing_public_demo import LANDING_PUBLIC_EMBED_SESSION_ISSUER
+from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedStatus
@@ -30,8 +30,8 @@ class PublicLandingAgentCard(BaseModel):
     name: str
     flow_id: str
     branch_id: str
-    assistant_title: Optional[str]
-    greeting_message: Optional[str]
+    assistant_title: str | None
+    greeting_message: str | None
     landing_card_image_url: str
     theme: str
     primary_color: str
@@ -46,7 +46,7 @@ class PublicLandingAgentCard(BaseModel):
 
 
 class PublicLandingAgentsResponse(BaseModel):
-    items: List[PublicLandingAgentCard]
+    items: list[PublicLandingAgentCard]
 
 
 class PublicLandingSessionRequest(BaseModel):
@@ -84,9 +84,9 @@ async def _effective_landing_card_image_url(
 
 async def _collect_landing_cards(
     container: ContainerDep,
-    configs: List[EmbedConfig],
-) -> List[PublicLandingAgentCard]:
-    cards: List[PublicLandingAgentCard] = []
+    configs: list[EmbedConfig],
+) -> list[PublicLandingAgentCard]:
+    cards: list[PublicLandingAgentCard] = []
     for c in configs:
         if c.status != EmbedStatus.ACTIVE or not c.landing_visible:
             continue
@@ -166,6 +166,21 @@ async def issue_public_landing_session(
 
     guest_id = f"landing_guest_{uuid.uuid4().hex}"
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=body.expires_in_seconds)
+    _ = await ensure_persisted_runtime_user(
+        container,
+        user_id=guest_id,
+        company_id=SYSTEM_COMPANY_ID,
+        name="Landing Guest",
+        roles=["guest"],
+        attrs={
+            "kind": "embed_session_guest",
+            "embed_id": embed_id,
+            "embed_flow_id": config.flow_id,
+            "embed_branch_id": config.branch_id,
+            "issued_by": LANDING_PUBLIC_EMBED_SESSION_ISSUER,
+            "token_expires_at": expires_at.isoformat(),
+        },
+    )
     token = get_token_service().create_embed_session_token(
         user_id=guest_id,
         company_id=SYSTEM_COMPANY_ID,

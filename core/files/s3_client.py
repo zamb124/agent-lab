@@ -7,7 +7,7 @@ S3 клиент для работы с объектным хранилищем.
 
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 from urllib.parse import urlparse
 
 import aioboto3
@@ -33,10 +33,10 @@ class S3Client:
         access_key_id: str,
         secret_access_key: str,
         region_name: str = "us-east-1",
-        endpoint_url: Optional[str] = None,
+        endpoint_url: str | None = None,
         provider_name: str = "aws",
         track_files: bool = True,
-        bucket_config_key: Optional[str] = None,
+        bucket_config_key: str | None = None,
     ):
         """
         Инициализация S3 клиента.
@@ -67,8 +67,8 @@ class S3Client:
         self.track_files = track_files
         self._session = None
         self._client = None
-        self._client_lock: Optional[asyncio.Lock] = None
-        self._minio_bucket_lock: Optional[asyncio.Lock] = None
+        self._client_lock: asyncio.Lock | None = None
+        self._minio_bucket_lock: asyncio.Lock | None = None
         self._minio_ready_buckets: set[str] = set()
 
     def require_bucket_config_key(self) -> str:
@@ -95,7 +95,7 @@ class S3Client:
             return False
         return host in ("localhost", "127.0.0.1", "::1", "[::1]")
 
-    def _botocore_client_config(self) -> Optional[Config]:
+    def _botocore_client_config(self) -> Config | None:
         kwargs: dict[str, Any] = {}
         if self.provider_name == "vkcloud":
             kwargs["signature_version"] = "s3"
@@ -188,11 +188,11 @@ class S3Client:
 
     async def upload_file(
         self,
-        file_path: Union[str, Path],
+        file_path: str | Path,
         key: str,
-        bucket: Optional[str] = None,
-        metadata: Optional[Dict[str, str]] = None,
-        content_type: Optional[str] = None,
+        bucket: str | None = None,
+        metadata: dict[str, str] | None = None,
+        content_type: str | None = None,
         public: bool = False,
     ) -> bool:
         """
@@ -238,9 +238,9 @@ class S3Client:
         self,
         data: bytes,
         key: str,
-        bucket: Optional[str] = None,
-        metadata: Optional[Dict[str, str]] = None,
-        content_type: Optional[str] = None,
+        bucket: str | None = None,
+        metadata: dict[str, str] | None = None,
+        content_type: str | None = None,
         public: bool = False,
     ) -> bool:
         """
@@ -285,8 +285,8 @@ class S3Client:
     async def download_file(
         self,
         key: str,
-        file_path: Union[str, Path],
-        bucket: Optional[str] = None,
+        file_path: str | Path,
+        bucket: str | None = None,
     ) -> bool:
         """
         Скачивает файл из S3.
@@ -313,7 +313,7 @@ class S3Client:
     async def download_bytes(
         self,
         key: str,
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
     ) -> bytes:
         """
         Скачивает данные из S3 в память.
@@ -340,7 +340,7 @@ class S3Client:
     async def delete_file(
         self,
         key: str,
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
     ) -> bool:
         """
         Удаляет файл из S3.
@@ -363,14 +363,14 @@ class S3Client:
         logger.info(f"Файл удален из S3: {bucket}/{key}")
         return True
 
-    async def delete_object(self, key: str, bucket: Optional[str] = None) -> bool:
+    async def delete_object(self, key: str, bucket: str | None = None) -> bool:
         """Алиас для delete_file (совместимость с тестами)"""
         return await self.delete_file(key, bucket)
 
     async def file_exists(
         self,
         key: str,
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
     ) -> bool:
         """
         Проверяет существование файла в S3.
@@ -394,8 +394,8 @@ class S3Client:
     async def get_object_metadata(
         self,
         key: str,
-        bucket: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        bucket: str | None = None,
+    ) -> dict[str, Any]:
         """
         Получает метаданные объекта из S3.
 
@@ -427,7 +427,7 @@ class S3Client:
     async def get_presigned_url(
         self,
         key: str,
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
         expiration: int = 3600,
     ) -> str:
         """
@@ -458,7 +458,7 @@ class S3Client:
     def get_public_url(
         self,
         key: str,
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
     ) -> str:
         """
         Генерирует публичный URL для файла.
@@ -479,7 +479,7 @@ class S3Client:
         else:
             return f"https://{bucket}.s3.{self.region_name}.amazonaws.com/{key}"
 
-    async def object_exists(self, key: str, bucket: Optional[str] = None) -> bool:
+    async def object_exists(self, key: str, bucket: str | None = None) -> bool:
         """Алиас для file_exists (совместимость с тестами)"""
         return await self.file_exists(key, bucket)
 
@@ -487,9 +487,9 @@ class S3Client:
         self,
         prefix: str = "",
         max_keys: int = 1000,
-        bucket: Optional[str] = None,
-        start_after: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        bucket: str | None = None,
+        start_after: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Список объектов в bucket с указанным префиксом.
 
@@ -508,7 +508,7 @@ class S3Client:
 
         client = await self._get_client()
 
-        list_kw: Dict[str, Any] = {
+        list_kw: dict[str, Any] = {
             "Bucket": bucket,
             "Prefix": prefix,
             "MaxKeys": max_keys,
@@ -534,8 +534,8 @@ class S3Client:
         self,
         source_key: str,
         dest_key: str,
-        source_bucket: Optional[str] = None,
-        dest_bucket: Optional[str] = None,
+        source_bucket: str | None = None,
+        dest_bucket: str | None = None,
     ) -> bool:
         """
         Копирует объект в S3.
@@ -569,7 +569,7 @@ class S3Client:
     async def generate_presigned_url(
         self,
         key: str,
-        bucket: Optional[str] = None,
+        bucket: str | None = None,
         expiration: int = 3600,
         method: str = "get_object",
     ) -> str:
@@ -686,8 +686,8 @@ class S3ClientFactory:
 
         return S3ClientFactory.create_client_for_bucket(settings.s3.default_bucket)
 
-_default_s3_client: Optional[S3Client] = None
-_default_s3_client_lock: Optional[asyncio.Lock] = None
+_default_s3_client: S3Client | None = None
+_default_s3_client_lock: asyncio.Lock | None = None
 
 def _get_lock() -> asyncio.Lock:
     """Получает или создает лок для глобального S3 клиента"""
@@ -696,7 +696,7 @@ def _get_lock() -> asyncio.Lock:
         _default_s3_client_lock = asyncio.Lock()
     return _default_s3_client_lock
 
-async def get_default_s3_client() -> Optional[S3Client]:
+async def get_default_s3_client() -> S3Client | None:
     """
     Получает дефолтный S3 клиент на основе конфигурации.
     Потокобезопасно создает клиент при первом обращении.

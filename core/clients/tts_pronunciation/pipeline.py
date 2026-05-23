@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
-from typing import Optional
 
 import ahocorasick
 
@@ -80,11 +79,11 @@ def _build_automaton(
     rules: list[_CompiledAliasRule],
     *,
     provider: str,
-    voice: Optional[str],
-    language: Optional[str],
+    voice: str | None,
+    language: str | None,
     capabilities_stress: bool,
-    case_sensitive_subset: Optional[bool] = None,
-) -> Optional[ahocorasick.Automaton]:
+    case_sensitive_subset: bool | None = None,
+) -> ahocorasick.Automaton | None:
     """Строит Aho-Corasick automaton из применимых alias-правил.
 
     case_sensitive_subset:
@@ -175,8 +174,8 @@ class TtsTextPipeline:
         *,
         pronunciation: CompiledPronunciation,
         provider: str,
-        voice: Optional[str] = None,
-        language: Optional[str] = None,
+        voice: str | None = None,
+        language: str | None = None,
     ) -> str:
         """Применяет все стадии text-shaping и возвращает преобразованный текст.
 

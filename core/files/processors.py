@@ -9,7 +9,7 @@ import mimetypes
 import re
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from core.context import require_active_company
@@ -37,7 +37,7 @@ class FileProcessor:
     Загружает файлы в S3 и сохраняет метаданные через FileRepository.
     """
 
-    def __init__(self, file_repository: "FileRepository", bucket_name: Optional[str] = None):
+    def __init__(self, file_repository: "FileRepository", bucket_name: str | None = None):
         """
         Args:
             file_repository: FileRepository для работы с записями о файлах
@@ -45,7 +45,7 @@ class FileProcessor:
         """
         self.file_repository = file_repository
         self.bucket_name = bucket_name
-        self._s3_client: Optional[S3Client] = None
+        self._s3_client: S3Client | None = None
 
     async def get_s3_client(self) -> S3Client:
         """Получает S3 клиент"""
@@ -75,12 +75,12 @@ class FileProcessor:
         return original_name
 
     @staticmethod
-    def _to_ascii_s3_metadata(metadata: Dict[str, Any]) -> Dict[str, str]:
+    def _to_ascii_s3_metadata(metadata: dict[str, Any]) -> dict[str, str]:
         """
         S3 user-defined metadata должна быть ASCII-only строками.
         При этом в FileRecord.metadata мы сохраняем исходные значения (включая Unicode).
         """
-        out: Dict[str, str] = {}
+        out: dict[str, str] = {}
         for raw_key, raw_value in metadata.items():
             key = raw_key.strip()
             if isinstance(raw_value, (dict, list)):
@@ -95,10 +95,10 @@ class FileProcessor:
         self,
         data: bytes,
         original_name: str,
-        content_type: Optional[str] = None,
-        uploaded_by: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
+        content_type: str | None = None,
+        uploaded_by: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
         public: bool = False,
     ) -> FileMetadata:
         """
@@ -182,13 +182,13 @@ class FileProcessor:
         data: bytes,
         original_name: str,
         content_type: str,
-        uploaded_by: Optional[str],
+        uploaded_by: str | None,
         company_id: str,
         public: bool,
         download_url_prefix: str,
-        content_sha256_hex: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
+        content_sha256_hex: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
     ) -> FileMetadata:
         """
         Один путь для «байты с клиента или воркера → S3 + FileRecord»: process_file_from_bytes,
@@ -204,7 +204,7 @@ class FileProcessor:
             public=public,
         )
         prefix = download_url_prefix.rstrip("/")
-        updates: Dict[str, Any] = {
+        updates: dict[str, Any] = {
             "company_id": company_id,
             "download_url": f"{prefix}/{file_record.file_id}",
         }
@@ -220,14 +220,14 @@ class FileProcessor:
         data: bytes,
         original_name: str,
         content_type: str,
-        uploaded_by: Optional[str],
+        uploaded_by: str | None,
         company_id: str,
         public: bool,
         download_url_prefix: str,
-        content_sha256_hex: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        content_sha256_hex: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Байты с клиента → S3 + FileRecord + download_url; один элемент формата state.files.
         """
@@ -256,7 +256,7 @@ class FileProcessor:
             "file_size": record.file_size,
         }
 
-    async def get_file_record(self, file_id: str) -> Optional[FileMetadata]:
+    async def get_file_record(self, file_id: str) -> FileMetadata | None:
         """
         Получает запись о файле.
 
@@ -322,7 +322,7 @@ class FileProcessor:
         )
 
     @staticmethod
-    def extract_file_info_from_message(message_content: str) -> List[Dict[str, str]]:
+    def extract_file_info_from_message(message_content: str) -> list[dict[str, str]]:
         """
         Извлекает информацию о файлах из текста сообщения.
 
@@ -357,11 +357,11 @@ class AudioProcessor:
     def __init__(
         self,
         file_repository: "FileRepository",
-        bucket_name: Optional[str] = None,
+        bucket_name: str | None = None,
     ):
         self.file_repository = file_repository
         self.bucket_name = bucket_name
-        self._s3_client: Optional[S3Client] = None
+        self._s3_client: S3Client | None = None
 
     async def get_s3_client(self) -> S3Client:
         if self._s3_client is None:
@@ -381,11 +381,11 @@ class AudioProcessor:
         data: bytes,
         original_name: str,
         content_type: str = "audio/wave",
-        uploaded_by: Optional[str] = None,
+        uploaded_by: str | None = None,
         auto_recognize: bool = True,
-        language: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
+        language: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
         public: bool = True,
     ) -> AudioMetadata:
         """Загружает аудио в S3 и при auto_recognize транскрибирует через MediaTranscriber."""
@@ -408,8 +408,8 @@ class AudioProcessor:
 
         transcription_text = None
         transcription_status = AudioTranscriptionStatus.IDLE
-        transcription_error: Optional[str] = None
-        transcription_provider: Optional[str] = None
+        transcription_error: str | None = None
+        transcription_provider: str | None = None
 
         if auto_recognize:
             company_id = require_active_company().company_id
@@ -451,7 +451,7 @@ class AudioProcessor:
         logger.info("Аудио обработано: %s", file_id)
         return audio_record
 
-    async def get_audio_record(self, audio_id: str) -> Optional[AudioMetadata]:
+    async def get_audio_record(self, audio_id: str) -> AudioMetadata | None:
         record = await self.file_repository.get(audio_id)
         if record is None:
             return None
@@ -459,8 +459,8 @@ class AudioProcessor:
             return record
         return AudioMetadata.model_validate(record.model_dump(mode="json"))
 
-_default_file_processor: Optional[FileProcessor] = None
-_default_audio_processor: Optional[AudioProcessor] = None
+_default_file_processor: FileProcessor | None = None
+_default_audio_processor: AudioProcessor | None = None
 _default_file_repository = None
 
 def initialize_default_processors(file_repository) -> None:

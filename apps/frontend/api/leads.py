@@ -5,7 +5,7 @@ import json
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, field_validator, model_validator
@@ -22,13 +22,13 @@ lead_requests_router = APIRouter(prefix="/api/lead-requests", tags=["lead-reques
 
 class LeadCreateBody(BaseModel):
     name: str
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    company: Optional[str] = None
-    comment: Optional[str] = None
-    job_title: Optional[str] = None
-    headcount_range: Optional[str] = None
-    interested_products: Optional[list[str]] = None
+    email: str | None = None
+    phone: str | None = None
+    company: str | None = None
+    comment: str | None = None
+    job_title: str | None = None
+    headcount_range: str | None = None
+    interested_products: list[str] | None = None
 
     @field_validator("email", "phone", "company", "comment", "job_title", "headcount_range", mode="before")
     @classmethod
@@ -49,7 +49,7 @@ class LeadCreateBody(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def validate_email_optional(cls, v: Optional[str]) -> Optional[str]:
+    def validate_email_optional(cls, v: str | None) -> str | None:
         if v is None:
             return None
         email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"

@@ -5,6 +5,8 @@
  *   GET   /frontend/api/settings/company         → profile (name/subdomain/budget/metadata)
  *   PATCH /frontend/api/settings/company         ← CompanySettingsUpdate (без AI providers)
  *   GET   /frontend/api/settings/ai-providers    → capabilities + custom + catalog
+ *   PUT   /frontend/api/settings/ai-providers/llm-context
+ *   DELETE /frontend/api/settings/ai-providers/llm-context
  *   PUT   /frontend/api/settings/ai-providers/:capability  ← AIProvidersCapabilityUpdate
  *   DELETE /frontend/api/settings/ai-providers/:capability
  *   POST  /frontend/api/settings/ai-providers/custom              ← CustomProviderCreate
@@ -93,6 +95,35 @@ export const aiProviderCapabilityDeleteOp = createAsyncOp({
             url: `${BASE}/ai-providers/${encodeURIComponent(payload.capability)}`,
         });
     },
+    onSuccess: (ctx) => {
+        ctx.dispatch(aiProvidersLoadOp.events.REQUESTED, null, { source: 'local' });
+    },
+});
+
+export const aiProviderLlmContextPutOp = createAsyncOp({
+    name: 'frontend/ai_provider_llm_context_put',
+    successToastKey: 'frontend:settings_page.ai_providers.toast_context_saved',
+    errorToastKey: 'frontend:settings_page.ai_providers.toast_context_failed',
+    restMirror: { method: 'PUT', path: '/frontend/api/settings/ai-providers/llm-context' },
+    request: async ({ payload }) => await httpRequest({
+        method: 'PUT',
+        url: `${BASE}/ai-providers/llm-context`,
+        body: payload && typeof payload === 'object' ? payload : {},
+    }),
+    onSuccess: (ctx) => {
+        ctx.dispatch(aiProvidersLoadOp.events.REQUESTED, null, { source: 'local' });
+    },
+});
+
+export const aiProviderLlmContextDeleteOp = createAsyncOp({
+    name: 'frontend/ai_provider_llm_context_delete',
+    successToastKey: 'frontend:settings_page.ai_providers.toast_context_cleared',
+    errorToastKey: 'frontend:settings_page.ai_providers.toast_context_failed',
+    restMirror: { method: 'DELETE', path: '/frontend/api/settings/ai-providers/llm-context' },
+    request: async () => await httpRequest({
+        method: 'DELETE',
+        url: `${BASE}/ai-providers/llm-context`,
+    }),
     onSuccess: (ctx) => {
         ctx.dispatch(aiProvidersLoadOp.events.REQUESTED, null, { source: 'local' });
     },

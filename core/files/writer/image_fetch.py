@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import mimetypes
-from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -28,7 +27,7 @@ def fetch_url_bytes(
     *,
     max_bytes: int,
     timeout_seconds: float,
-) -> tuple[bytes, Optional[str]]:
+) -> tuple[bytes, str | None]:
     """
     GET по URL; возвращает (тело ответа, content-type из заголовка при наличии).
     """
@@ -53,7 +52,7 @@ def fetch_url_bytes(
         raise FileWriteError(f"Пустой ответ при загрузке изображения {normalized!r}")
 
     ct_header = response.headers.get("content-type")
-    mime: Optional[str] = None
+    mime: str | None = None
     if isinstance(ct_header, str) and ct_header.strip():
         mime = ct_header.split(";")[0].strip()
     if mime is None or mime == "application/octet-stream":

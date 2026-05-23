@@ -13,10 +13,8 @@ core.logging.setup_logging() через _silence_noisy_loggers.
 
 from __future__ import annotations
 
-from typing import Any
 
-
-def get_uvicorn_log_config() -> dict[str, Any]:
+def get_uvicorn_log_config() -> dict[str, object]:
     """Минимальный log-config: всё пропагируется в root."""
     return {
         "version": 1,

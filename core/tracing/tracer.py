@@ -11,9 +11,10 @@ import hashlib
 import json
 import logging
 import uuid
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Mapping, Optional, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanKind, Status, StatusCode
@@ -22,6 +23,7 @@ import core.tracing.attributes as attr
 from core.config import get_settings
 from core.context import get_context
 from core.logging import get_logger
+from core.types import JsonObject
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -93,9 +95,9 @@ logging.getLogger("opentelemetry.sdk.trace").addFilter(
     lambda record: "Failed to detach context" not in record.getMessage()
 )
 
-_tracer: Optional["PlatformTracer"] = None
-_span_repository: Optional["SpanRepository"] = None
-_process_tracing_service_name: Optional[str] = None
+_tracer: PlatformTracer | None = None
+_span_repository: SpanRepository | None = None
+_process_tracing_service_name: str | None = None
 
 
 def _span_attribute(span: Span, key: str) -> Any:
@@ -162,8 +164,8 @@ class PlatformTracer:
         operation_name: str,
         kind: str,
         start_time: datetime,
-        trace_ctx: Optional[TraceContext],
-        extra_attrs: Optional[Dict[str, Any]] = None,
+        trace_ctx: TraceContext | None,
+        extra_attrs: dict[str, Any] | None = None,
     ) -> None:
         """Сохраняет span в PostgreSQL."""
         if _span_repository is None:
@@ -205,8 +207,8 @@ class PlatformTracer:
             if trace_ctx.is_resume and attr.ATTR_IS_RESUME not in all_attrs:
                 all_attrs[attr.ATTR_IS_RESUME] = trace_ctx.is_resume
 
-        company_id: Optional[str] = None
-        namespace: Optional[str] = None
+        company_id: str | None = None
+        namespace: str | None = None
 
         app_ctx = get_context()
         if app_ctx:
@@ -269,16 +271,16 @@ class PlatformTracer:
 
     def create_trace_context(
         self,
-        user_id: Optional[str] = None,
-        user_name: Optional[str] = None,
-        user_groups: Optional[List[str]] = None,
-        session_auth: Optional[str] = None,
-        session_agent: Optional[str] = None,
-        task_id: Optional[str] = None,
-        context_id: Optional[str] = None,
-        flow_id: Optional[str] = None,
-        branch_id: Optional[str] = None,
-        channel: Optional[str] = None,
+        user_id: str | None = None,
+        user_name: str | None = None,
+        user_groups: list[str] | None = None,
+        session_auth: str | None = None,
+        session_agent: str | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
+        flow_id: str | None = None,
+        branch_id: str | None = None,
+        channel: str | None = None,
         is_resume: bool = False,
     ) -> TraceContext:
         """Создает новый TraceContext."""
@@ -299,7 +301,7 @@ class PlatformTracer:
             is_resume=is_resume,
         )
 
-    def _base_attributes(self, trace_ctx: Optional[TraceContext]) -> Dict[str, Any]:
+    def _base_attributes(self, trace_ctx: TraceContext | None) -> dict[str, Any]:
         """Возвращает базовые атрибуты для всех spans."""
         if trace_ctx is None:
             return {}
@@ -334,7 +336,7 @@ class PlatformTracer:
     async def request_span(
         self,
         method: str,
-        trace_ctx: Optional[TraceContext] = None,
+        trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для HTTP запроса (message/send, message/stream)."""
         if not is_tracing_enabled():
@@ -365,7 +367,7 @@ class PlatformTracer:
         self,
         flow_id: str,
         entry_node: str,
-        trace_ctx: Optional[TraceContext] = None,
+        trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для выполнения flow."""
         if not is_tracing_enabled():
@@ -400,7 +402,7 @@ class PlatformTracer:
         resource_type: str,
         resource_id: str,
         event_type: str = "resource.session",
-        trace_ctx: Optional[TraceContext] = None,
+        trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """
         Корневой span сущности (чат, сессия flow, заметка): дочерние spans через вложенные
@@ -437,11 +439,11 @@ class PlatformTracer:
         self,
         operation_name: str,
         *,
-        event_type: Optional[str] = None,
-        resource_type: Optional[str] = None,
-        resource_id: Optional[str] = None,
-        trace_ctx: Optional[TraceContext] = None,
-        extra_attributes: Optional[Dict[str, Any]] = None,
+        event_type: str | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        trace_ctx: TraceContext | None = None,
+        extra_attributes: dict[str, Any] | None = None,
     ) -> AsyncGenerator[Span, None]:
         """
         Универсальный span значимой операции сервиса (RAG, Sync, CRM, …).
@@ -482,7 +484,7 @@ class PlatformTracer:
         self,
         node_id: str,
         node_type: str,
-        trace_ctx: Optional[TraceContext] = None,
+        trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для выполнения ноды."""
         if not is_tracing_enabled():
@@ -515,9 +517,9 @@ class PlatformTracer:
     async def llm_node_span(
         self,
         node_label: str,
-        flow_id: Optional[str] = None,
-        model: Optional[str] = None,
-        trace_ctx: Optional[TraceContext] = None,
+        flow_id: str | None = None,
+        model: str | None = None,
+        trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span на весь ReAct-цикл llm_node (LLM + tools)."""
         if not is_tracing_enabled():
@@ -554,7 +556,7 @@ class PlatformTracer:
         self,
         iteration: int,
         node_label: str,
-        trace_ctx: Optional[TraceContext] = None,
+        trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для одной итерации ReAct цикла."""
         if not is_tracing_enabled():
@@ -589,8 +591,8 @@ class PlatformTracer:
         model: str,
         messages_count: int,
         tools_count: int,
-        trace_ctx: Optional[TraceContext] = None,
-        llm_provider: Optional[str] = None,
+        trace_ctx: TraceContext | None = None,
+        llm_provider: str | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для вызова LLM."""
         if not is_tracing_enabled():
@@ -631,9 +633,9 @@ class PlatformTracer:
     def record_llm_request(
         self,
         span: Span,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        response_format: Optional[Dict[str, Any]] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> None:
         """
         Записывает полный LLM request в span.
@@ -660,17 +662,18 @@ class PlatformTracer:
         output_tokens: int,
         has_tool_calls: bool,
         duration_ms: float,
-        response_content: Optional[str] = None,
-        tool_calls: Optional[List[Dict[str, Any]]] = None,
-        llm_provider: Optional[str] = None,
-        llm_model: Optional[str] = None,
-        candidate_source: Optional[str] = None,
-        provider_reported_cost: Optional[float] = None,
-        provider_upstream_inference_cost: Optional[float] = None,
-        settlement_quantity_rub: Optional[int] = None,
-        billing_resource_name: Optional[str] = None,
-        cost_origin: Optional[str] = None,
-        custom_provider_id: Optional[str] = None,
+        response_content: str | None = None,
+        tool_calls: list[JsonObject] | None = None,
+        llm_provider: str | None = None,
+        llm_model: str | None = None,
+        candidate_source: str | None = None,
+        provider_reported_cost: float | None = None,
+        provider_upstream_inference_cost: float | None = None,
+        settlement_quantity_rub: int | None = None,
+        billing_resource_name: str | None = None,
+        cost_origin: str | None = None,
+        custom_provider_id: str | None = None,
+        llm_context: JsonObject | None = None,
     ) -> None:
         """Записывает результат LLM вызова в span и помечает для billing settlement."""
         total_tokens = input_tokens + output_tokens
@@ -718,6 +721,8 @@ class PlatformTracer:
             span.set_attribute(attr.ATTR_BILLING_COST_ORIGIN, cost_origin)
         if custom_provider_id is not None:
             span.set_attribute(attr.ATTR_BILLING_CUSTOM_PROVIDER_ID, custom_provider_id)
+        if llm_context is not None:
+            self._record_llm_context(span, llm_context)
 
         if response_content is not None or tool_calls:
             response_data = {
@@ -727,14 +732,41 @@ class PlatformTracer:
             response_str = json.dumps(response_data, ensure_ascii=False, default=str)
             span.set_attribute(attr.ATTR_LLM_RESPONSE, response_str)
 
+    def _record_llm_context(self, span: Span, llm_context: JsonObject) -> None:
+        span.set_attribute(attr.ATTR_LLM_CONTEXT_ENABLED, True)
+        usage = llm_context.get("usage")
+        if isinstance(usage, dict):
+            total_input = usage.get("total_input_tokens")
+            if isinstance(total_input, int) and not isinstance(total_input, bool):
+                span.set_attribute(attr.ATTR_LLM_CONTEXT_TOTAL_INPUT_TOKENS, total_input)
+            max_input = usage.get("max_input_tokens")
+            if isinstance(max_input, int) and not isinstance(max_input, bool):
+                span.set_attribute(attr.ATTR_LLM_CONTEXT_MAX_INPUT_TOKENS, max_input)
+            model_context_length = usage.get("model_context_length")
+            if isinstance(model_context_length, int) and not isinstance(model_context_length, bool):
+                span.set_attribute(
+                    attr.ATTR_LLM_CONTEXT_MODEL_CONTEXT_LENGTH,
+                    model_context_length,
+                )
+        selected = llm_context.get("selected_blocks")
+        if isinstance(selected, list):
+            span.set_attribute(attr.ATTR_LLM_CONTEXT_SELECTED_BLOCKS_COUNT, len(selected))
+        dropped = llm_context.get("dropped_blocks")
+        if isinstance(dropped, list):
+            span.set_attribute(attr.ATTR_LLM_CONTEXT_DROPPED_BLOCKS_COUNT, len(dropped))
+        span.set_attribute(
+            attr.ATTR_LLM_CONTEXT,
+            json.dumps(llm_context, ensure_ascii=False, default=str),
+        )
+
     @asynccontextmanager
     async def tool_call_span(
         self,
         tool_name: str,
         tool_call_id: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         nested_flow_tool: bool = False,
-        trace_ctx: Optional[TraceContext] = None,
+        trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для вызова tool."""
         if not is_tracing_enabled():
@@ -770,7 +802,7 @@ class PlatformTracer:
         span: Span,
         result: Any,
         duration_ms: float,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         """Записывает результат tool в span."""
         result_str = str(result)[:500]
@@ -802,7 +834,7 @@ class PlatformTracer:
         question: str,
         tool_name: str,
         path_depth: int = 0,
-        trace_ctx: Optional[TraceContext] = None,
+        trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для interrupt (ask_user)."""
         if not is_tracing_enabled():
@@ -835,8 +867,8 @@ class PlatformTracer:
         self,
         node_id: str,
         template: str,
-        variables: Dict[str, Any],
-        trace_ctx: Optional[TraceContext] = None,
+        variables: dict[str, Any],
+        trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для сборки системного промпта."""
         if not is_tracing_enabled():
@@ -879,7 +911,7 @@ class PlatformTracer:
         self,
         span: Span,
         rendered_prompt: str,
-        variables: Dict[str, Any],
+        variables: dict[str, Any],
     ) -> None:
         """Записывает результат сборки промпта в span."""
         prompt_hash = hashlib.md5(rendered_prompt.encode()).hexdigest()
@@ -890,7 +922,7 @@ class PlatformTracer:
             }
         )
 
-    def get_current_trace_context(self) -> Optional[TraceContext]:
+    def get_current_trace_context(self) -> TraceContext | None:
         """Получает текущий trace context для propagation."""
         span = trace.get_current_span()
         if not span or not span.is_recording():

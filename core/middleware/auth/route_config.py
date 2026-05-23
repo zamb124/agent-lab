@@ -4,7 +4,6 @@
 
 import fnmatch
 from dataclasses import dataclass
-from typing import List, Optional
 
 from starlette.requests import Request
 
@@ -80,7 +79,7 @@ class RouteRule:
     skip: bool = False
     auth_required: bool = True
     context_type: str = "frontend"
-    channel: Optional[str] = None
+    channel: str | None = None
 
 
 SKIP_PATHS = [
@@ -99,7 +98,7 @@ SKIP_PATHS = [
     "/frontend/api/v1/payments/webhook/*",
 ]
 
-ROUTE_RULES: List[RouteRule] = [
+ROUTE_RULES: list[RouteRule] = [
     # ============================================================================
     # ПУБЛИЧНЫЕ ENDPOINTS (без авторизации)
     # ============================================================================
@@ -162,6 +161,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/api/i18n/*", auth_required=False, context_type="anonymous"),
     RouteRule("/api/public/legal", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/legal", auth_required=False, context_type="anonymous"),
+    RouteRule("/frontend/api/public/docs-assistant/session", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/landing-agents", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/api/public/landing-agents/session", auth_required=False, context_type="anonymous"),
     RouteRule("/api/public/site-bundle", auth_required=False, context_type="anonymous"),
@@ -499,8 +499,8 @@ class RouteMatcher:
 
     def __init__(
         self,
-        rules: List[RouteRule] | None = None,
-        skip_paths: List[str] | None = None,
+        rules: list[RouteRule] | None = None,
+        skip_paths: list[str] | None = None,
     ):
         self.rules = rules or ROUTE_RULES
         self.skip_paths = skip_paths or SKIP_PATHS
@@ -509,7 +509,7 @@ class RouteMatcher:
         """Проверяет, нужно ли пропустить middleware для пути"""
         return any(fnmatch.fnmatch(path, pattern) for pattern in self.skip_paths)
 
-    def match(self, path: str) -> Optional[RouteRule]:
+    def match(self, path: str) -> RouteRule | None:
         """Находит подходящее правило для пути"""
         for rule in self.rules:
             if fnmatch.fnmatch(path, rule.pattern):

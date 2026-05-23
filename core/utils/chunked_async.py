@@ -5,13 +5,14 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Awaitable, Callable, List, Sequence, TypeVar
+from collections.abc import Awaitable, Callable, Sequence
+from typing import TypeVar
 
 T = TypeVar("T")
 R = TypeVar("R")
 
 
-def chunk_sequence(items: Sequence[T], chunk_size: int) -> List[List[T]]:
+def chunk_sequence(items: Sequence[T], chunk_size: int) -> list[list[T]]:
     if chunk_size < 1:
         raise ValueError("chunk_size must be >= 1")
     if not items:
@@ -22,10 +23,10 @@ def chunk_sequence(items: Sequence[T], chunk_size: int) -> List[List[T]]:
 async def run_chunked_map(
     items: Sequence[T],
     chunk_size: int,
-    process_chunk: Callable[[List[T]], Awaitable[R]],
+    process_chunk: Callable[[list[T]], Awaitable[R]],
     *,
     max_concurrent: int,
-) -> List[R]:
+) -> list[R]:
     """
     Нарезает items на чанки размера chunk_size и для каждого чанка вызывает process_chunk.
     Параллельность ограничена семафором max_concurrent.
@@ -40,7 +41,7 @@ async def run_chunked_map(
 
     sem = asyncio.Semaphore(max_concurrent)
 
-    async def run_one(chunk: List[T]) -> R:
+    async def run_one(chunk: list[T]) -> R:
         async with sem:
             return await process_chunk(chunk)
 
@@ -48,11 +49,11 @@ async def run_chunked_map(
 
 
 async def map_reduce_tree(
-    leaves: List[T],
+    leaves: list[T],
     *,
     chunk_size: int,
-    map_batch: Callable[[List[T]], Awaitable[R]],
-    merge_batch: Callable[[List[R]], Awaitable[R]],
+    map_batch: Callable[[list[T]], Awaitable[R]],
+    merge_batch: Callable[[list[R]], Awaitable[R]],
     max_concurrent: int,
 ) -> R:
     """
@@ -71,7 +72,7 @@ async def map_reduce_tree(
     if len(leaves) <= chunk_size:
         return await map_batch(leaves)
 
-    current: List[R] = await run_chunked_map(
+    current: list[R] = await run_chunked_map(
         leaves,
         chunk_size,
         map_batch,

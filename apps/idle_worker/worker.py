@@ -12,7 +12,7 @@ from core.config.loader import load_merged_config
 from core.tasks.logging_init import setup_worker_logging_early
 
 _merged_flows = load_merged_config(service_name="flows", silent=True)
-_idle_worker_flow_settings = FlowSettings(**_merged_flows)
+_idle_worker_flow_settings = FlowSettings.model_validate(_merged_flows)
 setup_worker_logging_early("idle_worker", logging_config=_idle_worker_flow_settings.logging)
 set_flow_settings(_idle_worker_flow_settings)
 

@@ -20,9 +20,9 @@
  *   4. `disconnectedCallback` корректно убивает редактор и observers.
  */
 
-import { html, css, nothing } from 'lit';
-import { guard } from 'lit/directives/guard.js';
-import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { html, css, nothing } from '../../assets/js/lit/lit.min.js';
+import { guard } from '../../assets/js/lit/directives/guard.js';
+import { PlatformElement } from '../platform-element/index.js';
 
 const BOOT_WATCH_TIMEOUT_MS = 120_000;
 const UI_FALLBACK_TIMEOUT_MS = 2_500;
@@ -98,7 +98,7 @@ function browserSafeDocumentServerUrl(raw) {
 
 let _ooEmbedCounter = 0;
 
-export class OnlyOfficeHost extends PlatformElement {
+export class PlatformOnlyOfficeHost extends PlatformElement {
     static properties = {
         config: { type: Object },
         bindingId: { type: String, attribute: 'binding-id' },
@@ -175,14 +175,25 @@ export class OnlyOfficeHost extends PlatformElement {
         };
     }
 
+    firstUpdated() {
+        this._bootIfConfigChanged();
+    }
+
     updated(changed) {
         super.updated(changed);
-        if (changed.has('config') && this.config) {
-            const key = this._computeConfigKey(this.config);
-            if (key !== this._configKey) {
-                this._configKey = key;
-                void this._bootEditor();
-            }
+        if (changed.has('config')) {
+            this._bootIfConfigChanged();
+        }
+    }
+
+    _bootIfConfigChanged() {
+        if (!this.config) {
+            return;
+        }
+        const key = this._computeConfigKey(this.config);
+        if (key !== this._configKey) {
+            this._configKey = key;
+            void this._bootEditor();
         }
     }
 
@@ -208,7 +219,11 @@ export class OnlyOfficeHost extends PlatformElement {
         const bindingId = typeof this.bindingId === 'string' && this.bindingId.length > 0
             ? this.bindingId
             : (typeof this.config?.document?.key === 'string' ? this.config.document.key : '');
-        if (!bindingId || typeof window === 'undefined' || window.parent === window) {
+        if (!bindingId) {
+            return;
+        }
+        this.emit('document-state', { bindingId, dirty: Boolean(dirty) });
+        if (typeof window === 'undefined' || window.parent === window) {
             return;
         }
         window.parent.postMessage(
@@ -590,4 +605,4 @@ export class OnlyOfficeHost extends PlatformElement {
     }
 }
 
-customElements.define('onlyoffice-host', OnlyOfficeHost);
+customElements.define('platform-onlyoffice-host', PlatformOnlyOfficeHost);

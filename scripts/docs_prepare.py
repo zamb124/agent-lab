@@ -7,8 +7,8 @@ build/documentation-ru и build/documentation-en (без index.md в репоз�
 
 from __future__ import annotations
 
-import json
 import html
+import json
 import re
 import shutil
 from pathlib import Path
@@ -455,29 +455,23 @@ def _copy_screenshots(src_slug_dir: Path, dst_slug_dir: Path) -> None:
     shutil.copytree(shots, dst_shots)
 
 
-def _build_en_scenarios_from_readme_en(scenarios_src: Path, en_scenarios_out: Path) -> None:
+def _build_en_scenarios_from_readmes(scenarios_src: Path, en_scenarios_out: Path) -> None:
     if en_scenarios_out.exists():
         shutil.rmtree(en_scenarios_out)
     if not scenarios_src.is_dir():
         return
 
-    found_any = False
-    for readme_en in scenarios_src.rglob("README.en.md"):
-        if ".git" in readme_en.parts:
-            continue
-        rel = readme_en.parent.relative_to(scenarios_src)
-        parts_src = rel.parts
-        if len(parts_src) != 3:
-            continue
-        service, tag, slug_name = parts_src
-        found_any = True
-        dest_parts = _dest_parts_for_scenario(service, tag, slug_name)
+    mapping = _collect_scenario_slug_readmes(scenarios_src)
+    for dest_parts, src_dir in sorted(mapping.items(), key=lambda item: item[0]):
+        readme = src_dir / "README.en.md"
+        if not readme.is_file():
+            readme = src_dir / "README.md"
         out_dir = en_scenarios_out.joinpath(*dest_parts)
         out_dir.mkdir(parents=True, exist_ok=True)
-        _write_index_md_from_readme(readme_en, out_dir / "index.md")
-        _copy_screenshots(readme_en.parent, out_dir)
+        _write_index_md_from_readme(readme, out_dir / "index.md")
+        _copy_screenshots(src_dir, out_dir)
 
-    if not found_any:
+    if not mapping:
         return
 
     missing_parents: set[Path] = set()
@@ -519,7 +513,7 @@ def _build_en_scenarios_from_readme_en(scenarios_src: Path, en_scenarios_out: Pa
     _write_hub_index(
         en_scenarios_out / "index.md",
         "E2E scenarios",
-        "Step-by-step UI scenarios with screenshots (tests with `title_en` / `description_en`).",
+        "Step-by-step UI scenarios with screenshots generated from the same tests as the Russian documentation.",
         [(_service_label_en(svc), f"{svc}/") for svc in services],
         heading="Services",
     )
@@ -544,7 +538,7 @@ def _prepare_en_build_tree(docs_dir: Path, en_dir: Path) -> None:
     _copy_openapi_subdir(docs_dir, en_dir)
     _copy_optional_subdir(docs_dir, "assets", en_dir)
 
-    _build_en_scenarios_from_readme_en(docs_dir / SCENARIOS_ROOT, en_dir / SCENARIOS_ROOT)
+    _build_en_scenarios_from_readmes(docs_dir / SCENARIOS_ROOT, en_dir / SCENARIOS_ROOT)
 
 
 def _generate_api_docs(ru_dir: Path, en_dir: Path) -> None:

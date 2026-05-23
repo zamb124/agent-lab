@@ -1,9 +1,4 @@
-"""
-Задачи для асинхронной обработки flows.
-STREAM-FIRST: все события публикуются в Redis Pub/Sub.
-"""
-
-from typing import Any
+"""Задачи для асинхронной обработки flows."""
 
 from apps.flows.src.channels.types import PreparedTaskParams
 from apps.flows.src.container import get_container
@@ -12,6 +7,7 @@ from apps.flows_worker.broker import broker
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.tracing.context import set_current_trace_context
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 
@@ -26,12 +22,12 @@ async def process_flow_task(
     channel: str = "a2a",
     task_id: str | None = None,
     context_id: str | None = None,
-    metadata: dict[str, Any] | None = None,
+    metadata: JsonObject | None = None,
     is_resume: bool = False,
-    files: list[dict[str, Any]] | None = None,
-    context_data: dict[str, Any] | None = None,
-    trace_context: dict[str, Any] | None = None,
-):
+    files: list[JsonObject] | None = None,
+    context_data: JsonObject | None = None,
+    trace_context: JsonObject | None = None,
+) -> JsonObject:
     """
     Обрабатывает запрос через агента.
 
@@ -80,4 +76,7 @@ async def process_flow_task(
         user_id=user_id,
     )
 
-    return await channel_instance.process_task(params)
+    return require_json_object(
+        await channel_instance.process_task(params),
+        "process_flow_task.result",
+    )

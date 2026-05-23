@@ -55,6 +55,7 @@ import '../components/sheets/platform-service-switcher-sheet.js';
 import '../components/platform-user-chip.js';
 import '../components/platform-user-info-modal.js';
 import '../components/platform-services-modal.js';
+import '../components/platform-file-viewer-modal.js';
 import './platform-services-page.js';
 
 export function renderPlatformAppShell(app) {

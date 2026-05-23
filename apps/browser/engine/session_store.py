@@ -5,10 +5,17 @@
 from __future__ import annotations
 
 import secrets
-from typing import Any, Optional
+from collections.abc import Mapping
+from typing import cast
 from urllib.parse import urlparse
 
-from apps.browser.engine.types import ContextSignature, SessionStateBlob
+from apps.browser.engine.types import (
+    BrowserContextHandle,
+    BrowserPage,
+    BrowserStorageState,
+    ContextSignature,
+    SessionStateBlob,
+)
 
 
 class SessionStateStore:
@@ -57,21 +64,23 @@ class SessionStateStore:
 
     async def capture_from(
         self,
-        context: Any,
-        page: Any,
+        context: BrowserContextHandle,
+        page: BrowserPage,
         *,
         shared_storage_key: str,
         context_signature: ContextSignature,
-        last_snapshot_ref: Optional[str],
+        last_snapshot_ref: str | None,
     ) -> str:
-        current_url = str(getattr(page, "url", "") or "")
+        current_url = page.url
         if current_url.startswith("about:"):
             raise ValueError("Нельзя сохранить состояние: current_url должен быть реальным URL, не about:*")
         _ = origin_from_url(current_url)
         storage_state = await context.storage_state()
         origin = origin_from_url(current_url)
-        session_storage_dump: dict[str, str] = await page.evaluate(
-            """() => {
+        raw_session_storage = cast(
+            object,
+            await page.evaluate(
+                """() => {
                 const out = {};
                 for (let i = 0; i < sessionStorage.length; i++) {
                     const k = sessionStorage.key(i);
@@ -82,7 +91,16 @@ class SessionStateStore:
                 }
                 return out;
             }"""
+            ),
         )
+        if not isinstance(raw_session_storage, dict):
+            raise ValueError("sessionStorage dump должен быть JSON object")
+        raw_session_storage_map = cast(Mapping[object, object], raw_session_storage)
+        session_storage_dump: dict[str, str] = {}
+        for key, value in raw_session_storage_map.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                raise ValueError("sessionStorage dump должен содержать только string -> string")
+            session_storage_dump[key] = value
         by_origin: dict[str, dict[str, str]] = {origin: dict(session_storage_dump)}
         blob = SessionStateBlob(
             shared_storage_key=shared_storage_key,
@@ -100,7 +118,7 @@ class SessionStateStore:
         )
         return self.put(blob)
 
-    def storage_state_for_new_context(self, state_key: str) -> dict[str, Any]:
+    def storage_state_for_new_context(self, state_key: str) -> BrowserStorageState:
         blob = self.get(state_key)
         return blob.storage_state
 

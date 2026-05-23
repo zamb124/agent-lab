@@ -15,7 +15,7 @@ _context: contextvars.ContextVar[Optional["Context"]] = contextvars.ContextVar(
     "context", default=None
 )
 
-_current_channel: contextvars.ContextVar[Optional[Any]] = contextvars.ContextVar(
+_current_channel: contextvars.ContextVar[Any | None] = contextvars.ContextVar(
     "current_channel", default=None
 )
 
@@ -72,7 +72,7 @@ def set_current_channel(channel: Any) -> None:
     _current_channel.set(channel)
 
 
-def get_current_channel() -> Optional[Any]:
+def get_current_channel() -> Any | None:
     """
     Получает текущий канал коммуникации.
 

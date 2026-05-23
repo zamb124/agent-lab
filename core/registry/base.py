@@ -6,7 +6,7 @@ Zero-Guess: все ресурсы регистрируются явно при s
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, List, TypeVar
+from typing import Any, Generic, TypeVar
 
 from core.errors import ResourceAlreadyExistsError, ResourceNotFoundError
 
@@ -30,11 +30,11 @@ class ResourceRegistry(ABC, Generic[T]):
     """
 
     def __init__(self):
-        self._resources: Dict[str, T] = {}
-        self._metadata: Dict[str, Dict[str, Any]] = {}
+        self._resources: dict[str, T] = {}
+        self._metadata: dict[str, dict[str, Any]] = {}
 
     @abstractmethod
-    def register(self, key: str, resource: T, metadata: Dict[str, Any] | None = None) -> None:
+    def register(self, key: str, resource: T, metadata: dict[str, Any] | None = None) -> None:
         """
         Регистрирует ресурс в реестре.
 
@@ -89,7 +89,7 @@ class ResourceRegistry(ABC, Generic[T]):
         """
         return key in self._resources
 
-    def list_all(self) -> Dict[str, T]:
+    def list_all(self) -> dict[str, T]:
         """
         Возвращает все зарегистрированные ресурсы.
 
@@ -98,7 +98,7 @@ class ResourceRegistry(ABC, Generic[T]):
         """
         return dict(self._resources)
 
-    def list_keys(self) -> List[str]:
+    def list_keys(self) -> list[str]:
         """
         Возвращает список всех ключей.
 
@@ -107,7 +107,7 @@ class ResourceRegistry(ABC, Generic[T]):
         """
         return list(self._resources.keys())
 
-    def get_metadata(self, key: str) -> Dict[str, Any]:
+    def get_metadata(self, key: str) -> dict[str, Any]:
         """
         Получает метаданные ресурса.
 

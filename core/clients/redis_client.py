@@ -4,7 +4,8 @@ Redis клиент для кэширования, сессий и Pub/Sub stream
 
 import asyncio
 import time
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 from urllib.parse import urlparse
 
 try:
@@ -29,7 +30,7 @@ class RedisClient:
             max_retries: Максимальное количество попыток переподключения
         """
         self.redis_url = redis_url
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
         self._max_retries = max_retries
         self._connection_lock = asyncio.Lock()
 
@@ -98,7 +99,7 @@ class RedisClient:
             raise RuntimeError("Redis client not connected after retries")
         return self._client
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         """Получает значение по ключу с auto-reconnect"""
         if not await self._ensure_connected():
             return None
@@ -117,7 +118,7 @@ class RedisClient:
                     pass
             return None
 
-    async def getdel(self, key: str) -> Optional[str]:
+    async def getdel(self, key: str) -> str | None:
         """Атомарно возвращает значение и удаляет ключ (Redis GETDEL / fallback Lua)."""
         if not await self._ensure_connected():
             return None
@@ -260,7 +261,7 @@ class RedisClient:
         channel: str,
         timeout: float = 300.0,
         max_timeout: float = 3600.0,
-        ready_event: Optional[asyncio.Event] = None,
+        ready_event: asyncio.Event | None = None,
     ) -> AsyncIterator[str]:
         """
         Подписывается на канал и yield'ит сообщения с auto-reconnect.

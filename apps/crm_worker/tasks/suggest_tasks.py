@@ -8,7 +8,7 @@ from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
 from apps.crm.scheduled_task_constants import CRM_GENERATE_NAMESPACE_SUGGESTS_TASK_NAME
 from apps.crm_worker.broker import broker
-from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
+from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -52,7 +52,7 @@ async def crm_generate_namespace_suggests_tick(
         )
     )
 
-    await _set_crm_context(company_id=company_id, namespace=namespace, interface_language=None)
+    await set_crm_context(company_id=company_id, namespace=namespace, interface_language=None)
 
     try:
         summary = await container.suggest_service.generate_namespace_suggests(

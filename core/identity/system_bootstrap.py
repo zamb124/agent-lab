@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, cast
 
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.subdomain_repository import SubdomainRepository
@@ -23,6 +23,10 @@ class SystemBootstrapContainer(Protocol):
     company_repository: CompanyRepository
     subdomain_repository: SubdomainRepository
     user_repository: UserRepository
+
+
+def as_system_bootstrap_container(container: object) -> SystemBootstrapContainer:
+    return cast(SystemBootstrapContainer, container)
 
 
 async def ensure_system_company_exists(container: SystemBootstrapContainer) -> Company:

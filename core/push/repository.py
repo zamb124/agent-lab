@@ -9,7 +9,7 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -45,7 +45,7 @@ class PushSubscriptionRepository:
             self._session_factory = await get_session_factory(self._db_url)
         return self._session_factory
 
-    async def get_user_subscriptions(self, user_id: str) -> List[PushSubscription]:
+    async def get_user_subscriptions(self, user_id: str) -> list[PushSubscription]:
         """
         Получить все подписки пользователя.
 
@@ -70,7 +70,7 @@ class PushSubscriptionRepository:
         endpoint: str,
         keys: dict[str, Any],
         platform: str = "unknown",
-        user_agent: Optional[str] = None,
+        user_agent: str | None = None,
     ) -> PushSubscription:
         """
         Создать или обновить подписку.

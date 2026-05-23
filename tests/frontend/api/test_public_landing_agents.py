@@ -256,6 +256,7 @@ async def test_public_landing_agents_lists_visible_only(
 @pytest.mark.asyncio
 async def test_public_landing_session_mints_token(
     frontend_client: AsyncClient,
+    frontend_container,
     system_landing_embed,
 ):
     embed_id, _config = system_landing_embed
@@ -278,6 +279,15 @@ async def test_public_landing_session_mints_token(
     assert token_data.metadata["embed_flow_id"] == "universal_agent"
     assert token_data.metadata["embed_branch_id"] == "default"
     assert token_data.metadata["allowed_origin"] == ""
+
+    guest = await frontend_container.user_repository.get(token_data.user_id)
+    assert guest is not None
+    assert guest.active_company_id == SYSTEM_COMPANY_ID
+    assert guest.companies[SYSTEM_COMPANY_ID] == ["guest"]
+    assert "guest" in guest.groups
+    assert guest.attrs["runtime_identity"] is True
+    assert guest.attrs["kind"] == "embed_session_guest"
+    assert guest.attrs["embed_id"] == embed_id
 
 
 @pytest.mark.asyncio

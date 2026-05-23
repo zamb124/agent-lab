@@ -6,10 +6,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-from typing import Any, Iterator
+from typing import Any
 
 from core.errors import FrozenStateFieldError
 
@@ -33,6 +34,7 @@ FROZEN_STATE_FIELDS: frozenset[str] = frozenset(
         "node_history",
         "execution_exceptions",
         "prompt_history",
+        "llm_context_memory_cursor",
         "reasoning_history",
         "pending_reasoning",
         "breakpoints",

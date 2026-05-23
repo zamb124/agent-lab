@@ -2997,6 +2997,23 @@ export class CRMNoteCardView extends PlatformElement {
         this._closeAttachmentsPopover();
     }
 
+    _openAttachmentItem(item) {
+        if (!item || typeof item !== 'object') return;
+        if (typeof item.id === 'string' && item.id.length > 0) {
+            this.openFile({
+                file_id: item.id,
+                original_name: item.filename,
+                content_type: item.contentType,
+                file_size: item.sizeBytes,
+                url: item.downloadUrl,
+            }, { source: 'crm_note_attachment' });
+            return;
+        }
+        if (typeof item.downloadUrl === 'string' && item.downloadUrl.length > 0) {
+            window.open(item.downloadUrl, '_blank', 'noopener');
+        }
+    }
+
     _onDeleteViewAttachment(attachmentId) {
         if (!this.note || typeof this.note.entity_id !== 'string' || this.note.entity_id.length === 0) {
             throw new Error('CRMNoteCardView._onDeleteViewAttachment: note entity_id required');
@@ -3070,17 +3087,15 @@ export class CRMNoteCardView extends PlatformElement {
                     <p class="attachments-popover-meta">${metaText}</p>
                 </div>
                 <div class="attachments-popover-actions">
-                    ${item.downloadUrl.length > 0 ? html`
-                        <a
+                    ${item.id.length > 0 || item.downloadUrl.length > 0 ? html`
+                        <button
+                            type="button"
                             class="attachment-action-btn"
-                            href=${item.downloadUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download=${item.filename}
                             title=${this.t('note_view.download')}
+                            @click=${() => this._openAttachmentItem(item)}
                         >
                             <platform-icon name="import" size="14"></platform-icon>
-                        </a>
+                        </button>
                     ` : nothing}
                     ${item.canDelete ? html`
                         <button

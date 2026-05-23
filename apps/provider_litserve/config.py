@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import model_validator
 
 from core.config import BaseSettings
@@ -25,12 +23,12 @@ class ProviderLitserveServiceSettings(BaseSettings):
         return self
 
 
-_provider_litserve_settings: Optional[ProviderLitserveServiceSettings] = None
+_provider_litserve_settings: ProviderLitserveServiceSettings | None = None
 
 
 def get_provider_litserve_settings() -> ProviderLitserveServiceSettings:
     global _provider_litserve_settings
     if _provider_litserve_settings is None:
         merged = load_merged_config(service_name="provider_litserve", silent=True)
-        _provider_litserve_settings = ProviderLitserveServiceSettings(**merged)
+        _provider_litserve_settings = ProviderLitserveServiceSettings.model_validate(merged)
     return _provider_litserve_settings

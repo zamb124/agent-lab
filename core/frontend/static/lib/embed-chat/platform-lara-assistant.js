@@ -20,6 +20,7 @@ export class PlatformLaraAssistant extends LitElement {
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
         toggleEventName: { type: String, attribute: 'toggle-event-name' },
         eventNamespace: { type: String, attribute: 'event-namespace' },
+        conversationKey: { type: String, attribute: 'conversation-key' },
         getAuthToken: { type: Object },
         getExtraMetadataVariables: { type: Object },
         getContextVariables: { type: Object },
@@ -49,6 +50,7 @@ export class PlatformLaraAssistant extends LitElement {
         this.useCredentials = false;
         this.toggleEventName = 'humanitec-embed-chat-toggle';
         this.eventNamespace = 'assistant';
+        this.conversationKey = '';
         this.getAuthToken = undefined;
         this.getExtraMetadataVariables = undefined;
         this.getContextVariables = undefined;
@@ -73,6 +75,7 @@ export class PlatformLaraAssistant extends LitElement {
         if (!style.width) style.width = '1px';
         if (!style.height) style.height = '1px';
         if (!style.overflow) style.overflow = 'visible';
+        if (!style.zIndex) style.zIndex = '2147483000';
     }
 
     firstUpdated(changed) {
@@ -104,6 +107,7 @@ export class PlatformLaraAssistant extends LitElement {
                 ?use-credentials=${this.useCredentials}
                 toggle-event-name=${this.toggleEventName || 'humanitec-embed-chat-toggle'}
                 event-namespace=${this.eventNamespace || 'assistant'}
+                conversation-key=${this.conversationKey || ''}
                 .getAuthToken=${this.getAuthToken}
                 .getExtraMetadataVariables=${this.getExtraMetadataVariables}
                 .getContextVariables=${this.getContextVariables}

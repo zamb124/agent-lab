@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import uuid
 from html.parser import HTMLParser
-from typing import Any, Literal, Optional
+from typing import ClassVar, Literal, override
 from urllib.parse import urljoin, urlparse
 
 from fastapi import APIRouter, Response
@@ -42,6 +42,7 @@ from apps.browser.api.control import (
     create_control_session,
     delete_control_session,
 )
+from apps.browser.container import BrowserContainer
 from apps.browser.dependencies import ContainerDep
 from apps.browser.engine.types import ContextSignature
 from apps.browser.interaction.interaction_profiles import (
@@ -49,6 +50,7 @@ from apps.browser.interaction.interaction_profiles import (
     get_interaction_profile,
 )
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 router = APIRouter(prefix="/mcp", tags=["browser-mcp"])
 
@@ -57,81 +59,81 @@ AntiBotTier = Literal["white", "gray", "black"]
 
 
 class JsonRpcRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     jsonrpc: Literal["2.0"] = "2.0"
     id: int | str | None = None
     method: str
-    params: dict[str, Any] | None = None
+    params: JsonObject | None = None
 
 
 class JsonRpcError(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     code: int
     message: str
-    data: dict[str, Any] | None = None
+    data: JsonObject | None = None
 
 
 class JsonRpcResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     jsonrpc: Literal["2.0"] = "2.0"
     id: int | str | None
-    result: dict[str, Any] | None = None
+    result: JsonObject | None = None
     error: JsonRpcError | None = None
 
 
 class McpInitializeResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     protocolVersion: str
-    capabilities: dict[str, Any]
-    serverInfo: dict[str, Any]
+    capabilities: JsonObject
+    serverInfo: JsonObject
 
 
 class McpToolInfo(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     name: str
     description: str
-    inputSchema: dict[str, Any]
+    inputSchema: JsonObject
 
 
 class McpToolsListResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     tools: list[McpToolInfo]
 
 
 class McpToolCallResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    content: list[dict[str, Any]]
+    content: list[JsonObject]
     isError: bool = False
 
 
 class ToolCreateSessionArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    session_id: Optional[str] = None
-    run_id: Optional[str] = None
-    task_id: Optional[str] = None
+    session_id: str | None = None
+    run_id: str | None = None
+    task_id: str | None = None
     page_mode: Literal["interactive", "crawl", "lite"] = "interactive"
-    shared_storage_key: Optional[str] = None
+    shared_storage_key: str | None = None
     proxy_policy: str = ""
     anti_bot_tier: str = "gray"
     timeout_ms: int = Field(default=90_000, ge=1000)
-    endpoint_key: Optional[str] = None
+    endpoint_key: str | None = None
     session_mode: Literal["warm", "restore"] = "warm"
-    restore_state_key: Optional[str] = None
+    restore_state_key: str | None = None
     interaction_profile: InteractionProfileName = "human"
-    interaction_seed: Optional[int] = None
-    context: dict[str, Any] = Field(default_factory=dict)
+    interaction_seed: int | None = None
+    context: JsonObject = Field(default_factory=dict)
 
 
 class ToolNavigateArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
     url: str
@@ -144,14 +146,14 @@ class ToolNavigateArgs(BaseModel):
 
 
 class ToolObserveArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
     include_snapshot_refs: bool = False
 
 
 class ToolClickArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
     ref: str
@@ -159,54 +161,55 @@ class ToolClickArgs(BaseModel):
 
 
 class ToolFillArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
     ref: str
     text: str
     timeout_ms: int = Field(default=10_000, ge=1000)
-    typing_delay_ms: Optional[int] = Field(default=None, ge=0)
+    typing_delay_ms: int | None = Field(default=None, ge=0)
 
 
 class ToolPressArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
     key: str
 
 
 class ToolWaitArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
-    selector: Optional[str] = None
-    load_state: Optional[Literal["domcontentloaded", "networkidle"]] = None
+    selector: str | None = None
+    load_state: Literal["domcontentloaded", "networkidle"] | None = None
     timeout_ms: int = Field(default=30_000, ge=1000)
 
 
 class ToolCloseSessionArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
 
 
 class ToolSaveHtmlToS3Args(BaseModel): # убрать костыль
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     session_id: str
     original_name: str = "snapshot.html"
     links_limit: int = Field(default=10, ge=1, le=100)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
 
 
 class _AnchorHrefParser(HTMLParser):
     def __init__(self, base_url: str, limit: int):
         super().__init__(convert_charrefs=True)
-        self._base_url = base_url
-        self._limit = limit
+        self._base_url: str = base_url
+        self._limit: int = limit
         self._seen: set[str] = set()
         self.links: list[str] = []
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag != "a" or len(self.links) >= self._limit:
             return
@@ -247,9 +250,9 @@ def _extract_clickable_links(*, html: str, base_url: str, limit: int) -> list[st
     return parser.links
 
 
-def _schema_for_model(model: type[BaseModel]) -> dict[str, Any]:
+def _schema_for_model(model: type[BaseModel]) -> JsonObject:
     # Pydantic v2: model_json_schema() возвращает JSON Schema.
-    return model.model_json_schema()
+    return require_json_object(model.model_json_schema(), f"{model.__name__}.schema")
 
 
 def _tools() -> list[McpToolInfo]:
@@ -315,19 +318,27 @@ def _tools() -> list[McpToolInfo]:
     ]
 
 
-def _json_text_content(obj: Any) -> list[dict[str, Any]]:
-    return [{"type": "text", "text": json.dumps(obj, ensure_ascii=False)}]
+def _model_json_object(model: BaseModel) -> JsonObject:
+    return require_json_object(model.model_dump(mode="json"), model.__class__.__name__)
 
 
-def _error(code: int, message: str, data: dict[str, Any] | None = None) -> JsonRpcError:
+def _jsonrpc_payload(response: JsonRpcResponse) -> JsonObject:
+    return require_json_object(response.model_dump(mode="json", exclude_none=True), "JsonRpcResponse")
+
+
+def _json_text_content(value: JsonValue) -> list[JsonObject]:
+    return [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}]
+
+
+def _error(code: int, message: str, data: JsonObject | None = None) -> JsonRpcError:
     return JsonRpcError(code=code, message=message, data=data)
 
 
-def _mcp_tool_trace_attributes(*, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    keys = [k for k in arguments.keys() if isinstance(k, str)]
+def _mcp_tool_trace_attributes(*, tool_name: str, arguments: JsonObject) -> dict[str, str]:
+    keys = list(arguments.keys())
     keys.sort()
     sid = arguments.get("session_id")
-    out: dict[str, Any] = {
+    out: dict[str, str] = {
         "platform.mcp.tool_name": tool_name.strip(),
         "platform.mcp.source": "browser_runtime",
         "platform.mcp.tool_args_keys": ",".join(keys[:50]),
@@ -368,8 +379,8 @@ def _optional_str(value: object, *, field: str) -> str | None:
 async def _tool_call(
     *,
     tool_name: str,
-    arguments: dict[str, Any],
-    container: Any,
+    arguments: JsonObject,
+    container: BrowserContainer,
 ) -> McpToolCallResult:
     runtime = container.browser_runtime
 
@@ -387,7 +398,7 @@ async def _tool_call(
         profile_name = _parse_interaction_profile(
             ctx.get("interaction_profile", args.interaction_profile)
         )
-        get_interaction_profile(profile_name)
+        _ = get_interaction_profile(profile_name)
         seed_value = ctx.get("interaction_seed", args.interaction_seed)
         if seed_value is not None and not isinstance(seed_value, int):
             raise ValueError("interaction_seed должен быть целым числом")
@@ -437,7 +448,7 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(out_model.model_dump()), isError=False)
+        return McpToolCallResult(content=_json_text_content(_model_json_object(out_model)), isError=False)
 
     if tool_name == "browser_navigate":
         args = ToolNavigateArgs.model_validate(arguments)
@@ -454,7 +465,7 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(out), isError=False)
+        return McpToolCallResult(content=_json_text_content(require_json_value(out, "browser_navigate result")), isError=False)
 
     if tool_name == "browser_observe":
         args = ToolObserveArgs.model_validate(arguments)
@@ -463,20 +474,20 @@ async def _tool_call(
             body=ControlObserveBody(include_snapshot_refs=args.include_snapshot_refs),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(payload), isError=False)
+        return McpToolCallResult(content=_json_text_content(require_json_value(payload, "browser_observe result")), isError=False)
 
     if tool_name == "browser_click":
         args = ToolClickArgs.model_validate(arguments)
-        await control_click(
+        _ = await control_click(
             session_id=args.session_id,
             body=ControlClickBody(ref=args.ref, timeout_ms=args.timeout_ms),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content({"ok": True}), isError=False)
+        return McpToolCallResult(content=_json_text_content(require_json_value({"ok": True}, "browser_click result")), isError=False)
 
     if tool_name == "browser_fill":
         args = ToolFillArgs.model_validate(arguments)
-        await control_fill(
+        _ = await control_fill(
             session_id=args.session_id,
             body=ControlFillBody(
                 ref=args.ref,
@@ -486,20 +497,20 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content({"ok": True}), isError=False)
+        return McpToolCallResult(content=_json_text_content(require_json_value({"ok": True}, "browser_fill result")), isError=False)
 
     if tool_name == "browser_press":
         args = ToolPressArgs.model_validate(arguments)
-        await control_press(
+        _ = await control_press(
             session_id=args.session_id,
             body=ControlPressBody(key=args.key),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content({"ok": True}), isError=False)
+        return McpToolCallResult(content=_json_text_content(require_json_value({"ok": True}, "browser_press result")), isError=False)
 
     if tool_name == "browser_wait":
         args = ToolWaitArgs.model_validate(arguments)
-        await control_wait(
+        _ = await control_wait(
             session_id=args.session_id,
             body=ControlWaitBody(
                 selector=args.selector,
@@ -508,7 +519,7 @@ async def _tool_call(
             ),
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content({"ok": True}), isError=False)
+        return McpToolCallResult(content=_json_text_content(require_json_value({"ok": True}, "browser_wait result")), isError=False)
 
     if tool_name == "browser_close_session":
         args = ToolCloseSessionArgs.model_validate(arguments)
@@ -516,7 +527,7 @@ async def _tool_call(
             session_id=args.session_id,
             container=container,
         )
-        return McpToolCallResult(content=_json_text_content(out), isError=False)
+        return McpToolCallResult(content=_json_text_content(require_json_value(out, "browser_close_session result")), isError=False)
 
     if tool_name == "browser_save_html_to_s3":
         args = ToolSaveHtmlToS3Args.model_validate(arguments)
@@ -551,7 +562,7 @@ async def _tool_call(
                 "source_url": page.url,
                 "links": links,
             }
-        return McpToolCallResult(content=_json_text_content(payload), isError=False)
+        return McpToolCallResult(content=_json_text_content(require_json_value(payload, "browser_save_html_to_s3 result")), isError=False)
 
     raise ValueError(f"Tool not found: {tool_name}")
 
@@ -561,7 +572,7 @@ async def mcp_jsonrpc(
     req: JsonRpcRequest,
     response: Response,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     MCP JSON-RPC endpoint (single POST).
 
@@ -583,41 +594,42 @@ async def mcp_jsonrpc(
             capabilities={},
             serverInfo={"name": "platform-browser-runtime", "version": "1.0.0"},
         )
-        return JsonRpcResponse(id=req_id, result=res.model_dump()).model_dump(exclude_none=True)
+        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=_model_json_object(res)))
 
     if method == "tools/list":
         tools = _tools()
         res = McpToolsListResult(tools=tools)
-        return JsonRpcResponse(id=req_id, result=res.model_dump()).model_dump(exclude_none=True)
+        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=_model_json_object(res)))
 
     if method == "tools/call":
         name = params.get("name")
         arguments = params.get("arguments")
         if not isinstance(name, str) or not name.strip():
             err = _error(-32602, "tools/call: params.name is required")
-            return JsonRpcResponse(id=req_id, error=err).model_dump(exclude_none=True)
+            return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
         if arguments is None:
             arguments = {}
         if not isinstance(arguments, dict):
             err = _error(-32602, "tools/call: params.arguments must be object")
-            return JsonRpcResponse(id=req_id, error=err).model_dump(exclude_none=True)
+            return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+        arguments_obj = require_json_object(arguments, "tools/call.params.arguments")
         try:
             async with traced_operation(
                 "browser.mcp.tool_call",
                 event_type="mcp.tool_call",
                 operation_category="mcp",
-                extra_attributes=_mcp_tool_trace_attributes(tool_name=name, arguments=arguments),
+                extra_attributes=_mcp_tool_trace_attributes(tool_name=name, arguments=arguments_obj),
             ) as span:
                 call_res = await _tool_call(
                     tool_name=name,
-                    arguments=arguments,
+                    arguments=arguments_obj,
                     container=container,
                 )
                 span.set_attribute("platform.mcp.tool_result_is_error", bool(call_res.isError))
         except Exception as exc:
             err = _error(-32000, str(exc), data={"tool": name})
-            return JsonRpcResponse(id=req_id, error=err).model_dump(exclude_none=True)
-        return JsonRpcResponse(id=req_id, result=call_res.model_dump()).model_dump(exclude_none=True)
+            return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=_model_json_object(call_res)))
 
     err = _error(-32601, f"Method not found: {method}")
-    return JsonRpcResponse(id=req_id, error=err).model_dump(exclude_none=True)
+    return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))

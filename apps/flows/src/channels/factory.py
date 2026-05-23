@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any, Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, Protocol, TypeVar, cast
+
+from apps.flows.src.container_contracts import FlowRuntimeContainer
+
+if TYPE_CHECKING:
+    from apps.flows.src.channels.a2a import A2AChannel
 
 ChannelT = TypeVar("ChannelT", bound="ChannelClass")
 
@@ -11,7 +16,13 @@ ChannelT = TypeVar("ChannelT", bound="ChannelClass")
 class ChannelClass(Protocol):
     name: str
 
-    def __call__(self, flow_id: str, context: Any = None, *, container: Any) -> Any: ...
+    def __call__(
+        self,
+        flow_id: str,
+        context: object | None = None,
+        *,
+        container: FlowRuntimeContainer,
+    ) -> A2AChannel: ...
 
 _CHANNEL_REGISTRY: dict[str, str] = {
     "a2a": "apps.flows.src.channels.a2a:A2AChannel",
@@ -35,7 +46,13 @@ def register_channel(channel_class: type[ChannelT]) -> type[ChannelT]:
     return channel_class
 
 
-def get_channel(name: str, flow_id: str, context: Any = None, *, container: Any) -> Any:
+def get_channel(
+    name: str,
+    flow_id: str,
+    context: object | None = None,
+    *,
+    container: FlowRuntimeContainer,
+) -> A2AChannel:
     """
     Получить канал по имени.
 

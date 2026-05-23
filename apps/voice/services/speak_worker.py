@@ -27,7 +27,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 from apps.voice.services.voice_client_channel import VoiceClientChannel
 from apps.voice.services.voice_session import VoiceSession
@@ -46,7 +45,7 @@ async def run_speak_worker(
     tts_streamer: BaseTTSStreamer,
     *,
     channel: VoiceClientChannel,
-    chunker: Optional[VoiceChunker] = None,
+    chunker: VoiceChunker | None = None,
 ) -> None:
     """Читать ``synthesis_queue`` и отправлять клиенту PCM через ``channel``.
 

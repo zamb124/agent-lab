@@ -2573,6 +2573,23 @@ export class CRMEntityCard extends PlatformElement {
         this._onRemoveAttachment({ document_id: attachmentId });
     }
 
+    _openEntityAttachmentItem(item) {
+        if (!item || typeof item !== 'object') return;
+        if (typeof item.id === 'string' && item.id.length > 0) {
+            this.openFile({
+                file_id: item.id,
+                original_name: item.filename,
+                content_type: item.contentType,
+                file_size: item.sizeBytes,
+                url: item.downloadUrl,
+            }, { source: 'crm_entity_attachment' });
+            return;
+        }
+        if (typeof item.downloadUrl === 'string' && item.downloadUrl.length > 0) {
+            window.open(item.downloadUrl, '_blank', 'noopener');
+        }
+    }
+
     _renderEntityAttachmentsPopover(mode) {
         const mapped = this._mapEntityCardAttachmentItems();
         const editMode = mode === 'edit';
@@ -2600,17 +2617,15 @@ export class CRMEntityCard extends PlatformElement {
                                     <p class="attachments-popover-meta">${metaText}</p>
                                 </div>
                                 <div class="attachments-popover-actions">
-                                    ${item.downloadUrl.length > 0 ? html`
-                                        <a
+                                    ${item.id.length > 0 || item.downloadUrl.length > 0 ? html`
+                                        <button
+                                            type="button"
                                             class="attachment-action-btn"
-                                            href=${item.downloadUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            download=${item.filename}
                                             title=${this.t('note_view.download')}
+                                            @click=${() => this._openEntityAttachmentItem(item)}
                                         >
                                             <platform-icon name="import" size="14"></platform-icon>
-                                        </a>
+                                        </button>
                                     ` : nothing}
                                     ${item.id.length > 0 ? html`
                                         <button

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, Self
+from typing import Any, Literal, Self
 from urllib.parse import urlparse
 
 from pydantic import (
@@ -33,23 +33,23 @@ class DemoAuthConfig(BaseModel):
     company_id: str = "demo"
     subdomain: str = "demo"
     company_name: str = "Demo"
-    password: Optional[str] = None
+    password: str | None = None
 
 
 class AuthProviderConfig(BaseModel):
     """Конфигурация провайдера авторизации"""
 
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
+    client_id: str | None = None
+    client_secret: str | None = None
     auth_url: str = ""
     token_url: str = ""
     userinfo_url: str = ""
     scope: str = "openid profile email"
     enabled: bool = True
     token_request_format: str = "form"
-    apple_team_id: Optional[str] = None
-    apple_key_id: Optional[str] = None
-    apple_private_key: Optional[str] = None
+    apple_team_id: str | None = None
+    apple_key_id: str | None = None
+    apple_private_key: str | None = None
 
 
 class AuthConfig(BaseModel):
@@ -73,11 +73,11 @@ class AuthConfig(BaseModel):
     dev_auto_user_id: str = "dev-auto-user"
     dev_auto_company_id: str = "system"
     dev_auto_company_name: str = "System"
-    dev_auto_groups: List[str] = Field(default_factory=lambda: ["admin", "developers"])
-    secret_key: Optional[str] = None
-    jwt_secret_key: Optional[str] = None
+    dev_auto_groups: list[str] = Field(default_factory=lambda: ["admin", "developers"])
+    secret_key: str | None = None
+    jwt_secret_key: str | None = None
     session_timeout: int = 3600
-    providers: Dict[str, AuthProviderConfig] = Field(default_factory=dict)
+    providers: dict[str, AuthProviderConfig] = Field(default_factory=dict)
     demo: DemoAuthConfig = Field(default_factory=DemoAuthConfig)
 
 
@@ -85,19 +85,19 @@ class DatabaseConfig(BaseModel):
     """Конфигурация базы данных: ровно пять URL PostgreSQL + redis (без дублирующего url)."""
 
     checkpointer_url: str = "postgresql://agent_user:agent_password@localhost:5432/agent_platform"
-    shared_url: Optional[str] = Field(
+    shared_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices("shared_url", "url"),
     )
-    flows_url: Optional[str] = Field(
+    flows_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices("flows_url"),
     )
-    crm_url: Optional[str] = None
-    sync_url: Optional[str] = None
-    rag_url: Optional[str] = None
-    office_url: Optional[str] = None
-    tracing_url: Optional[str] = Field(
+    crm_url: str | None = None
+    sync_url: str | None = None
+    rag_url: str | None = None
+    office_url: str | None = None
+    tracing_url: str | None = Field(
         default=None,
         description="PostgreSQL platform_tracing (spans); отдельно от shared",
     )
@@ -120,15 +120,15 @@ class LoggingConfig(BaseModel):
         default=1.0,
         description="Доля INFO-записей у hot-path логгеров (sampled_loggers); 1.0 — без сэмплинга",
     )
-    sampled_loggers: List[str] = Field(
+    sampled_loggers: list[str] = Field(
         default_factory=list,
         description="Префиксы логгеров, к которым применяется sample_rate_info",
     )
-    loggers_levels: Dict[str, str] = Field(
+    loggers_levels: dict[str, str] = Field(
         default_factory=dict,
         description="Точные уровни для конкретных логгеров: {'sqlalchemy.engine': 'WARNING'}",
     )
-    drop_keys: List[str] = Field(
+    drop_keys: list[str] = Field(
         default_factory=list,
         description="Ключи лог-записи, значение которых заменяется на REDACT_PLACEHOLDER",
     )
@@ -136,7 +136,7 @@ class LoggingConfig(BaseModel):
         default=8192,
         description="Максимальная длина строкового значения; обрезанные помечаются _truncated",
     )
-    loki_url: Optional[str] = Field(
+    loki_url: str | None = Field(
         default=None,
         description=(
             "URL Loki push API для отправки логов с хоста (dev-режим). "
@@ -152,7 +152,7 @@ class LoggingConfig(BaseModel):
             "В prod/test логи собирает Alloy из stdout контейнеров."
         ),
     )
-    loki_query_url: Optional[str] = Field(
+    loki_query_url: str | None = Field(
         default=None,
         description=(
             "URL Loki query API для поиска логов из приложения (GET /loki/api/v1/query_range). "
@@ -162,14 +162,14 @@ class LoggingConfig(BaseModel):
             "Используется flows logs API и admin logs API."
         ),
     )
-    grafana_public_url: Optional[str] = Field(
+    grafana_public_url: str | None = Field(
         default=None,
         description=(
             "Публичный origin Grafana без завершающего слэша (ссылки Explore для company_id system). "
             "Пример: https://grafana.humanitec.ru."
         ),
     )
-    grafana_loki_datasource_uid: Optional[str] = Field(
+    grafana_loki_datasource_uid: str | None = Field(
         default=None,
         description=(
             "UID источника Loki в Grafana (Provisioning). Совместно с grafana_public_url даёт logs_explore_url в ошибках для system."
@@ -180,7 +180,7 @@ class LoggingConfig(BaseModel):
         description="orgId в URL Grafana Explore для deep-link.",
     )
 
-    def resolve_loki_query_http_base(self) -> Optional[str]:
+    def resolve_loki_query_http_base(self) -> str | None:
         """
         Базовый URL хоста Loki для LokiClient (GET /loki/api/v1/query_range).
 
@@ -205,18 +205,18 @@ class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8001
     debug: bool = False
-    deployment_version: Optional[str] = Field(
+    deployment_version: str | None = Field(
         default=None,
         description="Уникальная метка релиза для /health и сброса PWA-кэша в браузере; в проде задавать на каждый выкат (ENV SERVER__DEPLOYMENT_VERSION или server.deployment_version в JSON).",
     )
 
     # URL сервисов для межсервисного взаимодействия
-    flows_service_url: Optional[str] = Field(
+    flows_service_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices("flows_service_url"),
         description="Внутренний или dev URL сервиса flows (ServiceClient, локальные вызовы).",
     )
-    flows_webhook_public_base_url: Optional[str] = Field(
+    flows_webhook_public_base_url: str | None = Field(
         default=None,
         validation_alias=AliasChoices("flows_webhook_public_base_url"),
         description=(
@@ -224,25 +224,25 @@ class ServerConfig(BaseModel):
             "канона ingress). Если пусто — {platform_public_base_url}/flows, иначе flows_service_url."
         ),
     )
-    crm_service_url: Optional[str] = None
-    frontend_service_url: Optional[str] = None
-    rag_service_url: Optional[str] = None
-    sync_service_url: Optional[str] = None
-    scheduler_service_url: Optional[str] = None
-    office_service_url: Optional[str] = None
-    browser_service_url: Optional[str] = None
-    provider_litserve_service_url: Optional[str] = None
-    voice_service_url: Optional[str] = None
-    capability_gateway_service_url: Optional[str] = None
-    code_runner_python_service_url: Optional[str] = None
-    code_runner_node_service_url: Optional[str] = None
-    code_runner_go_service_url: Optional[str] = None
-    code_runner_csharp_service_url: Optional[str] = None
-    platform_public_base_url: Optional[str] = Field(
+    crm_service_url: str | None = None
+    frontend_service_url: str | None = None
+    rag_service_url: str | None = None
+    sync_service_url: str | None = None
+    scheduler_service_url: str | None = None
+    office_service_url: str | None = None
+    browser_service_url: str | None = None
+    provider_litserve_service_url: str | None = None
+    voice_service_url: str | None = None
+    capability_gateway_service_url: str | None = None
+    code_runner_python_service_url: str | None = None
+    code_runner_node_service_url: str | None = None
+    code_runner_go_service_url: str | None = None
+    code_runner_csharp_service_url: str | None = None
+    platform_public_base_url: str | None = Field(
         default="https://humanitec.ru",
         description="Публичный origin без завершающего слэша для deep link (календарь, Sync join).",
     )
-    document_server_dev_upstream_url: Optional[str] = Field(
+    document_server_dev_upstream_url: str | None = Field(
         default=None,
         description=(
             "development/test: реальный HTTP origin Document Server для DevInterServiceProxy "
@@ -252,7 +252,7 @@ class ServerConfig(BaseModel):
     )
 
     # Порты по умолчанию для каждого сервиса
-    _default_ports: Dict[str, int] = {
+    _default_ports: dict[str, int] = {
         "flows": 8001,
         "frontend": 8002,
         "crm": 8003,
@@ -270,7 +270,7 @@ class ServerConfig(BaseModel):
         "code_runner_csharp": 8020,
     }
 
-    def get_service_url(self, service: Optional[str] = None) -> str:
+    def get_service_url(self, service: str | None = None) -> str:
         """
         Возвращает URL сервиса.
 
@@ -328,7 +328,7 @@ class WorkerConfig(BaseModel):
     """Конфигурация FASHN API"""
 
     enabled: bool = False
-    api_key: Optional[str] = None
+    api_key: str | None = None
     base_url: str = "https://api.fashn.ai/v1"
     timeout: int = 120
     poll_interval: float = 5.0
@@ -343,7 +343,7 @@ class CloudRuSTTConfig(BaseModel):
     """
 
     enabled: bool = False
-    api_key: Optional[str] = None
+    api_key: str | None = None
     base_url: str = "https://foundation-models.api.cloud.ru/v1/audio/transcriptions"
     model: str = "openai/whisper-large-v3"
     response_format: str = "text"
@@ -392,7 +392,7 @@ class CloudRuTTSBackendConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    api_key: Optional[str] = None
+    api_key: str | None = None
     base_url: str = "https://foundation-models.api.cloud.ru/v1/audio/speech"
     model: str = "openai/tts-1"
     voice: str = "alloy"
@@ -407,8 +407,8 @@ class YandexSTTBackendConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    api_key: Optional[str] = None
-    folder_id: Optional[str] = None
+    api_key: str | None = None
+    folder_id: str | None = None
     base_url: str = "https://stt.api.cloud.yandex.net/speech/v1/stt:recognize"
     model: str = "general"
     timeout_s: float = Field(default=120.0, gt=0.0)
@@ -420,8 +420,8 @@ class YandexTTSBackendConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    api_key: Optional[str] = None
-    folder_id: Optional[str] = None
+    api_key: str | None = None
+    folder_id: str | None = None
     base_url: str = "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize"
     voice: str = "ermil"
     response_format: Literal["wav", "mp3", "ogg", "pcm", "lpcm"] = "lpcm"
@@ -435,8 +435,8 @@ class SberSTTBackendConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
+    client_id: str | None = None
+    client_secret: str | None = None
     auth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     base_url: str = "https://smartspeech.sber.ru/rest/v1/speech:recognize"
     scope: str = "SALUTE_SPEECH_PERS"
@@ -450,8 +450,8 @@ class SberTTSBackendConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
+    client_id: str | None = None
+    client_secret: str | None = None
     auth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     base_url: str = "https://smartspeech.sber.ru/rest/v1/text:synthesize"
     scope: str = "SALUTE_SPEECH_PERS"
@@ -485,7 +485,7 @@ class STTProvidersConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: Literal["litserve", "cloud_ru", "yandex", "sber", "mock"] = "litserve"
-    default_model: Optional[str] = Field(
+    default_model: str | None = Field(
         default=None,
         description=(
             "OpenAI-совместимый id модели по умолчанию для выбранного "
@@ -538,11 +538,11 @@ class TTSProvidersConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: Literal["litserve", "cloud_ru", "yandex", "sber", "mock"] = "litserve"
-    default_model: Optional[str] = Field(
+    default_model: str | None = Field(
         default=None,
         description="OpenAI-совместимый id модели по умолчанию (например `silero-tts-v5-5-ru`).",
     )
-    default_voice: Optional[str] = None
+    default_voice: str | None = None
     default_response_format: Literal["wav", "mp3", "ogg", "pcm"] = "wav"
     default_sample_rate: int = Field(default=24000, gt=0)
     chunk_max_chars: int = Field(default=100, ge=1)
@@ -566,7 +566,7 @@ class VADProvidersConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: Literal["litserve", "silero_local", "mock"] = "silero_local"
-    default_model: Optional[str] = None
+    default_model: str | None = None
     default_sample_rate: int = Field(default=16000, gt=0)
     default_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     echo_compensation: float = Field(default=0.2, ge=0.0, le=1.0)
@@ -631,7 +631,7 @@ class VoiceDiagnosticsConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    uplink_dump_dir: Optional[str] = Field(
+    uplink_dump_dir: str | None = Field(
         default=None,
         description=(
             "Директория для дампа сырого uplink PCM как WAV. None — выкл. "
@@ -668,14 +668,14 @@ class TelegramConfig(BaseModel):
 
     enabled: bool = True
     api_base: str = "https://api.telegram.org"
-    bots: Dict[str, str] = Field(default_factory=dict)
+    bots: dict[str, str] = Field(default_factory=dict)
 
 
 class WhatsAppConfig(BaseModel):
     """Конфигурация WhatsApp интеграции"""
 
     enabled: bool = True
-    verify_token: Optional[str] = None
+    verify_token: str | None = None
     graph_api_version: str = "v18.0"
     graph_api_url: str = "https://graph.facebook.com"
 
@@ -692,7 +692,7 @@ class ProxyConfig(BaseModel):
     """Конфигурация прокси с умной ротацией - проблемные прокси уходят в конец"""
 
     enabled: bool = False
-    proxies: List[str] = Field(
+    proxies: list[str] = Field(
         default_factory=list,
         description="Список прокси URL: ['http://proxy1:8080', 'http://user:pass@proxy2:8080']",
     )
@@ -711,9 +711,9 @@ class ProxyConfig(BaseModel):
     )
 
     _current_index: int = PrivateAttr(default=0)
-    _last_used_proxy: Optional[str] = PrivateAttr(default=None)
+    _last_used_proxy: str | None = PrivateAttr(default=None)
 
-    def get_next_proxy(self) -> Optional[str]:
+    def get_next_proxy(self) -> str | None:
         """Возвращает следующий прокси по round-robin"""
         if not self.enabled or not self.proxies:
             return None
@@ -744,28 +744,28 @@ class PaymentProviderConfigEntry(BaseModel):
 
     provider_type: Literal["yoomoney", "yukassa"]
     enabled: bool = True
-    account_number: Optional[str] = None
-    notification_secret: Optional[str] = None
+    account_number: str | None = None
+    notification_secret: str | None = None
     quickpay_url: str = "https://yoomoney.ru/quickpay/confirm.xml"
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
-    access_token: Optional[str] = None
-    api_url: Optional[str] = None
-    shop_id: Optional[str] = None
-    secret_key: Optional[str] = None
+    client_id: str | None = None
+    client_secret: str | None = None
+    access_token: str | None = None
+    api_url: str | None = None
+    shop_id: str | None = None
+    secret_key: str | None = None
 
 
 class PaymentProvidersConfig(BaseModel):
     """Конфигурация платежных провайдеров"""
 
-    default_provider: Optional[str] = None
+    default_provider: str | None = None
     sync_enabled: bool = Field(
         default=False, description="Включена ли периодическая сверка транзакций"
     )
     sync_cron: str = Field(
         default="*/30 * * * *", description="Cron-расписание для сверки транзакций"
     )
-    providers: Dict[str, PaymentProviderConfigEntry] = Field(
+    providers: dict[str, PaymentProviderConfigEntry] = Field(
         default_factory=dict, description="Платежные провайдеры (yoomoney_main, yukassa_main, etc.)"
     )
 
@@ -779,8 +779,8 @@ class EmbeddingApiConfig(BaseModel):
     dimension: int = 1024
     # Явный override корня ``…/v1``: при ``provider=openrouter`` пусто — из ``llm``;
     # при ``provider=provider_litserve`` пусто — из ``provider_litserve.api.base_url`` в настройках.
-    base_url: Optional[str] = None
-    mrl_output_dimension: Optional[int] = Field(
+    base_url: str | None = None
+    mrl_output_dimension: int | None = Field(
         default=None,
         gt=0,
         description="MRL-усечение: если задано, вектор обрезается до первых N измерений "
@@ -802,7 +802,7 @@ class EmbeddingConfig(BaseModel):
         """Плоские ``model`` / ``dimension`` / ``base_url`` на уровне ``embedding`` -> ``api`` (обратная совместимость с merge JSON)."""
         if not isinstance(data, dict):
             return data
-        api: Dict[str, Any] = dict(data.get("api") or {})
+        api: dict[str, Any] = dict(data.get("api") or {})
         for k in ("model", "dimension", "base_url", "mrl_output_dimension"):
             if k in data:
                 api[k] = data.pop(k)
@@ -814,19 +814,19 @@ class RAGProviderConfig(BaseModel):
     """Конфигурация одного RAG провайдера"""
 
     enabled: bool = False
-    api_key: Optional[str] = None  # API ключ провайдера (например Agentset API)
-    base_url: Optional[str] = None
+    api_key: str | None = None  # API ключ провайдера (например Agentset API)
+    base_url: str | None = None
     timeout: int = 60
 
     # Legacy (не используются для pgvector)
-    host: Optional[str] = None
-    port: Optional[int] = None
+    host: str | None = None
+    port: int | None = None
 
     # Специфика PgVector
-    db_url: Optional[str] = None
+    db_url: str | None = None
 
     # Legacy: override ключа эмбеддингов pgvector (ENV); иначе llm.<provider>.api_key. У agentset — см. AgentsetRAGProvider.
-    embedding_api_key: Optional[str] = None
+    embedding_api_key: str | None = None
     # Средняя цена за 1M токенов (в рублях). ~$0.05 ≈ 5₽
     embedding_cost_per_1m_tokens: float = 5.0
     # Наценка платформы на embedding (1.1 = +10%)
@@ -836,7 +836,7 @@ class RAGProviderConfig(BaseModel):
     chunk_size: int = 1000
     chunk_overlap: int = 100
 
-    extra_params: Dict[str, Any] = Field(default_factory=dict)
+    extra_params: dict[str, Any] = Field(default_factory=dict)
 
 
 class RerankerApiRuntimeConfig(BaseModel):
@@ -848,7 +848,7 @@ class RerankerApiRuntimeConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    base_url: Optional[str] = None
+    base_url: str | None = None
     timeout_seconds: float = 60.0
 
 
@@ -858,7 +858,7 @@ class RerankerRuntimeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: Literal["none", "provider_litserve"] = "provider_litserve"
-    api: Optional[RerankerApiRuntimeConfig] = None
+    api: RerankerApiRuntimeConfig | None = None
     # Биллинг (как у embedding в pgvector): оценка по tiktoken, запись через BillingService
     cost_per_1m_tokens: float = 5.0
     platform_markup: float = 1.1
@@ -870,7 +870,7 @@ class RerankerRuntimeConfig(BaseModel):
         """Плоские ``base_url`` / ``timeout_seconds`` и вложенный ``api``."""
         if not isinstance(data, dict):
             return data
-        api: Dict[str, Any] = {}
+        api: dict[str, Any] = {}
         if isinstance(data.get("api"), dict):
             api.update(data["api"])
         flat_base = data.pop("base_url", None)
@@ -890,7 +890,7 @@ class RerankerRuntimeConfig(BaseModel):
         return self
 
     @property
-    def base_url(self) -> Optional[str]:
+    def base_url(self) -> str | None:
         if self.provider != "provider_litserve" or self.api is None:
             return None
         u = self.api.base_url
@@ -910,7 +910,7 @@ class ProviderLitserveApiConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    base_url: Optional[str] = None
+    base_url: str | None = None
 
 
 class ProviderLitserveSTTModelEntry(BaseModel):
@@ -1416,7 +1416,7 @@ class RAGConfig(BaseModel):
     # Общая конфигурация embeddings для всех провайдеров
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
 
-    providers: Dict[str, RAGProviderConfig] = Field(default_factory=dict)
+    providers: dict[str, RAGProviderConfig] = Field(default_factory=dict)
     reranker: RerankerRuntimeConfig = Field(default_factory=RerankerRuntimeConfig)
     document_indexing: IndexProfileConfig = Field(
         default_factory=IndexProfileConfig,
@@ -1427,7 +1427,7 @@ class RAGConfig(BaseModel):
         description="TTL индексируемых документов и периодическая очистка.",
     )
 
-    def get_enabled_provider_key(self, override: Optional[str] = None) -> str:
+    def get_enabled_provider_key(self, override: str | None = None) -> str:
         """Имя провайдера из ``override`` или ``default_provider`` с проверкой ``rag.enabled`` и ``providers[name].enabled``."""
         if not self.enabled:
             raise ValueError("RAG не включен в конфигурации (rag.enabled = false)")
@@ -1448,14 +1448,14 @@ class SGRConfig(BaseModel):
 
     enabled: bool = False
     base_url: str = "http://localhost:8010"
-    api_key: Optional[str] = None
+    api_key: str | None = None
     timeout: float = 300.0
     llm_base_url: str = "https://api.openai.com/v1"
-    llm_api_key: Optional[str] = None
+    llm_api_key: str | None = None
     llm_model: str = "gpt-4o-mini"
     llm_max_tokens: int = 8000
     llm_temperature: float = 0.4
-    tavily_api_key: Optional[str] = None
+    tavily_api_key: str | None = None
     max_steps: int = 6
     max_results: int = 10
 
@@ -1485,7 +1485,7 @@ class TasksConfig(BaseModel):
     """Конфигурация TaskIQ"""
 
     broker_url: str = "redis://localhost:6379/0"
-    result_backend_url: Optional[str] = None
+    result_backend_url: str | None = None
     max_workers: int = 4
     default_retry_count: int = Field(
         default=3,
@@ -1517,14 +1517,14 @@ class CalendarSyncConfig(BaseModel):
 class OpenAIProviderConfig(BaseModel):
     """Конфигурация OpenAI провайдера"""
 
-    api_key: Optional[str] = Field(default=None)
-    base_url: Optional[str] = Field(default=None)
+    api_key: str | None = Field(default=None)
+    base_url: str | None = Field(default=None)
 
 
 class OpenRouterProviderConfig(BaseModel):
     """Конфигурация OpenRouter провайдера"""
 
-    api_key: Optional[str] = Field(default=None)
+    api_key: str | None = Field(default=None)
     base_url: str = Field(default="https://openrouter.ai/api/v1")
     site_url: str = Field(default="https://platform.local")
     site_name: str = Field(default="platform")
@@ -1533,15 +1533,15 @@ class OpenRouterProviderConfig(BaseModel):
 class BothubProviderConfig(BaseModel):
     """Конфигурация Bothub провайдера"""
 
-    api_key: Optional[str] = Field(default=None)
+    api_key: str | None = Field(default=None)
     base_url: str = Field(default="https://bothub.chat/api/v2/openai/v1")
 
 
 class YandexLLMProviderConfig(BaseModel):
     """Yandex Cloud Foundation Models (OpenAI-совместимый endpoint): Api-Key + x-folder-id."""
 
-    api_key: Optional[str] = Field(default=None)
-    folder_id: Optional[str] = Field(
+    api_key: str | None = Field(default=None)
+    folder_id: str | None = Field(
         default=None,
         description="Идентификатор каталога Yandex Cloud (заголовок x-folder-id)",
     )
@@ -1549,10 +1549,11 @@ class YandexLLMProviderConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    """Конфигурация модели — переопределение temperature/max_tokens для конкретной модели"""
+    """Конфигурация модели — переопределение temperature/max_tokens/context_length."""
 
     temperature: float = Field(default=0.2)
-    max_tokens: Optional[int] = Field(default=None)
+    max_tokens: int | None = Field(default=None)
+    context_length: int | None = Field(default=None, gt=0)
 
 
 class OpenRouterFreePoolConfig(BaseModel):
@@ -1605,13 +1606,13 @@ class LLMConfig(BaseModel):
         default="gemini-2.5-pro-preview", description="Модель для multimodal/vision запросов"
     )
     temperature: float = Field(default=0.2)
-    max_tokens: Optional[int] = Field(default=None)
+    max_tokens: int | None = Field(default=None)
     timeout: float = Field(default=300.0)
-    openai: Optional[OpenAIProviderConfig] = Field(default=None)
-    openrouter: Optional[OpenRouterProviderConfig] = Field(default=None)
-    bothub: Optional[BothubProviderConfig] = Field(default=None)
-    yandex: Optional[YandexLLMProviderConfig] = Field(default=None)
-    models: Dict[str, ModelConfig] = Field(default_factory=dict)
+    openai: OpenAIProviderConfig | None = Field(default=None)
+    openrouter: OpenRouterProviderConfig | None = Field(default=None)
+    bothub: BothubProviderConfig | None = Field(default=None)
+    yandex: YandexLLMProviderConfig | None = Field(default=None)
+    models: dict[str, ModelConfig] = Field(default_factory=dict)
     default_strategy: Literal["configured", "openrouter_free_pool"] = Field(
         default="openrouter_free_pool",
         description=(
@@ -1626,12 +1627,12 @@ class LLMConfig(BaseModel):
 class S3BucketConfig(BaseModel):
     """Конфигурация одного S3 bucket"""
 
-    bucket_name: Optional[str] = Field(
+    bucket_name: str | None = Field(
         default=None, description="Реальное имя bucket (если отличается от ключа конфигурации)"
     )
-    access_key_id: Optional[str] = Field(default=None)
-    secret_access_key: Optional[str] = Field(default=None)
-    endpoint_url: Optional[str] = Field(default=None)
+    access_key_id: str | None = Field(default=None)
+    secret_access_key: str | None = Field(default=None)
+    endpoint_url: str | None = Field(default=None)
     region_name: str = Field(default="us-east-1")
     provider: str = Field(default="aws")
     enabled: bool = Field(default=True)
@@ -1642,7 +1643,7 @@ class S3Config(BaseModel):
 
     enabled: bool = Field(default=False)
     default_bucket: str = Field(default="files")
-    buckets: Dict[str, S3BucketConfig] = Field(default_factory=dict)
+    buckets: dict[str, S3BucketConfig] = Field(default_factory=dict)
 
 
 class SpeechToChatConfig(BaseModel):
@@ -1763,24 +1764,24 @@ class PushConfig(BaseModel):
     """
 
     enabled: bool = False
-    vapid_public_key: Optional[str] = None
-    vapid_private_key: Optional[str] = None
+    vapid_public_key: str | None = None
+    vapid_private_key: str | None = None
     vapid_email: str = "admin@humanitec.ru"
-    apns_team_id: Optional[str] = None
-    apns_key_id: Optional[str] = None
-    apns_private_key: Optional[str] = None
-    apns_bundle_id: Optional[str] = None
+    apns_team_id: str | None = None
+    apns_key_id: str | None = None
+    apns_private_key: str | None = None
+    apns_bundle_id: str | None = None
     apns_use_sandbox: bool = False
-    fcm_credentials_json: Optional[Any] = None
-    fcm_project_id: Optional[str] = None
+    fcm_credentials_json: Any | None = None
+    fcm_project_id: str | None = None
 
 
 class PublicSiteConfig(BaseModel):
     """Публичные настройки маркетингового слоя сайта (виджеты, аналитика, комьюнити)."""
 
-    telegram_community_url: Optional[str] = None
-    yandex_metrika_id: Optional[str] = None
-    google_analytics_measurement_id: Optional[str] = None
+    telegram_community_url: str | None = None
+    yandex_metrika_id: str | None = None
+    google_analytics_measurement_id: str | None = None
 
 
 class LegalConfig(BaseModel):
@@ -1790,14 +1791,14 @@ class LegalConfig(BaseModel):
     company_name_en: str = "Angilabs LLC"
     legal_form_ru: str = "Общество с ограниченной ответственностью"
     legal_form_en: str = "Limited Liability Company"
-    inn: Optional[str] = None
-    ogrn: Optional[str] = None
-    legal_address_ru: Optional[str] = None
-    legal_address_en: Optional[str] = None
+    inn: str | None = None
+    ogrn: str | None = None
+    legal_address_ru: str | None = None
+    legal_address_en: str | None = None
     contact_email: str = "info@angilabs.ru"
     support_email: str = "support@angilabs.ru"
     dpo_email: str = "dpo@angilabs.ru"
-    phone: Optional[str] = None
+    phone: str | None = None
     min_age: int = 18
     retention_logs: str = "30 дней / 30 days"
     retention_messages: str = "1 год / 1 year"
@@ -1805,10 +1806,10 @@ class LegalConfig(BaseModel):
     cloud_provider: str = "AWS/Yandex Cloud"
     cloud_region: str = "EU/RU"
     analytics_tools: str = "Internal analytics"
-    billing_provider: Optional[str] = None
+    billing_provider: str | None = None
 
 
-def default_billing_resource_base_prices() -> Dict[str, Dict[str, float]]:
+def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
     """
     Базовый каталог цен до merge с shared storage и пер-компанией.
 
@@ -1880,11 +1881,11 @@ class BillingConfig(BaseModel):
         default=True,
         description="Pre-flight: блокировать старт операций с pending_settlement при balance <= 0.",
     )
-    balance_enforcement_exempt_company_ids: List[str] = Field(
+    balance_enforcement_exempt_company_ids: list[str] = Field(
         default_factory=lambda: ["system"],
         description="company_id без проверки баланса (например system и демо для локальной разработки).",
     )
-    resource_base_prices: Dict[str, Dict[str, float]] = Field(
+    resource_base_prices: dict[str, dict[str, float]] = Field(
         default_factory=default_billing_resource_base_prices,
         description="Дерево category → resource → цена в руб./единицу списания; merge с storage override.",
     )
@@ -1957,7 +1958,7 @@ class MediaTranscriberConfig(BaseModel):
         ge=1024,
         description="Максимальный размер файла для транскрипции (байт).",
     )
-    default_language: Optional[str] = Field(
+    default_language: str | None = Field(
         default=None,
         description=(
             "Язык по умолчанию для STT (None — из `settings.voice.stt.default_language`)."

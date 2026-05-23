@@ -51,7 +51,12 @@ import { operatorQueuesResource, operatorQueueAddMemberOp, operatorQueueRemoveMe
          operatorTaskPostMessageOp, operatorTaskCompleteOp } from '../events/resources/operator.resource.js';
 import { editorResource, editorBulkDeleteOp, stickyNoteUpsertOp } from '../events/resources/editor.resource.js';
 import { executionUiSlice } from '../events/resources/execution-ui.resource.js';
-import { asObject, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
+import {
+    LARA_FLOWS_BRANCH_ID,
+    buildLaraFlowsContext,
+    flattenLaraFlowsContext,
+} from '../_helpers/lara-node-helper.js';
 import { resolveVoiceHttpOrigin } from '@platform/lib/voice/voice-http-origin.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
@@ -404,7 +409,7 @@ export class FlowsApp extends PlatformApp {
                 toggle-event-name="flows-lara-open"
                 event-namespace="assistant"
                 flow-id="lara"
-                branch-id="flows"
+                branch-id=${LARA_FLOWS_BRANCH_ID}
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
                 .assistantTitle=${'Lara'}
@@ -418,52 +423,16 @@ export class FlowsApp extends PlatformApp {
     }
 
     _laraEmbedContextVariables = async () => {
-        return this._flattenLaraContext(this._buildLaraFlowsContext({}));
+        return flattenLaraFlowsContext(this._buildLaraFlowsContext({
+            assistant_branch_id: LARA_FLOWS_BRANCH_ID,
+            request_kind: 'chat',
+        }));
     };
 
     _buildLaraFlowsContext(options = {}) {
-        const editorState = isPlainObject(this._editor?.state) ? this._editor.state : {};
         const routerValue = this._routerSelect ? this._routerSelect.value : null;
         const params = isPlainObject(routerValue?.params) ? routerValue.params : {};
-        const pickString = (...candidates) => {
-            for (const c of candidates) {
-                if (typeof c === 'string' && c.length > 0) return c;
-            }
-            return null;
-        };
-        const flowId = pickString(editorState.flowId, params.flowId, options.flow_id);
-        const branchId = pickString(editorState.currentBranchId, params.branchId, options.branch_id, 'base');
-        const nodeId = pickString(editorState.selectedNodeId, options.node_id);
-        const branchData = isPlainObject(editorState.branchData) ? editorState.branchData : { nodes: {} };
-        const nodes = isPlainObject(branchData.nodes) ? branchData.nodes : {};
-        const node = nodeId && isPlainObject(nodes[nodeId]) ? nodes[nodeId] : null;
-        return {
-            app_surface: 'flows',
-            flow_id: flowId,
-            target_branch_id: branchId,
-            node_id: nodeId,
-            node_type: node && typeof node.type === 'string' ? node.type : null,
-            node_payload: node,
-            flow_payload: isPlainObject(editorState.flowConfig) ? editorState.flowConfig : null,
-            screen: nodeId ? 'flow_editor_node' : (flowId ? 'flow_editor' : 'flow_list'),
-        };
-    }
-
-    _flattenLaraContext(context) {
-        return {
-            lara_ui_context: context,
-            lara_ui_context_json: JSON.stringify(context),
-            app_surface: context.app_surface,
-            screen: context.screen,
-            flow_id: asString(context.flow_id),
-            target_branch_id: typeof context.target_branch_id === 'string' && context.target_branch_id.length > 0 ? context.target_branch_id : 'base',
-            branch_id: typeof context.target_branch_id === 'string' && context.target_branch_id.length > 0 ? context.target_branch_id : 'base',
-            assistant_branch_id: 'flows',
-            node_id: asString(context.node_id),
-            node_type: asString(context.node_type),
-            node_payload_json: context.node_payload ? JSON.stringify(context.node_payload) : '',
-            flow_payload_json: context.flow_payload ? JSON.stringify(context.flow_payload) : '',
-        };
+        return buildLaraFlowsContext(this._editor?.state, params, options);
     }
 
     render() {

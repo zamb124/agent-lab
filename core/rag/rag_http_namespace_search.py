@@ -6,7 +6,7 @@ HTTP-контракт ``POST {RAG_API_V1_PREFIX}/namespaces/{id}/search`` (ка�
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 from urllib.parse import quote, urlencode
 
 RAG_API_V1_PREFIX = "/rag/api/v1"
@@ -16,17 +16,17 @@ SEARCH_REQUEST_OPTION_KEYS = frozenset(
 )
 
 
-def filter_search_request_options(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def filter_search_request_options(raw: dict[str, Any] | None) -> dict[str, Any]:
     if not raw:
         return {}
     return {k: v for k, v in raw.items() if k in SEARCH_REQUEST_OPTION_KEYS}
 
 
 def merge_search_request_options(
-    bind_opts: Optional[Dict[str, Any]],
-    call_opts: Optional[Dict[str, Any]],
-) -> Optional[Dict[str, Any]]:
-    merged: Dict[str, Any] = {}
+    bind_opts: dict[str, Any] | None,
+    call_opts: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    merged: dict[str, Any] = {}
     merged.update(filter_search_request_options(bind_opts))
     merged.update(filter_search_request_options(call_opts))
     return merged if merged else None
@@ -35,7 +35,7 @@ def merge_search_request_options(
 def build_namespace_search_path(
     namespace_id: str,
     *,
-    provider: Optional[str] = None,
+    provider: str | None = None,
 ) -> str:
     seg = quote(namespace_id, safe="")
     path = f"{RAG_API_V1_PREFIX}/namespaces/{seg}/search"
@@ -48,10 +48,10 @@ def build_namespace_search_json_body(
     *,
     query: str,
     limit: int,
-    filters: Optional[Dict[str, Any]] = None,
-    merged_search_options: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    body: Dict[str, Any] = {"query": query, "limit": limit}
+    filters: dict[str, Any] | None = None,
+    merged_search_options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {"query": query, "limit": limit}
     if filters is not None:
         body["filters"] = filters
     if merged_search_options:

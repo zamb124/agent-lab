@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -100,7 +99,7 @@ class SchedulerTaskRepository:
             await session.commit()
         return task
 
-    async def get(self, company_id: str, schedule_task_id: str) -> Optional[PlatformScheduledTask]:
+    async def get(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask | None:
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
             result = await session.execute(
@@ -165,10 +164,10 @@ class SchedulerTaskRepository:
         schedule_task_id: str,
         status: ScheduledTaskStatus | str,
         *,
-        schedule_id: Optional[str] = None,
-        last_run_at: Optional[datetime] = None,
-        next_run_at: Optional[datetime] = None,
-        error_message: Optional[str] = None,
+        schedule_id: str | None = None,
+        last_run_at: datetime | None = None,
+        next_run_at: datetime | None = None,
+        error_message: str | None = None,
     ) -> bool:
         status_value = status.value if isinstance(status, ScheduledTaskStatus) else str(status)
         values: dict[str, object] = {

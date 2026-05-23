@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode, urlparse, urlunparse
 from uuid import uuid4
 
@@ -553,7 +553,7 @@ class OAuthService:
         user_id: str,
         provider: IntegrationProvider,
         service: str,
-    ) -> Optional[IntegrationCredential]:
+    ) -> IntegrationCredential | None:
         """
         Получает credential из БД. Если expired — auto-refresh.
 

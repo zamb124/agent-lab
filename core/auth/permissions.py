@@ -4,7 +4,6 @@
 Permissions основаны на группах пользователя из JWT (claim grps).
 """
 
-from typing import List, Optional, Union
 
 # Группа с полным доступом
 ADMIN_GROUP = "admin"
@@ -20,7 +19,7 @@ class PermissionChecker:
     Источник групп - claim grps из JWT токена.
     """
 
-    def normalize(self, permission: Optional[Union[str, List[str]]]) -> List[str]:
+    def normalize(self, permission: str | list[str] | None) -> list[str]:
         """Нормализует permission к списку строк."""
         if permission is None:
             return DEFAULT_PERMISSION
@@ -30,7 +29,7 @@ class PermissionChecker:
             return permission if permission else DEFAULT_PERMISSION
         return DEFAULT_PERMISSION
 
-    def check(self, user_groups: List[str], required: List[str]) -> bool:
+    def check(self, user_groups: list[str], required: list[str]) -> bool:
         """Проверяет есть ли у пользователя доступ."""
         if not user_groups:
             return False
@@ -40,8 +39,8 @@ class PermissionChecker:
 
     def check_flow_permission(
         self,
-        user_groups: List[str],
-        flow_permission: Optional[Union[str, List[str]]],
+        user_groups: list[str],
+        flow_permission: str | list[str] | None,
     ) -> bool:
         """Проверяет доступ к flow/agent."""
         required = self.normalize(flow_permission)
@@ -49,9 +48,9 @@ class PermissionChecker:
 
     def check_branch_permission(
         self,
-        user_groups: List[str],
-        branch_permission: Optional[Union[str, List[str]]],
-        flow_permission: Optional[Union[str, List[str]]] = None,
+        user_groups: list[str],
+        branch_permission: str | list[str] | None,
+        flow_permission: str | list[str] | None = None,
     ) -> bool:
         """Проверяет доступ к ветке графа. Fallback на permission flow."""
         if branch_permission:
@@ -62,8 +61,8 @@ class PermissionChecker:
 
     def check_tool_permission(
         self,
-        user_groups: List[str],
-        tool_permission: Optional[Union[str, List[str]]],
+        user_groups: list[str],
+        tool_permission: str | list[str] | None,
     ) -> bool:
         """Проверяет доступ к tool."""
         required = self.normalize(tool_permission)

@@ -36,6 +36,7 @@ from core.models import (
     CalendarIntegrationSettings,
     CalendarProvider,
 )
+from core.types import require_json_array
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 SYNC_LINK_TOKEN_META = "sync_link_token"
@@ -1344,8 +1345,18 @@ class CalendarService:
             "/crm/api/v1/entities/query",
             json={"entity_type": "task", "limit": 200, "search_mode": "hybrid"},
         )
-        notes_items = notes_response.get("items", []) if isinstance(notes_response, dict) else []
-        tasks_items = tasks_response.get("items", []) if isinstance(tasks_response, dict) else []
+        notes_items_raw = notes_response.get("items") if isinstance(notes_response, dict) else None
+        tasks_items_raw = tasks_response.get("items") if isinstance(tasks_response, dict) else None
+        notes_items = (
+            require_json_array(notes_items_raw, "crm.notes.items")
+            if isinstance(notes_items_raw, list)
+            else []
+        )
+        tasks_items = (
+            require_json_array(tasks_items_raw, "crm.tasks.items")
+            if isinstance(tasks_items_raw, list)
+            else []
+        )
         events: list[CalendarEvent] = []
         now = datetime.now(timezone.utc)
         for item in [*notes_items, *tasks_items]:
@@ -1361,6 +1372,12 @@ class CalendarService:
             end_value = datetime.fromisoformat(f"{raw_date}T10:00:00+00:00")
             if start_value >= end_at or end_value <= start_at:
                 continue
+            raw_kind = item.get("entity_type")
+            kind = raw_kind if isinstance(raw_kind, str) and raw_kind else "crm"
+            raw_title = item.get("name")
+            title = raw_title if isinstance(raw_title, str) and raw_title else "CRM event"
+            raw_description = item.get("description")
+            description = raw_description if isinstance(raw_description, str) else None
             events.append(
                 CalendarEvent(
                     event_id=f"crm-{source_id}",
@@ -1368,9 +1385,9 @@ class CalendarService:
                     source_id=source_id,
                     company_id=company_id,
                     namespace=None,
-                    kind=item.get("entity_type") or "crm",
-                    title=item.get("name") or "CRM event",
-                    description=item.get("description"),
+                    kind=kind,
+                    title=title,
+                    description=description,
                     location=None,
                     status=CalendarEventStatus.CONFIRMED,
                     timezone="UTC",

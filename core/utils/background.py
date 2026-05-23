@@ -26,7 +26,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any, Awaitable
+from collections.abc import Awaitable
+from typing import Any
 
 from core.config import get_settings
 from core.logging import (

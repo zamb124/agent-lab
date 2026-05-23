@@ -4,7 +4,6 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
 
 from sqlalchemy import select
 
@@ -18,7 +17,7 @@ class DocumentBindingRepository:
 
     async def list_by_company_namespace_and_catalog(
         self, company_id: str, namespace: str, catalog_id: str
-    ) -> List[OfficeDocumentBinding]:
+    ) -> list[OfficeDocumentBinding]:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding)
@@ -33,7 +32,7 @@ class DocumentBindingRepository:
 
     async def list_by_company_namespace_and_catalogs(
         self, company_id: str, namespace: str, catalog_ids: list[str]
-    ) -> List[OfficeDocumentBinding]:
+    ) -> list[OfficeDocumentBinding]:
         if not catalog_ids:
             return []
         async with self._db.session() as session:
@@ -50,7 +49,7 @@ class DocumentBindingRepository:
 
     async def get_for_company(
         self, binding_id: str, company_id: str, namespace: str
-    ) -> Optional[OfficeDocumentBinding]:
+    ) -> OfficeDocumentBinding | None:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding).where(
@@ -63,7 +62,7 @@ class DocumentBindingRepository:
 
     async def get_by_binding_and_company(
         self, binding_id: str, company_id: str
-    ) -> Optional[OfficeDocumentBinding]:
+    ) -> OfficeDocumentBinding | None:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding).where(
@@ -78,7 +77,7 @@ class DocumentBindingRepository:
         file_id: str,
         company_id: str,
         namespace: str,
-    ) -> Optional[OfficeDocumentBinding]:
+    ) -> OfficeDocumentBinding | None:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding)
@@ -126,7 +125,7 @@ class DocumentBindingRepository:
         company_id: str,
         namespace: str,
         title: str,
-    ) -> Optional[OfficeDocumentBinding]:
+    ) -> OfficeDocumentBinding | None:
         async with self._db.session() as session:
             result = await session.execute(
                 select(OfficeDocumentBinding).where(

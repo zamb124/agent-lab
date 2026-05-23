@@ -4,7 +4,7 @@ Apple (Sign in with Apple) OAuth провайдер — веб-флоу authoriz
 
 import json
 import time
-from typing import Any, Optional, Tuple
+from typing import Any
 from urllib.parse import urlencode
 
 import jwt
@@ -60,7 +60,7 @@ def decode_apple_id_token(id_token: str, audience: str) -> dict[str, Any]:
     )
     return decoded
 
-def _name_from_apple_user_json(user_json: str) -> Optional[str]:
+def _name_from_apple_user_json(user_json: str) -> str | None:
     parsed = json.loads(user_json)
     name_obj = parsed.get("name")
     if not isinstance(name_obj, dict):
@@ -125,7 +125,7 @@ class AppleProvider(BaseAuthProvider):
 
     async def exchange_code_for_token(
         self, code: str, redirect_uri: str
-    ) -> Tuple[str, Optional[str]]:
+    ) -> tuple[str, str | None]:
         client_secret = build_apple_client_secret(
             self._team_id,
             self.client_id or "",
@@ -159,7 +159,7 @@ class AppleProvider(BaseAuthProvider):
     async def get_user_info(
         self,
         access_token: str,
-        first_login_user_json: Optional[str] = None,
+        first_login_user_json: str | None = None,
     ) -> ProviderUserInfo:
         claims = decode_apple_id_token(access_token, self.client_id or "")
         sub = claims.get("sub")

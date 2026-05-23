@@ -13,7 +13,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from contextlib import suppress
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from a2a.types import (
@@ -72,6 +72,7 @@ from core.state.trigger_runtime import TriggerRuntimeSnapshot
 from core.tasks.kicker import kiq_task_name_with_context
 from core.tracing import get_tracer
 from core.tracing.provider import is_tracing_enabled
+from core.types import JsonObject, require_json_object
 from core.utils.background import run_with_log_context
 
 logger = get_logger(__name__)
@@ -222,19 +223,26 @@ class BaseChannel(ABC):
         Returns:
             Список групп пользователя
         """
+        raw_groups = None
         if context is None:
-            # Пробуем взять из Context канала
-            if self.context and self.context.metadata:
-                return self.context.metadata.get("grps", []) or []
+            if self.context is not None:
+                raw_groups = self.context.metadata.get("grps") or self.context.metadata.get(
+                    "user_groups"
+                )
+        elif isinstance(context, Context):
+            raw_groups = context.metadata.get("grps") or context.metadata.get("user_groups")
+        elif isinstance(context, dict):
+            raw_groups = context.get("user_groups") or context.get("grps")
+        else:
+            raw_groups = getattr(context, "user_groups", None)
+
+        if raw_groups is None:
             return []
-
-        if isinstance(context, dict):
-            return context.get("user_groups", []) or []
-
-        if isinstance(context, Context):
-            return context.metadata.get("grps", []) or []
-
-        return getattr(context, "user_groups", []) or []
+        if not isinstance(raw_groups, list) or not all(
+            isinstance(group, str) for group in raw_groups
+        ):
+            raise ValueError("context user groups must be a string array")
+        return [group for group in raw_groups if isinstance(group, str)]
 
     async def _normalize_request_variables(
         self, request_variables: dict[str, Any]
@@ -474,9 +482,9 @@ class BaseChannel(ABC):
         if is_tracing_enabled():
             tracer = get_tracer()
             trace_ctx = tracer.create_trace_context(
-                user_id=self.context.user.user_id if self.context.user else None,
-                user_name=self.context.user.name if self.context.user else None,
-                user_groups=self.context.metadata.get("grps", []) if self.context.metadata else [],
+                user_id=self.context.user.user_id,
+                user_name=self.context.user.name,
+                user_groups=self._get_user_groups_from_context(self.context),
                 session_auth=self.context.session_id,
                 session_agent=params.session_id,
                 task_id=params.task_id,
@@ -599,9 +607,14 @@ class BaseChannel(ABC):
         )
 
         # Получаем breakpoints из metadata
-        breakpoints = {}
-        if params.metadata and "breakpoints" in params.metadata:
-            breakpoints = params.metadata["breakpoints"]
+        breakpoints: dict[str, bool] = {}
+        breakpoints_raw = params.metadata.get("breakpoints") if params.metadata else None
+        if breakpoints_raw is not None:
+            breakpoints_obj = require_json_object(breakpoints_raw, "metadata.breakpoints")
+            for key, value in breakpoints_obj.items():
+                if not isinstance(value, bool):
+                    raise ValueError(f"metadata.breakpoints[{key!r}] must be bool")
+                breakpoints[key] = value
 
         exec_state = ExecutionState(
             task_id=effective_task_id,
@@ -621,8 +634,8 @@ class BaseChannel(ABC):
             background_kind="flow_stream",
         )
 
-        user_id = ctx.user.user_id if ctx.user else params.user_id
-        user_groups = ctx.metadata.get("grps", []) or []
+        user_id = ctx.user.user_id
+        user_groups = self._get_user_groups_from_context(ctx)
         state = saved_state
         state_is_new = state is None
 
@@ -670,8 +683,12 @@ class BaseChannel(ABC):
                 raise ValueError(f"Flow не найден: {self.flow_id}")
 
             # Переопределяем variables из metadata если переданы
-            request_variables = params.metadata.get("variables") if params.metadata else None
-            if request_variables:
+            request_variables_raw = params.metadata.get("variables") if params.metadata else None
+            if request_variables_raw is not None:
+                request_variables = require_json_object(
+                    request_variables_raw,
+                    "metadata.variables",
+                )
                 resolved_override_vars = await self._normalize_request_variables(request_variables)
                 # Извлекаем значения если они были в FlowVariableConfig формате
                 final_override_vars = {}
@@ -693,7 +710,14 @@ class BaseChannel(ABC):
                 runtime_flow.variables = {**runtime_flow.variables, **identity_vars}
 
             if state_is_new:
-                cfg_nodes = (runtime_flow.config or {}).get("nodes") or {}
+                cfg_nodes_raw = (runtime_flow.config or {}).get("nodes") or {}
+                cfg_nodes = {
+                    node_id: require_json_object(
+                        node_config,
+                        f"runtime_flow.config.nodes.{node_id}",
+                    )
+                    for node_id, node_config in cfg_nodes_raw.items()
+                }
                 state.files = collect_flow_node_files(cfg_nodes)
 
             if params.files_data:
@@ -701,8 +725,12 @@ class BaseChannel(ABC):
 
             state.variables = {**state.variables, **runtime_flow.variables}
 
-            request_triggers = params.metadata.get("triggers") if params.metadata else None
-            if request_triggers:
+            request_triggers_raw = params.metadata.get("triggers") if params.metadata else None
+            if request_triggers_raw is not None:
+                request_triggers = require_json_object(
+                    request_triggers_raw,
+                    "metadata.triggers",
+                )
                 merged: dict[str, TriggerRuntimeSnapshot] = dict(state.triggers)
                 for tid, snap in request_triggers.items():
                     if isinstance(snap, TriggerRuntimeSnapshot):
@@ -736,7 +764,12 @@ class BaseChannel(ABC):
                 branch_cfg_snapshot = flow_config.branches[params.branch_id]
                 branch_mock = branch_cfg_snapshot.mock
 
-            request_mock = params.metadata.get("mock") if params.metadata else None
+            request_mock_raw = params.metadata.get("mock") if params.metadata else None
+            request_mock: JsonObject | None = (
+                require_json_object(request_mock_raw, "metadata.mock")
+                if request_mock_raw is not None
+                else None
+            )
 
             # Проверка прав на использование mock через request metadata
             if request_mock:
@@ -1215,7 +1248,7 @@ class BaseChannel(ABC):
         if entry is None:
             raise ValueError(f"Flow '{self.flow_id}' has no entry")
         validation_result = await validator.validate(
-            nodes=effective["nodes"],
+            nodes=cast(dict[str, dict[str, Any]], effective["nodes"]),
             edges=[
                 {"from": e.from_node, "to": e.to_node, "condition": e.condition}
                 for e in effective["edges"]
@@ -1336,7 +1369,7 @@ class BaseChannel(ABC):
         if entry is None:
             raise ValueError(f"Flow '{self.flow_id}' has no entry")
         validation_result = await validator.validate(
-            nodes=effective["nodes"],
+            nodes=cast(dict[str, dict[str, Any]], effective["nodes"]),
             edges=[
                 {"from": e.from_node, "to": e.to_node, "condition": e.condition}
                 for e in effective["edges"]
@@ -1418,8 +1451,10 @@ class BaseChannel(ABC):
                         "code": node_config.get("code", ""),
                         "args_schema": node_config.get("args_schema", {}),
                     }
-                elif node_config.get("tool_id"):
-                    tools_set.add(node_config["tool_id"])
+                else:
+                    tool_id = node_config.get("tool_id")
+                    if isinstance(tool_id, str) and tool_id:
+                        tools_set.add(tool_id)
 
             # Собираем inline tools из llm_node nodes
             elif node_type == NodeType.LLM_NODE.value:
@@ -1435,8 +1470,9 @@ class BaseChannel(ABC):
                             tool_id = str(getattr(tool_ref, "tool_id", tool_ref))
                         tools_set.add(tool_id)
 
-                if node_config.get("node_id"):
-                    node_db_config = await container.node_repository.get(node_config["node_id"])
+                node_db_id = node_config.get("node_id")
+                if isinstance(node_db_id, str) and node_db_id:
+                    node_db_config = await container.node_repository.get(node_db_id)
                     if node_db_config and node_db_config.tools:
                         for tool_ref in node_db_config.tools:
                             if isinstance(tool_ref, dict) and tool_ref.get("code"):
@@ -1475,7 +1511,7 @@ class BaseChannel(ABC):
             tool_ref = await container.tool_repository.get(tool_id)
             if tool_ref:
                 info = tool_ref.to_registry_format()
-                ref_attrs = info.get("attributes", {})
+                ref_attrs = require_json_object(info.get("attributes", {}), "tool.attributes")
                 ref_payload: dict[str, Any] = {
                     "description": ref_attrs.get("description", ""),
                     "source": "reference",
@@ -1521,8 +1557,9 @@ class BaseChannel(ABC):
                 node_type = node_config.get("type", "unknown")
                 node_name = node_id
 
-                if node_config.get("flow_id"):
-                    flow_config = await container.flow_repository.get(node_config["flow_id"])
+                node_flow_id = node_config.get("flow_id")
+                if isinstance(node_flow_id, str) and node_flow_id:
+                    flow_config = await container.flow_repository.get(node_flow_id)
                     if flow_config:
                         node_name = flow_config.name
 

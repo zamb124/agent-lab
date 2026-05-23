@@ -20,21 +20,33 @@ Zero-Guess: работает с ExecutionState напрямую (но может
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, cast
 
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 from core.variables import VarResolver
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
 _VAR_FULL_VAR = VarResolver.VAR_REF_PATTERN
+type MappingState = ExecutionState | JsonObject
+
+
+def _state_variables(state: MappingState) -> Mapping[str, JsonValue]:
+    if isinstance(state, Mapping):
+        variables = state.get("variables", {})
+        if not isinstance(variables, Mapping):
+            raise TypeError("state.variables must be a mapping")
+        return require_json_object(variables, "state.variables")
+    return state.variables
 
 
 class MappingResolver:
     """Единая логика резолвинга @state:path и @var:name для всех нод."""
 
     @staticmethod
-    def resolve_value(source: Any, state: ExecutionState | dict[str, Any]) -> Any:
+    def resolve_value(source: object, state: MappingState) -> object:
         """
         Резолвит значение из маппинга.
 
@@ -53,17 +65,13 @@ class MappingResolver:
             return MappingResolver.get_nested_value(state, path)
 
         if source.startswith("@var:"):
-            # Получаем variables - либо из ExecutionState, либо из dict
-            if isinstance(state, dict):
-                variables = state.get("variables", {})
-            else:
-                variables = state.variables
+            variables = _state_variables(state)
             return VarResolver.resolve_ref(source, variables)
 
         return source
 
     @staticmethod
-    def get_nested_value(data: Any, path: str) -> Any:
+    def get_nested_value(data: MappingState | object, path: str) -> object | None:
         """
         Получает значение по вложенному пути из любого объекта.
 
@@ -80,22 +88,24 @@ class MappingResolver:
             return None
 
         keys = path.split(".")
-        value = data
+        value: object = data
 
         for key in keys:
             # Сначала пробуем как dict (чтобы избежать .items(), .keys() и т.д.)
-            if isinstance(value, dict) and key in value:
-                value = value[key]
+            if isinstance(value, Mapping) and key in value:
+                mapped = cast(Mapping[str, object], value)
+                value = mapped[key]
             # Потом пробуем атрибут (для ExecutionState и других объектов)
-            elif hasattr(value, key):
-                value = getattr(value, key)
             else:
-                return None
+                candidate = cast(object, value)
+                if not hasattr(candidate, key):
+                    return None
+                value = cast(object, getattr(candidate, key))
 
         return value
 
     @staticmethod
-    def resolve_vars_in_string(value: str, variables: dict[str, Any]) -> str:
+    def resolve_vars_in_string(value: JsonValue, variables: Mapping[str, JsonValue]) -> JsonValue:
         """
         Заменяет все @var:path в строке на значения из variables.
 
@@ -108,15 +118,17 @@ class MappingResolver:
         Returns:
             Строка с подставленными значениями
         """
-        if not value or not isinstance(value, str):
+        if not isinstance(value, str):
+            return value
+        if not value:
             return value
         return VarResolver.resolve_text(value, variables)
 
     @staticmethod
     def build_mapped_state(
-        mapping: dict[str, Any],
-        state: ExecutionState | dict[str, Any],
-    ) -> dict[str, Any]:
+        mapping: Mapping[str, object],
+        state: MappingState,
+    ) -> dict[str, object]:
         """
         Строит новый Dict на основе маппинга.
 
@@ -127,7 +139,7 @@ class MappingResolver:
         Returns:
             Новый Dict с замапленными полями
         """
-        result: dict[str, Any] = {}
+        result: dict[str, object] = {}
 
         for target_field, source in mapping.items():
             result[target_field] = MappingResolver.resolve_value(source, state)
@@ -137,9 +149,9 @@ class MappingResolver:
     @staticmethod
     def resolve_json_template_string(
         s: str,
-        state: ExecutionState | dict[str, Any],
-        variables: dict[str, Any],
-    ) -> Any:
+        state: MappingState,
+        variables: Mapping[str, JsonValue],
+    ) -> JsonValue:
         """
         Резолвит одну строку внутри JSON-шаблона тела запроса external_api.
 
@@ -147,16 +159,20 @@ class MappingResolver:
         - Иначе при наличии подстроки @state: — ошибка (смешанный текст запрещён).
         - Иначе подстановка токенов @var: через VarResolver.resolve_text.
         """
-        if not isinstance(s, str):
-            raise TypeError("resolve_json_template_string expects str")
         if s.startswith("@state:"):
-            return MappingResolver.resolve_value(s, state)
+            return require_json_value(
+                MappingResolver.resolve_value(s, state),
+                "JSON body template @state value",
+            )
         if _VAR_FULL_VAR.match(s):
-            return MappingResolver.resolve_value(s, state)
+            return require_json_value(
+                MappingResolver.resolve_value(s, state),
+                "JSON body template @var value",
+            )
         if "@state:" in s:
             raise ValueError(
                 "JSON body template: mixed text with @state: is not supported; "
-                "use a whole-string @state:path or @var:path reference"
+                + "use a whole-string @state:path or @var:path reference"
             )
         if "@var:" in s:
             return VarResolver.resolve_text(s, variables)
@@ -164,10 +180,10 @@ class MappingResolver:
 
     @staticmethod
     def resolve_json_template_tree(
-        value: Any,
-        state: ExecutionState | dict[str, Any],
-        variables: dict[str, Any],
-    ) -> Any:
+        value: JsonValue,
+        state: MappingState,
+        variables: Mapping[str, JsonValue],
+    ) -> JsonValue:
         """
         Рекурсивно резолвит JSON-дерево после json.loads (тело external_api).
         """
@@ -188,18 +204,18 @@ class MappingResolver:
     @staticmethod
     def parse_and_resolve_body_template(
         body_template: str,
-        state: ExecutionState | dict[str, Any],
-        variables: dict[str, Any],
-    ) -> Any:
+        state: MappingState,
+        variables: Mapping[str, JsonValue],
+    ) -> JsonValue:
         """Парсит JSON body_template и резолвит плейсхолдеры."""
-        raw = body_template.strip() if isinstance(body_template, str) else ""
+        raw = body_template.strip()
         if not raw:
             return {}
-        parsed = json.loads(raw)
+        parsed = require_json_value(cast(object, json.loads(raw)), "body_template")
         return MappingResolver.resolve_json_template_tree(parsed, state, variables)
 
     @staticmethod
-    def _coerce_to_header_string(value: Any) -> str:
+    def _coerce_to_header_string(value: object) -> str:
         """Скаляр или JSON в одну строку для HTTP-заголовка."""
         if value is None:
             raise ValueError("header template resolved to None")
@@ -213,14 +229,12 @@ class MappingResolver:
 
     @staticmethod
     def resolve_http_header_value(
-        value: Any,
-        state: ExecutionState | dict[str, Any],
-        variables: dict[str, Any],
+        value: str,
+        state: MappingState,
+        variables: Mapping[str, JsonValue],
     ) -> str:
         """
         Значение одного HTTP-заголовка: те же правила, что resolve_json_template_string, итог — str.
         """
-        if not isinstance(value, str):
-            raise TypeError("header value must be str")
         resolved = MappingResolver.resolve_json_template_string(value, state, variables)
         return MappingResolver._coerce_to_header_string(resolved)

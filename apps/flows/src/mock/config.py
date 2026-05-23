@@ -2,9 +2,11 @@
 MockConfig - модель конфигурации моков.
 """
 
-from typing import Any
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from core.types import JsonObject, JsonValue
 
 
 class MockLLMResponse(BaseModel):
@@ -19,7 +21,7 @@ class MockLLMResponse(BaseModel):
     type: str = Field(description="Тип ответа: 'text' или 'tool_call'")
     content: str | None = Field(default=None, description="Текст ответа (для type='text')")
     tool: str | None = Field(default=None, description="Имя tool (для type='tool_call')")
-    args: dict[str, Any] | None = Field(default=None, description="Аргументы tool (для type='tool_call')")
+    args: JsonObject | None = Field(default=None, description="Аргументы tool (для type='tool_call')")
 
 
 class MockConfig(BaseModel):
@@ -33,26 +35,26 @@ class MockConfig(BaseModel):
     - Request metadata (metadata.mock)
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow")
 
     enabled: bool = Field(default=False, description="Включен ли mock режим")
 
-    llm: list[MockLLMResponse] | list[dict[str, Any]] | None = Field(
+    llm: list[MockLLMResponse] | None = Field(
         default=None,
         description="Очередь mock ответов LLM"
     )
 
-    tools: dict[str, Any] = Field(
+    tools: dict[str, JsonValue] = Field(
         default_factory=dict,
         description="Mock ответы для tools по имени"
     )
 
-    flows: dict[str, Any] = Field(
+    flows: dict[str, JsonValue] = Field(
         default_factory=dict,
         description="Mock ответы для вложенных flows по ID"
     )
 
-    nodes: dict[str, dict[str, Any]] = Field(
+    nodes: dict[str, JsonObject] = Field(
         default_factory=dict,
         description="Mock ответы для nodes по ID (мержится в state)"
     )
@@ -61,4 +63,3 @@ class MockConfig(BaseModel):
         default_factory=lambda: ["admin", "developers"],
         description="Группы с правом использования mock через request metadata"
     )
-

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Sequence
-from typing import Any, Dict, List, Union
+from typing import Any, Literal
 
 from a2a.types import (
     FilePart,
@@ -17,20 +17,34 @@ from a2a.types import (
     TaskStatusUpdateEvent,
     TextPart,
 )
+from pydantic import Field
 
-MessageInput = Union[
-    str,
-    List[str],
-    Message,
-    List[Message],
-    Dict[str, Any],
-    List[Dict[str, Any]],
-]
+from core.models import StrictBaseModel
+from core.types import JsonObject
+
+MessageInput = str | list[str] | Message | list[Message] | dict[str, Any] | list[dict[str, Any]]
 
 StreamEvent = TaskArtifactUpdateEvent | TaskStatusUpdateEvent
 
 
-def extract_content_parts(parts: List[Any]) -> tuple[List[Dict[str, Any]], bool]:
+class LLMToolCallFunction(StrictBaseModel):
+    """OpenAI-compatible function payload preserved in assistant history."""
+
+    name: str
+    arguments: str
+
+
+class LLMToolCall(StrictBaseModel):
+    """Canonical LLM tool call produced by providers and executed by Flow tools."""
+
+    id: str
+    name: str
+    arguments: JsonObject = Field(default_factory=dict)
+    type: Literal["function"] = "function"
+    function: LLMToolCallFunction | None = None
+
+
+def extract_content_parts(parts: list[Any]) -> tuple[list[dict[str, Any]], bool]:
     """
     Извлекает content parts из списка A2A parts.
 
@@ -39,7 +53,7 @@ def extract_content_parts(parts: List[Any]) -> tuple[List[Dict[str, Any]], bool]
         - content_parts: список OpenAI content parts
         - has_files: True если есть файлы (нужен multimodal формат)
     """
-    content_parts: List[Dict[str, Any]] = []
+    content_parts: list[dict[str, Any]] = []
     has_files = False
 
     for part in parts:
@@ -82,7 +96,7 @@ def extract_content_parts(parts: List[Any]) -> tuple[List[Dict[str, Any]], bool]
     return content_parts, has_files
 
 
-def message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any]:
+def message_to_openai(message: Message | dict[str, Any] | str) -> dict[str, Any]:
     """
     A2A Message в формат OpenAI API.
 
@@ -134,7 +148,7 @@ def message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any]
 
     content_parts, has_files = extract_content_parts(parts)
     if has_files:
-        content: str | List[Dict[str, Any]] = content_parts
+        content: str | list[dict[str, Any]] = content_parts
     else:
         content = "".join(
             content_part["text"]
@@ -147,7 +161,7 @@ def message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any]
     if metadata.get("tool_call_id"):
         openai_role = "tool"
 
-    openai_message: Dict[str, Any] = {
+    openai_message: dict[str, Any] = {
         "role": openai_role,
         "content": content,
     }
@@ -161,12 +175,12 @@ def message_to_openai(message: Message | Dict[str, Any] | str) -> Dict[str, Any]
     return openai_message
 
 
-def messages_to_openai(messages: Sequence[Message | Dict[str, Any] | str]) -> List[Dict[str, Any]]:
+def messages_to_openai(messages: Sequence[Message | dict[str, Any] | str]) -> list[dict[str, Any]]:
     """Внутренняя функция - список A2A Message в формат OpenAI API."""
     return [message_to_openai(message) for message in messages]
 
 
-def normalize_messages(messages: MessageInput) -> List[Message]:
+def normalize_messages(messages: MessageInput) -> list[Message]:
     """
     Нормализует различные форматы messages в List[Message].
 
@@ -191,7 +205,7 @@ def normalize_messages(messages: MessageInput) -> List[Message]:
         return [messages]
 
     if isinstance(messages, dict):
-        role = Role.user if messages.get("role", "user") == "user" else Role.agent
+        role, metadata = _role_and_metadata_from_openai_dict(messages)
         content = messages.get("content", "")
         if not isinstance(content, str):
             raise ValueError("message.content must be string")
@@ -200,6 +214,7 @@ def normalize_messages(messages: MessageInput) -> List[Message]:
                 message_id=str(uuid.uuid4()),
                 role=role,
                 parts=[Part(root=TextPart(text=content))],
+                metadata=metadata or None,
             )
         ]
 
@@ -237,7 +252,7 @@ def normalize_messages(messages: MessageInput) -> List[Message]:
             for message in messages:
                 if not isinstance(message, dict):
                     raise ValueError("messages list must contain only dict objects")
-                role = Role.user if message.get("role", "user") == "user" else Role.agent
+                role, metadata = _role_and_metadata_from_openai_dict(message)
                 content = message.get("content", "")
                 if not isinstance(content, str):
                     raise ValueError("message.content must be string")
@@ -246,6 +261,7 @@ def normalize_messages(messages: MessageInput) -> List[Message]:
                         message_id=str(uuid.uuid4()),
                         role=role,
                         parts=[Part(root=TextPart(text=content))],
+                        metadata=metadata or None,
                     )
                 )
             return dict_messages
@@ -253,7 +269,25 @@ def normalize_messages(messages: MessageInput) -> List[Message]:
     raise ValueError(f"Unsupported messages type: {type(messages)}")
 
 
-def messages_have_non_text_parts(openai_messages: List[Dict[str, Any]]) -> bool:
+def _role_and_metadata_from_openai_dict(message: dict[str, Any]) -> tuple[Role, dict[str, Any]]:
+    role_raw = str(message.get("role", "user"))
+    metadata: dict[str, Any] = {}
+    if role_raw == "system":
+        metadata["system"] = True
+        return Role.user, metadata
+    if role_raw == "tool":
+        tool_call_id = message.get("tool_call_id")
+        if tool_call_id:
+            metadata["tool_call_id"] = tool_call_id
+        return Role.agent, metadata
+    if message.get("tool_calls"):
+        metadata["tool_calls"] = message["tool_calls"]
+    if role_raw in ("assistant", "agent"):
+        return Role.agent, metadata
+    return Role.user, metadata
+
+
+def messages_have_non_text_parts(openai_messages: list[dict[str, Any]]) -> bool:
     for message in openai_messages:
         content = message.get("content")
         if not isinstance(content, list):

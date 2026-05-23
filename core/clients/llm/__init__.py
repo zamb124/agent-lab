@@ -10,7 +10,7 @@ from .errors import (
     LLMStreamIdleTimeoutError,
     LLMStreamUserCancelledError,
 )
-from .messages import MessageInput, StreamEvent
+from .messages import LLMToolCall, LLMToolCallFunction, MessageInput, StreamEvent
 from .mock import MockLLM, get_global_mock_llm
 from .model_routing import (
     HUMANITEC_LLM_AUTO_MODEL,
@@ -33,6 +33,8 @@ __all__ = [
     "LLMStreamIdleTimeoutError",
     "LLMStreamUserCancelledError",
     "MessageInput",
+    "LLMToolCall",
+    "LLMToolCallFunction",
     "MockLLM",
     "setup_mock_responses",
     "should_use_platform_default_free_pool",

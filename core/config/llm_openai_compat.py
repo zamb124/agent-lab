@@ -6,7 +6,7 @@ API-ключ и корень ``.../v1`` OpenAI-совместимого HTTP API
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from core.config.models import LLMConfig
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
@@ -22,7 +22,7 @@ _LLM_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
 )
 
 
-def _norm_api_key(raw: Optional[str]) -> str:
+def _norm_api_key(raw: str | None) -> str:
     if raw is None:
         return ""
     s = str(raw).strip()
@@ -31,7 +31,7 @@ def _norm_api_key(raw: Optional[str]) -> str:
     return s
 
 
-def _active_llm_provider_block(llm: LLMConfig) -> Tuple[str, Any]:
+def _active_llm_provider_block(llm: LLMConfig) -> tuple[str, Any]:
     p = (llm.provider or "").strip().lower()
     if p == "openrouter":
         return p, llm.openrouter
@@ -58,7 +58,7 @@ def resolve_llm_api_key_for_openai_compatible_calls(llm: LLMConfig) -> str:
     return k
 
 
-def yandex_provider_http_headers(cfg: Any) -> Dict[str, str]:
+def yandex_provider_http_headers(cfg: Any) -> dict[str, str]:
     """Заголовки Yandex по подблоку ``llm.yandex`` (без требования ``llm.provider``)."""
     if cfg is None:
         raise ValueError("yandex config is None")
@@ -85,7 +85,7 @@ def yandex_llm_openai_root_from_provider_cfg(cfg: Any) -> str:
     return normalize_openai_v1_base_url(raw)
 
 
-def yandex_llm_http_headers(llm: LLMConfig) -> Dict[str, str]:
+def yandex_llm_http_headers(llm: LLMConfig) -> dict[str, str]:
     """Заголовки ``Authorization: Api-Key`` и ``x-folder-id`` для Yandex OpenAI-compatible API."""
     p, cfg = _active_llm_provider_block(llm)
     if p != "yandex":

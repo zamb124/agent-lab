@@ -117,6 +117,14 @@
         "error_no_file": "No file selected",
         "error_bad_response": "Invalid server response"
     },
+    "file_viewer": {
+        "loading": "Opening file…",
+        "syncing": "Saving changes…",
+        "minimize": "Minimize",
+        "restore": "Restore",
+        "open_failed": "Could not open the file in the editor: {message}",
+        "close_failed": "Could not save changes before closing"
+    },
     "company": {
         "create_title": "Create company",
         "create_subtitle": "Create a company to get started",

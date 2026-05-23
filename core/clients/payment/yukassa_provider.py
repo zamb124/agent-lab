@@ -3,7 +3,7 @@
 В будущем здесь будет полная реализация через API ЮKassa.
 """
 
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -48,7 +48,7 @@ class YuKassaProvider(BasePaymentProvider):
         logger.error("ЮKassa провайдер не реализован")
         raise NotImplementedError("ЮKassa провайдер еще не реализован")
 
-    async def verify_webhook(self, webhook_data: Dict[str, Any]) -> WebhookVerificationResult:
+    async def verify_webhook(self, webhook_data: dict[str, Any]) -> WebhookVerificationResult:
         """Заглушка: проверка webhook не реализована"""
         logger.error("ЮKassa провайдер не реализован")
         return WebhookVerificationResult(

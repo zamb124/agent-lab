@@ -16,7 +16,6 @@ Flow - выполнение графа нод.
 from __future__ import annotations
 
 import asyncio
-import operator
 import re
 from typing import Any
 
@@ -45,6 +44,7 @@ from core.state.mutation_policy import should_skip_field_on_user_returned_state_
 from core.tracing import get_tracer
 from core.tracing.context import TraceContext, get_current_trace_context
 from core.tracing.provider import is_tracing_enabled
+from core.types import JsonArray, JsonObject
 
 from .nodes import BaseNode, create_node
 
@@ -325,7 +325,7 @@ class Flow:
                         raise ValueError(f"Node '{node_id}' not found in flow '{self.flow_id}'")
 
                     node = self.nodes[node_id]
-                    node_type = node.config.get("type", "function")
+                    node_type = self._node_type_from_config(node)
                     self._check_node_call_limit(state, node_id, node)
 
                     # Проверка breakpoint
@@ -334,12 +334,12 @@ class Flow:
                         return state
 
                 for node_id in current_nodes:
-                    node_type = self.nodes[node_id].config.get("type", "function")
+                    node_type = self._node_type_from_config(self.nodes[node_id])
                     logger.debug(f"Flow {self.flow_id}: executing node '{node_id}' (type={node_type})")
 
                 # Выполнение всех нод текущего уровня
                 async def _run(node_id: str, run_state: ExecutionState) -> ExecutionState:
-                    node_type = self.nodes[node_id].config.get("type", "function")
+                    node_type = self._node_type_from_config(self.nodes[node_id])
                     async with tracer.node_span(node_id, node_type, trace_ctx):
                         await emitter.emit_node_start(node_id, node_type)
                         try:
@@ -431,7 +431,7 @@ class Flow:
 
                 for node_id in current_nodes:
                     node = self.nodes[node_id]
-                    node_type = node.config.get("type", "function")
+                    node_type = self._node_type_from_config(node)
                     self._record_node_call(state, node_id, node_type)
 
                 # Проверка interrupt
@@ -600,17 +600,18 @@ class Flow:
         """
         pending = state.join_arrived_preds or {}
         if pending:
-            details: list[dict[str, Any]] = []
+            details: JsonArray = []
             for target in sorted(pending.keys()):
                 arrived = set(pending.get(target) or [])
                 required = set(self._join_required.get(target, frozenset()))
-                details.append(
-                    {
-                        "target": target,
-                        "arrived": sorted(arrived),
-                        "required": sorted(required),
-                    }
-                )
+                arrived_payload: JsonArray = [node_id for node_id in sorted(arrived)]
+                required_payload: JsonArray = [node_id for node_id in sorted(required)]
+                detail: JsonObject = {
+                    "target": target,
+                    "arrived": arrived_payload,
+                    "required": required_payload,
+                }
+                details.append(detail)
             raise FlowPrematureCompletionError(
                 self.flow_id,
                 "incomplete_and_join",
@@ -686,8 +687,11 @@ class Flow:
     def _check_node_call_limit(self, state: ExecutionState, node_id: str, node: BaseNode) -> None:
         """Проверяет лимит заходов в ноду за текущий Flow.run."""
         node_history = state.node_history.get(node_id, {})
-        call_count = len(node_history.get("calls", []))
-        node_type = node.config.get("type", "function")
+        calls = node_history.get("calls", [])
+        if not isinstance(calls, list):
+            raise ValueError(f"node_history[{node_id!r}].calls must be a list")
+        call_count = len(calls)
+        node_type = self._node_type_from_config(node)
         configured = node.config.get("max_visits_per_run")
         if configured is None:
             if node_type == "code":
@@ -695,16 +699,32 @@ class Flow:
             else:
                 return
         else:
-            limit = int(configured)
+            if isinstance(configured, bool) or not isinstance(configured, int):
+                raise ValueError(
+                    f"node.config.max_visits_per_run for '{node_id}' must be an integer"
+                )
+            limit = configured
         if call_count >= limit:
             raise NodeCallLimitError(node_id, limit)
+
+    @staticmethod
+    def _node_type_from_config(node: BaseNode) -> str:
+        node_type = node.config.get("type", "function")
+        if not isinstance(node_type, str) or not node_type:
+            raise TypeError("node.config.type must be a non-empty string")
+        return node_type
 
     def _record_node_call(self, state: ExecutionState, node_id: str, node_type: str) -> None:
         """Записывает вызов ноды в историю."""
         if node_id not in state.node_history:
             state.node_history[node_id] = {"type": node_type, "calls": []}
 
-        state.node_history[node_id]["calls"].append(
+        node_history = state.node_history[node_id]
+        calls = node_history.get("calls")
+        if not isinstance(calls, list):
+            calls = []
+            node_history["calls"] = calls
+        calls.append(
             {
                 "response": state.response,
                 "validation": state.validation,
@@ -759,28 +779,53 @@ class Flow:
         variable = condition.get("variable", "")
         op_str = condition.get("operator", "==")
         value = condition.get("value", "")
-
-        ops = {
-            "==": operator.eq,
-            "!=": operator.ne,
-            ">": operator.gt,
-            "<": operator.lt,
-            ">=": operator.ge,
-            "<=": operator.le,
-            "in": lambda a, b: a in b if hasattr(b, "__contains__") else False,
-        }
-
-        op = ops.get(op_str, operator.eq)
         left = MappingResolver.get_nested_value(state, variable)
         right = self._parse_value(str(value)) if not isinstance(value, (bool, int, float)) else value
 
         try:
-            return op(left, right)
+            return self._evaluate_binary_condition(left, str(op_str), right)
         except TypeError as e:
             raise ValueError(
                 f"Условие ребра: несовместимые типы для variable={variable!r} "
                 f"op={op_str!r} left={left!r} right={right!r}"
             ) from e
+
+    @staticmethod
+    def _evaluate_binary_condition(left: object, op_str: str, right: object) -> bool:
+        if op_str == "==":
+            return left == right
+        if op_str == "!=":
+            return left != right
+        if op_str == "in":
+            if isinstance(right, str):
+                return str(left) in right
+            if isinstance(right, (list, tuple, set, frozenset)):
+                return left in right
+            if isinstance(right, dict):
+                return left in right
+            return False
+
+        if isinstance(left, bool) or isinstance(right, bool):
+            raise TypeError("ordered comparison does not accept bool")
+        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+            if op_str == ">":
+                return left > right
+            if op_str == "<":
+                return left < right
+            if op_str == ">=":
+                return left >= right
+            if op_str == "<=":
+                return left <= right
+        if isinstance(left, str) and isinstance(right, str):
+            if op_str == ">":
+                return left > right
+            if op_str == "<":
+                return left < right
+            if op_str == ">=":
+                return left >= right
+            if op_str == "<=":
+                return left <= right
+        raise TypeError(f"unsupported edge condition operator: {op_str!r}")
 
     async def _evaluate_code_condition(self, condition: dict[str, Any], state: ExecutionState) -> bool:
         """
@@ -814,15 +859,15 @@ class Flow:
         """Вычисляет условие в legacy строковом формате."""
         # Двухсимвольные операторы раньше односимвольных: иначе "count <= 3" матчится как "count" > "= 3".
         patterns = [
-            (r"(.+?)\s*==\s*(.+)", operator.eq),
-            (r"(.+?)\s*!=\s*(.+)", operator.ne),
-            (r"(.+?)\s*>=\s*(.+)", operator.ge),
-            (r"(.+?)\s*<=\s*(.+)", operator.le),
-            (r"(.+?)\s*>\s*(.+)", operator.gt),
-            (r"(.+?)\s*<\s*(.+)", operator.lt),
+            (r"(.+?)\s*==\s*(.+)", "=="),
+            (r"(.+?)\s*!=\s*(.+)", "!="),
+            (r"(.+?)\s*>=\s*(.+)", ">="),
+            (r"(.+?)\s*<=\s*(.+)", "<="),
+            (r"(.+?)\s*>\s*(.+)", ">"),
+            (r"(.+?)\s*<\s*(.+)", "<"),
         ]
 
-        for pattern, op in patterns:
+        for pattern, op_str in patterns:
             match = re.match(pattern, condition.strip())
             if match:
                 left_path = match.group(1).strip()
@@ -832,7 +877,7 @@ class Flow:
                 right = self._parse_value(right_value)
 
                 try:
-                    return op(left, right)
+                    return self._evaluate_binary_condition(left, op_str, right)
                 except TypeError as e:
                     raise ValueError(
                         f"Строковое условие ребра: несовместимые типы "

@@ -776,7 +776,7 @@ async def get_period_summary(
     container: ContainerDep,
 ):
     """Сводка заметок за диапазон дат (merge дневных сводок)."""
-    summary: dict[str, object] = await container.entity_service.get_period_summary_cached(
+    summary: JsonObject = await container.entity_service.get_period_summary_cached(
         date_from=request.date_from,
         date_to=request.date_to,
         namespace=request.namespace,

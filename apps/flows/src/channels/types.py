@@ -2,13 +2,26 @@
 Типы для каналов коммуникации.
 """
 
-from typing import Any
-
 from a2a.types import Message
+
+from core.types import JsonObject
 
 
 class PreparedTaskParams:
     """Подготовленные параметры для process_task."""
+
+    task_id: str
+    context_id: str
+    session_id: str
+    content: str
+    branch_id: str
+    is_resume: bool
+    files_data: list[JsonObject]
+    message: Message | None
+    metadata: JsonObject | None
+    user_id: str
+    is_takeover_user_reply: bool
+    takeover_operator_task_id: str | None
 
     def __init__(
         self,
@@ -18,13 +31,13 @@ class PreparedTaskParams:
         content: str,
         branch_id: str,
         is_resume: bool,
-        files_data: list[dict[str, Any]],
+        files_data: list[JsonObject],
         message: Message | None,
-        metadata: dict[str, Any] | None,
+        metadata: JsonObject | None,
         user_id: str | None = None,
         is_takeover_user_reply: bool = False,
         takeover_operator_task_id: str | None = None,
-    ):
+    ) -> None:
         self.task_id = task_id
         self.context_id = context_id
         self.session_id = session_id

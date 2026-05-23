@@ -7,7 +7,7 @@ SQLAlchemy модели для Sync Service.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -42,9 +42,9 @@ class SyncChannel(Base):
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     namespace: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
-    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -74,7 +74,7 @@ class SyncChannelMember(Base):
     user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
-    last_read_at: Mapped[Optional[datetime]] = mapped_column(
+    last_read_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         default=None,
@@ -104,7 +104,7 @@ class SyncThread(Base):
         String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"), nullable=False
     )
     root_message_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -129,23 +129,23 @@ class SyncMessage(Base):
     channel_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"), nullable=False
     )
-    thread_id: Mapped[Optional[str]] = mapped_column(
+    thread_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("sync_threads.thread_id", ondelete="SET NULL"), nullable=True
     )
-    parent_message_id: Mapped[Optional[str]] = mapped_column(
+    parent_message_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("sync_messages.message_id", ondelete="SET NULL"), nullable=True
     )
-    call_id: Mapped[Optional[str]] = mapped_column(
+    call_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("sync_calls.call_id", ondelete="SET NULL"), nullable=True
     )
     sender_user_id: Mapped[str] = mapped_column(String(200), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reactions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    forwarded_from_channel_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    forwarded_from_channel_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    forwarded_from_channel_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    forwarded_from_channel_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     __table_args__ = (
         Index("ix_sync_messages_company", "company_id"),
@@ -171,7 +171,7 @@ class SyncMessageContent(Base):
     )
     type: Mapped[str] = mapped_column(String(64), nullable=False)
     order: Mapped[int] = mapped_column(Integer, nullable=False)
-    data: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
     __table_args__ = (
         Index("ix_sync_message_contents_message", "message_id"),
@@ -210,8 +210,8 @@ class SyncFile(Base):
     original_name: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(255), nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    storage_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    checksum: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    storage_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -236,7 +236,7 @@ class SyncGitResourceRef(Base):
     project_key: Mapped[str] = mapped_column(String(255), nullable=False)
     external_id: Mapped[str] = mapped_column(String(255), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
-    extra: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    extra: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
     __table_args__ = (
         Index("ix_sync_git_refs_company", "company_id"),
@@ -265,9 +265,9 @@ class SyncCall(Base):
     mode: Mapped[str] = mapped_column(String(8), nullable=False)
     call_type: Mapped[str] = mapped_column(String(8), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ringing")
-    livekit_room_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    livekit_room_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -328,8 +328,8 @@ class SyncCallParticipant(Base):
     )
     user_id: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="invited")
-    joined_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    left_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    joined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_sync_call_participants_call", "call_id"),
@@ -355,7 +355,7 @@ class SyncCallLink(Base):
         String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"), nullable=False
     )
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    call_id: Mapped[Optional[str]] = mapped_column(
+    call_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("sync_calls.call_id", ondelete="SET NULL"), nullable=True
     )
     call_type: Mapped[str] = mapped_column(String(8), nullable=False, default="video")
@@ -364,14 +364,14 @@ class SyncCallLink(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    scheduled_start_at: Mapped[Optional[datetime]] = mapped_column(
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scheduled_start_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    scheduled_end_at: Mapped[Optional[datetime]] = mapped_column(
+    scheduled_end_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    calendar_event_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    calendar_event_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_persistent_channel_link: Mapped[bool] = mapped_column(
         Boolean(),
         nullable=False,
@@ -404,17 +404,17 @@ class SyncCallRecording(Base):
     )
     namespace: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="requested")
-    started_by_user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    provider_job_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    raw_file_id: Mapped[Optional[str]] = mapped_column(
+    started_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    provider_job_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    raw_file_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("sync_files.file_id", ondelete="SET NULL"), nullable=True
     )
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_sync_call_recordings_company", "company_id"),

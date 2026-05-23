@@ -234,6 +234,17 @@ export class OperatorPage extends PlatformPage {
             .dialog-entry--user { background: var(--accent-subtle); }
             .dialog-entry--operator { background: var(--glass-solid-medium); }
             .dialog-role { font-size: var(--text-xs); color: var(--text-tertiary); font-weight: var(--font-semibold); }
+            .dialog-file-button {
+                align-self: flex-start;
+                border: 0;
+                background: transparent;
+                padding: 0;
+                color: var(--accent);
+                cursor: pointer;
+                font: inherit;
+                text-decoration: underline;
+                text-underline-offset: 2px;
+            }
             .operator-composer {
                 display: flex; flex-direction: column; gap: var(--space-2);
                 margin-top: auto;
@@ -580,9 +591,13 @@ export class OperatorPage extends PlatformPage {
                             <span class="dialog-role">${entry.role === 'operator' ? this.t('operator.role_operator') : this.t('operator.role_user')}</span>
                             <span>${entry.text}</span>
                             ${asArray(entry.file_ids).map((fid) => html`
-                                <a href="/flows/api/v1/files/download/${fid}" target="_blank" rel="noopener">
+                                <button
+                                    type="button"
+                                    class="dialog-file-button"
+                                    @click=${() => this.openFile(fid, { source: 'flows_operator_dialog' })}
+                                >
                                     ${this.t('operator.download_file')}
-                                </a>
+                                </button>
                             `)}
                         </div>
                     `)}

@@ -7,12 +7,14 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union, assert_never
+from typing import Annotated, Literal, assert_never
 from uuid import UUID
 
 from pydantic import Field, TypeAdapter, model_validator
 
+from core.clients.llm.messages import LLMToolCall
 from core.models import StrictBaseModel
+from core.types import JsonObject, JsonValue, require_json_object
 
 
 class InterruptKind(StrEnum):
@@ -48,7 +50,7 @@ class OperatorTaskInterrupt(StrictBaseModel):
         default=HandoffMode.SINGLE_REPLY,
         description="single_reply — один ответ оператора; takeover — полный перехват диалога",
     )
-    operator_task_id: Optional[str] = Field(
+    operator_task_id: str | None = Field(
         default=None,
         description="ID строки OperatorTasks (для user-reply в takeover)",
     )
@@ -65,7 +67,7 @@ class OAuthInterrupt(StrictBaseModel):
 
 
 InterruptBody = Annotated[
-    Union[UserMessageInterrupt, OperatorTaskInterrupt, OAuthInterrupt],
+    UserMessageInterrupt | OperatorTaskInterrupt | OAuthInterrupt,
     Field(discriminator="kind"),
 ]
 
@@ -75,13 +77,13 @@ _INTERRUPT_BODY_ADAPTER: TypeAdapter[InterruptBody] = TypeAdapter(InterruptBody)
 class InterruptSystemContext(StrictBaseModel):
     """Служебные поля прерывания (путь, task_id, tool_call)."""
 
-    tool_call: Optional[Dict[str, Any]] = None
-    path: List[Dict[str, Any]] = Field(default_factory=list)
-    task_id: Optional[str] = None
-    context_id: Optional[str] = None
+    tool_call: LLMToolCall | None = None
+    path: list[JsonObject] = Field(default_factory=list)
+    task_id: str | None = None
+    context_id: str | None = None
 
 
-def system_from_legacy_context(ctx: Any) -> InterruptSystemContext:
+def system_from_legacy_context(ctx: JsonValue) -> InterruptSystemContext:
     """Единственная точка разбора старого interrupt.context при миграции."""
     if ctx is None:
         return InterruptSystemContext()
@@ -90,22 +92,32 @@ def system_from_legacy_context(ctx: Any) -> InterruptSystemContext:
             f"legacy interrupt.context ожидается dict или None, получено {type(ctx)}"
         )
     raw_path = ctx.get("path")
-    path: List[Dict[str, Any]]
+    path: list[JsonObject]
     if raw_path is None:
         path = []
     elif isinstance(raw_path, list):
-        path = [p for p in raw_path if isinstance(p, dict)]
+        path = [
+            require_json_object(path_item, "legacy interrupt.context.path[]")
+            for path_item in raw_path
+            if isinstance(path_item, dict)
+        ]
     else:
         raise ValueError("legacy interrupt.context.path должен быть list или отсутствовать")
+    raw_tool_call = ctx.get("tool_call")
+    tool_call = LLMToolCall.model_validate(raw_tool_call) if isinstance(raw_tool_call, dict) else None
+    raw_task_id = ctx.get("task_id")
+    task_id = raw_task_id if isinstance(raw_task_id, str) else None
+    raw_context_id = ctx.get("context_id")
+    context_id = raw_context_id if isinstance(raw_context_id, str) else None
     return InterruptSystemContext(
-        tool_call=ctx.get("tool_call"),
+        tool_call=tool_call,
         path=path,
-        task_id=ctx.get("task_id"),
-        context_id=ctx.get("context_id"),
+        task_id=task_id,
+        context_id=context_id,
     )
 
 
-def parse_interrupt_body_from_external_dict(raw: Dict[str, Any]) -> InterruptBody:
+def parse_interrupt_body_from_external_dict(raw: JsonObject) -> InterruptBody:
     """
     Разбор тела interrupt с внешнего API или inline-ответа tool.
     Без kind — только user_message и обязательный question.
@@ -120,9 +132,9 @@ def parse_interrupt_body_from_external_dict(raw: Dict[str, Any]) -> InterruptBod
     return _INTERRUPT_BODY_ADAPTER.validate_python(raw)
 
 
-def interrupt_to_response_dict(ir: "InterruptData") -> Dict[str, Any]:
+def interrupt_to_response_dict(ir: "InterruptData") -> JsonObject:
     """Сериализация для HTTP/TaskIQ: полный объект + поле question для совместимости клиентов."""
-    data = ir.model_dump(mode="json")
+    data = require_json_object(ir.model_dump(mode="json"), "interrupt")
     data["question"] = ir.question
     return data
 
@@ -145,7 +157,7 @@ class InterruptData(StrictBaseModel):
 
     body: InterruptBody
     system: InterruptSystemContext = Field(default_factory=InterruptSystemContext)
-    correlation_id: Optional[UUID] = None
+    correlation_id: UUID | None = None
 
     @property
     def question(self) -> str:
@@ -153,7 +165,7 @@ class InterruptData(StrictBaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _migrate_legacy(cls, data: Any) -> Any:
+    def _migrate_legacy(cls, data: JsonValue | InterruptData) -> JsonValue | InterruptData:
         if data is None or isinstance(data, InterruptData):
             return data
         if not isinstance(data, dict):
@@ -170,7 +182,7 @@ class InterruptData(StrictBaseModel):
                 raise ValueError("legacy InterruptData: question должен быть непустой строкой")
             ctx = data.get("context")
             system = system_from_legacy_context(ctx)
-            out: Dict[str, Any] = {
+            out: JsonObject = {
                 "body": {
                     "kind": InterruptKind.USER_MESSAGE,
                     "question": q.strip(),

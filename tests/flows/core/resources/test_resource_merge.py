@@ -141,3 +141,41 @@ def test_merge_shared_files_shallow_then_validates() -> None:
     )
     assert out["prefix"] == "p2"
     assert out["bucket"] == "my-bucket"
+
+
+def test_merge_shared_llm_context_deep_merges_nested_patch() -> None:
+    out = merge_shared_definition_config_with_patch(
+        ResourceType.LLM_CONTEXT,
+        {"profile": "agent", "retrieval": {"top_k": 24, "rerank": True}},
+        {"retrieval": {"rerank": False}, "memory": "node"},
+    )
+
+    assert out == {
+        "profile": "agent",
+        "retrieval": {"top_k": 24, "rerank": False},
+        "memory": "node",
+    }
+
+
+def test_merge_shared_rag_resource_deep_merges_filters_and_search_options() -> None:
+    out = merge_shared_definition_config_with_patch(
+        ResourceType.RAG,
+        {
+            "namespace": "kb",
+            "default_top_k": 8,
+            "filters": {"tenant": "acme"},
+            "search_options": {"channels": {"semantic": True}, "rerank": False},
+        },
+        {
+            "filters": {"collection_id": "support"},
+            "search_options": {"rerank": True},
+        },
+    )
+
+    assert out == {
+        "namespace": "kb",
+        "provider": "pgvector",
+        "default_top_k": 8,
+        "filters": {"tenant": "acme", "collection_id": "support"},
+        "search_options": {"channels": {"semantic": True}, "rerank": True},
+    }

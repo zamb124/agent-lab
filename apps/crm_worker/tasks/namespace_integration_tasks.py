@@ -7,13 +7,13 @@ TaskIQ: фоновая синхронизация интеграций namespace
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
 from apps.crm_worker.broker import broker
 from apps.crm_worker.task_names import CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME
-from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
+from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
 from apps.crm_worker.tasks.knowledge_import_tasks import _notify_task_user
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
@@ -51,7 +51,7 @@ def _notification_cancelled_title(label: str, *, job: str) -> str:
 async def run_namespace_integration_job(
     task_id: str,
     company_id: str,
-    auth_token: Optional[str],
+    auth_token: str | None,
     interface_language: str,
 ) -> dict[str, Any]:
     container = get_crm_container()
@@ -77,7 +77,7 @@ async def run_namespace_integration_job(
     if row.status == "cancelled":
         return {"status": "cancelled", "task_id": task_id}
 
-    await _set_crm_context(
+    await set_crm_context(
         company_id,
         row.namespace,
         auth_token,

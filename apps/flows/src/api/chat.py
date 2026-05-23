@@ -12,6 +12,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.container import FlowContainer
+from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.flow_config import FlowConfig
 from core.context import get_context
@@ -74,7 +75,7 @@ async def get_chat_interface(flow_id: str, request: Request, container: Containe
 
     # Получаем список веток
     context = get_context()
-    channel = A2AChannel(flow_id, context=context, container=container)
+    channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     branches_list = await channel.list_branches()
 
     # Получаем email пользователя из контекста или request.state

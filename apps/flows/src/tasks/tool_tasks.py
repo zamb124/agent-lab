@@ -7,34 +7,35 @@ TaskIQ задачи для выполнения tools.
 
 from __future__ import annotations
 
-from typing import Any
-
 from apps.flows.src.container import get_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_TOOL
+from apps.flows.src.tools.base import ToolArguments
+from apps.flows.src.tools.registry import ToolMaterializeInput
 from apps.flows_worker.broker import broker
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.state import ExecutionState
 from core.state.interrupt import interrupt_to_response_dict
+from core.types import JsonObject, require_json_array, require_json_object
 
 logger = get_logger(__name__)
 
 
 @broker.task(task_name=TASK_EXECUTE_TOOL, queue_name="flows_worker")
 async def execute_tool(
-    tool_id_or_config: Any,
-    args: dict[str, Any],
-    state_dict: dict[str, Any],
-    context_data: dict[str, Any] | None = None,
-):
+    tool_config: ToolMaterializeInput,
+    args: ToolArguments,
+    state_dict: JsonObject,
+    context_data: JsonObject | None = None,
+) -> JsonObject:
     """
     Выполняет tool через TaskIQ.
 
     Args:
-        tool_id_or_config: ID tool (str) или inline конфиг (dict)
+        tool_config: Inline tool config, ToolReference или NodeConfig
         args: Аргументы вызова
         state_dict: Сериализованный ExecutionState (граница TaskIQ)
         context_data: Сериализованный Context (как у process_flow_task) для репозиториев с company_id
@@ -48,13 +49,8 @@ async def execute_tool(
         set_context(Context.from_dict(context_data))
 
     container = get_container()
-
-    if isinstance(tool_id_or_config, str):
-        tool_id = tool_id_or_config
-        tool = await container.tool_registry.create_tool({"tool_id": tool_id})
-    else:
-        tool_id = tool_id_or_config.get("tool_id", "unknown")
-        tool = await container.tool_registry.create_tool(tool_id_or_config)
+    tool = await container.tool_registry.create_tool(tool_config)
+    tool_id = tool.name
     logger.debug(f"Executing tool: {tool_id}")
 
     tool_state = ExecutionState.model_validate(state_dict)
@@ -77,20 +73,40 @@ async def execute_tool(
             packed = tool_state.interrupt
             if packed is None:
                 raise RuntimeError("execute_tool: apply_interrupt не выставил interrupt")
+            state_payload = require_json_object(
+                tool_state.model_dump(mode="json"),
+                "execute_tool.state",
+            )
             return {
                 "tool_id": tool_id,
                 "result": None,
-                "interrupt": interrupt_to_response_dict(packed),
-                "nested_states": nested,
-                "interrupt_path": path,
+                "interrupt": require_json_object(
+                    interrupt_to_response_dict(packed),
+                    "execute_tool.interrupt",
+                ),
+                "nested_states": require_json_object(
+                    state_payload["nested_states"],
+                    "execute_tool.nested_states",
+                ),
+                "interrupt_path": require_json_array(
+                    state_payload["interrupt_path"],
+                    "execute_tool.interrupt_path",
+                ),
             }
 
         logger.debug(f"Tool {tool_id} completed")
+        state_payload = require_json_object(
+            tool_state.model_dump(mode="json"),
+            "execute_tool.state",
+        )
 
         return {
             "tool_id": tool_id,
             "result": result,
-            "nested_states": tool_state.nested_states,
+            "nested_states": require_json_object(
+                state_payload["nested_states"],
+                "execute_tool.nested_states",
+            ),
         }
     finally:
         if context_data is not None:

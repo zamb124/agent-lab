@@ -4,14 +4,27 @@
 """
 
 import re
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import ClassVar, TypeAlias, overload
 from zoneinfo import ZoneInfo
 
 from core.context import get_context
 from core.logging import get_logger
+from core.types import JsonArray, JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
+
+VariableMap: TypeAlias = Mapping[str, JsonValue]
+VariableDict: TypeAlias = JsonObject
+
+
+def _mapping_item(value: JsonValue | VariableMap, key: str) -> tuple[bool, JsonValue | None]:
+    if not isinstance(value, Mapping):
+        return False, None
+    if key not in value:
+        return False, None
+    return True, value[key]
 
 
 class UnmatchedBracesError(Exception):
@@ -34,28 +47,24 @@ class VarResolver:
     - Отсутствующий ключ или путь всегда приводит к VariableResolutionError
     """
 
-    VAR_REF_PATTERN = re.compile(r"^@var:([a-zA-Z_][a-zA-Z0-9_.]*)$")
-    _VAR_TOKEN_PATTERN = re.compile(r"@var:([a-zA-Z_][a-zA-Z0-9_.]*)")
+    VAR_REF_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^@var:([a-zA-Z_][a-zA-Z0-9_.]*)$")
+    _VAR_TOKEN_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"@var:([a-zA-Z_][a-zA-Z0-9_.]*)")
 
     @classmethod
     def resolve_ref(
         cls,
         value: str,
-        variables: Dict[str, Any],
-        _visited: Optional[set[str]] = None,
-    ) -> Any:
+        variables: VariableMap,
+        _visited: set[str] | None = None,
+    ) -> JsonValue:
         """Резолвит только полную ссылку формата @var:path."""
-        if not isinstance(value, str):
-            raise VariableResolutionError(
-                f"@var reference must be string, got {type(value).__name__}"
-            )
         match = cls.VAR_REF_PATTERN.match(value)
         if match is None:
             raise VariableResolutionError(
                 f"Invalid @var reference format: '{value}'"
             )
         path = match.group(1)
-        visited = set() if _visited is None else set(_visited)
+        visited: set[str] = set() if _visited is None else set(_visited)
         if path in visited:
             raise VariableResolutionError(
                 f"Circular @var reference detected: '@var:{path}'"
@@ -68,19 +77,14 @@ class VarResolver:
     def resolve_text(
         cls,
         value: str,
-        variables: Dict[str, Any],
-        _visited: Optional[set[str]] = None,
+        variables: VariableMap,
+        _visited: set[str] | None = None,
     ) -> str:
         """
         Резолвит все @var:path токены в строке.
         Если любой токен неразрешим, бросает VariableResolutionError.
         """
-        if not isinstance(value, str):
-            raise VariableResolutionError(
-                f"Text for @var resolution must be string, got {type(value).__name__}"
-            )
-
-        visited = set() if _visited is None else set(_visited)
+        visited: set[str] = set() if _visited is None else set(_visited)
 
         def replace_var(match: re.Match[str]) -> str:
             ref_path = match.group(1)
@@ -95,21 +99,48 @@ class VarResolver:
             resolved_text = updated_text
         return resolved_text
 
+    @overload
     @classmethod
     def resolve_deep(
         cls,
-        value: Any,
-        variables: Dict[str, Any],
-        _visited: Optional[set[str]] = None,
-    ) -> Any:
+        value: JsonObject,
+        variables: VariableMap,
+        _visited: set[str] | None = None,
+    ) -> JsonObject: ...
+
+    @overload
+    @classmethod
+    def resolve_deep(
+        cls,
+        value: JsonArray,
+        variables: VariableMap,
+        _visited: set[str] | None = None,
+    ) -> JsonArray: ...
+
+    @overload
+    @classmethod
+    def resolve_deep(
+        cls,
+        value: JsonValue,
+        variables: VariableMap,
+        _visited: set[str] | None = None,
+    ) -> JsonValue: ...
+
+    @classmethod
+    def resolve_deep(
+        cls,
+        value: JsonValue,
+        variables: VariableMap,
+        _visited: set[str] | None = None,
+    ) -> JsonValue:
         """
         Рекурсивно резолвит @var во всех строках dict/list.
         """
-        if isinstance(value, dict):
-            return {
-                key: cls.resolve_deep(item, variables, _visited)
-                for key, item in value.items()
-            }
+        if isinstance(value, Mapping):
+            resolved: JsonObject = {}
+            for key, item in value.items():
+                resolved[key] = cls.resolve_deep(item, variables, _visited)
+            return resolved
         if isinstance(value, list):
             return [cls.resolve_deep(item, variables, _visited) for item in value]
         if isinstance(value, str):
@@ -121,11 +152,15 @@ class VarResolver:
         return value
 
     @classmethod
-    def _resolve_path(cls, path: str, variables: Dict[str, Any]) -> Any:
-        value: Any = variables
-        for key in path.split("."):
-            if isinstance(value, dict) and key in value:
-                value = value[key]
+    def _resolve_path(cls, path: str, variables: VariableMap) -> JsonValue:
+        parts = path.split(".")
+        found, value = _mapping_item(variables, parts[0])
+        if not found:
+            raise VariableResolutionError(f"Variable '@var:{path}' not found")
+        for key in parts[1:]:
+            found, item = _mapping_item(value, key)
+            if found:
+                value = item
                 continue
             raise VariableResolutionError(f"Variable '@var:{path}' not found")
         return value
@@ -134,8 +169,8 @@ class VarResolver:
     def resolve_for_flow_variable(
         cls,
         value: str,
-        company_variables: Dict[str, Any],
-    ) -> Any:
+        company_variables: VariableMap,
+    ) -> JsonValue | None:
         """
         Резолвит значение поля flow/skill variables (строка из FlowVariableConfig.value).
 
@@ -150,10 +185,6 @@ class VarResolver:
         Отличается от resolve_ref/resolve_text: не бросает исключение при отсутствии
         переменной — возвращает None (опциональные секреты и ссылки в агенте).
         """
-        if not isinstance(value, str):
-            raise VariableResolutionError(
-                f"resolve_for_flow_variable expects str, got {type(value).__name__}"
-            )
         if "@var:" not in value:
             return value
         for match in cls._VAR_TOKEN_PATTERN.finditer(value):
@@ -181,9 +212,19 @@ class VariableResolver:
     """
 
     @staticmethod
+    def _flow_variable_payload_value(value: JsonValue) -> JsonValue:
+        if not isinstance(value, Mapping):
+            return value
+        if "value" in value and (
+            "public" in value or "title" in value or "description" in value
+        ):
+            return value["value"]
+        return dict(value)
+
+    @staticmethod
     def resolve_all(
-        local_vars: Optional[Dict[str, Any]] = None, include_system: bool = True
-    ) -> Dict[str, Any]:
+        local_vars: VariableMap | None = None, include_system: bool = True
+    ) -> VariableDict:
         """
         Собирает все переменные с учетом приоритета.
 
@@ -194,17 +235,18 @@ class VariableResolver:
         Returns:
             Словарь всех переменных
         """
-        variables = {}
+        variables: VariableDict = {}
 
         context = get_context()
 
         # Системные переменные (с учётом таймзоны из state.store.timezone если есть)
         if include_system:
             tz = None
-            if context and getattr(context, "state", None):
-                store = context.state.get("store", {}) if isinstance(context.state, dict) else {}
+            if context and context.state:
+                state = context.state
+                store = state.get("store")
                 tz_name = store.get("timezone") if isinstance(store, dict) else None
-                if tz_name:
+                if isinstance(tz_name, str) and tz_name:
                     try:
                         tz = ZoneInfo(tz_name)
                     except Exception:
@@ -223,12 +265,9 @@ class VariableResolver:
 
         if not context:
             if local_vars:
-                local_vars_clean = {}
+                local_vars_clean: VariableDict = {}
                 for key, value in local_vars.items():
-                    if isinstance(value, dict) and "value" in value and ("public" in value or "title" in value or "description" in value):
-                        local_vars_clean[key] = value["value"]
-                    else:
-                        local_vars_clean[key] = value
+                    local_vars_clean[key] = VariableResolver._flow_variable_payload_value(value)
                 variables.update(local_vars_clean)
             return variables
 
@@ -244,40 +283,35 @@ class VariableResolver:
                     "user_id": context.user.user_id,
                 }
             )
-            if context.metadata.get("email"):
-                variables["user_email"] = context.metadata["email"]
+            email = context.metadata.get("email")
+            if isinstance(email, str) and email:
+                variables["user_email"] = email
 
         # Переменные агента
         if context.flow_variables:
-            flow_vars = {}
+            flow_vars: VariableDict = {}
             for key, value in context.flow_variables.items():
-                if isinstance(value, dict) and "value" in value and ("public" in value or "title" in value or "description" in value):
-                    flow_vars[key] = value["value"]
-                else:
-                    flow_vars[key] = value
+                flow_vars[key] = VariableResolver._flow_variable_payload_value(value)
             variables.update(flow_vars)
 
         # Локальные переменные (наивысший приоритет)
         if local_vars:
-            local_vars_clean = {}
+            request_vars_clean: VariableDict = {}
             for key, value in local_vars.items():
-                if isinstance(value, dict) and "value" in value and ("public" in value or "title" in value or "description" in value):
-                    local_vars_clean[key] = value["value"]
-                else:
-                    local_vars_clean[key] = value
-            variables.update(local_vars_clean)
+                request_vars_clean[key] = VariableResolver._flow_variable_payload_value(value)
+            variables.update(request_vars_clean)
 
         return variables
 
     @staticmethod
-    def _is_empty_value(value: Any) -> bool:
+    def _is_empty_value(value: JsonValue) -> bool:
         """Проверяет, является ли значение пустым (None, '', False)."""
         return value is None or value == "" or value is False
 
     @staticmethod
     def _resolve_variable_value(
-        expr: str, variables: Dict[str, Any]
-    ) -> tuple[Any, bool]:
+        expr: str, variables: VariableMap
+    ) -> tuple[JsonValue | None, bool]:
         """
         Резолвит значение переменной из словаря.
 
@@ -288,24 +322,26 @@ class VariableResolver:
         Returns:
             (value, found) - значение и флаг найденности
         """
-        value = variables
         parts = expr.split(".")
+        found, value = _mapping_item(variables, parts[0])
+        if not found:
+            return None, False
 
-        for part in parts:
-            if isinstance(value, dict) and part in value:
-                value = value[part]
+        for part in parts[1:]:
+            found, item = _mapping_item(value, part)
+            if found:
+                value = item
             else:
                 return None, False
 
-        if isinstance(value, dict) and "value" in value and ("public" in value or "title" in value or "description" in value):
-            value = value["value"]
+        value = VariableResolver._flow_variable_payload_value(value)
 
         return value, True
 
     @staticmethod
     def render_template(
         template: str,
-        local_vars: Optional[Dict[str, Any]] = None,
+        local_vars: VariableMap | None = None,
         safe: bool = True,
         include_system: bool = True,
     ) -> str:
@@ -362,12 +398,12 @@ class VariableResolver:
             local_vars=local_vars, include_system=include_system
         )
 
-        def process_for_loops(text: str, loop_vars: Optional[Dict[str, Any]] = None) -> str:
+        def process_for_loops(text: str, loop_vars: VariableDict | None = None) -> str:
             """Обрабатывает {for...}...{endfor} циклы."""
             if loop_vars is None:
                 loop_vars = {}
 
-            result = []
+            result: list[str] = []
             i = 0
 
             while i < len(text):
@@ -439,12 +475,12 @@ class VariableResolver:
 
                     i += 8
 
-                    merged_vars = {**variables, **loop_vars}
+                    merged_vars: VariableDict = {**variables, **loop_vars}
                     list_value, found = VariableResolver._resolve_variable_value(list_name, merged_vars)
 
                     if found and isinstance(list_value, list):
                         for item in list_value:
-                            item_vars = {**loop_vars, var_name: item}
+                            item_vars: VariableDict = {**loop_vars, var_name: item}
                             rendered_body = process_for_loops(body, item_vars)
                             rendered_body = process_blocks_recursive(rendered_body, item_vars)
                             result.append(rendered_body)
@@ -456,14 +492,14 @@ class VariableResolver:
 
             return ''.join(result)
 
-        def process_blocks_recursive(text: str, extra_vars: Optional[Dict[str, Any]] = None) -> str:
+        def process_blocks_recursive(text: str, extra_vars: VariableDict | None = None) -> str:
             """Рекурсивно обрабатывает все блоки {}."""
             if extra_vars is None:
                 extra_vars = {}
 
-            merged_vars = {**variables, **extra_vars}
+            merged_vars: VariableDict = {**variables, **extra_vars}
 
-            result = []
+            result: list[str] = []
             i = 0
 
             while i < len(text):
@@ -598,12 +634,12 @@ class VariableResolver:
 
             return ''.join(result)
 
-        def process_short_format(text: str, extra_vars: Optional[Dict[str, Any]] = None) -> str:
+        def process_short_format(text: str, extra_vars: VariableDict | None = None) -> str:
             """Обрабатывает короткий формат ?variable и ?variable|default"""
             if extra_vars is None:
                 extra_vars = {}
 
-            result = []
+            result: list[str] = []
             i = 0
             while i < len(text):
                 if text[i] == '?' and (i == 0 or (text[i-1] != '{' and text[i-1] != '\\')):
@@ -634,7 +670,7 @@ class VariableResolver:
                                 j += 1
                             default = text[default_start:j].rstrip()
 
-                        merged_vars = {**variables, **extra_vars}
+                        merged_vars: VariableDict = {**variables, **extra_vars}
                         value, found = VariableResolver._resolve_variable_value(expr, merged_vars)
 
                         if found and not VariableResolver._is_empty_value(value):
@@ -659,7 +695,7 @@ class VariableResolver:
         return result
 
 
-def get_state() -> Optional[Dict[str, Any]]:
+def get_state() -> VariableDict | None:
     """
     Получает state агента из контекста.
     Используется в тулах для доступа к store и другим данным state.
@@ -670,10 +706,13 @@ def get_state() -> Optional[Dict[str, Any]]:
     context = get_context()
     if context is None:
         return None
-    return context.state
+    state = context.state
+    if state is None:
+        return None
+    return state
 
 
-def set_state_in_context(state: Dict[str, Any]) -> None:
+def set_state_in_context(state: VariableDict) -> None:
     """
     Устанавливает state в контекст.
     Вызывается автоматически при входе в агента.
@@ -684,4 +723,4 @@ def set_state_in_context(state: Dict[str, Any]) -> None:
     context = get_context()
     if context is None:
         raise RuntimeError("Нельзя установить state: контекст запроса не установлен")
-    context.state = state
+    context.state = require_json_object(state, "context.state")

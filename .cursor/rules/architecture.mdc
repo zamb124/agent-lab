@@ -157,6 +157,8 @@ config = await get_container().flow_repository.get(flow_id)
 
 LLM — только через `core/clients/llm/factory.py::get_llm()`. Прямые импорты LangChain/OpenAI моделей — запрещены.
 
+Контекстный слой LLM — общий платформенный слой, не часть `llm_node`: `core.llm_context` компилирует system/profile, active window, retrieved memory/RAG/tool blocks в лимит токенов; `core.clients.llm.context_layer` подключает его к `LLMClient.chat/stream/invoke`. Слои конфигурации: platform → company → `llm_context` resource → node → inline call.
+
 ```python
 from core.clients.llm import get_llm
 llm = get_llm()

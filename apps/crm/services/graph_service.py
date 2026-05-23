@@ -27,6 +27,7 @@ from apps.crm.services.access_control_service import AccessControlService
 from apps.crm.types import JsonObject
 from core.context import get_context
 from core.logging import get_logger
+from core.types import require_json_object
 
 logger = get_logger(__name__)
 
@@ -105,14 +106,18 @@ class GraphService:
             return None
         leaves: list[JsonObject] = []
         if created_at_from is not None:
-            leaves.append({"field": "created_at", "op": "$gte", "value": created_at_from})
+            leaves.append(
+                {"field": "created_at", "op": "$gte", "value": created_at_from.isoformat()}
+            )
         if created_at_to is not None:
-            leaves.append({"field": "created_at", "op": "$lte", "value": created_at_to})
+            leaves.append(
+                {"field": "created_at", "op": "$lte", "value": created_at_to.isoformat()}
+            )
         if len(leaves) == 0:
             return None
         if len(leaves) == 1:
             return leaves[0]
-        return {"$and": leaves}
+        return require_json_object({"$and": leaves}, "timeline count filters")
 
     async def _ensure_graph_entity_count_within_limit(
         self,

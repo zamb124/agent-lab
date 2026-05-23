@@ -8,7 +8,7 @@
 import asyncio
 import os
 import weakref
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -40,7 +40,7 @@ def _get_loop_id() -> int:
     loop = asyncio.get_running_loop()
     return id(loop)
 
-async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
+async def get_engine(db_url: str | None = None) -> AsyncEngine:
     """
     Лениво создает engine для текущего event loop и URL БД.
 
@@ -88,7 +88,7 @@ async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
     _engines[cache_key] = engine
     return engine
 
-async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmaker[AsyncSession]:
+async def get_session_factory(db_url: str | None = None) -> async_sessionmaker[AsyncSession]:
     """
     Лениво создает session factory для текущего event loop и URL БД.
 
@@ -115,7 +115,7 @@ async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmake
     logger.debug(f"Session factory создана (loop {loop_id}, db_url={db_url[:50]}...)")
     return session_factory
 
-async def session(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, None]:
+async def session(db_url: str | None = None) -> AsyncGenerator[AsyncSession, None]:
     """
     Алиас для get_session_factory() - создает контекстный менеджер сессии.
 
@@ -131,7 +131,7 @@ async def session(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, 
     async with session_factory() as s:
         yield s
 
-async def get_db(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, None]:
+async def get_db(db_url: str | None = None) -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency для получения сессии БД в FastAPI.
 
@@ -144,7 +144,7 @@ async def get_db(db_url: Optional[str] = None) -> AsyncGenerator[AsyncSession, N
         yield session
         await session.close()
 
-async def wait_for_db(max_retries: int = 30, retry_interval: int = 2, db_url: Optional[str] = None):
+async def wait_for_db(max_retries: int = 30, retry_interval: int = 2, db_url: str | None = None):
     """
     Ожидает готовности БД с повторными попытками.
     Если БД недоступна после всех попыток - бросает исключение.

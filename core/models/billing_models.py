@@ -4,7 +4,7 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -42,7 +42,7 @@ class UsageRecord(BaseModel):
     )
     user_id: str = Field(title="ID пользователя")
     company_id: str = Field(title="ID компании")
-    session_id: Optional[str] = Field(default=None, title="ID сессии")
+    session_id: str | None = Field(default=None, title="ID сессии")
 
     # Что использовалось
     usage_type: UsageType = Field(title="Тип использования")
@@ -53,7 +53,7 @@ class UsageRecord(BaseModel):
     quantity: int = Field(default=1, title="Количество")  # токены, вызовы, байты
 
     # Метаданные
-    metadata: Dict[str, Any] = Field(default_factory=dict, title="Дополнительные данные")
+    metadata: dict[str, Any] = Field(default_factory=dict, title="Дополнительные данные")
 
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

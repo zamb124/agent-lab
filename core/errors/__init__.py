@@ -5,7 +5,7 @@
 и конвертации в A2A error format.
 """
 
-from typing import Any, Dict, List, Optional
+from core.types import JsonArray, JsonObject
 
 
 class ImanBaseError(Exception):
@@ -21,10 +21,10 @@ class ImanBaseError(Exception):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        payload: Optional[Dict[str, Any]] = None,
-    ):
+        message: str | None = None,
+        code: str | None = None,
+        payload: JsonObject | None = None,
+    ) -> None:
         """
         Args:
             message: Человекочитаемое описание ошибки
@@ -33,10 +33,10 @@ class ImanBaseError(Exception):
         """
         self.message = message or self.message
         self.code = code or self.code
-        self.payload = payload or {}
+        self.payload: JsonObject = payload if payload is not None else {}
         super().__init__(self.message)
 
-    def to_a2a_error(self) -> Dict[str, Any]:
+    def to_a2a_error(self) -> JsonObject:
         """
         Конвертирует исключение в A2A error format.
 
@@ -49,7 +49,7 @@ class ImanBaseError(Exception):
             "data": self.payload,
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         """
         Конвертирует исключение в dict для логирования.
 
@@ -77,8 +77,8 @@ class ConfigError(ImanBaseError):
     Означает что конфиг невалиден или неполный.
     """
 
-    code = "CONFIG_ERROR"
-    message = "Ошибка конфигурации"
+    code: str = "CONFIG_ERROR"
+    message: str = "Ошибка конфигурации"
 
 
 class ValidationError(ConfigError):
@@ -89,8 +89,8 @@ class ValidationError(ConfigError):
     кастомные валидаторы обнаружили проблемы.
     """
 
-    code = "VALIDATION_ERROR"
-    message = "Ошибка валидации конфигурации"
+    code: str = "VALIDATION_ERROR"
+    message: str = "Ошибка валидации конфигурации"
 
 
 class MissingFieldError(ValidationError):
@@ -101,14 +101,14 @@ class MissingFieldError(ValidationError):
     все обязательные поля должны быть явно указаны.
     """
 
-    code = "MISSING_FIELD"
-    message = "Отсутствует обязательное поле"
+    code: str = "MISSING_FIELD"
+    message: str = "Отсутствует обязательное поле"
 
-    def __init__(self, field: str, entity: str, **kwargs):
+    def __init__(self, field: str, entity: str, *, code: str | None = None) -> None:
         super().__init__(
             message=f"Поле '{field}' отсутствует в конфигурации {entity}",
+            code=code,
             payload={"field": field, "entity": entity},
-            **kwargs,
         )
 
 
@@ -120,14 +120,14 @@ class UnknownFieldError(ValidationError):
     это может быть опечатка или устаревший конфиг.
     """
 
-    code = "UNKNOWN_FIELD"
-    message = "Неизвестное поле в конфигурации"
+    code: str = "UNKNOWN_FIELD"
+    message: str = "Неизвестное поле в конфигурации"
 
-    def __init__(self, field: str, entity: str, **kwargs):
+    def __init__(self, field: str, entity: str, *, code: str | None = None) -> None:
         super().__init__(
             message=f"Неизвестное поле '{field}' в конфигурации {entity}",
+            code=code,
             payload={"field": field, "entity": entity},
-            **kwargs,
         )
 
 
@@ -138,14 +138,15 @@ class CyclicDependencyError(ConfigError):
     Выбрасывается GraphCompiler при обнаружении цикла без выхода.
     """
 
-    code = "CYCLIC_DEPENDENCY"
-    message = "Обнаружена циклическая зависимость в графе"
+    code: str = "CYCLIC_DEPENDENCY"
+    message: str = "Обнаружена циклическая зависимость в графе"
 
-    def __init__(self, cycle_path: list[str], **kwargs):
+    def __init__(self, cycle_path: list[str], *, code: str | None = None) -> None:
+        cycle_path_payload: JsonArray = [*cycle_path]
         super().__init__(
             message=f"Циклическая зависимость: {' -> '.join(cycle_path)}",
-            payload={"cycle_path": cycle_path},
-            **kwargs,
+            code=code,
+            payload={"cycle_path": cycle_path_payload},
         )
 
 
@@ -157,14 +158,15 @@ class NodeConflictError(ConfigError):
     модифицировать одну и ту же ноду несовместимым образом.
     """
 
-    code = "NODE_CONFLICT"
-    message = "Конфликт нод между ветками"
+    code: str = "NODE_CONFLICT"
+    message: str = "Конфликт нод между ветками"
 
-    def __init__(self, node_id: str, branches: list[str], **kwargs):
+    def __init__(self, node_id: str, branches: list[str], *, code: str | None = None) -> None:
+        branch_payload: JsonArray = [*branches]
         super().__init__(
             message=f"Нода '{node_id}' конфликтует между ветками: {', '.join(branches)}",
-            payload={"node_id": node_id, "branches": branches},
-            **kwargs,
+            code=code,
+            payload={"node_id": node_id, "branches": branch_payload},
         )
 
 
@@ -176,8 +178,8 @@ class InvalidGraphError(ConfigError):
     недостижимые ноды, несовместимые input/output схемы.
     """
 
-    code = "INVALID_GRAPH"
-    message = "Невалидная структура графа"
+    code: str = "INVALID_GRAPH"
+    message: str = "Невалидная структура графа"
 
 
 # ============================================================================
@@ -192,8 +194,8 @@ class ResourceError(ImanBaseError):
     Ресурсы: агенты, ноды, tools, переменные.
     """
 
-    code = "RESOURCE_ERROR"
-    message = "Ошибка работы с ресурсом"
+    code: str = "RESOURCE_ERROR"
+    message: str = "Ошибка работы с ресурсом"
 
 
 class ResourceNotFoundError(ResourceError):
@@ -204,14 +206,14 @@ class ResourceNotFoundError(ResourceError):
     если его нет - это явная ошибка конфигурации.
     """
 
-    code = "RESOURCE_NOT_FOUND"
-    message = "Ресурс не найден"
+    code: str = "RESOURCE_NOT_FOUND"
+    message: str = "Ресурс не найден"
 
-    def __init__(self, resource_type: str, resource_id: str, **kwargs):
+    def __init__(self, resource_type: str, resource_id: str, *, code: str | None = None) -> None:
         super().__init__(
             message=f"{resource_type} '{resource_id}' не найден",
+            code=code,
             payload={"resource_type": resource_type, "resource_id": resource_id},
-            **kwargs,
         )
 
 
@@ -220,14 +222,14 @@ class ResourceAlreadyExistsError(ResourceError):
     Ресурс уже существует (при попытке регистрации дубликата).
     """
 
-    code = "RESOURCE_ALREADY_EXISTS"
-    message = "Ресурс уже существует"
+    code: str = "RESOURCE_ALREADY_EXISTS"
+    message: str = "Ресурс уже существует"
 
-    def __init__(self, resource_type: str, resource_id: str, **kwargs):
+    def __init__(self, resource_type: str, resource_id: str, *, code: str | None = None) -> None:
         super().__init__(
             message=f"{resource_type} '{resource_id}' уже зарегистрирован",
+            code=code,
             payload={"resource_type": resource_type, "resource_id": resource_id},
-            **kwargs,
         )
 
 
@@ -243,8 +245,8 @@ class ExecutionError(ImanBaseError):
     Выбрасывается во время runtime исполнения графа.
     """
 
-    code = "EXECUTION_ERROR"
-    message = "Ошибка выполнения"
+    code: str = "EXECUTION_ERROR"
+    message: str = "Ошибка выполнения"
 
 
 class NodeExecutionError(ExecutionError):
@@ -252,14 +254,14 @@ class NodeExecutionError(ExecutionError):
     Ошибка выполнения конкретной ноды.
     """
 
-    code = "NODE_EXECUTION_ERROR"
-    message = "Ошибка выполнения ноды"
+    code: str = "NODE_EXECUTION_ERROR"
+    message: str = "Ошибка выполнения ноды"
 
-    def __init__(self, node_id: str, error: Exception, **kwargs):
+    def __init__(self, node_id: str, error: Exception, *, code: str | None = None) -> None:
         super().__init__(
             message=f"Ошибка выполнения ноды '{node_id}': {str(error)}",
+            code=code,
             payload={"node_id": node_id, "original_error": str(error)},
-            **kwargs,
         )
 
 
@@ -268,14 +270,14 @@ class ToolExecutionError(ExecutionError):
     Ошибка выполнения инструмента.
     """
 
-    code = "TOOL_EXECUTION_ERROR"
-    message = "Ошибка выполнения инструмента"
+    code: str = "TOOL_EXECUTION_ERROR"
+    message: str = "Ошибка выполнения инструмента"
 
-    def __init__(self, tool_id: str, error: Exception, **kwargs):
+    def __init__(self, tool_id: str, error: Exception, *, code: str | None = None) -> None:
         super().__init__(
             message=f"Ошибка выполнения инструмента '{tool_id}': {str(error)}",
+            code=code,
             payload={"tool_id": tool_id, "original_error": str(error)},
-            **kwargs,
         )
 
 
@@ -284,8 +286,8 @@ class FlowExecutionError(ExecutionError):
     Базовая ошибка выполнения flow.
     """
 
-    code = "FLOW_EXECUTION_ERROR"
-    message = "Ошибка выполнения flow"
+    code: str = "FLOW_EXECUTION_ERROR"
+    message: str = "Ошибка выполнения flow"
 
 
 class NodeCallLimitError(FlowExecutionError):
@@ -293,14 +295,14 @@ class NodeCallLimitError(FlowExecutionError):
     Превышен лимит вызовов ноды.
     """
 
-    code = "NODE_CALL_LIMIT"
-    message = "Превышен лимит вызовов ноды"
+    code: str = "NODE_CALL_LIMIT"
+    message: str = "Превышен лимит вызовов ноды"
 
-    def __init__(self, node_id: str, limit: int, **kwargs):
+    def __init__(self, node_id: str, limit: int, *, code: str | None = None) -> None:
         super().__init__(
             message=f"Нода '{node_id}' вызвана больше {limit} раз",
+            code=code,
             payload={"node_id": node_id, "limit": limit},
-            **kwargs,
         )
 
 
@@ -309,14 +311,14 @@ class FlowInfiniteLoopError(FlowExecutionError):
     Превышено максимальное количество итераций flow.
     """
 
-    code = "FLOW_INFINITE_LOOP"
-    message = "Превышено максимальное количество итераций flow"
+    code: str = "FLOW_INFINITE_LOOP"
+    message: str = "Превышено максимальное количество итераций flow"
 
-    def __init__(self, flow_id: str, max_iterations: int, **kwargs):
+    def __init__(self, flow_id: str, max_iterations: int, *, code: str | None = None) -> None:
         super().__init__(
             message=f"Flow '{flow_id}' превысил лимит итераций: {max_iterations}",
+            code=code,
             payload={"flow_id": flow_id, "max_iterations": max_iterations},
-            **kwargs,
         )
 
 
@@ -325,28 +327,28 @@ class FlowPrematureCompletionError(FlowExecutionError):
     Цикл flow остановился без достижения терминала (END / только связи to=null).
     """
 
-    code = "FLOW_PREMATURE_COMPLETION"
-    message = "Flow завершился до терминальной ноды"
+    code: str = "FLOW_PREMATURE_COMPLETION"
+    message: str = "Flow завершился до терминальной ноды"
 
     def __init__(
         self,
         flow_id: str,
         reason: str,
         *,
-        last_nodes: Optional[List[str]] = None,
-        extra: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
+        last_nodes: list[str] | None = None,
+        extra: JsonObject | None = None,
+        code: str | None = None,
     ) -> None:
-        payload: Dict[str, Any] = {"flow_id": flow_id, "reason": reason}
+        payload: JsonObject = {"flow_id": flow_id, "reason": reason}
         if last_nodes is not None:
-            payload["last_nodes"] = last_nodes
+            last_node_payload: JsonArray = [*last_nodes]
+            payload["last_nodes"] = last_node_payload
         if extra:
             payload.update(extra)
         super().__init__(
             message=f"Flow '{flow_id}': остановка не на END ({reason})",
-            code=self.code,
+            code=code,
             payload=payload,
-            **kwargs,
         )
 
 
@@ -355,14 +357,14 @@ class FlowWallClockTimeoutError(FlowExecutionError):
     Превышен wall-clock лимит выполнения flow (дедлайн в ExecutionState).
     """
 
-    code = "FLOW_WALL_CLOCK_TIMEOUT"
-    message = "Превышен лимит времени выполнения flow"
+    code: str = "FLOW_WALL_CLOCK_TIMEOUT"
+    message: str = "Превышен лимит времени выполнения flow"
 
-    def __init__(self, flow_id: str, timeout_seconds: int, **kwargs: Any) -> None:
+    def __init__(self, flow_id: str, timeout_seconds: int, *, code: str | None = None) -> None:
         super().__init__(
             message=f"Flow '{flow_id}': превышен лимит времени выполнения ({timeout_seconds}с)",
+            code=code,
             payload={"flow_id": flow_id, "timeout_seconds": timeout_seconds},
-            **kwargs,
         )
 
 
@@ -371,14 +373,14 @@ class NodeWallClockTimeoutError(FlowExecutionError):
     Превышен wall-clock лимит выполнения одной ноды.
     """
 
-    code = "NODE_WALL_CLOCK_TIMEOUT"
-    message = "Превышен лимит времени выполнения ноды"
+    code: str = "NODE_WALL_CLOCK_TIMEOUT"
+    message: str = "Превышен лимит времени выполнения ноды"
 
-    def __init__(self, node_id: str, timeout_seconds: int, **kwargs: Any) -> None:
+    def __init__(self, node_id: str, timeout_seconds: int, *, code: str | None = None) -> None:
         super().__init__(
             message=f"Нода '{node_id}': превышен лимит времени выполнения ({timeout_seconds}с)",
+            code=code,
             payload={"node_id": node_id, "timeout_seconds": timeout_seconds},
-            **kwargs,
         )
 
 
@@ -387,8 +389,8 @@ class SafeEvalError(ExecutionError):
     Ошибка безопасного выполнения кода.
     """
 
-    code = "SAFE_EVAL_ERROR"
-    message = "Ошибка безопасного выполнения кода"
+    code: str = "SAFE_EVAL_ERROR"
+    message: str = "Ошибка безопасного выполнения кода"
 
 
 class CodeExecutionRuntimeError(ExecutionError):
@@ -396,8 +398,8 @@ class CodeExecutionRuntimeError(ExecutionError):
     Ошибка исполнения пользовательского кода в isolated code runner.
     """
 
-    code = "CODE_EXECUTION_RUNTIME_ERROR"
-    message = "Ошибка исполнения пользовательского кода"
+    code: str = "CODE_EXECUTION_RUNTIME_ERROR"
+    message: str = "Ошибка исполнения пользовательского кода"
 
     def __init__(
         self,
@@ -412,9 +414,9 @@ class CodeExecutionRuntimeError(ExecutionError):
         stderr: str | None = None,
         request_id: str | None = None,
         trace_id: str | None = None,
-        **kwargs: Any,
+        code: str | None = None,
     ) -> None:
-        payload: Dict[str, Any] = {
+        payload: JsonObject = {
             "language": language,
             "service": service,
             "stage": stage,
@@ -432,8 +434,8 @@ class CodeExecutionRuntimeError(ExecutionError):
             payload["trace_id"] = trace_id
         super().__init__(
             message=f"{service}/{language}/{stage}: {message}",
+            code=code,
             payload=payload,
-            **kwargs,
         )
 
 
@@ -442,14 +444,14 @@ class FrozenStateFieldError(SafeEvalError):
     Попытка изменить системное поле ExecutionState из кода ноды или tool.
     """
 
-    code = "FROZEN_STATE_FIELD"
+    code: str = "FROZEN_STATE_FIELD"
 
     def __init__(
         self,
         field: str,
         *,
         reason: str = "assign",
-        **kwargs: Any,
+        code: str | None = None,
     ) -> None:
         base = (
             f"Поле '{field}' зарезервировано платформой (лимиты выполнения, история, "
@@ -466,8 +468,8 @@ class FrozenStateFieldError(SafeEvalError):
             msg = base
         super().__init__(
             message=msg,
+            code=code,
             payload={"field": field, "reason": reason},
-            **kwargs,
         )
 
 
@@ -476,8 +478,8 @@ class ExternalAPIError(ExecutionError):
     Ошибка вызова внешнего API.
     """
 
-    code = "EXTERNAL_API_ERROR"
-    message = "Ошибка вызова внешнего API"
+    code: str = "EXTERNAL_API_ERROR"
+    message: str = "Ошибка вызова внешнего API"
 
 
 class TimeoutError(ExecutionError):
@@ -485,14 +487,14 @@ class TimeoutError(ExecutionError):
     Превышен таймаут выполнения.
     """
 
-    code = "EXECUTION_TIMEOUT"
-    message = "Превышен таймаут выполнения"
+    code: str = "EXECUTION_TIMEOUT"
+    message: str = "Превышен таймаут выполнения"
 
-    def __init__(self, entity: str, timeout: int, **kwargs):
+    def __init__(self, entity: str, timeout: int, *, code: str | None = None) -> None:
         super().__init__(
             message=f"Превышен таймаут выполнения {entity}: {timeout}с",
+            code=code,
             payload={"entity": entity, "timeout": timeout},
-            **kwargs,
         )
 
 
@@ -501,14 +503,14 @@ class MaxRetriesExceededError(ExecutionError):
     Превышено максимальное количество повторов.
     """
 
-    code = "MAX_RETRIES_EXCEEDED"
-    message = "Превышено максимальное количество повторов"
+    code: str = "MAX_RETRIES_EXCEEDED"
+    message: str = "Превышено максимальное количество повторов"
 
-    def __init__(self, entity: str, max_retries: int, **kwargs):
+    def __init__(self, entity: str, max_retries: int, *, code: str | None = None) -> None:
         super().__init__(
             message=f"Превышено максимальное количество повторов для {entity}: {max_retries}",
+            code=code,
             payload={"entity": entity, "max_retries": max_retries},
-            **kwargs,
         )
 
 
@@ -522,8 +524,8 @@ class SecurityError(ImanBaseError):
     Ошибка безопасности или прав доступа.
     """
 
-    code = "SECURITY_ERROR"
-    message = "Ошибка безопасности"
+    code: str = "SECURITY_ERROR"
+    message: str = "Ошибка безопасности"
 
 
 class PermissionDeniedError(SecurityError):
@@ -534,8 +536,8 @@ class PermissionDeniedError(SecurityError):
     permission не указан явно.
     """
 
-    code = "PERMISSION_DENIED"
-    message = "Отказано в доступе"
+    code: str = "PERMISSION_DENIED"
+    message: str = "Отказано в доступе"
 
     def __init__(
         self,
@@ -543,19 +545,24 @@ class PermissionDeniedError(SecurityError):
         resource_id: str,
         required_groups: list[str],
         user_groups: list[str],
-        **kwargs
-    ):
+        code: str | None = None,
+    ) -> None:
+        user_groups_text = ", ".join(user_groups) if user_groups else "нет групп"
+        required_groups_payload: JsonArray = [*required_groups]
+        user_groups_payload: JsonArray = [*user_groups]
         super().__init__(
-            message=f"Недостаточно прав для доступа к {resource_type} '{resource_id}'. "
-                   f"Требуется одна из групп: {', '.join(required_groups)}. "
-                   f"У пользователя: {', '.join(user_groups) if user_groups else 'нет групп'}",
+            message=(
+                f"Недостаточно прав для доступа к {resource_type} '{resource_id}'. "
+                + f"Требуется одна из групп: {', '.join(required_groups)}. "
+                + f"У пользователя: {user_groups_text}"
+            ),
+            code=code,
             payload={
                 "resource_type": resource_type,
                 "resource_id": resource_id,
-                "required_groups": required_groups,
-                "user_groups": user_groups,
+                "required_groups": required_groups_payload,
+                "user_groups": user_groups_payload,
             },
-            **kwargs,
         )
 
 
@@ -564,8 +571,8 @@ class AuthenticationError(SecurityError):
     Ошибка аутентификации.
     """
 
-    code = "AUTHENTICATION_ERROR"
-    message = "Ошибка аутентификации"
+    code: str = "AUTHENTICATION_ERROR"
+    message: str = "Ошибка аутентификации"
 
 
 # ============================================================================
@@ -578,8 +585,8 @@ class StateError(ImanBaseError):
     Ошибка работы с состоянием выполнения.
     """
 
-    code = "STATE_ERROR"
-    message = "Ошибка работы с состоянием"
+    code: str = "STATE_ERROR"
+    message: str = "Ошибка работы с состоянием"
 
 
 class InvalidStateError(StateError):
@@ -587,8 +594,8 @@ class InvalidStateError(StateError):
     Невалидное состояние выполнения.
     """
 
-    code = "INVALID_STATE"
-    message = "Невалидное состояние выполнения"
+    code: str = "INVALID_STATE"
+    message: str = "Невалидное состояние выполнения"
 
 
 class SchemaMismatchError(StateError):
@@ -598,14 +605,21 @@ class SchemaMismatchError(StateError):
     output схема ноды A несовместима с input схемой ноды B.
     """
 
-    code = "SCHEMA_MISMATCH"
-    message = "Несоответствие схем данных"
+    code: str = "SCHEMA_MISMATCH"
+    message: str = "Несоответствие схем данных"
 
-    def __init__(self, from_node: str, to_node: str, details: str, **kwargs):
+    def __init__(
+        self,
+        from_node: str,
+        to_node: str,
+        details: str,
+        *,
+        code: str | None = None,
+    ) -> None:
         super().__init__(
             message=f"Несовместимые схемы между нодами '{from_node}' -> '{to_node}': {details}",
+            code=code,
             payload={"from_node": from_node, "to_node": to_node, "details": details},
-            **kwargs,
         )
 
 

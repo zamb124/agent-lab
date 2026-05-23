@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Optional
 
 from sqlalchemy import select, update
 
@@ -52,7 +51,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
 
     async def get_active_call_for_channel(
         self, channel_id: str, company_id: str
-    ) -> Optional[SyncCall]:
+    ) -> SyncCall | None:
         """Возвращает активный звонок в канале (status ringing/active) или None."""
         async with self._db.session() as session:
             stmt = (
@@ -72,8 +71,8 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         call_id: str,
         status: str,
         *,
-        started_at: Optional[datetime] = None,
-        ended_at: Optional[datetime] = None,
+        started_at: datetime | None = None,
+        ended_at: datetime | None = None,
     ) -> None:
         values: dict[str, object] = {"status": status}
         if started_at is not None:
@@ -108,8 +107,8 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         user_id: str,
         status: str,
         *,
-        joined_at: Optional[datetime] = None,
-        left_at: Optional[datetime] = None,
+        joined_at: datetime | None = None,
+        left_at: datetime | None = None,
     ) -> None:
         values: dict[str, object] = {"status": status}
         if joined_at is not None:
@@ -176,7 +175,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
 
     async def get_link_by_calendar_event(
         self, company_id: str, calendar_event_id: str
-    ) -> Optional[SyncCallLink]:
+    ) -> SyncCallLink | None:
         async with self._db.session() as session:
             stmt = (
                 select(SyncCallLink)
@@ -191,7 +190,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
 
     async def get_persistent_channel_link(
         self, company_id: str, channel_id: str
-    ) -> Optional[SyncCallLink]:
+    ) -> SyncCallLink | None:
         async with self._db.session() as session:
             stmt = (
                 select(SyncCallLink)
@@ -219,10 +218,10 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         link_token: str,
         company_id: str,
         *,
-        title: Optional[str] = None,
-        scheduled_start_at: Optional[datetime] = None,
-        scheduled_end_at: Optional[datetime] = None,
-        expires_at: Optional[datetime] = None,
+        title: str | None = None,
+        scheduled_start_at: datetime | None = None,
+        scheduled_end_at: datetime | None = None,
+        expires_at: datetime | None = None,
     ) -> None:
         row = await self.get_link_for_company(link_token, company_id)
         if row.calendar_event_id is None:
@@ -265,7 +264,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         *,
         range_start: datetime,
         range_end: datetime,
-        channel_id: Optional[str] = None,
+        channel_id: str | None = None,
     ) -> list[SyncCallLink]:
         async with self._db.session() as session:
             stmt = (

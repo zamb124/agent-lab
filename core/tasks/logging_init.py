@@ -8,8 +8,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from core.config.models import LoggingConfig
 from core.logging.setup import setup_logging
 
@@ -17,7 +15,7 @@ from core.logging.setup import setup_logging
 def setup_worker_logging_early(
     service_name: str,
     *,
-    logging_config: Optional[LoggingConfig] = None,
+    logging_config: LoggingConfig | None = None,
 ) -> None:
     if not isinstance(service_name, str) or not service_name.strip():
         raise ValueError("setup_worker_logging_early: service_name must be a non-empty string")

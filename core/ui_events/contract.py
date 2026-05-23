@@ -25,7 +25,7 @@ import re
 import time
 import uuid
 from enum import StrEnum
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -50,10 +50,10 @@ class UIEventMeta(BaseModel):
 
     ts: int = Field(default_factory=lambda: int(time.time() * 1000), description="Epoch ms")
     source: Literal["local", "ws", "http", "router", "storage", "timer", "system"] = "system"
-    causation_id: Optional[str] = None
-    correlation_id: Optional[str] = None
-    trace_id: Optional[str] = None
-    request_id: Optional[str] = Field(
+    causation_id: str | None = None
+    correlation_id: str | None = None
+    trace_id: str | None = None
+    request_id: str | None = Field(
         default=None,
         description="E2E request_id запроса-инициатора UI-события (HTTP/WS/TaskIQ).",
     )
@@ -82,8 +82,8 @@ class UIEventTarget(BaseModel):
     - broadcast=True: рассылка всем подключённым сокетам.
     """
 
-    user_id: Optional[str] = None
-    company_id: Optional[str] = None
+    user_id: str | None = None
+    company_id: str | None = None
     broadcast: bool = False
 
     def assert_valid(self) -> None:

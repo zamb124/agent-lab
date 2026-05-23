@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.container import get_crm_container
@@ -12,7 +12,7 @@ from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm_worker.broker import broker
 from apps.crm_worker.task_names import CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME
-from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
+from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -51,7 +51,7 @@ async def _broadcast_draft_repair_phase(
 async def _journal_failed(
     *,
     container,
-    task_id: Optional[str],
+    task_id: str | None,
     company_id: str,
     snapshot_user_id: str,
     error_message: str,
@@ -80,7 +80,7 @@ async def _journal_failed(
 async def _journal_completed(
     *,
     container,
-    task_id: Optional[str],
+    task_id: str | None,
     company_id: str,
     snapshot_user_id: str,
 ) -> None:
@@ -112,9 +112,9 @@ async def repair_note_analysis_draft_task(
     auth_token: str,
     user_id: str,
     interface_language: str,
-    task_id: Optional[str] = None,
+    task_id: str | None = None,
 ) -> dict[str, Any]:
-    await _set_crm_context(
+    await set_crm_context(
         company_id,
         namespace,
         auth_token,

@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import binascii
 import re
-from typing import Union
 
 from core.files.writer.exceptions import FileWriteError
 from core.files.writer.models import ContentKind
@@ -49,7 +48,7 @@ def classify_content(text: str) -> ContentKind:
     return ContentKind.RAW
 
 
-SourceContent = Union[str, bytes]
+SourceContent = str | bytes
 
 
 def normalize_str_content(content: SourceContent, encoding: str) -> tuple[str, bool]:

@@ -3,7 +3,6 @@
 Использует service БД, is_global=False (изолирован по компаниям).
 """
 
-from typing import Optional
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
@@ -37,7 +36,7 @@ class FileRepository(BaseRepository[FileRecord]):
     def _extract_entity_id(self, entity: FileRecord) -> str:
         return entity.file_id
 
-    async def get_by_s3_key(self, provider: str, file_id: str) -> Optional[FileRecord]:
+    async def get_by_s3_key(self, provider: str, file_id: str) -> FileRecord | None:
         """
         Получает файл по S3 ключу.
 

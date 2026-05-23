@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from apps.browser.contracts.control import BrowserControlAdapter
 from apps.browser.engine.cdp_pool import CDPConnectionPool
 from apps.browser.engine.context_factory import ContextFactory
@@ -17,6 +15,7 @@ from apps.browser.engine.types import BrowserRuntimeSettingsView
 from apps.browser.observe.observe_store import ControlObserveStore
 from apps.browser.observe.session_artifacts import ControlSessionArtifactsWriter
 from apps.browser.orchestration.control_adapter_factory import build_browser_control_adapter
+from core.types import JsonObject
 
 
 class BrowserRuntimeFacade:
@@ -67,9 +66,9 @@ class BrowserRuntimeFacade:
             settings=settings,
         )
         self.observe_store = ControlObserveStore()
-        self._control_adapter: Optional[BrowserControlAdapter] = None
+        self._control_adapter: BrowserControlAdapter | None = None
 
-    def _log_page_event(self, session_id: str, event: dict[str, object]) -> None:
+    def _log_page_event(self, session_id: str, event: JsonObject) -> None:
         self.session_artifacts.append_jsonl_for_session(
             session_id=session_id,
             filename="page_events.jsonl",

@@ -2,8 +2,6 @@
 Сервисы биллинга и учета использования ресурсов.
 """
 
-from typing import Optional
-
 from .cbr_rate_provider import (
     get_current_rate as get_cbr_usd_to_rub_rate,
 )
@@ -23,7 +21,7 @@ from .service import (
     BillingService,
 )
 
-_billing_service: Optional[BillingService] = None
+_billing_service: BillingService | None = None
 
 
 def set_billing_service(service: BillingService) -> None:

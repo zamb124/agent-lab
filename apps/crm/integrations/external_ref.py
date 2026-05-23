@@ -13,17 +13,11 @@ from typing import cast as type_cast
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.crm.types import JsonObject
+from core.types import require_json_object
 
 
 def _as_json_object(value: object, context: str) -> JsonObject:
-    if not isinstance(value, dict):
-        raise ValueError(f"{context} must be JSON object")
-    result: JsonObject = {}
-    for key, item in type_cast(dict[object, object], value).items():
-        if not isinstance(key, str):
-            raise ValueError(f"{context} contains non-string key")
-        result[key] = item
-    return result
+    return require_json_object(value, context)
 
 
 class ExternalRef(BaseModel):

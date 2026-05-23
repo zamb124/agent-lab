@@ -7,7 +7,7 @@
 """
 
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import Field as PydanticField
 
@@ -27,18 +27,18 @@ CUSTOM_UI_FIELDS = {
 def Field(
     default: Any = ...,
     *,
-    frozen: Optional[bool] = None,
+    frozen: bool | None = None,
     readonly: bool = False,
-    placeholder: Optional[str] = None,
-    groups: Optional[dict[str, Any]] = None,
-    widget_attrs: Optional[dict[str, Any]] = None,
+    placeholder: str | None = None,
+    groups: dict[str, Any] | None = None,
+    widget_attrs: dict[str, Any] | None = None,
     exclude_from_form: bool = False,
     editable_in_table: bool = True,
     hidden: bool = False,
-    title: Optional[str] = None,
-    description: Optional[str] = None,
+    title: str | None = None,
+    description: str | None = None,
     default_factory: Callable[[], Any] | Callable[[dict[str, Any]], Any] | None = None,
-    alias: Optional[str] = None,
+    alias: str | None = None,
     **kwargs: Any,
 ) -> Any:
     """

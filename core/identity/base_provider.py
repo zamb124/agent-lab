@@ -5,7 +5,6 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
 
 from core.config.models import AuthProviderConfig
 from core.http import request_public_oauth
@@ -46,7 +45,7 @@ class BaseAuthProvider(ABC):
     @abstractmethod
     async def exchange_code_for_token(
         self, code: str, redirect_uri: str
-    ) -> Tuple[str, Optional[str]]:
+    ) -> tuple[str, str | None]:
         """
         Обменивает код авторизации на токены доступа.
 
@@ -61,7 +60,7 @@ class BaseAuthProvider(ABC):
 
     @abstractmethod
     async def get_user_info(
-        self, access_token: str, first_login_user_json: Optional[str] = None
+        self, access_token: str, first_login_user_json: str | None = None
     ) -> ProviderUserInfo:
         """
         Получает информацию о пользователе по токену доступа.
@@ -77,7 +76,7 @@ class BaseAuthProvider(ABC):
 
     async def refresh_access_token(
         self, refresh_token: str
-    ) -> Tuple[str, Optional[str]]:
+    ) -> tuple[str, str | None]:
         """
         Обновляет токен доступа используя refresh token.
 

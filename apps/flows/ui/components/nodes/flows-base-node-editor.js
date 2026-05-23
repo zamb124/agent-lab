@@ -167,6 +167,20 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             .field-pill-file-refs-shell {
                 gap: var(--field-pill-gap);
             }
+            .field-pill-file-ref-open {
+                min-width: 0;
+                flex: 1 1 auto;
+                display: inline-flex;
+                align-items: center;
+                gap: var(--space-2);
+                border: 0;
+                background: transparent;
+                padding: 0;
+                color: inherit;
+                font: inherit;
+                text-align: left;
+                cursor: pointer;
+            }
 
             glass-button {
                 flex-shrink: 0;
@@ -1044,6 +1058,12 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             delete ov.llm_resource_key;
             patch.llm = Object.keys(ov).length > 0 ? ov : null;
         }
+        const contextPreset = typeof this.nodeConfig?.llm_context_resource_key === 'string'
+            ? this.nodeConfig.llm_context_resource_key.trim()
+            : '';
+        if (contextPreset === key) {
+            patch.llm_context_resource_key = null;
+        }
         this._emitPatch(patch);
     }
 
@@ -1171,23 +1191,35 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                                     const fsize = this._formatFileSize(f.file_size);
                                     return html`
                                         <div class="field-pill-file-ref-row">
-                                            <platform-icon
-                                                class="field-pill-file-ref-icon"
-                                                file-icon
-                                                name=${resolveFileIconKey(fname, fmime)}
-                                                size="22"
-                                            ></platform-icon>
-                                            <div class="field-pill-file-ref-info">
-                                                <span class="field-pill-file-ref-line" title=${fname}>
-                                                    <span class="field-pill-file-ref-name">${fname}</span>
-                                                    ${fsize
-                                                        ? html`
-                                                            <span class="field-pill-file-ref-sep">\u00a0\u00b7\u00a0</span>
-                                                            <span class="field-pill-file-ref-meta">${fsize}</span>
-                                                          `
-                                                        : ''}
-                                                </span>
-                                            </div>
+                                            <button
+                                                type="button"
+                                                class="field-pill-file-ref-open"
+                                                @click=${() => this.openFile({
+                                                    file_id: f.file_id,
+                                                    original_name: fname,
+                                                    content_type: fmime,
+                                                    file_size: f.file_size,
+                                                    url: typeof f.url === 'string' ? f.url : '',
+                                                }, { source: 'flows_node_file_ref' })}
+                                            >
+                                                <platform-icon
+                                                    class="field-pill-file-ref-icon"
+                                                    file-icon
+                                                    name=${resolveFileIconKey(fname, fmime)}
+                                                    size="22"
+                                                ></platform-icon>
+                                                <div class="field-pill-file-ref-info">
+                                                    <span class="field-pill-file-ref-line" title=${fname}>
+                                                        <span class="field-pill-file-ref-name">${fname}</span>
+                                                        ${fsize
+                                                            ? html`
+                                                                <span class="field-pill-file-ref-sep">\u00a0\u00b7\u00a0</span>
+                                                                <span class="field-pill-file-ref-meta">${fsize}</span>
+                                                              `
+                                                            : ''}
+                                                    </span>
+                                                </div>
+                                            </button>
                                             <button
                                                 class="field-pill-file-ref-remove"
                                                 type="button"

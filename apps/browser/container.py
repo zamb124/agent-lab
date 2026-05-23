@@ -4,8 +4,6 @@ DI контейнер сервиса browser.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from apps.browser.config import get_browser_settings, settings_to_runtime_view
 from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
 from core.container import BaseContainer, lazy
@@ -37,11 +35,11 @@ class BrowserContainer(BaseContainer):
     """
 
     @lazy
-    def browser_runtime(self):
+    def browser_runtime(self) -> BrowserRuntimeFacade:
         return BrowserRuntimeFacade(settings_to_runtime_view(get_browser_settings()))
 
 
-_browser_container: Optional[BrowserContainer] = None
+_browser_container: BrowserContainer | None = None
 
 
 def get_browser_container() -> BrowserContainer:

@@ -13,6 +13,7 @@ from apps.flows.src.models import NodeConfig, ToolReference
 from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.models.tool_reference import CallParameter
+from core.llm_context import LLMContextPatch
 from core.logging import get_logger
 from core.pagination import OffsetPage
 
@@ -40,6 +41,8 @@ class NodeCreateRequest(BaseModel):
     prompt: str | None = None
     tools: list[Any] = Field(default_factory=list)  # str для обычных tools, dict для inline tools
     llm: NodeLLMConfigRequest | None = None
+    llm_context: LLMContextPatch | None = None
+    llm_context_resource_key: str | None = None
     variables: dict[str, Any] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
 
@@ -54,6 +57,8 @@ class NodeResponse(BaseModel):
     prompt: str | None
     tools: list[Any]  # str для обычных tools, dict для inline tools
     llm: dict[str, Any] | None
+    llm_context: dict[str, Any] | None = None
+    llm_context_resource_key: str | None = None
     variables: dict[str, Any] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
     source: str = "manual"
@@ -112,6 +117,8 @@ def _node_to_response(node: NodeConfig) -> NodeResponse:
         prompt=node.prompt,
         tools=[_tool_ref_to_response(t) for t in node.tools],
         llm=node.llm.model_dump() if node.llm else None,
+        llm_context=node.llm_context.model_dump(exclude_none=True) if node.llm_context else None,
+        llm_context_resource_key=node.llm_context_resource_key,
         variables=node.local_variables,
         tags=node.tags,
         source=node.source,
@@ -159,6 +166,8 @@ async def create_node(request: NodeCreateRequest, container: ContainerDep) -> No
         prompt=request.prompt,
         tools=tools,
         llm=llm_config,
+        llm_context=request.llm_context,
+        llm_context_resource_key=request.llm_context_resource_key,
         local_variables=request.variables,
         tags=request.tags,
         source="api",
@@ -213,6 +222,8 @@ async def update_node(
         prompt=request.prompt,
         tools=tools,
         llm=llm_config,
+        llm_context=request.llm_context,
+        llm_context_resource_key=request.llm_context_resource_key,
         local_variables=request.variables,
         tags=request.tags,
         source=source,

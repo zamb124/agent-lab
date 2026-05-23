@@ -9,7 +9,7 @@ Sign in with Apple, подходит для push, только если в Apple
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,7 @@ class ResolvedApnsCredentials:
     use_sandbox: bool
 
 
-def resolve_apns_credentials(settings: Any) -> Optional[ResolvedApnsCredentials]:
+def resolve_apns_credentials(settings: Any) -> ResolvedApnsCredentials | None:
     push = settings.push
     bundle_id = push.apns_bundle_id
     if bundle_id is None or not str(bundle_id).strip():
@@ -52,7 +52,7 @@ def resolve_apns_credentials(settings: Any) -> Optional[ResolvedApnsCredentials]
     )
 
 
-def _apple_field(apple: Any, name: str) -> Optional[str]:
+def _apple_field(apple: Any, name: str) -> str | None:
     if apple is None:
         return None
     value = getattr(apple, name, None)

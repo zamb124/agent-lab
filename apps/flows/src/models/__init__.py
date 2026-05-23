@@ -1,4 +1,22 @@
 from .channel_config import ChannelNodeConfig, OutputAction
+from .dataflow import (
+    DataflowAvailability,
+    DataflowCanvasChip,
+    DataflowCanvasOutputChip,
+    DataflowCanvasSummary,
+    DataflowConfidence,
+    DataflowConfigRead,
+    DataflowConfigRef,
+    DataflowInputMappingRow,
+    DataflowInspectResult,
+    DataflowIssue,
+    DataflowMappingSource,
+    DataflowNodeInfo,
+    DataflowSeverity,
+    DataflowSource,
+    DataflowStateDescriptor,
+    DataflowStatus,
+)
 from .enums import (
     ChannelType,
     CodeMode,
@@ -41,11 +59,22 @@ from .flow_speech_settings import (
 )
 from .llm_model import LLMModel
 from .mcp import MCPCallResult, MCPServerConfig, MCPToolInfo, MCPTransportType
-from .node_config import NodeConfig, NodeLLMConfig, NodeLLMOverride, ReactConfig, ReactLoopMode
+from .node_config import (
+    GraphNodeConfig,
+    NodeConfig,
+    NodeInputMapping,
+    NodeLLMConfig,
+    NodeLLMOverride,
+    ReactConfig,
+    ReactLoopMode,
+)
 from .resource import (
     LLMResourceConfig,
+    RagResourceBindParams,
     ResourceDefinition,
+    ResourceMapInput,
     ResourceReference,
+    ResourceReferenceInput,
     ResourceType,
 )
 from .session_config import SessionConfig
@@ -71,6 +100,22 @@ __all__ = [
     "CodeMode",
     "ReactToolRole",
     "CronTriggerConfig",
+    "DataflowAvailability",
+    "DataflowCanvasChip",
+    "DataflowCanvasOutputChip",
+    "DataflowCanvasSummary",
+    "DataflowConfidence",
+    "DataflowConfigRead",
+    "DataflowConfigRef",
+    "DataflowInspectResult",
+    "DataflowInputMappingRow",
+    "DataflowIssue",
+    "DataflowMappingSource",
+    "DataflowNodeInfo",
+    "DataflowSeverity",
+    "DataflowSource",
+    "DataflowStateDescriptor",
+    "DataflowStatus",
     "Edge",
     "EmailTriggerConfig",
     "EvaluationResult",
@@ -79,10 +124,12 @@ __all__ = [
     "ExternalAPIConfig",
     "FlowConfig",
     "FlowVariableConfig",
+    "GraphNodeConfig",
     "HTTPMethod",
     "InputConfig",
     "InputType",
     "NodeConfig",
+    "NodeInputMapping",
     "NodeLLMConfig",
     "NodeLLMOverride",
     "LLMConfig",
@@ -119,6 +166,9 @@ __all__ = [
     "MCPTransportType",
     "ResourceType",
     "LLMResourceConfig",
+    "RagResourceBindParams",
     "ResourceDefinition",
+    "ResourceMapInput",
     "ResourceReference",
+    "ResourceReferenceInput",
 ]

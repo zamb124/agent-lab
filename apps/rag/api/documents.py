@@ -3,7 +3,7 @@ API для управления документами RAG.
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
@@ -45,9 +45,9 @@ class IngestTextRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str = Field(..., min_length=1)
-    document_name: Optional[str] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    document_id: Optional[str] = None
+    document_name: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    document_id: str | None = None
 
 
 class IngestTextResponse(BaseModel):
@@ -63,7 +63,7 @@ async def ingest_text(
     namespace_id: str,
     request: IngestTextRequest,
     container: ContainerDep,
-    provider: Optional[str] = Query(None),
+    provider: str | None = Query(None),
 ) -> IngestTextResponse:
     """
     Синхронная индексация произвольного текста в namespace (без файла и S3).
@@ -77,7 +77,7 @@ async def ingest_text(
     company_id = require_active_company().company_id
     user_id = context.user.user_id
 
-    merged_meta: Dict[str, Any] = dict(request.metadata)
+    merged_meta: dict[str, Any] = dict(request.metadata)
     merged_meta["company_id"] = company_id
     merged_meta["uploaded_by_user_id"] = user_id
     if request.document_id:
@@ -117,7 +117,7 @@ async def list_documents(
     container: ContainerDep,
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    provider: Optional[str] = Query(None),
+    provider: str | None = Query(None),
 ) -> OffsetPage[RAGDocument]:
     """Список документов в namespace (completed + in-progress)."""
     settings = get_rag_settings()
@@ -162,7 +162,7 @@ async def upload_document(
     container: ContainerDep,
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
-    provider: Optional[str] = Query(None),
+    provider: str | None = Query(None),
 ) -> DocumentUploadResponse:
     """
     Принимает документ, сохраняет через FileProcessor (FileRecord в shared DB),
@@ -172,7 +172,7 @@ async def upload_document(
     if not settings.s3.enabled or not settings.s3.default_bucket:
         raise HTTPException(status_code=503, detail="S3 не настроен.")
 
-    metadata_dict: Dict[str, Any] = json.loads(metadata) if metadata else {}
+    metadata_dict: dict[str, Any] = json.loads(metadata) if metadata else {}
     file_data = await file.read()
 
     context = require_context()
@@ -243,7 +243,7 @@ async def delete_document(
     namespace_id: str,
     document_id: str,
     container: ContainerDep,
-    provider: Optional[str] = Query(None),
+    provider: str | None = Query(None),
 ):
     """Удаляет документ из S3, shared DB и векторного индекса."""
     status_repo = container.document_status_repository

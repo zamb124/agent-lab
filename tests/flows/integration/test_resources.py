@@ -8,14 +8,14 @@ import uuid
 
 import pytest
 
-pytestmark = pytest.mark.skip(
-    reason="Legacy in-process resource injection is no longer supported; sandbox code uses capabilities."
-)
-
 from apps.flows.src.models import ResourceDefinition, ResourceReference
 from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
 from apps.flows.src.runtime.nodes import CodeNode, LlmNode
 from core.state import ExecutionState
+
+pytestmark = pytest.mark.skip(
+    reason="Legacy in-process resource injection is no longer supported; sandbox code uses capabilities."
+)
 
 
 def make_state(**kwargs) -> ExecutionState:
@@ -477,99 +477,6 @@ async def run(args, state):
         read_result = await read_node.run(state2)
 
         assert read_result.file_content == 'Hello from resource test!'
-
-    @pytest.mark.asyncio
-    async def test_files_resource_list(self, unique_prefix, container):
-        """
-        FILES resource: список файлов.
-        """
-        files_resource = {
-            "type": "files",
-            "config": {
-                **self.MINIO_CONFIG,
-                "prefix": unique_prefix
-            }
-        }
-
-        # Создаём несколько файлов
-        storage = FilesResource(
-            prefix=unique_prefix,
-            **self.MINIO_CONFIG
-        )
-        await storage.write("file1.txt", "Content 1")
-        await storage.write("file2.txt", "Content 2")
-
-        # Получаем список
-        list_node = CodeNode(
-            node_id="list_files",
-            config={
-                "code": """
-async def run(args, state):
-    files = await storage.list()
-    state.file_count = len(files)
-    state.files = files
-    return {'count': state.file_count}
-""",
-                "resources": {
-                    "storage": ResourceReference.model_validate(files_resource)
-                }
-            },
-            container=container,
-        )
-
-        state = make_state()
-        result = await list_node.run(state)
-
-        assert result.file_count >= 2
-
-    @pytest.mark.asyncio
-    async def test_files_resource_exists_delete(self, unique_prefix, container):
-        """
-        FILES resource: проверка существования и удаление.
-        """
-        files_resource = {
-            "type": "files",
-            "config": {
-                **self.MINIO_CONFIG,
-                "prefix": unique_prefix
-            }
-        }
-
-        # Создаём файл напрямую
-        storage = FilesResource(
-            prefix=unique_prefix,
-            **self.MINIO_CONFIG
-        )
-        await storage.write("to_delete.txt", "Will be deleted")
-
-        # Проверяем и удаляем через ноду
-        node = CodeNode(
-            node_id="check_delete",
-            config={
-                "code": """
-async def run(args, state):
-    exists_before = await storage.exists('to_delete.txt')
-    deleted = await storage.delete('to_delete.txt')
-    exists_after = await storage.exists('to_delete.txt')
-
-    state.existed = exists_before
-    state.deleted = deleted
-    state.gone = not exists_after
-    return {'success': state.gone}
-""",
-                "resources": {
-                    "storage": ResourceReference.model_validate(files_resource)
-                }
-            },
-            container=container,
-        )
-
-        state = make_state()
-        result = await node.run(state)
-
-        assert result.existed is True
-        assert result.deleted is True
-        assert result.gone is True
 
     @pytest.mark.asyncio
     async def test_files_resource_in_react_tool(self, mock_llm_with_queue, unique_prefix, container):

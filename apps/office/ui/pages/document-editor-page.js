@@ -1,10 +1,10 @@
 /**
- * OfficeDocumentEditorPage — тонкая обёртка над `<onlyoffice-host>`.
+ * OfficeDocumentEditorPage — тонкая обёртка над `<platform-onlyoffice-host>`.
  *
  * Маршрут `/documents/edit/:bindingId` (parameter передаётся как `.bindingId`
  * из `OfficeApp.renderRoute`). Фабрика `useOp('office/document_editor_config')`
  * по `bindingId` достаёт JWT и URL DocsAPI, передаёт результат как `config`
- * в `<onlyoffice-host>`. Все iframe-портал и обозреватели изолированы в host.
+ * в `<platform-onlyoffice-host>`. Все iframe-портал и обозреватели изолированы в host.
  *
  * Простая защита от мусорного сегмента в URL — `_isPlausibleBindingId`:
  * не допускает слэши, `..`, расширения; иначе показывает ошибку без
@@ -14,7 +14,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
-import '../components/onlyoffice-host.js';
+import '@platform/lib/components/platform-onlyoffice-host.js';
 
 const BAD_BINDING_PATTERNS = [/\//, /\.\./, /\.html?$/i, /^\s*$/];
 
@@ -170,11 +170,11 @@ export class OfficeDocumentEditorPage extends PlatformPage {
                 ${showLoading
                     ? html`<div class="loading">${this.t('editor.loading')}</div>`
                     : (config
-                        ? html`<onlyoffice-host
+                        ? html`<platform-onlyoffice-host
                                 .bindingId=${this.bindingId}
                                 .config=${config}
                                 @editor-error=${this._onEditorError}
-                            ></onlyoffice-host>`
+                            ></platform-onlyoffice-host>`
                         : nothing)}
             </div>
         `;

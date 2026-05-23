@@ -10,7 +10,7 @@ import re
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from core.context import get_context
 from core.logging import get_logger
@@ -47,10 +47,10 @@ class TranslationManager:
         self.translations_dir = Path(self.config.translations_directory)
 
         # Кеш переводов: {language: {key: value}}
-        self._translations_cache: Dict[Language, Dict[str, str]] = {}
+        self._translations_cache: dict[Language, dict[str, str]] = {}
 
         # Найденные ключи: {key: TranslationKey}
-        self._discovered_keys: Dict[str, TranslationKey] = {}
+        self._discovered_keys: dict[str, TranslationKey] = {}
 
         self._initialized = True
 
@@ -171,7 +171,7 @@ class TranslationManager:
                     logger.warning(f"Переводы для {language.value} не найдены")
                     self._translations_cache[language] = {}
 
-    async def _load_modular_translations(self, lang_dir: Path) -> Dict[str, str]:
+    async def _load_modular_translations(self, lang_dir: Path) -> dict[str, str]:
         """Загружает переводы из модульной структуры"""
         translations = {}
 
@@ -314,7 +314,7 @@ class TranslationManager:
                 return True
         return False
 
-    def _extract_field_params(self, call_node: ast.Call) -> Dict[str, str]:
+    def _extract_field_params(self, call_node: ast.Call) -> dict[str, str]:
         """Извлекает параметры из вызова Field()"""
         params: dict[str, str] = {}
 
@@ -664,7 +664,7 @@ class TranslationManager:
 
         return translation
 
-    def get_translations(self, language: Language) -> Dict[str, str]:
+    def get_translations(self, language: Language) -> dict[str, str]:
         """Возвращает все переводы для указанного языка"""
         return self._translations_cache.get(language, {}).copy()
 
@@ -694,7 +694,7 @@ class TranslationManager:
 
 
 # Глобальный экземпляр менеджера
-_translation_manager: Optional[TranslationManager] = None
+_translation_manager: TranslationManager | None = None
 
 
 def get_translation_manager() -> TranslationManager:

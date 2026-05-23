@@ -10,7 +10,7 @@ from core.config.loader import load_merged_config
 from core.tasks.logging_init import setup_worker_logging_early
 
 _merged_sync_worker = load_merged_config(service_name="sync_worker", silent=True)
-_sync_worker_settings = SyncSettings(**_merged_sync_worker)
+_sync_worker_settings = SyncSettings.model_validate(_merged_sync_worker)
 setup_worker_logging_early("sync_worker", logging_config=_sync_worker_settings.logging)
 set_settings(_sync_worker_settings)
 

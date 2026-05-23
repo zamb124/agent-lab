@@ -51,7 +51,7 @@ import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
 import '@platform/lib/components/layout/platform-island.js';
 import '../components/office-sidebar.js';
 import '../components/sheets/office-workspace-picker-sheet.js';
-import '../components/onlyoffice-host.js';
+import '@platform/lib/components/platform-onlyoffice-host.js';
 import '../components/office-document-row.js';
 import '../components/office-catalog-card.js';
 import '../components/office-integration-banner.js';

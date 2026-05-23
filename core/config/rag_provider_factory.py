@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Literal, Optional, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from core.company_ai.resolver import resolve_embedding_for_company
 from core.config.base import BaseSettings, get_settings
@@ -57,7 +57,7 @@ class ResolvedRagProvider:
 
 def resolve_rag_provider_bundle(
     settings: BaseSettings,
-    provider_name: Optional[str] = None,
+    provider_name: str | None = None,
 ) -> ResolvedRagProvider:
     rag = settings.rag
     key = rag.get_enabled_provider_key(provider_name)
@@ -106,7 +106,7 @@ def _bundle_cache_key(bundle: ResolvedRagProvider) -> str:
 
 
 def get_rag_provider(
-    provider_name: Optional[str] = None,
+    provider_name: str | None = None,
     *,
     settings: BaseSettings | None = None,
 ) -> "BaseRAGProvider":

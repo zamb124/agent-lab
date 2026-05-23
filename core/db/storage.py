@@ -13,7 +13,7 @@ import json
 from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from types import TracebackType
-from typing import Optional, TypedDict, cast
+from typing import TypedDict, cast
 
 from sqlalchemy import Column, DateTime, MetaData, String, Table, delete, select
 from sqlalchemy import func as sa_func
@@ -120,7 +120,7 @@ class Storage:
 
     def __init__(
         self,
-        db_url: Optional[str] = None,
+        db_url: str | None = None,
         get_context_func: ContextGetter | None = None,
     ):
         self.session_factory: async_sessionmaker[AsyncSession] | None = None
@@ -133,7 +133,7 @@ class Storage:
         """Возвращает асинхронный контекстный менеджер для сессии БД"""
         return _SessionContextManager(self)
 
-    def _get_table_name(self, key: str, company_id: Optional[str] = None) -> str:
+    def _get_table_name(self, key: str, company_id: str | None = None) -> str:
         """
         Определяет имя таблицы на основе префикса ключа и компании.
 
@@ -189,7 +189,7 @@ class Storage:
         self._table_cache[table_name] = table
         return table
 
-    def _get_company_key(self, key: str, force_global: bool = False) -> tuple[str, Optional[str]]:
+    def _get_company_key(self, key: str, force_global: bool = False) -> tuple[str, str | None]:
         """
         Добавляет префикс компании к ключу если нужно.
 
@@ -224,7 +224,7 @@ class Storage:
         key: str,
         db_session: AsyncSession | None = None,
         force_global: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Получает значение по ключу.
 
@@ -250,7 +250,7 @@ class Storage:
         key: str,
         table_name: str,
         session: AsyncSession,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Получает значение с использованием переданной сессии"""
         table = self._get_table(table_name)
 
@@ -265,7 +265,7 @@ class Storage:
         self,
         key: str,
         value: str,
-        ttl: Optional[int] = None,
+        ttl: int | None = None,
         db_session: AsyncSession | None = None,
         force_global: bool = False,
     ) -> bool:
@@ -298,7 +298,7 @@ class Storage:
         self,
         key: str,
         value: str,
-        ttl: Optional[int],
+        ttl: int | None,
         table_name: str,
         session: AsyncSession,
     ) -> bool:
@@ -483,7 +483,7 @@ class Storage:
 
             return data
 
-    async def get_with_session_and_table(self, key: str, table_name: str) -> Optional[str]:
+    async def get_with_session_and_table(self, key: str, table_name: str) -> str | None:
         """
         Низкоуровневый метод для получения значения из конкретной таблицы.
         Используется BaseRepository.
@@ -499,7 +499,7 @@ class Storage:
             return await self._get_with_session(key, table_name, session)
 
     async def set_with_table(
-        self, key: str, value: str, table_name: str, ttl: Optional[int] = None
+        self, key: str, value: str, table_name: str, ttl: int | None = None
     ) -> bool:
         """
         Низкоуровневый метод для сохранения значения в конкретную таблицу.

@@ -4,7 +4,6 @@
 Расширяет BaseSettings добавляя специфичные для Frontend поля.
 """
 
-from typing import Optional
 
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
@@ -24,7 +23,7 @@ class FrontendSettings(BaseSettings):
     pass
 
 
-_frontend_settings: Optional[FrontendSettings] = None
+_frontend_settings: FrontendSettings | None = None
 
 
 def get_frontend_settings() -> FrontendSettings:
@@ -37,7 +36,7 @@ def get_frontend_settings() -> FrontendSettings:
     global _frontend_settings
     if _frontend_settings is None:
         merged_config = load_merged_config(service_name="frontend", silent=True)
-        _frontend_settings = FrontendSettings(**merged_config)
+        _frontend_settings = FrontendSettings.model_validate(merged_config)
 
     return _frontend_settings
 

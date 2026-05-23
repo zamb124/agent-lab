@@ -8,7 +8,8 @@ DocxTemplater — одна ссылка на файл (FileRef): dict из state
 from __future__ import annotations
 
 import base64
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from core.files.docx_template.engine import render_docx_template_bytes
 from core.files.docx_template.files_ref import read_template_bytes_from_file_ref
@@ -49,7 +50,7 @@ class DocxTemplater:
         strict: bool = False,
         date_iso: bool = True,
         public: bool = True,
-        writer: Optional[FileWriter] = None,
+        writer: FileWriter | None = None,
     ) -> FileMetadata:
         name = (output_original_name or "").strip()
         if not name.lower().endswith(".docx"):

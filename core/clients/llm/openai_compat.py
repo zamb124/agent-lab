@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Any
 
 
-def masked_headers(headers: Dict[str, str]) -> Dict[str, str]:
+def masked_headers(headers: dict[str, str]) -> dict[str, str]:
     sanitized = dict(headers)
     for key in list(sanitized.keys()):
         lower_key = key.lower()
@@ -19,12 +19,12 @@ def masked_headers(headers: Dict[str, str]) -> Dict[str, str]:
     return sanitized
 
 
-def pretty_json(payload: Dict[str, Any]) -> str:
+def pretty_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 def merge_openai_compatible_usage_into_usage_data(
-    usage: Dict[str, Any], usage_data: Dict[str, Any]
+    usage: dict[str, Any], usage_data: dict[str, Any]
 ) -> None:
     """
     Заполняет usage_data из объекта usage финального чанка/ответа chat completions.

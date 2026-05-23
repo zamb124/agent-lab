@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING
 
 from core.clients.llm.config import LLMCallConfig
 from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER, LLM_ROUTING_PROVIDER_SLUGS
@@ -24,7 +24,7 @@ def _yandex_openai_root(settings: BaseSettings) -> str:
     return yandex_llm_openai_root_from_provider_cfg(yandex_config)
 
 
-def _yandex_auth_headers(*, api_key: str, folder_id: str) -> Dict[str, str]:
+def _yandex_auth_headers(*, api_key: str, folder_id: str) -> dict[str, str]:
     resolved_folder_id = folder_id.strip()
     if not resolved_folder_id:
         raise ValueError("Yandex LLM: folder_id пуст")
@@ -55,7 +55,7 @@ def normalize_yandex_resource_model_uri(model: str, folder_id: str) -> str:
     return model
 
 
-def _resolve_var(value: Optional[str], state: Optional["ExecutionState"]) -> Optional[str]:
+def _resolve_var(value: str | None, state: ExecutionState | None) -> str | None:
     """Резолвит @var:path из state.variables по strict-контракту."""
     if not value:
         return None
@@ -72,12 +72,12 @@ def _resolve_var(value: Optional[str], state: Optional["ExecutionState"]) -> Opt
 
 
 def _resolve_headers_vars(
-    headers: Optional[Dict[str, str]],
-    state: Optional["ExecutionState"],
-) -> Optional[Dict[str, str]]:
+    headers: dict[str, str] | None,
+    state: ExecutionState | None,
+) -> dict[str, str] | None:
     if not headers:
         return None
-    resolved_headers: Dict[str, str] = {}
+    resolved_headers: dict[str, str] = {}
     for key, header_value in headers.items():
         resolved_header_value = _resolve_var(header_value, state)
         if resolved_header_value is None:
@@ -86,7 +86,7 @@ def _resolve_headers_vars(
     return resolved_headers
 
 
-def _detect_provider(base_url: Optional[str]) -> Optional[str]:
+def _detect_provider(base_url: str | None) -> str | None:
     """Определяет провайдера по base_url."""
     if not base_url:
         return None
@@ -107,7 +107,7 @@ def _detect_provider(base_url: Optional[str]) -> Optional[str]:
     return None
 
 
-def _is_humanitec_llm_provider(provider: Optional[str]) -> bool:
+def _is_humanitec_llm_provider(provider: str | None) -> bool:
     return str(provider or "").strip() == HUMANITEC_LLM_PROVIDER
 
 
@@ -148,12 +148,12 @@ def _get_default_base_url(provider: str, settings: BaseSettings) -> str:
 def _resolve_default_base_url(
     *,
     provider: str,
-    explicit_base_url: Optional[str],
+    explicit_base_url: str | None,
     config_base_url_is_set: bool,
     inherit_transport: bool,
-    inherit_transport_from: Optional[LLMCallConfig],
+    inherit_transport_from: LLMCallConfig | None,
     settings: BaseSettings,
-) -> Optional[str]:
+) -> str | None:
     if config_base_url_is_set:
         return explicit_base_url
     if inherit_transport and inherit_transport_from is not None:
@@ -167,9 +167,9 @@ def _resolve_llm_call_config(
     config: LLMCallConfig,
     *,
     settings: BaseSettings,
-    state: Optional["ExecutionState"] = None,
-    inherit_transport_from: Optional[LLMCallConfig] = None,
-    source: Optional[str] = None,
+    state: ExecutionState | None = None,
+    inherit_transport_from: LLMCallConfig | None = None,
+    source: str | None = None,
 ) -> LLMCallConfig:
     """Resolve one LLM config into a concrete runtime attempt."""
     if not isinstance(config, LLMCallConfig):
@@ -215,9 +215,15 @@ def _resolve_llm_call_config(
         if config.folder_id is not None
         else (inherit_transport_from.folder_id if inherit_transport and inherit_transport_from else None)
     )
-    default_headers: Dict[str, str] = {}
+    default_headers: dict[str, str] = {}
     candidate_model = str(config.model).strip()
     resolved_source = source or config.source
+    configured_model = settings.llm.models.get(candidate_model)
+    resolved_context_length = (
+        config.context_length
+        if config.context_length is not None
+        else (configured_model.context_length if configured_model else None)
+    )
 
     if resolved_api_key:
         if resolved_provider == "custom_openai_compatible" and not resolved_base_url:
@@ -241,7 +247,7 @@ def _resolve_llm_call_config(
             if not folder_id:
                 raise ValueError(
                     "Yandex LLM: задайте folder_id в переопределении ноды/ресурса "
-                    "или llm.yandex.folder_id"
+                    + "или llm.yandex.folder_id"
                 )
             default_headers = _yandex_auth_headers(
                 api_key=resolved_api_key,
@@ -260,6 +266,7 @@ def _resolve_llm_call_config(
                 "folder_id": folder_id,
                 "default_headers": default_headers,
                 "source": resolved_source,
+                "context_length": resolved_context_length,
                 "extra_request_body": (
                     dict(config.extra_request_body) if config.extra_request_body else None
                 ),
@@ -301,7 +308,7 @@ def _resolve_llm_call_config(
     elif resolved_provider == "custom_openai_compatible":
         raise ValueError(
             "custom_openai_compatible LLM требует явный api_key и base_url; "
-            "вызывайте через core.company_ai.resolve_llm_for_capability(...)"
+            + "вызывайте через core.company_ai.resolve_llm_for_capability(...)"
         )
 
     if provider_config is not None:
@@ -315,6 +322,7 @@ def _resolve_llm_call_config(
             "folder_id": folder_id,
             "default_headers": default_headers,
             "source": resolved_source,
+            "context_length": resolved_context_length,
             "extra_request_body": (
                 dict(config.extra_request_body) if config.extra_request_body else None
             ),
@@ -328,10 +336,10 @@ def _resolve_llm_call_config(
 
 def _resolved_llm_configs(
     primary_config: LLMCallConfig,
-    fallback_models: Optional[List[LLMCallConfig]],
+    fallback_models: list[LLMCallConfig] | None,
     *,
     settings: BaseSettings,
-    state: Optional["ExecutionState"],
+    state: ExecutionState | None,
 ) -> list[LLMCallConfig]:
     resolved_primary = _resolve_llm_call_config(
         primary_config,
@@ -363,11 +371,11 @@ def _platform_default_pool_is_configured(settings: BaseSettings) -> bool:
 
 def _should_use_platform_default_pool(
     *,
-    model: Optional[str],
-    provider: Optional[str],
-    api_key: Optional[str],
-    base_url: Optional[str],
-    folder_id: Optional[str],
+    model: str | None,
+    provider: str | None,
+    api_key: str | None,
+    base_url: str | None,
+    folder_id: str | None,
     settings: BaseSettings,
 ) -> bool:
     has_explicit_transport = any(

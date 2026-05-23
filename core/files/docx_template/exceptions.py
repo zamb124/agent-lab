@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.errors import ImanBaseError
 
@@ -22,12 +22,12 @@ class DocxTemplateInvalidError(DocxTemplateError):
 
     def __init__(
         self,
-        message: Optional[str] = None,
+        message: str | None = None,
         *,
-        reason: Optional[str] = None,
+        reason: str | None = None,
         **kwargs: Any,
     ) -> None:
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if reason:
             payload["reason"] = reason
         super().__init__(
@@ -47,11 +47,11 @@ class DocxTemplateSyntaxError(DocxTemplateError):
         self,
         message: str,
         *,
-        line: Optional[int] = None,
-        name: Optional[str] = None,
+        line: int | None = None,
+        name: str | None = None,
         **kwargs: Any,
     ) -> None:
-        payload: Dict[str, Any] = {"detail": message}
+        payload: dict[str, Any] = {"detail": message}
         if line is not None:
             payload["line"] = line
         if name is not None:
@@ -76,11 +76,11 @@ class DocxTemplateContextError(DocxTemplateError):
         self,
         message: str,
         *,
-        missing_variables: Optional[List[str]] = None,
-        extra_keys: Optional[List[str]] = None,
+        missing_variables: list[str] | None = None,
+        extra_keys: list[str] | None = None,
         **kwargs: Any,
     ) -> None:
-        payload: Dict[str, Any] = {"detail": message}
+        payload: dict[str, Any] = {"detail": message}
         if missing_variables is not None:
             payload["missing_variables"] = missing_variables
         if extra_keys is not None:

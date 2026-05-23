@@ -5,13 +5,24 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Protocol
 
+from core.types import JsonObject
 from core.variables.resolver import VariableResolutionError, VarResolver
 
 
+class FlowVariableMapProvider(Protocol):
+    async def get_resolved_variables_map(
+        self,
+        flow_id: str,
+        branch_id: str = "default",
+        *,
+        config_version: str | None = None,
+    ) -> JsonObject: ...
+
+
 async def resolve_at_var_for_flow(
-    container: Any,
+    flow_factory: FlowVariableMapProvider,
     flow_id: str,
     raw: str,
     *,
@@ -24,7 +35,7 @@ async def resolve_at_var_for_flow(
     if not s.startswith("@var:"):
         return s
     try:
-        var_map = await container.flow_factory.get_resolved_variables_map(
+        var_map = await flow_factory.get_resolved_variables_map(
             flow_id,
             branch_id,
             config_version=config_version,

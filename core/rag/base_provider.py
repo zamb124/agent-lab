@@ -6,12 +6,22 @@
 import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from types import TracebackType
 
+from core.config.models import RAGProviderConfig
 from core.files.s3_client import S3ClientFactory
 from core.files.types import ext_to_mime
 from core.logging import get_logger
-from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
+from core.rag.models import (
+    RAGDocument,
+    RAGMetadata,
+    RAGMetadataFilter,
+    RAGNamespace,
+    RAGSearchOptions,
+    RAGSearchResult,
+)
+from core.rag.upload_profile_binding import UploadProfileBinding
+from core.types import JsonValue
 
 logger = get_logger(__name__)
 _LOGICAL_OPERATORS: frozenset[str] = frozenset({"$and", "$or"})
@@ -19,48 +29,56 @@ _COMPARISON_OPERATORS: frozenset[str] = frozenset(
     {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin"}
 )
 
-def _is_scalar_filter_value(value: Any) -> bool:
+
+def _is_scalar_filter_value(value: JsonValue) -> bool:
     if isinstance(value, bool):
         return True
     return isinstance(value, (str, int, float))
 
-def _is_number(value: Any) -> bool:
+
+def _is_number(value: JsonValue) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
-def _validate_in_values(field_name: str, operator: str, value: Any) -> None:
+
+def _validate_in_values(field_name: str, operator: str, value: JsonValue) -> None:
     if not isinstance(value, list) or not value:
         raise ValueError(f"RAG filters: {field_name}.{operator} должен быть непустым массивом")
     first = value[0]
     if isinstance(first, bool):
-        expected_type = bool
+        for item in value:
+            if not isinstance(item, bool):
+                raise ValueError(
+                    f"RAG filters: {field_name}.{operator} должен содержать значения одного типа"
+                )
+        return
     elif isinstance(first, str):
-        expected_type = str
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError(
+                    f"RAG filters: {field_name}.{operator} должен содержать значения одного типа"
+                )
+        return
     elif _is_number(first):
-        expected_type = (int, float)
-    else:
-        raise ValueError(
-            f"RAG filters: {field_name}.{operator} поддерживает только string/number/boolean"
-        )
-    for item in value:
-        if expected_type == (int, float):
+        for item in value:
             if not _is_number(item):
                 raise ValueError(
                     f"RAG filters: {field_name}.{operator} должен содержать значения одного типа"
                 )
-            continue
-        if not isinstance(item, expected_type):
-            raise ValueError(
-                f"RAG filters: {field_name}.{operator} должен содержать значения одного типа"
-            )
+        return
+    else:
+        raise ValueError(
+            f"RAG filters: {field_name}.{operator} поддерживает только string/number/boolean"
+        )
 
-def validate_metadata_filters(filters: Dict[str, Any]) -> None:
+
+def validate_metadata_filters(filters: RAGMetadataFilter) -> None:
     """
     Валидация фильтра метаданных в формате Chroma-like ``where``.
 
     Поддерживаемые операторы: ``$eq/$ne/$gt/$gte/$lt/$lte/$in/$nin`` и логические ``$and/$or``.
     """
 
-    def _validate_node(node: Any, path: str) -> None:
+    def _validate_node(node: JsonValue, path: str) -> None:
         if not isinstance(node, dict) or not node:
             raise ValueError(f"RAG filters: {path} должен быть непустым объектом")
 
@@ -111,7 +129,7 @@ def validate_metadata_filters(filters: Dict[str, Any]) -> None:
                 if not _is_scalar_filter_value(field_filter):
                     raise ValueError(
                         f"RAG filters: {path}.{field_name} должен быть string/number/boolean "
-                        "или объектом оператора"
+                        f"или объектом оператора"
                     )
 
     _validate_node(filters, "filters")
@@ -122,7 +140,7 @@ class BaseRAGProvider(ABC):
     Определяет единый интерфейс для работы с RAG хранилищем.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: RAGProviderConfig) -> None:
         self.config = config
 
     def _get_content_type(self, file_path: str) -> str:
@@ -165,7 +183,7 @@ class BaseRAGProvider(ABC):
     async def _download_file_from_s3(
         self,
         s3_key: str,
-        bucket_config_key: Optional[str] = None,
+        bucket_config_key: str | None = None,
     ) -> tuple[bytes, str, str]:
         """Скачивает файл из S3 и возвращает (data, bucket_name, filename)."""
         if bucket_config_key:
@@ -253,19 +271,18 @@ class BaseRAGProvider(ABC):
     async def create_namespace(
         self,
         name: str,
-        description: Optional[str] = None,
-        **kwargs
+        description: str | None = None,
     ) -> RAGNamespace:
         """Создает новый namespace для изоляции документов"""
         pass
 
     @abstractmethod
-    async def get_namespace(self, namespace_id: str) -> Optional[RAGNamespace]:
+    async def get_namespace(self, namespace_id: str) -> RAGNamespace | None:
         """Получает информацию о namespace"""
         pass
 
     @abstractmethod
-    async def list_namespaces(self) -> List[RAGNamespace]:
+    async def list_namespaces(self) -> list[RAGNamespace]:
         """Список всех namespaces"""
         pass
 
@@ -279,9 +296,8 @@ class BaseRAGProvider(ABC):
         self,
         namespace_id: str,
         file_path: str,
-        document_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs
+        document_name: str | None = None,
+        metadata: RAGMetadata | None = None,
     ) -> RAGDocument:
         """
         Загружает документ из файла.
@@ -294,9 +310,9 @@ class BaseRAGProvider(ABC):
         self,
         namespace_id: str,
         s3_key: str,
-        document_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs
+        document_name: str | None = None,
+        metadata: RAGMetadata | None = None,
+        upload_profile: UploadProfileBinding | None = None,
     ) -> RAGDocument:
         """
         Загружает документ из S3.
@@ -309,9 +325,8 @@ class BaseRAGProvider(ABC):
         self,
         namespace_id: str,
         text: str,
-        document_name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs
+        document_name: str | None = None,
+        metadata: RAGMetadata | None = None,
     ) -> RAGDocument:
         """
         Загружает текст напрямую в RAG хранилище.
@@ -323,7 +338,7 @@ class BaseRAGProvider(ABC):
         self,
         namespace_id: str,
         document_id: str
-    ) -> Optional[RAGDocument]:
+    ) -> RAGDocument | None:
         """Получает информацию о документе"""
         pass
 
@@ -332,7 +347,7 @@ class BaseRAGProvider(ABC):
         self,
         namespace_id: str,
         limit: int = 100
-    ) -> List[RAGDocument]:
+    ) -> list[RAGDocument]:
         """Список документов в namespace"""
         pass
 
@@ -340,9 +355,9 @@ class BaseRAGProvider(ABC):
     async def list_documents_with_filters(
         self,
         namespace_id: str,
-        where: Optional[Dict[str, Any]] = None,
+        where: RAGMetadataFilter | None = None,
         limit: int = 100
-    ) -> List[RAGDocument]:
+    ) -> list[RAGDocument]:
         """Список документов с фильтрацией по metadata через where clause"""
         pass
 
@@ -361,9 +376,9 @@ class BaseRAGProvider(ABC):
         namespace_id: str,
         query: str,
         limit: int = 5,
-        filters: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> List[RAGSearchResult]:
+        filters: RAGMetadataFilter | None = None,
+        search_options: RAGSearchOptions | None = None,
+    ) -> list[RAGSearchResult]:
         """
         Семантический поиск по документам в namespace.
         """
@@ -371,18 +386,25 @@ class BaseRAGProvider(ABC):
 
     async def search_multiple_namespaces(
         self,
-        namespace_ids: List[str],
+        namespace_ids: list[str],
         query: str,
         limit: int = 5,
-        **kwargs
-    ) -> Dict[str, List[RAGSearchResult]]:
+        filters: RAGMetadataFilter | None = None,
+        search_options: RAGSearchOptions | None = None,
+    ) -> dict[str, list[RAGSearchResult]]:
         """
         Поиск сразу по нескольким namespace.
         Базовая реализация вызывает search() для каждого namespace.
         """
-        results = {}
+        results: dict[str, list[RAGSearchResult]] = {}
         for ns_id in namespace_ids:
-            ns_results = await self.search(ns_id, query, limit, **kwargs)
+            ns_results = await self.search(
+                ns_id,
+                query,
+                limit,
+                filters=filters,
+                search_options=search_options,
+            )
             results[ns_id] = ns_results
             logger.debug(f"Поиск в {ns_id}: найдено {len(ns_results)} результатов")
 
@@ -392,12 +414,17 @@ class BaseRAGProvider(ABC):
         """Удаляет chunks без company_id, если backend хранит company-scoped chunks."""
         raise NotImplementedError(f"{self.provider_name} не поддерживает orphan chunks cleanup")
 
-    async def close(self):
+    async def close(self) -> None:
         """Закрывает соединения"""
         pass
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "BaseRAGProvider":
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         await self.close()

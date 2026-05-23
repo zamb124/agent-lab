@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import httpx
 from pydantic import BaseModel, Field
@@ -411,8 +411,8 @@ class PronunciationAwareTTSClient(BaseTTSClient):
         pronunciation: "CompiledPronunciation",
         *,
         provider_name: str,
-        default_voice: Optional[str] = None,
-        default_language: Optional[str] = None,
+        default_voice: str | None = None,
+        default_language: str | None = None,
     ) -> None:
         self._delegate = delegate
         self._pronunciation = pronunciation
@@ -424,9 +424,9 @@ class PronunciationAwareTTSClient(BaseTTSClient):
         self,
         *,
         text: str,
-        voice: Optional[str] = None,
-        response_format: Optional[str] = None,
-        sample_rate: Optional[int] = None,
+        voice: str | None = None,
+        response_format: str | None = None,
+        sample_rate: int | None = None,
     ) -> TTSResult:
         pipeline = get_tts_text_pipeline()
         original_len = len(text)

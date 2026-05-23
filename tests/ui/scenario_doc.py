@@ -284,14 +284,6 @@ class ScenarioRecorder:
 
         title_en = _strip_optional(m.kwargs.get("title_en"))
         description_en = _strip_optional(m.kwargs.get("description_en"))
-        if title_en is not None and description_en is None:
-            raise ValueError(
-                "pytest.mark.scenario: задан title_en — добавьте description_en (англ. описание сценария)"
-            )
-        if description_en is not None and title_en is None:
-            raise ValueError(
-                "pytest.mark.scenario: задан description_en — добавьте title_en (англ. заголовок сценария)"
-            )
 
         doc = inspect.getdoc(node.function)
         if doc:
@@ -347,7 +339,7 @@ class ScenarioRecorder:
         full_page: bool = True,
         label_en: str | None = None,
     ) -> None:
-        """Фиксирует шаг; при переданном page — ожидание готовности UI, затем скриншот (по умолчанию вся страница). label_en — README.en.md при паре title_en/description_en."""
+        """Фиксирует шаг; при переданном page ждёт готовность UI и делает скриншот."""
         rel: str | None = None
         if page is not None and not self.disabled():
             n = len(self.steps) + 1
@@ -362,10 +354,6 @@ class ScenarioRecorder:
             )
             rel = f"screenshots/{fname}"
         le = _strip_optional(label_en)
-        if self.title_en is not None and le is None:
-            raise ValueError(
-                f"scenario.step: для шага «{label}» задайте label_en=... (англ. подпись), раз включены title_en/description_en"
-            )
         self.steps.append(_StepRecord(label=label, label_en=le, image_rel=rel))
 
     def finalize(self) -> None:
@@ -387,18 +375,19 @@ class ScenarioRecorder:
         readme = self.out_dir / "README.md"
         readme.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
-        if self.title_en is not None:
-            en_lines: list[str] = [
-                f"# {self.title_en}",
-                "",
-            ]
-            if self.description_en:
-                en_lines.extend([self.description_en, ""])
-            for i, s in enumerate(self.steps, start=1):
-                step_label = s.label_en if s.label_en is not None else s.label
-                en_lines.append(f"## Step {i}. {step_label}")
+        en_title = self.title_en or self.title
+        en_description = self.description_en if self.description_en is not None else self.description
+        en_lines: list[str] = [
+            f"# {en_title}",
+            "",
+        ]
+        if en_description:
+            en_lines.extend([en_description, ""])
+        for i, s in enumerate(self.steps, start=1):
+            step_label = s.label_en if s.label_en is not None else s.label
+            en_lines.append(f"## Step {i}. {step_label}")
+            en_lines.append("")
+            if s.image_rel:
+                en_lines.append(f"![{step_label}]({s.image_rel})")
                 en_lines.append("")
-                if s.image_rel:
-                    en_lines.append(f"![{step_label}]({s.image_rel})")
-                    en_lines.append("")
-            (self.out_dir / "README.en.md").write_text("\n".join(en_lines).rstrip() + "\n", encoding="utf-8")
+        (self.out_dir / "README.en.md").write_text("\n".join(en_lines).rstrip() + "\n", encoding="utf-8")

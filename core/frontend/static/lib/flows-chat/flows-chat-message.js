@@ -1,5 +1,6 @@
-import { LitElement, html, css, nothing } from '../lit-shim.js';
+import { html, css, nothing } from '../lit-shim.js';
 import { unsafeHTML } from '../unsafe-html-shim.js';
+import { PlatformElement } from '../platform-element/index.js';
 import '../components/platform-icon.js';
 import '../components/platform-help-hint.js';
 import '../components/platform-assistant-message-actions.js';
@@ -71,7 +72,7 @@ function formatLabel(template, vars) {
     return out;
 }
 
-export class FlowsChatMessage extends LitElement {
+export class FlowsChatMessage extends PlatformElement {
     static properties = {
         variant: { type: String, reflect: true },
         role: { type: String },
@@ -581,9 +582,14 @@ export class FlowsChatMessage extends LitElement {
             min-width: 0;
             max-width: 100%;
             padding: 4px 0;
+            border: 0;
+            background: transparent;
             font-size: 14px;
             text-decoration: none;
             color: inherit;
+            cursor: pointer;
+            font-family: inherit;
+            text-align: left;
         }
 
         .file-item:hover .file-name {
@@ -1170,6 +1176,22 @@ export class FlowsChatMessage extends LitElement {
                 ${file.file_size ? html`<div class="file-size">${formatFileSize(file.file_size)}</div>` : nothing}
             </div>
         `;
+        if (fileId.length > 0) {
+            return html`
+                <button
+                    type="button"
+                    class="file-item"
+                    @click=${() => this.openFile({
+                        ...file,
+                        file_id: fileId,
+                        original_name: originalName,
+                        content_type: mimeType,
+                    }, { source: 'flows_chat_message' })}
+                >
+                    ${content}
+                </button>
+            `;
+        }
         if (href.length === 0) {
             return html`<div class="file-item">${content}</div>`;
         }
@@ -1184,12 +1206,16 @@ export class FlowsChatMessage extends LitElement {
         return html`
             <div class="files-container">
                 ${ids.map((fid) => html`
-                    <a class="file-item" href=${this._downloadUrl(fid)} target="_blank" rel="noopener">
+                    <button
+                        type="button"
+                        class="file-item"
+                        @click=${() => this.openFile(fid, { source: 'flows_chat_operator_file' })}
+                    >
                         <platform-icon name="file" size="20"></platform-icon>
                         <div>
                             <div class="file-name">${this._label('operator_files', 'Attached files')}</div>
                         </div>
-                    </a>
+                    </button>
                 `)}
             </div>
         `;
@@ -1384,6 +1410,16 @@ export class FlowsChatMessage extends LitElement {
         `;
     }
 
+    _renderMainText(role, text) {
+        if (text.length === 0) {
+            return nothing;
+        }
+        if (role === 'user') {
+            return html`<div class=${classNames({ text: true, 'has-content': true })}>${text}</div>`;
+        }
+        return html`<div class=${classNames({ markdown: true, 'has-content': true })}>${this._markdownTemplate(text, { streaming: Boolean(this.streaming) })}</div>`;
+    }
+
     render() {
         const role = asString(this.role) || 'assistant';
         const text = asString(this.content);
@@ -1406,11 +1442,7 @@ export class FlowsChatMessage extends LitElement {
                         ${this._renderActivity()}
                         ${this._renderToolOrbs()}
                         ${this._renderReasoning()}
-                        ${text.length > 0
-                            ? html`<div class=${classNames({ markdown: true, 'has-content': true })}>
-                                  ${role === 'user' ? text : this._markdownTemplate(text, { streaming: Boolean(this.streaming) })}
-                              </div>`
-                            : nothing}
+                        ${this._renderMainText(role, text)}
                         ${this._renderStreamPending()}
                         ${this._renderAssistantError()}
                         ${this._renderInputRequired()}

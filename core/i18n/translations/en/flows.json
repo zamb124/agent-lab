@@ -505,6 +505,34 @@
     "placeholder_presence_penalty": "-2 to 2",
     "placeholder_seed": "Integer"
   },
+  "llm_context_editor": {
+    "inherit": "Inherit",
+    "profile": "Profile",
+    "mode": "Mode",
+    "memory": "Memory",
+    "retrieval": "Retrieval",
+    "budget": "Budget",
+    "show_advanced": "Show details",
+    "hide_advanced": "Hide details",
+    "clear": "Reset",
+    "advanced": "Fine tuning",
+    "advanced_retrieval": "Retrieval and compaction",
+    "advanced_budget": "Token limits",
+    "custom_budget": "Custom limits",
+    "top_k": "Top-K",
+    "min_score": "Min score",
+    "rerank": "Rerank",
+    "compaction": "Compaction",
+    "cache": "Cache",
+    "max_input_tokens": "Max input",
+    "active_window_tokens": "Active window",
+    "memory_tokens": "Memory",
+    "rag_tokens": "RAG",
+    "tool_result_tokens": "Tool result",
+    "output_reserve_tokens": "Output reserve",
+    "reasoning_reserve_tokens": "Reasoning reserve",
+    "safety_buffer_tokens": "Safety buffer"
+  },
   "prompt_editor": {
     "var_hint": "Use @var:KEY to insert flow variables"
   },
@@ -532,6 +560,10 @@
     "section_llm_from_branch": "LLM configuration [{{id}}]",
     "llm_resource_legacy_hint": "One LLM resource is pinned on the node but not set as the base. Bind it to apply at runtime.",
     "llm_resource_legacy_bind": "Use as base",
+    "section_context": "Context",
+    "context_resource": "Context resource",
+    "context_resource_auto": "Auto / inherit",
+    "context_resource_hint": "If a flow or node has exactly one llm_context resource, runtime selects it automatically; use this field only to disambiguate.",
     "section_messages_filter": "Messages filter",
     "section_structured": "Structured output",
     "section_output_mode": "Output mode",
@@ -1013,6 +1045,9 @@
     "publish": "Publish",
     "share_preview": "Guest preview link (one-time)"
   },
+  "node_ai_helper": {
+    "placeholder": "Message Lara…"
+  },
   "preview_share": {
     "title": "Guest preview",
     "url_label": "Link",
@@ -1269,7 +1304,9 @@
   "floating_panel": {
     "expand": "Expand",
     "collapse": "Collapse",
-    "close": "Close"
+    "close": "Close",
+    "open_node_ai": "Open AI for this node",
+    "close_node_ai": "Back to node settings"
   },
   "toast": {
     "resource_created": "Resource created",

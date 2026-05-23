@@ -21,6 +21,7 @@ from core.integrations.guided_integration_error import (
 )
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.models.identity_models import NamespaceCRMSettings
+from core.types import require_json_object
 
 if TYPE_CHECKING:
     from apps.crm.db.repositories.entity_repository import EntityRepository
@@ -101,14 +102,10 @@ class AmoCRMConnector:
 
     @staticmethod
     def _as_json_object(value: object) -> JsonObject | None:
-        if not isinstance(value, dict):
+        try:
+            return require_json_object(value, "amocrm json object")
+        except ValueError:
             return None
-        result: JsonObject = {}
-        for key, item in type_cast(dict[object, object], value).items():
-            if not isinstance(key, str):
-                return None
-            result[key] = item
-        return result
 
     async def sync_entities(
         self,

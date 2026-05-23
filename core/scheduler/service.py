@@ -19,6 +19,7 @@ from core.scheduler.models import (
     PlatformScheduleType,
     ScheduledTaskStatus,
 )
+from core.scheduler.payload import normalize_schedule_task_payload
 from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.source import get_schedule_source
 from core.tasks.kicker import build_log_labels
@@ -140,7 +141,7 @@ class SchedulerService:
             interval_seconds=request.interval_seconds,
             run_at=request.run_at,
             timezone=request.timezone,
-            payload=dict(request.payload),
+            payload=normalize_schedule_task_payload(request.payload),
             status=ScheduledTaskStatus.PENDING,
             created_by_user_id=user_id,
             created_at=now,
@@ -277,7 +278,7 @@ class SchedulerService:
             broker=broker,
             labels=labels,
         )
-        await kicker.kiq(**task.payload)
+        await kicker.kiq(**normalize_schedule_task_payload(task.payload))
         next_run_at = task.next_run_at
         if task.schedule_type in (PlatformScheduleType.CRON, PlatformScheduleType.INTERVAL):
             next_run_at = self._calculate_next_run_at(task)

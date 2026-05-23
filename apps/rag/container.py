@@ -1,6 +1,5 @@
 """DI контейнер для RAG Service."""
 
-from typing import Optional
 
 from apps.rag.config import get_rag_settings
 from core.container import BaseContainer, lazy
@@ -26,7 +25,7 @@ class RAGContainer(BaseContainer):
         return get_rag_provider(settings=settings)
 
 
-_container: Optional[RAGContainer] = None
+_container: RAGContainer | None = None
 
 
 def get_rag_container() -> RAGContainer:

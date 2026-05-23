@@ -2,7 +2,6 @@
 Конфигурация для RAG Service.
 """
 
-from typing import Optional
 
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
@@ -18,7 +17,7 @@ class RAGSettings(BaseSettings):
     pass
 
 
-_rag_settings: Optional[RAGSettings] = None
+_rag_settings: RAGSettings | None = None
 
 
 def get_rag_settings() -> RAGSettings:
@@ -31,7 +30,7 @@ def get_rag_settings() -> RAGSettings:
     global _rag_settings
     if _rag_settings is None:
         merged_config = load_merged_config(service_name="rag", silent=True)
-        _rag_settings = RAGSettings(**merged_config)
+        _rag_settings = RAGSettings.model_validate(merged_config)
 
     return _rag_settings
 
@@ -40,5 +39,4 @@ def reset_rag_settings():
     """Сбрасывает настройки (для тестов)"""
     global _rag_settings
     _rag_settings = None
-
 

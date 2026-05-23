@@ -15,13 +15,10 @@
 ВАЖНО: BaseContainer НЕ зависит от app/* модулей!
 """
 
+from collections.abc import Callable
 from typing import (
     Any,
-    Callable,
-    Dict,
     Generic,
-    List,
-    Optional,
     TypeVar,
     cast,
     overload,
@@ -61,9 +58,11 @@ from core.logging import get_logger
 from core.push.repository import PushSubscriptionRepository
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
+from core.rag.llm_context_memory_store import RAGLLMContextMemoryStore
 from core.rag.repository import RAGRepository
 from core.short_links import ShortLinkService
 from core.short_links.repository import ShortLinkRepository
+from core.text_transforms import TextTransformService
 from core.tracing.repository import SpanRepository
 from core.variables.service import VariablesService
 
@@ -139,9 +138,9 @@ class BaseContainer:
 
     def __init__(
         self,
-        db_url: Optional[str] = None,
-        shared_db_url: Optional[str] = None,
-        service_db_url: Optional[str] = None  # Алиас для db_url
+        db_url: str | None = None,
+        shared_db_url: str | None = None,
+        service_db_url: str | None = None  # Алиас для db_url
     ):
         """
         Args:
@@ -155,8 +154,8 @@ class BaseContainer:
             shared_db_url = settings.database.shared_url
         self.shared_db_url = shared_db_url
 
-        self._crud_routers: Dict[str, APIRouter] = {}
-        self._service_name: Optional[str] = None
+        self._crud_routers: dict[str, APIRouter] = {}
+        self._service_name: str | None = None
 
     @property
     def service_name(self) -> str:
@@ -267,7 +266,20 @@ class BaseContainer:
         """NamespaceRepository для работы с namespace"""
         return NamespaceRepository(storage=self.shared_storage)
 
+    @lazy
+    def llm_context_memory_store(self):
+        """Company-scoped episodic memory store for the generic LLM context layer."""
+        return RAGLLMContextMemoryStore(
+            repository=self.rag_repository,
+            namespace_repository=self.namespace_repository,
+        )
+
     # === Сервисы ===
+
+    @lazy
+    def text_transform_service(self):
+        """Generic LLM-backed text transforms used by platform services."""
+        return TextTransformService()
 
     @lazy
     def billing_service(self):
@@ -397,7 +409,7 @@ class BaseContainer:
         repository_name: str,
         repository: Any,
         prefix: str,
-        tags: List[str],
+        tags: list[str],
         repository_dependency: Callable[..., Any],
     ):
         """
@@ -422,7 +434,7 @@ class BaseContainer:
 
         logger.debug(f"CRUD роутер зарегистрирован: {repository_name} -> {prefix}")
 
-    def get_crud_routers(self) -> List[APIRouter]:
+    def get_crud_routers(self) -> list[APIRouter]:
         """
         Возвращает список всех зарегистрированных CRUD роутеров.
 

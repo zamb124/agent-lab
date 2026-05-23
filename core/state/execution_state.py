@@ -7,15 +7,18 @@ Zero-Guess: все системные поля явно типизированы
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, get_args
+from collections.abc import Mapping
+from typing import Literal, TypedDict, TypeVar, Unpack, cast, get_args, overload, override
 
 from a2a.types import Message
 from pydantic import Field, field_serializer, field_validator, model_validator
 
+from core.clients.llm.messages import LLMToolCall
 from core.models import FlexibleBaseModel
 from core.state.interrupt import InterruptData
 from core.state.mutation_policy import guard_setattr_if_user_code
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
+from core.types import JsonObject, JsonValue, require_json_object
 
 ExecutionTaskState = Literal[
     "completed",
@@ -30,6 +33,41 @@ TERMINAL_TASK_STATES: frozenset[str] = frozenset(get_args(ExecutionTaskState))
 DEPRECATED_EXECUTION_STATE_FIELD_NAMES: frozenset[str] = frozenset(
     {"terminal_status", "terminal_error"}
 )
+_GetDefault = TypeVar("_GetDefault")
+
+
+class ExecutionStateCreateKwargs(TypedDict, total=False):
+    flow_config_version: str | None
+    terminal_task_state: ExecutionTaskState | None
+    terminal_task_error: str | None
+    current_nodes: list[str]
+    response: str | None
+    result: JsonValue
+    validation: JsonObject | None
+    messages: list[Message]
+    user_groups: list[str]
+    variables: JsonObject
+    triggers: dict[str, TriggerRuntimeSnapshot]
+    files: list[JsonObject]
+    interrupt: InterruptData | None
+    interrupt_path: list[InterruptPathItem]
+    hitl_handoff_correlation_id: str | None
+    node_history: dict[str, JsonObject]
+    tool_results: JsonObject
+    execution_exceptions: list[ExecutionExceptionRecord]
+    nested_states: dict[str, NestedStateData]
+    mock: JsonObject | None
+    reasoning_history: list[JsonObject]
+    pending_reasoning: JsonObject | None
+    breakpoints: dict[str, bool]
+    breakpoint_hit: str | None
+    breakpoint_state: JsonObject | None
+    scheduled_tasks: list[JsonObject]
+    join_arrived_preds: dict[str, list[str]]
+    flow_deadline_monotonic: float | None
+    flow_timeout_effective_seconds: int | None
+    prompt_history: list[PromptHistoryItem]
+    llm_context_memory_cursor: dict[str, int]
 
 
 class InterruptPathItem(FlexibleBaseModel):
@@ -37,15 +75,15 @@ class InterruptPathItem(FlexibleBaseModel):
 
     type: str = Field(..., description="Тип: tool, llm_node, flow")
     id: str = Field(..., description="ID ноды/tool")
-    tool_call: Optional[Dict[str, Any]] = Field(default=None, description="Данные tool_call")
+    tool_call: LLMToolCall | None = Field(default=None, description="Данные tool_call")
 
 
 class NodeCallInfo(FlexibleBaseModel):
     """Информация о вызове ноды"""
 
-    response: Any = Field(default=None, description="Ответ ноды")
-    validation: Optional[Dict[str, Any]] = Field(default=None, description="Данные валидации")
-    timestamp: Optional[str] = Field(default=None, description="Время вызова")
+    response: JsonValue = Field(default=None, description="Ответ ноды")
+    validation: JsonObject | None = Field(default=None, description="Данные валидации")
+    timestamp: str | None = Field(default=None, description="Время вызова")
 
 
 class ExecutionExceptionRecord(FlexibleBaseModel):
@@ -58,8 +96,8 @@ class ExecutionExceptionRecord(FlexibleBaseModel):
     )
     exception_type: str = Field(..., description="Имя класса исключения (type(exc).__name__)")
     message: str = Field(..., description="Текст исключения")
-    tool_name: Optional[str] = Field(default=None, description="Имя tool при source=tool")
-    tool_call_id: Optional[str] = Field(default=None, description="ID tool_call при source=tool")
+    tool_name: str | None = Field(default=None, description="Имя tool при source=tool")
+    tool_call_id: str | None = Field(default=None, description="ID tool_call при source=tool")
 
 
 class PromptHistoryItem(FlexibleBaseModel):
@@ -68,7 +106,7 @@ class PromptHistoryItem(FlexibleBaseModel):
     prompt_hash: str = Field(..., description="MD5 хеш промпта для сравнения")
     prompt: str = Field(..., description="Рендеренный промпт")
     template: str = Field(..., description="Исходный шаблон")
-    variables_used: Dict[str, Any] = Field(default_factory=dict, description="Использованные переменные")
+    variables_used: JsonObject = Field(default_factory=dict, description="Использованные переменные")
     node_id: str = Field(..., description="ID ноды которая сгенерировала промпт")
     timestamp: str = Field(..., description="Время создания ISO")
 
@@ -76,24 +114,26 @@ class PromptHistoryItem(FlexibleBaseModel):
 class NestedStateData(FlexibleBaseModel):
     """Данные вложенного состояния для субагентов."""
 
-    messages: List[Message] = Field(default_factory=list, description="История сообщений субагента")
-    interrupt_path: List[InterruptPathItem] = Field(
+    messages: list[Message] = Field(default_factory=list, description="История сообщений субагента")
+    interrupt_path: list[InterruptPathItem] = Field(
         default_factory=list,
         description="Путь прерывания внутри субагента"
     )
-    nested_states: Dict[str, NestedStateData] = Field(
+    nested_states: dict[str, NestedStateData] = Field(
         default_factory=dict,
         description="Вложенные состояния суб-субагентов"
     )
 
     @field_validator("messages", mode="before")
     @classmethod
-    def validate_messages(cls, v: Any) -> List[Message]:
+    def validate_messages(cls, v: object) -> list[Message]:
         """Конвертирует словари в объекты Message."""
-        if not v:
+        if v is None or v == []:
             return []
-        result = []
-        for i, item in enumerate(v):
+        if not isinstance(v, list):
+            raise ValueError(f"messages: ожидается list, получен {type(v)}")
+        result: list[Message] = []
+        for item in cast(list[object], v):
             if isinstance(item, Message):
                 result.append(item)
             elif isinstance(item, dict):
@@ -106,12 +146,14 @@ class NestedStateData(FlexibleBaseModel):
 
     @field_validator("interrupt_path", mode="before")
     @classmethod
-    def validate_interrupt_path(cls, v: Any) -> List[InterruptPathItem]:
+    def validate_interrupt_path(cls, v: object) -> list[InterruptPathItem]:
         """Конвертирует словари в объекты InterruptPathItem."""
-        if not v:
+        if v is None or v == []:
             return []
-        result = []
-        for i, item in enumerate(v):
+        if not isinstance(v, list):
+            raise ValueError(f"interrupt_path: ожидается list, получен {type(v)}")
+        result: list[InterruptPathItem] = []
+        for i, item in enumerate(cast(list[object], v)):
             if isinstance(item, InterruptPathItem):
                 result.append(item)
             elif isinstance(item, dict):
@@ -119,7 +161,7 @@ class NestedStateData(FlexibleBaseModel):
             else:
                 raise ValueError(
                     f"Неожиданный тип элемента #{i} в interrupt_path: {type(item)}. "
-                    f"Ожидается InterruptPathItem или dict."
+                    + "Ожидается InterruptPathItem или dict."
                 )
         return result
 
@@ -160,15 +202,15 @@ class ExecutionState(FlexibleBaseModel):
     # Снимок конфигурации flow в БД (полный граф не хранится в state)
     # ========================================================================
 
-    flow_config_version: Optional[str] = Field(
+    flow_config_version: str | None = Field(
         default=None,
         description="Версия FlowConfig в flows_versions; None = при выполнении брать последнюю из flows",
     )
-    terminal_task_state: Optional[ExecutionTaskState] = Field(
+    terminal_task_state: ExecutionTaskState | None = Field(
         default=None,
         description="Финальный A2A TaskState, сохранённый в БД только на terminal boundary.",
     )
-    terminal_task_error: Optional[str] = Field(
+    terminal_task_error: str | None = Field(
         default=None,
         description="Текст ошибки для terminal_task_state='failed'/'rejected'/'unknown'.",
     )
@@ -177,24 +219,25 @@ class ExecutionState(FlexibleBaseModel):
     # Системные поля - опциональные
     # ========================================================================
 
-    current_nodes: List[str] = Field(default_factory=list, description="Текущие ноды для выполнения")
+    current_nodes: list[str] = Field(default_factory=list, description="Текущие ноды для выполнения")
     branch_id: str = Field(default="default", description="ID branch")
 
     @model_validator(mode="before")
     @classmethod
-    def reject_deprecated_system_field_names(cls, value: Any) -> Any:
+    def reject_deprecated_system_field_names(cls, value: object) -> object:
         if not isinstance(value, dict):
             return value
+        raw = cast(Mapping[str, object], value)
         deprecated_field_names = sorted(
-            DEPRECATED_EXECUTION_STATE_FIELD_NAMES.intersection(value.keys())
+            DEPRECATED_EXECUTION_STATE_FIELD_NAMES.intersection(raw.keys())
         )
         if deprecated_field_names:
             names = ", ".join(deprecated_field_names)
             raise ValueError(
                 f"ExecutionState deprecated field names are forbidden: {names}. "
-                "Use terminal_task_state and terminal_task_error."
+                + "Use terminal_task_state and terminal_task_error."
             )
-        return value
+        return dict(raw)
 
     @field_validator("session_id")
     @classmethod
@@ -205,7 +248,7 @@ class ExecutionState(FlexibleBaseModel):
         if ":" not in v:
             raise ValueError(
                 f"session_id must be in format 'flow_id:context_id', got: '{v}'. "
-                "Session ID должен содержать ':' для извлечения flow_id."
+                + "Session ID должен содержать ':' для извлечения flow_id."
             )
         flow_id, context_id = v.split(":", 1)
         if not flow_id:
@@ -224,27 +267,29 @@ class ExecutionState(FlexibleBaseModel):
     # Данные пользователя
     # ========================================================================
 
-    content: Optional[str] = Field(default=None, description="Входное сообщение")
-    response: Optional[str] = Field(default=None, description="Ответ агента")
-    result: Optional[Any] = Field(
+    content: str | None = Field(default=None, description="Входное сообщение")
+    response: str | None = Field(default=None, description="Ответ агента")
+    result: JsonValue = Field(
         default=None,
         description="Произвольный результат ноды или tool (CodeNode, inline execute)",
     )
-    validation: Optional[Dict[str, Any]] = Field(
+    validation: JsonObject | None = Field(
         default=None,
         description="Данные валидации ноды (условия рёбер вида validation.valid == true)",
     )
-    messages: List[Message] = Field(default_factory=list, description="История сообщений")
-    user_groups: List[str] = Field(default_factory=list, description="Группы пользователя")
+    messages: list[Message] = Field(default_factory=list, description="История сообщений")
+    user_groups: list[str] = Field(default_factory=list, description="Группы пользователя")
 
     @field_validator("messages", mode="before")
     @classmethod
-    def validate_messages(cls, v: Any) -> List[Message]:
+    def validate_messages(cls, v: object) -> list[Message]:
         """Конвертирует словари в объекты Message."""
-        if not v:
+        if v is None or v == []:
             return []
-        result = []
-        for i, item in enumerate(v):
+        if not isinstance(v, list):
+            raise ValueError(f"messages: ожидается list, получен {type(v)}")
+        result: list[Message] = []
+        for item in cast(list[object], v):
             if isinstance(item, Message):
                 result.append(item)
             elif isinstance(item, dict):
@@ -257,11 +302,13 @@ class ExecutionState(FlexibleBaseModel):
 
     @field_validator("execution_exceptions", mode="before")
     @classmethod
-    def validate_execution_exceptions(cls, v: Any) -> List[ExecutionExceptionRecord]:
-        if not v:
+    def validate_execution_exceptions(cls, v: object) -> list[ExecutionExceptionRecord]:
+        if v is None or v == []:
             return []
-        result: List[ExecutionExceptionRecord] = []
-        for idx, item in enumerate(v):
+        if not isinstance(v, list):
+            raise ValueError(f"execution_exceptions: ожидается list, получен {type(v)}")
+        result: list[ExecutionExceptionRecord] = []
+        for idx, item in enumerate(cast(list[object], v)):
             if isinstance(item, ExecutionExceptionRecord):
                 result.append(item)
             elif isinstance(item, dict):
@@ -269,38 +316,43 @@ class ExecutionState(FlexibleBaseModel):
             else:
                 raise ValueError(
                     f"execution_exceptions[{idx}]: ожидается ExecutionExceptionRecord или dict, "
-                    f"получен {type(item)}"
+                    + f"получен {type(item)}"
                 )
         return result
 
     @field_validator("triggers", mode="before")
     @classmethod
     def validate_triggers(
-        cls, v: Any
-    ) -> Dict[str, TriggerRuntimeSnapshot]:
+        cls, v: object
+    ) -> dict[str, TriggerRuntimeSnapshot]:
         if v is None or v == {}:
             return {}
         if not isinstance(v, dict):
             msg = f"triggers must be a dict, got {type(v).__name__}"
             raise TypeError(msg)
-        out: Dict[str, TriggerRuntimeSnapshot] = {}
-        for k, item in v.items():
+        out: dict[str, TriggerRuntimeSnapshot] = {}
+        for key, item in cast(Mapping[object, object], v).items():
+            if not isinstance(key, str):
+                msg = f"triggers keys must be str, got {type(key).__name__}"
+                raise TypeError(msg)
             if isinstance(item, TriggerRuntimeSnapshot):
-                out[k] = item
+                out[key] = item
             elif isinstance(item, dict):
-                if "payload" not in item or not isinstance(item.get("payload"), dict):
-                    msg = f"triggers['{k}'] must include 'payload' as a dict"
+                raw_item = cast(Mapping[str, object], item)
+                payload = raw_item.get("payload")
+                if not isinstance(payload, dict):
+                    msg = f"triggers['{key}'] must include 'payload' as a dict"
                     raise ValueError(msg)
-                ctx = item.get("context", {})
+                ctx = raw_item.get("context", {})
                 if not isinstance(ctx, dict):
-                    msg = f"triggers['{k}'].context must be a dict"
+                    msg = f"triggers['{key}'].context must be a dict"
                     raise TypeError(msg)
-                out[k] = TriggerRuntimeSnapshot(
-                    payload=item["payload"],
-                    context=ctx,
+                out[key] = TriggerRuntimeSnapshot(
+                    payload=dict(cast(Mapping[str, object], payload)),
+                    context=dict(cast(Mapping[str, object], ctx)),
                 )
             else:
-                msg = f"triggers['{k}'] must be TriggerRuntimeSnapshot or dict, got {type(item).__name__}"
+                msg = f"triggers['{key}'] must be TriggerRuntimeSnapshot or dict, got {type(item).__name__}"
                 raise TypeError(msg)
         return out
 
@@ -308,23 +360,23 @@ class ExecutionState(FlexibleBaseModel):
     # Переменные и данные
     # ========================================================================
 
-    variables: Dict[str, Any] = Field(default_factory=dict, description="Резолвнутые переменные")
-    triggers: Dict[str, TriggerRuntimeSnapshot] = Field(
+    variables: JsonObject = Field(default_factory=dict, description="Резолвнутые переменные")
+    triggers: dict[str, TriggerRuntimeSnapshot] = Field(
         default_factory=dict,
         description="Снимок по trigger_id: { payload, context } — не смешивать с variables",
     )
-    files: List[Dict[str, Any]] = Field(default_factory=list, description="Прикреплённые файлы")
+    files: list[JsonObject] = Field(default_factory=list, description="Прикреплённые файлы")
 
     # ========================================================================
     # Interrupt (ask_user)
     # ========================================================================
 
-    interrupt: Optional[InterruptData] = Field(default=None, description="Данные прерывания")
-    interrupt_path: List[InterruptPathItem] = Field(
+    interrupt: InterruptData | None = Field(default=None, description="Данные прерывания")
+    interrupt_path: list[InterruptPathItem] = Field(
         default_factory=list,
         description="Путь к месту прерывания"
     )
-    hitl_handoff_correlation_id: Optional[str] = Field(
+    hitl_handoff_correlation_id: str | None = Field(
         default=None,
         description=(
             "При resume после operator handoff: correlation_id задачи до сброса interrupt, "
@@ -334,20 +386,21 @@ class ExecutionState(FlexibleBaseModel):
 
     @field_validator("interrupt", mode="before")
     @classmethod
-    def validate_interrupt(cls, v: Any) -> Optional[InterruptData]:
+    def validate_interrupt(cls, v: object) -> InterruptData | None:
         """Конвертирует dict в InterruptData (для inline кода)."""
         if v is None:
             return None
         if isinstance(v, InterruptData):
             return v
         if isinstance(v, dict):
-            return InterruptData.model_validate(v)
+            return InterruptData.model_validate(cast(object, v))
         raise ValueError(
             f"Неожиданный тип interrupt: {type(v)}. "
-            f"Ожидается InterruptData или dict."
+            + "Ожидается InterruptData или dict."
         )
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    @override
+    def __setattr__(self, name: str, value: object) -> None:
         """
         Перехватывает прямое присваивание атрибутов.
         Нормализует dict -> типизированные модели при присваивании.
@@ -358,23 +411,25 @@ class ExecutionState(FlexibleBaseModel):
         if name in DEPRECATED_EXECUTION_STATE_FIELD_NAMES:
             raise ValueError(
                 f"ExecutionState deprecated field name is forbidden: {name}. "
-                "Use terminal_task_state or terminal_task_error."
+                + "Use terminal_task_state or terminal_task_error."
             )
         guard_setattr_if_user_code(name)
         if name == "interrupt" and value is not None and isinstance(value, dict):
-            value = InterruptData.model_validate(value)
+            value = InterruptData.model_validate(cast(object, value))
         if name == "prompt_history" and value is not None:
             value = ExecutionState.normalize_prompt_history(value)
         super().__setattr__(name, value)
 
     @field_validator("interrupt_path", mode="before")
     @classmethod
-    def validate_interrupt_path(cls, v: Any) -> List[InterruptPathItem]:
+    def validate_interrupt_path(cls, v: object) -> list[InterruptPathItem]:
         """Конвертирует словари в объекты InterruptPathItem."""
-        if not v:
+        if v is None or v == []:
             return []
-        result = []
-        for i, item in enumerate(v):
+        if not isinstance(v, list):
+            raise ValueError(f"interrupt_path: ожидается list, получен {type(v)}")
+        result: list[InterruptPathItem] = []
+        for i, item in enumerate(cast(list[object], v)):
             if isinstance(item, InterruptPathItem):
                 result.append(item)
             elif isinstance(item, dict):
@@ -382,7 +437,7 @@ class ExecutionState(FlexibleBaseModel):
             else:
                 raise ValueError(
                     f"Неожиданный тип элемента #{i} в interrupt_path: {type(item)}. "
-                    f"Ожидается InterruptPathItem или dict."
+                    + "Ожидается InterruptPathItem или dict."
                 )
         return result
 
@@ -390,26 +445,26 @@ class ExecutionState(FlexibleBaseModel):
     # История выполнения
     # ========================================================================
 
-    node_history: Dict[str, Dict[str, Any]] = Field(
+    node_history: dict[str, JsonObject] = Field(
         default_factory=dict,
         description=(
             "История вызовов нод за последний проход Flow.run: {node_id: {type, calls: [...]}}. "
             "Сбрасывается в начале каждого Flow.run; лимит повторных заходов в code-ноду считается только в этом проходе."
         ),
     )
-    tool_results: Dict[str, Any] = Field(
+    tool_results: JsonObject = Field(
         default_factory=dict,
         description="Результаты выполнения tools {tool_id: result}"
     )
-    execution_exceptions: List[ExecutionExceptionRecord] = Field(
+    execution_exceptions: list[ExecutionExceptionRecord] = Field(
         default_factory=list,
         description="Реестр исключений, обработанных как ответ (exception_as_response на ноде)",
     )
-    nested_states: Dict[str, NestedStateData] = Field(
+    nested_states: dict[str, NestedStateData] = Field(
         default_factory=dict,
         description="Состояния вложенных субагентов"
     )
-    mock: Optional[Dict[str, Any]] = Field(
+    mock: JsonObject | None = Field(
         default=None,
         description="Mock конфигурация для тестирования"
     )
@@ -418,11 +473,11 @@ class ExecutionState(FlexibleBaseModel):
     # Reasoning (tool reason)
     # ========================================================================
 
-    reasoning_history: List[Dict[str, Any]] = Field(
+    reasoning_history: list[JsonObject] = Field(
         default_factory=list,
         description="История рассуждений агента"
     )
-    pending_reasoning: Optional[Dict[str, Any]] = Field(
+    pending_reasoning: JsonObject | None = Field(
         default=None,
         description="Текущее pending рассуждение"
     )
@@ -431,15 +486,15 @@ class ExecutionState(FlexibleBaseModel):
     # Точки перелома (отладка)
     # ========================================================================
 
-    breakpoints: Dict[str, bool] = Field(
+    breakpoints: dict[str, bool] = Field(
         default_factory=dict,
         description="Активные breakpoints для нод (node_id -> enabled)"
     )
-    breakpoint_hit: Optional[str] = Field(
+    breakpoint_hit: str | None = Field(
         default=None,
         description="ID ноды, на которой сработал breakpoint"
     )
-    breakpoint_state: Optional[Dict[str, Any]] = Field(
+    breakpoint_state: JsonObject | None = Field(
         default=None,
         description="Snapshot state на момент срабатывания breakpoint"
     )
@@ -448,26 +503,26 @@ class ExecutionState(FlexibleBaseModel):
     # Запланированные задачи
     # ========================================================================
 
-    scheduled_tasks: List[Dict[str, Any]] = Field(
+    scheduled_tasks: list[JsonObject] = Field(
         default_factory=list,
         description="Scheduled tasks созданные в текущей сессии"
     )
 
-    join_arrived_preds: Dict[str, List[str]] = Field(
+    join_arrived_preds: dict[str, list[str]] = Field(
         default_factory=dict,
         description=(
             "AND-join (incoming_policy=all): target_node_id -> предки, уже пришедшие в текущем цикле ожидания"
         ),
     )
 
-    flow_deadline_monotonic: Optional[float] = Field(
+    flow_deadline_monotonic: float | None = Field(
         default=None,
         description=(
             "Дедлайн одного вызова run flow: time.monotonic() <= flow_deadline_monotonic; "
             "None — wall-clock лимит не задан для этой сессии"
         ),
     )
-    flow_timeout_effective_seconds: Optional[int] = Field(
+    flow_timeout_effective_seconds: int | None = Field(
         default=None,
         description="Секунд wall-clock, заданных на этот run (для ошибок и отладки)",
     )
@@ -476,18 +531,24 @@ class ExecutionState(FlexibleBaseModel):
     # История системных промптов
     # ========================================================================
 
-    prompt_history: List[PromptHistoryItem] = Field(
+    prompt_history: list[PromptHistoryItem] = Field(
         default_factory=list,
         description="История изменений системного промпта"
     )
+    llm_context_memory_cursor: dict[str, int] = Field(
+        default_factory=dict,
+        description="Закрытый offset сообщений для episodic memory context layer",
+    )
 
     @staticmethod
-    def normalize_prompt_history(v: Any) -> List[PromptHistoryItem]:
+    def normalize_prompt_history(v: object) -> list[PromptHistoryItem]:
         """Единая нормализация: dict/list dict -> List[PromptHistoryItem]."""
-        if not v:
+        if v is None or v == []:
             return []
-        result = []
-        for item in v:
+        if not isinstance(v, list):
+            raise ValueError(f"prompt_history: ожидается list, получен {type(v)}")
+        result: list[PromptHistoryItem] = []
+        for item in cast(list[object], v):
             if isinstance(item, PromptHistoryItem):
                 result.append(item)
             elif isinstance(item, dict):
@@ -500,18 +561,18 @@ class ExecutionState(FlexibleBaseModel):
 
     @field_validator("prompt_history", mode="before")
     @classmethod
-    def validate_prompt_history(cls, v: Any) -> List[PromptHistoryItem]:
+    def validate_prompt_history(cls, v: object) -> list[PromptHistoryItem]:
         return cls.normalize_prompt_history(v)
 
     @field_serializer("prompt_history", when_used="always")
-    def serialize_prompt_history(self, v: List[PromptHistoryItem]) -> List[Any]:
+    def serialize_prompt_history(self, v: list[PromptHistoryItem]) -> list[JsonObject]:
         return [
-            x.model_dump() if isinstance(x, PromptHistoryItem) else PromptHistoryItem.model_validate(x).model_dump()
-            for x in v
+            require_json_object(item.model_dump(mode="json"), "prompt_history[]")
+            for item in v
         ]
 
     @property
-    def current_system_prompt(self) -> Optional[str]:
+    def current_system_prompt(self) -> str | None:
         """Текущий системный промпт (последний из истории)."""
         if not self.prompt_history:
             return None
@@ -524,9 +585,9 @@ class ExecutionState(FlexibleBaseModel):
         context_id: str,
         user_id: str,
         session_id: str,
-        content: Optional[str] = None,
+        content: str | None = None,
         branch_id: str = "default",
-        **kwargs
+        **kwargs: Unpack[ExecutionStateCreateKwargs],
     ) -> ExecutionState:
         """
         Создаёт новое состояние выполнения.
@@ -561,22 +622,37 @@ class ExecutionState(FlexibleBaseModel):
             return key in self.__pydantic_extra__
         return False
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> object:
         """Поддержка доступа через квадратные скобки."""
         if hasattr(self, key):
-            return getattr(self, key)
+            return cast(object, getattr(self, key))
         if hasattr(self, '__pydantic_extra__') and self.__pydantic_extra__ and key in self.__pydantic_extra__:
-            return self.__pydantic_extra__[key]
+            return cast(object, self.__pydantic_extra__[key])
         raise KeyError(key)
 
-    def __setitem__(self, key: str, value: Any) -> None:
+    def __setitem__(self, key: str, value: object) -> None:
         """Поддержка присваивания через квадратные скобки."""
         if hasattr(self, key):
             setattr(self, key, value)
         else:
             setattr(self, key, value)
 
-    def get(self, key: str, default: Any = None) -> Any:
+    @overload
+    def get(self, key: Literal["messages"], default: list[Message]) -> list[Message]: ...
+
+    @overload
+    def get(self, key: Literal["files"], default: list[JsonObject]) -> list[JsonObject]: ...
+
+    @overload
+    def get(self, key: Literal["tool_results"], default: JsonObject) -> JsonObject: ...
+
+    @overload
+    def get(self, key: str, default: _GetDefault) -> object | _GetDefault: ...
+
+    @overload
+    def get(self, key: str) -> object | None: ...
+
+    def get(self, key: str, default: object | None = None) -> object | None:
         """Поддержка метода get как у dict."""
         try:
             return self[key]

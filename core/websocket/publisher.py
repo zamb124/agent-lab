@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -51,9 +51,9 @@ class NotificationAction(BaseModel):
 
     label: str = ""
     url: str
-    label_i18n_key: Optional[str] = None
-    label_i18n_vars: Dict[str, Any] = Field(default_factory=dict)
-    data: Dict[str, Any] = Field(default_factory=dict)
+    label_i18n_key: str | None = None
+    label_i18n_vars: dict[str, Any] = Field(default_factory=dict)
+    data: dict[str, Any] = Field(default_factory=dict)
 
 
 class Notification(BaseModel):
@@ -62,17 +62,17 @@ class Notification(BaseModel):
     type: NotificationType
     title: str
     message: str
-    title_i18n_key: Optional[str] = None
-    title_i18n_vars: Dict[str, Any] = Field(default_factory=dict)
-    message_i18n_key: Optional[str] = None
-    message_i18n_vars: Dict[str, Any] = Field(default_factory=dict)
-    data: Dict[str, Any] = Field(default_factory=dict)
+    title_i18n_key: str | None = None
+    title_i18n_vars: dict[str, Any] = Field(default_factory=dict)
+    message_i18n_key: str | None = None
+    message_i18n_vars: dict[str, Any] = Field(default_factory=dict)
+    data: dict[str, Any] = Field(default_factory=dict)
     service: str
     priority: str = "normal"
-    action_url: Optional[str] = None
-    action_label: Optional[str] = None
-    action_label_i18n_key: Optional[str] = None
-    actions: List[NotificationAction] = Field(default_factory=list)
+    action_url: str | None = None
+    action_label: str | None = None
+    action_label_i18n_key: str | None = None
+    actions: list[NotificationAction] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

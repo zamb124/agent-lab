@@ -346,6 +346,11 @@ export class SyncMessageBubble extends PlatformElement {
             background: var(--glass-hover);
             border-radius: var(--radius-sm);
             min-width: 200px;
+            cursor: pointer;
+        }
+        .file:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
         }
         :host([data-own]) .file { background: rgba(255,255,255,0.18); }
         .file-info { flex: 1; min-width: 0; }
@@ -788,6 +793,23 @@ export class SyncMessageBubble extends PlatformElement {
         return html`<div class="image-wrap"><img src=${url} alt=${alt} loading="lazy" @click=${() => window.open(url, '_blank')} /></div>`;
     }
 
+    _openFileData(data, url, source) {
+        if (!data || typeof data.file_id !== 'string' || data.file_id.length === 0) return;
+        this.openFile({
+            file_id: data.file_id,
+            original_name: typeof data.original_name === 'string' ? data.original_name : (typeof data.name === 'string' ? data.name : ''),
+            content_type: typeof data.content_type === 'string' ? data.content_type : (typeof data.mime_type === 'string' ? data.mime_type : ''),
+            file_size: typeof data.file_size === 'number' ? data.file_size : null,
+            url,
+        }, { source });
+    }
+
+    _onFileOpenKeydown(event, data, url) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        this._openFileData(data, url, 'sync_message_file_keyboard');
+    }
+
     _renderFile(content) {
         const data = (content && content.data && typeof content.data === 'object') ? content.data : null;
         const fileId = data ? data.file_id : null;
@@ -801,13 +823,24 @@ export class SyncMessageBubble extends PlatformElement {
             ? formatFileSize(data.file_size)
             : '';
         return html`
-            <div class="file">
+            <div
+                class="file"
+                role="button"
+                tabindex="0"
+                @click=${() => this._openFileData(data, url, 'sync_message_file')}
+                @keydown=${(event) => this._onFileOpenKeydown(event, data, url)}
+            >
                 <platform-icon name="file" size="24"></platform-icon>
                 <div class="file-info">
                     <div class="file-name">${name}</div>
                     ${size ? html`<div class="file-size">${size}</div>` : ''}
                 </div>
-                <a href=${url} download=${name} title=${this.t('bubble.download_title')}>
+                <a
+                    href=${url}
+                    download=${name}
+                    title=${this.t('bubble.download_title')}
+                    @click=${(event) => event.stopPropagation()}
+                >
                     <platform-icon name="download" size="18"></platform-icon>
                 </a>
             </div>

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 
 from apps.browser.interaction.interaction_profiles import InteractionProfileName
+from apps.browser.observe.snapshot_refs import RefMap
 
 
 class ControlObserveStore:
@@ -21,16 +22,16 @@ class ControlObserveStore:
     """
 
     def __init__(self) -> None:
-        self._last_refs: dict[str, dict[str, dict[str, object]]] = {}
+        self._last_refs: dict[str, RefMap] = {}
         self._interaction_profile: dict[str, InteractionProfileName] = {}
         self._interaction_seed: dict[str, int] = {}
         self._interaction_step: dict[str, int] = {}
 
     def forget(self, session_id: str) -> None:
-        self._last_refs.pop(session_id, None)
-        self._interaction_profile.pop(session_id, None)
-        self._interaction_seed.pop(session_id, None)
-        self._interaction_step.pop(session_id, None)
+        _ = self._last_refs.pop(session_id, None)
+        _ = self._interaction_profile.pop(session_id, None)
+        _ = self._interaction_seed.pop(session_id, None)
+        _ = self._interaction_step.pop(session_id, None)
 
     @staticmethod
     def _seed_from_session_id(session_id: str) -> int:
@@ -48,8 +49,6 @@ class ControlObserveStore:
     ) -> None:
         if not session_id:
             raise ValueError("session_id обязателен")
-        if not profile:
-            raise ValueError("profile обязателен")
         self._interaction_profile[session_id] = profile
         self._interaction_seed[session_id] = seed if seed is not None else self._seed_from_session_id(session_id)
         self._interaction_step[session_id] = 0
@@ -73,13 +72,13 @@ class ControlObserveStore:
         self._interaction_step[session_id] = step + 1
         return seed, step
 
-    def update_refs(self, session_id: str, refs: dict[str, dict[str, object]]) -> None:
+    def update_refs(self, session_id: str, refs: RefMap) -> None:
         self._last_refs[session_id] = refs
 
     def clear_refs(self, session_id: str) -> None:
-        self._last_refs.pop(session_id, None)
+        _ = self._last_refs.pop(session_id, None)
 
-    def get_refs(self, session_id: str) -> dict[str, dict[str, object]]:
+    def get_refs(self, session_id: str) -> RefMap:
         refs = self._last_refs.get(session_id)
         if refs is None:
             raise KeyError(f"Нет refs для session_id={session_id}")

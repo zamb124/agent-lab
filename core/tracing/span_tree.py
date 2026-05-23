@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any
 
 
-def _parse_span_start_time(span: Dict[str, Any]) -> datetime:
+def _parse_span_start_time(span: dict[str, Any]) -> datetime:
     raw = span.get("start_time")
     if raw is None:
         return datetime.max.replace(tzinfo=timezone.utc)
@@ -24,11 +24,11 @@ def _parse_span_start_time(span: Dict[str, Any]) -> datetime:
     return dt
 
 
-def _span_exec_sort_key(span: Dict[str, Any]) -> tuple[datetime, str]:
+def _span_exec_sort_key(span: dict[str, Any]) -> tuple[datetime, str]:
     return (_parse_span_start_time(span), span.get("span_id") or "")
 
 
-def _sort_span_tree_execution_order(nodes: List[Dict[str, Any]]) -> None:
+def _sort_span_tree_execution_order(nodes: list[dict[str, Any]]) -> None:
     nodes.sort(key=_span_exec_sort_key)
     for node in nodes:
         children = node.get("children")
@@ -36,7 +36,7 @@ def _sort_span_tree_execution_order(nodes: List[Dict[str, Any]]) -> None:
             _sort_span_tree_execution_order(children)
 
 
-def build_span_tree(spans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def build_span_tree(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Строит дерево spans из плоского списка.
     Siblings сортируются по start_time.
@@ -46,7 +46,7 @@ def build_span_tree(spans: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     ordered = sorted(spans, key=_span_exec_sort_key)
     span_map = {s["span_id"]: {**s, "children": []} for s in ordered}
-    roots: List[Dict[str, Any]] = []
+    roots: list[dict[str, Any]] = []
 
     for span in ordered:
         span_id = span["span_id"]

@@ -3,7 +3,7 @@ Tasks для обслуживания и очистки vector_documents.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any
 
 from apps.rag.container import get_rag_container
 from apps.rag_worker.broker import broker
@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 
 @broker.task(queue_name="rag")
-async def cleanup_namespace_task(namespace_id: str) -> Dict[str, Any]:
+async def cleanup_namespace_task(namespace_id: str) -> dict[str, Any]:
     """
     Очистка namespace -- удаление всех документов.
 
@@ -44,7 +44,7 @@ async def cleanup_namespace_task(namespace_id: str) -> Dict[str, Any]:
 
 
 @broker.task(queue_name="rag")
-async def list_documents_task(namespace_id: str) -> List[Dict[str, Any]]:
+async def list_documents_task(namespace_id: str) -> list[dict[str, Any]]:
     """
     Получить список всех документов в namespace.
 
@@ -72,13 +72,13 @@ async def list_documents_task(namespace_id: str) -> List[Dict[str, Any]]:
 
 @broker.task(queue_name="rag", retry_on_error=True, max_retries=3)
 async def reindex_document_task(
-    context_data: Dict[str, Any],
+    context_data: dict[str, Any],
     namespace_id: str,
     document_id: str,
     s3_key: str,
     document_name: str,
-    metadata: Dict[str, Any],
-) -> Dict[str, Any]:
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
     """
     Переиндексация документа (удаление + загрузка заново).
 
@@ -148,7 +148,7 @@ async def reindex_document_task(
 async def rag_cleanup_expired_documents_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Удаляет просроченные по ``rag.ttl`` документы: shared FileRecord (если есть),
     строка ``document_processing_status``, вектора/внешний индекс через провайдер.
@@ -222,7 +222,7 @@ async def rag_cleanup_expired_documents_tick(
 async def rag_reembed_stale_documents_tick(
     schedule_task_id: str,
     company_id: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     _ = company_id
     return await execute_reembed_tick(
         container=get_rag_container(),
@@ -240,7 +240,7 @@ async def rag_reembed_stale_documents_tick(
 async def rag_cleanup_orphan_company_chunks_tick(
     schedule_task_id: str,
     company_id: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Батчево удаляет ``vector_documents`` без ``company_id`` (NULL/'').
 

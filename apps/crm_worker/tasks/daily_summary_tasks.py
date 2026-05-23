@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import date, datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, select
 
@@ -32,6 +33,7 @@ from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import User
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject
 from core.utils.tokens import TokenType, get_token_service
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -40,16 +42,16 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# user_id из _set_crm_context без реального пользователя — не искать в user_repository
+# user_id из set_crm_context без реального пользователя — не искать в user_repository
 _WORKER_PLACEHOLDER_USER_IDS = frozenset({"crm-worker"})
 
 
-async def _set_crm_context(
+async def set_crm_context(
     company_id: str,
-    namespace: Optional[str] = None,
-    auth_token: Optional[str] = None,
-    user_id: Optional[str] = None,
-    interface_language: Optional[str] = None,
+    namespace: str | None = None,
+    auth_token: str | None = None,
+    user_id: str | None = None,
+    interface_language: str | None = None,
 ) -> None:
     if namespace is None:
         normalized_namespace = ""
@@ -78,7 +80,7 @@ async def _set_crm_context(
     set_context(context)
 
 
-async def _build_auth_token_for_company(company_id: str, user_id: Optional[str]) -> str:
+async def _build_auth_token_for_company(company_id: str, user_id: str | None) -> str:
     container = get_crm_container()
     resolved_user_id = user_id
     if resolved_user_id in _WORKER_PLACEHOLDER_USER_IDS:
@@ -113,8 +115,8 @@ async def _build_auth_token_for_company(company_id: str, user_id: Optional[str])
 async def _notify_daily_summary_updated(
     company_id: str,
     date_str: str,
-    namespace: Optional[str],
-    summary_state: dict[str, Any],
+    namespace: str | None,
+    summary_state: JsonObject,
     *,
     container: "CRMContainer",
 ) -> None:
@@ -126,7 +128,7 @@ async def _notify_daily_summary_updated(
         access_grant_repository=container.access_grant_repository,
     )
 
-    notification_data = {
+    notification_data: JsonObject = {
         "event": "crm.daily_summary.updated",
         "company_id": company_id,
         "namespace": normalized_namespace,
@@ -178,12 +180,12 @@ async def _snapshot_crm_task_if_present(
 async def rebuild_daily_summary_task(
     company_id: str,
     date_str: str,
-    namespace: Optional[str] = None,
+    namespace: str | None = None,
     reason: str = "event",
-    auth_token: Optional[str] = None,
-    user_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-) -> dict[str, Any]:
+    auth_token: str | None = None,
+    user_id: str | None = None,
+    task_id: str | None = None,
+) -> JsonObject:
     """Пересчитывает и сохраняет summary в Redis state.
 
     task_id — опциональный идентификатор записи CRMTask для обновления прогресса.
@@ -193,7 +195,7 @@ async def rebuild_daily_summary_task(
         resolved_auth_token = await _build_auth_token_for_company(
             company_id=company_id, user_id=user_id
         )
-    await _set_crm_context(
+    await set_crm_context(
         company_id=company_id,
         namespace=namespace,
         auth_token=resolved_auth_token,
@@ -278,10 +280,7 @@ async def rebuild_daily_summary_task(
             summary_state=state,
             container=container,
         )
-    logger.info(
-        "CRM daily summary rebuilt: "
-        f"company_id={company_id}, namespace={namespace or 'all'}, date={date_str}, reason={reason}"
-    )
+    logger.info(f"CRM daily summary rebuilt: company_id={company_id}, namespace={namespace or 'all'}, date={date_str}, reason={reason}")
     return state
 
 
@@ -290,19 +289,19 @@ async def rebuild_period_summary_task(
     company_id: str,
     date_from: str,
     date_to: str,
-    namespace: Optional[str] = None,
+    namespace: str | None = None,
     reason: str = "event",
-    auth_token: Optional[str] = None,
-    user_id: Optional[str] = None,
-    task_id: Optional[str] = None,
-) -> dict[str, Any]:
+    auth_token: str | None = None,
+    user_id: str | None = None,
+    task_id: str | None = None,
+) -> JsonObject:
     """Пересчитывает и сохраняет period summary в Redis и S3."""
     resolved_auth_token = auth_token
     if resolved_auth_token is None:
         resolved_auth_token = await _build_auth_token_for_company(
             company_id=company_id, user_id=user_id
         )
-    await _set_crm_context(
+    await set_crm_context(
         company_id=company_id,
         namespace=namespace,
         auth_token=resolved_auth_token,
@@ -395,11 +394,7 @@ async def rebuild_period_summary_task(
             },
             container=container,
         )
-    logger.info(
-        "CRM period summary rebuilt: "
-        f"company_id={company_id}, namespace={namespace or 'all'}, "
-        f"from={date_from}, to={date_to}, reason={reason}"
-    )
+    logger.info(f"CRM period summary rebuilt: company_id={company_id}, namespace={namespace or 'all'}, from={date_from}, to={date_to}, reason={reason}")
     return state
 
 
@@ -408,7 +403,7 @@ async def reconcile_daily_summary_task(
     days_back: int = 1,
     schedule_task_id: str | None = None,
     company_id: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Периодическая reconcile-задача.
 
@@ -435,18 +430,26 @@ async def reconcile_daily_summary_task(
                 )
             )
         )
-        rows = (await session.execute(stmt)).all()
+        raw_rows: Sequence[tuple[str, str, date | None]] = (
+            await session.execute(stmt)
+        ).tuples().all()
+        rows = [
+            (row_company_id, row_namespace, row_note_date)
+            for row_company_id, row_namespace, row_note_date in raw_rows
+            if row_note_date is not None
+        ]
 
-    by_company: dict[str, list[Any]] = defaultdict(list)
+    by_company: dict[str, list[tuple[str, str, date]]] = defaultdict(list)
     for row in rows:
-        by_company[row.company_id].append(row)
+        row_company_id, _, _ = row
+        by_company[row_company_id].append(row)
 
     enqueued_count = 0
     for cid in sorted(by_company.keys()):
         company_rows = by_company[cid]
         tick_id = str(uuid.uuid4())
         tick_started = datetime.now(timezone.utc)
-        await container.task_repository.create(
+        _ = await container.task_repository.create(
             CRMTask(
                 task_id=tick_id,
                 task_type="reconcile_daily_summary_tick",
@@ -466,11 +469,11 @@ async def reconcile_daily_summary_task(
             )
         )
         enqueued_company = 0
-        for row in company_rows:
-            await _set_crm_context(company_id=row.company_id, namespace=row.namespace)
+        for row_company_id, row_namespace, row_note_date in company_rows:
+            await set_crm_context(company_id=row_company_id, namespace=row_namespace)
             queued = await container.entity_service.enqueue_daily_summary_rebuild(
-                date_str=row.note_date.isoformat(),
-                namespace=row.namespace,
+                date_str=row_note_date.isoformat(),
+                namespace=row_namespace,
             )
             if queued:
                 enqueued_company += 1
@@ -486,10 +489,7 @@ async def reconcile_daily_summary_task(
         )
         enqueued_count += enqueued_company
 
-    logger.info(
-        f"CRM daily summary reconcile finished: rows={len(rows)}, enqueued={enqueued_count}, "
-        f"days_back={days_back}, companies={len(by_company)}"
-    )
+    logger.info(f"CRM daily summary reconcile finished: rows={len(rows)}, enqueued={enqueued_count}, days_back={days_back}, companies={len(by_company)}")
     return {
         "rows": len(rows),
         "enqueued": enqueued_count,

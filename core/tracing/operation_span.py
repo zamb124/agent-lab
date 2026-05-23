@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any
 
 from opentelemetry.trace import Span
 
@@ -19,18 +20,18 @@ from .tracer import get_tracer
 async def traced_operation(
     operation_name: str,
     *,
-    event_type: Optional[str] = None,
-    operation_category: Optional[str] = None,
-    billing_usage_type: Optional[str] = None,
-    billing_resource_name: Optional[str] = None,
-    billing_quantity: Optional[int] = None,
+    event_type: str | None = None,
+    operation_category: str | None = None,
+    billing_usage_type: str | None = None,
+    billing_resource_name: str | None = None,
+    billing_quantity: int | None = None,
     billing_pending_settlement: bool = False,
-    billing_cost_origin: Optional[str] = None,
-    billing_custom_provider_id: Optional[str] = None,
-    resource_type: Optional[str] = None,
-    resource_id: Optional[str] = None,
-    trace_ctx: Optional[TraceContext] = None,
-    extra_attributes: Optional[Dict[str, Any]] = None,
+    billing_cost_origin: str | None = None,
+    billing_custom_provider_id: str | None = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    trace_ctx: TraceContext | None = None,
+    extra_attributes: dict[str, Any] | None = None,
 ) -> AsyncGenerator[Span, None]:
     """
     operation_name: стабильная строка вида service.area.action.
@@ -40,7 +41,7 @@ async def traced_operation(
         UsageRecord с ``cost=0`` (баланс не трогается, см. core/billing/service.py).
     billing_custom_provider_id: id custom OpenAI-compatible провайдера компании (опц., для аналитики).
     """
-    merged: Dict[str, Any] = dict(extra_attributes or {})
+    merged: dict[str, Any] = dict(extra_attributes or {})
     if operation_category:
         merged[attr.ATTR_OPERATION_CATEGORY] = operation_category
     if billing_usage_type:

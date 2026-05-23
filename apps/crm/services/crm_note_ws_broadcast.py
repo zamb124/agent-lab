@@ -27,6 +27,7 @@ from apps.crm.services.namespace_notification_recipients import (
 )
 from apps.crm.types import JsonObject
 from core.logging import get_logger
+from core.types import require_json_object
 from core.ui_events.dispatcher import publish_ui_event_to_user
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -98,9 +99,15 @@ async def broadcast_crm_note_event(
         "action": action,
     }
     if markdown_format is not None:
-        ui_event_payload["markdown_format"] = markdown_format
+        ui_event_payload["markdown_format"] = require_json_object(
+            markdown_format,
+            "crm_note_ws.markdown_format",
+        )
     if draft_repair is not None:
-        ui_event_payload["draft_repair"] = draft_repair
+        ui_event_payload["draft_repair"] = require_json_object(
+            draft_repair,
+            "crm_note_ws.draft_repair",
+        )
     for user_id in recipient_user_ids:
         if not skip_notification_center:
             await notify_user(

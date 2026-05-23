@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -131,18 +131,18 @@ class CallTranscriptContent(BaseModel):
     entries: list[CallTranscriptEntry] = Field(description="Реплики в хронологическом порядке.")
 
 
-ContentData = Union[
-    TextPlainContent,
-    CodeBlockContent,
-    FileAttachmentContent,
-    AudioAttachmentContent,
-    VideoAttachmentContent,
-    CallBoundaryContent,
-    CallTranscriptContent,
-    MockImageContent,
-    GitReferenceContent,
-    CustomToolResponseContent,
-]
+ContentData = (
+    TextPlainContent
+    | CodeBlockContent
+    | FileAttachmentContent
+    | AudioAttachmentContent
+    | VideoAttachmentContent
+    | CallBoundaryContent
+    | CallTranscriptContent
+    | MockImageContent
+    | GitReferenceContent
+    | CustomToolResponseContent
+)
 
 
 class MessageContentModel(BaseModel):

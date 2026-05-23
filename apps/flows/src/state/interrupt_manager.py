@@ -12,11 +12,11 @@ InterruptManager - управление interrupt/resume для вложенны
 Zero-Guess: все методы работают с ExecutionState, не Dict.
 """
 
-from typing import Any
 from uuid import UUID
 
 from apps.flows.src.runtime.a2a_messages import build_user_message
 from apps.flows.src.state.execution_state import NestedStateData
+from core.clients.llm import LLMToolCall
 from core.logging import get_logger
 from core.state import ExecutionState, InterruptData, InterruptPathItem
 from core.state.interrupt import InterruptBody, InterruptSystemContext
@@ -142,7 +142,7 @@ class InterruptManager:
     def apply_interrupt(
         state: ExecutionState,
         body: InterruptBody,
-        tool_call: dict[str, Any] | None = None,
+        tool_call: LLMToolCall | None = None,
         correlation_id: UUID | None = None,
     ) -> None:
         """

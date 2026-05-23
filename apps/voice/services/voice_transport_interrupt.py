@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from core.logging import get_logger
 
@@ -34,12 +34,12 @@ async def execute_voice_transport_interrupt(
     kind: VoiceTransportInterruptKind,
     clear_tts_queues: bool,
     reset_stt_vad: bool,
-    channel: Optional["VoiceClientChannel"],
-    stt_provider: Optional["BaseSTTProvider"],
-    vad_provider: Optional["BaseVADProvider"],
-    language: Optional[str],
-    peek_min_buffer_bytes: Optional[int],
-    on_barge_in_timestamp: Optional[Callable[[], None]],
+    channel: VoiceClientChannel | None,
+    stt_provider: BaseSTTProvider | None,
+    vad_provider: BaseVADProvider | None,
+    language: str | None,
+    peek_min_buffer_bytes: int | None,
+    on_barge_in_timestamp: Callable[[], None] | None,
 ) -> None:
     """Остановить TTS, опционально отправить снимок STT без flush, сбросить провайдеры.
 

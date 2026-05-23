@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,7 @@ class ResolvedFcmCredentials:
     token_uri: str
 
 
-def resolve_fcm_credentials(settings: Any) -> Optional[ResolvedFcmCredentials]:
+def resolve_fcm_credentials(settings: Any) -> ResolvedFcmCredentials | None:
     push = settings.push
     raw = push.fcm_credentials_json
     if raw is None:
@@ -48,7 +48,7 @@ def resolve_fcm_credentials(settings: Any) -> Optional[ResolvedFcmCredentials]:
     )
 
 
-def _coerce_to_dict(raw: Any) -> Optional[dict[str, Any]]:
+def _coerce_to_dict(raw: Any) -> dict[str, Any] | None:
     if isinstance(raw, dict):
         return raw
     if isinstance(raw, str):

@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
 from apps.flows.src.models.channel_config import (
@@ -283,7 +284,7 @@ async def verify_trigger_draft(
         if isinstance(raw_token, str) and raw_token.startswith("@var:"):
             try:
                 cfg["bot_token"] = await resolve_at_var_for_flow(
-                    container,
+                    container.flow_factory,
                     flow_id,
                     raw_token,
                     branch_id=request.branch_id,
@@ -606,7 +607,10 @@ async def telegram_webhook(
     if trigger.type != TriggerType.TELEGRAM:
         raise HTTPException(status_code=400, detail="Not a Telegram trigger")
 
-    telegram_handler = TelegramTriggerHandler(base_url="", container=container)
+    telegram_handler = TelegramTriggerHandler(
+        base_url="",
+        container=as_flow_runtime_container(container),
+    )
 
     if not trigger.config.get("_secret_token"):
         logger.warning(
@@ -690,7 +694,7 @@ async def generic_webhook(
     if raw_secret is not None and str(raw_secret).strip() != "":
         try:
             expected = await resolve_at_var_for_flow(
-                container,
+                container.flow_factory,
                 flow_id,
                 str(raw_secret),
                 branch_id=trigger.branch_id,

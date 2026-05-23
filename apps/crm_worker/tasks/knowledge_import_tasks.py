@@ -9,10 +9,10 @@ TaskIQ: импорт базы знаний.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
 
 import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
+from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.models.api import NoteProcessingConfig
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.file_text_reader import load_text_from_stored_file_id
@@ -22,16 +22,17 @@ from apps.crm.services.knowledge_import_text_redis import (
 )
 from apps.crm_worker.broker import broker
 from apps.crm_worker.task_names import CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME
-from apps.crm_worker.tasks.daily_summary_tasks import _set_crm_context
+from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject
 from core.utils.knowledge_text_split import split_knowledge_text
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
 
 
-def _optional_payload_str(data: dict[str, object], key: str) -> str | None:
+def _optional_payload_str(data: JsonObject, key: str) -> str | None:
     value = data.get(key)
     if value is None:
         return None
@@ -41,7 +42,7 @@ def _optional_payload_str(data: dict[str, object], key: str) -> str | None:
     raise ValueError(f"data.{key} должен быть строкой")
 
 
-def _payload_str_list(data: dict[str, object], key: str) -> list[str]:
+def _payload_str_list(data: JsonObject, key: str) -> list[str]:
     value = data.get(key)
     if value is None:
         return []
@@ -57,13 +58,13 @@ def _payload_str_list(data: dict[str, object], key: str) -> list[str]:
     return result
 
 
-def _optional_payload_str_list(data: dict[str, object], key: str) -> list[str] | None:
+def _optional_payload_str_list(data: JsonObject, key: str) -> list[str] | None:
     if data.get(key) is None:
         return None
     return _payload_str_list(data, key)
 
 
-def _payload_int(data: dict[str, object], key: str, *, default: int) -> int:
+def _payload_int(data: JsonObject, key: str, *, default: int) -> int:
     value = data.get(key)
     if value is None:
         return default
@@ -72,7 +73,7 @@ def _payload_int(data: dict[str, object], key: str, *, default: int) -> int:
     return value
 
 
-def _payload_bool(data: dict[str, object], key: str, *, default: bool) -> bool:
+def _payload_bool(data: JsonObject, key: str, *, default: bool) -> bool:
     value = data.get(key)
     if value is None:
         return default
@@ -83,7 +84,7 @@ def _payload_bool(data: dict[str, object], key: str, *, default: bool) -> bool:
 
 async def _notify_task_user(
     user_id: str,
-    repo,
+    repo: TaskRepository,
     company_id: str,
     *,
     task_id: str,
@@ -125,20 +126,18 @@ async def _notify_task_user(
 async def run_knowledge_import_task(
     task_id: str,
     company_id: str,
-    auth_token: Optional[str],
+    auth_token: str | None,
     interface_language: str,
-) -> dict[str, Any]:
+) -> JsonObject:
     container = get_crm_container()
     repo = container.task_repository
     row = await repo.get_for_worker(task_id, company_id)
     if row is None:
         raise ValueError(f"Задача не найдена: {task_id}")
 
-    if not isinstance(row.data, dict):
-        raise ValueError("task.data должен быть JSON object")
-    data: dict[str, object] = row.data
+    data: JsonObject = row.data
     used_redis = data.get("source_text_sha256") is not None
-    await _set_crm_context(
+    await set_crm_context(
         company_id,
         row.namespace,
         auth_token,

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Protocol
 
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
     BrowserAcquireResult,
+    BrowserContextHandle,
     BrowserFetchRequest,
     BrowserFetchResult,
+    BrowserPage,
 )
 
 
@@ -31,10 +33,10 @@ class BrowserInteractor(Protocol):
     """
     async def acquire(self, req: BrowserAcquireRequest) -> BrowserAcquireResult: ...
 
-    async def fetch(self, page: Any, req: BrowserFetchRequest) -> BrowserFetchResult: ...
+    async def fetch(self, page: BrowserPage, req: BrowserFetchRequest) -> BrowserFetchResult: ...
 
-    async def save_state(self, context: Any, shared_storage_key: str) -> str: ...
+    async def save_state(self, context: BrowserContextHandle, shared_storage_key: str) -> str: ...
 
-    async def restore_state(self, context: Any, state_key: str) -> None: ...
+    async def restore_state(self, context: BrowserContextHandle, state_key: str) -> None: ...
 
-    async def release(self, page: Any) -> None: ...
+    async def release(self, page: BrowserPage) -> None: ...
