@@ -3,8 +3,14 @@
  * Обеспечивает офлайн-работу, кэширование и push-уведомления
  */
 
-const STATIC_CACHE_NAME = 'humanitec-static-v5';
-const DYNAMIC_CACHE_NAME = 'humanitec-dynamic-v5';
+const CACHE_SCHEMA_VERSION = 'v6';
+const STATIC_CACHE_NAME = `humanitec-static-${CACHE_SCHEMA_VERSION}`;
+const DYNAMIC_CACHE_NAME = `humanitec-dynamic-${CACHE_SCHEMA_VERSION}`;
+const METADATA_CACHE_NAME = 'humanitec-metadata-v1';
+const DEPLOYMENT_VERSION_CACHE_KEY = '/__humanitec_pwa/deployment-version';
+const DEPLOYMENT_CHECK_MIN_INTERVAL_MS = 30_000;
+let deploymentCheckInFlight = null;
+let lastDeploymentCheckAt = 0;
 
 // Статические ресурсы для предварительного кэширования (только пути, доступные на любом сервисе с /static/core)
 const STATIC_ASSETS = [
@@ -18,49 +24,213 @@ const STATIC_ASSETS = [
   '/static/core/pwa/icons/icon-512x512.png',
 ];
 
-// Install: кэшируем статику
+// Install: кэшируем offline-минимум, но не блокируем установку при частичной сетевой ошибке.
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing...');
-  
+
   event.waitUntil(
-    caches.open(STATIC_CACHE_NAME)
-      .then((cache) => {
-        console.log('[SW] Caching static assets');
-        return cache.addAll(STATIC_ASSETS);
-      })
-      .then(() => self.skipWaiting())
-      .catch((error) => {
-        console.error('[SW] Failed to cache static assets:', error);
-      })
+    (async () => {
+      try {
+        await precacheStaticAssets();
+      } catch (error) {
+        console.warn('[SW] precache failed:', error);
+      }
+      await self.skipWaiting();
+    })()
   );
 });
 
 // Activate: очистка старых кэшей
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating...');
-  
+
   event.waitUntil(
-    caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames
-            .filter((name) => {
-              return name.startsWith('humanitec-') && 
-                     name !== STATIC_CACHE_NAME && 
-                     name !== DYNAMIC_CACHE_NAME;
-            })
-            .map((name) => {
-              console.log('[SW] Deleting old cache:', name);
-              return caches.delete(name);
-            })
-        );
-      })
-      .then(() => self.clients.claim())
+    (async () => {
+      const deletedObsolete = await deleteObsoleteHumanitecCaches();
+      const deploymentPurged = await ensureDeploymentFresh({ force: true });
+      await self.clients.claim();
+      if (deletedObsolete || deploymentPurged) {
+        await reloadWindowClients();
+      }
+    })()
   );
 });
 
 function swOrigin() {
   return self.location.origin;
+}
+
+function sameOriginRequest(url) {
+  return url.origin === swOrigin();
+}
+
+function freshRequest(request, cacheMode = 'reload') {
+  return new Request(request, { cache: cacheMode });
+}
+
+async function fetchFresh(request, cacheMode = 'reload') {
+  return fetch(freshRequest(request, cacheMode));
+}
+
+async function precacheStaticAssets() {
+  const results = await Promise.allSettled(
+    STATIC_ASSETS.map(async (assetUrl) => {
+      const request = new Request(assetUrl, {
+        cache: 'reload',
+        credentials: 'same-origin',
+      });
+      const response = await fetch(request);
+      await putInStaticCache(request, response);
+    })
+  );
+  const failed = results.filter((r) => r.status === 'rejected');
+  if (failed.length > 0) {
+    console.warn('[SW] precache partial failure:', failed.length);
+  }
+}
+
+async function deleteObsoleteHumanitecCaches() {
+  const cacheNames = await caches.keys();
+  const allowed = new Set([STATIC_CACHE_NAME, DYNAMIC_CACHE_NAME, METADATA_CACHE_NAME]);
+  const toDelete = cacheNames.filter((name) => name.startsWith('humanitec-') && !allowed.has(name));
+  await Promise.all(
+    toDelete.map((name) => {
+      console.log('[SW] Deleting old cache:', name);
+      return caches.delete(name);
+    })
+  );
+  return toDelete.length > 0;
+}
+
+async function deleteHumanitecContentCaches() {
+  const cacheNames = await caches.keys();
+  const toDelete = cacheNames.filter((name) => name.startsWith('humanitec-') && name !== METADATA_CACHE_NAME);
+  await Promise.all(
+    toDelete.map((name) => {
+      console.log('[SW] Deleting content cache after deployment change:', name);
+      return caches.delete(name);
+    })
+  );
+}
+
+async function readStoredDeploymentVersion() {
+  const cache = await caches.open(METADATA_CACHE_NAME);
+  const response = await cache.match(DEPLOYMENT_VERSION_CACHE_KEY);
+  if (!response) {
+    return null;
+  }
+  try {
+    const data = await response.json();
+    return typeof data.version === 'string' && data.version.length > 0 ? data.version : null;
+  } catch (error) {
+    console.warn('[SW] deployment metadata parse failed:', error);
+    return null;
+  }
+}
+
+async function writeStoredDeploymentVersion(version) {
+  const cache = await caches.open(METADATA_CACHE_NAME);
+  await cache.put(
+    DEPLOYMENT_VERSION_CACHE_KEY,
+    new Response(JSON.stringify({ version }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      },
+    })
+  );
+}
+
+async function fetchServerDeploymentVersion() {
+  const response = await fetch(new Request('/health', {
+    cache: 'no-store',
+    credentials: 'same-origin',
+    headers: { 'Cache-Control': 'no-cache' },
+  }));
+  if (!response.ok) {
+    throw new Error(`deployment version check failed: HTTP ${response.status}`);
+  }
+  const data = await response.json();
+  const version = data && (data.deployment_version || data.version);
+  return typeof version === 'string' && version.length > 0 ? version : null;
+}
+
+async function ensureDeploymentFresh({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && now - lastDeploymentCheckAt < DEPLOYMENT_CHECK_MIN_INTERVAL_MS) {
+    return false;
+  }
+  if (deploymentCheckInFlight) {
+    return deploymentCheckInFlight;
+  }
+  lastDeploymentCheckAt = now;
+  deploymentCheckInFlight = (async () => {
+    let serverVersion;
+    try {
+      serverVersion = await fetchServerDeploymentVersion();
+    } catch (error) {
+      console.warn('[SW] deployment version check skipped:', error);
+      return false;
+    }
+    if (!serverVersion) {
+      return false;
+    }
+    const storedVersion = await readStoredDeploymentVersion();
+    if (storedVersion && storedVersion !== serverVersion) {
+      await deleteHumanitecContentCaches();
+      await writeStoredDeploymentVersion(serverVersion);
+      await notifyWindowClients({
+        type: 'humanitec-deployment-updated',
+        from: storedVersion,
+        to: serverVersion,
+      });
+      return true;
+    }
+    if (!storedVersion) {
+      await writeStoredDeploymentVersion(serverVersion);
+    }
+    return false;
+  })();
+  try {
+    return await deploymentCheckInFlight;
+  } finally {
+    deploymentCheckInFlight = null;
+  }
+}
+
+async function notifyWindowClients(message) {
+  const clientList = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+  for (const client of clientList) {
+    if (client.url && client.url.startsWith(swOrigin())) {
+      client.postMessage(message);
+    }
+  }
+}
+
+async function reloadWindowClients() {
+  const clientList = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+  await Promise.all(
+    clientList.map(async (client) => {
+      if (!client.url || !client.url.startsWith(swOrigin())) {
+        return;
+      }
+      if (typeof client.navigate === 'function') {
+        try {
+          await client.navigate(client.url);
+          return;
+        } catch (error) {
+          console.warn('[SW] client.navigate failed:', client.url, error);
+        }
+      }
+      client.postMessage({ type: 'humanitec-deployment-reload-requested' });
+    })
+  );
 }
 
 /**
@@ -124,7 +294,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Только свой origin — иначе fetch из SW падает (CORS / чужой хост) и даёт Uncaught в promise
-  if (url.origin !== swOrigin()) {
+  if (!sameOriginRequest(url)) {
     return;
   }
 
@@ -142,7 +312,7 @@ self.addEventListener('fetch', (event) => {
   // Версия деплоя и health: только сеть, без Cache Storage (иначе клиент не видит новый релиз)
   if (url.pathname === '/health' || url.pathname.endsWith('/health')) {
     event.respondWith(
-      fetch(request).catch((err) => {
+      fetchFresh(request, 'no-store').catch((err) => {
         console.error('[SW] health fetch:', err);
         return new Response('', { status: 503, statusText: 'Service Unavailable' });
       })
@@ -157,9 +327,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Статика: отдаём кэш сразу, параллельно обновляем из сети (новый релиз подтягивается без «вечного» stale)
+  // Mutable ESM/CSS/HTML статика: сеть первая, Cache Storage только как offline fallback.
   if (url.pathname.startsWith('/static/')) {
-    event.respondWith(staleWhileRevalidateStatic(request));
+    event.respondWith(networkFirstStatic(request));
     return;
   }
 
@@ -173,51 +343,20 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(networkFirst(request));
 });
 
-/**
- * Cache First стратегия
- * Сначала ищем в кэше, если нет - загружаем из сети
- */
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) {
-    return cached;
-  }
-  
+async function networkFirstStatic(request) {
+  await ensureDeploymentFresh();
   try {
-    const response = await fetch(request);
+    const response = await fetchFresh(request, 'reload');
     await putInStaticCache(request, response);
     return response;
   } catch (error) {
-    console.error('[SW] Cache first failed:', error);
+    const cached = await caches.match(request);
+    if (cached) {
+      return cached;
+    }
+    console.warn('[SW] networkFirstStatic: сеть недоступна, кэша нет', request.url, error);
     return new Response('', { status: 504, statusText: 'Gateway Timeout' });
   }
-}
-
-async function staleWhileRevalidateStatic(request) {
-  const cached = await caches.match(request);
-  const networkPromise = fetch(request)
-    .then(async (response) => {
-      await putInStaticCache(request, response);
-      return response;
-    })
-    .catch((error) => {
-      // Фоновое обновление: при уже отданном из кэша ответе сбой сети не ошибка сценария.
-      if (!cached) {
-        console.warn('[SW] staleWhileRevalidateStatic: нет кэша и сеть недоступна', request.url, error);
-      }
-      return null;
-    });
-
-  if (cached) {
-    void networkPromise;
-    return cached;
-  }
-
-  const response = await networkPromise;
-  if (response) {
-    return response;
-  }
-  return new Response('', { status: 504, statusText: 'Gateway Timeout' });
 }
 
 /**
@@ -226,7 +365,7 @@ async function staleWhileRevalidateStatic(request) {
  */
 async function networkFirst(request) {
   try {
-    const response = await fetch(request);
+    const response = await fetchFresh(request, 'reload');
     await putInDynamicCache(request, response);
     return response;
   } catch (error) {
@@ -243,8 +382,9 @@ async function networkFirst(request) {
  * сначала сеть с offline-резервом для HTML страниц
  */
 async function networkFirstWithOffline(request) {
+  await ensureDeploymentFresh({ force: true });
   try {
-    const response = await fetch(request);
+    const response = await fetchFresh(request, 'reload');
     await putInDynamicCache(request, response);
     return response;
   } catch (error) {

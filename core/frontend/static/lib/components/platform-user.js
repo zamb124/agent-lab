@@ -393,20 +393,20 @@ export class PlatformUser extends PlatformElement {
                     style=${`z-index:${this._menuZIndex}`}
                     @click=${(e) => e.stopPropagation()}
                 >
-                    <button class="menu-item" type="button" @click=${this._openServicesHub}>
+                    <button class="menu-item" type="button" data-menu-action="apps" @click=${this._openServicesHub}>
                         <platform-icon class="menu-icon" name="apps" size="18"></platform-icon>
                         <span class="menu-item-label">${this.t('menu.apps')}</span>
                     </button>
 
                     <div class="menu-divider"></div>
 
-                    <button class="menu-item" @click=${this._openUserInfo}>
+                    <button class="menu-item" data-menu-action="profile" @click=${this._openUserInfo}>
                         <platform-icon class="menu-icon" name="user" size="18"></platform-icon>
                         <span class="menu-item-label">${this.t('menu.profile')}</span>
                     </button>
 
                     ${hasCompaniesMenu ? html`
-                        <button class="menu-item company-selector" @click=${this._toggleCompanySelector}>
+                        <button class="menu-item company-selector" data-menu-action="company-selector" @click=${this._toggleCompanySelector}>
                             <platform-icon class="menu-icon" name="building-one" size="18"></platform-icon>
                             <span class="menu-item-label">${currentCompanyName}</span>
                             <platform-icon
@@ -436,6 +436,7 @@ export class PlatformUser extends PlatformElement {
                                     <button
                                         type="button"
                                         class="company-create-item"
+                                        data-menu-action="create-company"
                                         @click=${this._openCreateCompany}
                                     >
                                         <span class="company-item-name">
@@ -450,33 +451,35 @@ export class PlatformUser extends PlatformElement {
 
                     <div class="menu-divider"></div>
 
-                    <button class="menu-item" @click=${this._openCalendar}>
+                    <button class="menu-item" data-menu-action="calendar" @click=${this._openCalendar}>
                         <platform-icon class="menu-icon" name="calendar" size="18"></platform-icon>
                         <span class="menu-item-label">${this.t('menu.calendar')}</span>
                     </button>
 
-                    <button class="menu-item" @click=${this._openDocumentation}>
+                    <button class="menu-item" data-menu-action="documentation" @click=${this._openDocumentation}>
                         <platform-icon class="menu-icon" name="book-open" size="18"></platform-icon>
                         <span class="menu-item-label">${this.t('menu.documentation')}</span>
                     </button>
 
-                    <div class="lang-row">
+                    <div class="lang-row" data-menu-action="language">
                         <platform-icon class="menu-icon" name="globe" size="18"></platform-icon>
                         <span class="menu-item-label">${this.t('menu.language')}</span>
                         <span class="lang-switcher">
                             <button
                                 class=${classMap({ 'lang-option': true, active: locale === 'en' })}
+                                data-locale="en"
                                 @click=${(e) => this._setLocale('en', e)}
                             >en</button>
                             <span class="lang-separator">|</span>
                             <button
                                 class=${classMap({ 'lang-option': true, active: locale === 'ru' })}
+                                data-locale="ru"
                                 @click=${(e) => this._setLocale('ru', e)}
                             >ru</button>
                         </span>
                     </div>
 
-                    <button class="menu-item" @click=${this._toggleTheme}>
+                    <button class="menu-item" data-menu-action="theme" @click=${this._toggleTheme}>
                         <platform-icon class="menu-icon" name=${themeMode === 'dark' ? 'sun' : 'moon'} size="18"></platform-icon>
                         <span class="menu-item-label">
                             ${themeMode === 'dark' ? this.t('menu.theme_light') : this.t('menu.theme_dark')}
@@ -485,7 +488,7 @@ export class PlatformUser extends PlatformElement {
 
                     <div class="menu-divider"></div>
 
-                    <button class="menu-item danger" @click=${this._logout}>
+                    <button class="menu-item danger" data-menu-action="logout" @click=${this._logout}>
                         <platform-icon class="menu-icon" name="logout" size="18"></platform-icon>
                         <span class="menu-item-label">${this.t('menu.logout')}</span>
                     </button>

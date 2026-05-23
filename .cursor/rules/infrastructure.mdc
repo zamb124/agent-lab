@@ -42,7 +42,7 @@ files/                          # ConfigMap источники (loki, tempo, all
 
 `values.yaml`:
 
-- образ `image.repository=ghcr.io/zamb124/agent-lab`, `image.tag=latest` (CI: `--set image.tag=$SHA`);
+- образ `image.repository=ghcr.io/zamb124/agent-lab`; production deploy задаёт уникальный immutable `image.tag` (CI: `--set image.tag=$SHA`). `latest` для production запрещён: он ломает `SERVER__DEPLOYMENT_VERSION` и PWA-инвалидацию статики;
 - `masterNodeName: master` — куда прибиваются Postgres/Redis/Loki/Tempo;
 - `gpuNodeSelectorKey/Value: accelerator=nvidia-gpu` — куда прибивается LitServe;
 - `applications.<name>` (9 сервисов: flows/frontend/crm/rag/sync/office/scheduler-api/voice/browser) — порт, реплики, command;
@@ -73,7 +73,7 @@ files/                          # ConfigMap источники (loki, tempo, all
 | crm-worker | — | 1 | `taskiq worker apps.crm_worker.worker:worker_app --workers 2` |
 | idle-worker | — | 1 | `taskiq worker apps.idle_worker.worker:worker_app --workers 2` |
 
-Один образ `ghcr.io/zamb124/agent-lab:latest`, разные `command:` через `values.yaml`.
+Один immutable образ `ghcr.io/zamb124/agent-lab:<image.tag>`, разные `command:` через `values.yaml`.
 
 **Frontend:** Deployment добавляет `initContainer` `extract-static`, копирует `/app/static/` в `emptyDir` `shared-static`. Frontend сам обслуживает статику.
 
@@ -124,7 +124,7 @@ PWA-маршруты (`/manifest.json`, `/sw.js`, `/offline.html`, `/.well-known
 
 LitServe — единственный под на GPU-ноде через `nodeSelector: accelerator=nvidia-gpu` + `tolerations: nvidia.com/gpu`. Манифест: `templates/50-gpu/litserve.yaml`.
 
-- Образ: тот же `ghcr.io/zamb124/agent-lab:latest`, command `python -m apps.provider_litserve.main`.
+- Образ: тот же `ghcr.io/zamb124/agent-lab:<image.tag>`, command `python -m apps.provider_litserve.main`.
 - ENV: `PROVIDER_LITSERVE__INFRA__BACKEND=flagllm`, `PROVIDER_LITSERVE__INFRA__ACCELERATOR=cuda`, `MODEL_ID=Qwen/Qwen3-Reranker-0.6B`, `EMBEDDING_MODEL_ID=Qwen/Qwen3-Embedding-0.6B`, `HF_TOKEN` из `platform-secrets`.
 - Ресурсы: `nvidia.com/gpu: 1` (request + limit).
 - Кэш моделей: PVC `litserve-model-cache` (50Gi).
@@ -147,7 +147,7 @@ curl -fsS https://humanitec.ru/litserve/health
 CI (`.github/workflows/deploy.yml`, `workflow_dispatch` или push в `main`):
 
 1. `build` job: `docker build --target full` → push в GHCR (`ghcr.io/zamb124/agent-lab:<sha>` + `:latest`).
-2. `deploy` job: `helm upgrade --install agent-lab ./deploy/helm/agent-lab --namespace platform --create-namespace ...`; секреты из GitHub Actions передаются через `deploy/scripts/helm_platform_secrets_json.sh` и `--set-json platformSecrets=...` (`create: true` внутри JSON).
+2. `deploy` job: `helm upgrade --install agent-lab ./deploy/helm/agent-lab --namespace platform --create-namespace --set image.tag=<sha> ...`; секреты из GitHub Actions передаются через `deploy/scripts/helm_platform_secrets_json.sh` и `--set-json platformSecrets=...` (`create: true` внутри JSON).
 3. Verification: `kubectl get pods -n platform`.
 
 Никаких SSH/SCP/`docker compose` в CI. Доступ к кластеру — секрет `KUBECONFIG_B64` (base64 от `~/.kube/config` master).

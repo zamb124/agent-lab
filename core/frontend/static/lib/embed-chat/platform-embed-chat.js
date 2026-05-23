@@ -1,26 +1,16 @@
-import { LitElement, html, css, nothing } from './lit-shim.js';
-import { unsafeHTML } from './unsafe-html-shim.js';
+import { LitElement, html, css, nothing } from '../lit-shim.js';
 import { streamEmbedA2A } from './embed-a2a-stream.js';
-import { embedAssistantMarkdownToHtml } from './embed-chat-markdown.js';
-import {
-    normalizeEmbedBlockForFlowsUrls,
-    rewriteFlowsFileUrlsInHtml,
-} from './embed-flows-url-rewrite.js';
 import {
     crmA2aInterfaceLanguageVariables,
     embedChatLabelsForLang,
 } from './embed-chat-default-labels.js';
-import { reduceEmbedStreamEvent } from './embed-stream-handler.js';
-import { registerBuiltinEmbedBlocks } from './embed-builtin-blocks.js';
+import { mergeBlocksFromToolResult } from '../flows-chat/tool-result-blocks.js';
+import { normalizeFlowChatBlockForFlowsUrls } from '../flows-chat/flows-url-rewrite.js';
 import {
-    pairEmbedToolCallsAndResults,
-    embedToolRowDisplayName,
-    formatEmbedToolPairHintText,
-    toolCallIconName,
-} from './embed-tool-helpers.js';
-import '../components/platform-icon.js';
-import '../components/platform-help-hint.js';
-import '../components/platform-assistant-message-actions.js';
+    inputRequiredFieldsFromA2a,
+    mapA2aResultToChatRuntimeEvents,
+    resolveA2aContextId,
+} from '../flows-chat/a2a-chat-runtime.js';
 import {
     readTtsOutputEnabled,
     TTS_OUTPUT_CHANGED_EVENT,
@@ -40,7 +30,8 @@ import {
     setStreamTtsTarget,
     clearStreamTtsTarget,
 } from '../voice/stream-tts-registry.js';
-import './embed-block-renderer.js';
+import '../flows-chat/flows-chat-message.js';
+import '../flows-chat/flows-chat-files-panel.js';
 import './embed-chat-input.js';
 import { getActivePlatformNamespaceName } from '../utils/platform-namespace.js';
 import { getPlatformBus, hasPlatformBus } from '../events/bus-singleton.js';
@@ -232,13 +223,70 @@ function ensurePlatformBusForEmbedChat(flowsBaseUrl, platformUiOrigin) {
 
 const ASSISTANT_EVENT_SCHEMA_VERSION = '1.0.0';
 
+function _isEmbedGuestLimitMessage(text) {
+    const raw = typeof text === 'string' ? text.trim() : '';
+    if (raw.length === 0) {
+        return false;
+    }
+    return (
+        raw.includes('Достигнут лимит сообщений для этого виджета') ||
+        raw.includes('Guest message limit reached for this widget')
+    );
+}
+
+function _embedString(value) {
+    return typeof value === 'string' ? value : value == null ? '' : String(value);
+}
+
+function _embedFileKey(file) {
+    if (!file || typeof file !== 'object') {
+        return '';
+    }
+    return (
+        _embedString(file.file_id)
+        || _embedString(file.url)
+        || _embedString(file.preview_url)
+        || _embedString(file.original_name)
+        || _embedString(file.name)
+    );
+}
+
+function _upsertEmbedFiles(existing, incoming) {
+    const out = Array.isArray(existing) ? [...existing] : [];
+    const index = new Map();
+    out.forEach((file, i) => {
+        const key = _embedFileKey(file);
+        if (key) {
+            index.set(key, i);
+        }
+    });
+    for (const file of Array.isArray(incoming) ? incoming : []) {
+        if (!file || typeof file !== 'object') {
+            continue;
+        }
+        const key = _embedFileKey(file);
+        if (!key) {
+            out.push(file);
+            continue;
+        }
+        const existingIndex = index.get(key);
+        if (typeof existingIndex === 'number') {
+            out[existingIndex] = { ...out[existingIndex], ...file };
+        } else {
+            index.set(key, out.length);
+            out.push(file);
+        }
+    }
+    return out;
+}
+
 /**
  * Автономный чат: A2A stream + блоки. Без apps/crm, apps/flows.
  *
  * Свойства:
  * - flowsBaseUrl, platformUiOrigin (platform-ui-origin): origin UI-платформы для bus (i18n, иконки, file-types);
  *   если пусто — берётся origin из flowsBaseUrl
- * - flowId, embedId, branchId или skillId (легаси атрибут skill-id; embedId приоритетен для внешнего embed-route)
+ * - flowId, embedId, branchId (embedId приоритетен для внешнего embed-route)
  * - title
  * - labels: { send, placeholder, newChat, greeting, ... }
  * - useCredentials: boolean (fetch credentials: include — cookie при том же site / см. хост)
@@ -264,7 +312,6 @@ export class PlatformEmbedChat extends LitElement {
         flowId: { type: String, attribute: 'flow-id' },
         embedId: { type: String, attribute: 'embed-id' },
         branchId: { type: String, attribute: 'branch-id' },
-        skillId: { type: String, attribute: 'skill-id' },
         title: { type: String },
         assistantTitle: { type: String, attribute: 'assistant-title' },
         labels: { type: Object },
@@ -348,126 +395,24 @@ export class PlatformEmbedChat extends LitElement {
             flex-direction: column;
             gap: 12px;
         }
-        .scroll > .msg {
-            align-self: flex-start;
-            max-width: 92%;
-        }
-        .embed-msg-group {
-            display: flex;
-            flex-direction: column;
+        flows-chat-message {
             max-width: 92%;
             min-width: 0;
-            align-items: stretch;
+            align-self: flex-start;
+            --flows-chat-radius: var(--embed-radius);
+            --flows-chat-text: var(--embed-chat-text);
+            --flows-chat-muted: var(--embed-chat-muted);
+            --flows-chat-secondary: var(--embed-chat-muted);
+            --flows-chat-border: var(--embed-chat-border);
+            --flows-chat-surface: var(--embed-chat-surface);
+            --flows-chat-surface-subtle: var(--embed-chat-composer-bg);
+            --flows-chat-accent: var(--embed-chat-accent);
+            --flows-chat-accent-muted: var(--embed-chat-accent-muted);
+            --flows-chat-info-bg: var(--embed-chat-interrupt-bg);
+            --flows-chat-info-border: var(--embed-chat-accent);
         }
-        .embed-msg-group.user {
+        flows-chat-message[data-role='user'] {
             align-self: flex-end;
-            align-items: flex-end;
-        }
-        .embed-msg-group.assistant {
-            align-self: flex-start;
-        }
-        .msg {
-            max-width: 100%;
-            min-width: 0;
-            width: fit-content;
-            padding: 12px 14px;
-            border-radius: var(--embed-radius);
-            font-size: 14px;
-            line-height: 1.45;
-            box-sizing: border-box;
-        }
-        .embed-msg-group.user .msg {
-            width: auto;
-        }
-        .embed-msg-group.assistant .msg {
-            width: 100%;
-        }
-        .msg.user {
-            background: var(--embed-chat-accent-muted);
-        }
-        .msg.assistant {
-            background: var(--embed-chat-surface);
-            border: 1px solid var(--embed-chat-border);
-        }
-        .embed-assistant-actions,
-        .embed-user-actions {
-            margin-top: 6px;
-            padding: 0 2px;
-        }
-        .embed-msg-group.user .embed-user-actions {
-            display: flex;
-            justify-content: flex-end;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        .meta {
-            font-size: 11px;
-            color: var(--embed-chat-muted);
-            margin-bottom: 4px;
-        }
-        .embed-tool-stack {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            margin-top: 10px;
-        }
-        .embed-tool-orb {
-            position: relative;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 30px;
-            height: 30px;
-            margin-left: -10px;
-            border-radius: 50%;
-            background: var(--embed-chat-composer-bg);
-            border: 1px solid var(--embed-chat-border);
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-        }
-        :host([embed-theme='light']) .embed-tool-orb {
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-        }
-        .embed-tool-orb:first-child {
-            margin-left: 0;
-        }
-        .embed-tool-orb-inner {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            height: 100%;
-        }
-        .embed-tool-orb platform-help-hint {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .interrupt {
-            margin-top: 10px;
-            padding: 12px 14px;
-            border-radius: var(--embed-radius);
-            border: 1px solid var(--embed-chat-accent);
-            background: var(--embed-chat-interrupt-bg);
-        }
-        .interrupt-banner {
-            font-size: 12px;
-            color: var(--embed-chat-muted);
-            margin-bottom: 8px;
-        }
-        .embed-oauth-link {
-            display: inline-block;
-            margin-top: 8px;
-            padding: 6px 16px;
-            background: var(--embed-chat-accent, #4285f4);
-            color: #fff;
-            border-radius: 6px;
-            text-decoration: none;
-            font-size: 13px;
-            font-weight: 500;
-            transition: opacity 0.15s;
-        }
-        .embed-oauth-link:hover {
-            opacity: 0.85;
         }
         button.link {
             background: transparent;
@@ -477,111 +422,6 @@ export class PlatformEmbedChat extends LitElement {
             font-size: 13px;
             padding: 0;
             border-radius: var(--embed-radius);
-        }
-        .embed-msg-md {
-            color: inherit;
-            overflow-wrap: anywhere;
-            word-break: break-word;
-            max-width: 100%;
-        }
-        .embed-msg-md > :first-child {
-            margin-top: 0;
-        }
-        .embed-msg-md > :last-child {
-            margin-bottom: 0;
-        }
-        .embed-msg-md p,
-        .embed-msg-md ul,
-        .embed-msg-md ol,
-        .embed-msg-md blockquote,
-        .embed-msg-md pre,
-        .embed-msg-md h1,
-        .embed-msg-md h2,
-        .embed-msg-md h3,
-        .embed-msg-md h4 {
-            margin: 0 0 10px 0;
-        }
-        .embed-msg-md ul,
-        .embed-msg-md ol {
-            padding-left: 1.25rem;
-        }
-        .embed-msg-md a {
-            color: var(--embed-chat-accent);
-        }
-        .embed-msg-md code {
-            background: var(--embed-chat-composer-bg);
-            border-radius: 6px;
-            padding: 1px 5px;
-            font-size: 0.92em;
-        }
-        .embed-msg-md pre {
-            background: var(--embed-chat-input-bg);
-            border: 1px solid var(--embed-chat-border);
-            border-radius: 10px;
-            padding: 10px;
-            overflow: auto;
-        }
-        .embed-msg-md pre code {
-            background: transparent;
-            border: 0;
-            padding: 0;
-        }
-        .embed-msg-md table {
-            border-collapse: collapse;
-            width: 100%;
-            margin: 0 0 10px 0;
-            font-size: 13px;
-        }
-        .embed-msg-md th,
-        .embed-msg-md td {
-            border: 1px solid var(--embed-chat-border);
-            padding: 6px 8px;
-        }
-        .embed-stream-dots {
-            color: var(--embed-chat-muted);
-        }
-        .embed-stream-caret {
-            display: inline-block;
-            margin-left: 2px;
-            color: var(--embed-chat-muted);
-            animation: embed-caret-blink 1s steps(1, end) infinite;
-        }
-        @keyframes embed-caret-blink {
-            0%,
-            49% {
-                opacity: 1;
-            }
-            50%,
-            100% {
-                opacity: 0;
-            }
-        }
-        .embed-operator-reply {
-            margin-top: 12px;
-            padding: 10px 12px;
-            border-radius: 12px;
-            border: 1px solid var(--embed-chat-border);
-            background: var(--embed-chat-interrupt-bg);
-        }
-        .embed-operator-reply-label {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--embed-chat-muted);
-            margin-bottom: 6px;
-        }
-        .embed-file-card {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            margin-top: 6px;
-            padding: 2px 0;
-            font-size: 12px;
-            color: var(--embed-chat-accent, #3b82f6);
-            text-decoration: none;
-            cursor: pointer;
-        }
-        .embed-file-card:hover {
-            text-decoration: underline;
         }
         .embed-cred-badges {
             position: absolute;
@@ -665,7 +505,6 @@ export class PlatformEmbedChat extends LitElement {
         this.flowId = '';
         this.embedId = '';
         this.branchId = '';
-        this.skillId = '';
         this.title = '';
         this.assistantTitle = '';
         this.labels = {};
@@ -696,6 +535,7 @@ export class PlatformEmbedChat extends LitElement {
         this._streamAbort = null;
         this._contextId = `${Date.now()}`;
         this._currentTaskId = null;
+        this._streamTaskPrimed = false;
         this.greetingSent = false;
         /** Пользователь у низа — продолжаем автопрокрутку при новых кусках ответа */
         this._stickToBottom = true;
@@ -734,13 +574,10 @@ export class PlatformEmbedChat extends LitElement {
                 this._syncEmbedStreamTtsAfterPrefChange();
             }
         };
-        registerBuiltinEmbedBlocks();
     }
 
     _embedBranchId() {
-        const a = this.branchId != null ? String(this.branchId).trim() : '';
-        const b = this.skillId != null ? String(this.skillId).trim() : '';
-        return a || b;
+        return this.branchId != null ? String(this.branchId).trim() : '';
     }
 
     static _SCROLL_STICK_PX = 56;
@@ -784,7 +621,7 @@ export class PlatformEmbedChat extends LitElement {
      * @returns {string}
      */
     _embedAssistantTtsVoiceBaseUrl() {
-        if (!readTtsOutputEnabled()) {
+        if (!this._streamTtsAllowed()) {
             return '';
         }
         const flows = this.flowsBaseUrl != null ? String(this.flowsBaseUrl).trim() : '';
@@ -792,6 +629,10 @@ export class PlatformEmbedChat extends LitElement {
             return resolveVoiceHttpOriginFromFlowsBaseUrl(flows);
         }
         return resolveVoiceHttpOrigin();
+    }
+
+    _streamTtsAllowed() {
+        return (this.enableVoice === true || this.voiceDuplex === true) && readTtsOutputEnabled();
     }
 
     /**
@@ -857,7 +698,6 @@ export class PlatformEmbedChat extends LitElement {
                 flowsApiRoot: root,
                 flowId: fid,
                 branchId: this.branchId,
-                skillIdLegacy: this.skillId,
                 credentials: this.useCredentials === true ? 'include' : 'omit',
                 getHeaders: () => this._outboundFlowsRequestHeaders(),
             });
@@ -932,7 +772,7 @@ export class PlatformEmbedChat extends LitElement {
             }
             return;
         }
-        if (this.voiceComposerActive || !readTtsOutputEnabled() || !this.visible) {
+        if (this.voiceComposerActive || !this._streamTtsAllowed() || !this.visible) {
             this._embedTtsOnlyMedia = null;
             clearStreamTtsTarget();
             try {
@@ -949,7 +789,7 @@ export class PlatformEmbedChat extends LitElement {
      * Жест отправки: WS только для TTS (`speak`). Публичный API для drawer.
      */
     primeStreamTtsFromUserGesture() {
-        if (!readTtsOutputEnabled()) {
+        if (!this._streamTtsAllowed()) {
             return;
         }
         if (this.voiceComposerActive) {
@@ -1014,7 +854,7 @@ export class PlatformEmbedChat extends LitElement {
     }
 
     async ensureTtsOnlyStream() {
-        if (!readTtsOutputEnabled()) {
+        if (!this._streamTtsAllowed()) {
             this._disposeEmbedTtsOnlyStream();
             return;
         }
@@ -1072,7 +912,7 @@ export class PlatformEmbedChat extends LitElement {
     }
 
     _syncEmbedStreamTtsAfterPrefChange() {
-        if (!readTtsOutputEnabled()) {
+        if (!this._streamTtsAllowed()) {
             this._disposeEmbedTtsOnlyStream();
             return;
         }
@@ -1092,7 +932,7 @@ export class PlatformEmbedChat extends LitElement {
         const t0 = Date.now();
         const maxMs = 2500;
         while (Date.now() - t0 < maxMs) {
-            if (this.voiceComposerActive || !readTtsOutputEnabled()) {
+            if (this.voiceComposerActive || !this._streamTtsAllowed()) {
                 return;
             }
             if (
@@ -1130,8 +970,8 @@ export class PlatformEmbedChat extends LitElement {
     connectedCallback() {
         ensurePlatformBusForEmbedChat(this.flowsBaseUrl, this.platformUiOrigin);
         super.connectedCallback();
-        this.addEventListener('embed-block-action', this._onBlockAction);
-        this.addEventListener('embed-action-config-error', this._onEmbedActionConfigError);
+        this.addEventListener('flows-chat-block-action', this._onBlockAction);
+        this.addEventListener('flows-chat-action-config-error', this._onEmbedActionConfigError);
         document.addEventListener('click', this._onCredClickOutside);
         this._bindAckListeners();
         if (typeof window !== 'undefined') {
@@ -1142,8 +982,8 @@ export class PlatformEmbedChat extends LitElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        this.removeEventListener('embed-block-action', this._onBlockAction);
-        this.removeEventListener('embed-action-config-error', this._onEmbedActionConfigError);
+        this.removeEventListener('flows-chat-block-action', this._onBlockAction);
+        this.removeEventListener('flows-chat-action-config-error', this._onEmbedActionConfigError);
         document.removeEventListener('click', this._onCredClickOutside);
         if (typeof window !== 'undefined') {
             window.removeEventListener(TTS_OUTPUT_CHANGED_EVENT, this._onTtsPrefForEmbed);
@@ -1717,7 +1557,7 @@ export class PlatformEmbedChat extends LitElement {
         if (changed.has('visible') && !this.visible) {
             this._disposeEmbedTtsOnlyStream();
         }
-        if (changed.has('flowId') || changed.has('branchId') || changed.has('skillId')) {
+        if (changed.has('flowId') || changed.has('branchId')) {
             this._disposeEmbedTtsOnlyStream();
         }
         if (changed.has('visible')) {
@@ -1907,6 +1747,9 @@ export class PlatformEmbedChat extends LitElement {
     }
 
     _onEmbedComposeEdit(e) {
+        if (e && typeof e.stopPropagation === 'function') {
+            e.stopPropagation();
+        }
         const detail = e.detail;
         const text = detail && typeof detail.text === 'string' ? detail.text : '';
         if (text === '') {
@@ -2003,7 +1846,7 @@ export class PlatformEmbedChat extends LitElement {
 
         stopStreamTtsPlayback();
 
-        if (readTtsOutputEnabled()) {
+        if (this._streamTtsAllowed()) {
             primeStreamTtsPlaybackFromUserGesture();
             this.primeStreamTtsFromUserGesture();
             await this._awaitEmbedTtsOnlyReady();
@@ -2036,6 +1879,7 @@ export class PlatformEmbedChat extends LitElement {
         };
         this._messages = [...this._messages, assistantMsg];
         this._activeStreamMessageId = assistantMsg.id;
+        this._streamTaskPrimed = false;
         this._loading = true;
         this._sseOpen = true;
         this._pendingAssistantReplyNotify = true;
@@ -2076,11 +1920,7 @@ export class PlatformEmbedChat extends LitElement {
                 this._patchMessage(assistantMsg.id, { streaming: false });
             } else {
                 const m = err instanceof Error ? err.message : String(err);
-                const isGuestLimit =
-                    typeof m === 'string' &&
-                    (m.includes('Достигнут лимит сообщений для этого виджета') ||
-                        m.includes('Guest message limit reached for this widget'));
-                if (isGuestLimit) {
+                if (_isEmbedGuestLimitMessage(m)) {
                     this._patchMessage(assistantMsg.id, {
                         content: '',
                         streaming: false,
@@ -2126,102 +1966,214 @@ export class PlatformEmbedChat extends LitElement {
         this.requestUpdate();
     }
 
-    _handleEvent(event, messageId) {
-        const streamResult = event && typeof event === 'object' ? event.result : null;
-        if (streamResult !== null && typeof streamResult === 'object') {
-            feedStreamTtsFromA2aResult(streamResult);
+    _appendOperatorMessage(text) {
+        const opMsg = {
+            id: `op_${++mid}`,
+            role: 'operator',
+            content: text,
+            operatorReply: '',
+            blocks: [],
+            toolCalls: [],
+            toolResults: [],
+        };
+        this._messages = [...this._messages, opMsg];
+    }
+
+    _appendOperatorFiles(fileIds) {
+        const lastOp = [...this._messages].reverse().find((m) => m.role === 'operator');
+        if (lastOp) {
+            const current = Array.isArray(lastOp.fileIds) ? lastOp.fileIds : [];
+            this._messages = this._messages.map((m) => (
+                m.id === lastOp.id ? { ...m, fileIds: [...current, ...fileIds] } : m
+            ));
+            return;
         }
+        this._messages = [
+            ...this._messages,
+            {
+                id: `op_${++mid}`,
+                role: 'operator',
+                content: '',
+                fileIds,
+                operatorReply: '',
+                blocks: [],
+                toolCalls: [],
+                toolResults: [],
+            },
+        ];
+    }
+
+    _startResumeAssistantMessage(messageId, taskId, content) {
+        this._patchMessage(messageId, { inputRequired: null, streaming: false });
+        const resumeMsg = {
+            id: `a_${++mid}`,
+            role: 'assistant',
+            content,
+            streaming: true,
+            reasoning: '',
+            operatorReply: '',
+            toolCalls: [],
+            toolResults: [],
+            blocks: [],
+            inputRequired: null,
+            breakpoint: null,
+            taskId,
+        };
+        this._messages = [...this._messages, resumeMsg];
+        this._activeStreamMessageId = resumeMsg.id;
+    }
+
+    _patchActiveAssistantFromRuntime(messageId, runtimeEvent) {
         const msg = this._findMessage(messageId);
         if (!msg) {
             return;
         }
-        const r = event?.result;
-        const md = r?.metadata || {};
-        const st = r?.status?.state;
-        const stStr = typeof st === 'string' ? st : st?.value;
-        if (
-            (md.platform_handoff_continue === true || md.platform_oauth_continue === true) &&
-            (stStr === 'input-required' || stStr === 'input_required') &&
-            !r?.final
-        ) {
-            this._loading = false;
-        }
-        const reduced = reduceEmbedStreamEvent(msg, event);
-        if (reduced.currentTaskId) {
-            this._currentTaskId = reduced.currentTaskId;
-        }
-        if (reduced.contextId) {
-            this._contextId = reduced.contextId;
-        }
-        if (reduced.taskId) {
-            this._currentTaskId = reduced.taskId;
-        }
-        if (reduced.operatorMessage) {
-            const opMsg = {
-                id: `op_${++mid}`,
-                role: 'operator',
-                content: reduced.operatorMessage,
-                operatorReply: '',
-                blocks: [],
-                toolCalls: [],
-                toolResults: [],
-            };
-            this._messages = [...this._messages, opMsg];
-            this.requestUpdate();
+        const payload = runtimeEvent.payload && typeof runtimeEvent.payload === 'object' ? runtimeEvent.payload : {};
+        const taskId = typeof payload.task_id === 'string' ? payload.task_id : this._currentTaskId;
+        if (runtimeEvent.type === 'task_started') {
+            this._patchMessage(messageId, { taskId, streaming: true });
             return;
         }
-        if (reduced.operatorFiles) {
-            const lastOp = [...this._messages].reverse().find((m) => m.role === 'operator');
-            if (lastOp) {
-                this._patchMessage(lastOp.id, {
-                    fileIds: [...(lastOp.fileIds || []), ...reduced.operatorFiles],
+        if (runtimeEvent.type === 'content_chunk') {
+            const text = typeof payload.text === 'string' ? payload.text : '';
+            if (msg.inputRequired) {
+                this._startResumeAssistantMessage(messageId, taskId, text);
+                return;
+            }
+            this._patchMessage(messageId, { content: `${typeof msg.content === 'string' ? msg.content : ''}${text}` });
+            return;
+        }
+        if (runtimeEvent.type === 'reasoning_chunk') {
+            const text = typeof payload.text === 'string' ? payload.text : '';
+            this._patchMessage(messageId, { reasoning: `${typeof msg.reasoning === 'string' ? msg.reasoning : ''}${text}` });
+            return;
+        }
+        if (runtimeEvent.type === 'activity') {
+            this._patchMessage(messageId, { activity: typeof payload.text === 'string' ? payload.text : '' });
+            return;
+        }
+        if (runtimeEvent.type === 'tool_calls') {
+            const existing = Array.isArray(msg.toolCalls) ? msg.toolCalls : [];
+            const incoming = Array.isArray(payload.tool_calls) ? payload.tool_calls : [];
+            const add = incoming.filter((tc) => !existing.some((item) => item && item.id === tc.id));
+            if (add.length > 0) {
+                this._patchMessage(messageId, { toolCalls: [...existing, ...add] });
+            }
+            return;
+        }
+        if (runtimeEvent.type === 'tool_result') {
+            const existing = Array.isArray(msg.toolResults) ? msg.toolResults : [];
+            const tr = payload.tool_result && typeof payload.tool_result === 'object' ? payload.tool_result : null;
+            if (tr && !existing.some((item) => item && item.id === tr.id)) {
+                this._patchMessage(messageId, {
+                    toolResults: [...existing, tr],
+                    blocks: mergeBlocksFromToolResult(Array.isArray(msg.blocks) ? msg.blocks : [], tr),
+                });
+            }
+            return;
+        }
+        if (runtimeEvent.type === 'completed') {
+            const content = typeof payload.content === 'string' ? payload.content : '';
+            const current = typeof msg.content === 'string' ? msg.content.trim() : '';
+            this._patchMessage(messageId, {
+                content: content.length > 0 && current.length === 0 ? content : msg.content,
+                streaming: false,
+                inputRequired: null,
+            });
+            return;
+        }
+        if (runtimeEvent.type === 'failed') {
+            const error = typeof payload.error === 'string' && payload.error.length > 0 ? payload.error : 'Request failed';
+            if (_isEmbedGuestLimitMessage(error)) {
+                this._patchMessage(messageId, {
+                    content: '',
+                    streaming: false,
+                    inputRequired: {
+                        interruptKind: 'oauth_required',
+                        question: error,
+                        authUrl: '/login',
+                    },
                 });
             } else {
-                const opMsg = {
-                    id: `op_${++mid}`,
-                    role: 'operator',
-                    content: '',
-                    fileIds: reduced.operatorFiles,
-                    operatorReply: '',
-                    blocks: [],
-                    toolCalls: [],
-                    toolResults: [],
-                };
-                this._messages = [...this._messages, opMsg];
+                this._patchMessage(messageId, { content: error, streaming: false, inputRequired: null });
             }
-            this.requestUpdate();
             return;
         }
-        if (reduced.splitMessage) {
-            this._patchMessage(messageId, { inputRequired: null, streaming: false });
-            const resumeMsg = {
-                id: `a_${++mid}`,
-                role: 'assistant',
-                content: reduced.patch.content || '',
-                streaming: true,
-                reasoning: '',
-                operatorReply: '',
-                toolCalls: [],
-                toolResults: [],
-                blocks: [],
+        if (runtimeEvent.type === 'breakpoint') {
+            this._patchMessage(messageId, {
+                streaming: false,
+                breakpoint: payload.breakpoint,
                 inputRequired: null,
-                breakpoint: null,
-            };
-            this._messages = [...this._messages, resumeMsg];
-            this._activeStreamMessageId = resumeMsg.id;
-            this.requestUpdate();
+            });
             return;
         }
-        if (reduced.uiEvent && typeof reduced.uiEvent === 'object') {
-            this._emitUiEvents([reduced.uiEvent], messageId);
+        if (runtimeEvent.type === 'input_required') {
+            this._loading = false;
+            this._patchMessage(messageId, {
+                streaming: false,
+                inputRequired: inputRequiredFieldsFromA2a(payload.message, payload.result_metadata),
+            });
         }
-        const patch = reduced.patch;
-        if (patch && Object.keys(patch).length > 0) {
-            const merged = { ...msg, ...patch };
-            this._messages = this._messages.map((m) => (m.id === messageId ? merged : m));
-            if (Array.isArray(patch.uiEvents) && patch.uiEvents.length > 0) {
-                this._emitUiEvents(patch.uiEvents, messageId);
+    }
+
+    _applyRuntimeEvent(runtimeEvent, messageId) {
+        if (runtimeEvent.type === 'operator_reply') {
+            const text = typeof runtimeEvent.payload?.text === 'string' ? runtimeEvent.payload.text : '';
+            this._appendOperatorMessage(text);
+            return;
+        }
+        if (runtimeEvent.type === 'operator_files') {
+            const fileIds = Array.isArray(runtimeEvent.payload?.file_ids) ? runtimeEvent.payload.file_ids : [];
+            this._appendOperatorFiles(fileIds);
+            return;
+        }
+        if (runtimeEvent.type === 'files_event') {
+            const eventPayload = runtimeEvent.payload?.event?.payload;
+            const files = eventPayload && typeof eventPayload === 'object' && Array.isArray(eventPayload.files)
+                ? eventPayload.files
+                : [];
+            if (files.length > 0) {
+                const msg = Array.isArray(this._messages)
+                    ? this._messages.find((item) => item && item.id === messageId)
+                    : null;
+                this._patchMessage(messageId, {
+                    files: _upsertEmbedFiles(Array.isArray(msg?.files) ? msg.files : [], files),
+                });
             }
+            return;
+        }
+        if (runtimeEvent.type === 'ui_event') {
+            const uiEvent = runtimeEvent.payload?.event;
+            if (uiEvent && typeof uiEvent === 'object') {
+                this._emitUiEvents([uiEvent], messageId);
+            }
+            return;
+        }
+        this._patchActiveAssistantFromRuntime(messageId, runtimeEvent);
+    }
+
+    _handleEvent(event, messageId) {
+        const result = event && typeof event === 'object' ? event.result : null;
+        if (!result || typeof result !== 'object') {
+            return;
+        }
+        feedStreamTtsFromA2aResult(result);
+        const mapped = mapA2aResultToChatRuntimeEvents(result, {
+            contextId: this._contextId,
+            currentTaskId: this._currentTaskId,
+            taskPrimed: this._streamTaskPrimed,
+        });
+        this._streamTaskPrimed = mapped.taskPrimed;
+        if (mapped.nextTaskId) {
+            this._currentTaskId = mapped.nextTaskId;
+        }
+        const resolvedContextId = resolveA2aContextId(result, this._contextId);
+        if (resolvedContextId) {
+            this._contextId = resolvedContextId;
+        }
+        const targetMessageId = this._activeStreamMessageId ? this._activeStreamMessageId : messageId;
+        for (const runtimeEvent of mapped.events) {
+            this._applyRuntimeEvent(runtimeEvent, targetMessageId);
         }
         this.requestUpdate();
     }
@@ -2230,6 +2182,8 @@ export class PlatformEmbedChat extends LitElement {
         this._pendingAssistantReplyNotify = false;
         this._greetingTypingRunId += 1;
         this._contextId = `${Date.now()}`;
+        this._currentTaskId = null;
+        this._streamTaskPrimed = false;
         this._uiEventDispatchKeys.clear();
         this._messages = [];
         this.greetingSent = false;
@@ -2298,23 +2252,34 @@ export class PlatformEmbedChat extends LitElement {
                   `
                 : nothing;
 
+        const files = this._sessionFilesForSharedPanel();
+
         return html`
             ${head}
             <div class="embed-chat-content">
                 ${credBadges}
+                ${files.length > 0
+                    ? html`
+                          <flows-chat-files-panel
+                              .files=${files}
+                              active-company-id=${this.companyId || ''}
+                              document-base-url=${this._embedDocumentBaseUrl()}
+                          ></flows-chat-files-panel>
+                      `
+                    : nothing}
                 <div class="scroll" @scroll=${this._onScrollAreaScroll}>
-                    ${this._messages.map((m) => this._renderMessage(m))}
+                    ${this._messages.map((m) => this._renderChatSurfaceMessage(m))}
                 </div>
                 <embed-chat-input
-                    ?loading=${this._loading}
-                    ?cancel-busy=${this._cancelBusy}
+                    .loading=${this._loading}
+                    .cancelBusy=${this._cancelBusy}
                     placeholder=${this._lb('placeholder', 'Message...')}
                     .labels=${this._mergedLabels()}
-                    ?enable-voice=${this.enableVoice}
-                    ?voice-duplex=${this.voiceDuplex}
-                    ?voice-active=${this.voiceComposerActive}
-                    voice-composer-status=${this.voiceComposerStatus || 'idle'}
-                    ?show-locale-control=${this.showLocaleControl}
+                    .enableVoice=${this.enableVoice}
+                    .voiceDuplex=${this.voiceDuplex}
+                    .voiceActive=${this.voiceComposerActive}
+                    voice-status=${this.voiceComposerStatus || 'idle'}
+                    .showLocaleControl=${this.showLocaleControl}
                     interface-locale=${this.interfaceLocale || 'auto'}
                     @embed-locale-change=${this._onEmbedLocaleChange}
                     @embed-send=${this._onSend}
@@ -2324,169 +2289,112 @@ export class PlatformEmbedChat extends LitElement {
         `;
     }
 
-    _renderEmbedToolStack(m) {
-        const rows = pairEmbedToolCallsAndResults(m.toolCalls, m.toolResults);
-        if (rows.length === 0) {
-            return nothing;
-        }
-        const defaultName = this._lb('tool_default_name', 'tool');
-        const hintStrings = {
-            tool_hint_tool_name: this._lb('tool_hint_tool_name', 'Tool: {name}'),
-            tool_hint_args_label: this._lb('tool_hint_args_label', 'Arguments:'),
-            tool_hint_result_label: this._lb('tool_hint_result_label', 'Result:'),
-        };
-        const nameList = rows.map((row) => embedToolRowDisplayName(row.call, row.result, defaultName)).join(', ');
-        const aria = this._lb('tool_stack_aria', 'Tool calls: {names}').replace(/\{names\}/g, nameList);
-        return html`
-            <div class="embed-tool-stack" role="group" aria-label=${aria}>
-                ${rows.map(
-                    (row, index) => {
-                        const name = embedToolRowDisplayName(row.call, row.result, defaultName);
-                        const icon = toolCallIconName(name);
-                        const hint = formatEmbedToolPairHintText(row.call, row.result, hintStrings, defaultName);
-                        const z = index + 1;
-                        return html`
-                            <span class="embed-tool-orb" style="z-index: ${z}">
-                                <platform-help-hint .text=${hint} .label=${name} ?wide=${true}>
-                                    <span class="embed-tool-orb-inner" tabindex="0" role="img" aria-label=${name}>
-                                        <platform-icon name=${icon} size="16"></platform-icon>
-                                    </span>
-                                </platform-help-hint>
-                            </span>
-                        `;
-                    },
-                )}
-            </div>
-        `;
+    _embedDocumentBaseUrl() {
+        return (
+            _normalizedPlatformUiOrigin(this.platformUiOrigin)
+            || _platformApexOriginFromFlowsBaseUrl(this.flowsBaseUrl)
+        );
     }
 
-    _renderMessage(m) {
-        if (m.role === 'user') {
-            const files =
-                m.filesMeta && m.filesMeta.length
-                    ? html`<div class="meta">${m.filesMeta.map((f) => f.name).join(', ')}</div>`
-                    : nothing;
-            const body = typeof m.content === 'string' ? m.content.trim() : '';
-            const userActions =
-                body !== ''
-                    ? html`
-                          <div class="embed-user-actions">
-                              <platform-assistant-message-actions
-                                  .text=${body}
-                                  voice-base-url=""
-                                  credentials=${this.useCredentials ? 'include' : 'omit'}
-                                  show-edit
-                                  @compose-edit=${this._onEmbedComposeEdit}
-                              ></platform-assistant-message-actions>
-                          </div>
-                      `
-                    : nothing;
-            return html`
-                <div class="embed-msg-group user">
-                    <div class="msg user">
-                        ${files}
-                        ${m.content || ''}
-                    </div>
-                    ${userActions}
-                </div>
-            `;
+    _fileFromPanelBlock(block) {
+        if (!block || typeof block !== 'object' || block.type !== 'file_card') {
+            return null;
         }
-        if (m.role === 'operator') {
-            const flowsRootOp = (this.flowsBaseUrl && String(this.flowsBaseUrl).trim()) || '';
-            const fileCards = (m.fileIds || []).map(
-                (fid) => html`
-                    <a
-                        href="${flowsRootOp}/api/v1/files/download/${fid}"
-                        target="_blank"
-                        rel="noopener"
-                        class="embed-file-card"
-                    >
-                        ${this._lb('download_file', 'Download')}
-                    </a>
-                `,
-            );
-            return html`
-                <div class="msg assistant embed-operator-msg">
-                    <div class="embed-operator-reply-label">${this._lb('operator_reply_heading', 'Operator')}</div>
-                    <div class="embed-msg-md">${unsafeHTML(embedAssistantMarkdownToHtml(m.content || ''))}</div>
-                    ${fileCards}
-                </div>
-            `;
+        const root = (this.flowsBaseUrl && String(this.flowsBaseUrl).trim()) || '';
+        const normalized = normalizeFlowChatBlockForFlowsUrls(block, root);
+        const document =
+            normalized.document && typeof normalized.document === 'object' && !Array.isArray(normalized.document)
+                ? normalized.document
+                : null;
+        const capabilities =
+            normalized.capabilities && typeof normalized.capabilities === 'object' && !Array.isArray(normalized.capabilities)
+                ? { ...normalized.capabilities }
+                : {};
+        const editorUrl = _embedString(normalized.editor_url);
+        if (document) {
+            capabilities.document = document;
+        } else if (editorUrl.length > 0) {
+            capabilities.document = {
+                binding_id: _embedString(normalized.binding_id),
+                file_id: _embedString(normalized.file_id),
+                catalog_id: _embedString(normalized.catalog_id),
+                document_type: _embedString(normalized.document_type),
+                title: _embedString(normalized.name || normalized.original_name),
+                namespace: _embedString(normalized.namespace),
+                editor_url: editorUrl,
+                editable: true,
+            };
         }
-        const toolStack = this._renderEmbedToolStack(m);
+        return {
+            file_id: _embedString(normalized.file_id),
+            original_name: _embedString(normalized.original_name || normalized.name),
+            content_type: _embedString(normalized.content_type || normalized.mime_type),
+            file_size: Number(normalized.file_size || normalized.size) || 0,
+            url: _embedString(normalized.url || normalized.preview_url),
+            capabilities,
+            document: capabilities.document || null,
+        };
+    }
+
+    _sessionFilesForSharedPanel() {
+        let files = [];
+        const root = String(this.flowsBaseUrl || '').replace(/\/$/, '');
+        for (const message of Array.isArray(this._messages) ? this._messages : []) {
+            files = _upsertEmbedFiles(files, Array.isArray(message.files) ? message.files : []);
+            for (const fid of Array.isArray(message.fileIds) ? message.fileIds : []) {
+                const id = _embedString(fid);
+                if (id.length === 0) {
+                    continue;
+                }
+                files = _upsertEmbedFiles(files, [{
+                    file_id: id,
+                    original_name: this._lb('operator_files', 'Attached files'),
+                    url: root ? `${root}/api/v1/files/download/${encodeURIComponent(id)}` : '',
+                }]);
+            }
+            for (const block of Array.isArray(message.blocks) ? message.blocks : []) {
+                const file = this._fileFromPanelBlock(block);
+                if (file) {
+                    files = _upsertEmbedFiles(files, [file]);
+                }
+            }
+        }
+        return files.filter((file) => _embedFileKey(file).length > 0);
+    }
+
+    _renderChatSurfaceMessage(m) {
+        const labels = this._mergedLabels();
         const flowsRoot = (this.flowsBaseUrl && String(this.flowsBaseUrl).trim()) || '';
-        const blocks = (m.blocks || []).map((b) => {
-            const nb = normalizeEmbedBlockForFlowsUrls(b, flowsRoot);
-            return html`<embed-block-renderer .block=${nb}></embed-block-renderer>`;
-        });
-        const bodyHtml = rewriteFlowsFileUrlsInHtml(
-            embedAssistantMarkdownToHtml(m.content || '', { streaming: Boolean(m.streaming) }),
-            flowsRoot,
-        );
-        const interrupt = m.inputRequired
-            ? html`
-                  <div class="interrupt">
-                      ${m.inputRequired.interruptKind === 'operator_task'
-                          ? html`<div class="interrupt-banner">${this._lb('interrupt_operator_banner', '')}</div>`
-                          : nothing}
-                      ${m.inputRequired.interruptKind === 'oauth_required'
-                          ? html`<div class="interrupt-banner">${this._lb('interrupt_oauth_banner', 'Authorization required')}</div>`
-                          : nothing}
-                      <div class="embed-msg-md">
-                          ${unsafeHTML(
-                              rewriteFlowsFileUrlsInHtml(
-                                  embedAssistantMarkdownToHtml(m.inputRequired.question || ''),
-                                  flowsRoot,
-                              ),
-                          )}
-                      </div>
-                      ${m.inputRequired.interruptKind === 'oauth_required' && m.inputRequired.authUrl
-                          ? html`<a class="embed-oauth-link" href="${m.inputRequired.authUrl}" target="_blank" rel="noopener noreferrer">${this._lb('interrupt_oauth_button', 'Authorize')}</a>`
-                          : nothing}
-                  </div>
-              `
-            : nothing;
-        const operatorReplyHtml =
-            m.operatorReply && String(m.operatorReply).trim()
-                ? html`
-                      <div class="embed-operator-reply">
-                          <div class="embed-operator-reply-label">${this._lb('operator_reply_heading', 'Operator')}</div>
-                          <div class="embed-msg-md">
-                              ${unsafeHTML(
-                                  rewriteFlowsFileUrlsInHtml(
-                                      embedAssistantMarkdownToHtml(String(m.operatorReply)),
-                                      flowsRoot,
-                                  ),
-                              )}
-                          </div>
-                      </div>
-                  `
-                : nothing;
-        const assistantActions =
-            !m.streaming && typeof m.content === 'string' && m.content.trim() !== ''
-                ? html`
-                      <div class="embed-assistant-actions">
-                          <platform-assistant-message-actions
-                              .text=${String(m.content).trim()}
-                              voice-base-url=${this._embedAssistantTtsVoiceBaseUrl()}
-                              credentials=${this.useCredentials ? 'include' : 'omit'}
-                              .getHeaders=${typeof this.getAuthToken === 'function' ? this.getAuthToken : null}
-                          ></platform-assistant-message-actions>
-                      </div>
-                  `
-                : nothing;
         return html`
-            <div class="embed-msg-group assistant">
-                <div class="msg assistant">
-                    <div class="embed-msg-md">${unsafeHTML(bodyHtml)}</div>
-                    ${m.streaming ? html`<span class="embed-stream-caret" aria-hidden="true">|</span>` : nothing}
-                    ${interrupt}
-                    ${operatorReplyHtml}
-                    ${blocks}
-                    ${toolStack}
-                </div>
-                ${assistantActions}
-            </div>
+            <flows-chat-message
+                variant="embed"
+                data-role=${m.role || 'assistant'}
+                .role=${m.role || 'assistant'}
+                .content=${m.content || ''}
+                ?streaming=${Boolean(m.streaming)}
+                .reasoning=${m.reasoning || ''}
+                .activity=${m.activity || ''}
+                .toolCalls=${Array.isArray(m.toolCalls) ? m.toolCalls : []}
+                .toolResults=${Array.isArray(m.toolResults) ? m.toolResults : []}
+                .browserPreviews=${Array.isArray(m.browserPreviews) ? m.browserPreviews : []}
+                .inputRequired=${m.inputRequired || null}
+                .operatorReply=${m.operatorReply || ''}
+                .breakpoint=${m.breakpoint || null}
+                .files=${Array.isArray(m.files) ? m.files : []}
+                .filesMeta=${Array.isArray(m.filesMeta) ? m.filesMeta : []}
+                .fileIds=${Array.isArray(m.fileIds) ? m.fileIds : []}
+                .blocks=${Array.isArray(m.blocks) ? m.blocks : []}
+                .taskId=${m.taskId || ''}
+                .labels=${labels}
+                .flowRoot=${flowsRoot}
+                .useCredentials=${this.useCredentials}
+                .voiceBaseUrl=${this._embedAssistantTtsVoiceBaseUrl()}
+                .getHeaders=${typeof this.getAuthToken === 'function' ? this.getAuthToken : null}
+                .showAvatar=${false}
+                .showHeader=${false}
+                .showTraceControls=${false}
+                @compose-edit=${this._onEmbedComposeEdit}
+            ></flows-chat-message>
         `;
     }
 }

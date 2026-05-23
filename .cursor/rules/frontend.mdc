@@ -14,6 +14,14 @@ alwaysApply: false
 
 Lit 3, ES modules через import map, нативные web components. Бандлера **нет** — браузер грузит модули напрямую. Никакого Zustand/Redux/MobX.
 
+## PWA и обновление статики
+
+`/static/core/**`, `/static/frontend/**` и сервисные UI-static (`/flows/static/**`, `/crm/ui/static/**`, `/sync/ui/static/**`, `/rag/ui/static/**`, `/documents/ui/static/**`) — mutable ES modules/CSS по стабильным URL. Service Worker **никогда** не отдаёт их cache-first/stale-while-revalidate: только network-first с Cache Storage как offline fallback.
+
+Источник версии релиза — `SERVER__DEPLOYMENT_VERSION` в `/health` / `/<svc>/health`. Клиент хранит последнюю увиденную версию в `localStorage` ключе `platform:core:deployment_version`; SW хранит свою metadata-копию в Cache Storage. При mismatch обязательно удалить `humanitec-*` content caches, обновить SW и перезагрузить окно. In-memory `state.pwa.deploymentVersion` — только отображение, не источник истины для сравнения между запусками.
+
+`/sw.js` всегда отдаётся с `Cache-Control: no-cache, no-store, must-revalidate` и `Service-Worker-Allowed: /`. Любое изменение стратегии кэширования SW должно bump-ать `CACHE_SCHEMA_VERSION`, чтобы старые content caches были удалены на activate.
+
 ## Поток
 
 ```

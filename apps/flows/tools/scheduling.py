@@ -71,10 +71,10 @@ class ScheduleOneTimeArgs(_ScheduledTaskContentArgs):
 class CancelScheduledTaskArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    task_id: str = Field(
+    schedule_task_id: str = Field(
         ...,
         min_length=1,
-        description="UUID или полный id задачи, как в ответе при создании или в list_scheduled_tasks.",
+        description="schedule_task_id задачи, как в ответе при создании или в list_scheduled_tasks.",
     )
 
 
@@ -128,7 +128,7 @@ async def schedule_cron_task(
 
     state.scheduled_tasks.append(task.model_dump())
 
-    return f"Периодическая задача создана (ID: {task.id}). Расписание: {cron}"
+    return f"Периодическая задача создана (schedule_task_id: {task.schedule_task_id}). Расписание: {cron}"
 
 
 @tool(
@@ -175,7 +175,10 @@ async def schedule_interval_task(
 
     state.scheduled_tasks.append(task.model_dump())
 
-    return f"Периодическая задача создана (ID: {task.id}). Интервал: каждые {interval_minutes} минут"
+    return (
+        "Периодическая задача создана "
+        f"(schedule_task_id: {task.schedule_task_id}). Интервал: каждые {interval_minutes} минут"
+    )
 
 
 @tool(
@@ -223,7 +226,7 @@ async def schedule_one_time_task(
 
     state.scheduled_tasks.append(task.model_dump())
 
-    return f"Одноразовая задача создана (ID: {task.id}). Запуск: {run_at}"
+    return f"Одноразовая задача создана (schedule_task_id: {task.schedule_task_id}). Запуск: {run_at}"
 
 
 @tool(
@@ -268,7 +271,9 @@ async def list_scheduled_tasks(
         content_info = f"{content_type}: {task.content}"
         desc = f" - {task.description}" if task.description else ""
 
-        lines.append(f"- [{task.id[:8]}] {schedule_info}, {content_info}, статус: {status}{desc}")
+        lines.append(
+            f"- [{task.schedule_task_id[:8]}] {schedule_info}, {content_info}, статус: {status}{desc}"
+        )
 
     return "\n".join(lines)
 
@@ -280,7 +285,7 @@ async def list_scheduled_tasks(
     args_schema=CancelScheduledTaskArgs,
 )
 async def cancel_scheduled_task(
-    task_id: str,
+    schedule_task_id: str,
     *,
     state: ExecutionState,
 ) -> str:
@@ -288,15 +293,20 @@ async def cancel_scheduled_task(
     Отменяет задачу.
 
     Args:
-        task_id: ID задачи
+        schedule_task_id: ID записи платформенного scheduler
         state: Состояние агента
     """
     service = get_schedule_service()
 
-    success = await service.cancel_task(task_id)
+    success = await service.cancel_task(schedule_task_id)
 
     if success:
-        state.scheduled_tasks = [t for t in state.scheduled_tasks if t.get("id") != task_id]
-        return f"Задача {task_id} отменена"
+        state.scheduled_tasks = [
+            t for t in state.scheduled_tasks if t.get("schedule_task_id") != schedule_task_id
+        ]
+        return f"Задача {schedule_task_id} отменена"
     else:
-        return f"Не удалось отменить задачу {task_id}. Возможно она уже выполнена или не существует."
+        return (
+            f"Не удалось отменить задачу {schedule_task_id}. "
+            "Возможно она уже выполнена или не существует."
+        )

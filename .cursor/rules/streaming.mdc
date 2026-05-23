@@ -45,7 +45,7 @@ assert emitter.events[1]["kind"] == "task-status-update"
 
 ## EventSubscriber
 
-`apps/flows/src/streaming/subscriber.py`. Подписка завершается на `is_final_event`: `TaskStatusUpdateEvent` с `final=True` и терминальным `state` (`completed`, `failed`, `input-required`, `canceled`).
+`apps/flows/src/streaming/subscriber.py`. Подписка завершается на `is_final_event`: `TaskStatusUpdateEvent` с `final=True` и терминальным `task_state` (`completed`, `failed`, `input-required`, `canceled`; в A2A JSON это `status.state`).
 
 **Отмена задачи (`tasks/cancel`, Redis `cancel:{task_id}`):** перед `emit_cancelled` воркер сохраняет `ExecutionState` и помечает `_cancelled`; частичный текст ответа LLM на момент `FlowCancelled` фиксируется в `state.messages` как сообщение ассистента с `metadata.interrupted=true` (`LlmNodeRunner`). Резолв `session_id` по `tasks/cancel`/`tasks/get` использует `task_id` **или** `context_id` (`BaseChannel._resolve_session_id_for_a2a_lookup`).
 
@@ -69,6 +69,7 @@ async for event in subscriber.subscribe(task_id):
 ## A2A типы
 
 Все события — типы из `a2a-sdk`. **Свои типы не создавать.**
+На транспортной границе A2A имя спеки остаётся `TaskStatus.state` / JSON `status.state`; внутри платформенного кода это значение называется `task_state`, а сохранённый terminal snapshot — `ExecutionState.terminal_task_state`.
 
 ```python
 from a2a.types import TaskStatusUpdateEvent, TaskArtifactUpdateEvent, TaskState, Artifact, Part, TextPart

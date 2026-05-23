@@ -1,7 +1,7 @@
 /**
  * Scheduler tasks page — расписания платформенного scheduler.
  *
- * Фильтры: status, target_service, task_name. Колонки: id, service, task,
+ * Фильтры: status, target_service, task_name. Колонки: schedule_task_id, service, task,
  * schedule, status, next_run, actions. Действия: run-now, pause/resume,
  * cancel, redis snapshot. Redis snapshot — inline expandable section
  * под строкой задачи (без модалки).
@@ -65,7 +65,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
             td { color: var(--text-primary); font-size: var(--text-sm); }
             td.actions { text-align: right; white-space: nowrap; }
             td.actions button + button { margin-left: var(--space-2); }
-            td.id { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-tertiary); }
+            td.schedule-task-id { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-tertiary); }
             td code { font-family: var(--font-mono); font-size: var(--text-xs); background: var(--glass-solid-subtle); padding: 2px 6px; border-radius: var(--radius-sm); }
 
             .status-tag {
@@ -108,7 +108,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         _filterStatus: { state: true },
         _filterService: { state: true },
         _filterTask: { state: true },
-        _expandedRedisId: { state: true },
+        _expandedScheduleTaskId: { state: true },
     };
 
     constructor() {
@@ -123,7 +123,7 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         this._filterStatus = '';
         this._filterService = '';
         this._filterTask = '';
-        this._expandedRedisId = null;
+        this._expandedScheduleTaskId = null;
     }
 
     updated() {
@@ -146,30 +146,30 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
     }
 
     _runNow(t) {
-        this._runNowOp.run({ task_id: t.id });
+        this._runNowOp.run({ schedule_task_id: t.schedule_task_id });
     }
 
     _pauseTask(t) {
-        this._pause.run({ task_id: t.id });
+        this._pause.run({ schedule_task_id: t.schedule_task_id });
     }
 
     _resumeTask(t) {
-        this._resume.run({ task_id: t.id });
+        this._resume.run({ schedule_task_id: t.schedule_task_id });
     }
 
     _cancelTask(t) {
-        const message = this.t('scheduler_page.confirm_cancel', { name: t.task_name || t.id });
+        const message = this.t('scheduler_page.confirm_cancel', { name: t.task_name || t.schedule_task_id });
         if (!confirm(message)) return;
-        this._cancelOp.run({ task_id: t.id });
+        this._cancelOp.run({ schedule_task_id: t.schedule_task_id });
     }
 
     _toggleRedis(t) {
-        if (this._expandedRedisId === t.id) {
-            this._expandedRedisId = null;
+        if (this._expandedScheduleTaskId === t.schedule_task_id) {
+            this._expandedScheduleTaskId = null;
             return;
         }
-        this._expandedRedisId = t.id;
-        this._redis.run({ task_id: t.id });
+        this._expandedScheduleTaskId = t.schedule_task_id;
+        this._redis.run({ schedule_task_id: t.schedule_task_id });
     }
 
     _statusFilterEnumConfig() {
@@ -251,10 +251,10 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
     }
 
     _renderRedisRow(t) {
-        const snapshotById = this._redis.state.snapshotById;
-        const loadingById = this._redis.state.loadingById;
-        const snapshot = snapshotById[t.id];
-        const loading = Boolean(loadingById[t.id]);
+        const snapshotByScheduleTaskId = this._redis.state.snapshotByScheduleTaskId;
+        const loadingByScheduleTaskId = this._redis.state.loadingByScheduleTaskId;
+        const snapshot = snapshotByScheduleTaskId[t.schedule_task_id];
+        const loading = Boolean(loadingByScheduleTaskId[t.schedule_task_id]);
         const data = !snapshot && loading
             ? html`<div>${this.t('scheduler_page.redis_loading')}</div>`
             : snapshot
@@ -272,10 +272,10 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
 
     _renderRow(t) {
         const status = t.status || 'pending';
-        const expanded = this._expandedRedisId === t.id;
+        const expanded = this._expandedScheduleTaskId === t.schedule_task_id;
         return html`
             <tr>
-                <td class="id">${t.id}</td>
+                <td class="schedule-task-id">${t.schedule_task_id}</td>
                 <td>${t.target_service || ''}</td>
                 <td>${t.task_name || ''}</td>
                 <td><code>${this._formatSchedule(t)}</code></td>

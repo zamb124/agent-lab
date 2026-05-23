@@ -48,7 +48,7 @@ async def _create_topic(
         user=op_user,
         container=op_container,
     )
-    return channel.id, namespace
+    return channel.channel_id, namespace
 
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_op_channels_create_topic_and_list(
         user=op_user,
         container=op_container,
     )
-    assert any(c.id == channel_id for c in listing.items)
+    assert any(c.channel_id == channel_id for c in listing.items)
 
 
 @pytest.mark.asyncio
@@ -112,7 +112,7 @@ async def test_op_channels_create_direct_second_call_reuses_same_channel(
     )
     first = await op_channels_create(create_direct, user=op_user, container=op_container)
     second = await op_channels_create(create_direct, user=op_user, container=op_container)
-    assert first.id == second.id
+    assert first.channel_id == second.channel_id
     assert first.type == ChannelType.DIRECT
     assert second.type == ChannelType.DIRECT
 

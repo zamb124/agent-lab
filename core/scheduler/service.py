@@ -130,7 +130,7 @@ class SchedulerService:
     ) -> PlatformScheduledTask:
         now = datetime.now(timezone.utc)
         task = PlatformScheduledTask(
-            id=str(uuid4()),
+            schedule_task_id=str(uuid4()),
             company_id=company_id,
             target_service=request.target_service,
             task_name=request.task_name,
@@ -140,14 +140,14 @@ class SchedulerService:
             interval_seconds=request.interval_seconds,
             run_at=request.run_at,
             timezone=request.timezone,
-            payload=request.payload,
+            payload=dict(request.payload),
             status=ScheduledTaskStatus.PENDING,
             created_by_user_id=user_id,
             created_at=now,
             updated_at=now,
             next_run_at=None,
         )
-        task.payload["scheduler_task_id"] = task.id
+        task.payload["schedule_task_id"] = task.schedule_task_id
         task.payload["company_id"] = company_id
         task.next_run_at = self._calculate_next_run_at(task, base_time_utc=now)
         task.schedule_id = await self._create_schedule(task)
@@ -163,7 +163,7 @@ class SchedulerService:
         task = await self.get(company_id=company_id, schedule_task_id=schedule_task_id)
         if task.schedule_id is None:
             return PlatformRedisScheduleSnapshot(
-                schedule_task_id=task.id,
+                schedule_task_id=task.schedule_task_id,
                 company_id=task.company_id,
                 schedule_id=None,
                 exists_in_redis=False,
@@ -178,7 +178,7 @@ class SchedulerService:
         matched = [item for item in schedules if item.schedule_id == task.schedule_id]
         if len(matched) == 0:
             return PlatformRedisScheduleSnapshot(
-                schedule_task_id=task.id,
+                schedule_task_id=task.schedule_task_id,
                 company_id=task.company_id,
                 schedule_id=task.schedule_id,
                 exists_in_redis=False,
@@ -191,7 +191,7 @@ class SchedulerService:
 
         redis_schedule = matched[0]
         return PlatformRedisScheduleSnapshot(
-            schedule_task_id=task.id,
+            schedule_task_id=task.schedule_task_id,
             company_id=task.company_id,
             schedule_id=task.schedule_id,
             exists_in_redis=True,

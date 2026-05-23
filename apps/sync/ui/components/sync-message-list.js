@@ -29,6 +29,7 @@ const SCROLL_TOP_THRESHOLD = 60;
 export class SyncMessageList extends PlatformElement {
     static properties = {
         channelId: { type: String },
+        threadId: { type: String, attribute: 'thread-id' },
         myUserId: { type: String, attribute: 'my-user-id' },
         channelType: { type: String, attribute: 'channel-type' },
     };
@@ -130,12 +131,14 @@ export class SyncMessageList extends PlatformElement {
     constructor() {
         super();
         this.channelId = '';
+        this.threadId = '';
         this.myUserId = '';
         this.channelType = '';
         this._channelMembers = [];
         this._store = this.useSlice('sync/messages_store');
         this._messagesStoreSel = this.select((s) => s.syncMessagesStore);
         this._channelsSel = this.select((s) => s.syncChannels);
+        this._members = this.useResource('sync/company_members', { autoload: true });
         this._loadOlder = this.useOp('sync/messages_load_older');
         this._loadNewer = this.useOp('sync/messages_load_newer');
         this._stickToBottom = true;
@@ -193,10 +196,18 @@ export class SyncMessageList extends PlatformElement {
         if (!slice || !slice.byChannelId) return [];
         const channelData = slice.byChannelId[this.channelId];
         if (!channelData || !Array.isArray(channelData.items)) return [];
-        const items = [...channelData.items];
+        const targetThreadId = typeof this.threadId === 'string' ? this.threadId : '';
+        const items = channelData.items.filter((item) => {
+            const itemThreadId = typeof item.thread_id === 'string' ? item.thread_id : '';
+            return targetThreadId ? itemThreadId === targetThreadId : itemThreadId === '';
+        });
         if (channelData.pendingByLocalId && typeof channelData.pendingByLocalId === 'object') {
             for (const pending of Object.values(channelData.pendingByLocalId)) {
-                if (pending && typeof pending === 'object') items.push(pending);
+                if (!pending || typeof pending !== 'object') continue;
+                const pendingThreadId = typeof pending.thread_id === 'string' ? pending.thread_id : '';
+                if (targetThreadId ? pendingThreadId === targetThreadId : pendingThreadId === '') {
+                    items.push(pending);
+                }
             }
         }
         items.sort((a, b) => {
@@ -274,7 +285,7 @@ export class SyncMessageList extends PlatformElement {
     _channelUnread() {
         const slice = this._channelsSel.value;
         if (!slice || !Array.isArray(slice.items)) return 0;
-        const ch = slice.items.find((c) => c && c.id === this.channelId);
+        const ch = slice.items.find((c) => c && c.channel_id === this.channelId);
         if (!ch) return 0;
         const n = typeof ch.unread_count === 'number' ? ch.unread_count : 0;
         return n > 0 ? n : 0;
@@ -284,7 +295,7 @@ export class SyncMessageList extends PlatformElement {
     _pinnedIdsSet() {
         const slice = this._channelsSel.value;
         if (!slice || !Array.isArray(slice.items)) return new Set();
-        const ch = slice.items.find((c) => c && c.id === this.channelId);
+        const ch = slice.items.find((c) => c && c.channel_id === this.channelId);
         if (!ch || !Array.isArray(ch.pinned_message_ids)) return new Set();
         return new Set(ch.pinned_message_ids.filter((id) => typeof id === 'string' && id !== ''));
     }
@@ -363,6 +374,7 @@ export class SyncMessageList extends PlatformElement {
                     ? html`<div class="day" data-day-key=${entry.key}><span class="day-pill">${entry.label}</span></div>`
                     : html`<sync-message-bubble
                         .message=${this._messageForBubble(entry.message, pinnedSet)}
+                        .members=${this._members.items}
                         my-user-id=${this.myUserId}
                         channel-type=${this.channelType}
                         data-position=${entry.position}

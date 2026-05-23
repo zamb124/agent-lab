@@ -263,7 +263,7 @@ class TextTransformService:
         base_url: str | None,
     ) -> bool:
         if cost_origin == COST_ORIGIN_PLATFORM and should_use_platform_default_free_pool(
-            model_name=model,
+            model=model,
             provider=provider,
             api_key=api_key,
             base_url=base_url,

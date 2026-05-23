@@ -2755,7 +2755,7 @@ class TestProcessTaskTriggerOutput:
             is_resume=False,
             context_data=ctx.to_dict(),
         )
-        assert result.get("status") == "completed"
+        assert result.get("task_state") == "completed"
         tg_req = server.get_requests("telegram_send_message")
         assert len(tg_req) == 1
         assert "pt_bot_tok" in tg_req[0]["token"]

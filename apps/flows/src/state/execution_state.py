@@ -7,7 +7,9 @@ DEPRECATED: ExecutionState перенесен в core.state.
 
 # Реэкспорт из core.state БЕЗ warning - это нормально для compatibility слоя
 from core.state import (
+    TERMINAL_TASK_STATES,
     ExecutionState,
+    ExecutionTaskState,
     InterruptData,
     InterruptPathItem,
     NestedStateData,
@@ -17,7 +19,9 @@ from core.state import (
 
 __all__ = [
     "ExecutionState",
+    "ExecutionTaskState",
     "State",
+    "TERMINAL_TASK_STATES",
     "InterruptData",
     "InterruptPathItem",
     "NodeCallInfo",

@@ -1,7 +1,11 @@
-# CRM: оболочка записной книжки
+# NetWorkle: оболочка записной книжки
 
-Доступ к CRM UI на system.localhost после входа.
+Доступ к NetWorkle UI на system.localhost после входа.
 
-## Шаг 1. SPA CRM открыт
+## Шаг 1. SPA NetWorkle открыт
 
-![SPA CRM открыт](screenshots/001.png)
+![SPA NetWorkle открыт](screenshots/001.png)
+
+## Шаг 2. Оболочка NetWorkle видна
+
+![Оболочка NetWorkle видна](screenshots/002.png)

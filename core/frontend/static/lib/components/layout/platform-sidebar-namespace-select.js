@@ -250,6 +250,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                                   type="button"
                                   class="btn-edit"
                                   title=${this.editTitle}
+                                  aria-label=${this.editTitle}
                                   ?disabled=${this.disabled}
                                   @click=${this._onEditClick}
                               >
@@ -263,6 +264,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
                                   type="button"
                                   class="btn-add"
                                   title=${this.addTitle}
+                                  aria-label=${this.addTitle}
                                   ?disabled=${this.disabled}
                                   @click=${this._onAddClick}
                               >

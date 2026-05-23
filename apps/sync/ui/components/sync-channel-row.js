@@ -304,7 +304,7 @@ export class SyncChannelRow extends PlatformElement {
                 const au = typeof peer.avatar_url === 'string' ? peer.avatar_url : '';
                 sig = `dm:${peer.user_id}|${au}`;
             } else {
-                const id = typeof this.channel.id === 'string' ? this.channel.id : '';
+                const id = typeof this.channel.channel_id === 'string' ? this.channel.channel_id : '';
                 const au = typeof this.channel.avatar_url === 'string' ? this.channel.avatar_url : '';
                 sig = `ch:${id}|${au}`;
             }
@@ -314,7 +314,7 @@ export class SyncChannelRow extends PlatformElement {
             }
         }
         const slice = this._channelsSel.value;
-        const selected = slice && slice.selectedChannelId === (this.channel && this.channel.id);
+        const selected = slice && slice.selectedChannelId === (this.channel && this.channel.channel_id);
         this.toggleAttribute('data-selected', Boolean(selected));
         const mention = !!(this.channel && typeof this.channel.mention_unread_count === 'number'
             && this.channel.mention_unread_count > 0);
@@ -335,7 +335,7 @@ export class SyncChannelRow extends PlatformElement {
     _onClick() {
         if (this.pickMode) return;
         if (!this.channel) return;
-        this.navigate('channel', { channelId: this.channel.id });
+        this.navigate('channel', { channelId: this.channel.channel_id });
         this._closeSidebarMobile();
     }
 
@@ -360,11 +360,11 @@ export class SyncChannelRow extends PlatformElement {
                 : 'video';
             this.openModal('sync.call_overlay', {
                 callId: callInfo.call_id,
-                channelId: this.channel.id,
+                channelId: this.channel.channel_id,
                 callType,
             });
         }
-        this.navigate('channel', { channelId: this.channel.id });
+        this.navigate('channel', { channelId: this.channel.channel_id });
         this._closeSidebarMobile();
     }
 
@@ -378,8 +378,8 @@ export class SyncChannelRow extends PlatformElement {
             this.openModal('platform.user_info', { userId: ch.peer.user_id });
             return;
         }
-        if (typeof ch.id === 'string' && ch.id !== '') {
-            this.openModal('sync.channel_edit', { channelId: ch.id });
+        if (typeof ch.channel_id === 'string' && ch.channel_id !== '') {
+            this.openModal('sync.channel_edit', { channelId: ch.channel_id });
         }
     }
 
@@ -409,7 +409,7 @@ export class SyncChannelRow extends PlatformElement {
             </span>`;
         }
         const name = typeof channel.name === 'string' && channel.name !== '' ? channel.name : '#';
-        const chId = typeof channel.id === 'string' ? channel.id : 'sync';
+        const chId = typeof channel.channel_id === 'string' ? channel.channel_id : 'sync';
         const hueVar = syncAvatarHueVar(chId);
         if (this._avatarImgFailed) {
             return html`<span class="avatar pastel-initials" style=${hueVar}>${initialsFromName(name)}</span>`;
@@ -433,14 +433,14 @@ export class SyncChannelRow extends PlatformElement {
         const myUserId = me && typeof me.user_id === 'string' ? me.user_id : '';
         const typingLine = getTypingIndicatorLine({
             typingByChannel,
-            channelId: this.channel.id,
+            channelId: this.channel.channel_id,
             threadId: null,
             myUserId,
             members: this._members.items,
             t: (k, v) => this.t(k, v),
         });
         const callUi = this._callUiSel.value;
-        const activeCall = !this.pickMode && callUi && callUi.activeCallChannels && callUi.activeCallChannels[this.channel.id];
+        const activeCall = !this.pickMode && callUi && callUi.activeCallChannels && callUi.activeCallChannels[this.channel.channel_id];
         const unread = typeof this.channel.unread_count === 'number' ? this.channel.unread_count : 0;
         const mentions = typeof this.channel.mention_unread_count === 'number' ? this.channel.mention_unread_count : 0;
         const previewText = typeof this.channel.last_message_preview === 'string' ? this.channel.last_message_preview : '';

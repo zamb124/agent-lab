@@ -413,7 +413,7 @@ async def op_channels_create(
     )
     if created_new:
         recipients = await _channel_recipient_user_ids(
-            container.channel_repository, channel.id, company_id
+            container.channel_repository, channel.channel_id, company_id
         )
         await publish_realtime_events(
             [
@@ -645,7 +645,7 @@ async def op_threads_list(
     )
     items = [
         ThreadRow(
-            id=t.thread_id,
+            thread_id=t.thread_id,
             channel_id=t.channel_id,
             root_message_id=t.root_message_id,
             title=t.title,
@@ -670,7 +670,7 @@ async def op_threads_item(
     if thread is None:
         raise WsCommandError("not_found", f"Thread {payload.thread_id!r} not found.")
     return ThreadRow(
-        id=thread.thread_id,
+        thread_id=thread.thread_id,
         channel_id=thread.channel_id,
         root_message_id=thread.root_message_id,
         title=thread.title,
@@ -1374,7 +1374,7 @@ async def op_git_resources_get(
     if ref is None:
         raise WsCommandError("not_found", "Git resource not found")
     return GitResourceRefRead(
-        id=ref.git_ref_id,
+        git_ref_id=ref.git_ref_id,
         provider=GitProvider(ref.provider),
         kind=GitResourceKind(ref.kind),
         project_key=ref.project_key,
@@ -2454,9 +2454,9 @@ async def op_calls_join_accept(
 
     is_authenticated = user.user_id not in ("anonymous", "")
 
-    identity: str
+    participant_identity: str
     if is_authenticated:
-        identity = user.user_id
+        participant_identity = user.user_id
     else:
         if payload.body is None or not payload.body.guest_name.strip():
             raise WsCommandError(
@@ -2464,7 +2464,7 @@ async def op_calls_join_accept(
                 "Для гостевого входа необходимо указать guest_name.",
             )
         safe_name = payload.body.guest_name.strip().replace(":", "_")
-        identity = f"guest:{uuid4().hex[:8]}:{safe_name}"
+        participant_identity = f"guest:{uuid4().hex[:8]}:{safe_name}"
 
     if link.call_id:
         call = await container.call_repository.get_call(link.call_id, link.company_id)
@@ -2478,7 +2478,7 @@ async def op_calls_join_accept(
             await _livekit_client(settings).create_room(
                 livekit_room,
                 company_id=link.company_id,
-                user_id=identity,
+                user_id=participant_identity,
             )
             new_call = SyncCall(
                 call_id=uuid4().hex,
@@ -2501,7 +2501,7 @@ async def op_calls_join_accept(
         await _livekit_client(settings).create_room(
             livekit_room_name,
             company_id=link.company_id,
-            user_id=identity,
+            user_id=participant_identity,
         )
         call = SyncCall(
             call_id=uuid4().hex,
@@ -2521,7 +2521,7 @@ async def op_calls_join_accept(
         raise WsCommandError("internal", "У звонка нет LiveKit комнаты.")
 
     token = _livekit_client(settings).generate_token(
-        room_name=call.livekit_room_name, identity=identity
+        room_name=call.livekit_room_name, identity=participant_identity
     )
     participant_names = await _participant_names_for_call(container, call)
 
@@ -2530,7 +2530,7 @@ async def op_calls_join_accept(
         call_type="video",
         livekit_token=token,
         livekit_url=_livekit_public_url(settings),
-        identity=identity,
+        participant_identity=participant_identity,
         meeting_admin_user_id=call.created_by_user_id,
         mode="sfu",
         participant_names=participant_names,
@@ -2683,9 +2683,9 @@ class FilesUploadCompletedPayload(BaseModel):
 
 class FilesUploadCompletedResult(BaseModel):
     file_id: str
-    filename: str
-    mime_type: str
-    size: int
+    original_name: str
+    content_type: str
+    file_size: int
 
 
 async def op_files_upload_completed(
@@ -2707,7 +2707,7 @@ async def op_files_upload_completed(
         raise WsCommandError("not_found", f"Файл {payload.file_id!r} не найден.")
     return FilesUploadCompletedResult(
         file_id=record.file_id,
-        filename=record.original_name,
-        mime_type=record.content_type,
-        size=record.file_size,
+        original_name=record.original_name,
+        content_type=record.content_type,
+        file_size=record.file_size,
     )

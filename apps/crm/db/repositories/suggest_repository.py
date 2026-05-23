@@ -25,7 +25,7 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
     @property
     @override
     def id_field(self) -> str:
-        return "id"
+        return "suggest_id"
 
     @override
     def _get_company_id(self) -> str:
@@ -37,14 +37,15 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
     @override
     async def get(
         self,
-        entity_id: str,
+        suggest_id: str,
+        /,
         *,
         namespace: str | None = None,
     ) -> CRMSuggest | None:
         company_id = self._get_company_id()
         async with self._db.session() as session:
             stmt = select(CRMSuggest).where(
-                CRMSuggest.id == entity_id,
+                CRMSuggest.suggest_id == suggest_id,
                 CRMSuggest.company_id == company_id,
             )
             if namespace is not None:
@@ -96,7 +97,7 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
         async with self._db.session() as session:
             stmt = (
                 update(CRMSuggest)
-                .where(CRMSuggest.id == suggest_id, CRMSuggest.company_id == company_id)
+                .where(CRMSuggest.suggest_id == suggest_id, CRMSuggest.company_id == company_id)
                 .values(status=new_status)
                 .returning(CRMSuggest)
             )

@@ -48,7 +48,7 @@ async def test_fill_docx_template_bad_output_name(tmp_path) -> None:
         context_id="c1",
         user_id="u1",
         session_id="flow:c1",
-        files=[{"name": "t.docx", "path": str(p)}],
+        files=[{"original_name": "t.docx", "url": str(p), "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "file_size": 4}],
     )
     out = await fill_docx_template._run_impl(
         {

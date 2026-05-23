@@ -74,8 +74,8 @@ export class SyncCallOverlayModal extends PlatformModal {
         livekitToken: { type: String },
         livekitUrl: { type: String },
         participantNames: { type: Object },
-        /** LiveKit identity из JoinResponse (guest:…), для чата и подписей «Вы». */
-        guestIdentity: { type: String },
+        /** LiveKit participant_identity из JoinResponse, для чата и подписей «Вы». */
+        participantIdentity: { type: String },
         _connecting: { state: true },
         _status: { state: true },
         _error: { state: true },
@@ -90,7 +90,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         /** Узкая ширина: запись и устройства только в меню «⋯». */
         _controlsCompact: { state: true },
         _audioQualitySubOpen: { state: true },
-        _participantMenuIdentity: { state: true },
+        _participantMenuParticipantIdentity: { state: true },
         _deviceLists: { state: true },
         _audioOutputSupported: { state: true },
         _fullscreenTileKey: { state: true },
@@ -746,7 +746,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         this.livekitToken = '';
         this.livekitUrl = '';
         this.participantNames = null;
-        this.guestIdentity = '';
+        this.participantIdentity = '';
         this._connecting = true;
         this._status = 'connecting';
         this._error = null;
@@ -762,7 +762,7 @@ export class SyncCallOverlayModal extends PlatformModal {
             ? window.matchMedia('(max-width: 640px)').matches
             : false;
         this._audioQualitySubOpen = false;
-        this._participantMenuIdentity = null;
+        this._participantMenuParticipantIdentity = null;
         this._deviceLists = { audioinput: [], videoinput: [], audiooutput: [] };
         this._audioOutputSupported = typeof HTMLMediaElement !== 'undefined'
             && 'setSinkId' in HTMLMediaElement.prototype;
@@ -1071,22 +1071,22 @@ export class SyncCallOverlayModal extends PlatformModal {
         const localScreen = localPubs.find((p) => p.source === Track.Source.ScreenShare);
         const localCam = localPubs.find((p) => p.source !== Track.Source.ScreenShare);
         if (localScreen) {
-            tiles.push({ key: 'local-screen', identity: me.identity, isLocal: true, track: localScreen.track, isScreen: true });
+            tiles.push({ key: 'local-screen', participantIdentity: me.identity, isLocal: true, track: localScreen.track, isScreen: true });
         } else if (localCam) {
-            tiles.push({ key: 'local-cam', identity: me.identity, isLocal: true, track: localCam.track, isScreen: false });
+            tiles.push({ key: 'local-cam', participantIdentity: me.identity, isLocal: true, track: localCam.track, isScreen: false });
         } else {
-            tiles.push({ key: 'local-ph', identity: me.identity, isLocal: true, track: null, isScreen: false });
+            tiles.push({ key: 'local-ph', participantIdentity: me.identity, isLocal: true, track: null, isScreen: false });
         }
         for (const remote of this._room.remoteParticipants.values()) {
             const pubs = Array.from(remote.videoTrackPublications.values()).filter((p) => p.track && p.isSubscribed);
             const screen = pubs.find((p) => p.source === Track.Source.ScreenShare);
             if (screen) {
-                tiles.push({ key: `r-${remote.identity}-screen`, identity: remote.identity, isLocal: false, track: screen.track, isScreen: true });
+                tiles.push({ key: `r-${remote.identity}-screen`, participantIdentity: remote.identity, isLocal: false, track: screen.track, isScreen: true });
             } else {
                 const cam = pubs[0] || null;
                 tiles.push({
                     key: cam ? `r-${remote.identity}-cam` : `r-${remote.identity}-ph`,
-                    identity: remote.identity,
+                    participantIdentity: remote.identity,
                     isLocal: false,
                     track: cam ? cam.track : null,
                     isScreen: false,
@@ -1149,7 +1149,7 @@ export class SyncCallOverlayModal extends PlatformModal {
     }
 
     _onDocumentPointerDown(e) {
-        if (!this._devicesMenuOpen && !this._moreMenuOpen && this._participantMenuIdentity == null) return;
+        if (!this._devicesMenuOpen && !this._moreMenuOpen && this._participantMenuParticipantIdentity == null) return;
         const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
         const insideMenu = path.some((n) => n instanceof Element && (
             n.classList?.contains('menu')
@@ -1162,7 +1162,7 @@ export class SyncCallOverlayModal extends PlatformModal {
 
     _onDocumentKeydown(e) {
         if (e.key === 'Escape') {
-            if (this._devicesMenuOpen || this._moreMenuOpen || this._participantMenuIdentity != null) {
+            if (this._devicesMenuOpen || this._moreMenuOpen || this._participantMenuParticipantIdentity != null) {
                 this._closeMenus();
                 e.stopPropagation();
             }
@@ -1173,7 +1173,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         this._devicesMenuOpen = false;
         this._moreMenuOpen = false;
         this._audioQualitySubOpen = false;
-        this._participantMenuIdentity = null;
+        this._participantMenuParticipantIdentity = null;
     }
 
     _onFullscreenChange() {
@@ -1547,7 +1547,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         if (!this._controlsCompact) {
             this._moreMenuOpen = false;
         }
-        this._participantMenuIdentity = null;
+        this._participantMenuParticipantIdentity = null;
         this._devicesMenuOpen = !this._devicesMenuOpen;
     }
 
@@ -1556,7 +1556,7 @@ export class SyncCallOverlayModal extends PlatformModal {
         if (!this._controlsCompact) {
             this._devicesMenuOpen = false;
         }
-        this._participantMenuIdentity = null;
+        this._participantMenuParticipantIdentity = null;
         this._moreMenuOpen = !this._moreMenuOpen;
         if (!this._moreMenuOpen) {
             this._audioQualitySubOpen = false;
@@ -1571,9 +1571,11 @@ export class SyncCallOverlayModal extends PlatformModal {
         this._audioQualitySubOpen = !this._audioQualitySubOpen;
     }
 
-    _toggleParticipantMenu(identity, e) {
+    _toggleParticipantMenu(participantIdentity, e) {
         e.stopPropagation();
-        this._participantMenuIdentity = this._participantMenuIdentity === identity ? null : identity;
+        this._participantMenuParticipantIdentity = this._participantMenuParticipantIdentity === participantIdentity
+            ? null
+            : participantIdentity;
     }
 
     async _onAudioInputChange(e) {
@@ -1682,8 +1684,8 @@ export class SyncCallOverlayModal extends PlatformModal {
     }
 
     _myUserId() {
-        if (typeof this.guestIdentity === 'string' && this.guestIdentity !== '') {
-            return this.guestIdentity;
+        if (typeof this.participantIdentity === 'string' && this.participantIdentity !== '') {
+            return this.participantIdentity;
         }
         const me = this._authUserSel.value;
         return me && typeof me.user_id === 'string' ? me.user_id : '';
@@ -1767,10 +1769,10 @@ export class SyncCallOverlayModal extends PlatformModal {
         this._callUi.setRecordingStatus({ status: status === 'failed' ? 'idle' : status, error });
     }
 
-    async _assignAdmin(identity, e) {
+    async _assignAdmin(participantIdentity, e) {
         e.stopPropagation();
-        if (!this.callId || typeof identity !== 'string' || identity === '') return;
-        await this._adminTransferOp.run({ call_id: this.callId, target_user_id: identity });
+        if (!this.callId || typeof participantIdentity !== 'string' || participantIdentity === '') return;
+        await this._adminTransferOp.run({ call_id: this.callId, target_user_id: participantIdentity });
         if (this._adminTransferOp.lastResult === null) {
             const detail = this._adminTransferOp.error;
             this.toast('call_overlay.toast_admin_transfer_failed', {
@@ -1778,7 +1780,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                 vars: { detail: typeof detail === 'string' ? detail : '' },
             });
         }
-        this._participantMenuIdentity = null;
+        this._participantMenuParticipantIdentity = null;
     }
 
     _onMinimize(e) {
@@ -1949,33 +1951,33 @@ export class SyncCallOverlayModal extends PlatformModal {
         return formatDurationSeconds(sec);
     }
 
-    _resolveDisplayName(identity) {
-        if (typeof identity !== 'string' || identity === '') return '?';
+    _resolveDisplayName(participantIdentity) {
+        if (typeof participantIdentity !== 'string' || participantIdentity === '') return '?';
         const names = this._livekitDisplayNames();
-        if (names && typeof names[identity] === 'string') return names[identity];
-        if (identity.startsWith('guest:')) {
-            const parts = identity.split(':');
+        if (names && typeof names[participantIdentity] === 'string') return names[participantIdentity];
+        if (participantIdentity.startsWith('guest:')) {
+            const parts = participantIdentity.split(':');
             return parts.slice(2).join(':') || this.t('call_overlay.guest');
         }
-        return identity;
+        return participantIdentity;
     }
 
     _renderTile(tile, idx) {
-        const display = tile.isLocal ? this.t('call_overlay.you') : this._resolveDisplayName(tile.identity);
+        const display = tile.isLocal ? this.t('call_overlay.you') : this._resolveDisplayName(tile.participantIdentity);
         const label = tile.isScreen ? this.t('call_overlay.screen_tile_suffix', { label: display }) : display;
         const tileClass = tile.isScreen ? 'tile screen' : 'tile';
-        const isAdmin = this._isMeetingAdmin(tile.identity);
+        const isAdmin = this._isMeetingAdmin(tile.participantIdentity);
         const showActions = this._canTransferAdmin() && !tile.isLocal && !tile.isScreen;
-        const menuOpen = this._participantMenuIdentity === tile.identity;
+        const menuOpen = this._participantMenuParticipantIdentity === tile.participantIdentity;
         const fsActive = this._fullscreenTileKey === tile.key;
-        const hueVar = syncAvatarHueVar(tile.identity || `tile-${idx}`);
+        const hueVar = syncAvatarHueVar(tile.participantIdentity || `tile-${idx}`);
         return html`
             <div class="${tileClass}" data-idx=${idx} data-tile-key=${tile.key}>
                 ${showActions ? html`
                     <button
                         class="tile-btn tile-actions"
                         title=${this.t('call_overlay.participant_menu')}
-                        @click=${(e) => this._toggleParticipantMenu(tile.identity, e)}
+                        @click=${(e) => this._toggleParticipantMenu(tile.participantIdentity, e)}
                     ><platform-icon name="more-vertical" size="16"></platform-icon></button>
                     ${menuOpen ? html`
                         <div class="tile-action-menu" @click=${(e) => e.stopPropagation()}>
@@ -1984,7 +1986,7 @@ export class SyncCallOverlayModal extends PlatformModal {
                                     ${this.t('call_overlay.participant_action_unavailable')}
                                 </div>
                             ` : html`
-                                <button @click=${(e) => this._assignAdmin(tile.identity, e)}>
+                                <button @click=${(e) => this._assignAdmin(tile.participantIdentity, e)}>
                                     ${this.t('call_overlay.promote_meeting_admin')}
                                 </button>
                             `}

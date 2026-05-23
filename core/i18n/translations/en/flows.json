@@ -370,8 +370,10 @@
   "chat_input": {
     "title_attach": "Attach file",
     "title_remove_file": "Remove file",
+    "title_send": "Send",
     "title_stop": "Stop response",
-    "title_stop_pending": "Stopping response…"
+    "title_stop_pending": "Stopping response…",
+    "err_file_too_large": "File {name} is too large. Max size: {max}"
   },
   "bottom_toolbar": {
     "title_select": "Select (V)",

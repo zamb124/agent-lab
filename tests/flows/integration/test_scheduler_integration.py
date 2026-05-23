@@ -51,14 +51,16 @@ class TestScheduleService:
             description="Test one-time task",
         )
 
-        assert task.id is not None
+        assert task.schedule_task_id is not None
         assert task.schedule_type == "one_time"
         assert task.content_type == "message"
         assert task.content == "Test reminder"
         assert task.status == "pending"
 
         # Проверяем что сохранено в БД
-        saved_task = await container.scheduled_task_repository.get_by_id(task.id)
+        saved_task = await container.scheduled_task_repository.get_by_schedule_task_id(
+            task.schedule_task_id
+        )
         assert saved_task is not None
         assert saved_task.content == "Test reminder"
 
@@ -81,11 +83,13 @@ class TestScheduleService:
             description="Daily morning task",
         )
 
-        assert task.id is not None
+        assert task.schedule_task_id is not None
         assert task.schedule_type == "cron"
         assert task.cron == "0 9 * * *"
 
-        saved_task = await container.scheduled_task_repository.get_by_id(task.id)
+        saved_task = await container.scheduled_task_repository.get_by_schedule_task_id(
+            task.schedule_task_id
+        )
         assert saved_task is not None
         assert saved_task.cron == "0 9 * * *"
 
@@ -108,11 +112,13 @@ class TestScheduleService:
             description="Hydration reminder",
         )
 
-        assert task.id is not None
+        assert task.schedule_task_id is not None
         assert task.schedule_type == "interval"
         assert task.interval_minutes == 30
 
-        saved_task = await container.scheduled_task_repository.get_by_id(task.id)
+        saved_task = await container.scheduled_task_repository.get_by_schedule_task_id(
+            task.schedule_task_id
+        )
         assert saved_task is not None
         assert saved_task.interval_minutes == 30
 
@@ -169,11 +175,13 @@ class TestScheduleService:
             content="To be cancelled",
         )
 
-        success = await service.cancel_task(task.id)
+        success = await service.cancel_task(task.schedule_task_id)
 
         assert success is True
 
-        cancelled_task = await container.scheduled_task_repository.get_by_id(task.id)
+        cancelled_task = await container.scheduled_task_repository.get_by_schedule_task_id(
+            task.schedule_task_id
+        )
         assert cancelled_task.status == "cancelled"
 
     @pytest.mark.asyncio
@@ -310,9 +318,9 @@ class TestSchedulingTools:
             state,
         )
 
-        task_id = state.scheduled_tasks[0]["id"]
+        schedule_task_id = state.scheduled_tasks[0]["schedule_task_id"]
 
-        result = await cancel_tool.run({"task_id": task_id}, state)
+        result = await cancel_tool.run({"schedule_task_id": schedule_task_id}, state)
 
         assert "отменена" in result
         assert len(state.scheduled_tasks) == 0
@@ -385,7 +393,7 @@ class TestScheduledTaskExecution:
 
         # Симулируем выполнение scheduled task (как это делает scheduler)
         result = await execute_scheduled_task(
-            scheduled_task_id=task.id,
+            schedule_task_id=task.schedule_task_id,
             flow_id=flow_id,
             session_id=session_id,
             user_id=user_id,
@@ -397,7 +405,9 @@ class TestScheduledTaskExecution:
         assert "Scheduled message test" in result["response"]
 
         # Проверяем что статус обновился
-        updated_task = await container.scheduled_task_repository.get_by_id(task.id)
+        updated_task = await container.scheduled_task_repository.get_by_schedule_task_id(
+            task.schedule_task_id
+        )
         assert updated_task.status == ScheduledTaskStatus.EXECUTED
 
     @pytest.mark.asyncio
@@ -422,7 +432,7 @@ class TestScheduledTaskExecution:
         )
 
         result = await execute_scheduled_task(
-            scheduled_task_id=task.id,
+            schedule_task_id=task.schedule_task_id,
             flow_id=flow_id,
             session_id=session_id,
             user_id=user_id,
@@ -432,6 +442,5 @@ class TestScheduledTaskExecution:
 
         assert result["tool"] == "calculator"
         assert "15" in str(result["result"])
-
 
 

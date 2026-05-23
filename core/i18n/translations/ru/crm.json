@@ -2,8 +2,8 @@
     "sidebar": {
         "namespace_label": "Пространство",
         "all_namespaces": "Все пространства",
-        "create_space_tooltip": "Создать пространство",
-        "edit_space_tooltip": "Редактировать пространство",
+        "create_namespace_tooltip": "Создать пространство",
+        "edit_namespace_tooltip": "Редактировать пространство",
         "org_section": "Организация",
         "nav": {
             "namespaces": "Пространства",
@@ -36,9 +36,9 @@
         "tasks": "Задачи",
         "suggests": "AI-предложения",
         "access_requests": "Запросы доступа",
-        "spaces": "Пространства",
-        "space": "Пространство",
-        "space_integrations": "Интеграции",
+        "namespaces": "Пространства",
+        "namespace": "Пространство",
+        "namespace_integrations": "Интеграции",
         "templates": "Шаблоны",
         "namespace_imports": "Задачи пространства",
         "relationship_types": "Типы связей"
@@ -59,7 +59,7 @@
         "period_summary_range_clamped_message": "Запрошенный период {requested_days} дн. превышает лимит {max_days} дн.; сводка построена по доступному диапазону.",
         "daily_summary_updated_title": "Daily Summary обновлён",
         "daily_summary_updated_message": "Обновлена сводка за {date}",
-        "open_crm": "Открыть CRM"
+        "open_crm": "Открыть NetWorkle"
     },
     "entity_modal": {
         "header_create": "Новая сущность",
@@ -141,10 +141,10 @@
         "field_due_date": "Дедлайн"
     },
     "settings_hub_page": {
-        "title": "Настройки CRM",
+        "title": "Настройки NetWorkle",
         "subtitle": "Конфигурация типов, шаблонов и доступа",
-        "card_spaces_title": "Пространства",
-        "card_spaces_description": "Управление namespace компании, доступы и редактирование.",
+        "card_namespaces_title": "Пространства",
+        "card_namespaces_description": "Управление namespace компании, доступы и редактирование.",
         "card_templates_title": "Шаблоны пространств",
         "card_templates_description": "Готовые наборы типов сущностей и связей.",
         "card_namespace_imports_title": "Импорты в пространства",
@@ -248,6 +248,7 @@
         "tags_label": "Теги",
         "tags_placeholder": "Введите тег...",
         "date_label": "Дата",
+        "view_status_empty": "Не указан",
         "reset": "Сбросить фильтры"
     },
     "neighbor_row": {
@@ -296,7 +297,7 @@
     },
     "namespace_tasks_page": {
         "title": "Задачи пространства",
-        "subtitle": "Журнал фоновых задач CRM: импорты, анализ и форматирование заметок, сводки, интеграции, крон-тики.",
+        "subtitle": "Журнал фоновых задач NetWorkle: импорты, анализ и форматирование заметок, сводки, интеграции, крон-тики.",
         "namespace_label": "Пространство: {{namespace}}",
         "namespace_label_all": "Все пространства компании",
         "loading": "Загрузка...",
@@ -577,7 +578,7 @@
         "label_integrations": "Интеграции",
         "integrations_empty": "Нет подключённых интеграций",
         "integrations_aria": "Подключённые интеграции",
-        "action_open_space_settings": "Настройки пространства",
+        "action_open_namespace_settings": "Настройки пространства",
         "entity_count": "Сущностей в пространстве",
         "used_types": "Используемых типов",
         "can_update_types": "Можно менять разрешённые типы",
@@ -835,7 +836,7 @@
         "action_undo": "Вернуть",
         "apply_error_title": "Не удалось применить черновик",
         "apply_error_hint": "Раскройте строку с ошибкой: при необходимости смените тип и подтип сущности, заполните поля атрибутов по схеме типа, затем нажмите «Сохранить изменения» и снова «Применить».",
-        "apply_error_ai_tooltip": "Исправить черновик через AI (типы полей из справочника CRM)",
+        "apply_error_ai_tooltip": "Исправить черновик через AI (типы полей из справочника NetWorkle)",
         "dismiss_error_tooltip": "Скрыть сообщение об ошибке",
         "discard_draft_tooltip": "Удалить черновик из заметки",
         "discard_draft_title": "Удалить черновик AI",
@@ -966,7 +967,7 @@
         "note_preview_analysis_failed_title": "Ошибка анализа",
         "analysis_tooltip_after_error": "Ошибка анализа — нажмите, чтобы повторить"
     },
-    "spaces_page": {
+    "namespaces_page": {
         "title": "Пространства",
         "subtitle": "Все namespace компании",
         "integrations_connected": "Подключённые интеграции",
@@ -989,7 +990,7 @@
         "show_ui_label": "Показывать выбор голоса заметки в редакторе",
         "show_ui_label_hint": "Если выключено, переключатель голоса заметки скрыт в редакторе заметки."
     },
-    "space_detail_page": {
+    "namespace_detail_page": {
         "subtitle": "Настройки пространства и его типов",
         "no_id": "Не указано пространство",
         "meta_section": "Метаданные",
@@ -1000,7 +1001,7 @@
         "back_to_types": "К списку типов",
         "action_allow": "Включить в пространство",
         "action_disallow": "Убрать из пространства",
-        "type_all_spaces_hint": "Тип привязан ко всем пространствам (*); убрать только из этого пространства нельзя — измените список пространств у типа.",
+        "type_all_namespaces_hint": "Тип привязан ко всем пространствам (*); убрать только из этого пространства нельзя — измените список пространств у типа.",
         "amocrm_section": "AmoCRM",
         "amocrm_subdomain_label": "Поддомен amo (без .amocrm.ru)",
         "amocrm_subdomain_placeholder": "например mycompany",
@@ -1010,7 +1011,7 @@
         "amocrm_subdomain_required": "Укажите поддомен amo",
         "link_integrations": "Интеграции",
         "sidebar_menu_section": "Меню сайдбара",
-        "sidebar_menu_hint": "Пункты навигации в левой колонке CRM для этого пространства. По умолчанию дерево строится из разрешённых типов; здесь можно зафиксировать снимок или вернуться к автоматическому режиму.",
+        "sidebar_menu_hint": "Пункты навигации в левой колонке NetWorkle для этого пространства. По умолчанию дерево строится из разрешённых типов; здесь можно зафиксировать снимок или вернуться к автоматическому режиму.",
         "sidebar_menu_mode_custom": "Режим: сохранённое дерево",
         "sidebar_menu_mode_derived": "Режим: автоматически из типов",
         "sidebar_menu_snapshot": "Сохранить меню из типов",
@@ -1052,7 +1053,7 @@
         "meta_stat_entity_count_hint": "Сколько сущностей уже хранится в этом пространстве.",
         "meta_stat_used_types_hint": "Сколько разных типов сущностей фактически встречается в данных пространства.",
         "meta_stat_can_update_hint": "Разрешено ли изменять список типов, подключённых к пространству, с учётом политики и уже записанных данных.",
-        "sidebar_menu_section_hint": "Управление пунктами левого меню CRM для этого пространства: снимок текущего дерева из типов или возврат к автоматической сборке.",
+        "sidebar_menu_section_hint": "Управление пунктами левого меню NetWorkle для этого пространства: снимок текущего дерева из типов или возврат к автоматической сборке.",
         "task_board_section_hint": "Настройка колонок канбана для задач: идентификаторы стадий пишутся в задачу и определяют колонку на доске.",
         "task_board_col_stage_id_label": "ID стадии",
         "task_board_col_stage_id_hint": "Значение в attributes.status у задачи; только a-z, 0-9 и _, первый символ — буква.",

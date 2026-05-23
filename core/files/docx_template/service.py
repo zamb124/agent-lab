@@ -21,7 +21,7 @@ class DocxTemplater:
     """
     Заполнение .docx с плейсхолдерами Jinja2 (docxtpl).
 
-    Источник шаблона — FileRef: локальный path, HTTP url или file_id в хранилище (как у FileReader).
+    Источник шаблона — FileRef: `url` или `file_id` в хранилище (как у FileReader).
     """
 
     async def fill(

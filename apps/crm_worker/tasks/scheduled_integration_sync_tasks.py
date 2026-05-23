@@ -32,7 +32,7 @@ logger = get_logger(__name__)
     max_retries=2,
 )
 async def scheduled_namespace_integration_unified_sync(
-    scheduler_task_id: str,
+    schedule_task_id: str,
     company_id: str,
     namespace: str,
     provider_id: str,
@@ -77,7 +77,7 @@ async def scheduled_namespace_integration_unified_sync(
                     namespace=ns,
                     user_id=uid,
                     data={
-                        "scheduler_task_id": scheduler_task_id,
+                        "schedule_task_id": schedule_task_id,
                         "provider_id": pid,
                         "blocking_task_id": existing.task_id,
                         "blocking_job": job,
@@ -92,7 +92,7 @@ async def scheduled_namespace_integration_unified_sync(
                 "reason": "active_namespace_integration_job",
                 "blocking_task_id": existing.task_id,
                 "blocking_job": job,
-                "scheduler_task_id": scheduler_task_id,
+                "schedule_task_id": schedule_task_id,
             }
 
     sync_task_id = str(uuid.uuid4())
@@ -107,7 +107,7 @@ async def scheduled_namespace_integration_unified_sync(
             company_id=company_id,
             namespace=ns,
             user_id=uid,
-            data={"scheduler_task_id": scheduler_task_id, "provider_id": pid},
+            data={"schedule_task_id": schedule_task_id, "provider_id": pid},
             started_at=sync_started,
         )
     )
@@ -134,7 +134,7 @@ async def scheduled_namespace_integration_unified_sync(
         fields_stats = await connector.sync_custom_field_catalog(ns)
 
         done_patch: dict[str, Any] = {
-            "scheduler_task_id": scheduler_task_id,
+            "schedule_task_id": schedule_task_id,
             "provider_id": pid,
         }
         if isinstance(entities_stats, dict):
@@ -155,17 +155,17 @@ async def scheduled_namespace_integration_unified_sync(
 
         logger.info(
             "scheduled_namespace_integration_unified_sync: done company=%s ns=%s provider=%s "
-            "scheduler_task_id=%s entities=%s fields=%s",
+            "schedule_task_id=%s entities=%s fields=%s",
             company_id,
             ns,
             pid,
-            scheduler_task_id,
+            schedule_task_id,
             entities_stats,
             fields_stats,
         )
         return {
             "status": "completed",
-            "scheduler_task_id": scheduler_task_id,
+            "schedule_task_id": schedule_task_id,
             "entities_stats": entities_stats,
             "fields_stats": fields_stats,
         }

@@ -154,9 +154,9 @@ class AudioAttachmentContent(BaseModel):
     """Канонический payload аудио-вложения для сообщений сервисов."""
 
     file_id: str = Field(description="Идентификатор файла в системе.")
-    filename: str = Field(description="Оригинальное имя файла.")
-    mime_type: str = Field(description="MIME-тип аудиофайла.")
-    size: int = Field(description="Размер аудио в байтах.")
+    original_name: str = Field(description="Оригинальное имя файла.")
+    content_type: str = Field(description="MIME-тип аудиофайла.")
+    file_size: int = Field(description="Размер аудио в байтах.")
     duration_ms: int = Field(description="Длительность аудио в миллисекундах.")
     waveform: list[int] | None = Field(
         default=None,
@@ -187,7 +187,7 @@ class FileReadPreviewResponse(BaseModel):
     truncated: bool = Field(description="Усечён ли текст по лимиту превью")
     page_count: int = Field(default=0, description="Число страниц после чтения")
     detected_kind: str = Field(description="Тип файла по FileReader")
-    mime_type: Optional[str] = Field(default=None, description="MIME после распознавания")
+    content_type: Optional[str] = Field(default=None, description="Content-Type после распознавания")
     warnings: List[str] = Field(default_factory=list, description="Предупреждения парсера")
     preview_note: Optional[str] = Field(
         default=None,
@@ -199,9 +199,9 @@ class VideoAttachmentContent(BaseModel):
     """Видеовложение в сообщении (запись звонка и т.п.)."""
 
     file_id: str = Field(description="Идентификатор файла в системе.")
-    filename: str = Field(description="Оригинальное имя файла.")
-    mime_type: str = Field(description="MIME-тип, например video/mp4.")
-    size: int = Field(description="Размер файла в байтах.")
+    original_name: str = Field(description="Оригинальное имя файла.")
+    content_type: str = Field(description="MIME-тип, например video/mp4.")
+    file_size: int = Field(description="Размер файла в байтах.")
     duration_ms: int | None = Field(
         default=None,
         description="Длительность в миллисекундах, если известна.",

@@ -12,7 +12,7 @@ from core.files.reader.service import FileReader
 
 async def read_template_bytes_from_file_ref(ref: FileRef) -> bytes:
     finfo = normalize_file_ref(ref)
-    declared = (finfo.get("name") or finfo.get("original_name") or "").strip()
+    declared = str(finfo["original_name"]).strip()
     if not declared.lower().endswith(".docx"):
         raise DocxTemplateSourceError(
             f"Шаблон должен быть файлом .docx, получено имя: {declared!r}"

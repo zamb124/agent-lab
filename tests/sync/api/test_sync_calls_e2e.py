@@ -415,7 +415,7 @@ async def test_call_invite_with_solo_member_immediately_active(
             json={"namespace": namespace, "type": "topic", "name": "solo_ch", "is_private": False},
         )
         assert cr.status_code == 201, cr.text
-        channel_id = cr.json()["id"]
+        channel_id = cr.json()["channel_id"]
 
     call = await _invite_call(sync_auth_token, channel_id)
 

@@ -4,7 +4,9 @@ namespace: platform
 
 image:
   repository: ghcr.io/zamb124/agent-lab
-  tag: latest
+  # Обязательно задаётся в production как immutable release tag (обычно short SHA).
+  # latest запрещён: от image.tag зависит SERVER__DEPLOYMENT_VERSION и PWA-инвалидация статики.
+  tag: ""
   pullPolicy: IfNotPresent
   pullSecrets: []
 

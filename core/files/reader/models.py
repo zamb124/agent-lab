@@ -30,7 +30,7 @@ class ReadAssetKind(StrEnum):
 
 class ReadAsset(BaseModel):
     kind: ReadAssetKind
-    mime_type: Optional[str] = None
+    content_type: Optional[str] = None
     checksum: str = Field(description="SHA-256 hex сырых байт фрагмента")
     file_id: Optional[str] = None
     width: Optional[int] = None
@@ -50,7 +50,7 @@ class ReadPage(BaseModel):
 
 class FileReadResult(BaseModel):
     file_name: str
-    mime_type: Optional[str] = None
+    content_type: Optional[str] = None
     detected_kind: FileReadKind
     page_count: int = Field(ge=0)
     pages: List[ReadPage] = Field(default_factory=list)
@@ -99,5 +99,5 @@ def merge_file_ref_read_options(
 
 class FileTypeInfo(BaseModel):
     detected_kind: FileReadKind
-    mime_type: Optional[str] = None
+    content_type: Optional[str] = None
     extension: str = ""

@@ -100,8 +100,9 @@ export async function httpRequest(req) {
     }
     const method = req.method || 'GET';
     const isFormData = typeof FormData !== 'undefined' && req.body instanceof FormData;
+    const hasBody = req.body !== undefined && req.body !== null;
     const headers = {
-        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(hasBody && !isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...(req.headers || {}),
     };
     const url = `${req.url}${_buildQuery(req.query)}`;
@@ -111,7 +112,7 @@ export async function httpRequest(req) {
         credentials: req.credentials || 'include',
         signal: req.signal,
     };
-    if (req.body !== undefined && req.body !== null) {
+    if (hasBody) {
         init.body = isFormData ? req.body : JSON.stringify(req.body);
     }
 

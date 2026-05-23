@@ -1,6 +1,7 @@
 /**
  * Однострочное подключение Lara на стороннем сайте: один <script type="module" src="...humanitec-embed-autoload.js" data-*></script>.
- * Import map не нужен — замыкание embed на относительных импортах до lit-shim (см. scripts/check_embed_esm_closure.py).
+ * Import map не нужен — замыкание embed на относительных импортах до общего lib/lit-shim.js
+ * (см. scripts/check_embed_esm_closure.py).
  *
  * Обязательно: data-embed-id, data-flows-base-url.
  * Опционально: data-platform-ui-origin — абсолютный origin платформы (i18n, file-types, SVG). Если CDN

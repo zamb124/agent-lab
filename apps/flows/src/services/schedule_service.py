@@ -1,7 +1,6 @@
 """Сервис управления scheduled tasks через единый scheduler API."""
 
 import datetime
-import uuid
 from typing import Any
 
 from core.clients.scheduler_client import SchedulerClient
@@ -61,7 +60,7 @@ class ScheduleService:
         )
 
         return ScheduledTaskInfo(
-            id=task.id,
+            schedule_task_id=task.schedule_task_id,
             schedule_id=task.schedule_id,
             flow_id=flow_id,
             session_id=session_id,
@@ -95,9 +94,7 @@ class ScheduleService:
         interval_seconds: int | None = None,
         run_at: datetime.datetime | None = None,
     ) -> ScheduledTaskInfo:
-        flow_task_id = str(uuid.uuid4())
         payload = {
-            "scheduled_task_id": flow_task_id,
             "flow_id": flow_id,
             "session_id": session_id,
             "user_id": user_id,
@@ -170,7 +167,11 @@ class ScheduleService:
             tool_args=tool_args,
             cron=cron,
         )
-        logger.info(f"Scheduled cron task created via scheduler API: id={task.id}, cron={cron}")
+        logger.info(
+            "Scheduled cron task created via scheduler API: schedule_task_id=%s, cron=%s",
+            task.schedule_task_id,
+            cron,
+        )
         return task
 
     async def schedule_interval_task(
@@ -210,7 +211,11 @@ class ScheduleService:
             tool_args=tool_args,
             interval_seconds=interval_minutes * 60,
         )
-        logger.info(f"Scheduled interval task created via scheduler API: id={task.id}, interval={interval_minutes}min")
+        logger.info(
+            "Scheduled interval task created via scheduler API: schedule_task_id=%s, interval=%smin",
+            task.schedule_task_id,
+            interval_minutes,
+        )
         return task
 
     async def schedule_one_time_task(
@@ -250,7 +255,11 @@ class ScheduleService:
             tool_args=tool_args,
             run_at=run_at,
         )
-        logger.info(f"Scheduled one-time task created via scheduler API: id={task.id}, run_at={run_at}")
+        logger.info(
+            "Scheduled one-time task created via scheduler API: schedule_task_id=%s, run_at=%s",
+            task.schedule_task_id,
+            run_at,
+        )
         return task
 
     async def list_tasks(
@@ -300,12 +309,12 @@ class ScheduleService:
                 filtered.append(self._map_task(item))
         return filtered
 
-    async def cancel_task(self, task_id: str) -> bool:
+    async def cancel_task(self, schedule_task_id: str) -> bool:
         """
         Отменяет задачу.
 
         Args:
-            task_id: ID задачи
+            schedule_task_id: ID записи платформенного scheduler
 
         Returns:
             True если задача отменена
@@ -317,33 +326,39 @@ class ScheduleService:
                     raise ValueError("company context is required for scheduler service")
                 cancelled = await self._scheduler_service.cancel(
                     company_id=context.active_company.company_id,
-                    schedule_task_id=task_id,
+                    schedule_task_id=schedule_task_id,
                 )
             else:
-                cancelled = await self._scheduler_client.cancel_schedule(task_id)
+                cancelled = await self._scheduler_client.cancel_schedule(schedule_task_id)
         except ValueError:
             return False
-        logger.info(f"Task cancelled via scheduler API: id={cancelled.id}")
+        logger.info(
+            "Task cancelled via scheduler API: schedule_task_id=%s",
+            cancelled.schedule_task_id,
+        )
         if self._scheduled_task_repository is not None:
-            await self._scheduled_task_repository.update_status(task_id, ScheduledTaskStatus.CANCELLED)
+            await self._scheduled_task_repository.update_status(
+                schedule_task_id,
+                ScheduledTaskStatus.CANCELLED,
+            )
         return True
 
-    async def get_task(self, task_id: str) -> ScheduledTaskInfo | None:
-        """Получает задачу по ID."""
+    async def get_task(self, schedule_task_id: str) -> ScheduledTaskInfo | None:
+        """Получает задачу по schedule_task_id."""
         if self._scheduler_service is not None:
             context = get_context()
             if context is None or context.active_company is None:
                 raise ValueError("company context is required for scheduler service")
             task = await self._scheduler_service.get(
                 company_id=context.active_company.company_id,
-                schedule_task_id=task_id,
+                schedule_task_id=schedule_task_id,
             )
         else:
-            task = await self._scheduler_client.get_schedule(task_id)
+            task = await self._scheduler_client.get_schedule(schedule_task_id)
         if task.target_service != "flows" or task.task_name != "execute_scheduled_task":
-            raise ValueError(f"Task {task_id} is not flows scheduled task")
+            raise ValueError(f"Task {schedule_task_id} is not flows scheduled task")
         return self._map_task(task)
 
-    async def mark_executed(self, task_id: str) -> bool:
+    async def mark_executed(self, schedule_task_id: str) -> bool:
         """Помечает задачу как выполненную."""
         raise NotImplementedError("mark_executed is not supported in scheduler API mode")

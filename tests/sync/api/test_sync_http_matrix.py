@@ -176,7 +176,7 @@ async def test_http_send_message_and_mark_read_flow(
         },
     )
     assert sr.status_code == 201
-    mid = sr.json()["id"]
+    mid = sr.json()["message_id"]
     rr = await sync_client.post(
         f"/sync/api/v1/channels/{channel_id}/read",
         headers=sync_auth_headers,
@@ -188,7 +188,7 @@ async def test_http_send_message_and_mark_read_flow(
     )
     assert lr.status_code == 200
     assert len(lr.json()["items"]) == 1
-    assert lr.json()["items"][0]["id"] == mid
+    assert lr.json()["items"][0]["message_id"] == mid
 
 
 @pytest.mark.asyncio
@@ -211,12 +211,14 @@ async def test_http_git_upsert(
         json=body,
     )
     assert r.status_code == 201
-    gid = r.json()["id"]
+    git_ref_id = r.json()["git_ref_id"]
+    assert "id" not in r.json()
     gr = await sync_client.get(
-        f"/sync/api/v1/git/resources/{gid}",
+        f"/sync/api/v1/git/resources/{git_ref_id}",
         headers=sync_auth_headers,
     )
     assert gr.status_code == 200
+    assert gr.json()["git_ref_id"] == git_ref_id
     assert gr.json()["external_id"] == "ext_http"
 
 

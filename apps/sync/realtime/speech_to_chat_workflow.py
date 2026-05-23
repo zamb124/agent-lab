@@ -129,8 +129,8 @@ def _normalize_storage_url_for_worker(*, storage_url: str, testing: bool) -> str
     return f"{parsed.scheme}://{netloc}{parsed.path}"
 
 
-def _mime_for_segment_filename(name: str) -> str:
-    lower = name.lower()
+def _content_type_for_segment_original_name(original_name: str) -> str:
+    lower = original_name.lower()
     if lower.endswith(".aac"):
         return "audio/aac"
     if lower.endswith(".m4a") or lower.endswith(".mp4") or lower.endswith(".m4s"):
@@ -154,6 +154,7 @@ _SPEECH_EGRESS_SEGMENT_SUFFIXES: tuple[str, ...] = (
     ".ts",
     ".wav",
 )
+
 
 def _speech_egress_s3_prefix(row: SyncCallSpeechEgressTrack) -> str:
     return (
@@ -275,25 +276,25 @@ async def _fetch_segment_bytes(*, storage_url: str) -> bytes:
 
 
 async def _normalize_egress_audio_for_upload_pipeline(
-    data: bytes, *, original_name: str, mime_type: str
+    data: bytes, *, original_name: str, content_type: str
 ) -> tuple[bytes, str, str]:
     """
     Форматы сегментов egress (ADTS AAC, MPEG-TS, fMP4 .m4s) приводим к M4A+faststart,
     как после перекодирования в обычной загрузке голосового для Safari.
     Остальное оставляем — дальше тот же FileProcessor, что и POST .../files/.
     """
-    base_mime = mime_type.split(";")[0].strip().lower()
+    base_content_type = content_type.split(";")[0].strip().lower()
     suf = Path(original_name).suffix.lower()
-    needs_m4a = suf in (".aac", ".m4s", ".ts") or base_mime in (
+    needs_m4a = suf in (".aac", ".m4s", ".ts") or base_content_type in (
         "audio/aac",
         "video/mp2t",
     )
-    if base_mime == "audio/mp4" and suf == ".m4s":
+    if base_content_type == "audio/mp4" and suf == ".m4s":
         needs_m4a = True
-    if base_mime == "application/octet-stream" and suf in (".aac", ".m4s", ".ts"):
+    if base_content_type == "application/octet-stream" and suf in (".aac", ".m4s", ".ts"):
         needs_m4a = True
     if not needs_m4a:
-        return data, original_name, mime_type
+        return data, original_name, content_type
     src_suffix = suf if suf else ".aac"
     out = await transcode_audio_bytes_to_m4a_aac(data, src_suffix)
     stem = Path(original_name).stem
@@ -307,8 +308,8 @@ async def _post_segment_file_as_message(
     row: SyncCallSpeechEgressTrack,
     storage_url: str,
     original_name: str,
-    size_bytes: int,
-    mime_type: str,
+    file_size: int,
+    content_type: str,
     call_id: str,
 ) -> None:
     settings = get_settings()
@@ -320,13 +321,13 @@ async def _post_segment_file_as_message(
         testing=bool(getattr(settings, "testing", False)),
     )
     raw = await _fetch_segment_bytes(storage_url=normalized_url)
-    if size_bytes > 0 and len(raw) != size_bytes:
+    if file_size > 0 and len(raw) != file_size:
         raise ValueError(
-            f"Размер сегмента не совпадает с ожидаемым: got={len(raw)} expected={size_bytes} url={normalized_url}"
+            f"Размер сегмента не совпадает с ожидаемым: got={len(raw)} expected={file_size} url={normalized_url}"
         )
 
     normalized_audio, upload_name, upload_mime = await _normalize_egress_audio_for_upload_pipeline(
-        raw, original_name=original_name, mime_type=mime_type
+        raw, original_name=original_name, content_type=content_type
     )
 
     stc = settings.calls.speech_to_chat
@@ -395,9 +396,9 @@ async def _post_segment_file_as_message(
                 type=MessageContentType.FILE_AUDIO,
                 data=AudioAttachmentContent(
                     file_id=file_record.file_id,
-                    filename=file_record.original_name,
-                    mime_type=file_record.content_type,
-                    size=file_record.file_size,
+                    original_name=file_record.original_name,
+                    content_type=file_record.content_type,
+                    file_size=file_record.file_size,
                     duration_ms=duration_ms,
                     waveform=None,
                     transcription_status=AudioTranscriptionStatus.IDLE,
@@ -444,13 +445,13 @@ async def process_new_files_for_egress_row(
                 return
             idx = fresh.segments_posted
             loc, fn, sz = livekit_entries[idx]
-            mime = _mime_for_segment_filename(fn)
+            content_type = _content_type_for_segment_original_name(fn)
             await _post_segment_file_as_message(
                 row=fresh,
                 storage_url=loc,
                 original_name=fn,
-                size_bytes=sz,
-                mime_type=mime,
+                file_size=sz,
+                content_type=content_type,
                 call_id=call_id,
             )
             segment_s3_key = f"{_speech_egress_s3_prefix(fresh)}{fn}"
@@ -480,13 +481,13 @@ async def process_new_files_for_egress_row(
         for loc, fn, sz, obj_key in page:
             if budget <= 0:
                 break
-            mime = _mime_for_segment_filename(fn)
+            content_type = _content_type_for_segment_original_name(fn)
             await _post_segment_file_as_message(
                 row=fresh,
                 storage_url=loc,
                 original_name=fn,
-                size_bytes=sz,
-                mime_type=mime,
+                file_size=sz,
+                content_type=content_type,
                 call_id=call_id,
             )
             n += 1

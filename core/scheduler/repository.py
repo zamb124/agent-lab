@@ -21,7 +21,7 @@ from core.scheduler.models import (
 
 def _to_model(record: SchedulerTaskRecord) -> PlatformScheduledTask:
     return PlatformScheduledTask(
-        id=record.id,
+        schedule_task_id=record.schedule_task_id,
         company_id=record.company_id,
         schedule_id=record.schedule_id,
         target_service=record.target_service,
@@ -52,7 +52,7 @@ class SchedulerTaskRepository:
     async def save(self, task: PlatformScheduledTask) -> PlatformScheduledTask:
         session_factory = await get_session_factory(self._db_url)
         values = {
-            "id": task.id,
+            "schedule_task_id": task.schedule_task_id,
             "company_id": task.company_id,
             "schedule_id": task.schedule_id,
             "target_service": task.target_service,
@@ -76,7 +76,7 @@ class SchedulerTaskRepository:
         }
         stmt = insert(SchedulerTaskRecord).values(**values)
         stmt = stmt.on_conflict_do_update(
-            index_elements=["id"],
+            index_elements=[SchedulerTaskRecord.schedule_task_id],
             set_={
                 "schedule_id": stmt.excluded.schedule_id,
                 "target_service": stmt.excluded.target_service,
@@ -106,7 +106,7 @@ class SchedulerTaskRepository:
             result = await session.execute(
                 select(SchedulerTaskRecord).where(
                     SchedulerTaskRecord.company_id == company_id,
-                    SchedulerTaskRecord.id == schedule_task_id,
+                    SchedulerTaskRecord.schedule_task_id == schedule_task_id,
                 )
             )
             record = result.scalar_one_or_none()
@@ -190,7 +190,7 @@ class SchedulerTaskRepository:
                 update(SchedulerTaskRecord)
                 .where(
                     SchedulerTaskRecord.company_id == company_id,
-                    SchedulerTaskRecord.id == schedule_task_id,
+                    SchedulerTaskRecord.schedule_task_id == schedule_task_id,
                 )
                 .values(**values)
             )

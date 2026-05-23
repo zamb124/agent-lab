@@ -15,13 +15,14 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from core.calendar.repositories import CalendarEventSqlRepository
-from core.clients.service_client import ServiceClient
+from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
 from core.http import get_httpx_client
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
+from core.logging import get_logger
 from core.models import (
     CalendarAttendee,
     CalendarEvent,
@@ -43,6 +44,8 @@ SYNC_MEETING_FLAG_META = "sync_meeting"
 SYNC_REMINDER_SENT_META = "sync_join_reminder_sent_at"
 
 JsonObject = dict[str, Any]
+
+logger = get_logger(__name__)
 
 
 def _enum_field_to_str(value: Enum | str) -> str:
@@ -486,29 +489,45 @@ class CalendarService:
         merged_events = list(local_events)
         include_all_sources = include_sources is None
         if include_all_sources or CalendarEventSource.CRM in include_sources:
-            merged_events.extend(
-                await self._fetch_crm_events(
-                    company_id=company_id,
-                    user_id=user_id,
-                    start_at=start_at,
-                    end_at=end_at,
+            try:
+                merged_events.extend(
+                    await self._fetch_crm_events(
+                        company_id=company_id,
+                        user_id=user_id,
+                        start_at=start_at,
+                        end_at=end_at,
+                    )
                 )
-            )
+            except ServiceClientError as exc:
+                logger.warning(
+                    "calendar.optional_source_failed",
+                    source=CalendarEventSource.CRM.value,
+                    company_id=company_id,
+                    error=str(exc),
+                )
         if include_all_sources or CalendarEventSource.SYNC in include_sources:
             platform_event_ids = {
                 e.event_id
                 for e in local_events
                 if e.source == CalendarEventSource.PLATFORM
             }
-            merged_events.extend(
-                await self._fetch_sync_events(
-                    company_id=company_id,
-                    user_id=user_id,
-                    start_at=start_at,
-                    end_at=end_at,
-                    exclude_platform_event_ids=platform_event_ids,
+            try:
+                merged_events.extend(
+                    await self._fetch_sync_events(
+                        company_id=company_id,
+                        user_id=user_id,
+                        start_at=start_at,
+                        end_at=end_at,
+                        exclude_platform_event_ids=platform_event_ids,
+                    )
                 )
-            )
+            except ServiceClientError as exc:
+                logger.warning(
+                    "calendar.optional_source_failed",
+                    source=CalendarEventSource.SYNC.value,
+                    company_id=company_id,
+                    error=str(exc),
+                )
         filtered_events = merged_events
         if include_sources:
             filtered_events = [item for item in merged_events if item.source in include_sources]
@@ -532,16 +551,19 @@ class CalendarService:
             if attendee.email and attendee.email.strip()
         }
         for attendee in attendees:
-            if attendee.attendee_id and attendee.attendee_id in company_member_ids:
+            if not attendee.attendee_id:
+                continue
+            if attendee.attendee_id in company_member_ids:
+                invited_ids.add(attendee.attendee_id)
+                continue
+            attendee_user = await self._user_repository.get(attendee.attendee_id)
+            if attendee_user is not None and company_id in attendee_user.companies:
                 invited_ids.add(attendee.attendee_id)
         if invited_emails:
-            for member_user_id in company_member_ids:
-                member_user = await self._user_repository.get(member_user_id)
-                if member_user is None:
-                    raise ValueError(f"User {member_user_id} not found")
-                member_emails = {email.strip().lower() for email in member_user.emails if email and email.strip()}
-                if invited_emails.intersection(member_emails):
-                    invited_ids.add(member_user_id)
+            for email in invited_emails:
+                for member_user in await self._user_repository.find_all_by_email_ci(email):
+                    if member_user.user_id in company_member_ids or company_id in member_user.companies:
+                        invited_ids.add(member_user.user_id)
         invited_ids.discard(organizer_user_id)
         return sorted(invited_ids)
 

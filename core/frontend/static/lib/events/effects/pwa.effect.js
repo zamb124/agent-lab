@@ -10,14 +10,17 @@
  *     - native Android (Capacitor) -> PushNotifications.register() -> POST /api/push/subscribe transport=android_fcm
  *     - браузер / PWA              -> Service Worker + VAPID       -> POST /api/push/subscribe transport=web_vapid
  *   pwa/push/unsubscribe_requested         — отписаться (web: pushManager; native: реализуется отдельно).
- *   pwa/deployment_version/check_requested — GET /<base>/health и сравнить с текущей.
+ *   pwa/deployment_version/check_requested — GET /<base>/health и сравнить с persisted/state version.
  */
 
 import { CoreEvents } from '../contract.js';
 import { httpRequest } from '../http.js';
+import { platformStorageKey } from '../../utils/storage-keys.js';
 
 const VERSION_POLL_MS = 60_000;
 const HUMANITEC_CACHE_PREFIX = 'humanitec-';
+const DEPLOYMENT_VERSION_STORAGE_KEY = platformStorageKey('core', 'deployment_version');
+let reloadPageForTests = null;
 
 function _isCapacitorNative() {
     if (typeof window === 'undefined' || typeof window.Capacitor === 'undefined') {
@@ -137,22 +140,123 @@ async function _deleteHumanitecCaches() {
     await Promise.all(toDelete.map((name) => caches.delete(name)));
 }
 
-async function _reloadAfterDeployment() {
-    await _deleteHumanitecCaches();
+function _browserStorage() {
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            return window.localStorage;
+        }
+    } catch (err) {
+        console.warn('[PWA] window.localStorage unavailable', err);
+    }
+    try {
+        if (typeof globalThis !== 'undefined' && globalThis.localStorage) {
+            return globalThis.localStorage;
+        }
+    } catch (err) {
+        console.warn('[PWA] globalThis.localStorage unavailable', err);
+    }
+    return null;
+}
+
+function _readStoredDeploymentVersion() {
+    const storage = _browserStorage();
+    if (!storage) {
+        return null;
+    }
+    try {
+        const value = storage.getItem(DEPLOYMENT_VERSION_STORAGE_KEY);
+        return typeof value === 'string' && value.length > 0 ? value : null;
+    } catch (err) {
+        console.warn('[PWA] deployment version read failed', err);
+        return null;
+    }
+}
+
+function _writeStoredDeploymentVersion(version) {
+    if (typeof version !== 'string' || version.length === 0) {
+        return;
+    }
+    const storage = _browserStorage();
+    if (!storage) {
+        return;
+    }
+    try {
+        storage.setItem(DEPLOYMENT_VERSION_STORAGE_KEY, version);
+    } catch (err) {
+        console.warn('[PWA] deployment version persist failed', err);
+    }
+}
+
+async function _fetchDeploymentVersion(base) {
+    const normalizedBase = typeof base === 'string' ? base.replace(/\/+$/, '') : '';
+    const healthUrl = `${normalizedBase}/health`;
+    const response = await fetch(healthUrl, {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: {
+            Accept: 'application/json',
+            'Cache-Control': 'no-cache',
+        },
+    });
+    if (!response.ok) {
+        throw new Error(`deployment version check failed: HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    const version = data && (data.deployment_version || data.version);
+    return typeof version === 'string' && version.length > 0 ? version : null;
+}
+
+async function _reloadAfterDeployment(version) {
+    _writeStoredDeploymentVersion(version);
+    try {
+        await _deleteHumanitecCaches();
+    } catch (err) {
+        console.warn('[PWA] cache purge failed', err);
+    }
     const sw = typeof navigator !== 'undefined' && navigator.serviceWorker;
     if (sw && typeof sw.getRegistration === 'function') {
-        const reg = await sw.getRegistration();
-        if (reg) {
-            if (typeof reg.update === 'function') {
-                await reg.update();
+        try {
+            const reg = await sw.getRegistration();
+            if (reg) {
+                if (typeof reg.update === 'function') {
+                    await reg.update();
+                }
+                if (reg.waiting && typeof reg.waiting.postMessage === 'function') {
+                    reg.waiting.postMessage({ type: 'skipWaiting' });
+                }
             }
-            if (reg.waiting && typeof reg.waiting.postMessage === 'function') {
-                reg.waiting.postMessage({ type: 'skipWaiting' });
-            }
+        } catch (err) {
+            console.warn('[PWA] service worker update failed', err);
         }
+    }
+    _reloadPage();
+}
+
+function _reloadPage() {
+    if (typeof reloadPageForTests === 'function') {
+        reloadPageForTests();
+        return;
     }
     if (typeof location !== 'undefined' && typeof location.reload === 'function') {
         location.reload();
+    }
+}
+
+export function _setPwaReloadForTests(fn) {
+    reloadPageForTests = typeof fn === 'function' ? fn : null;
+}
+
+function _handleServiceWorkerMessage(event) {
+    const data = event && event.data;
+    if (!data || typeof data !== 'object') {
+        return;
+    }
+    if (data.type === 'humanitec-deployment-updated') {
+        void _reloadAfterDeployment(data.to);
+    }
+    if (data.type === 'humanitec-deployment-reload-requested') {
+        void _reloadAfterDeployment(null);
     }
 }
 
@@ -218,6 +322,10 @@ export function createPwaEffect({ baseUrl, suppressHostIntegrations } = {}) {
                         ctx.dispatch(CoreEvents.PWA_INSTALLED, null, { source: 'system' });
                     });
                     _registerServiceWorker();
+                    const sw = typeof navigator !== 'undefined' && navigator.serviceWorker;
+                    if (sw && typeof sw.addEventListener === 'function') {
+                        sw.addEventListener('message', _handleServiceWorkerMessage);
+                    }
                 }
                 _scheduleVersionCheck(ctx);
                 return;
@@ -305,13 +413,22 @@ export function createPwaEffect({ baseUrl, suppressHostIntegrations } = {}) {
 
             case PWA_EVENTS.DEPLOYMENT_VERSION_CHECK_REQUESTED: {
                 try {
-                    const data = await httpRequest({ method: 'GET', url: `${base}/health` });
-                    const version = (data && (data.deployment_version || data.version)) || null;
-                    const cur = ctx.getState().pwa.deploymentVersion;
+                    const version = await _fetchDeploymentVersion(base);
+                    const stateVersion = ctx.getState().pwa.deploymentVersion;
+                    const storedVersion = _readStoredDeploymentVersion();
                     ctx.dispatch(PWA_EVENTS.DEPLOYMENT_VERSION_LOADED, { version }, { causation_id: event.id, source: 'http' });
-                    if (cur && version && cur !== version) {
-                        ctx.dispatch(CoreEvents.PWA_UPDATE_AVAILABLE, { from: cur, to: version }, { causation_id: event.id });
-                        await _reloadAfterDeployment();
+                    if (storedVersion && version && storedVersion !== version) {
+                        ctx.dispatch(CoreEvents.PWA_UPDATE_AVAILABLE, { from: storedVersion, to: version }, { causation_id: event.id });
+                        await _reloadAfterDeployment(version);
+                        return;
+                    }
+                    if (stateVersion && version && stateVersion !== version) {
+                        ctx.dispatch(CoreEvents.PWA_UPDATE_AVAILABLE, { from: stateVersion, to: version }, { causation_id: event.id });
+                        await _reloadAfterDeployment(version);
+                        return;
+                    }
+                    if (version) {
+                        _writeStoredDeploymentVersion(version);
                     }
                 } catch (err) {
                     ctx.dispatch(

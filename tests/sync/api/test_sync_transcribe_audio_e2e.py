@@ -42,9 +42,9 @@ def _audio_content_block(file_payload: dict[str, Any]) -> dict[str, Any]:
         "order": 0,
         "data": {
             "file_id": file_payload["file_id"],
-            "filename": "note.wav",
-            "mime_type": "audio/wav",
-            "size": file_payload["file_size"],
+            "original_name": "note.wav",
+            "content_type": "audio/wav",
+            "file_size": file_payload["file_size"],
             "duration_ms": 800,
         },
     }
@@ -75,7 +75,7 @@ async def _upload_voice_and_send(
     assert audio_block["data"]["transcription_status"] == "idle", (
         "Без флага канала и без явного transcribe сообщение должно быть idle"
     )
-    return msg["id"], msg
+    return msg["message_id"], msg
 
 
 @pytest.mark.asyncio
@@ -117,7 +117,7 @@ async def test_transcribe_audio_rest_marks_done_via_worker(
         await wait_frame(
             ws_user2,
             type_="sync/message/updated",
-            where=lambda p: p.get("id") == message_id and any(
+            where=lambda p: p.get("message_id") == message_id and any(
                 c["type"] == "file/audio" and c.get("data", {}).get("transcription_status") == "processing"
                 for c in p.get("contents", [])
             ),
@@ -127,7 +127,7 @@ async def test_transcribe_audio_rest_marks_done_via_worker(
         done_frame = await wait_frame(
             ws_user2,
             type_="sync/message/updated",
-            where=lambda p: p.get("id") == message_id and any(
+            where=lambda p: p.get("message_id") == message_id and any(
                 c["type"] == "file/audio" and c.get("data", {}).get("transcription_status") == "done"
                 for c in p.get("contents", [])
             ),
@@ -180,7 +180,7 @@ async def test_transcribe_audio_via_ws_command_succeeds(
         done = await wait_frame(
             ws_owner,
             type_="sync/message/updated",
-            where=lambda p: p.get("id") == message_id and any(
+            where=lambda p: p.get("message_id") == message_id and any(
                 c["type"] == "file/audio" and c.get("data", {}).get("transcription_status") == "done"
                 for c in p.get("contents", [])
             ),

@@ -36,7 +36,7 @@ export const threadsResource = createResourceCollection({
         openThread: 'open_requested',
         closeThread: 'drawer_closed',
     },
-    extraReducer: (state, event) => {
+    extraReducer: (state, event, events) => {
         switch (event.type) {
             case 'sync/context/company_cleared': {
                 return {
@@ -51,17 +51,25 @@ export const threadsResource = createResourceCollection({
                     byChannelId: Object.freeze({}),
                 };
             }
+            case events.CREATED:
             case 'sync/thread/created': {
-                const item = event.payload;
+                const item = event.type === events.CREATED
+                    ? (event.payload && event.payload.item)
+                    : event.payload;
                 if (!item || typeof item.thread_id !== 'string') return state;
-                if (state.items.some((x) => x.thread_id === item.thread_id)) return state;
-                const next = { ...state, items: Object.freeze([...state.items, item]) };
+                const hasItem = state.items.some((x) => x.thread_id === item.thread_id);
+                const next = {
+                    ...state,
+                    items: hasItem ? state.items : Object.freeze([...state.items, item]),
+                    selectedThreadId: item.thread_id,
+                };
                 if (typeof item.channel_id === 'string') {
                     const existing = state.byChannelId[item.channel_id];
                     const cur = Array.isArray(existing) ? existing : [];
+                    const hasInChannel = cur.some((x) => x.thread_id === item.thread_id);
                     next.byChannelId = Object.freeze({
                         ...state.byChannelId,
-                        [item.channel_id]: Object.freeze([...cur, item]),
+                        [item.channel_id]: hasInChannel ? cur : Object.freeze([...cur, item]),
                     });
                 }
                 return next;

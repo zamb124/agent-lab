@@ -36,7 +36,7 @@ class TestFrontendSchedulerApi:
     def _task_payload(status: str = "pending") -> dict:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         return {
-            "id": "task-1",
+            "schedule_task_id": "task-1",
             "company_id": "system",
             "schedule_id": "sched-1",
             "target_service": "flows",
@@ -70,7 +70,7 @@ class TestFrontendSchedulerApi:
             "interval_seconds": 60,
             "run_at": None,
             "taskiq_task_id": None,
-            "kwargs": {"scheduler_task_id": "task-1", "company_id": "system"},
+            "kwargs": {"schedule_task_id": "task-1", "company_id": "system"},
             "labels": {},
             "missing_reason": None,
         }
@@ -89,12 +89,12 @@ class TestFrontendSchedulerApi:
         assert response.status_code == 200
         payload = response.json()["items"]
         assert isinstance(payload, list)
-        assert payload[0]["id"] == "task-1"
+        assert payload[0]["schedule_task_id"] == "task-1"
         assert payload[0]["target_service"] == "flows"
 
     async def test_pause_schedule(self, frontend_client_with_auth, frontend_container, monkeypatch):
-        async def _pause(task_id: str):
-            assert task_id == "task-1"
+        async def _pause(schedule_task_id: str):
+            assert schedule_task_id == "task-1"
             payload = self._task_payload(status="paused")
             payload["schedule_id"] = None
             return payload
@@ -106,14 +106,14 @@ class TestFrontendSchedulerApi:
         )
         assert response.status_code == 200
         payload = response.json()
-        assert payload["id"] == "task-1"
+        assert payload["schedule_task_id"] == "task-1"
         assert payload["status"] == "paused"
 
     async def test_run_now_schedule(
         self, frontend_client_with_auth, frontend_container, monkeypatch
     ):
-        async def _run_now(task_id: str):
-            assert task_id == "task-1"
+        async def _run_now(schedule_task_id: str):
+            assert schedule_task_id == "task-1"
             payload = self._task_payload()
             payload["last_run_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
             return payload
@@ -125,11 +125,11 @@ class TestFrontendSchedulerApi:
         )
         assert response.status_code == 200
         payload = response.json()
-        assert payload["id"] == "task-1"
+        assert payload["schedule_task_id"] == "task-1"
 
     async def test_get_schedule(self, frontend_client_with_auth, frontend_container, monkeypatch):
-        async def _get(task_id: str):
-            assert task_id == "task-1"
+        async def _get(schedule_task_id: str):
+            assert schedule_task_id == "task-1"
             return self._task_payload()
 
         monkeypatch.setattr(frontend_container.scheduler_client, "get_schedule", _get)
@@ -137,7 +137,7 @@ class TestFrontendSchedulerApi:
         response = await frontend_client_with_auth.get("/frontend/api/scheduler/schedules/task-1")
         assert response.status_code == 200
         payload = response.json()
-        assert payload["id"] == "task-1"
+        assert payload["schedule_task_id"] == "task-1"
         assert payload["target_service"] == "flows"
 
     async def test_create_schedule(
@@ -165,13 +165,13 @@ class TestFrontendSchedulerApi:
         )
         assert response.status_code == 200
         payload = response.json()
-        assert payload["id"] == "task-1"
+        assert payload["schedule_task_id"] == "task-1"
 
     async def test_resume_schedule(
         self, frontend_client_with_auth, frontend_container, monkeypatch
     ):
-        async def _resume(task_id: str):
-            assert task_id == "task-1"
+        async def _resume(schedule_task_id: str):
+            assert schedule_task_id == "task-1"
             return self._task_payload(status="pending")
 
         monkeypatch.setattr(frontend_container.scheduler_client, "resume_schedule", _resume)
@@ -186,8 +186,8 @@ class TestFrontendSchedulerApi:
     async def test_cancel_schedule(
         self, frontend_client_with_auth, frontend_container, monkeypatch
     ):
-        async def _cancel(task_id: str):
-            assert task_id == "task-1"
+        async def _cancel(schedule_task_id: str):
+            assert schedule_task_id == "task-1"
             return self._task_payload(status="cancelled")
 
         monkeypatch.setattr(frontend_container.scheduler_client, "cancel_schedule", _cancel)
@@ -202,8 +202,8 @@ class TestFrontendSchedulerApi:
     async def test_get_schedule_redis_snapshot(
         self, frontend_client_with_auth, frontend_container, monkeypatch
     ):
-        async def _get_redis_snapshot(task_id: str):
-            assert task_id == "task-1"
+        async def _get_redis_snapshot(schedule_task_id: str):
+            assert schedule_task_id == "task-1"
             return self._redis_snapshot_payload()
 
         monkeypatch.setattr(
@@ -260,7 +260,11 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
             assert user_id is None
             self.created_requests.append(request)
             n = len(self.created_requests)
-            return type("CreatedTask", (), {"id": f"task-{n}", "schedule_id": f"schedule-{n}"})()
+            return type(
+                "CreatedTask",
+                (),
+                {"schedule_task_id": f"task-{n}", "schedule_id": f"schedule-{n}"},
+            )()
 
     fake_service = _FakeSchedulerService()
     fake_container = type("Container", (), {"scheduler_service": fake_service})()
@@ -294,7 +298,11 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
 
 @pytest.mark.asyncio
 async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None:
-    paused_task = type("PausedTask", (), {"id": "paused-1", "status": ScheduledTaskStatus.PAUSED})()
+    paused_task = type(
+        "PausedTask",
+        (),
+        {"schedule_task_id": "paused-1", "status": ScheduledTaskStatus.PAUSED},
+    )()
 
     class _FakeSettings:
         calendar_sync = CalendarSyncConfig(
@@ -308,7 +316,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
 
     class _FakeSchedulerService:
         def __init__(self) -> None:
-            self.resumed_task_id = None
+            self.resumed_schedule_task_id = None
             self.meeting_reminder_create = None
 
         async def list(self, company_id, filters):
@@ -333,8 +341,12 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
 
         async def resume(self, company_id, schedule_task_id):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
-            self.resumed_task_id = schedule_task_id
-            return type("ResumedTask", (), {"id": schedule_task_id, "schedule_id": "schedule-2"})()
+            self.resumed_schedule_task_id = schedule_task_id
+            return type(
+                "ResumedTask",
+                (),
+                {"schedule_task_id": schedule_task_id, "schedule_id": "schedule-2"},
+            )()
 
         async def create(self, company_id, user_id, request):
             assert company_id == SYSTEM_SCHEDULER_COMPANY_ID
@@ -344,7 +356,10 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             return type(
                 "CreatedTask",
                 (),
-                {"id": f"created-{request.task_name}", "schedule_id": "schedule-rem-1"},
+                {
+                    "schedule_task_id": f"created-{request.task_name}",
+                    "schedule_id": "schedule-rem-1",
+                },
             )()
 
     fake_service = _FakeSchedulerService()
@@ -352,7 +367,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
 
     await on_startup(app=None, container=fake_container, settings=_FakeSettings())
 
-    assert fake_service.resumed_task_id == "paused-1"
+    assert fake_service.resumed_schedule_task_id == "paused-1"
     assert fake_service.meeting_reminder_create is not None
     assert (
         fake_service.meeting_reminder_create.task_name == CALENDAR_SYNC_MEETING_REMINDER_TASK_NAME
@@ -386,7 +401,11 @@ async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() ->
             assert user_id is None
             self.created_requests.append(request)
             n = len(self.created_requests)
-            return type("CreatedTask", (), {"id": f"task-{n}", "schedule_id": f"schedule-{n}"})()
+            return type(
+                "CreatedTask",
+                (),
+                {"schedule_task_id": f"task-{n}", "schedule_id": f"schedule-{n}"},
+            )()
 
     fake_service = _FakeSchedulerService()
     fake_container = type("Container", (), {"scheduler_service": fake_service})()

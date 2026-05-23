@@ -78,7 +78,7 @@ async def test_suggests_lifecycle(
         # Создаём suggest
         now = datetime.now(timezone.utc)
         suggest = CRMSuggest(
-            id=suggest_id,
+            suggest_id=suggest_id,
             company_id="system",
             namespace=ns,
             suggest_type="duplicate",
@@ -105,7 +105,7 @@ async def test_suggests_lifecycle(
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["total"] >= 1
-    found = [item for item in data["items"] if item["id"] == suggest_id]
+    found = [item for item in data["items"] if item["suggest_id"] == suggest_id]
     assert len(found) == 1
     assert found[0]["status"] == "pending"
 
@@ -147,7 +147,7 @@ async def test_suggests_dismiss(
     try:
         now = datetime.now(timezone.utc)
         suggest = CRMSuggest(
-            id=suggest_id,
+            suggest_id=suggest_id,
             company_id="system",
             namespace=ns,
             suggest_type="missed_entity",
@@ -176,7 +176,7 @@ async def test_suggests_dismiss(
     )
     assert response.status_code == 200
     data = response.json()
-    assert not any(item["id"] == suggest_id for item in data["items"])
+    assert not any(item["suggest_id"] == suggest_id for item in data["items"])
 
 
 @pytest.mark.asyncio
@@ -222,7 +222,7 @@ async def test_missed_entity_dismissed_same_draft_is_not_recreated(
             if item.suggest_type == "missed_entity"
             and item.target_entity_ids == [note_id]
         )
-        await crm_container.suggest_service.dismiss_suggest(created.id, namespace=ns)
+        await crm_container.suggest_service.dismiss_suggest(created.suggest_id, namespace=ns)
 
         second_summary = await crm_container.suggest_service.generate_namespace_suggests(
             company_id="system",
@@ -245,6 +245,6 @@ async def test_missed_entity_dismissed_same_draft_is_not_recreated(
             and item.target_entity_ids == [note_id]
             and item.status == "dismissed"
         ]
-        assert [item.id for item in dismissed] == [created.id]
+        assert [item.suggest_id for item in dismissed] == [created.suggest_id]
     finally:
         clear_context()

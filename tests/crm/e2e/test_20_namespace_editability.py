@@ -74,8 +74,8 @@ class TestNamespaceEditabilityEmpty:
         assert type_b in editability["removable_type_ids"]
         assert type_a in editability["current_allowed_type_ids"]
         assert type_b in editability["current_allowed_type_ids"]
-        assert isinstance(editability["all_spaces_type_ids"], list)
-        assert len(editability["all_spaces_type_ids"]) >= 1
+        assert isinstance(editability["all_namespaces_type_ids"], list)
+        assert len(editability["all_namespaces_type_ids"]) >= 1
 
     @pytest.mark.asyncio
     async def test_empty_namespace_can_remove_all_types(self, crm_client, unique_id, auth_headers_system):

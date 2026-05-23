@@ -36,10 +36,10 @@ function isKnownStatus(status) {
 }
 
 function requireSuggestId(suggest, owner) {
-    if (!suggest || typeof suggest.id !== 'string' || suggest.id.length === 0) {
-        throw new Error(`${owner}: suggest.id required`);
+    if (!suggest || typeof suggest.suggest_id !== 'string' || suggest.suggest_id.length === 0) {
+        throw new Error(`${owner}: suggest.suggest_id required`);
     }
-    return suggest.id;
+    return suggest.suggest_id;
 }
 
 function requireSuggestPayload(suggest, owner) {

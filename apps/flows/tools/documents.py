@@ -27,7 +27,7 @@ class DocumentsOpenFileArgs(BaseModel):
     )
     file_name: str | None = Field(
         None,
-        description="Имя файла из state.files[].name; используется, если file_id не передан.",
+        description="Имя файла из state.files[].original_name; используется, если file_id не передан.",
     )
     title: str | None = Field(
         None,
@@ -96,6 +96,9 @@ def _document_capability(raw: JsonDict, namespace: str) -> JsonDict:
 
 
 def _with_document_capability(item: JsonDict, raw: JsonDict, namespace: str) -> JsonDict:
+    original_name = item.get("original_name")
+    if not isinstance(original_name, str) or not original_name.strip():
+        raise ValueError("state.files[].original_name обязателен для documents")
     capabilities = item.get("capabilities")
     if not isinstance(capabilities, dict):
         capabilities = {}
@@ -103,7 +106,7 @@ def _with_document_capability(item: JsonDict, raw: JsonDict, namespace: str) -> 
     return {
         **item,
         "file_id": raw["file_id"],
-        "name": item.get("name") or raw.get("title") or raw["file_id"],
+        "original_name": original_name,
         "capabilities": {**capabilities, "document": doc},
         "document": doc,
     }
@@ -133,7 +136,7 @@ async def _bind_or_get_document(
     files = list(state.files or [])
     item = _pick_state_file(files, file_id=file_id, file_name=file_name)
     if item is None:
-        return None, None, _context_namespace(), f"Файл не найден. Доступные: {[f.get('name') for f in files]}"
+        return None, None, _context_namespace(), f"Файл не найден. Доступные: {[f.get('original_name') for f in files]}"
     fid = str(item.get("file_id") or "").strip()
     if not fid:
         return item, None, _context_namespace(), "У файла нет file_id; интерактивное редактирование недоступно."
@@ -205,7 +208,7 @@ async def _apply_document_mutation(
     }
     enriched = _with_document_capability(item, merged, namespace)
     if isinstance(result.get("file_size"), int):
-        enriched["size"] = result["file_size"]
+        enriched["file_size"] = result["file_size"]
     _upsert_state_file(state, enriched)
     push_ui_event(
         state,
@@ -251,7 +254,7 @@ async def documents_open_file(
         return json.dumps(
             {
                 "success": False,
-                "error": f"Файл не найден. Доступные: {[f.get('name') for f in files]}",
+                "error": f"Файл не найден. Доступные: {[f.get('original_name') for f in files]}",
             },
             ensure_ascii=False,
         )

@@ -522,7 +522,7 @@ class TestOAuthService:
             "user_id": f"user-{unique_id}",
             "company_id": f"company-{unique_id}",
             "redirect_uri": "http://localhost/callback",
-            "return_path": "/crm/spaces/x/integrations",
+            "return_path": "/crm/namespaces/x/integrations",
             "scopes": "",
             "post_auth_redirect_origin": "http://system.lvh.me:8002",
         }

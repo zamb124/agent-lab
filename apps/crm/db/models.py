@@ -443,7 +443,7 @@ class AccessRequest(Base):
 
     __tablename__: str = "access_requests"
 
-    request_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    access_request_id: Mapped[str] = mapped_column("request_id", String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     requester_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     requester_company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -476,7 +476,10 @@ class AccessRequest(Base):
 
     @override
     def __repr__(self) -> str:
-        return f"<AccessRequest(request_id='{self.request_id}', status='{self.status}')>"
+        return (
+            f"<AccessRequest(access_request_id='{self.access_request_id}', "
+            f"status='{self.status}')>"
+        )
 
 
 class NamespaceTemplate(Base):
@@ -640,7 +643,7 @@ class CRMSuggest(Base):
 
     __tablename__: str = "crm_suggests"
 
-    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    suggest_id: Mapped[str] = mapped_column("id", String(100), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     namespace: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
 
@@ -686,4 +689,7 @@ class CRMSuggest(Base):
 
     @override
     def __repr__(self) -> str:
-        return f"<CRMSuggest(id='{self.id}', type='{self.suggest_type}', status='{self.status}')>"
+        return (
+            f"<CRMSuggest(suggest_id='{self.suggest_id}', "
+            f"suggest_type='{self.suggest_type}', status='{self.status}')>"
+        )

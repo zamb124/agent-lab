@@ -24,10 +24,9 @@
       "node_id": "internship_contract_filler_main",
       "files": [
         {
-          "name": "internship_contract_ru.docx",
-          "path": "http://localhost:8001/static/templates/internship_contract_ru.docx",
+          "original_name": "internship_contract_ru.docx",
           "url": "http://localhost:8001/static/templates/internship_contract_ru.docx",
-          "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         }
       ],
       "llm": {

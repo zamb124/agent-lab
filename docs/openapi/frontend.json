@@ -24,7 +24,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListResponse_dict_"
+                  "$ref": "#/components/schemas/ListResponse_dict_str__Any__"
                 }
               }
             }
@@ -223,6 +223,126 @@
   },
   "components": {
     "schemas": {
+      "AIProvidersCapabilityUpdate": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Provider"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "extra_request_headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Request Headers"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "fallback_models": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LLMCallConfig"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Models"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "sample_rate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "AIProvidersCapabilityUpdate",
+        "description": "PUT /api/settings/ai-providers/{capability}: задать override capability компании.\n\n- ``provider`` платформенный (``openrouter|openai|bothub|yandex|provider_litserve``)\n  или ``custom:<id>``; для rerank допустимы ``inherit|none|provider_litserve|custom:<id>``;\n  для voice — литералы провайдеров речи или ``custom:<id>`` (кроме VAD).\n- ``api_key`` (plaintext) шифруется на сервере; для ``custom:<id>`` не используется\n  (ключ в custom-провайдере)."
+      },
       "AcceptInviteRequest": {
         "properties": {
           "short_code": {
@@ -425,18 +545,14 @@
           },
           "by_resource": {
             "additionalProperties": {
-              "additionalProperties": {
-                "type": "number"
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/BillingUsageResourceBucket"
             },
             "type": "object",
             "title": "By Resource"
           },
           "by_user": {
             "additionalProperties": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/BillingUsageUserBucket"
             },
             "type": "object",
             "title": "By User"
@@ -451,6 +567,53 @@
         ],
         "title": "BillingUsage",
         "description": "Статистика использования"
+      },
+      "BillingUsageResourceBucket": {
+        "properties": {
+          "cost": {
+            "type": "number",
+            "title": "Cost"
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cost",
+          "calls"
+        ],
+        "title": "BillingUsageResourceBucket"
+      },
+      "BillingUsageUserBucket": {
+        "properties": {
+          "cost": {
+            "type": "number",
+            "title": "Cost"
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls"
+          },
+          "user_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cost",
+          "calls"
+        ],
+        "title": "BillingUsageUserBucket"
       },
       "Body_auth_callback_post_auth_callback__provider_name__post": {
         "properties": {
@@ -532,6 +695,68 @@
         ],
         "title": "Body_auth_callback_post_frontend_api_auth_callback__provider_name__post"
       },
+      "Body_payment_webhook_api_v1_payments_webhook__provider_name__post": {
+        "properties": {
+          "notification_type": {
+            "type": "string",
+            "title": "Notification Type",
+            "default": ""
+          },
+          "operation_id": {
+            "type": "string",
+            "title": "Operation Id",
+            "default": ""
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount",
+            "default": ""
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": ""
+          },
+          "datetime": {
+            "type": "string",
+            "title": "Datetime",
+            "default": ""
+          },
+          "sender": {
+            "type": "string",
+            "title": "Sender",
+            "default": ""
+          },
+          "codepro": {
+            "type": "string",
+            "title": "Codepro",
+            "default": ""
+          },
+          "sha1_hash": {
+            "type": "string",
+            "title": "Sha1 Hash",
+            "default": ""
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "test_notification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Notification"
+          }
+        },
+        "type": "object",
+        "title": "Body_payment_webhook_api_v1_payments_webhook__provider_name__post"
+      },
       "Body_payment_webhook_frontend_api_v1_payments_webhook__provider_name__post": {
         "properties": {
           "notification_type": {
@@ -600,6 +825,17 @@
             "type": "string",
             "format": "binary",
             "title": "File"
+          },
+          "public": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public"
           }
         },
         "type": "object",
@@ -750,6 +986,7 @@
             "default": true
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "provider",
@@ -1305,6 +1542,7 @@
             "title": "Metadata"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "title",
@@ -1359,6 +1597,69 @@
         ],
         "title": "CheckSlugResponse"
       },
+      "CompanySecretsMetaDTO": {
+        "properties": {
+          "api_key_set": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key Set"
+          },
+          "client_secret_set": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Secret Set"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CompanySecretsMetaDTO",
+        "description": "Не выдаёт сырое значение api_key/client_secret."
+      },
       "CompanySettingsUpdate": {
         "properties": {
           "name": {
@@ -1397,22 +1698,261 @@
             ],
             "title": "Metadata",
             "description": "Дополнительные данные"
+          }
+        },
+        "type": "object",
+        "title": "CompanySettingsUpdate",
+        "description": "Обновление базовых настроек компании.\n\nAI-провайдеры конфигурируются отдельным CRUD-роутером ``/ai-providers``\n(см. core.company_ai). Поля legacy (``rag_embedding`` / ``rag_rerank`` /\n``crm_summarize_provider``) удалены вместе с парсерами в ``core.company_ai``."
+      },
+      "CompanyVoiceProviderItem": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "stt",
+              "tts"
+            ],
+            "title": "Kind",
+            "description": "Тип провайдера речи."
           },
-          "rag_embedding": {
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "description": "Имя провайдера."
+          },
+          "model": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RagEmbeddingOverrideUpdate"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Переопределение embedding модели RAG для компании"
+            "title": "Model"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "sample_rate": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Rate"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          },
+          "response_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "wav",
+                  "mp3",
+                  "ogg",
+                  "pcm",
+                  "lpcm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Format"
+          },
+          "secrets_meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompanySecretsMetaDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
+        "additionalProperties": false,
         "type": "object",
-        "title": "CompanySettingsUpdate",
-        "description": "Обновление настроек компании"
+        "required": [
+          "kind",
+          "provider"
+        ],
+        "title": "CompanyVoiceProviderItem",
+        "description": "Одна запись `company_voice_providers` (ответ GET/PUT без сырых секретов)."
+      },
+      "CompanyVoiceProviderUpsertRequest": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Provider",
+            "description": "Имя провайдера речи."
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "sample_rate": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Rate"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          },
+          "response_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "wav",
+                  "mp3",
+                  "ogg",
+                  "pcm",
+                  "lpcm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Format"
+          },
+          "secrets": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secrets",
+            "description": "Merge-patch для колонки `secrets`; если поля нет в JSON — сохранённые ключи не меняются; если `secrets: null` — колонка очищается; в объект patch `null`/`\"\"` по ключу удаляет ключ, непустая строка — задаёт значение."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "CompanyVoiceProviderUpsertRequest",
+        "description": "Тело PUT-запроса для одного kind-а."
+      },
+      "CompanyVoiceProvidersResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id",
+            "description": "ID компании."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyVoiceProviderItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "CompanyVoiceProvidersResponse",
+        "description": "Список настроек речи компании (stt/tts)."
       },
       "CreateCompanyRequest": {
         "properties": {
@@ -1474,7 +2014,7 @@
           },
           "branch_id": {
             "type": "string",
-            "title": "Skill Id",
+            "title": "Branch Id",
             "description": "Skill flow (LOCAL); для EXTERNAL не используется",
             "default": "default"
           },
@@ -1555,7 +2095,7 @@
           "placeholder": {
             "type": "string",
             "title": "Placeholder",
-            "description": "Placeholder",
+            "description": "Текст placeholder в поле ввода виджета",
             "default": "Введите сообщение..."
           },
           "branding": {
@@ -1563,6 +2103,54 @@
             "title": "Branding",
             "description": "Показывать брендинг",
             "default": true
+          },
+          "landing_visible": {
+            "type": "boolean",
+            "title": "Landing Visible",
+            "description": "Показ в публичном каталоге лендинга (только company system)",
+            "default": false
+          },
+          "landing_card_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Card Image Url",
+            "description": "Картинка карточки на лендинге"
+          },
+          "landing_sort_order": {
+            "type": "integer",
+            "title": "Landing Sort Order",
+            "description": "Порядок в каталоге (меньше — выше)",
+            "default": 0
+          },
+          "guest_max_user_messages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guest Max User Messages",
+            "description": "Лимит пользовательских сообщений на диалог (embed-session); не задан — без лимита"
+          },
+          "voice_enabled": {
+            "type": "boolean",
+            "title": "Voice Enabled",
+            "description": "Дуплекс голоса (WebSocket эфир); при false — только браузерная диктовка при поддержке",
+            "default": false
+          },
+          "voice_default_on": {
+            "type": "boolean",
+            "title": "Voice Default On",
+            "description": "Автоматически включать голосовой режим при открытии виджета",
+            "default": false
           }
         },
         "type": "object",
@@ -1628,7 +2216,7 @@
         "title": "CredentialInfo",
         "description": "Публичная проекция credential для UI (без токенов)."
       },
-      "CursorPage_dict_": {
+      "CursorPage_dict_str__Any__": {
         "properties": {
           "items": {
             "items": {
@@ -1659,7 +2247,224 @@
           "items",
           "has_more"
         ],
-        "title": "CursorPage[dict]"
+        "title": "CursorPage[dict[str, Any]]"
+      },
+      "CustomProviderCreate": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "base_url": {
+            "type": "string",
+            "title": "Base Url"
+          },
+          "api_key": {
+            "type": "string",
+            "title": "Api Key"
+          },
+          "extra_request_headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Request Headers"
+          },
+          "extra_request_body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Request Body"
+          },
+          "rerank_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Path"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "llm_chat",
+                "llm_summarize",
+                "llm_format_markdown",
+                "llm_codegen",
+                "llm_vision",
+                "embedding",
+                "rerank",
+                "image_gen",
+                "voice_stt",
+                "voice_tts",
+                "voice_vad"
+              ]
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "model_by_capability": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Model By Capability"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "base_url",
+          "api_key"
+        ],
+        "title": "CustomProviderCreate",
+        "description": "POST /api/settings/ai-providers/custom: создание custom OpenAI-compatible провайдера."
+      },
+      "CustomProviderUpdate": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "extra_request_headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Request Headers"
+          },
+          "extra_request_body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Request Body"
+          },
+          "rerank_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Path"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "llm_chat",
+                    "llm_summarize",
+                    "llm_format_markdown",
+                    "llm_codegen",
+                    "llm_vision",
+                    "embedding",
+                    "rerank",
+                    "image_gen",
+                    "voice_stt",
+                    "voice_tts",
+                    "voice_vad"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
+          "model_by_capability": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model By Capability"
+          }
+        },
+        "type": "object",
+        "title": "CustomProviderUpdate",
+        "description": "PATCH /api/settings/ai-providers/custom/{id}."
       },
       "DemoLoginRequest": {
         "properties": {
@@ -1696,6 +2501,21 @@
           "token_endpoint": {
             "type": "string",
             "title": "Token Endpoint"
+          },
+          "backend_proxy_code": {
+            "type": "string",
+            "title": "Backend Proxy Code"
+          },
+          "browser_to_host_backend_code": {
+            "type": "string",
+            "title": "Browser To Host Backend Code"
+          },
+          "allowed_origins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Origins"
           }
         },
         "type": "object",
@@ -1703,7 +2523,10 @@
           "html_code",
           "script_url",
           "embed_id",
-          "token_endpoint"
+          "token_endpoint",
+          "backend_proxy_code",
+          "browser_to_host_backend_code",
+          "allowed_origins"
         ],
         "title": "EmbedCodeResponse",
         "description": "Код для встраивания виджета"
@@ -1724,7 +2547,7 @@
           },
           "branch_id": {
             "type": "string",
-            "title": "Skill Id"
+            "title": "Branch Id"
           },
           "allowed_origins": {
             "items": {
@@ -1794,6 +2617,48 @@
             "type": "boolean",
             "title": "Branding"
           },
+          "landing_visible": {
+            "type": "boolean",
+            "title": "Landing Visible"
+          },
+          "landing_card_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Card Image Url"
+          },
+          "landing_sort_order": {
+            "type": "integer",
+            "title": "Landing Sort Order"
+          },
+          "guest_max_user_messages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guest Max User Messages"
+          },
+          "voice_enabled": {
+            "type": "boolean",
+            "title": "Voice Enabled"
+          },
+          "voice_default_on": {
+            "type": "boolean",
+            "title": "Voice Default On"
+          },
+          "preview_share_link": {
+            "type": "boolean",
+            "title": "Preview Share Link"
+          },
           "usage_count": {
             "type": "integer",
             "title": "Usage Count"
@@ -1844,6 +2709,13 @@
           "interface_locale",
           "placeholder",
           "branding",
+          "landing_visible",
+          "landing_card_image_url",
+          "landing_sort_order",
+          "guest_max_user_messages",
+          "voice_enabled",
+          "voice_default_on",
+          "preview_share_link",
           "usage_count",
           "last_used_at",
           "created_at",
@@ -1900,7 +2772,7 @@
           },
           "branch_id": {
             "type": "string",
-            "title": "Skill Id"
+            "title": "Branch Id"
           }
         },
         "type": "object",
@@ -1945,7 +2817,7 @@
             "title": "Detected Kind",
             "description": "Тип файла по FileReader"
           },
-          "mime_type": {
+          "content_type": {
             "anyOf": [
               {
                 "type": "string"
@@ -1954,8 +2826,8 @@
                 "type": "null"
               }
             ],
-            "title": "Mime Type",
-            "description": "MIME после распознавания"
+            "title": "Content Type",
+            "description": "Content-Type после распознавания"
           },
           "warnings": {
             "items": {
@@ -2090,6 +2962,238 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "LLMCallConfig": {
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "top_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top P"
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top K"
+          },
+          "frequency_penalty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Penalty"
+          },
+          "presence_penalty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presence Penalty"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "extra_request_body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Request Body"
+          },
+          "extra_request_headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Request Headers"
+          },
+          "default_headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Default Headers"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "explicit"
+          },
+          "supported_parameters": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true,
+            "title": "Supported Parameters"
+          },
+          "input_modalities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true,
+            "title": "Input Modalities"
+          },
+          "output_modalities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true,
+            "title": "Output Modalities"
+          },
+          "context_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Length"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LLMCallConfig",
+        "description": "One concrete LLM attempt config.\n\n`provider` and `model` may be partial at authoring time for primary node\noverrides; by the time the HTTP client attempts a call, both are resolved."
+      },
       "LeadCreateBody": {
         "properties": {
           "name": {
@@ -2139,6 +3243,42 @@
               }
             ],
             "title": "Comment"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "headcount_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headcount Range"
+          },
+          "interested_products": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interested Products"
           }
         },
         "type": "object",
@@ -2211,7 +3351,7 @@
         ],
         "title": "ListResponse[UserSearchResult]"
       },
-      "ListResponse_dict_": {
+      "ListResponse_dict_str__Any__": {
         "properties": {
           "items": {
             "items": {
@@ -2226,7 +3366,7 @@
         "required": [
           "items"
         ],
-        "title": "ListResponse[dict]"
+        "title": "ListResponse[dict[str, Any]]"
       },
       "OffsetPage_ApiKey_": {
         "properties": {
@@ -2501,6 +3641,16 @@
             "type": "string",
             "title": "Company Id"
           },
+          "static_base": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Static Base"
+          },
           "effective": {
             "additionalProperties": {
               "additionalProperties": {
@@ -2510,6 +3660,44 @@
             },
             "type": "object",
             "title": "Effective"
+          },
+          "unit_effective": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Effective"
+          },
+          "tariff_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tariff Plan"
+          },
+          "tariff_multipliers": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Tariff Multipliers"
           },
           "storage_override": {
             "anyOf": [
@@ -2532,10 +3720,11 @@
         "type": "object",
         "required": [
           "company_id",
+          "static_base",
           "effective"
         ],
         "title": "PlatformBillingCompanyPricesResponse",
-        "description": "Эффективный прайс для компании (global merge + override компании)."
+        "description": "Эффективный прайс для компании с учетом override и тарифного множителя."
       },
       "PlatformBillingCompanyResolveResponse": {
         "properties": {
@@ -2569,6 +3758,16 @@
       },
       "PlatformBillingPricesResponse": {
         "properties": {
+          "static_base": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Static Base"
+          },
           "effective": {
             "additionalProperties": {
               "additionalProperties": {
@@ -2599,6 +3798,7 @@
         },
         "type": "object",
         "required": [
+          "static_base",
           "effective"
         ],
         "title": "PlatformBillingPricesResponse",
@@ -2636,6 +3836,346 @@
         ],
         "title": "PlatformBillingUsageReportResponse",
         "description": "Строки usage из shared БД для админки."
+      },
+      "PlatformPronunciationRuleCreateRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "alias",
+              "regex",
+              "stress"
+            ],
+            "title": "Kind"
+          },
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Pattern"
+          },
+          "replacement": {
+            "type": "string",
+            "title": "Replacement"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "case_sensitive": {
+            "type": "boolean",
+            "title": "Case Sensitive",
+            "default": false
+          },
+          "word_boundary": {
+            "type": "boolean",
+            "title": "Word Boundary",
+            "default": true
+          },
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          },
+          "voices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voices"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "pattern",
+          "replacement"
+        ],
+        "title": "PlatformPronunciationRuleCreateRequest"
+      },
+      "PlatformPronunciationRuleDTO": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "alias",
+              "regex",
+              "stress"
+            ],
+            "title": "Kind"
+          },
+          "pattern": {
+            "type": "string",
+            "title": "Pattern"
+          },
+          "replacement": {
+            "type": "string",
+            "title": "Replacement"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "case_sensitive": {
+            "type": "boolean",
+            "title": "Case Sensitive",
+            "default": false
+          },
+          "word_boundary": {
+            "type": "boolean",
+            "title": "Word Boundary",
+            "default": true
+          },
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          },
+          "voices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voices"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "pattern",
+          "replacement"
+        ],
+        "title": "PlatformPronunciationRuleDTO"
+      },
+      "PlatformPronunciationRuleUpdateRequest": {
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "alias",
+                  "regex",
+                  "stress"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern"
+          },
+          "replacement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "case_sensitive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Sensitive"
+          },
+          "word_boundary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Boundary"
+          },
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          },
+          "voices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voices"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PlatformPronunciationRuleUpdateRequest"
+      },
+      "PlatformPronunciationRulesListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlatformPronunciationRuleDTO"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PlatformPronunciationRulesListResponse"
       },
       "PlatformRedisScheduleSnapshot": {
         "properties": {
@@ -2851,9 +4391,9 @@
       },
       "PlatformScheduledTask": {
         "properties": {
-          "id": {
+          "schedule_task_id": {
             "type": "string",
-            "title": "Id"
+            "title": "Schedule Task Id"
           },
           "company_id": {
             "type": "string",
@@ -3000,7 +4540,7 @@
         "additionalProperties": true,
         "type": "object",
         "required": [
-          "id",
+          "schedule_task_id",
           "company_id",
           "target_service",
           "task_name",
@@ -3108,31 +4648,30 @@
         ],
         "title": "PreviewInviteResponse"
       },
-      "RagEmbeddingOverrideUpdate": {
+      "PronunciationRuleCreateRequest": {
         "properties": {
-          "enabled": {
-            "type": "boolean",
-            "title": "Enabled",
-            "description": "Включить company override",
-            "default": false
-          },
-          "provider": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "openrouter",
-                  "provider_litserve"
-                ]
-              },
-              {
-                "type": "null"
-              }
+          "kind": {
+            "type": "string",
+            "enum": [
+              "alias",
+              "regex",
+              "stress"
             ],
-            "title": "Provider",
-            "description": "Провайдер эмбеддингов"
+            "title": "Kind",
+            "description": "Тип правила."
           },
-          "model": {
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Pattern",
+            "description": "Искомое слово / regex."
+          },
+          "replacement": {
+            "type": "string",
+            "title": "Replacement",
+            "description": "Замена."
+          },
+          "language": {
             "anyOf": [
               {
                 "type": "string"
@@ -3141,13 +4680,568 @@
                 "type": "null"
               }
             ],
-            "title": "Model",
-            "description": "ID embedding модели"
+            "title": "Language",
+            "description": "BCP-47 (только ISO 639-1, например 'ru')."
+          },
+          "case_sensitive": {
+            "type": "boolean",
+            "title": "Case Sensitive",
+            "default": false
+          },
+          "word_boundary": {
+            "type": "boolean",
+            "title": "Word Boundary",
+            "default": true
+          },
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          },
+          "voices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voices"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "pattern",
+          "replacement"
+        ],
+        "title": "PronunciationRuleCreateRequest"
+      },
+      "PronunciationRuleDTO": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "alias",
+              "regex",
+              "stress"
+            ],
+            "title": "Kind"
+          },
+          "pattern": {
+            "type": "string",
+            "title": "Pattern"
+          },
+          "replacement": {
+            "type": "string",
+            "title": "Replacement"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "case_sensitive": {
+            "type": "boolean",
+            "title": "Case Sensitive",
+            "default": false
+          },
+          "word_boundary": {
+            "type": "boolean",
+            "title": "Word Boundary",
+            "default": true
+          },
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          },
+          "voices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voices"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "pattern",
+          "replacement"
+        ],
+        "title": "PronunciationRuleDTO"
+      },
+      "PronunciationRuleTestRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Text",
+            "description": "Текст для dry-run."
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "description": "Имя TTS-провайдера.",
+            "default": "litserve"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "PronunciationRuleTestRequest"
+      },
+      "PronunciationRuleTestResponse": {
+        "properties": {
+          "original": {
+            "type": "string",
+            "title": "Original"
+          },
+          "transformed": {
+            "type": "string",
+            "title": "Transformed"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "original",
+          "transformed",
+          "changed"
+        ],
+        "title": "PronunciationRuleTestResponse"
+      },
+      "PronunciationRuleUpdateRequest": {
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "alias",
+                  "regex",
+                  "stress"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern"
+          },
+          "replacement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "case_sensitive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Sensitive"
+          },
+          "word_boundary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Boundary"
+          },
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          },
+          "voices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voices"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PronunciationRuleUpdateRequest"
+      },
+      "PronunciationRulesListResponse": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "title": "Company Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PronunciationRuleDTO"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "items"
+        ],
+        "title": "PronunciationRulesListResponse"
+      },
+      "PublicLandingAgentCard": {
+        "properties": {
+          "embed_id": {
+            "type": "string",
+            "title": "Embed Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "assistant_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assistant Title"
+          },
+          "greeting_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greeting Message"
+          },
+          "landing_card_image_url": {
+            "type": "string",
+            "title": "Landing Card Image Url"
+          },
+          "theme": {
+            "type": "string",
+            "title": "Theme"
+          },
+          "primary_color": {
+            "type": "string",
+            "title": "Primary Color"
+          },
+          "interface_locale": {
+            "type": "string",
+            "title": "Interface Locale"
+          },
+          "placeholder": {
+            "type": "string",
+            "title": "Placeholder"
+          },
+          "show_reasoning": {
+            "type": "boolean",
+            "title": "Show Reasoning"
+          },
+          "show_tool_calls": {
+            "type": "boolean",
+            "title": "Show Tool Calls"
+          },
+          "branding": {
+            "type": "boolean",
+            "title": "Branding"
+          },
+          "landing_sort_order": {
+            "type": "integer",
+            "title": "Landing Sort Order"
+          },
+          "voice_enabled": {
+            "type": "boolean",
+            "title": "Voice Enabled"
+          },
+          "voice_default_on": {
+            "type": "boolean",
+            "title": "Voice Default On"
           }
         },
         "type": "object",
-        "title": "RagEmbeddingOverrideUpdate",
-        "description": "Переопределение embedding runtime для RAG на уровне компании."
+        "required": [
+          "embed_id",
+          "name",
+          "flow_id",
+          "branch_id",
+          "assistant_title",
+          "greeting_message",
+          "landing_card_image_url",
+          "theme",
+          "primary_color",
+          "interface_locale",
+          "placeholder",
+          "show_reasoning",
+          "show_tool_calls",
+          "branding",
+          "landing_sort_order",
+          "voice_enabled",
+          "voice_default_on"
+        ],
+        "title": "PublicLandingAgentCard"
+      },
+      "PublicLandingAgentsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicLandingAgentCard"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PublicLandingAgentsResponse"
+      },
+      "PublicLandingSessionRequest": {
+        "properties": {
+          "embed_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Embed Id"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "maximum": 900.0,
+            "minimum": 60.0,
+            "title": "Expires In Seconds",
+            "default": 300
+          }
+        },
+        "type": "object",
+        "required": [
+          "embed_id"
+        ],
+        "title": "PublicLandingSessionRequest"
+      },
+      "PublicLandingSessionResponse": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "flow_id": {
+            "type": "string",
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "token_type",
+          "expires_at",
+          "flow_id",
+          "branch_id"
+        ],
+        "title": "PublicLandingSessionResponse"
       },
       "ScheduledTaskStatus": {
         "type": "string",
@@ -3350,6 +5444,39 @@
         "type": "object",
         "title": "TestPushRequest"
       },
+      "TtsLitserveVoiceHint": {
+        "properties": {
+          "api_model_id": {
+            "type": "string",
+            "title": "Api Model Id"
+          },
+          "default_voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Voice"
+          },
+          "voice_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Voice Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "api_model_id"
+        ],
+        "title": "TtsLitserveVoiceHint",
+        "description": "Подсказка по голосу для одной Litserve TTS-модели."
+      },
       "UpdateEmbedConfigRequest": {
         "properties": {
           "name": {
@@ -3383,7 +5510,7 @@
                 "type": "null"
               }
             ],
-            "title": "Skill Id"
+            "title": "Branch Id"
           },
           "allowed_origins": {
             "anyOf": [
@@ -3529,6 +5656,72 @@
               }
             ],
             "title": "Branding"
+          },
+          "landing_visible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Visible"
+          },
+          "landing_card_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Card Image Url"
+          },
+          "landing_sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landing Sort Order"
+          },
+          "guest_max_user_messages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guest Max User Messages"
+          },
+          "voice_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Enabled"
+          },
+          "voice_default_on": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Default On"
           }
         },
         "type": "object",
@@ -3740,6 +5933,146 @@
           "publicKey"
         ],
         "title": "VapidPublicKeyResponse"
+      },
+      "VoiceProvidersCatalogDTO": {
+        "properties": {
+          "stt_tts_provider_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stt Tts Provider Ids"
+          },
+          "response_format_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Response Format Ids"
+          },
+          "credential_field_groups": {
+            "additionalProperties": {
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Credential Field Groups"
+          },
+          "stt_litserve_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stt Litserve Models"
+          },
+          "tts_litserve_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tts Litserve Models"
+          },
+          "tts_litserve_voice_hints": {
+            "items": {
+              "$ref": "#/components/schemas/TtsLitserveVoiceHint"
+            },
+            "type": "array",
+            "title": "Tts Litserve Voice Hints"
+          },
+          "cloud_ru_stt_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cloud Ru Stt Models"
+          },
+          "cloud_ru_tts_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cloud Ru Tts Models"
+          },
+          "yandex_speech_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Yandex Speech Models"
+          },
+          "sber_speech_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sber Speech Models"
+          },
+          "speech_language_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Speech Language Ids"
+          },
+          "vad_provider_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Vad Provider Ids"
+          },
+          "tts_sample_rate_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Tts Sample Rate Ids"
+          },
+          "vad_sample_rate_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Vad Sample Rate Ids"
+          },
+          "litserve_silero_tts_sample_rate_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Litserve Silero Tts Sample Rate Ids"
+          },
+          "cloud_ru_tts_voice_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cloud Ru Tts Voice Ids"
+          },
+          "yandex_tts_voice_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Yandex Tts Voice Ids"
+          },
+          "sber_tts_voice_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sber Tts Voice Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "VoiceProvidersCatalogDTO",
+        "description": "Ответ GET .../voice-providers/catalog (без конфиденциальных данных из conf)."
       }
     }
   },

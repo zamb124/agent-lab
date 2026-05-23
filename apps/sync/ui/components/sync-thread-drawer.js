@@ -9,7 +9,7 @@
  *   - открыть тред: dispatch('sync/threads/open_requested', { threadId })
  *
  * Внутри:
- *   - <sync-message-list> с props.thread-id
+ *   - <sync-message-list> с props.threadId
  *   - <sync-message-composer> с props.threadId
  */
 
@@ -97,8 +97,8 @@ export class SyncThreadDrawer extends PlatformElement {
                 </button>
             </div>
             <div class="body">
-                <sync-message-list .channelId=${this.channelId} thread-id=${threadId}></sync-message-list>
-                <sync-message-composer .channelId=${this.channelId} thread-id=${threadId}></sync-message-composer>
+                <sync-message-list .channelId=${this.channelId} .threadId=${threadId}></sync-message-list>
+                <sync-message-composer .channelId=${this.channelId} .threadId=${threadId}></sync-message-composer>
             </div>
         `;
     }

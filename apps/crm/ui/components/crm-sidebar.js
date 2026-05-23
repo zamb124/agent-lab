@@ -1,7 +1,7 @@
 /**
- * CRMSidebar — навигация и SPACE-селектор сервиса CRM на event-driven каноне.
+ * CRMSidebar — навигация и namespace-селектор сервиса CRM на event-driven каноне.
  *
- * SPACE-селектор: фабрика `crm/namespaces`, выбор через `setPlatformNamespaceSelection`.
+ * Namespace-селектор: фабрика `crm/namespaces`, выбор через `setPlatformNamespaceSelection`.
  * При выбранном конкретном пространстве основное меню — дерево из
  * `crm_settings.sidebar_navigation`: дети секций заметок / задач / сущностей
  * каждый рендер синхронизируются с каноном (`buildDefaultSidebarNav`), чтобы
@@ -53,7 +53,7 @@ const ORG_NAV = [
     { route: 'settings', icon: 'settings', label_key: 'sidebar.nav.settings' },
 ];
 
-const SETTINGS_ALIASES = new Set(['settings', 'spaces', 'templates', 'relationship_types']);
+const SETTINGS_ALIASES = new Set(['settings', 'namespaces', 'templates', 'relationship_types']);
 
 /**
  * @param {unknown} user
@@ -76,13 +76,13 @@ function resolveCrmSidebarNamespaceSelection(user, selectionByCompany) {
 }
 
 /**
- * @param {string} nsName
+ * @param {string} namespaceName
  * @param {Array<Record<string, unknown>>} entityTypesItems
  * @returns {string[]}
  */
-function allowedTypeIdsForSpace(nsName, entityTypesItems) {
-    if (typeof nsName !== 'string' || nsName.length === 0) {
-        throw new Error('allowedTypeIdsForSpace: nsName required');
+function allowedTypeIdsForNamespace(namespaceName, entityTypesItems) {
+    if (typeof namespaceName !== 'string' || namespaceName.length === 0) {
+        throw new Error('allowedTypeIdsForNamespace: namespaceName required');
     }
     const items = Array.isArray(entityTypesItems) ? entityTypesItems : [];
     const out = [];
@@ -90,7 +90,7 @@ function allowedTypeIdsForSpace(nsName, entityTypesItems) {
         if (!t || typeof t.type_id !== 'string' || t.type_id.length === 0) {
             continue;
         }
-        if (t.namespace !== nsName) {
+        if (t.namespace !== namespaceName) {
             continue;
         }
         out.push(t.type_id);
@@ -379,12 +379,12 @@ export class CRMSidebar extends PlatformElement {
     }
 
     /**
-     * @param {string} spaceName
+     * @param {string} namespaceName
      * @returns {Array<Record<string, unknown>>}
      */
-    _sidebarTreeNodesForSpace(spaceName) {
+    _sidebarTreeNodesForNamespace(namespaceName) {
         const items = this._namespaces.items;
-        const nsRow = items.find((row) => row && row.name === spaceName);
+        const nsRow = items.find((row) => row && row.name === namespaceName);
         const rawSettings = nsRow && nsRow.crm_settings && typeof nsRow.crm_settings === 'object'
             ? nsRow.crm_settings
             : null;
@@ -392,7 +392,7 @@ export class CRMSidebar extends PlatformElement {
             ? rawSettings.sidebar_navigation
             : null;
         const fromApi = mapSidebarNavFromApi(rawNav);
-        const allowed = allowedTypeIdsForSpace(spaceName, this._entityTypes.items);
+        const allowed = allowedTypeIdsForNamespace(namespaceName, this._entityTypes.items);
         const labels = {
             groupNotes: this.t('sidebar.nav_group_notes'),
             groupTasks: this.t('sidebar.nav_group_tasks'),
@@ -439,7 +439,7 @@ export class CRMSidebar extends PlatformElement {
             : '';
 
         const treeNodes = selectValue !== ''
-            ? this._sidebarTreeNodesForSpace(selectValue)
+            ? this._sidebarTreeNodesForNamespace(selectValue)
             : null;
         const activeItemId = treeNodes !== null && typeof routeKey === 'string' && routeKey.length > 0
             ? findNavLeafId(treeNodes, routeKey, searchNorm)
@@ -468,8 +468,8 @@ export class CRMSidebar extends PlatformElement {
                         .value=${selectValue}
                         .config=${this._namespaceDropdownConfig(items)}
                         ?show-edit=${selectValue !== ''}
-                        edit-title=${this.t('sidebar.edit_space_tooltip')}
-                        add-title=${this.t('sidebar.create_space_tooltip')}
+                        edit-title=${this.t('sidebar.edit_namespace_tooltip')}
+                        add-title=${this.t('sidebar.create_namespace_tooltip')}
                         @change=${this._onNamespaceChange}
                         @edit-request=${() => this._openEditNamespace(selectValue)}
                         @add-request=${this._openCreateNamespace}

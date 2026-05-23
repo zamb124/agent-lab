@@ -2,7 +2,7 @@
  * crm-entity-type-editor — общий редактор типа сущности.
  *
  * Используется и в `templates-page` (тип внутри шаблона), и в
- * `space-detail-page` (тип компании, привязанный к namespace).
+ * `namespace-detail-page` (тип компании, привязанный к namespace).
  *
  * Props:
  *   - typeDraft: { type_id, name, description, prompt, parent_type_id, icon,
@@ -15,11 +15,11 @@
  *   - parentTypeOptions: string[]
  *   - editingTypeId: string ('' если создаём новый)
  *   - savingType: boolean
- *   - showNamespaces: boolean (true для templates-page; false для space-detail
+ *   - showNamespaces: boolean (true для templates-page; false для namespace-detail
  *                     где namespace задан контекстом и редактируется одним
  *                     toggle снаружи)
  *   - compactChrome: boolean — без внешней .panel и без верхнего panel-header
- *     (шапка рисует родитель, напр. `space-detail-page`).
+ *     (шапка рисует родитель, напр. `namespace-detail-page`).
  *
  * События (через emit):
  *   - draft-changed: { typeDraft }

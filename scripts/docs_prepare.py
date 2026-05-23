@@ -1,23 +1,47 @@
 """
 Перед сборкой Zensical: заглушки README для docs/scenarios, отдельные деревья
 build/documentation-ru и build/documentation-en (без index.md в репозитории сценариев).
-В сборке тег general не даёт отдельного уровня: …/service/general/slug → …/service/slug.
+В сборке теги остаются только внутренней группировкой исходников:
+…/service/<tag>/slug → …/service/slug, чтобы навигация документации была без лишних уровней.
 """
 
 from __future__ import annotations
 
 import json
+import html
+import re
 import shutil
 from pathlib import Path
 
 SCENARIOS_ROOT = "scenarios"
+ROOT_MARKDOWN_PAGES = ("quickstart.md",)
 
 _SERVICE_NAV_LABEL: dict[str, str] = {
     "sync": "Sync",
     "flows": "Flows",
-    "crm": "CRM",
+    "platform": "Основные инструкции",
+    "crm": "NetWorkle",
     "rag": "RAG",
     "frontend": "Frontend",
+}
+
+_SERVICE_NAV_LABEL_EN: dict[str, str] = {
+    "sync": "Sync",
+    "flows": "Flows",
+    "platform": "Platform Basics",
+    "crm": "NetWorkle",
+    "rag": "RAG",
+    "frontend": "Frontend",
+}
+
+_SERVICE_SCENARIO_INTRO_RU: dict[str, str] = {
+    "platform": "Базовые инструкции для нового пользователя: вход, Dashboard, список сервисов и меню аккаунта.",
+    "flows": "Пошаговые инструкции по Flows: создание flow, работа с канвой, LLM-ноды и редактирование.",
+}
+
+_SERVICE_SCENARIO_INTRO_EN: dict[str, str] = {
+    "platform": "Basic instructions for a new user: entry, Dashboard, service list, and account menu.",
+    "flows": "Step-by-step Flows instructions: creating a flow, using the canvas, LLM nodes, and editing.",
 }
 
 _TAG_NAV_LABEL: dict[str, str] = {
@@ -29,6 +53,25 @@ RU_BUILD = Path("build/documentation-ru")
 EN_BUILD = Path("build/documentation-en")
 
 DEFAULT_SCENARIO_TAG = "general"
+_CRM_BRAND_RE = re.compile(r"(?<![A-Za-z0-9])CRM(?![A-Za-z0-9])")
+_CRM_BRAND_TOKEN_RE = re.compile(r"(?<!Amo)CRM")
+
+
+def _brand_display_text(value: str) -> str:
+    return _CRM_BRAND_RE.sub("NetWorkle", value)
+
+
+def _brand_openapi_json(value):
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            out[_CRM_BRAND_TOKEN_RE.sub("NetWorkle", key)] = _brand_openapi_json(item)
+        return out
+    if isinstance(value, list):
+        return [_brand_openapi_json(item) for item in value]
+    if isinstance(value, str):
+        return _CRM_BRAND_TOKEN_RE.sub("NetWorkle", value)
+    return value
 
 
 def _repo_root() -> Path:
@@ -51,6 +94,18 @@ def _title_from_readme(readme: Path) -> str:
 
 def _service_label(name: str) -> str:
     return _SERVICE_NAV_LABEL.get(name, name.replace("_", " ").title())
+
+
+def _service_label_en(name: str) -> str:
+    return _SERVICE_NAV_LABEL_EN.get(name, name.replace("_", " ").replace("-", " ").title())
+
+
+def _service_intro_ru(service: str, title: str) -> str:
+    return _SERVICE_SCENARIO_INTRO_RU.get(service, f"Пошаговые сценарии интерфейса {title}.")
+
+
+def _service_intro_en(service: str) -> str:
+    return _SERVICE_SCENARIO_INTRO_EN.get(service, "Step-by-step UI scenarios with screenshots.")
 
 
 def _tag_label(name: str) -> str:
@@ -139,9 +194,8 @@ def _write_index_md_from_readme(readme: Path, out: Path) -> None:
 
 
 def _dest_parts_for_scenario(service: str, tag: str, slug_name: str) -> tuple[str, ...]:
-    if tag == DEFAULT_SCENARIO_TAG:
-        return (service, slug_name)
-    return (service, tag, slug_name)
+    _ = tag
+    return (service, slug_name)
 
 
 def _collect_scenario_slug_readmes(scenarios_root: Path) -> dict[tuple[str, ...], Path]:
@@ -155,13 +209,6 @@ def _collect_scenario_slug_readmes(scenarios_root: Path) -> dict[tuple[str, ...]
                 if not readme.is_file():
                     continue
                 slug_name = slug_dir.name
-                if tag == DEFAULT_SCENARIO_TAG and slug_name != DEFAULT_SCENARIO_TAG:
-                    sibling = scenarios_root / service / slug_name
-                    if sibling.is_dir():
-                        raise ValueError(
-                            f"Сценарий {service}/{DEFAULT_SCENARIO_TAG}/{slug_name}: каталог "
-                            f"«{service}/{slug_name}» уже существует как тег; переименуйте doc_slug."
-                        )
                 parts = _dest_parts_for_scenario(service, tag, slug_name)
                 if parts in out:
                     raise ValueError(
@@ -214,14 +261,58 @@ def _is_tag_container_build_dir(d: Path) -> bool:
     return False
 
 
-def _write_hub_index(out: Path, title: str, intro: str, links: list[tuple[str, str]]) -> None:
+def _write_hub_index(
+    out: Path,
+    title: str,
+    intro: str,
+    links: list[tuple[str, str]],
+    *,
+    heading: str = "Сценарии",
+) -> None:
     title_json = json.dumps(title, ensure_ascii=False)
-    lines = ["---", f"title: {title_json}", "---", "", intro, "", "## Сценарии", ""]
+    lines = [
+        "---",
+        f"title: {title_json}",
+        "---",
+        "",
+        intro,
+        "",
+        f"## {heading}",
+        "",
+        '<div class="docs-link-grid">',
+    ]
     for label, href in sorted(links, key=lambda x: x[0].lower()):
-        lines.append(f"- [{label}]({href})")
-    lines.append("")
+        label_html = html.escape(label)
+        href_html = html.escape(href, quote=True)
+        lines.append(
+            f'  <a class="docs-link-card" href="{href_html}">'
+            f"<span>{label_html}</span>"
+            "</a>"
+        )
+    lines.extend(["</div>", ""])
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _write_ru_scenarios_root_index(scenarios_dst: Path) -> None:
+    if not scenarios_dst.is_dir():
+        return
+
+    links: list[tuple[str, str]] = []
+    for svc_dir in sorted(p for p in scenarios_dst.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        idx = svc_dir / "index.md"
+        if idx.is_file():
+            links.append((_service_label(svc_dir.name), f"{svc_dir.name}/"))
+
+    if not links:
+        return
+
+    _write_hub_index(
+        scenarios_dst / "index.md",
+        "Сценарии",
+        "Проверенные пользовательские сценарии с шагами и скриншотами интерфейса.",
+        links,
+    )
 
 
 def _write_ru_scenario_hub_indices(scenarios_dst: Path) -> None:
@@ -241,7 +332,7 @@ def _write_ru_scenario_hub_indices(scenarios_dst: Path) -> None:
         if not links:
             continue
         title = _service_label(service)
-        intro = f"Пошаговые сценарии интерфейса {title}."
+        intro = _service_intro_ru(service, title)
         _write_hub_index(svc_dir / "index.md", title, intro, links)
 
     for svc_dir in sorted(p for p in scenarios_dst.iterdir() if p.is_dir() and not p.name.startswith(".")):
@@ -269,6 +360,8 @@ def _write_ru_scenario_hub_indices(scenarios_dst: Path) -> None:
             intro_t = f"Сценарии в группе «{tag_title}» ({svc_label})."
             _write_hub_index(tag_dir / "index.md", tag_title, intro_t, links_t)
 
+    _write_ru_scenarios_root_index(scenarios_dst)
+
 
 def _populate_ru_scenario_index_tree(scenarios_src: Path, scenarios_dst: Path) -> None:
     scenarios_dst.mkdir(parents=True, exist_ok=True)
@@ -288,6 +381,40 @@ def _copy_optional_subdir(src_root: Path, name: str, dst_root: Path) -> None:
         shutil.copytree(src, dst_root / name, dirs_exist_ok=False)
 
 
+def _copy_openapi_subdir(src_root: Path, dst_root: Path) -> None:
+    src = src_root / "openapi"
+    if not src.is_dir():
+        return
+    dst = dst_root / "openapi"
+    if dst.exists():
+        shutil.rmtree(dst)
+    dst.mkdir(parents=True)
+    for item in src.iterdir():
+        target = dst / item.name
+        if item.is_dir():
+            shutil.copytree(item, target, dirs_exist_ok=False)
+            continue
+        if item.suffix == ".json":
+            try:
+                payload = json.loads(item.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                shutil.copy2(item, target)
+                continue
+            target.write_text(
+                json.dumps(_brand_openapi_json(payload), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        else:
+            shutil.copy2(item, target)
+
+
+def _copy_root_markdown_pages(src_root: Path, dst_root: Path) -> None:
+    for page in ROOT_MARKDOWN_PAGES:
+        src = src_root / page
+        if src.is_file():
+            shutil.copy2(src, dst_root / page)
+
+
 def _remove_legacy_en_scenarios_mirror(docs_dir: Path) -> None:
     legacy = docs_dir / "en" / SCENARIOS_ROOT
     if legacy.is_dir():
@@ -303,6 +430,7 @@ def _prepare_ru_build_tree(docs_dir: Path, ru_dir: Path) -> None:
     if not index_src.is_file():
         raise FileNotFoundError(f"Нет корневой страницы документации: {index_src}")
     shutil.copy2(index_src, ru_dir / "index.md")
+    _copy_root_markdown_pages(docs_dir, ru_dir)
 
     guides_src = docs_dir / "guides"
     if guides_src.is_dir():
@@ -313,8 +441,8 @@ def _prepare_ru_build_tree(docs_dir: Path, ru_dir: Path) -> None:
     if scenarios_src.is_dir():
         _populate_ru_scenario_index_tree(scenarios_src, scenarios_dst)
 
-    for extra in ("openapi", "assets"):
-        _copy_optional_subdir(docs_dir, extra, ru_dir)
+    _copy_openapi_subdir(docs_dir, ru_dir)
+    _copy_optional_subdir(docs_dir, "assets", ru_dir)
 
 
 def _copy_screenshots(src_slug_dir: Path, dst_slug_dir: Path) -> None:
@@ -371,20 +499,15 @@ def _build_en_scenarios_from_readme_en(scenarios_src: Path, en_scenarios_out: Pa
         )
         if not subdirs:
             continue
-        title = d.name.replace("_", " ").replace("-", " ").strip() or d.name
-        title_json = json.dumps(title, ensure_ascii=False)
-        lines = [
-            "---",
-            f"title: {title_json}",
-            "---",
-            "",
-            "## Pages",
-            "",
-        ]
-        for sub in subdirs:
-            lines.append(f"- [{sub.name}]({sub.name}/)")
-        lines.append("")
-        (d / "index.md").write_text("\n".join(lines), encoding="utf-8")
+        title = _service_label_en(d.name)
+        links = [(_title_from_index_md(sub / "index.md"), f"{sub.name}/") for sub in subdirs]
+        _write_hub_index(
+            d / "index.md",
+            title,
+            _service_intro_en(d.name),
+            links,
+            heading="Pages",
+        )
 
     services = sorted(
         x.name
@@ -393,20 +516,13 @@ def _build_en_scenarios_from_readme_en(scenarios_src: Path, en_scenarios_out: Pa
     )
     if not services:
         return
-    lines = [
-        "---",
-        'title: "E2E scenarios"',
-        "---",
-        "",
+    _write_hub_index(
+        en_scenarios_out / "index.md",
+        "E2E scenarios",
         "Step-by-step UI scenarios with screenshots (tests with `title_en` / `description_en`).",
-        "",
-        "## Services",
-        "",
-    ]
-    for svc in services:
-        lines.append(f"- [{svc}]({svc}/)")
-    lines.append("")
-    (en_scenarios_out / "index.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        [(_service_label_en(svc), f"{svc}/") for svc in services],
+        heading="Services",
+    )
 
 
 def _prepare_en_build_tree(docs_dir: Path, en_dir: Path) -> None:
@@ -419,13 +535,14 @@ def _prepare_en_build_tree(docs_dir: Path, en_dir: Path) -> None:
     if not en_index.is_file():
         raise FileNotFoundError(f"Нет английской корневой страницы: {en_index}")
     shutil.copy2(en_index, en_dir / "index.md")
+    _copy_root_markdown_pages(en_src, en_dir)
 
     guides_en = en_src / "guides"
     if guides_en.is_dir():
         shutil.copytree(guides_en, en_dir / "guides", dirs_exist_ok=False)
 
-    for extra in ("openapi", "assets"):
-        _copy_optional_subdir(docs_dir, extra, en_dir)
+    _copy_openapi_subdir(docs_dir, en_dir)
+    _copy_optional_subdir(docs_dir, "assets", en_dir)
 
     _build_en_scenarios_from_readme_en(docs_dir / SCENARIOS_ROOT, en_dir / SCENARIOS_ROOT)
 
@@ -452,6 +569,116 @@ def _generate_api_docs(ru_dir: Path, en_dir: Path) -> None:
         logger.warning(f"⚠️ Не удалось сгенерировать документацию API: {e}")
 
 
+def _markdown_without_frontmatter(text: str) -> str:
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            return text[end + 4 :].lstrip()
+    return text
+
+
+def _title_from_markdown(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            fm = text[3:end]
+            for line in fm.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("title:"):
+                    raw = stripped.split(":", 1)[1].strip()
+                    try:
+                        return str(json.loads(raw))[:200]
+                    except json.JSONDecodeError:
+                        return raw.strip("'\"")[:200]
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip()[:200]
+    return path.parent.name.replace("-", " ").title()
+
+
+def _plain_text_excerpt(markdown: str, limit: int = 220) -> str:
+    text = _markdown_without_frontmatter(markdown)
+    text = re.sub(r"```.*?```", " ", text, flags=re.S)
+    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"^[#>*\-\s`]+", "", text, flags=re.M)
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
+def _page_url_for_markdown(path: Path, docs_root: Path, base_url: str) -> str:
+    rel = path.relative_to(docs_root)
+    if rel.name == "index.md":
+        url_path = rel.parent.as_posix()
+    else:
+        url_path = rel.with_suffix("").as_posix()
+    if not url_path or url_path == ".":
+        return base_url.rstrip("/") + "/"
+    return base_url.rstrip("/") + "/" + url_path.rstrip("/") + "/"
+
+
+def _iter_llms_pages(docs_root: Path) -> list[Path]:
+    pages = []
+    for path in sorted(docs_root.rglob("*.md")):
+        if any(part.startswith(".") for part in path.relative_to(docs_root).parts):
+            continue
+        pages.append(path)
+    return pages
+
+
+def _generate_llms_files(docs_root: Path, language: str, base_url: str) -> None:
+    if not docs_root.is_dir():
+        return
+
+    title = "Humanitec Documentation" if language == "en" else "Документация Humanitec"
+    description = (
+        "Reference documentation for the Humanitec platform: quickstart, API, guides, and UI scenarios."
+        if language == "en"
+        else "Справочная документация платформы Humanitec: быстрый старт, API, руководства и UI-сценарии."
+    )
+    pages = _iter_llms_pages(docs_root)
+
+    llms_lines = [
+        f"# {title}",
+        "",
+        f"> {description}",
+        "",
+        "## Pages",
+        "",
+    ]
+    full_lines = [f"# {title}", "", description, ""]
+
+    for path in pages:
+        markdown = path.read_text(encoding="utf-8")
+        page_title = _title_from_markdown(path)
+        url = _page_url_for_markdown(path, docs_root, base_url)
+        excerpt = _plain_text_excerpt(markdown)
+        if excerpt:
+            llms_lines.append(f"- [{page_title}]({url}): {excerpt}")
+        else:
+            llms_lines.append(f"- [{page_title}]({url})")
+
+        full_lines.extend(
+            [
+                f"## {page_title}",
+                "",
+                f"Source: {url}",
+                "",
+                _markdown_without_frontmatter(markdown).strip(),
+                "",
+            ]
+        )
+
+    (docs_root / "llms.txt").write_text("\n".join(llms_lines).rstrip() + "\n", encoding="utf-8")
+    (docs_root / "llms-full.txt").write_text("\n".join(full_lines).rstrip() + "\n", encoding="utf-8")
+
+
 def main() -> None:
     root = _repo_root()
     docs_dir = root / "docs"
@@ -468,6 +695,8 @@ def main() -> None:
 
     # Генерация документации API
     _generate_api_docs(ru_path, en_path)
+    _generate_llms_files(ru_path, "ru", "https://humanitec.ru/documentation/")
+    _generate_llms_files(en_path, "en", "https://humanitec.ru/documentation/en/")
 
 
 if __name__ == "__main__":

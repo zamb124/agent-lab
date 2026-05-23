@@ -26,7 +26,7 @@ async for event in subscriber.subscribe(task_id):
 
 A2A типы из `a2a-sdk` (свои не создавать): `TaskStatusUpdateEvent` (working/input-required/completed/failed), `TaskArtifactUpdateEvent` (текстовые чанки от LLM). Автоматически добавляются `task_id`, `context_id`, `trace_id`, `span_id` (OpenTelemetry).
 
-**A2A вложения (`FilePart`):** `FileWithBytes` на HTTP API flows не пишется на локальный диск — канал вызывает `FileProcessor.persist_uploaded_file_as_state_files_item` (внутри — `persist_uploaded_file` / S3 + `FileRecord`). Имя без суффикса дополняется расширением по MIME в `process_file_from_bytes`. В `state.files` — `file_id` и same-origin `path` вида `/{server.name}/api/v1/files/download/{file_id}`. `FileWithUri` — без персиста, `path` остаётся URI. Нужен `active_company` в контексте. При takeover ответ пользователя с файлами — в `dialog_log` уходят только `file_id` (чтение локального path с диска не используется).
+**A2A вложения (`FilePart`):** `FileWithBytes` на HTTP API flows не пишется на локальный диск — канал вызывает `FileProcessor.persist_uploaded_file_as_state_files_item` (внутри — `persist_uploaded_file` / S3 + `FileRecord`). Внешние `FileWithBytes.name`/`mimeType` сразу мапятся в `state.files[].original_name/content_type`. В `state.files` — `file_id` и same-origin `url` вида `/{server.name}/api/v1/files/download/{file_id}`. `FileWithUri` — без персиста, `url` остаётся URI, `name` и `mimeType` обязательны на входной границе. Нужен `active_company` в контексте. При takeover ответ пользователя с файлами — в `dialog_log` уходят только `file_id` (чтение локального `url` с диска не используется).
 
 ## HTTP клиенты
 

@@ -32,13 +32,13 @@ class ScheduledTaskRepository:
         Сохраняет scheduled task.
 
         Returns:
-            ID задачи
+            ID записи платформенного scheduler
         """
         async with self._storage.get_session() as session:
             stmt = (
                 insert(ScheduledTasks)
                 .values(
-                    id=task.id,
+                    schedule_task_id=task.schedule_task_id,
                     schedule_id=task.schedule_id,
                     flow_id=task.flow_id,
                     session_id=task.session_id,
@@ -61,7 +61,7 @@ class ScheduledTaskRepository:
                     next_run=task.next_run,
                 )
                 .on_conflict_do_update(
-                    index_elements=["id"],
+                    index_elements=[ScheduledTasks.schedule_task_id],
                     set_={
                         "schedule_id": task.schedule_id,
                         "status": task.status.value
@@ -74,12 +74,12 @@ class ScheduledTaskRepository:
             )
             await session.execute(stmt)
             await session.commit()
-            return task.id
+            return task.schedule_task_id
 
-    async def get_by_id(self, task_id: str) -> ScheduledTaskInfo | None:
-        """Получает задачу по ID."""
+    async def get_by_schedule_task_id(self, schedule_task_id: str) -> ScheduledTaskInfo | None:
+        """Получает задачу по schedule_task_id."""
         async with self._storage.get_session() as session:
-            stmt = select(ScheduledTasks).where(ScheduledTasks.id == task_id)
+            stmt = select(ScheduledTasks).where(ScheduledTasks.schedule_task_id == schedule_task_id)
             result = await session.execute(stmt)
             row = result.scalar_one_or_none()
 
@@ -122,7 +122,7 @@ class ScheduledTaskRepository:
 
     async def update_status(
         self,
-        task_id: str,
+        schedule_task_id: str,
         status: ScheduledTaskStatus,
         executed_at: datetime | None = None,
         next_run: datetime | None = None,
@@ -139,17 +139,21 @@ class ScheduledTaskRepository:
             if error_message:
                 values["error_message"] = error_message
 
-            stmt = update(ScheduledTasks).where(ScheduledTasks.id == task_id).values(**values)
+            stmt = (
+                update(ScheduledTasks)
+                .where(ScheduledTasks.schedule_task_id == schedule_task_id)
+                .values(**values)
+            )
 
             result = await session.execute(stmt)
             await session.commit()
 
             return get_rowcount(result) > 0
 
-    async def delete(self, task_id: str) -> bool:
+    async def delete(self, schedule_task_id: str) -> bool:
         """Удаляет задачу."""
         async with self._storage.get_session() as session:
-            stmt = delete(ScheduledTasks).where(ScheduledTasks.id == task_id)
+            stmt = delete(ScheduledTasks).where(ScheduledTasks.schedule_task_id == schedule_task_id)
             result = await session.execute(stmt)
             await session.commit()
 
@@ -158,7 +162,7 @@ class ScheduledTaskRepository:
     def _row_to_task_info(self, row: ScheduledTasks) -> ScheduledTaskInfo:
         """Конвертирует строку БД в ScheduledTaskInfo."""
         return ScheduledTaskInfo(
-            id=row.id,
+            schedule_task_id=row.schedule_task_id,
             schedule_id=row.schedule_id,
             flow_id=row.flow_id,
             session_id=row.session_id,

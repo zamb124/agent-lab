@@ -146,7 +146,7 @@ async def integration_authorize_url(
     return_path: Annotated[
         str,
         Query(description="Путь на платформе после OAuth (внутри origin)"),
-    ] = "/crm/spaces",
+    ] = "/crm/namespaces",
     return_origin: Annotated[
         str | None,
         Query(

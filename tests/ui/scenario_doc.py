@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import os
 import re
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -13,14 +14,163 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Ожидание перед скриншотом для инструкций: без networkidle (WS держит соединение открытым).
+# Основная готовность перед скриншотом не опирается на networkidle: WS держит соединение открытым.
 _READY_MS = 30_000
+_VISUAL_READY_MS = 12_000
+_STABLE_LAYOUT_FRAMES = 6
 # Lit-корни платформенных SPA в E2E (см. tests/ui/apps.py).
 _SHELL_SELECTOR = "sync-app, crm-app, rag-app, flows-app, frontend-app, office-app"
+_LOADING_SELECTOR = (
+    "glass-spinner, "
+    ".loading-container, "
+    ".loading-spinner, "
+    ".loading-state, "
+    ".loading-overlay, "
+    ".island-loading-overlay, "
+    ".motion-skeleton, "
+    ".skeleton, "
+    "[aria-busy='true'], "
+    "[data-loading='true'], "
+    "platform-button[loading], "
+    "glass-button[loading], "
+    "[role='progressbar']"
+)
+
+
+async def _force_light_theme(page: Page) -> None:
+    await page.evaluate(
+        """
+        () => {
+            try {
+                window.localStorage.setItem('platform_theme', 'light');
+            } catch (_) {}
+            document.documentElement.removeAttribute('data-platform-theme-lock');
+            document.documentElement.setAttribute('data-theme', 'light');
+            const meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', '#ffffff');
+        }
+        """
+    )
+
+
+async def _await_fonts_ready(page: Page) -> None:
+    await page.wait_for_function(
+        "() => !document.fonts || document.fonts.status === 'loaded'",
+        timeout=_VISUAL_READY_MS,
+    )
+
+
+async def _await_visible_images_ready(page: Page) -> None:
+    await page.wait_for_function(
+        """
+        () => {
+            const elements = [];
+            const walk = (root) => {
+                if (!root || !root.querySelectorAll) return;
+                for (const el of root.querySelectorAll('*')) {
+                    elements.push(el);
+                    if (el.shadowRoot) walk(el.shadowRoot);
+                }
+            };
+            const visible = (el) => {
+                const rect = el.getBoundingClientRect();
+                if (rect.width <= 0 || rect.height <= 0) return false;
+                if (rect.bottom < 0 || rect.right < 0) return false;
+                if (rect.top > window.innerHeight || rect.left > window.innerWidth) return false;
+                const style = window.getComputedStyle(el);
+                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+            };
+
+            walk(document);
+            return elements
+                .filter((el) => el instanceof HTMLImageElement && visible(el))
+                .every((img) => img.complete && img.naturalWidth > 0);
+        }
+        """,
+        timeout=_VISUAL_READY_MS,
+    )
+
+
+async def _await_no_blocking_loaders(page: Page) -> None:
+    await page.wait_for_function(
+        """
+        (selector) => {
+            const matches = [];
+            const walk = (root) => {
+                if (!root || !root.querySelectorAll) return;
+                for (const el of root.querySelectorAll(selector)) matches.push(el);
+                for (const el of root.querySelectorAll('*')) {
+                    if (el.shadowRoot) walk(el.shadowRoot);
+                }
+            };
+            const visible = (el) => {
+                const rect = el.getBoundingClientRect();
+                if (rect.width <= 0 || rect.height <= 0) return false;
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                    return false;
+                }
+                return true;
+            };
+
+            walk(document);
+            return !matches.some(visible);
+        }
+        """,
+        arg=_LOADING_SELECTOR,
+        timeout=_VISUAL_READY_MS,
+    )
+
+
+async def _await_stable_layout(page: Page) -> None:
+    await page.wait_for_function(
+        """
+        ([shellSelector, frames]) => new Promise((resolve) => {
+            let last = '';
+            let stableFrames = 0;
+
+            const snapshot = () => {
+                const shell = document.querySelector(shellSelector) || document.body;
+                const rect = shell.getBoundingClientRect();
+                const doc = document.documentElement;
+                return [
+                    Math.round(rect.width),
+                    Math.round(rect.height),
+                    Math.round(rect.top),
+                    Math.round(rect.left),
+                    Math.round(doc.scrollWidth),
+                    Math.round(doc.scrollHeight),
+                    Math.round(document.body.scrollWidth),
+                    Math.round(document.body.scrollHeight),
+                    document.body.innerText.length,
+                ].join(':');
+            };
+
+            const tick = () => {
+                const current = snapshot();
+                if (current === last) {
+                    stableFrames += 1;
+                } else {
+                    stableFrames = 0;
+                    last = current;
+                }
+                if (stableFrames >= frames) {
+                    resolve(true);
+                    return;
+                }
+                requestAnimationFrame(tick);
+            };
+
+            requestAnimationFrame(tick);
+        })
+        """,
+        arg=[_SHELL_SELECTOR, _STABLE_LAYOUT_FRAMES],
+        timeout=_VISUAL_READY_MS,
+    )
 
 
 async def _await_page_ready(page: Page) -> None:
-    """Дождаться DOM и document.readyState; при наличии — видимости корневого web component shell."""
+    """Дождаться DOM, SPA-shell и визуальной стабильности перед снимком инструкции."""
     await page.wait_for_load_state("domcontentloaded", timeout=_READY_MS)
     await page.wait_for_function(
         "() => document.readyState === 'complete'",
@@ -29,6 +179,23 @@ async def _await_page_ready(page: Page) -> None:
     root = page.locator(_SHELL_SELECTOR)
     if await root.count() > 0:
         await root.first.wait_for(state="visible", timeout=_READY_MS)
+    await _await_fonts_ready(page)
+    await _await_visible_images_ready(page)
+    await _await_no_blocking_loaders(page)
+    await _await_stable_layout(page)
+
+
+async def _await_screenshot_ready(page: Page) -> None:
+    await _force_light_theme(page)
+    await _await_page_ready(page)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=1_500)
+    except PlaywrightTimeoutError:
+        pass
+    await _force_light_theme(page)
+    await _await_stable_layout(page)
+
+
 _DOCS_SCENARIOS = _REPO_ROOT / "docs" / "scenarios"
 _ENV_DISABLE = "UI_SCENARIO_DOCS"
 
@@ -86,6 +253,7 @@ class ScenarioRecorder:
     slug: str
     out_dir: Path
     steps: list[_StepRecord] = field(default_factory=list)
+    _screenshots_prepared: bool = field(default=False, init=False, repr=False)
 
     @classmethod
     def from_pytest_node(cls, node) -> ScenarioRecorder:
@@ -160,6 +328,17 @@ class ScenarioRecorder:
         v = os.environ.get(_ENV_DISABLE, "").strip().lower()
         return v in ("0", "false", "no", "off")
 
+    def _prepare_screenshot_dir(self) -> Path:
+        shot_dir = self.out_dir / "screenshots"
+        if not self._screenshots_prepared:
+            if shot_dir.exists():
+                shutil.rmtree(shot_dir)
+            shot_dir.mkdir(parents=True, exist_ok=True)
+            self._screenshots_prepared = True
+            return shot_dir
+        shot_dir.mkdir(parents=True, exist_ok=True)
+        return shot_dir
+
     async def step(
         self,
         label: str,
@@ -170,17 +349,17 @@ class ScenarioRecorder:
     ) -> None:
         """Фиксирует шаг; при переданном page — ожидание готовности UI, затем скриншот (по умолчанию вся страница). label_en — README.en.md при паре title_en/description_en."""
         rel: str | None = None
-        if page is not None:
+        if page is not None and not self.disabled():
             n = len(self.steps) + 1
-            shot_dir = self.out_dir / "screenshots"
-            shot_dir.mkdir(parents=True, exist_ok=True)
+            shot_dir = self._prepare_screenshot_dir()
             fname = f"{n:03d}.png"
-            await _await_page_ready(page)
-            try:
-                await page.wait_for_load_state("networkidle", timeout=4_000)
-            except PlaywrightTimeoutError:
-                pass
-            await page.screenshot(path=str(shot_dir / fname), full_page=full_page)
+            await _await_screenshot_ready(page)
+            await page.screenshot(
+                path=str(shot_dir / fname),
+                full_page=full_page,
+                animations="disabled",
+                caret="hide",
+            )
             rel = f"screenshots/{fname}"
         le = _strip_optional(label_en)
         if self.title_en is not None and le is None:

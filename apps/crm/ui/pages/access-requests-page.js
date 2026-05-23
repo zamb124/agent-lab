@@ -2,13 +2,13 @@
  * CRMAccessRequestsPage — список входящих запросов доступа к сущностям.
  *
  * Маршрут: `/crm/access-requests`. Показывает запросы, где текущий пользователь
- * является owner. Backend публикует ссылки `/crm/access-requests/{id}` в
+ * является owner. Backend публикует ссылки `/crm/access-requests/{access_request_id}` в
  * нотификациях, отсюда entry-point.
  *
  * Источники:
  *   - `useResource('crm/access_requests', { autoload: true })` — list через
  *     listQuery({ status, limit, offset }).
- *   - `useOp('crm/access_request_update')` — PUT /access-requests/{id}.
+ *   - `useOp('crm/access_request_update')` — PUT /access-requests/{access_request_id}.
  *
  * UI: chips-фильтр (pending / approved / rejected) → список запросов;
  * для pending — кнопки «Одобрить» / «Отклонить».
@@ -310,12 +310,18 @@ export class CRMAccessRequestsPage extends PlatformPage {
         this._reload();
     }
 
-    _onApprove(requestId) {
-        this._updateOp.run({ request_id: requestId, body: { status: STATUS_APPROVED } });
+    _onApprove(accessRequestId) {
+        this._updateOp.run({
+            access_request_id: accessRequestId,
+            body: { status: STATUS_APPROVED },
+        });
     }
 
-    _onReject(requestId) {
-        this._updateOp.run({ request_id: requestId, body: { status: STATUS_REJECTED } });
+    _onReject(accessRequestId) {
+        this._updateOp.run({
+            access_request_id: accessRequestId,
+            body: { status: STATUS_REJECTED },
+        });
     }
 
     _onOpenEntity(entityId) {
@@ -409,7 +415,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
                             type="button"
                             class="btn btn-approve"
                             ?disabled=${updating}
-                            @click=${() => this._onApprove(req.request_id)}
+                            @click=${() => this._onApprove(req.access_request_id)}
                         >
                             <platform-icon name="check" size="14"></platform-icon>
                             ${this.t('access_requests_page.action_approve')}
@@ -418,7 +424,7 @@ export class CRMAccessRequestsPage extends PlatformPage {
                             type="button"
                             class="btn btn-reject"
                             ?disabled=${updating}
-                            @click=${() => this._onReject(req.request_id)}
+                            @click=${() => this._onReject(req.access_request_id)}
                         >
                             <platform-icon name="close" size="14"></platform-icon>
                             ${this.t('access_requests_page.action_reject')}

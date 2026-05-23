@@ -15,6 +15,20 @@ from tests.ui.scenario_doc import ScenarioRecorder
 from tests.ui.subdomain_setup import ensure_ui_subdomain_mappings
 
 
+_FORCE_LIGHT_THEME_INIT_SCRIPT = """
+(() => {
+    try {
+        window.localStorage.setItem('platform_theme', 'light');
+    } catch (_) {}
+    const root = document.documentElement;
+    if (root) {
+        root.removeAttribute('data-platform-theme-lock');
+        root.setAttribute('data-theme', 'light');
+    }
+})();
+"""
+
+
 @pytest_asyncio.fixture
 async def scenario(request: pytest.FixtureRequest) -> ScenarioRecorder:
     """Собирает шаги и скриншоты; пишет `docs/scenarios/<service>/<tag>/<slug>/README.md` (см. `@pytest.mark.scenario`, опционально `doc_slug`)."""
@@ -54,7 +68,8 @@ async def _ui_subdomain_mappings(
 @pytest_asyncio.fixture
 async def page(_browser_session: Browser) -> Page:
     """Браузер без cookie — редирект на логин для защищённых SPA."""
-    context: BrowserContext = await _browser_session.new_context()
+    context: BrowserContext = await _browser_session.new_context(color_scheme="light")
+    await context.add_init_script(_FORCE_LIGHT_THEME_INIT_SCRIPT)
     await install_click_highlight_on_context(context)
     p = await context.new_page()
     yield p
@@ -68,7 +83,8 @@ async def ui_page_anonymous(page: Page) -> Page:
 
 
 async def _authenticated_page(browser: Browser, token: str) -> tuple[Page, BrowserContext]:
-    context = await browser.new_context()
+    context = await browser.new_context(color_scheme="light")
+    await context.add_init_script(_FORCE_LIGHT_THEME_INIT_SCRIPT)
     await install_click_highlight_on_context(context)
     await add_auth_token_cookie(context, token)
     page = await context.new_page()

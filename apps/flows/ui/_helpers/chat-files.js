@@ -5,13 +5,13 @@ function stableFileKey(file) {
         return '';
     }
     const fid = asString(file.file_id);
-    const path = asString(file.path) || asString(file.url);
-    return fid || path || asString(file.name);
+    const url = asString(file.url);
+    return fid || url || asString(file.original_name);
 }
 
 /**
  * Собирает файлы активного chat-контекста из канонического bucket-а файлов,
- * локальных файлов сообщения и legacy fileIds.
+ * локальных файлов сообщения.
  *
  * @param {object | null | undefined} chatState
  * @param {unknown[]} messages
@@ -44,19 +44,6 @@ export function collectCurrentChatFiles(chatState, messages) {
             if (key.length > 0) {
                 byKey.set(key, { ...(byKey.get(key) || {}), ...file });
             }
-        }
-        for (const rawId of asArray(message?.fileIds)) {
-            const fid = asString(rawId);
-            if (fid.length === 0 || byKey.has(fid)) {
-                continue;
-            }
-            const path = `/flows/api/v1/files/download/${encodeURIComponent(fid)}`;
-            byKey.set(fid, {
-                file_id: fid,
-                name: fid,
-                path,
-                url: path,
-            });
         }
     }
 

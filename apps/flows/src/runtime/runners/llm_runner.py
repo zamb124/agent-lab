@@ -444,7 +444,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             _billing_fallback_models,
         ) = split_llm_config_for_client(llm_config)
         uses_platform_free_pool = should_use_platform_default_free_pool(
-            model_name=billing_model,
+            model=billing_model,
             provider=billing_provider,
             api_key=billing_api_key,
             base_url=billing_base_url,

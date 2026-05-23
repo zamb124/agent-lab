@@ -162,8 +162,8 @@ class AmoCRMConnector:
                             "либо добавьте тип вручную."
                         ),
                         message_en=(
-                            f"AmoCRM integration in space «{ns}» requires entity type "
-                            f"«{type_id}» for this company. Create a space from the sales template "
+                            f"AmoCRM integration in namespace «{ns}» requires entity type "
+                            f"«{type_id}» for this company. Create a namespace from the sales template "
                             "or add the type manually."
                         ),
                         steps_ru=(
@@ -172,25 +172,25 @@ class AmoCRMConnector:
                             "Затем снова подключите AmoCRM в настройках интеграций.",
                         ),
                         steps_en=(
-                            "In Spaces, create a space from the sales template.",
-                            f"Or open space «{ns}» and add type «{type_id}» manually.",
+                            "In Namespaces, create a namespace from the sales template.",
+                            f"Or open namespace «{ns}» and add type «{type_id}» manually.",
                             "Then connect AmoCRM again in integration settings.",
                         ),
                         links=(
                             GuidedIntegrationLink(
-                                href="/crm/settings/spaces",
+                                href="/crm/namespaces",
                                 label_ru="Пространства",
-                                label_en="Spaces",
+                                label_en="Namespaces",
                             ),
                             GuidedIntegrationLink(
-                                href=f"/crm/settings/spaces/{quote(ns, safe='')}",
+                                href=f"/crm/namespaces/{quote(ns, safe='')}",
                                 label_ru=f"Пространство «{ns}»",
-                                label_en=f"Space «{ns}»",
+                                label_en=f"Namespace «{ns}»",
                             ),
                             GuidedIntegrationLink(
                                 href="/crm/settings/templates",
                                 label_ru="Шаблоны пространств",
-                                label_en="Space templates",
+                                label_en="Namespace templates",
                             ),
                         ),
                     )
@@ -208,7 +208,7 @@ class AmoCRMConnector:
                     company_id=company_id,
                     extra=extra,
                 )
-        await self._namespace_template_service.ensure_core_workspace_types_linked_to_namespace(ns)
+        await self._namespace_template_service.ensure_core_namespace_types_linked_to_namespace(ns)
 
     async def on_credential_saved(self, credential: IntegrationCredential) -> None:
         if credential.provider != IntegrationProvider.AMOCRM:

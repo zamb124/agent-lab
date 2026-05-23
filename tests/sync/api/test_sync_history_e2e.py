@@ -49,13 +49,13 @@ async def test_history_visible_in_fresh_http_client_after_send(
                 http_send, http_send.headers,
                 channel_id=channel_id, text=f"msg{i:02d} {unique_id}",
             )
-            sent_ids.append(sent["id"])
+            sent_ids.append(sent["message_id"])
 
     async with http_owner(sync_auth_token) as http_read:
         r = await http_read.get(f"/sync/api/v1/channels/{channel_id}/messages")
     assert r.status_code == 200, r.text
     items = r.json()["items"]
-    assert [m["id"] for m in items] == sent_ids
+    assert [m["message_id"] for m in items] == sent_ids
     bodies = [
         next(c["data"]["body"] for c in m["contents"] if c["type"] == "text/plain")
         for m in items
@@ -169,9 +169,9 @@ async def test_history_excludes_deleted_messages(
             company_id=company_id, unique_id=unique_id, suffix="del",
             channel_name="del_history",
         )
-        m1 = (await send_text_message(http, http.headers, channel_id=channel_id, text=f"keep1 {unique_id}"))["id"]
-        m2 = (await send_text_message(http, http.headers, channel_id=channel_id, text=f"to-delete {unique_id}"))["id"]
-        m3 = (await send_text_message(http, http.headers, channel_id=channel_id, text=f"keep2 {unique_id}"))["id"]
+        m1 = (await send_text_message(http, http.headers, channel_id=channel_id, text=f"keep1 {unique_id}"))["message_id"]
+        m2 = (await send_text_message(http, http.headers, channel_id=channel_id, text=f"to-delete {unique_id}"))["message_id"]
+        m3 = (await send_text_message(http, http.headers, channel_id=channel_id, text=f"keep2 {unique_id}"))["message_id"]
         r = await http.delete(f"/sync/api/v1/channels/{channel_id}/messages/{m2}")
         assert r.status_code == 200, r.text
 
@@ -179,7 +179,7 @@ async def test_history_excludes_deleted_messages(
         r = await http_read.get(f"/sync/api/v1/channels/{channel_id}/messages")
     assert r.status_code == 200
     items = r.json()["items"]
-    ids = [m["id"] for m in items]
+    ids = [m["message_id"] for m in items]
     assert ids == [m1, m3]
     assert m2 not in ids
 
@@ -206,7 +206,7 @@ async def test_history_reflects_edits_and_reactions(
         )
         await add_member_via_http(http, http.headers, channel_id=channel_id, user_id=user2_id)
         sent = await send_text_message(http, http.headers, channel_id=channel_id, text=f"v1 {unique_id}")
-        message_id = sent["id"]
+        message_id = sent["message_id"]
         e = await http.patch(
             f"/sync/api/v1/channels/{channel_id}/messages/{message_id}",
             json={
@@ -230,7 +230,7 @@ async def test_history_reflects_edits_and_reactions(
     items = r.json()["items"]
     assert len(items) == 1
     msg = items[0]
-    assert msg["id"] == message_id
+    assert msg["message_id"] == message_id
     assert msg.get("edited_at") is not None
     text_block = next(c for c in msg["contents"] if c["type"] == "text/plain")
     assert text_block["data"]["body"] == f"v2 {unique_id}"

@@ -189,7 +189,7 @@ class ScheduledTasks(Base):
 
     __tablename__ = "scheduled_tasks"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)
+    schedule_task_id: Mapped[str] = mapped_column("id", String, primary_key=True)
     schedule_id: Mapped[str | None] = mapped_column(String, default=None)
     flow_id: Mapped[str] = mapped_column(String)
     session_id: Mapped[str] = mapped_column(String)
@@ -216,7 +216,10 @@ class ScheduledTasks(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<ScheduledTasks(id='{self.id}', flow_id='{self.flow_id}', status='{self.status}')>"
+        return (
+            f"<ScheduledTasks(schedule_task_id='{self.schedule_task_id}', "
+            f"flow_id='{self.flow_id}', status='{self.status}')>"
+        )
 
 
 class Resources(Base):

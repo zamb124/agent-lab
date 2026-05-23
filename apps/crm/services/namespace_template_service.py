@@ -32,7 +32,7 @@ class NamespaceEditability(TypedDict):
     can_add_types: bool
     locked_type_ids: list[str]
     removable_type_ids: list[str]
-    all_spaces_type_ids: list[str]
+    all_namespaces_type_ids: list[str]
     lock_reason: str | None
 
 
@@ -107,7 +107,7 @@ class NamespaceTemplateService:
         missing = REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS - final_ids
         if missing:
             raise ValueError(
-                f"Шаблон пространства обязан содержать типы note и task; в шаблоне отсутствуют: {', '.join(sorted(missing))}"
+                f"Шаблон namespace обязан содержать типы note и task; в шаблоне отсутствуют: {', '.join(sorted(missing))}"
             )
 
     async def _materialize_entity_type_row(
@@ -170,13 +170,13 @@ class NamespaceTemplateService:
         )
         if refreshed is None:
             raise ValueError(
-                f"EntityType {item.type_id!r} не найден после update_metadata в пространстве {target_namespace!r}"
+                f"EntityType {item.type_id!r} не найден после update_metadata в namespace {target_namespace!r}"
             )
         return refreshed
 
-    async def ensure_core_workspace_types_linked_to_namespace(self, namespace_name: str) -> None:
+    async def ensure_core_namespace_types_linked_to_namespace(self, namespace_name: str) -> None:
         """
-        Гарантирует типы note и task в пространстве: при отсутствии строки — копия из default.
+        Гарантирует типы note и task в namespace: при отсутствии строки — копия из default.
         """
         name = namespace_name.strip()
         if not name:
@@ -221,7 +221,7 @@ class NamespaceTemplateService:
                 break
         if source_ns is None:
             raise ValueError(
-                f"Тип сущности {type_id!r} не найден ни в одном пространстве компании. Добавьте тип в каталоге или через шаблон пространства."
+                f"Тип сущности {type_id!r} не найден ни в одном namespace компании. Добавьте тип в каталоге или через шаблон namespace."
             )
         _ = await self._entity_type_repo.clone_entity_type_between_namespaces(
             type_id,
@@ -300,7 +300,7 @@ class NamespaceTemplateService:
                 is_system=False,
             )
 
-        await self.ensure_core_workspace_types_linked_to_namespace(namespace_name)
+        await self.ensure_core_namespace_types_linked_to_namespace(namespace_name)
         await self._ensure_platform_types_in_namespace(
             company_id=company_id,
             target_namespace=namespace_name,
@@ -352,7 +352,7 @@ class NamespaceTemplateService:
             "can_add_types": True,
             "locked_type_ids": locked_type_ids,
             "removable_type_ids": removable_type_ids,
-            "all_spaces_type_ids": addable_type_ids,
+            "all_namespaces_type_ids": addable_type_ids,
             "lock_reason": None,
         }
 

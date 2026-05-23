@@ -14,7 +14,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 
 const CARDS = [
-    { route: 'spaces',             icon: 'folder',   key: 'card_spaces' },
+    { route: 'namespaces',             icon: 'folder',   key: 'card_namespaces' },
     { route: 'templates',          icon: 'layers',   key: 'card_templates' },
     { route: 'namespace_imports',  icon: 'workflow', key: 'card_namespace_imports' },
     { route: 'relationship_types', icon: 'network',  key: 'card_relationship_types' },

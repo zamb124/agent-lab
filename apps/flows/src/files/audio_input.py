@@ -7,8 +7,8 @@ takeover), потому что embed/chat ходят через те же `/flow
 и `/.../message/stream` эндпоинты, что и публичный A2A API.
 
 Контракт:
-- На входе — список item-ов формата state.files (`name`, `path`, `mime_type`,
-  `size`, опционально `file_id`).
+- На входе — список item-ов формата state.files (`original_name`, `url`,
+  `content_type`, `file_size`, опционально `file_id`).
 - Для каждого item с категорией AUDIO достаются байты (через `file_processor`
   + S3, по `file_id`; URI без `file_id` пропускаются как «внешний ресурс,
   который скачивать не наша работа»), вызывается `voice_resolver.get_stt_client(...)
@@ -39,15 +39,15 @@ logger = get_logger(__name__)
 
 
 def _is_audio_item(item: dict[str, Any]) -> bool:
-    """Определяет категорию AUDIO по mime_type, иначе по расширению `name`."""
-    mime = item.get("mime_type")
-    if isinstance(mime, str) and mime.strip():
-        cat = mime_to_category(mime.strip().split(";")[0].strip())
+    """Определяет категорию AUDIO по content_type, иначе по расширению `original_name`."""
+    content_type = item.get("content_type")
+    if isinstance(content_type, str) and content_type.strip():
+        cat = mime_to_category(content_type.strip().split(";", 1)[0].strip())
         if cat is FileCategory.AUDIO:
             return True
-    name = item.get("name")
-    if isinstance(name, str) and name.strip():
-        ext = Path(name).suffix.lower()
+    original_name = item.get("original_name")
+    if isinstance(original_name, str) and original_name.strip():
+        ext = Path(original_name).suffix.lower()
         if ext and ext_to_category(ext) is FileCategory.AUDIO:
             return True
     return False
@@ -61,7 +61,7 @@ async def _read_persisted_audio_bytes(
     """
     Читает байты persisted-файла из S3 по file_id.
 
-    Возвращает (audio_bytes, original_name, mime_type).
+    Возвращает (audio_bytes, original_name, content_type).
     """
     record = await container.file_processor.get_file_record(file_id)
     if record is None:
@@ -83,7 +83,7 @@ async def transcribe_incoming_audio_files(
     """
     Возвращает блок текста для конкатенации с content сообщения.
 
-    Формат блока: `\n[AUDIO_TRANSCRIPT name=<file>]\n<текст>\n[/AUDIO_TRANSCRIPT]`
+    Формат блока: `\n[AUDIO_TRANSCRIPT original_name=<file>]\n<текст>\n[/AUDIO_TRANSCRIPT]`
     на каждое успешно распознанное аудио. Если входящих audio-вложений нет —
     пустая строка.
     """
@@ -115,18 +115,18 @@ async def transcribe_incoming_audio_files(
         if not isinstance(file_id, str) or not file_id.strip():
             logger.info(
                 "audio_input.skip_uri_only",
-                name=item.get("name"),
-                mime_type=item.get("mime_type"),
+                original_name=item.get("original_name"),
+                content_type=item.get("content_type"),
             )
             continue
-        audio_bytes, original_name, mime_type = await _read_persisted_audio_bytes(
+        audio_bytes, original_name, content_type = await _read_persisted_audio_bytes(
             container=container,
             file_id=file_id,
         )
         result = await stt.transcribe_audio(
             audio_bytes=audio_bytes,
             file_name=original_name,
-            mime_type=mime_type,
+            mime_type=content_type,
             language=merged.language,
         )
         text = (result.text or "").strip()
@@ -139,7 +139,7 @@ async def transcribe_incoming_audio_files(
             )
             continue
         parts.append(
-            f"\n[AUDIO_TRANSCRIPT name={original_name}]\n{text}\n[/AUDIO_TRANSCRIPT]"
+            f"\n[AUDIO_TRANSCRIPT original_name={original_name}]\n{text}\n[/AUDIO_TRANSCRIPT]"
         )
 
     return "".join(parts)

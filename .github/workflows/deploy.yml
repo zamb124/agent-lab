@@ -224,6 +224,10 @@ jobs:
             echo "::error title=Missing image_tag::Не задан inputs.image_tag и пустой needs.build.outputs.image_tag."
             exit 1
           fi
+          if [ "$TAG" = "latest" ]; then
+            echo "::error title=Invalid image_tag::image_tag=latest запрещён: он ломает SERVER__DEPLOYMENT_VERSION и PWA-инвалидацию статики."
+            exit 1
+          fi
           printf '%s\n' "image_tag=$TAG" >> "${GITHUB_OUTPUT}"
           printf '%s\n' "Deploying image tag: ${TAG}"
 
@@ -231,7 +235,7 @@ jobs:
         run: python3 deploy/scripts/render_helm_app_conf.py
 
       - name: Helm lint (sanity)
-        run: helm lint "$HELM_CHART"
+        run: helm lint "$HELM_CHART" --set image.tag="${{ steps.tag.outputs.image_tag }}"
 
       - name: Helm clear pending release lock (if any)
         env:

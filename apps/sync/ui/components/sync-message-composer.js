@@ -312,6 +312,7 @@ export class SyncMessageComposer extends PlatformElement {
         this._members = this.useResource('sync/company_members', { autoload: true });
         this._store = this.useSlice('sync/messages_store');
         this._messagesStoreSel = this.select((s) => s.syncMessagesStore);
+        this._channelsSel = this.select((s) => s.syncChannels);
         this._authSel = this.select((s) => s.auth && s.auth.user);
         this.useEvent('sync/messages_store/reply_mode_set', (event) => this._onReplyMode(event));
         this.useEvent('sync/messages_store/edit_mode_set', (event) => this._onEditMode(event));
@@ -432,9 +433,33 @@ export class SyncMessageComposer extends PlatformElement {
     _filteredMembers() {
         if (!this._mentionQuery) return [];
         const q = this._mentionQuery.query.toLowerCase();
+        const channelMemberIds = this._channelMemberIdSet();
         return this._members.items
-            .filter((m) => resolveDisplayName(m).toLowerCase().includes(q))
+            .filter((m) => {
+                const name = resolveDisplayName(m).toLowerCase();
+                const userId = m && typeof m.user_id === 'string' ? m.user_id.toLowerCase() : '';
+                return name.includes(q) || userId.includes(q);
+            })
+            .sort((a, b) => {
+                const aId = a && typeof a.user_id === 'string' ? a.user_id : '';
+                const bId = b && typeof b.user_id === 'string' ? b.user_id : '';
+                const aInChannel = channelMemberIds.has(aId) ? 0 : 1;
+                const bInChannel = channelMemberIds.has(bId) ? 0 : 1;
+                if (aInChannel !== bInChannel) return aInChannel - bInChannel;
+                return resolveDisplayName(a).localeCompare(resolveDisplayName(b));
+            })
             .slice(0, 8);
+    }
+
+    _channelMemberIdSet() {
+        const slice = this._channelsSel.value;
+        const byChannel = slice && slice.membersByChannel;
+        const raw = byChannel && this.channelId ? byChannel[this.channelId] : null;
+        if (!Array.isArray(raw)) return new Set();
+        const ids = raw
+            .map((m) => (m && typeof m.user_id === 'string' ? m.user_id : ''))
+            .filter((id) => id !== '');
+        return new Set(ids);
     }
 
     _onKeyDown(e) {
@@ -514,14 +539,14 @@ export class SyncMessageComposer extends PlatformElement {
         if (meta !== null && typeof meta.durationMsApprox === 'number' && meta.durationMsApprox > 0) {
             recordDurationMs = meta.durationMsApprox;
         }
-        const mimeType = (typeof result.mime_type === 'string' && result.mime_type !== '')
-            ? result.mime_type
-            : (typeof result.mime === 'string' && result.mime !== '' ? result.mime : file.type);
-        const filename = (typeof result.filename === 'string' && result.filename !== '')
-            ? result.filename
-            : (typeof result.original_name === 'string' && result.original_name !== '' ? result.original_name : file.name);
-        const size = typeof result.size === 'number' ? result.size : file.size;
-        const entry = { file_id: result.file_id, filename, mime_type: mimeType, size };
+        const contentType = (typeof result.content_type === 'string' && result.content_type !== '')
+            ? result.content_type
+            : file.type;
+        const originalName = (typeof result.original_name === 'string' && result.original_name !== '')
+            ? result.original_name
+            : file.name;
+        const fileSize = typeof result.file_size === 'number' ? result.file_size : file.size;
+        const entry = { file_id: result.file_id, original_name: originalName, content_type: contentType, file_size: fileSize };
         if (typeof result.duration_ms === 'number') {
             entry.duration_ms = result.duration_ms;
         } else if (recordDurationMs !== null) {
@@ -630,19 +655,19 @@ export class SyncMessageComposer extends PlatformElement {
             contents.push({ type: 'text/plain', data: { body: text }, order: 0 });
         }
         for (const att of this._attachments) {
-            const mt = typeof att.mime_type === 'string' ? att.mime_type : '';
-            const isAudio = mt.startsWith('audio/');
-            const isVideo = mt.startsWith('video/');
-            const isImage = mt.startsWith('image/');
+            const contentType = typeof att.content_type === 'string' ? att.content_type : '';
+            const isAudio = contentType.startsWith('audio/');
+            const isVideo = contentType.startsWith('video/');
+            const isImage = contentType.startsWith('image/');
             const blockType = isAudio ? 'file/audio'
                 : isVideo ? 'file/video'
                 : isImage ? 'file/image'
                 : 'file/document';
             const data = {
                 file_id: att.file_id,
-                filename: att.filename,
-                mime_type: mt,
-                size: att.size,
+                original_name: att.original_name,
+                content_type: contentType,
+                file_size: att.file_size,
             };
             if (isAudio) {
                 data.duration_ms = typeof att.duration_ms === 'number' ? att.duration_ms : 0;
@@ -724,8 +749,8 @@ export class SyncMessageComposer extends PlatformElement {
             ${this._attachments.length > 0 ? html`
                 <div class="attachments">
                     ${this._attachments.map((att, i) => {
-                        const mt = typeof att.mime_type === 'string' ? att.mime_type : '';
-                        const isVoiceDraft = att.voiceMessage === true && mt.startsWith('audio/');
+                        const contentType = typeof att.content_type === 'string' ? att.content_type : '';
+                        const isVoiceDraft = att.voiceMessage === true && contentType.startsWith('audio/');
                         if (isVoiceDraft) {
                             const dur = typeof att.duration_ms === 'number' ? att.duration_ms : 0;
                             return html`
@@ -753,7 +778,7 @@ export class SyncMessageComposer extends PlatformElement {
                         }
                         return html`
                             <span class="att" @click=${() => this._removeAttachment(i)}>
-                                ${att.filename || att.name || ''}
+                                ${att.original_name || ''}
                                 <platform-icon name="close" size="12"></platform-icon>
                             </span>
                         `;
@@ -764,7 +789,11 @@ export class SyncMessageComposer extends PlatformElement {
                 ${memberSuggestions.length > 0 ? html`
                     <div class="mention-popup">
                         ${memberSuggestions.map((m, i) => html`
-                            <div class="item ${i === Math.max(0, Math.min(this._mentionIndex, memberSuggestions.length - 1)) ? 'active' : ''}" @click=${() => this._insertMention(m)}>${resolveDisplayName(m)}</div>
+                            <div
+                                class="item ${i === Math.max(0, Math.min(this._mentionIndex, memberSuggestions.length - 1)) ? 'active' : ''}"
+                                data-user-id=${m.user_id}
+                                @click=${() => this._insertMention(m)}
+                            >${resolveDisplayName(m)}</div>
                         `)}
                     </div>
                 ` : ''}

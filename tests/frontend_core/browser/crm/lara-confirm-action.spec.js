@@ -1,5 +1,5 @@
 /**
- * Lara embed: embed-block-action без actionHandlers -> POST flows Lara pending apply (default path).
+ * Lara embed: flows-chat-block-action без actionHandlers -> POST flows Lara pending apply (default path).
  */
 
 import { fixture, fixtureCleanup, html, expect, elementUpdated, aTimeout } from '../helpers/render.js';
@@ -46,7 +46,7 @@ describe('crm lara confirm action (embed-chat default apply)', () => {
                     : '';
 
             el.dispatchEvent(
-                new CustomEvent('embed-block-action', {
+                new CustomEvent('flows-chat-block-action', {
                     bubbles: false,
                     composed: true,
                     detail: {

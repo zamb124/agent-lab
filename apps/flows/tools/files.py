@@ -4,8 +4,8 @@
 read_file — чтение вложений; create_file — FileWriter() + create_file (процесс настроен через FileWriter.configure_process_upload при старте).
 """
 
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
@@ -36,9 +36,9 @@ def _context_namespace() -> str:
 
 
 def _is_office_file(item: JsonDict) -> bool:
-    name = str(item.get("name") or item.get("original_name") or "").lower()
-    mime = str(item.get("mime_type") or item.get("content_type") or item.get("type") or "").lower()
-    return re.search(OFFICE_EXT_RE, name) is not None or re.search(OFFICE_MIME_RE, mime) is not None
+    original_name = str(item.get("original_name") or "").lower()
+    content_type = str(item.get("content_type") or "").lower()
+    return re.search(OFFICE_EXT_RE, original_name) is not None or re.search(OFFICE_MIME_RE, content_type) is not None
 
 
 def _document_capability(raw: JsonDict, namespace: str) -> JsonDict:
@@ -101,7 +101,7 @@ async def _sync_office_file_before_read(state: ExecutionState, item: JsonDict) -
             "file_id": fid,
             "catalog_id": document.get("catalog_id") or "",
             "document_type": document.get("document_type") or "",
-            "title": document.get("title") or item.get("name") or "",
+            "title": document.get("title") or item.get("original_name") or "",
             "editor_url": document.get("editor_url") or "",
         }
     else:
@@ -109,7 +109,7 @@ async def _sync_office_file_before_read(state: ExecutionState, item: JsonDict) -
             candidate = await ServiceClient().post(
                 "office",
                 "/documents/api/v1/documents/from-file",
-                json={"file_id": fid, "title": str(item.get("name") or fid)},
+                json={"file_id": fid, "title": str(item.get("original_name") or fid)},
                 headers={NAMESPACE_HEADER: namespace},
             )
         except ServiceClientError:
@@ -201,14 +201,14 @@ def _read_file_mock(args: JsonDict, state: Any = None) -> JsonDict:
         if finfo is None:
             return {
                 "success": False,
-                "error": f"Файл не найден. Доступные: {[f.get('name') for f in files]}",
+                "error": f"Файл не найден. Доступные: {[f.get('original_name') for f in files]}",
             }
-        path = finfo.get("path")
-        if path and not Path(path).exists():
-            return {"success": False, "error": f"Файл не найден: {path}"}
+        url = finfo.get("url")
+        if url and not str(url).startswith(("http://", "https://")) and not Path(str(url)).exists():
+            return {"success": False, "error": f"Файл не найден: {url}"}
         res = FileReadResult(
-            file_name=finfo.get("name", "file"),
-            mime_type=finfo.get("mime_type"),
+            file_name=str(finfo.get("original_name") or "file"),
+            content_type=finfo.get("content_type"),
             detected_kind=FileReadKind.TEXT,
             page_count=1,
             pages=[ReadPage(index=0, text="Mock read_file content", assets=[], label=None)],
@@ -218,7 +218,7 @@ def _read_file_mock(args: JsonDict, state: Any = None) -> JsonDict:
         return {"success": True, **res.model_dump(mode="json")}
     res = FileReadResult(
         file_name=file_name_arg or "mock",
-        mime_type="text/plain",
+        content_type="text/plain",
         detected_kind=FileReadKind.TEXT,
         page_count=1,
         pages=[ReadPage(index=0, text="Mock read_file without state", assets=[], label=None)],
@@ -232,7 +232,7 @@ class ReadFileArgs(BaseModel):
 
     file_name: str | None = Field(
         None,
-        description="Имя вложения как в state.files[].name; не передавай — будет взято последнее вложение в списке (обычно последняя загрузка пользователя).",
+        description="Имя вложения как в state.files[].original_name; не передавай — будет взято последнее вложение в списке (обычно последняя загрузка пользователя).",
     )
     include_asset_bytes: bool = Field(
         False,
@@ -265,7 +265,7 @@ class CreateFileArgs(BaseModel):
 @tool(
     name="read_file",
     description=(
-        "Читает вложение из state.files. Передаёшь file_name (как в записи name) — tool сам находит объект файла в state "
+        "Читает вложение из state.files. Передаёшь file_name (как в записи original_name) — tool сам находит объект файла в state "
         "и вызывает FileReader.read. Если file_name не указан, берётся последний файл в state.files (порядок: файлы нод графа, затем вложения по мере добавления в диалоге). "
         "include_asset_bytes — base64 вложений в ответе PDF (тяжело). "
         "vision_prompt — для картинок: инструкция vision-модели."
@@ -290,7 +290,7 @@ async def read_file(
     if finfo is None:
         return {
             "success": False,
-            "error": f"Файл не найден. Доступные: {[f.get('name') for f in files]}",
+            "error": f"Файл не найден. Доступные: {[f.get('original_name') for f in files]}",
         }
 
     finfo, sync_error = await _sync_office_file_before_read(state, finfo)
@@ -354,12 +354,10 @@ async def create_file(
     payload = response.model_dump(mode="json")
     file_item = {
         "file_id": response.file_id,
-        "name": response.original_name,
-        "path": response.url,
+        "original_name": response.original_name,
         "url": response.url,
-        "mime_type": response.content_type,
-        "type": response.content_type,
-        "size": response.file_size,
+        "content_type": response.content_type,
+        "file_size": response.file_size,
     }
     _upsert_state_file(state, file_item)
     push_ui_event(

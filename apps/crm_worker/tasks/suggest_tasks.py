@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 async def crm_generate_namespace_suggests_tick(
     company_id: str,
     namespace: str,
-    scheduler_task_id: str | None = None,
+    schedule_task_id: str | None = None,
 ) -> dict[str, Any]:
     """Генерация саджестов (дубли/пропущенные) для namespace по крону."""
     logger.info(
@@ -47,7 +47,7 @@ async def crm_generate_namespace_suggests_tick(
             company_id=company_id,
             namespace=namespace,
             user_id="system",
-            data={"scheduler_task_id": scheduler_task_id},
+            data={"schedule_task_id": schedule_task_id},
             started_at=now,
         )
     )

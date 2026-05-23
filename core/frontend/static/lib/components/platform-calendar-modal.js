@@ -303,6 +303,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 min-height: 100dvh !important;
                 border-radius: 0 !important;
                 margin: 0 !important;
+                transform: none !important;
                 transform-origin: center center;
                 --modal-content-inset: 0;
                 --modal-content-radius: 0;
@@ -323,9 +324,10 @@ export class PlatformCalendarModal extends PlatformModal {
                 animation: calendarModalIn 320ms var(--easing-smooth, cubic-bezier(0.22, 1, 0.36, 1)) both;
             }
 
-            :host([open]) .modal:not(.panel-enter-active) {
+            :host([open]:not([closing])) .modal.panel-enter-active,
+            :host([open]:not([closing])) .modal:not(.panel-enter-active) {
                 opacity: 1;
-                transform: none;
+                transform: none !important;
             }
 
             :host([open]) .modal .modal-content,

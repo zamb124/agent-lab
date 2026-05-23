@@ -165,10 +165,10 @@ class JoinResponse(BaseModel):
     call_type: CallType
     livekit_token: str
     livekit_url: str
-    identity: str
+    participant_identity: str
     meeting_admin_user_id: str
     mode: CallMode
     participant_names: dict[str, str] = Field(
         default_factory=dict,
-        description="LiveKit identity -> отображаемое имя (для гостя без карты участников компании).",
+        description="LiveKit participant_identity -> отображаемое имя (для гостя без карты участников компании).",
     )

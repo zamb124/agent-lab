@@ -146,7 +146,7 @@ async def reindex_document_task(
     max_retries=2,
 )
 async def rag_cleanup_expired_documents_tick(
-    scheduler_task_id: str | None = None,
+    schedule_task_id: str | None = None,
     company_id: str | None = None,
 ) -> Dict[str, Any]:
     """
@@ -161,7 +161,7 @@ async def rag_cleanup_expired_documents_tick(
     if not ttl_cfg.cleanup_enabled:
         return {
             "skipped": True,
-            "scheduler_task_id": scheduler_task_id,
+            "schedule_task_id": schedule_task_id,
             "candidates_total": 0,
             "deleted_documents": 0,
             "failed_documents": 0,
@@ -198,7 +198,7 @@ async def rag_cleanup_expired_documents_tick(
 
     logger.info(
         "rag.cleanup_expired.tick_done",
-        scheduler_task_id=scheduler_task_id,
+        schedule_task_id=schedule_task_id,
         candidates=len(candidates),
         deleted_documents=deleted,
         failed_documents=failed,
@@ -206,7 +206,7 @@ async def rag_cleanup_expired_documents_tick(
 
     return {
         "skipped": False,
-        "scheduler_task_id": scheduler_task_id,
+        "schedule_task_id": schedule_task_id,
         "candidates_total": len(candidates),
         "deleted_documents": deleted,
         "failed_documents": failed,
@@ -220,14 +220,14 @@ async def rag_cleanup_expired_documents_tick(
     max_retries=2,
 )
 async def rag_reembed_stale_documents_tick(
-    scheduler_task_id: str,
+    schedule_task_id: str,
     company_id: str | None = None,
 ) -> Dict[str, Any]:
     _ = company_id
     return await execute_reembed_tick(
         container=get_rag_container(),
         channel="rag_worker",
-        scheduler_task_id=scheduler_task_id,
+        schedule_task_id=schedule_task_id,
     )
 
 
@@ -238,7 +238,7 @@ async def rag_reembed_stale_documents_tick(
     max_retries=2,
 )
 async def rag_cleanup_orphan_company_chunks_tick(
-    scheduler_task_id: str,
+    schedule_task_id: str,
     company_id: str | None = None,
 ) -> Dict[str, Any]:
     """
@@ -248,27 +248,27 @@ async def rag_cleanup_orphan_company_chunks_tick(
     исторически (legacy) и подлежат удалению. reembed-тик их не обрабатывает.
     """
     _ = company_id
-    if not scheduler_task_id or not scheduler_task_id.strip():
-        raise ValueError("rag_cleanup_orphan_company_chunks_tick: scheduler_task_id обязателен")
+    if not schedule_task_id or not schedule_task_id.strip():
+        raise ValueError("rag_cleanup_orphan_company_chunks_tick: schedule_task_id обязателен")
     settings = get_settings()
     cfg = settings.rag.ttl
     if not cfg.orphan_cleanup_enabled:
         return {
             "skipped": True,
-            "scheduler_task_id": scheduler_task_id,
+            "schedule_task_id": schedule_task_id,
             "deleted": 0,
         }
     provider = get_rag_container().rag_provider
     deleted = await provider.delete_orphan_company_chunks(limit=cfg.orphan_cleanup_batch_size)
     logger.info(
         "rag.orphan_cleanup.tick_done",
-        scheduler_task_id=scheduler_task_id,
+        schedule_task_id=schedule_task_id,
         batch_size=cfg.orphan_cleanup_batch_size,
         deleted=deleted,
     )
     return {
         "skipped": False,
-        "scheduler_task_id": scheduler_task_id,
+        "schedule_task_id": schedule_task_id,
         "batch_size": cfg.orphan_cleanup_batch_size,
         "deleted": deleted,
     }

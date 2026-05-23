@@ -111,7 +111,7 @@ import {
     timelineBoundsOp,
     personEntitySelfOp,
 } from '../events/resources/graph.resource.js';
-import { laraSummaryOp } from '../events/resources/workspace.resource.js';
+import { laraSummaryOp } from '../events/resources/namespace-summary.resource.js';
 import {
     attachmentsListOp,
     attachmentUploadOp,
@@ -135,9 +135,9 @@ import '../pages/note-page.js';
 import '../pages/entity-detail-page.js';
 import '../pages/entity-create-page.js';
 import '../pages/access-requests-page.js';
-import '../pages/spaces-page.js';
-import '../pages/space-detail-page.js';
-import '../pages/space-integrations-page.js';
+import '../pages/namespaces-page.js';
+import '../pages/namespace-detail-page.js';
+import '../pages/namespace-integrations-page.js';
 
 import '../modals/namespace-modal.js';
 import '../modals/share-modal.js';
@@ -177,9 +177,9 @@ const CRM_ROUTES = [
     { key: 'tasks',               path: 'tasks',            titleKey: 'routes.tasks' },
     { key: 'suggests',            path: 'suggests',         titleKey: 'routes.suggests' },
     { key: 'access_requests',     path: 'access-requests',  titleKey: 'routes.access_requests' },
-    { key: 'spaces',              path: 'spaces',           parent: 'settings', titleKey: 'routes.spaces' },
-    { key: 'space',               path: 'spaces/:itemId',   parent: 'spaces', titleKey: 'routes.space' },
-    { key: 'space_integrations',  path: 'spaces/:itemId/integrations', parent: 'space', titleKey: 'routes.space_integrations' },
+    { key: 'namespaces',              path: 'namespaces',           parent: 'settings', titleKey: 'routes.namespaces' },
+    { key: 'namespace',               path: 'namespaces/:itemId',   parent: 'namespaces', titleKey: 'routes.namespace' },
+    { key: 'namespace_integrations',  path: 'namespaces/:itemId/integrations', parent: 'namespace', titleKey: 'routes.namespace_integrations' },
     { key: 'templates',           path: 'templates',        parent: 'settings', titleKey: 'routes.templates' },
     { key: 'namespace_imports',   path: 'namespace_imports', parent: 'settings', titleKey: 'routes.namespace_imports' },
     { key: 'relationship_types',  path: 'relationship_types', parent: 'settings', titleKey: 'routes.relationship_types' },
@@ -441,9 +441,9 @@ export class CRMApp extends PlatformApp {
             case 'tasks':               content = html`<crm-tasks-page></crm-tasks-page>`; break;
             case 'suggests':            content = html`<crm-suggests-page></crm-suggests-page>`; break;
             case 'access_requests':     content = html`<crm-access-requests-page></crm-access-requests-page>`; break;
-            case 'spaces':              content = html`<crm-spaces-page></crm-spaces-page>`; break;
-            case 'space':               content = html`<crm-space-detail-page .itemId=${params.itemId}></crm-space-detail-page>`; break;
-            case 'space_integrations':  content = html`<crm-space-integrations-page .itemId=${params.itemId}></crm-space-integrations-page>`; break;
+            case 'namespaces':              content = html`<crm-namespaces-page></crm-namespaces-page>`; break;
+            case 'namespace':               content = html`<crm-namespace-detail-page .itemId=${params.itemId}></crm-namespace-detail-page>`; break;
+            case 'namespace_integrations':  content = html`<crm-namespace-integrations-page .itemId=${params.itemId}></crm-namespace-integrations-page>`; break;
             case 'templates':           content = html`<crm-templates-page></crm-templates-page>`; break;
             case 'namespace_imports':   content = html`<crm-namespace-tasks-page></crm-namespace-tasks-page>`; break;
             case 'relationship_types':  content = html`<crm-relationship-types-page></crm-relationship-types-page>`; break;
@@ -469,7 +469,7 @@ export class CRMApp extends PlatformApp {
                 toggle-event-name="crm-lara-open"
                 event-namespace="assistant"
                 flow-id="lara"
-                skill-id="crm"
+                branch-id="crm"
                 .flowsBaseUrl=${'/flows'}
                 ?use-credentials=${true}
                 .showLauncher=${laraShowLauncher}

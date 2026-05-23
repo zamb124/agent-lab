@@ -216,8 +216,7 @@ export class SyncMessageContextMenu extends PlatformElement {
             this.dispatch('sync/threads/open_requested', { threadId: message.thread_id });
         } else {
             this._threads.create({
-                channel_id: this.channelId,
-                root_message_id: t.messageId,
+                body: { root_message_id: t.messageId },
             });
         }
         this._dismiss();

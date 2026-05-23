@@ -1,0 +1,80 @@
+---
+description: "Flows Chat: единый runtime/surface/profile для SPA, editor/test и embed; A2A SSE, strict auth/capabilities, без legacy/fallback"
+alwaysApply: false
+---
+# Flows Chat — единая архитектура
+
+Все UI-чаты flows обязаны использовать один контракт:
+
+1. **Chat runtime** — единственный A2A JSON-RPC/SSE транспорт, parser, reducer и state shape.
+2. **Chat surface** — единая композиция messages/composer/files/document viewer/actions.
+3. **Host profile** — единственное место различий режима: `spa`, `editor_test`, `embed_public`, `embed_preview`.
+
+Разделение режимов допускается только через typed profile/capabilities. Запрещены отдельные reducer'ы, отдельные SSE parser'ы, отдельные message renderer'ы, отдельные composer'ы и ad-hoc файлы вида `*-legacy*`, `embed-stream-handler`, `embed-only message normalize`, если они дублируют runtime.
+
+## Транспорт
+
+Единственный chat transport — A2A JSON-RPC поверх SSE:
+
+- send/stream: `POST /flows/api/v1/{flow_id}` или `POST /flows/api/v1/embed/{embed_id}`, `method: "message/stream"`;
+- cancel: тот же endpoint, `method: "tasks/cancel"`, `params: { id: task_id }`;
+- branch/version/context/files передаются только в A2A params/metadata по строгому контракту runtime.
+
+Embed endpoint не является отдельным протоколом. Он только резолвит `embed_id -> flow_id/branch/company` и применяет embed-session auth/capabilities.
+
+## Auth и public/system
+
+Embed-session JWT обязан быть связан с конкретным:
+
+- `embed_id`;
+- `embed_flow_id`;
+- `embed_branch_id`;
+- `company_id` embed target;
+- optional `allowed_origin`.
+
+Public landing agents — это embed configs компании `system` с `landing_visible=true`. Это не общий обход авторизации flows и не другое понятие `public` из registry. Публичный запуск всегда идет через short-lived `embed_session`.
+
+`embed_session` разрешает только:
+
+- `message/send`;
+- `message/stream`;
+- `tasks/cancel`.
+
+Любой другой A2A method обязан возвращать явную JSON-RPC ошибку. Никаких silent fallback.
+
+## Capabilities
+
+Функции UI включаются только через host profile capabilities:
+
+- `files.upload`;
+- `files.download`;
+- `documents.view`;
+- `documents.sync`;
+- `voice.input`;
+- `voice.output`;
+- `tasks.cancel`;
+- `trace.view`;
+
+Если capability отсутствует, feature не рендерится или возвращает typed error в runtime. Запрещено "попробовать и если не вышло открыть ссылку", скрытые `try/catch`, private-file links без auth bridge, и document iframe без явной document capability.
+
+## UI implementation
+
+SPA chat page, editor/test execution panel и embed chat используют общий chat surface. Локальные страницы могут только:
+
+- собрать `ChatHostProfile`;
+- передать flow/embed identifiers;
+- слушать surface events для навигации/закрытия shell.
+
+Компоненты chat surface не делают `fetch/httpRequest`. HTTP живет только в factories/runtime operations согласно `frontend.mdc` и `ui_factories.mdc`.
+
+## Tests
+
+Любая новая chat feature обязана иметь матрицу:
+
+- SPA full chat;
+- editor/test chat;
+- external embed chat;
+- public landing/system embed, если feature доступна public guest;
+- negative auth/capability case.
+
+Тесты должны проверять потребительский результат, а не приватные детали реализации. Если feature недоступна в режиме, тест фиксирует typed capability rejection или отсутствие UI control.

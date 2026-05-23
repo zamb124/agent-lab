@@ -140,10 +140,10 @@ class TestSuggestsE2E:
             if item["suggest_type"] == "duplicate"
             and set(item["target_entity_ids"]) == target_ids
         ]
-        assert [item["id"] for item in pending_after_second_tick] == [duplicate["id"]]
+        assert [item["suggest_id"] for item in pending_after_second_tick] == [duplicate["suggest_id"]]
 
         response = await crm_client.post(
-            f"/crm/api/v1/namespaces/{namespace}/suggests/{duplicate['id']}/resolve",
+            f"/crm/api/v1/namespaces/{namespace}/suggests/{duplicate['suggest_id']}/resolve",
             headers=auth_headers_system,
         )
         assert response.status_code == 200, response.text
@@ -307,10 +307,10 @@ class TestSuggestsE2E:
             if item["suggest_type"] == "missed_entity"
             and item["target_entity_ids"] == [note["entity_id"]]
         ]
-        assert [item["id"] for item in pending_after_second_tick] == [missed["id"]]
+        assert [item["suggest_id"] for item in pending_after_second_tick] == [missed["suggest_id"]]
 
         response = await crm_client.post(
-            f"/crm/api/v1/namespaces/{namespace}/suggests/{missed['id']}/resolve",
+            f"/crm/api/v1/namespaces/{namespace}/suggests/{missed['suggest_id']}/resolve",
             headers=auth_headers_system,
         )
         assert response.status_code == 200, response.text

@@ -114,6 +114,8 @@ A2A_METHODS = {
 }
 
 _STREAM_METHODS = {"message/stream", "tasks/resubscribe"}
+_EMBED_MESSAGE_METHODS = {"message/send", "message/stream"}
+_EMBED_SESSION_METHODS = _EMBED_MESSAGE_METHODS | {"tasks/cancel"}
 _SSE_HEADERS = {
     "Cache-Control": "no-cache, no-transform",
     "X-Accel-Buffering": "no",
@@ -159,7 +161,7 @@ async def _embed_session_guest_turn_limit_error(
     method: str | None,
     params_dict: dict[str, Any],
 ) -> dict[str, Any] | None:
-    if method not in {"message/send", "message/stream"}:
+    if method not in _EMBED_MESSAGE_METHODS:
         return None
     if embed_target is None or not embed_target.embed_id.strip():
         return None
@@ -221,9 +223,13 @@ def _validate_embed_session_request(
     method: str,
     params_dict: dict[str, Any],
     expected_branch_id: str | None = None,
+    expected_company_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Проверяет claims embed-session токена для A2A вызова."""
     metadata = token_data.metadata if isinstance(token_data.metadata, dict) else {}
+    if expected_company_id is not None and token_data.company_id != expected_company_id:
+        return {"code": -32000, "message": "Embed session token is not allowed for this company"}
+
     embed_token_id = metadata.get("embed_id")
     if embed_id is not None:
         if not isinstance(embed_token_id, str) or not embed_token_id.strip():
@@ -237,8 +243,11 @@ def _validate_embed_session_request(
     if flow_id != embed_flow_id.strip():
         return {"code": -32000, "message": "Embed session token is not allowed for this flow"}
 
-    if method not in {"message/send", "message/stream"}:
-        return {"code": -32000, "message": "Embed session token supports only message/send and message/stream"}
+    if method not in _EMBED_SESSION_METHODS:
+        return {
+            "code": -32000,
+            "message": "Embed session token supports only message/send, message/stream and tasks/cancel",
+        }
 
     allowed_origin = metadata.get("allowed_origin")
     origin = request.headers.get("origin", "")
@@ -247,10 +256,12 @@ def _validate_embed_session_request(
             return {"code": -32000, "message": "Origin is not allowed for this embed session token"}
 
     allowed_branch_id = _embed_session_branch_from_token_metadata(metadata)
-    if expected_branch_id is not None and isinstance(allowed_branch_id, str) and allowed_branch_id.strip():
+    if expected_branch_id is not None:
+        if not isinstance(allowed_branch_id, str) or not allowed_branch_id.strip():
+            return {"code": -32000, "message": "Invalid embed session token: embed_branch_id is required"}
         if allowed_branch_id.strip() != expected_branch_id:
             return {"code": -32000, "message": "Embed session token branch mismatch"}
-    if isinstance(allowed_branch_id, str) and allowed_branch_id.strip():
+    if method in _EMBED_MESSAGE_METHODS and isinstance(allowed_branch_id, str) and allowed_branch_id.strip():
         effective_branch_id = allowed_branch_id.strip()
         metadata_dict = params_dict.get("metadata")
         if metadata_dict is None:
@@ -495,11 +506,12 @@ async def _json_rpc_handler_internal(
             method=method,
             params_dict=params_dict,
             expected_branch_id=embed_target.branch_id if embed_target is not None else None,
+            expected_company_id=embed_target.company_id if embed_target is not None else None,
         )
         if embed_error is not None:
             return {"jsonrpc": "2.0", "id": rpc_id, "error": embed_error}
 
-    if embed_target is not None:
+    if embed_target is not None and method in _EMBED_MESSAGE_METHODS:
         metadata_dict = params_dict.get("metadata")
         if metadata_dict is None:
             params_dict["metadata"] = {"branch": embed_target.branch_id}

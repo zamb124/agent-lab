@@ -7,7 +7,7 @@
  * Поля соответствуют CreateEmbedConfigRequest/UpdateEmbedConfigRequest
  * (apps/frontend/api/embed_configs.py): в т.ч. greeting_message, placeholder.
  *
- * Skill (branch_id): список из flow.branches в ответе GET /flows/api/v1/flows/.
+ * Branch (branch_id): список из flow.branches в ответе GET /flows/api/v1/flows/.
  * Заблокирован для external и для LOCAL без веток (бэк подставит default).
  */
 import { html, css } from 'lit';
@@ -63,7 +63,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         embedConfig: { type: Object },
         _name: { state: true },
         _flowId: { state: true },
-        _skillId: { state: true },
+        _branchId: { state: true },
         _theme: { state: true },
         _position: { state: true },
         _interfaceLocale: { state: true },
@@ -87,7 +87,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         this.embedConfig = null;
         this._name = '';
         this._flowId = '';
-        this._skillId = 'default';
+        this._branchId = 'default';
         this._theme = 'dark';
         this._position = 'bottom-right';
         this._interfaceLocale = 'auto';
@@ -120,7 +120,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
     _resetCreateFormFields() {
         this._name = '';
         this._flowId = '';
-        this._skillId = 'default';
+        this._branchId = 'default';
         this._theme = 'dark';
         this._position = 'bottom-right';
         this._interfaceLocale = 'auto';
@@ -161,7 +161,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
             const c = this.embedConfig;
             if (typeof c.name === 'string') this._name = c.name;
             if (typeof c.flow_id === 'string') this._flowId = c.flow_id;
-            if (typeof c.branch_id === 'string') this._skillId = c.branch_id;
+            if (typeof c.branch_id === 'string') this._branchId = c.branch_id;
             if (typeof c.theme === 'string') this._theme = c.theme;
             if (typeof c.position === 'string') this._position = c.position;
             if (typeof c.interface_locale === 'string') this._interfaceLocale = c.interface_locale;
@@ -204,9 +204,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
 
     /**
      * Ветки flow в API: `branches: { [branch_id]: { name, ... } }`.
-     * Поле `skills` в каталоге не используется — оставлено только для совместимости.
      */
-    _skillEntriesFromFlow(flow) {
+    _branchEntriesFromFlow(flow) {
         if (!flow) return [];
         const branches = flow.branches;
         if (branches && typeof branches === 'object' && !Array.isArray(branches)) {
@@ -227,37 +226,26 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                 return mapped;
             }
         }
-        const skills = flow.skills;
-        if (Array.isArray(skills)) return skills.map((s) => ({ id: s, name: s }));
-        if (skills && typeof skills === 'object' && !Array.isArray(skills)) {
-            return Object.entries(skills).map(([id, v]) => ({
-                id,
-                name:
-                    v && typeof v === 'object' && typeof v.name === 'string' && v.name !== ''
-                        ? v.name
-                        : id,
-            }));
-        }
         return [];
     }
 
-    _flowSkills() {
-        return this._skillEntriesFromFlow(this._selectedFlow());
+    _flowBranches() {
+        return this._branchEntriesFromFlow(this._selectedFlow());
     }
 
-    _initialSkillIdForFlow(flow) {
-        const entries = this._skillEntriesFromFlow(flow);
+    _initialBranchIdForFlow(flow) {
+        const entries = this._branchEntriesFromFlow(flow);
         if (entries.length === 0) return 'default';
         const ids = entries.map((e) => e.id);
         if (ids.includes('default')) return 'default';
         return entries[0].id;
     }
 
-    _skillSelectorEnabled() {
+    _branchSelectorEnabled() {
         const flow = this._selectedFlow();
         if (!flow) return false;
         if (flow.type === 'external') return false;
-        return this._flowSkills().length > 0;
+        return this._flowBranches().length > 0;
     }
 
     validateForm() {
@@ -371,7 +359,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
         const payload = {
             name: this._name.trim(),
             flow_id: this._flowId,
-            branch_id: this._skillSelectorEnabled() ? this._skillId : 'default',
+            branch_id: this._branchSelectorEnabled() ? this._branchId : 'default',
             allowed_origins: this._parseOrigins(),
             theme: this._theme,
             position: this._position,
@@ -421,8 +409,8 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
     renderBody() {
         const flows = this._flows();
         const flowsLoading = this._catalog.busy;
-        const skillEnabled = this._skillSelectorEnabled();
-        const skills = this._flowSkills();
+        const branchEnabled = this._branchSelectorEnabled();
+        const branches = this._flowBranches();
         return html`
             <form @submit=${this._onSubmit}>
                 <div class="form-grid">
@@ -468,7 +456,7 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                   .hint=${this.t('embed_create_modal.flow_hint')}
                                   @change=${(e) => {
                                       this._flowId = e.detail.value;
-                                      this._skillId = this._initialSkillIdForFlow(this._selectedFlow());
+                                      this._branchId = this._initialBranchIdForFlow(this._selectedFlow());
                                       this.isDirty = true;
                                   }}
                               ></platform-field>`}
@@ -476,26 +464,26 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                     </div>
 
                     <div>
-                        ${skillEnabled
+                        ${branchEnabled
                             ? html`<platform-field
                                   type="enum"
                                   mode="edit"
-                                  .label=${this.t('embed_create_modal.label_skill')}
-                                  .value=${this._skillId}
+                                  .label=${this.t('embed_create_modal.label_branch')}
+                                  .value=${this._branchId}
                                   .config=${{
-                                      values: skills.map((s) => ({ value: s.id, label: s.name })),
+                                      values: branches.map((s) => ({ value: s.id, label: s.name })),
                                   }}
-                                  .hint=${this.t('embed_create_modal.skill_hint')}
-                                  @change=${(e) => { this._skillId = e.detail.value; this.isDirty = true; }}
+                                  .hint=${this.t('embed_create_modal.branch_hint')}
+                                  @change=${(e) => { this._branchId = e.detail.value; this.isDirty = true; }}
                               ></platform-field>`
                             : html`<platform-field
                                   type="enum"
                                   mode="edit"
-                                  .label=${this.t('embed_create_modal.label_skill')}
+                                  .label=${this.t('embed_create_modal.label_branch')}
                                   .value=${''}
                                   .config=${{ values: [] }}
                                   ?disabled=${true}
-                                  .hint=${this.t('embed_create_modal.skill_default_hint')}
+                                  .hint=${this.t('embed_create_modal.branch_default_hint')}
                               ></platform-field>`}
                     </div>
 

@@ -494,8 +494,11 @@ export class FlowsNodeTypesSidebar extends PlatformElement {
                         return html`
                             <div
                                 class="node-item"
+                                data-node-type=${it.type}
+                                data-node-category=${categoryKey}
                                 draggable="true"
                                 title=${it.description || it.name || it.type}
+                                aria-label=${it.name || it.type}
                                 @dragstart=${(e) => dragHandler.call(this, e, it.type)}
                             >
                                 <div class="node-icon" style=${style}>

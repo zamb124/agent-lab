@@ -275,7 +275,7 @@ class SuggestService:
     ) -> CRMSuggest:
         now = datetime.now(UTC)
         suggest = CRMSuggest(
-            id=f"sug_{uuid.uuid4().hex}",
+            suggest_id=f"sug_{uuid.uuid4().hex}",
             company_id=company_id,
             namespace=namespace,
             suggest_type=suggest_type,

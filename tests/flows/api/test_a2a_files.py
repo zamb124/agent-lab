@@ -2,7 +2,7 @@
 Тесты работы с файлами через A2A API.
 
 Проверяет:
-- FilePart извлекается в память, персистится в S3 на API (file_id + download path в state)
+- FilePart извлекается в память, персистится в S3 на API (file_id + url в state)
 - В content сообщения добавляются [FILE]...[/FILE] теги
 """
 
@@ -20,7 +20,7 @@ def _msg_with_file(
     file_bytes: bytes,
     file_name: str = "test_file.txt",
     mime_type: str = "text/plain",
-    context_id: str = None,
+    context_id: str | None = None,
 ) -> Dict[str, Any]:
     """Создаёт A2A Message с текстом и файлом."""
     context_id = context_id or str(uuid.uuid4())
@@ -46,7 +46,7 @@ def _msg_with_image(
     text: str,
     image_bytes: bytes,
     file_name: str = "image.png",
-    context_id: str = None,
+    context_id: str | None = None,
 ) -> Dict[str, Any]:
     """Создаёт A2A Message с текстом и изображением."""
     return _msg_with_file(
@@ -71,7 +71,7 @@ class TestA2AFilesHandling:
     async def test_file_saved_and_in_state(self, client, flow_id, mock_llm_with_queue, sync_tools):
         """
         Проверяет что файл из FilePart:
-        1. Персистится (S3 + FileRecord), в state — file_id и API download path
+        1. Персистится (S3 + FileRecord), в state — file_id и url
         2. Запись в БД файлов находится по file_id
         """
         mock_llm_with_queue([{"type": "text", "content": "I received your file"}])
@@ -110,17 +110,17 @@ class TestA2AFilesHandling:
         assert len(state["files"]) > 0, "State should have at least one file"
 
         file_info = state["files"][0]
-        assert "name" in file_info, "File info should have name"
-        assert "path" in file_info, "File info should have path"
-        assert "mime_type" in file_info, "File info should have mime_type"
-        assert "size" in file_info, "File info should have size"
+        assert "original_name" in file_info, "File info should have original_name"
+        assert "url" in file_info, "File info should have url"
+        assert "content_type" in file_info, "File info should have content_type"
+        assert "file_size" in file_info, "File info should have file_size"
         assert "file_id" in file_info, "File info should have file_id after persist"
 
-        assert file_info["name"] == "document.txt"
-        assert file_info["mime_type"] == "text/plain"
-        assert file_info["size"] == len(test_content)
+        assert file_info["original_name"] == "document.txt"
+        assert file_info["content_type"] == "text/plain"
+        assert file_info["file_size"] == len(test_content)
 
-        assert "/api/v1/files/download/" in file_info["path"]
+        assert "/api/v1/files/download/" in file_info["url"]
         stored = await get_container().file_processor.get_file_record(file_info["file_id"])
         assert stored is not None
         assert stored.file_size == len(test_content)
@@ -183,10 +183,10 @@ class TestA2AFilesHandling:
         assert len(state["files"]) == 1
         file_info = state["files"][0]
         assert file_info["file_id"] == file_id
-        assert file_info["name"] == "linked.csv"
-        assert file_info["path"] == uri
-        assert file_info["mime_type"] == "text/csv"
-        assert file_info["size"] == len(b"a,b\n1,2\n")
+        assert file_info["original_name"] == "linked.csv"
+        assert file_info["url"] == uri
+        assert file_info["content_type"] == "text/csv"
+        assert file_info["file_size"] == len(b"a,b\n1,2\n")
 
     @pytest.mark.asyncio
     async def test_file_info_in_content(self, client, flow_id, mock_llm_with_queue, sync_tools):
@@ -230,7 +230,7 @@ class TestA2AFilesHandling:
         assert "[FILE]" in content, f"Content should have [FILE] tag, got: {content}"
         assert "[/FILE]" in content, f"Content should have [/FILE] tag, got: {content}"
         assert "screenshot.png" in content, f"Content should have filename, got: {content}"
-        assert "image/png" in content, f"Content should have mime_type, got: {content}"
+        assert "image/png" in content, f"Content should have content_type, got: {content}"
         assert "/api/v1/files/download/" in content
 
     @pytest.mark.asyncio
@@ -288,7 +288,7 @@ class TestA2AFilesHandling:
         assert state is not None
         assert len(state["files"]) == 2, f"Should have 2 files, got: {state['files']}"
 
-        file_names = [f["name"] for f in state["files"]]
+        file_names = [f["original_name"] for f in state["files"]]
         assert "file1.txt" in file_names
         assert "file2.txt" in file_names
         for f in state["files"]:
@@ -345,7 +345,7 @@ class TestIncomingA2aFilesUnit:
 
         file_content = b"Test binary content"
         message = Message(
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
             role=Role.user,
             parts=[
                 Part(root=TextPart(text="Hello")),
@@ -365,9 +365,9 @@ class TestIncomingA2aFilesUnit:
 
         assert len(incoming) == 1
         one = incoming[0]
-        assert one.name == "test.bin"
-        assert one.mime_type == "application/octet-stream"
-        assert one.size == len(file_content)
+        assert one.original_name == "test.bin"
+        assert one.content_type == "application/octet-stream"
+        assert one.file_size == len(file_content)
         assert one.data == file_content
         assert one.uri is None
 
@@ -377,17 +377,17 @@ class TestIncomingA2aFilesUnit:
 
         files_data = [
             {
-                "name": "doc.pdf",
-                "path": "/flows/api/v1/files/download/file_abc",
-                "mime_type": "application/pdf",
-                "size": 1024,
+                "original_name": "doc.pdf",
+                "url": "/flows/api/v1/files/download/file_abc",
+                "content_type": "application/pdf",
+                "file_size": 1024,
                 "file_id": "file_abc",
             },
             {
-                "name": "ref.png",
-                "path": "https://cdn.example.com/ref.png",
-                "mime_type": "image/png",
-                "size": 0,
+                "original_name": "ref.png",
+                "url": "https://cdn.example.com/ref.png",
+                "content_type": "image/png",
+                "file_size": 0,
             },
         ]
 

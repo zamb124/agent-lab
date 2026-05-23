@@ -1,8 +1,12 @@
-.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres
+.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres stress
 .PHONY: test-runner test-runner-down test-runner-unit test-integration test-e2e test-logs test-frontend test-rag
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai build-i18n
 .PHONY: clean-i18n-unused base
-.PHONY: render-helm-app-conf k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
+.PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset
+
+STRESS_NUMERIC_TARGETS := $(shell seq 1 300 2>/dev/null)
+STRESS_GOAL_RPS := $(firstword $(filter $(STRESS_NUMERIC_TARGETS),$(MAKECMDGOALS)))
+.PHONY: $(STRESS_NUMERIC_TARGETS)
 
 # ============================================================================
 # Конфигурация
@@ -18,7 +22,7 @@ K8S_RELEASE ?= agent-lab
 HELM_CHART ?= ./deploy/helm/agent-lab
 HELM_VALUES ?= $(HELM_CHART)/values.yaml
 HELM_VALUES_PROD ?= $(HELM_CHART)/values-prod.yaml
-IMAGE_TAG ?= latest
+IMAGE_TAG ?=
 # Первый helm install (много образов, StatefulSets, hook миграций) часто >15m.
 HELM_WAIT_TIMEOUT ?= 30m
 PLATFORM_RUNTIME_DIR ?= $(HOME)/.cache/agent-lab/runtimes
@@ -61,6 +65,15 @@ dev-minio-restart:
 dev-bootstrap-postgres:
 	uv run python -m scripts.db_migrate upgrade
 	@echo "Postgres dev: миграции применены через scripts.db_migrate"
+
+stress:
+	@SERVICE="$(SERVICE)" PROFILE="$(PROFILE)" URL="$(URL)" TOKEN="$(TOKEN)" RPS="$(or $(RPS),$(STRESS_GOAL_RPS))" RATE="$(RATE)" DURATION="$(DURATION)" PRE_ALLOCATED_VUS="$(PRE_ALLOCATED_VUS)" MAX_VUS="$(MAX_VUS)" STRESS_USE_MOCK="$(STRESS_USE_MOCK)" DRY_RUN="$(DRY_RUN)" ./stress/run.sh
+
+stress-%:
+	@SERVICE="$(SERVICE)" PROFILE="$(PROFILE)" URL="$(URL)" TOKEN="$(TOKEN)" RPS="$*" RATE="$(RATE)" DURATION="$(DURATION)" PRE_ALLOCATED_VUS="$(PRE_ALLOCATED_VUS)" MAX_VUS="$(MAX_VUS)" STRESS_USE_MOCK="$(STRESS_USE_MOCK)" DRY_RUN="$(DRY_RUN)" ./stress/run.sh
+
+$(STRESS_NUMERIC_TARGETS):
+	@:
 
 # ============================================================================
 # Тесты — детали в mk/test.mk
@@ -178,12 +191,22 @@ base:
 render-helm-app-conf:
 	uv run python deploy/scripts/render_helm_app_conf.py
 
+require-image-tag:
+	@if [ -z "$(strip $(IMAGE_TAG))" ]; then \
+	  echo "IMAGE_TAG is required. Use immutable release tag, for example: make k8s-deploy IMAGE_TAG=<sha>"; \
+	  exit 1; \
+	fi
+	@if [ "$(IMAGE_TAG)" = "latest" ]; then \
+	  echo "IMAGE_TAG=latest is forbidden for production deploys: it breaks SERVER__DEPLOYMENT_VERSION and PWA static invalidation."; \
+	  exit 1; \
+	fi
+
 # Локальная валидация чарта (без обращения к кластеру).
 k8s-lint: render-helm-app-conf
-	helm lint $(HELM_CHART)
+	helm lint $(HELM_CHART) --set image.tag=lint
 
 # Рендер чарта без apply (для проверки итоговых манифестов).
-k8s-template: render-helm-app-conf
+k8s-template: render-helm-app-conf require-image-tag
 	helm template $(K8S_RELEASE) $(HELM_CHART) \
 		--namespace $(K8S_NAMESPACE) \
 		--values $(HELM_VALUES) \
@@ -192,7 +215,7 @@ k8s-template: render-helm-app-conf
 
 # Применить чарт в текущий kubeconfig-кластер. Атомарно, ждёт rollout.
 # Секреты: jq + deploy/scripts/helm_platform_secrets_json.sh → helm --set-json (устойчиво к многострочным значениям).
-k8s-deploy: render-helm-app-conf
+k8s-deploy: render-helm-app-conf require-image-tag
 	@bash -ec '\
 	set -euo pipefail; \
 	JSON_ARGS=(); \

@@ -1,8 +1,19 @@
 {{/*
 Полное имя образа.
 */}}
+{{- define "agentlab.imageTag" -}}
+{{- $tag := required "agent-lab Helm: задайте image.tag (production: immutable release tag, например short SHA)" .Values.image.tag | toString | trim -}}
+{{- if not $tag -}}
+{{- fail "agent-lab Helm: задайте image.tag (production: immutable release tag, например short SHA)" -}}
+{{- end -}}
+{{- if eq $tag "latest" -}}
+{{- fail "agent-lab Helm: image.tag=latest запрещён: он ломает SERVER__DEPLOYMENT_VERSION и PWA-инвалидацию статики" -}}
+{{- end -}}
+{{- $tag -}}
+{{- end -}}
+
 {{- define "agentlab.image" -}}
-{{- printf "%s:%s" .Values.image.repository ((required "agent-lab Helm: задайте image.tag (не используйте подстановку из Chart.AppVersion)" .Values.image.tag) | toString) -}}
+{{- printf "%s:%s" .Values.image.repository (include "agentlab.imageTag" .) -}}
 {{- end -}}
 
 {{/*
@@ -38,7 +49,7 @@
 - name: SERVER__DEBUG
   value: "false"
 - name: SERVER__DEPLOYMENT_VERSION
-  value: {{ required "agent-lab Helm: задайте image.tag для SERVER__DEPLOYMENT_VERSION" .Values.image.tag | quote }}
+  value: {{ include "agentlab.imageTag" . | quote }}
 - name: SERVER__FLOWS_SERVICE_URL
   value: http://{{ .Values.applications.flows.serviceName }}:{{ .Values.applications.flows.port }}
 {{- if .Values.appCommonEnv.flowsWebhookPublicBaseUrl }}

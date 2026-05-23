@@ -12,7 +12,7 @@ router = APIRouter(prefix="/namespaces/{namespace}/suggests", tags=["Suggests"])
 
 
 class SuggestResponse(BaseModel):
-    id: str
+    suggest_id: str
     suggest_type: str
     status: str
     target_entity_ids: list[str]
@@ -38,7 +38,7 @@ async def list_suggests(
     page = await container.suggest_service.list_suggests(namespace, status, limit, offset)
     items = [
         SuggestResponse(
-            id=s.id,
+            suggest_id=s.suggest_id,
             suggest_type=s.suggest_type,
             status=s.status,
             target_entity_ids=s.target_entity_ids,
@@ -66,7 +66,7 @@ async def resolve_suggest(
     try:
         s = await container.suggest_service.resolve_suggest(suggest_id, namespace=namespace)
         return SuggestResponse(
-            id=s.id,
+            suggest_id=s.suggest_id,
             suggest_type=s.suggest_type,
             status=s.status,
             target_entity_ids=s.target_entity_ids,
@@ -93,7 +93,7 @@ async def dismiss_suggest(
     try:
         s = await container.suggest_service.dismiss_suggest(suggest_id, namespace=namespace)
         return SuggestResponse(
-            id=s.id,
+            suggest_id=s.suggest_id,
             suggest_type=s.suggest_type,
             status=s.status,
             target_entity_ids=s.target_entity_ids,

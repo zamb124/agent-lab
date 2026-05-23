@@ -387,7 +387,7 @@ export class FlowCard extends PlatformElement {
         const branches = this._getBranches();
 
         return html`
-            <div class=${classMap(cardClasses)}>
+            <div class=${classMap(cardClasses)} data-flow-id=${this.flow.flow_id}>
                 <div class="flow-header" @click=${this._handleHeaderClick}>
                     <div 
                         class="flow-avatar" 
@@ -412,6 +412,8 @@ export class FlowCard extends PlatformElement {
                             class="action-btn chat" 
                             @click=${(e) => this._emitAction('chat', e)}
                             title=${this.t('flow_card.open_chat_title')}
+                            aria-label=${this.t('flow_card.open_chat_title')}
+                            data-action="open-chat"
                         >
                             <platform-icon name="chat" size="14"></platform-icon>
                         </button>
@@ -419,6 +421,8 @@ export class FlowCard extends PlatformElement {
                             class="action-btn" 
                             @click=${(e) => this._emitAction('edit', e)}
                             title=${this.t('flow_card.edit_title')}
+                            aria-label=${this.t('flow_card.edit_title')}
+                            data-action="edit-flow"
                         >
                             <platform-icon name="edit" size="14"></platform-icon>
                         </button>
@@ -426,6 +430,8 @@ export class FlowCard extends PlatformElement {
                             class="action-btn danger" 
                             @click=${(e) => this._emitAction('delete', e)}
                             title=${this.t('flow_card.delete_title')}
+                            aria-label=${this.t('flow_card.delete_title')}
+                            data-action="delete-flow"
                         >
                             <platform-icon name="trash" size="14"></platform-icon>
                         </button>

@@ -9,8 +9,8 @@ import { entityTypeNoteSubtreeLocked } from './entity-type-note-subtree-lock.js'
 /**
  * @param {object} item — объект типа из ответа GET /templates/{id} (поля type_id, name, …)
  * @param {{ type_id: string, parent_type_id: string }[]} catalogRows
- * @param {(overrides?: object) => object} makeTypeDraft — фабрика черновика страницы (space или templates)
- * @param {{ namespaceIds: boolean }} opts — для templates-page: true, для space: false
+ * @param {(overrides?: object) => object} makeTypeDraft — фабрика черновика страницы (namespace-detail или templates)
+ * @param {{ namespaceIds: boolean }} opts — для templates-page: true, для namespace-detail: false
  */
 export function buildEntityTypeDraftFromTemplateTypeItem(item, catalogRows, makeTypeDraft, opts) {
     if (!item || typeof item !== 'object' || typeof item.type_id !== 'string' || item.type_id.length === 0) {

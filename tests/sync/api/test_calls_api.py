@@ -124,7 +124,7 @@ async def test_full_link_flow(
         json={"name": "CallTestChannel", "type": "topic", "namespace": namespace},
     )
     assert ch_r.status_code == 201
-    channel_id = ch_r.json()["id"]
+    channel_id = ch_r.json()["channel_id"]
 
     link_r = await sync_client.post(
         "/sync/api/v1/calls/links",
@@ -172,7 +172,7 @@ async def test_join_link_flow_registered_and_guest(
         json={"name": "JoinFlowChannel", "type": "topic", "namespace": namespace},
     )
     assert ch_r.status_code == 201
-    channel_id = ch_r.json()["id"]
+    channel_id = ch_r.json()["channel_id"]
 
     link_r = await sync_client.post(
         "/sync/api/v1/calls/links",
@@ -191,8 +191,8 @@ async def test_join_link_flow_registered_and_guest(
     reg_data = join_reg.json()
     assert reg_data["mode"] == "sfu"
     assert reg_data["call_type"] == "video"
-    assert not reg_data["identity"].startswith("guest:")
-    assert reg_data["meeting_admin_user_id"] == reg_data["identity"]
+    assert not reg_data["participant_identity"].startswith("guest:")
+    assert reg_data["meeting_admin_user_id"] == reg_data["participant_identity"]
     call_id = reg_data["call_id"]
 
     # Гость переиспользует ту же комнату
@@ -203,8 +203,8 @@ async def test_join_link_flow_registered_and_guest(
     assert join_guest.status_code == 200
     guest_data = join_guest.json()
     assert guest_data["call_type"] == "video"
-    assert guest_data["meeting_admin_user_id"] == reg_data["identity"]
-    assert guest_data["identity"].startswith("guest:")
+    assert guest_data["meeting_admin_user_id"] == reg_data["participant_identity"]
+    assert guest_data["participant_identity"].startswith("guest:")
     assert guest_data["call_id"] == call_id
 
     # GET token через authenticated endpoint
@@ -245,7 +245,7 @@ async def test_create_link_with_call_id_guest_joins_same_livekit_call(
         json={"name": "LinkAttachCh", "type": "topic", "namespace": namespace},
     )
     assert ch_r.status_code == 201
-    channel_id = ch_r.json()["id"]
+    channel_id = ch_r.json()["channel_id"]
 
     existing_call_id = uuid4().hex
     room_name = f"call-{uuid4().hex[:16]}"
@@ -309,8 +309,8 @@ async def test_create_link_call_id_wrong_channel_returns_400(
         json={"name": "ChTwo", "type": "topic", "namespace": namespace},
     )
     assert ch1.status_code == 201 and ch2.status_code == 201
-    channel_a = ch1.json()["id"]
-    channel_b = ch2.json()["id"]
+    channel_a = ch1.json()["channel_id"]
+    channel_b = ch2.json()["channel_id"]
 
     call_id = uuid4().hex
     await call_repo.create_call(
@@ -356,7 +356,7 @@ async def test_short_join_url_redirects_to_sync_join(
     link_r = await sync_client.post(
         "/sync/api/v1/calls/links",
         headers=sync_auth_headers,
-        json={"channel_id": ch_r.json()["id"], "call_type": "video", "ttl_hours": 1},
+        json={"channel_id": ch_r.json()["channel_id"], "call_type": "video", "ttl_hours": 1},
     )
     assert link_r.status_code == 201
     link_data = link_r.json()
@@ -394,7 +394,7 @@ async def test_invite_uses_persistent_link_livekit_room_name(
         json={"name": "InviteLkCh", "type": "topic", "namespace": namespace},
     )
     assert ch_r.status_code == 201
-    channel_id = ch_r.json()["id"]
+    channel_id = ch_r.json()["channel_id"]
 
     link_r = await sync_client.post(
         "/sync/api/v1/calls/links",
@@ -437,7 +437,7 @@ async def test_persistent_channel_link_create_twice_same_token(
         json={"name": "PersistLinkCh", "type": "topic", "namespace": namespace},
     )
     assert ch_r.status_code == 201
-    channel_id = ch_r.json()["id"]
+    channel_id = ch_r.json()["channel_id"]
 
     body = {"channel_id": channel_id, "call_type": "video", "ttl_hours": 2}
     link_r1 = await sync_client.post(
@@ -475,7 +475,7 @@ async def test_join_after_call_ended_new_call_same_livekit_room(
         json={"name": "EndedJoinCh", "type": "topic", "namespace": namespace},
     )
     assert ch_r.status_code == 201
-    channel_id = ch_r.json()["id"]
+    channel_id = ch_r.json()["channel_id"]
 
     link_r = await sync_client.post(
         "/sync/api/v1/calls/links",

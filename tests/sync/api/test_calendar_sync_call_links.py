@@ -150,7 +150,7 @@ async def test_calendar_call_link_delete_removes_join_and_channel(
 
     listed = await sync_client.get("/sync/api/v1/channels/", headers=sync_auth_headers)
     assert listed.status_code == 200
-    channel_ids = {item["id"] for item in listed.json()["items"]}
+    channel_ids = {item["channel_id"] for item in listed.json()["items"]}
     assert channel_id not in channel_ids
 
 
@@ -253,6 +253,6 @@ async def test_calendar_channel_type_is_calendar_meeting(
 
     listed = await sync_client.get("/sync/api/v1/channels/", headers=sync_auth_headers)
     assert listed.status_code == 200
-    row = next((c for c in listed.json()["items"] if c["id"] == channel_id), None)
+    row = next((c for c in listed.json()["items"] if c["channel_id"] == channel_id), None)
     assert row is not None
     assert row["type"] == CHANNEL_TYPE_CALENDAR_MEETING

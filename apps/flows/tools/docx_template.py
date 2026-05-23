@@ -32,7 +32,7 @@ _FILL_DOCX_DESCRIPTION = """
   даты как строки в ISO; в inline-коде допускаются date/datetime/Decimal (см. DocxTemplater, date_iso).
 - output_original_name: имя результата с расширением .docx (обязательно).
   Ключ должен быть СТРОГО `output_original_name` (snake_case, через `_`, без пробелов).
-- file_name: имя шаблона как в state.files[].name (как у read_file); если не указано — последний файл .docx в state.files.
+- file_name: имя шаблона как в state.files[].original_name (как у read_file); если не указано — последний файл .docx в state.files.
 - strict: если true — в variables должны быть ровно все переменные верхнего уровня из шаблона, без лишних ключей.
 
 Ожидается JSON-объект аргументов только с ключами:
@@ -140,7 +140,7 @@ async def fill_docx_template(
         f
         for f in files
         if isinstance(f, dict)
-        and (f.get("name") or "").lower().endswith(".docx")
+        and str(f.get("original_name") or "").lower().endswith(".docx")
     ]
     normalized_file_name = _normalize_file_name(file_name)
     if normalized_file_name:
@@ -151,10 +151,10 @@ async def fill_docx_template(
     if finfo is None:
         return {
             "success": False,
-            "error": f"Файл не найден. Доступные: {[f.get('name') for f in files]}",
+            "error": f"Файл не найден. Доступные: {[f.get('original_name') for f in files]}",
         }
 
-    n = finfo.get("name") or ""
+    n = str(finfo.get("original_name") or "")
     if not n.lower().endswith(".docx"):
         return {
             "success": False,

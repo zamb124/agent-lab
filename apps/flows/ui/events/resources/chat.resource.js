@@ -18,14 +18,18 @@
 
 import { createResourceCollection, createAsyncOp, HttpError, httpRequest, httpStream } from '@platform/lib/events/index.js';
 import {
+    inputRequiredFieldsFromA2a as _inputRequiredFieldsFromPayload,
+    isA2aTerminalState as _isTerminalState,
+    mapA2aResultToChatRuntimeEvents,
+    resolveA2aContextId as _resolveStreamContextId,
+} from '@platform/lib/flows-chat/a2a-chat-runtime.js';
+import {
     feedStreamTtsFromA2aResult,
     stopStreamTtsPlayback,
 } from '@platform/lib/voice/stream-tts-registry.js';
 
 const EMPTY_LIST = Object.freeze([]);
 const EMPTY_OBJECT = Object.freeze({});
-const BROWSER_PREVIEW_EVENT_PREFIX = 'browser.preview.';
-const FILES_EVENT_PREFIX = 'files.';
 
 /** Ключ i18n `flows.chat_message.*` при обрыве SSE без терминального status-update. */
 const STREAM_INCOMPLETE_I18N_KEY = 'stream_incomplete';
@@ -35,21 +39,6 @@ let _traceSeq = 0;
 function _nextTraceId() {
     _traceSeq += 1;
     return `tr_${_traceSeq}`;
-}
-
-function _resolveStreamContextId(result, fallback) {
-    if (result && typeof result === 'object') {
-        if (typeof result.contextId === 'string' && result.contextId.length > 0) {
-            return result.contextId;
-        }
-        if (typeof result.context_id === 'string' && result.context_id.length > 0) {
-            return result.context_id;
-        }
-    }
-    if (typeof fallback === 'string' && fallback.length > 0) {
-        return fallback;
-    }
-    return null;
 }
 
 function _stringOrEmpty(value) {
@@ -107,130 +96,6 @@ function _appendRunTrace(ctx, contextId, taskId, fields, causationId) {
         { context_id: contextId, entry: Object.freeze(entry) },
         { causation_id: causationId, source: 'http' },
     );
-}
-
-/** DataPart артефактов: tool_call, tool_result, ui_event, file_ids, flow JSON (не node_*). */
-function _processArtifactDataTrace(ctx, cid, taskId, artifact, causationId) {
-    if (typeof cid !== 'string' || cid.length === 0) {
-        return;
-    }
-    if (!artifact || !Array.isArray(artifact.parts)) {
-        return;
-    }
-    const canMutateMessages = typeof taskId === 'string' && taskId.length > 0;
-    const meta = { causation_id: causationId, source: 'http' };
-    for (let i = 0; i < artifact.parts.length; i += 1) {
-        const part = artifact.parts[i];
-        if (!part || part.kind !== 'data' || !part.data || typeof part.data !== 'object') {
-            continue;
-        }
-        const d = part.data;
-        if (typeof d.event === 'string' && typeof d.node_id === 'string') {
-            continue;
-        }
-        if (typeof d.tool === 'string' && d.tool.length > 0 && typeof d.tool_call_id === 'string' && d.tool_call_id.length > 0) {
-            if (Object.prototype.hasOwnProperty.call(d, 'args')) {
-                if (canMutateMessages) {
-                    ctx.dispatch(
-                        'flows/chat/tool_calls',
-                        {
-                            task_id: taskId,
-                            tool_calls: [{ id: d.tool_call_id, name: d.tool, args: d.args }],
-                        },
-                        meta,
-                    );
-                }
-                _appendRunTrace(
-                    ctx,
-                    cid,
-                    taskId,
-                    { kind: 'tool_call', tool: d.tool, tool_call_id: d.tool_call_id },
-                    causationId,
-                );
-            } else if (Object.prototype.hasOwnProperty.call(d, 'result')) {
-                if (canMutateMessages) {
-                    ctx.dispatch(
-                        'flows/chat/tool_result',
-                        {
-                            task_id: taskId,
-                            tool_result: { id: d.tool_call_id, name: d.tool, result: d.result },
-                        },
-                        meta,
-                    );
-                }
-                _appendRunTrace(
-                    ctx,
-                    cid,
-                    taskId,
-                    { kind: 'tool_result', tool: d.tool, tool_call_id: d.tool_call_id },
-                    causationId,
-                );
-            }
-            continue;
-        }
-        if (Array.isArray(d.file_ids)) {
-            _appendRunTrace(
-                ctx,
-                cid,
-                taskId,
-                { kind: 'operator_files', file_count: d.file_ids.length },
-                causationId,
-            );
-            continue;
-        }
-        if (artifact.name === 'ui_event' && typeof d.type === 'string' && d.type.length > 0) {
-            let payloadPreview = '';
-            if (d.payload !== undefined && d.payload !== null) {
-                const raw = typeof d.payload === 'string' ? d.payload : JSON.stringify(d.payload);
-                payloadPreview = raw.length > 100 ? raw.slice(0, 100) : raw;
-            }
-            if (d.type.startsWith(BROWSER_PREVIEW_EVENT_PREFIX) && canMutateMessages) {
-                ctx.dispatch(
-                    'flows/chat/browser_preview_event',
-                    {
-                        task_id: taskId,
-                        context_id: cid,
-                        event: {
-                            id: typeof d.id === 'string' ? d.id : '',
-                            type: d.type,
-                            payload: d.payload && typeof d.payload === 'object' ? d.payload : {},
-                            timestamp: typeof d.timestamp === 'string' ? d.timestamp : '',
-                        },
-                    },
-                    meta,
-                );
-            }
-            if (d.type.startsWith(FILES_EVENT_PREFIX) && canMutateMessages) {
-                ctx.dispatch(
-                    'flows/chat/files_event',
-                    {
-                        task_id: taskId,
-                        context_id: cid,
-                        event: {
-                            id: typeof d.id === 'string' ? d.id : '',
-                            type: d.type,
-                            payload: d.payload && typeof d.payload === 'object' ? d.payload : {},
-                            timestamp: typeof d.timestamp === 'string' ? d.timestamp : '',
-                        },
-                    },
-                    meta,
-                );
-            }
-            _appendRunTrace(
-                ctx,
-                cid,
-                taskId,
-                { kind: 'ui_event', event_type: d.type, payload_preview: payloadPreview },
-                causationId,
-            );
-            continue;
-        }
-        if (artifact.name === 'artifact' && typeof d.content === 'string' && d.content.length > 0) {
-            const c = d.content;
-            const preview = c.length > 120 ? c.slice(0, 120) : c;
-            _appendRunTrace(ctx, cid, taskId, { kind: 'flow_artifact', preview }, causationId);
-        }
-    }
 }
 
 function _ensureContextBucket(state, contextId) {
@@ -534,35 +399,22 @@ function _upsertBrowserPreview(list, event) {
 function _normalizeFileItem(item) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
     const fileId = typeof item.file_id === 'string' ? item.file_id : '';
-    const name =
-        typeof item.name === 'string' && item.name.length > 0
-            ? item.name
-            : typeof item.original_name === 'string'
-              ? item.original_name
-              : fileId;
-    const path =
-        typeof item.path === 'string' && item.path.length > 0
-            ? item.path
-            : typeof item.url === 'string'
-              ? item.url
-              : fileId
-                ? `/flows/api/v1/files/download/${encodeURIComponent(fileId)}`
-                : '';
-    if (!fileId && !path) return null;
-    const mime =
-        typeof item.mime_type === 'string' && item.mime_type.length > 0
-            ? item.mime_type
-            : typeof item.type === 'string'
-              ? item.type
-              : '';
+    const originalName = typeof item.original_name === 'string' ? item.original_name : '';
+    const url = typeof item.url === 'string' ? item.url : '';
+    const contentType = typeof item.content_type === 'string' ? item.content_type : '';
+    const fileSize = typeof item.file_size === 'number' ? item.file_size : null;
+    if (!fileId && !url) return null;
+    if (originalName.length === 0) return null;
+    if (contentType.length === 0) return null;
+    if (fileSize === null) return null;
+    const { name, path, mime_type, type, size, ...rest } = item;
     return {
-        ...item,
+        ...rest,
         file_id: fileId,
-        name,
-        path,
-        url: typeof item.url === 'string' && item.url.length > 0 ? item.url : path,
-        mime_type: mime,
-        type: mime,
+        original_name: originalName,
+        url,
+        content_type: contentType,
+        file_size: fileSize,
     };
 }
 
@@ -575,7 +427,7 @@ function _upsertFiles(list, incoming) {
         const fid = typeof file.file_id === 'string' ? file.file_id : '';
         const idx = fid
             ? next.findIndex((item) => item && item.file_id === fid)
-            : next.findIndex((item) => item && item.path === file.path);
+            : next.findIndex((item) => item && item.url === file.url);
         if (idx >= 0) {
             next[idx] = { ...next[idx], ...file };
         } else {
@@ -585,477 +437,34 @@ function _upsertFiles(list, incoming) {
     return next;
 }
 
-function _extractTextFromParts(parts) {
-    if (!Array.isArray(parts)) return '';
-    return parts
-        .filter((p) => p && p.kind === 'text' && typeof p.text === 'string' && p.text.length > 0)
-        .map((p) => p.text)
-        .join('');
-}
-
-/**
- * Текст вопроса и вид interrupt для UI из A2A message + metadata (platform_interrupt).
- *
- * @param {unknown} message
- * @param {unknown} resultMetadata
- * @returns {{ question: string, interruptKind: string | null, authUrl: string }}
- */
-function _inputRequiredFieldsFromPayload(message, resultMetadata) {
-    const resultMeta = resultMetadata && typeof resultMetadata === 'object' ? resultMetadata : {};
-    let question = '';
-    if (message && typeof message === 'object' && Array.isArray(message.parts)) {
-        question = _extractTextFromParts(message.parts);
-    }
-    let interruptKind = null;
-    let authUrl = '';
-    const packed = resultMeta.platform_interrupt;
-    if (packed && typeof packed === 'object') {
-        const pq = packed.question;
-        if (typeof pq === 'string' && pq.length > 0) {
-            question = pq;
-        }
-        const body = packed.body;
-        if (body && typeof body === 'object' && typeof body.kind === 'string') {
-            interruptKind = body.kind;
-            if (
-                body.kind === 'oauth_required'
-                && typeof body.auth_url === 'string'
-                && body.auth_url.length > 0
-            ) {
-                authUrl = body.auth_url;
-            }
-        }
-    }
-    return { question, interruptKind, authUrl };
-}
-
-function _resolveTaskId(result, fallback) {
-    if (result && typeof result === 'object') {
-        if (typeof result.taskId === 'string') return result.taskId;
-        if (typeof result.task_id === 'string') return result.task_id;
-        const status = result.status;
-        if (status && typeof status === 'object') {
-            if (typeof status.taskId === 'string') return status.taskId;
-            if (typeof status.task_id === 'string') return status.task_id;
-        }
-    }
-    return fallback;
-}
-
-function _isTerminalState(state, final) {
-    // completed/finished с final:false — промежуточный кадр A2A (напр. завершилась генерация LLM), поток ещё несёт artifact-update по графу.
-    if (state === 'completed' || state === 'finished') {
-        return final === true;
-    }
-    if (state === 'failed' || state === 'error') {
-        return true;
-    }
-    if ((state === 'input-required' || state === 'input_required') && final) {
-        return true;
-    }
-    return false;
-}
-
-/** События нод/рёбер из A2A artifact (parts[].data.event) — те же типы, что push flows/run/* для канваса. */
-function _dispatchNodeRuntimeFromArtifact(ctx, artifact, causationId, streamContextId, taskId) {
-    if (!artifact || typeof artifact !== 'object' || !Array.isArray(artifact.parts)) return;
+function _dispatchRuntimeEvents(ctx, mapped, causationId) {
     const meta = { causation_id: causationId, source: 'http' };
-    for (const part of artifact.parts) {
-        if (!part || part.kind !== 'data' || !part.data || typeof part.data !== 'object') continue;
-        const d = part.data;
-        const ev = d.event;
-        if (ev === 'edge_executed') {
-            const edgeIndex = typeof d.edge_index === 'number' && Number.isFinite(d.edge_index)
-                ? Math.floor(d.edge_index)
-                : -1;
-            if (edgeIndex < 0) {
-                continue;
-            }
-            const fromN = typeof d.from_node === 'string' ? d.from_node : '';
-            const toN = typeof d.to_node === 'string' ? d.to_node : '';
-            if (fromN.length === 0 || toN.length === 0) {
-                continue;
-            }
-            ctx.dispatch(
-                'flows/run/edge_executed',
-                { edge_index: edgeIndex, from_node: fromN, to_node: toN },
-                meta,
-            );
+    for (const runEvent of mapped.runEvents) {
+        ctx.dispatch(runEvent.type, runEvent.payload, meta);
+    }
+    for (const trace of mapped.traceEntries) {
+        _appendRunTrace(ctx, trace.context_id, trace.task_id, trace.fields, causationId);
+    }
+    for (const event of mapped.events) {
+        if (event.type === 'ui_event') {
             continue;
         }
-        if (ev === 'edge_error') {
-            const edgeIndex = typeof d.edge_index === 'number' && Number.isFinite(d.edge_index)
-                ? Math.floor(d.edge_index)
-                : -1;
-            if (edgeIndex < 0) {
-                continue;
-            }
-            const fromN = typeof d.from_node === 'string' ? d.from_node : '';
-            const toN = typeof d.to_node === 'string' ? d.to_node : '';
-            if (fromN.length === 0 || toN.length === 0) {
-                continue;
-            }
-            const errText = typeof d.error === 'string' ? d.error : '';
-            ctx.dispatch(
-                'flows/run/edge_error',
-                {
-                    edge_index: edgeIndex,
-                    from_node: fromN,
-                    to_node: toN,
-                    error: errText,
-                },
-                meta,
-            );
-            continue;
-        }
-        const nodeId = d.node_id;
-        if (typeof nodeId !== 'string' || nodeId.length === 0) continue;
-        if (ev === 'node_start') {
-            ctx.dispatch('flows/run/node_started', { node_id: nodeId }, meta);
-            const nt = typeof d.node_type === 'string' ? d.node_type : '';
-            _appendRunTrace(
-                ctx,
-                streamContextId,
-                taskId,
-                { kind: 'node_start', node_id: nodeId, node_type: nt },
-                causationId,
-            );
-        } else if (ev === 'node_complete') {
-            ctx.dispatch('flows/run/node_completed', { node_id: nodeId }, meta);
-            const preview = typeof d.result_preview === 'string' ? d.result_preview : '';
-            _appendRunTrace(
-                ctx,
-                streamContextId,
-                taskId,
-                { kind: 'node_complete', node_id: nodeId, result_preview: preview },
-                causationId,
-            );
-        } else if (ev === 'node_error') {
-            const err =
-                typeof d.error === 'string' && d.error.length > 0 ? d.error : 'error';
-            ctx.dispatch('flows/run/node_failed', { node_id: nodeId, error: err }, meta);
-            _appendRunTrace(
-                ctx,
-                streamContextId,
-                taskId,
-                { kind: 'node_error', node_id: nodeId, error: err },
-                causationId,
-            );
-        }
+        ctx.dispatch(`flows/chat/${event.type}`, event.payload, meta);
     }
-}
-
-/**
- * Маппинг A2A-фрейма (`result` из JSON-RPC) в локальные события
- * `flows/chat/<verb>`. Возвращает `task_id` фрейма, если он там есть,
- * иначе — переданный `currentTaskId`.
- */
-function _dispatchA2aEvent(ctx, contextId, currentTaskId, result, causationId) {
-    if (!result || typeof result !== 'object') return currentTaskId;
-
-    if (result.kind === 'task' || (typeof result.id === 'string' && !result.kind)) {
-        const taskId = _resolveTaskId(result, currentTaskId);
-        if (taskId && taskId !== currentTaskId) {
-            const cid = _resolveStreamContextId(result, contextId);
-            ctx.dispatch(
-                'flows/chat/task_started',
-                { task_id: taskId, context_id: cid },
-                { causation_id: causationId, source: 'http' },
-            );
-        }
-        return taskId;
-    }
-
-    if (result.kind === 'message') {
-        const message = result;
-        const taskId = _resolveTaskId(message, currentTaskId);
-        _dispatchMessageMetadata(ctx, taskId, message, causationId);
-        return taskId;
-    }
-
-    if (result.kind === 'artifact-update') {
-        const taskId = _resolveTaskId(result, currentTaskId);
-        const cid = _resolveStreamContextId(result, contextId);
-        const artifact = result.artifact;
-        const final = result.final === true;
-
-        if (artifact) {
-            _dispatchNodeRuntimeFromArtifact(ctx, artifact, causationId, cid, taskId);
-        }
-
-        if (artifact && Array.isArray(artifact.parts)) {
-            const text = _extractTextFromParts(artifact.parts);
-            if (text) {
-                if (artifact.name === 'reasoning') {
-                    ctx.dispatch(
-                        'flows/chat/reasoning_chunk',
-                        { task_id: taskId, text },
-                        { causation_id: causationId, source: 'http' },
-                    );
-                    _appendRunTrace(
-                        ctx,
-                        cid,
-                        taskId,
-                        { kind: 'reasoning_chunk', char_count: text.length },
-                        causationId,
-                    );
-                } else if (artifact.name === 'operator_reply') {
-                    ctx.dispatch(
-                        'flows/chat/operator_reply',
-                        { task_id: taskId, text },
-                        { causation_id: causationId, source: 'http' },
-                    );
-                } else if (artifact.name !== 'operator_files') {
-                    ctx.dispatch(
-                        'flows/chat/content_chunk',
-                        { task_id: taskId, text },
-                        { causation_id: causationId, source: 'http' },
-                    );
-                }
-            }
-
-            if (artifact.name === 'operator_files') {
-                const dataPart = artifact.parts.find(
-                    (p) => p && p.data && Array.isArray(p.data.file_ids),
-                );
-                if (dataPart) {
-                    ctx.dispatch(
-                        'flows/chat/operator_files',
-                        { task_id: taskId, file_ids: dataPart.data.file_ids },
-                        { causation_id: causationId, source: 'http' },
-                    );
-                }
-            }
-
-            _processArtifactDataTrace(ctx, cid, taskId, artifact, causationId);
-        }
-
-        const message = artifact && artifact.message ? artifact.message : null;
-        if (message) {
-            _dispatchMessageMetadata(ctx, taskId, message, causationId);
-            const textFromMsg = _extractTextFromParts(message.parts);
-            if (textFromMsg) {
-                ctx.dispatch(
-                    'flows/chat/content_chunk',
-                    { task_id: taskId, text: textFromMsg },
-                    { causation_id: causationId, source: 'http' },
-                );
-            }
-        }
-
-        const state = artifact ? artifact.state : null;
-        if (final) {
-            _dispatchTerminal(ctx, cid, taskId, state, message, result.metadata, causationId);
-        }
-        return taskId;
-    }
-
-    if (result.kind === 'status-update') {
-        const status = result.status;
-        if (!status) return currentTaskId;
-        const taskId = _resolveTaskId(result, currentTaskId);
-        const cid = _resolveStreamContextId(result, contextId);
-        const message = status.message;
-        const state = status.state;
-        const final = result.final === true;
-        const metadata = _resolveStatusMetadata(result, message);
-
-        if (metadata && metadata.platform_ping === true) {
-            ctx.dispatch(
-                'flows/chat/stream_ping',
-                {
-                    task_id: taskId,
-                    context_id: cid,
-                    sent_at: typeof metadata.sent_at === 'string' ? metadata.sent_at : '',
-                    received_at: Date.now(),
-                    sequence: typeof metadata.sequence === 'number' ? metadata.sequence : null,
-                },
-                { causation_id: causationId, source: 'http' },
-            );
-            return taskId;
-        }
-
-        if (message) {
-            _dispatchMessageMetadata(ctx, taskId, message, causationId);
-        }
-
-        const statusStr = typeof state === 'string' ? state : '';
-        const activityTerminal =
-            final
-            || statusStr === 'completed'
-            || statusStr === 'finished'
-            || statusStr === 'failed'
-            || statusStr === 'error'
-            || statusStr === 'input-required'
-            || statusStr === 'input_required'
-            || statusStr === 'canceled'
-            || statusStr === 'cancelled';
-        if (!activityTerminal && taskId && message && typeof message === 'object' && message.parts) {
-            const actText = _extractTextFromParts(message.parts);
-            if (actText.length > 0) {
-                ctx.dispatch(
-                    'flows/chat/activity',
-                    { task_id: taskId, text: actText },
-                    { causation_id: causationId, source: 'http' },
-                );
-            }
-        }
-
-        if (state === 'input-required' || state === 'input_required') {
-            const handoffContinue = metadata && metadata.platform_handoff_continue === true;
-            const oauthContinue = metadata && metadata.platform_oauth_continue === true;
-            if (final || handoffContinue || oauthContinue) {
-                _dispatchInputRequired(ctx, cid, taskId, message, metadata, causationId);
-            }
-            return taskId;
-        }
-
-        // См. _isТерминальная нодаState: completed/finished с final:false — не конец задачи, после LLM ещё идут ноды графа.
-        if (final || state === 'failed' || state === 'error') {
-            _dispatchTerminal(ctx, cid, taskId, state, message, metadata, causationId);
-        }
-        return taskId;
-    }
-
-    return currentTaskId;
 }
 
 /**
  * Редьюсер чата и авто-TTS из одного кадра A2A (HTTP `chat_send` и `relayA2aVoiceStreamRpcFrame`).
  */
-function _dispatchA2aEventAndMaybeFeedStreamTts(ctx, contextId, currentTaskId, result, causationId) {
-    const nextTaskId = _dispatchA2aEvent(ctx, contextId, currentTaskId, result, causationId);
+function _dispatchA2aEventAndMaybeFeedStreamTts(ctx, contextId, currentTaskId, result, causationId, streamState) {
+    const mapped = mapA2aResultToChatRuntimeEvents(result, {
+        contextId,
+        currentTaskId,
+        taskPrimed: streamState && streamState.taskPrimed === true,
+    });
+    _dispatchRuntimeEvents(ctx, mapped, causationId);
     feedStreamTtsFromA2aResult(result);
-    return nextTaskId;
-}
-
-function _resolveStatusMetadata(result, message) {
-    if (result && typeof result === 'object' && result.metadata && typeof result.metadata === 'object') {
-        return result.metadata;
-    }
-    if (message && typeof message === 'object' && message.metadata && typeof message.metadata === 'object') {
-        return message.metadata;
-    }
-    return {};
-}
-
-function _dispatchMessageMetadata(ctx, taskId, message, causationId) {
-    if (!taskId || !message || typeof message !== 'object') return;
-    const metadata = message.metadata;
-    if (!metadata || typeof metadata !== 'object') return;
-    if (Array.isArray(metadata.tool_calls) && metadata.tool_calls.length > 0) {
-        ctx.dispatch(
-            'flows/chat/tool_calls',
-            { task_id: taskId, tool_calls: metadata.tool_calls },
-            { causation_id: causationId, source: 'http' },
-        );
-    }
-    if (metadata.tool_result && typeof metadata.tool_result === 'object') {
-        ctx.dispatch(
-            'flows/chat/tool_result',
-            { task_id: taskId, tool_result: metadata.tool_result },
-            { causation_id: causationId, source: 'http' },
-        );
-    }
-}
-
-function _dispatchInputRequired(ctx, contextId, taskId, message, metadata, causationId) {
-    if (!taskId) return;
-    const meta = metadata;
-    if (meta.breakpoint) {
-        const nodeFromMeta =
-            typeof meta.node_id === 'string' && meta.node_id.length > 0
-                ? meta.node_id
-                : '';
-        let breakpointPayload;
-        if (typeof meta.breakpoint === 'object' && meta.breakpoint !== null) {
-            breakpointPayload = {
-                node_id: typeof meta.breakpoint.node_id === 'string' ? meta.breakpoint.node_id : nodeFromMeta,
-                state: meta.breakpoint.state,
-                step: meta.breakpoint.step,
-                data: meta.breakpoint.data,
-            };
-        } else {
-            breakpointPayload = {
-                node_id: nodeFromMeta,
-                state: meta.state_snapshot,
-                step: undefined,
-                data: undefined,
-            };
-        }
-        _appendRunTrace(
-            ctx,
-            contextId,
-            taskId,
-            { kind: 'breakpoint', node_id: breakpointPayload.node_id },
-            causationId,
-        );
-        ctx.dispatch(
-            'flows/chat/breakpoint',
-            {
-                task_id: taskId,
-                context_id: contextId,
-                breakpoint: breakpointPayload,
-            },
-            { causation_id: causationId, source: 'http' },
-        );
-        return;
-    }
-    _appendRunTrace(ctx, contextId, taskId, { kind: 'input_required' }, causationId);
-    ctx.dispatch(
-        'flows/chat/input_required',
-        {
-            task_id: taskId,
-            context_id: contextId,
-            result_metadata: meta,
-            message_metadata: message && message.metadata ? message.metadata : {},
-            message: typeof message === 'object' && message !== null ? message : null,
-        },
-        { causation_id: causationId, source: 'http' },
-    );
-}
-
-function _dispatchTerminal(ctx, contextId, taskId, state, message, metadata, causationId) {
-    if (!taskId) return;
-    if (typeof state === 'string') {
-        if (
-            state === 'completed'
-            || state === 'finished'
-            || state === 'failed'
-            || state === 'error'
-        ) {
-            const text = message ? _extractTextFromParts(message.parts) : '';
-            const preview = text.length > 160 ? text.slice(0, 160) : text;
-            _appendRunTrace(
-                ctx,
-                contextId,
-                taskId,
-                { kind: 'status_terminal', terminal_state: state, message_preview: preview },
-                causationId,
-            );
-        }
-    }
-    if (state === 'completed' || state === 'finished') {
-        const text = message ? _extractTextFromParts(message.parts) : '';
-        ctx.dispatch(
-            'flows/chat/completed',
-            { task_id: taskId, context_id: contextId, content: text },
-            { causation_id: causationId, source: 'http' },
-        );
-        return;
-    }
-    if (state === 'failed' || state === 'error') {
-        const text = message ? _extractTextFromParts(message.parts) : '';
-        ctx.dispatch(
-            'flows/chat/failed',
-            { task_id: taskId, context_id: contextId, error: text.length > 0 ? text : 'error' },
-            { causation_id: causationId, source: 'http' },
-        );
-        return;
-    }
-    if (state === 'input-required' || state === 'input_required') {
-        _dispatchInputRequired(ctx, contextId, taskId, message, metadata, causationId);
-    }
+    return mapped;
 }
 
 /**
@@ -1091,28 +500,23 @@ async function _consumeA2aStream(req, ctx, contextId, causationId) {
             }
             const result = frame.result;
             if (!result) return;
-            if (!streamTaskPrimed) {
-                const primedTaskId = _resolveTaskId(result, taskId);
-                const primedCid = _resolveStreamContextId(result, contextId);
-                if (typeof primedTaskId === 'string' && primedTaskId.length > 0
-                    && typeof primedCid === 'string' && primedCid.length > 0) {
-                    ctx.dispatch(
-                        'flows/chat/task_started',
-                        { task_id: primedTaskId, context_id: primedCid },
-                        { causation_id: causationId, source: 'http' },
-                    );
-                    streamTaskPrimed = true;
-                }
-            }
-            const nextTaskId = _dispatchA2aEventAndMaybeFeedStreamTts(ctx, contextId, taskId, result, causationId);
-            if (nextTaskId) taskId = nextTaskId;
+            const mapped = _dispatchA2aEventAndMaybeFeedStreamTts(
+                ctx,
+                contextId,
+                taskId,
+                result,
+                causationId,
+                { taskPrimed: streamTaskPrimed },
+            );
+            streamTaskPrimed = mapped.taskPrimed;
+            if (mapped.nextTaskId) taskId = mapped.nextTaskId;
             let stateValue = null;
             if (result.kind === 'status-update' && result.status && typeof result.status.state === 'string') {
                 stateValue = result.status.state;
             } else if (result.kind === 'artifact-update' && result.artifact && typeof result.artifact.state === 'string') {
                 stateValue = result.artifact.state;
             }
-            if (_isTerminalState(stateValue, result.final === true)) {
+            if (mapped.terminal || _isTerminalState(stateValue, result.final === true)) {
                 terminal = true;
             }
         });
@@ -1191,32 +595,17 @@ export function relayA2aVoiceStreamRpcFrame(ctx, streamState, rpcFrame, causatio
     const result = rpcFrame.result;
     if (!result || typeof result !== 'object') return;
 
-    if (!streamState.taskPrimed) {
-        const primedTaskId = _resolveTaskId(result, streamState.taskId);
-        const primedCid = _resolveStreamContextId(result, streamState.contextId);
-        if (
-            typeof primedTaskId === 'string'
-            && primedTaskId.length > 0
-            && typeof primedCid === 'string'
-            && primedCid.length > 0
-        ) {
-            ctx.dispatch(
-                'flows/chat/task_started',
-                { task_id: primedTaskId, context_id: primedCid },
-                metaBase,
-            );
-            streamState.taskPrimed = true;
-        }
-    }
-    const nextTaskId = _dispatchA2aEventAndMaybeFeedStreamTts(
+    const mapped = _dispatchA2aEventAndMaybeFeedStreamTts(
         ctx,
         streamState.contextId,
         streamState.taskId,
         result,
         causationId,
+        streamState,
     );
-    if (nextTaskId) {
-        streamState.taskId = nextTaskId;
+    streamState.taskPrimed = mapped.taskPrimed;
+    if (mapped.nextTaskId) {
+        streamState.taskId = mapped.nextTaskId;
     }
     const resolvedCid = _resolveStreamContextId(result, streamState.contextId);
     if (typeof resolvedCid === 'string' && resolvedCid.length > 0) {

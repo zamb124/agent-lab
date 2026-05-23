@@ -67,12 +67,12 @@ async def _ensure_calendar_schedule(
     if len(paused_tasks) > 0:
         resumed = await container.scheduler_service.resume(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
-            schedule_task_id=paused_tasks[0].id,
+            schedule_task_id=paused_tasks[0].schedule_task_id,
         )
         logger.info(
-            "%s schedule resumed: task_id=%s schedule_id=%s",
+            "%s schedule resumed: schedule_task_id=%s schedule_id=%s",
             log_label,
-            resumed.id,
+            resumed.schedule_task_id,
             resumed.schedule_id,
         )
         return
@@ -91,7 +91,10 @@ async def _ensure_calendar_schedule(
         request=request,
     )
     logger.info(
-        "%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id
+        "%s schedule created: schedule_task_id=%s schedule_id=%s",
+        log_label,
+        created.schedule_task_id,
+        created.schedule_id,
     )
 
 
@@ -131,7 +134,7 @@ async def _ensure_idle_interval_schedule(
         logger.warning(
             "%s has incompatible pending schedules, leaving them untouched: %s",
             log_label,
-            [task.id for task in incompatible_pending],
+            [task.schedule_task_id for task in incompatible_pending],
         )
     pending_tasks = [task for task in compatible_tasks if task.status == ScheduledTaskStatus.PENDING]
     if pending_tasks:
@@ -142,12 +145,12 @@ async def _ensure_idle_interval_schedule(
         if paused_tasks:
             task = await container.scheduler_service.resume(
                 company_id=SYSTEM_SCHEDULER_COMPANY_ID,
-                schedule_task_id=paused_tasks[0].id,
+                schedule_task_id=paused_tasks[0].schedule_task_id,
             )
             logger.info(
-                "%s interval schedule resumed: task_id=%s schedule_id=%s",
+                "%s interval schedule resumed: schedule_task_id=%s schedule_id=%s",
                 log_label,
-                task.id,
+                task.schedule_task_id,
                 task.schedule_id,
             )
         else:
@@ -167,17 +170,21 @@ async def _ensure_idle_interval_schedule(
                 request=request,
             )
             logger.info(
-                "%s interval schedule created: task_id=%s schedule_id=%s",
+                "%s interval schedule created: schedule_task_id=%s schedule_id=%s",
                 log_label,
-                task.id,
+                task.schedule_task_id,
                 task.schedule_id,
             )
     if run_now_on_start:
         await container.scheduler_service.run_now(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
-            schedule_task_id=task.id,
+            schedule_task_id=task.schedule_task_id,
         )
-        logger.info("%s interval schedule kicked immediately: task_id=%s", log_label, task.id)
+        logger.info(
+            "%s interval schedule kicked immediately: schedule_task_id=%s",
+            log_label,
+            task.schedule_task_id,
+        )
 
 
 async def _ensure_rag_ttl_cleanup_schedule(
@@ -207,12 +214,12 @@ async def _ensure_rag_ttl_cleanup_schedule(
     if len(paused_tasks) > 0:
         resumed = await container.scheduler_service.resume(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
-            schedule_task_id=paused_tasks[0].id,
+            schedule_task_id=paused_tasks[0].schedule_task_id,
         )
         logger.info(
-            "%s schedule resumed: task_id=%s schedule_id=%s",
+            "%s schedule resumed: schedule_task_id=%s schedule_id=%s",
             log_label,
-            resumed.id,
+            resumed.schedule_task_id,
             resumed.schedule_id,
         )
         return
@@ -231,7 +238,10 @@ async def _ensure_rag_ttl_cleanup_schedule(
         request=request,
     )
     logger.info(
-        "%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id
+        "%s schedule created: schedule_task_id=%s schedule_id=%s",
+        log_label,
+        created.schedule_task_id,
+        created.schedule_id,
     )
 
 
@@ -262,12 +272,12 @@ async def _ensure_crm_cron_schedule(
     if len(paused_tasks) > 0:
         resumed = await container.scheduler_service.resume(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
-            schedule_task_id=paused_tasks[0].id,
+            schedule_task_id=paused_tasks[0].schedule_task_id,
         )
         logger.info(
-            "%s schedule resumed: task_id=%s schedule_id=%s",
+            "%s schedule resumed: schedule_task_id=%s schedule_id=%s",
             log_label,
-            resumed.id,
+            resumed.schedule_task_id,
             resumed.schedule_id,
         )
         return
@@ -286,7 +296,10 @@ async def _ensure_crm_cron_schedule(
         request=request,
     )
     logger.info(
-        "%s schedule created: task_id=%s schedule_id=%s", log_label, created.id, created.schedule_id
+        "%s schedule created: schedule_task_id=%s schedule_id=%s",
+        log_label,
+        created.schedule_task_id,
+        created.schedule_id,
     )
 
 

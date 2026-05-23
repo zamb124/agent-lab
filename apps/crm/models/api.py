@@ -489,7 +489,7 @@ class NamespaceEditabilityResponse(BaseModel):
     can_add_types: bool
     locked_type_ids: list[str]
     removable_type_ids: list[str]
-    all_spaces_type_ids: list[str]
+    all_namespaces_type_ids: list[str]
     lock_reason: str | None = None
 
 
@@ -796,7 +796,7 @@ class DeduplicateResult(BaseModel):
     merged_description: str | None = None
 
 
-class LaraWorkspaceSummaryResponse(BaseModel):
+class LaraNamespaceSummaryResponse(BaseModel):
     """Сводка для Lara: импорты и черновики AI-анализа заметок в namespace."""
 
     namespace: str

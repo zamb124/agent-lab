@@ -357,7 +357,7 @@ export class SyncChatList extends PlatformElement {
         const payload = { name, type: 'group' };
         if (ns !== null) payload.namespace = ns.name;
         const result = await this._adhoc.run(payload);
-        const channelId = result && typeof result.id === 'string' ? result.id : null;
+        const channelId = result && typeof result.channel_id === 'string' ? result.channel_id : null;
         if (channelId === null) return;
         this.navigate('channel', { channelId });
         this.emit('adhoc-call-started', { channelId });

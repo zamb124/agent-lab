@@ -300,7 +300,7 @@ async def _enqueue_channel_message_notifications(
                 recipient_user_id=uid,
                 channel_id=channel_id,
                 company_id=company_id,
-                message_id=message.id,
+                message_id=message.message_id,
                 sender_display_name=message.sender.display_name,
                 notification_title=title,
                 body_preview=preview,
@@ -310,7 +310,7 @@ async def _enqueue_channel_message_notifications(
                 recipient_user_id=uid,
                 channel_id=channel_id,
                 company_id=company_id,
-                message_id=message.id,
+                message_id=message.message_id,
                 sender_display_name=message.sender.display_name,
                 notification_title=title,
                 body_preview=preview,
@@ -457,9 +457,9 @@ def _set_audio_transcription_state(
             raise ValueError("file/audio: ожидается AudioAttachmentContent.")
         next_audio = AudioAttachmentContent(
             file_id=block.data.file_id,
-            filename=block.data.filename,
-            mime_type=block.data.mime_type,
-            size=block.data.size,
+            original_name=block.data.original_name,
+            content_type=block.data.content_type,
+            file_size=block.data.file_size,
             duration_ms=block.data.duration_ms,
             waveform=block.data.waveform,
             transcription_status=status,
@@ -500,9 +500,9 @@ def _set_video_transcription_state(
             raise ValueError("file/video: ожидается VideoAttachmentContent.")
         next_video = VideoAttachmentContent(
             file_id=block.data.file_id,
-            filename=block.data.filename,
-            mime_type=block.data.mime_type,
-            size=block.data.size,
+            original_name=block.data.original_name,
+            content_type=block.data.content_type,
+            file_size=block.data.file_size,
             duration_ms=block.data.duration_ms,
             transcription_status=status,
             transcription_text=transcription_text,
@@ -865,10 +865,10 @@ async def send_message_with_side_effects(
                     )
                     edited_at = datetime.now(tz=UTC)
                     await container.message_repository.replace_message_contents(
-                        message.id, processing_contents, edited_at
+                        message.message_id, processing_contents, edited_at
                     )
                     proc_entity = await container.message_repository.get_by_id_for_company(
-                        message.id, company_id
+                        message.message_id, company_id
                     )
                     if proc_entity is None:
                         raise WsCommandError(
@@ -888,7 +888,7 @@ async def send_message_with_side_effects(
                         SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
                         sync_worker_broker,
                         channel_id=channel_id,
-                        message_id=message.id,
+                        message_id=message.message_id,
                         company_id=company_id,
                         actor_user_id=user.user_id,
                         background_kind="sync_transcribe",
@@ -923,7 +923,7 @@ async def _create_thread(
     await threads.create(entity)
     created_by = await _user_brief(user_repository, actor_user_id)
     return ThreadRead(
-        id=thread_id,
+        thread_id=thread_id,
         channel_id=root.channel_id,
         root_message_id=body.root_message_id,
         title=body.title,
@@ -948,7 +948,7 @@ async def _upsert_git_resource(
     )
     await git_refs.update(entity)
     return GitResourceRefRead(
-        id=ref_id,
+        git_ref_id=ref_id,
         provider=body.provider,
         kind=body.kind,
         project_key=body.project_key,

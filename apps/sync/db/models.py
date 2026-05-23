@@ -208,8 +208,8 @@ class SyncFile(Base):
     file_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     original_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
-    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     storage_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     checksum: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -322,7 +322,7 @@ class SyncCallParticipant(Base):
 
     __tablename__ = "sync_call_participants"
 
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    call_participant_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     call_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("sync_calls.call_id", ondelete="CASCADE"), nullable=False
     )

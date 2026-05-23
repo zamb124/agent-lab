@@ -13,6 +13,7 @@ const HEALTH_DOT = {
     unhealthy: 'var(--error)',
     loading: 'var(--text-tertiary)',
 };
+const SYSTEM_ONLY_SERVICE_IDS = new Set(['grafana', 'litserve']);
 
 export class PlatformServicesLauncher extends PlatformElement {
     static i18nNamespace = 'platform';
@@ -211,9 +212,9 @@ export class PlatformServicesLauncher extends PlatformElement {
                     throw new Error(`platform-services-launcher: unknown service id "${id}"`);
                 }
                 return s;
-            }).filter((s) => isSystemCompany || s.id !== 'grafana');
+            }).filter((s) => isSystemCompany || !SYSTEM_ONLY_SERVICE_IDS.has(s.id));
         }
-        return PLATFORM_SERVICES.filter((s) => isSystemCompany || s.id !== 'grafana');
+        return PLATFORM_SERVICES.filter((s) => isSystemCompany || !SYSTEM_ONLY_SERVICE_IDS.has(s.id));
     }
 
     _healthForItem(id) {
@@ -273,7 +274,7 @@ export class PlatformServicesLauncher extends PlatformElement {
         const label = html`<span class="label">${title}</span>`;
         if (disabled) {
             return html`
-                <div class="tile tile--disabled" style=${brandStyle} aria-label=${title}>
+                <div class="tile tile--disabled" data-service-id=${id} style=${brandStyle} aria-label=${title}>
                     ${iconBlock}
                     ${label}
                 </div>
@@ -284,6 +285,7 @@ export class PlatformServicesLauncher extends PlatformElement {
                 <button
                     type="button"
                     class="tile"
+                    data-service-id=${id}
                     style=${brandStyle}
                     aria-label=${title}
                     @click=${(e) => this._onTileClick(e, id)}
@@ -297,6 +299,7 @@ export class PlatformServicesLauncher extends PlatformElement {
         return html`
             <a
                 class="tile"
+                data-service-id=${id}
                 href=${href}
                 aria-label=${title}
                 style=${brandStyle}

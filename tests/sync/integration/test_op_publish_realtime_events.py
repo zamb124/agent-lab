@@ -48,7 +48,7 @@ async def _create_topic_channel(
         user=op_user,
         container=op_container,
     )
-    return channel.id
+    return channel.channel_id
 
 
 @pytest.mark.asyncio
@@ -63,7 +63,7 @@ async def test_op_channels_create_publishes_channel_created(
         op_user, op_container, unique_id, suffix="pubch", name=f"PubCh {unique_id}"
     )
     events = await redis_pubsub_listener("sync/channel/created", timeout=2.0)
-    assert any(e.get("payload", {}).get("id") == channel_id for e in events)
+    assert any(e.get("payload", {}).get("channel_id") == channel_id for e in events)
 
 
 @pytest.mark.asyncio
@@ -94,7 +94,7 @@ async def test_op_messages_send_publishes_message_created(
         container=op_container,
     )
     events = await redis_pubsub_listener("sync/message/created", timeout=2.0)
-    assert any(e.get("payload", {}).get("id") == msg.id for e in events)
+    assert any(e.get("payload", {}).get("message_id") == msg.message_id for e in events)
 
 
 @pytest.mark.asyncio
@@ -139,4 +139,4 @@ async def test_op_git_resources_upsert_publishes_git_resource_upserted(
     )
     ref = await op_git_resources_upsert(payload, user=op_user, container=op_container)
     events = await redis_pubsub_listener("sync/git_resource/upserted", timeout=2.0)
-    assert any(e.get("payload", {}).get("id") == ref.id for e in events)
+    assert any(e.get("payload", {}).get("git_ref_id") == ref.git_ref_id for e in events)

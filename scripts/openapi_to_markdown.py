@@ -15,9 +15,18 @@ from __future__ import annotations
 
 import json
 import logging
+import html
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+_CRM_BRAND_RE = re.compile(r"(?<![A-Za-z0-9])CRM(?![A-Za-z0-9])")
+
+
+def _brand_display_text(value: str) -> str:
+    """Пользовательское название продукта в документации без переименования API-контрактов."""
+    return _CRM_BRAND_RE.sub("NetWorkle", value)
 
 # Локализации заголовков
 LOCALIZATIONS = {
@@ -178,18 +187,13 @@ def generate_endpoint_markdown(
     """
     loc = LOCALIZATIONS.get(lang, LOCALIZATIONS["en"])
 
-    method_badge = {
-        "GET": "⬇️ GET",
-        "POST": "➕ POST",
-        "PUT": "✏️ PUT",
-        "PATCH": "📝 PATCH",
-        "DELETE": "🗑️ DELETE",
-    }.get(method.upper(), f"⚪ {method.upper()}")
+    method_upper = method.upper()
+    method_class = method_upper.lower()
 
-    summary = operation.get("summary", operation.get("description", ""))
-    description = operation.get("description", "")
+    summary = _brand_display_text(operation.get("summary", operation.get("description", "")))
+    description = _brand_display_text(operation.get("description", ""))
 
-    md = f"### {method_badge} `{path}`\n\n"
+    md = f'### <span class="docs-http-method docs-method-{method_class}">{method_upper}</span> `{path}`\n\n'
 
     if summary:
         md += f"{summary}\n\n"
@@ -205,7 +209,7 @@ def generate_endpoint_markdown(
             param_name = param.get("name", "")
             param_in = param.get("in", "")
             required = " (обязательно)" if param.get("required", False) else ""
-            param_desc = param.get("description", "")
+            param_desc = _brand_display_text(param.get("description", ""))
             param_schema = param.get("schema", {})
 
             # Разворачиваем схему параметра
@@ -240,7 +244,7 @@ def generate_endpoint_markdown(
                         for prop_name, prop_schema in resolved_schema["properties"].items():
                             prop_required = " (обязательно)" if prop_name in required_fields else ""
                             prop_type = prop_schema.get("type", "any")
-                            prop_desc = prop_schema.get("description", "")
+                            prop_desc = _brand_display_text(prop_schema.get("description", ""))
                             md += (
                                 f'  "{prop_name}": <{prop_type}>{prop_required},  // {prop_desc}\n'
                             )
@@ -248,11 +252,11 @@ def generate_endpoint_markdown(
                         md += "```\n\n"
                     else:
                         md += "```json\n"
-                        md += json.dumps(resolved_schema, indent=2)
+                        md += _brand_display_text(json.dumps(resolved_schema, indent=2))
                         md += "\n```\n\n"
                 elif schema_obj:
                     md += "```json\n"
-                    md += json.dumps(schema_obj, indent=2)
+                    md += _brand_display_text(json.dumps(schema_obj, indent=2))
                     md += "\n```\n\n"
 
     # Responses
@@ -260,7 +264,7 @@ def generate_endpoint_markdown(
     if responses:
         md += f"#### {loc['response']}\n\n"
         for status_code, response in responses.items():
-            status_desc = response.get("description", "")
+            status_desc = _brand_display_text(response.get("description", ""))
             md += f"- **{status_code}**: {status_desc}\n"
         md += "\n"
 
@@ -287,15 +291,15 @@ def generate_service_markdown(
     loc = LOCALIZATIONS.get(lang, LOCALIZATIONS["en"])
 
     info = openapi_schema.get("info", {})
-    title = info.get("title", f"{service_name.title()} {loc['api_title']}")
-    description = info.get("description", "")
+    title = _brand_display_text(info.get("title", f"{service_name.title()} {loc['api_title']}"))
+    description = _brand_display_text(info.get("description", ""))
 
     # YAML frontmatter
     md = f"---\ntitle: {json.dumps(title, ensure_ascii=False)}\n---\n\n"
 
     # Ручное intro если есть
     if intro_content:
-        md += f"{intro_content}\n\n"
+        md += f"{_brand_display_text(intro_content)}\n\n"
 
     # Описание из OpenAPI
     if description:
@@ -349,6 +353,7 @@ title: {json.dumps("API" if lang == "en" else "API", ensure_ascii=False)}
             index_md += "Public APIs for Humanitec platform.\n\n"
 
         index_md += "## Сервисы\n\n" if lang == "ru" else "## Services\n\n"
+        service_cards: list[str] = []
 
         for openapi_file in sorted(openapi_dir.glob("*.json")):
             service_name = openapi_file.stem
@@ -375,8 +380,30 @@ title: {json.dumps("API" if lang == "en" else "API", ensure_ascii=False)}
             output_file.write_text(markdown, encoding="utf-8")
 
             # Добавляем в индекс
-            service_title = schema.get("info", {}).get("title", service_name.title())
-            index_md += f"- [{service_title}]({service_name}/)\n"
+            service_title = _brand_display_text(schema.get("info", {}).get("title", service_name.title()))
+            service_description = _brand_display_text(" ".join(schema.get("info", {}).get("description", "").split()))
+            if not service_description:
+                service_description = (
+                    "Автосгенерированная справка по публичным эндпоинтам сервиса."
+                    if lang == "ru"
+                    else "Generated reference for public service endpoints."
+                )
+            service_cards.append(
+                '<a class="docs-card" href="{href}/">'
+                '<span class="docs-card-kicker">OpenAPI</span>'
+                "<h2>{title}</h2>"
+                "<p>{description}</p>"
+                "</a>".format(
+                    href=html.escape(service_name),
+                    title=html.escape(service_title),
+                    description=html.escape(service_description[:220]),
+                )
+            )
+
+        if service_cards:
+            index_md += '<div class="docs-card-grid docs-card-grid-compact">\n'
+            index_md += "\n".join(service_cards)
+            index_md += "\n</div>\n"
 
         # Сохранение индекса
         index_file = build_dir / "index.md"

@@ -66,13 +66,13 @@ from core.billing.exceptions import BillingBalanceBlockedError
 from core.context import Context, clear_context, get_context, set_context
 from core.logging import bind_log_context, get_logger
 from core.logging.attributes import LOG_SESSION_AGENT
-from core.state import ExecutionState
+from core.state import ExecutionState, ExecutionTaskState
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt, interrupt_to_response_dict
-from core.utils.background import run_with_log_context
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
 from core.tasks.kicker import kiq_task_name_with_context
 from core.tracing import get_tracer
 from core.tracing.provider import is_tracing_enabled
+from core.utils.background import run_with_log_context
 
 logger = get_logger(__name__)
 
@@ -323,7 +323,7 @@ class BaseChannel(ABC):
         self,
         session_id: str,
         state: ExecutionState,
-        status: str,
+        terminal_task_state: ExecutionTaskState,
         *,
         error: str | None = None,
     ) -> None:
@@ -332,7 +332,7 @@ class BaseChannel(ABC):
         await container.state_manager.save_terminal_state(
             session_id,
             state,
-            status,
+            terminal_task_state,
             error=error,
         )
 
@@ -642,7 +642,7 @@ class BaseChannel(ABC):
                 f"[state] Loaded state for session {params.session_id}: "
                 f"messages={messages_count}, current_nodes={state.current_nodes}, "
                 f"interrupt={bool(state.interrupt)}, breakpoint_hit={state.breakpoint_hit}, "
-                f"terminal_status={state.terminal_status}"
+                f"terminal_task_state={state.terminal_task_state}"
             )
             # При breakpoint resume НЕ перезаписываем content - используем оригинальный
             if not state.breakpoint_hit:
@@ -651,13 +651,10 @@ class BaseChannel(ABC):
             state.context_id = params.context_id
             state.session_id = params.session_id
 
-        state.terminal_status = None
-        state.terminal_error = None
+        state.terminal_task_state = None
+        state.terminal_task_error = None
         state.user_id = user_id
         state.user_groups = user_groups
-
-        if params.files_data:
-            state.files = list(state.files) + params.files_data
 
         try:
             await self._save_state(params.session_id, state)
@@ -698,6 +695,9 @@ class BaseChannel(ABC):
             if state_is_new:
                 cfg_nodes = (runtime_flow.config or {}).get("nodes") or {}
                 state.files = collect_flow_node_files(cfg_nodes)
+
+            if params.files_data:
+                state.files = list(state.files) + params.files_data
 
             state.variables = {**state.variables, **runtime_flow.variables}
 
@@ -789,7 +789,7 @@ class BaseChannel(ABC):
                 setattr(state, "_cancelled", True)
                 await self._save_terminal_state(params.session_id, state, "canceled")
                 await emitter.emit_cancelled()
-                return {"response": "", "status": "canceled"}
+                return {"response": "", "task_state": "canceled"}
             finally:
                 await cancellation_token.cleanup()
                 set_cancellation_token(None)
@@ -808,7 +808,7 @@ class BaseChannel(ABC):
                     "response": "",
                     "breakpoint_hit": node_id,
                     "breakpoint_state": state.breakpoint_state,
-                    "status": "input-required",
+                    "task_state": "input-required",
                 }
             if state.interrupt:
                 InterruptManager.enrich_system_from_channel(
@@ -843,7 +843,9 @@ class BaseChannel(ABC):
                 f"messages={messages_count}, current_nodes={state.current_nodes}, "
                 f"interrupt={bool(state.interrupt)}"
             )
-            status = "input-required" if state.interrupt else "completed"
+            task_state: ExecutionTaskState = (
+                "input-required" if state.interrupt else "completed"
+            )
 
             # Сериализация interrupt
             if state.interrupt:
@@ -854,7 +856,7 @@ class BaseChannel(ABC):
             return {
                 "response": final_response,
                 "interrupt": interrupt_dict,
-                "status": status,
+                "task_state": task_state,
             }
 
         except BillingBalanceBlockedError as e:
@@ -914,7 +916,11 @@ class BaseChannel(ABC):
             )
 
     async def _send_push_notification(
-        self, task_id: str, context_id: str, state: str, message: str
+        self,
+        task_id: str,
+        context_id: str,
+        task_state: ExecutionTaskState,
+        message: str,
     ) -> None:
         """Отправляет push notification через TaskIQ."""
         await kiq_task_name_with_context(
@@ -922,7 +928,7 @@ class BaseChannel(ABC):
             idle_broker,
             task_id,
             context_id,
-            state,
+            task_state,
             message,
             True,
             background_kind="a2a_task",
@@ -947,16 +953,16 @@ class BaseChannel(ABC):
         if state is None:
             return None
 
-        if state.terminal_status:
-            task_state = TaskState(state.terminal_status)
+        if state.terminal_task_state:
+            task_state = TaskState(state.terminal_task_state)
             if task_state == TaskState.input_required and state.interrupt:
                 response = state.interrupt.question
             elif task_state == TaskState.canceled:
                 response = "Task cancelled"
             elif task_state == TaskState.failed:
-                response = state.terminal_error or "Task failed"
+                response = state.terminal_task_error or "Task failed"
             else:
-                response = state.response or state.terminal_error or ""
+                response = state.response or state.terminal_task_error or ""
         elif state.interrupt:
             task_state = TaskState.input_required
             response = state.interrupt.question

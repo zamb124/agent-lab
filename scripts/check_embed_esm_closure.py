@@ -110,7 +110,7 @@ def _scan_closure() -> None:
                 if BARE_LIT_RE.search(line):
                     fail(
                         f"{cur.relative_to(ROOT)}:{i}: bare import lit "
-                        "(нужны относительные пути к assets/js/lit или lit-shim в embed-chat)"
+                        "(нужны относительные пути к assets/js/lit или общему lib/lit-shim)"
                     )
                     break
         if BARE_PLATFORM_RE.search(clean):

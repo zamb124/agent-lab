@@ -74,7 +74,7 @@ export class SyncForwardModal extends PlatformModal {
         const exclude = this._excludeId();
         const q = this._query.trim().toLowerCase();
         return this._channels.items.filter((c) => {
-            if (c.id === exclude) return false;
+            if (c.channel_id === exclude) return false;
             if (q !== '') {
                 const title = typeof c.name === 'string' ? c.name.toLowerCase() : '';
                 const peer = c.peer && typeof c.peer.display_name === 'string' ? c.peer.display_name.toLowerCase() : '';
@@ -84,11 +84,11 @@ export class SyncForwardModal extends PlatformModal {
         });
     }
 
-    _toggle(id) {
-        if (this._selectedIds.includes(id)) {
-            this._selectedIds = this._selectedIds.filter((x) => x !== id);
+    _toggle(channelId) {
+        if (this._selectedIds.includes(channelId)) {
+            this._selectedIds = this._selectedIds.filter((x) => x !== channelId);
         } else {
-            this._selectedIds = [...this._selectedIds, id];
+            this._selectedIds = [...this._selectedIds, channelId];
         }
     }
 
@@ -136,11 +136,11 @@ export class SyncForwardModal extends PlatformModal {
                 : html`<div class="list">
                     ${channels.map((c) => html`
                         <div
-                            class=${this._selectedIds.includes(c.id) ? 'form-item selected' : 'form-item'}
-                            @click=${() => this._toggle(c.id)}
+                            class=${this._selectedIds.includes(c.channel_id) ? 'form-item selected' : 'form-item'}
+                            @click=${() => this._toggle(c.channel_id)}
                         >
                             <div class="form-checkbox">
-                                ${this._selectedIds.includes(c.id) ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
+                                ${this._selectedIds.includes(c.channel_id) ? html`<platform-icon name="check" size="12"></platform-icon>` : ''}
                             </div>
                             <div class="form-item-content">
                                 <sync-channel-row pick-mode .channel=${c}></sync-channel-row>

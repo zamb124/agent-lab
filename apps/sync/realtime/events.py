@@ -76,7 +76,7 @@ def event_channel_created(
 ) -> RealtimeEvent:
     return RealtimeEvent(
         type="sync/channel/created",
-        channel_id=channel.id,
+        channel_id=channel.channel_id,
         payload=channel.model_dump(mode="json"),
         company_id=company_id,
         recipient_user_ids=recipient_user_ids,
@@ -255,7 +255,7 @@ def event_channel_pins_changed(
 ) -> RealtimeEvent:
     return RealtimeEvent(
         type="sync/channel/pins_changed",
-        channel_id=channel.id,
+        channel_id=channel.channel_id,
         payload=channel.model_dump(mode="json"),
         company_id=company_id,
         recipient_user_ids=recipient_user_ids,

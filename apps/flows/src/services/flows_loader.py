@@ -524,19 +524,6 @@ class FlowsLoader:
         node_id: str,
         index: int,
     ) -> str | Path:
-        path_value = entry.get("path")
-        if isinstance(path_value, str) and path_value.strip():
-            path_str = path_value.strip()
-            local_from_http = self._map_source_to_local_static(path_str)
-            if local_from_http is not None:
-                return local_from_http
-            if path_str.startswith(("http://", "https://")):
-                return path_str
-            local_path = Path(path_str)
-            if not local_path.is_absolute():
-                local_path = bundle_dir / path_str
-            return local_path
-
         url_value = entry.get("url")
         if isinstance(url_value, str) and url_value.strip():
             url_str = url_value.strip()
@@ -545,7 +532,7 @@ class FlowsLoader:
                 return local_from_http
             return url_str
 
-        raise ValueError(f"Node '{node_id}': files[{index}] должен содержать path или url")
+        raise ValueError(f"Node '{node_id}': files[{index}] должен содержать url")
 
     async def _materialize_node_files(
         self,
@@ -568,17 +555,20 @@ class FlowsLoader:
         for index, entry in enumerate(files):
             if not isinstance(entry, dict):
                 raise ValueError(f"Node '{node_id}': files[{index}] должен быть объектом")
-            name = entry.get("name")
-            if not isinstance(name, str) or not name.strip():
-                raise ValueError(f"Node '{node_id}': files[{index}].name должен быть непустой строкой")
+            original_name_value = entry.get("original_name")
+            if not isinstance(original_name_value, str) or not original_name_value.strip():
+                raise ValueError(f"Node '{node_id}': files[{index}].original_name должен быть непустой строкой")
+            content_type = entry.get("content_type")
+            if not isinstance(content_type, str) or not content_type.strip():
+                raise ValueError(f"Node '{node_id}': files[{index}].content_type должен быть непустой строкой")
 
             source = self._resolve_file_source(entry, bundle_dir, node_id, index)
-            raw_bytes, resolved_name = await reader.resolve_source(source, name, ReadOptions())
-            original_name = name.strip() if name.strip() else resolved_name
+            original_name = original_name_value.strip()
+            raw_bytes, _resolved_name = await reader.resolve_source(source, original_name, ReadOptions())
             item = await processor.persist_uploaded_file_as_state_files_item(
                 data=raw_bytes,
                 original_name=original_name,
-                content_type=entry.get("mime_type"),
+                content_type=content_type.strip(),
                 uploaded_by=None,
                 company_id=company_id,
                 public=False,

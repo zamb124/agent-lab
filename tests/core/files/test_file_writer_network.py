@@ -102,7 +102,7 @@ def test_html_embeds_both_http_images_as_data_uri(
     )
     result = network_writer.build_bytes(md, "report.html", content_mode="markdown")
     overwrite_artifact("network_report.html", result.data)
-    assert result.mime_type.startswith("text/html")
+    assert result.content_type.startswith("text/html")
     html = result.data.decode("utf-8")
     assert "Отчёт" in html and "Конец." in html
     n = _count_data_uri_images(html)
@@ -125,7 +125,7 @@ def test_docx_contains_both_images_in_word_media(
     )
     result = network_writer.build_bytes(md, "doc.docx", content_mode="markdown")
     overwrite_artifact("network_doc.docx", result.data)
-    assert "wordprocessingml" in result.mime_type
+    assert "wordprocessingml" in result.content_type
     zf = zipfile.ZipFile(BytesIO(result.data))
     media = [n for n in zf.namelist() if n.startswith("word/media/")]
     assert len(media) >= 2, f"ожидались минимум 2 файла в word/media/, получено {media}"
@@ -152,7 +152,7 @@ def test_xlsx_table_text_and_both_http_images(
     )
     result = network_writer.build_bytes(md, "book.xlsx", content_mode="markdown")
     overwrite_artifact("network_book.xlsx", result.data)
-    assert "spreadsheetml" in result.mime_type
+    assert "spreadsheetml" in result.content_type
     zf = zipfile.ZipFile(BytesIO(result.data))
     media = [n for n in zf.namelist() if n.startswith("xl/media/")]
     assert len(media) >= 2, f"ожидались минимум 2 в xl/media/, получено {media}"

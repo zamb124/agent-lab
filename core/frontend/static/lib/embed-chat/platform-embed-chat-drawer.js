@@ -1,4 +1,4 @@
-import { LitElement, html, css, nothing } from './lit-shim.js';
+import { LitElement, html, css, nothing } from '../lit-shim.js';
 import { embedChatLabelsForLang } from './embed-chat-default-labels.js';
 import { readEmbedChatUrlParams, applyEmbedChatDrawerSizeVars } from './embed-chat-url-params.js';
 import { resolveEmbedChatTheme } from './embed-chat-theme.js';
@@ -35,7 +35,6 @@ export class PlatformEmbedChatDrawer extends LitElement {
         flowId: { type: String, attribute: 'flow-id' },
         embedId: { type: String, attribute: 'embed-id' },
         branchId: { type: String, attribute: 'branch-id' },
-        skillId: { type: String, attribute: 'skill-id' },
         useCredentials: { type: Boolean, attribute: 'use-credentials' },
         enableVoice: { type: Boolean, attribute: 'enable-voice' },
         voiceEnabled: { type: Boolean, attribute: 'voice-enabled' },
@@ -349,7 +348,6 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this.flowId = '';
         this.embedId = '';
         this.branchId = '';
-        this.skillId = '';
         this.useCredentials = false;
         this.enableVoice = true;
         this.voiceEnabled = false;
@@ -543,7 +541,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
             if (!this.open) {
                 void this._disposeTtsOnlyStream();
             }
-            if (this.open && readTtsOutputEnabled() && !this._voiceOn) {
+            if (this.open && this.voiceEnabled && readTtsOutputEnabled() && !this._voiceOn) {
                 void this._ensureTtsOnlyStream();
             }
             if (this.open && this.voiceEnabled && this.voiceDefaultOn && !this._voiceOn) {
@@ -727,7 +725,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
             void this._disposeTtsOnlyStream();
             return;
         }
-        if (this.open && !this._voiceOn) {
+        if (this.open && this.voiceEnabled && !this._voiceOn) {
             void this._ensureTtsOnlyStream();
         }
     }
@@ -774,6 +772,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
     _embedComposerBrowserDictation() {
         return (
             this.enableVoice === true
+            && this.voiceEnabled === true
             && (this._voiceEmbedTtsContextReady() !== true || this.voiceEnabled !== true)
         );
     }
@@ -1077,7 +1076,6 @@ export class PlatformEmbedChatDrawer extends LitElement {
             flowsApiRoot: root,
             flowId: fid,
             branchId: this.branchId,
-            skillIdLegacy: this.skillId,
             credentials: this.useCredentials === true ? 'include' : 'omit',
             getHeaders:
                 typeof this.getAuthToken === 'function' ? () => this.getAuthToken() : async () => ({}),
@@ -1174,7 +1172,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
             a2aBaseUrl,
             flowId: this.flowId || undefined,
             embedId: this.embedId || undefined,
-            branchId: (this.branchId || this.skillId || null) || null,
+            branchId: this.branchId || null,
             getHeaders,
             credentials: this.useCredentials ? 'include' : 'omit',
             getContextId: () => {
@@ -1284,7 +1282,7 @@ export class PlatformEmbedChatDrawer extends LitElement {
         this._voiceMedia = null;
         this._voiceOn = false;
         this._voiceStatus = 'idle';
-        if (readTtsOutputEnabled() && this.open) {
+        if (this.voiceEnabled && readTtsOutputEnabled() && this.open) {
             void this._ensureTtsOnlyStream();
         }
     }
@@ -1459,26 +1457,25 @@ export class PlatformEmbedChatDrawer extends LitElement {
                     @humanitec-embed-chat-assistant-reply-completed=${this._onEmbedAssistantReplyCompleted}
                     @humanitec-embed-voice-bridge-user-stop=${this._onEmbedVoiceBridgeUserStop}
                     @voice-toggle=${this._onComposerVoiceToggle}
-                    ?hide-header=${true}
-                    ?visible=${this.open}
+                    .hideHeader=${true}
+                    .visible=${this.open}
                     embed-theme=${embedTheme}
                     interface-locale=${this._interfaceLocaleForChat()}
-                    ?show-locale-control=${this.showLocaleControl}
+                    .showLocaleControl=${this.showLocaleControl}
                     .flowsBaseUrl=${this.flowsBaseUrl}
                     .platformUiOrigin=${this.platformUiOrigin || ''}
                     company-id=${this.companyId || ''}
                     voice-base-url=${this.voiceBaseUrl || ''}
                     flow-id=${this.flowId || ''}
                     embed-id=${this.embedId || ''}
-                    branch-id=${(this.branchId || this.skillId || '').trim()}
-                    skill-id=${(this.skillId || this.branchId || '').trim()}
+                    branch-id=${(this.branchId || '').trim()}
                     .assistantTitle=${headTitle}
                     .title=${headTitle}
                     .labels=${this.labels && typeof this.labels === 'object' ? this.labels : {}}
-                    ?use-credentials=${this.useCredentials}
-                    ?enable-voice=${this._embedComposerBrowserDictation()}
-                    ?voice-duplex=${this._embedComposerWsDuplex()}
-                    ?voice-composer-active=${this._voiceOn}
+                    .useCredentials=${this.useCredentials}
+                    .enableVoice=${this._embedComposerBrowserDictation()}
+                    .voiceDuplex=${this._embedComposerWsDuplex()}
+                    .voiceComposerActive=${this._voiceOn}
                     voice-composer-status=${this._voiceStatus || 'idle'}
                     .getAuthToken=${this.getAuthToken}
                     .getExtraMetadataVariables=${this.getExtraMetadataVariables}

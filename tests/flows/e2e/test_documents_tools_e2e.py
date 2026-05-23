@@ -6,7 +6,7 @@ import asyncio
 import base64
 import uuid
 from io import BytesIO
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from docx import Document
@@ -46,6 +46,8 @@ def _docx_text(data: bytes) -> str:
 def _xlsx_bytes() -> bytes:
     wb = Workbook()
     ws = wb.active
+    if ws is None:
+        raise RuntimeError("Workbook.active is required")
     ws.title = "Sheet1"
     ws["A1"] = "OLD_CELL"
     ws["B2"] = "keep"
@@ -159,8 +161,13 @@ async def _state_file(
     for _ in range(30):
         state = await container.state_manager.get_state(session_id)
         if state:
-            files = state.get("files") if isinstance(state, dict) else getattr(state, "files", [])
-            matches = [item for item in files or [] if item.get("name") == file_name]
+            files_raw = state.get("files") if isinstance(state, dict) else getattr(state, "files", [])
+            files = files_raw if isinstance(files_raw, list) else []
+            matches = [
+                cast(dict[str, Any], item)
+                for item in files
+                if isinstance(item, dict) and item.get("original_name") == file_name
+            ]
             for item in reversed(matches):
                 if _file_document(item):
                     return item

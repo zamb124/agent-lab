@@ -31,7 +31,7 @@ class GitResourceKind(str, Enum):
 class GitResourceRefRead(BaseModel):
     """Нормализованный Git-ресурс, возвращаемый из API."""
 
-    id: str = Field(description="Внутренний идентификатор Git-ресурса.")
+    git_ref_id: str = Field(description="Внутренний идентификатор Git-ресурса.")
     provider: GitProvider = Field(description="Провайдер Git.")
     kind: GitResourceKind = Field(description="Тип Git-ресурса.")
     project_key: str = Field(description="Ключ/путь проекта в провайдере.")

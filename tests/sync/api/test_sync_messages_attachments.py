@@ -54,9 +54,9 @@ async def test_http_send_message_file_document_list_round_trip(
                     "order": 0,
                     "data": {
                         "file_id": file_id,
-                        "filename": "report.pdf",
-                        "mime_type": "application/pdf",
-                        "size": f["file_size"],
+                        "original_name": "report.pdf",
+                        "content_type": "application/pdf",
+                        "file_size": f["file_size"],
                     },
                 },
             ],
@@ -76,9 +76,9 @@ async def test_http_send_message_file_document_list_round_trip(
     assert c0["type"] == "file/document"
     assert c0["order"] == 0
     assert c0["data"]["file_id"] == file_id
-    assert c0["data"]["filename"] == "report.pdf"
-    assert c0["data"]["mime_type"] == "application/pdf"
-    assert c0["data"]["size"] == f["file_size"]
+    assert c0["data"]["original_name"] == "report.pdf"
+    assert c0["data"]["content_type"] == "application/pdf"
+    assert c0["data"]["file_size"] == f["file_size"]
 
 
 @pytest.mark.asyncio
@@ -122,9 +122,9 @@ async def test_http_send_message_file_image_with_text_plain(
                     "order": 1,
                     "data": {
                         "file_id": file_id,
-                        "filename": "photo.jpg",
-                        "mime_type": "image/jpeg",
-                        "size": f["file_size"],
+                        "original_name": "photo.jpg",
+                        "content_type": "image/jpeg",
+                        "file_size": f["file_size"],
                     },
                 },
             ],
@@ -145,9 +145,9 @@ async def test_http_send_message_file_image_with_text_plain(
     assert contents[0]["data"]["body"] == "смотри фото"
     assert contents[1]["type"] == "file/image"
     assert contents[1]["data"]["file_id"] == file_id
-    assert contents[1]["data"]["filename"] == "photo.jpg"
-    assert contents[1]["data"]["mime_type"] == "image/jpeg"
-    assert contents[1]["data"]["size"] == f["file_size"]
+    assert contents[1]["data"]["original_name"] == "photo.jpg"
+    assert contents[1]["data"]["content_type"] == "image/jpeg"
+    assert contents[1]["data"]["file_size"] == f["file_size"]
 
 
 @pytest.mark.asyncio
@@ -188,9 +188,9 @@ async def test_http_send_message_two_file_attachments_one_message(
                     "order": 0,
                     "data": {
                         "file_id": fa["file_id"],
-                        "filename": "a.txt",
-                        "mime_type": "text/plain",
-                        "size": fa["file_size"],
+                        "original_name": "a.txt",
+                        "content_type": "text/plain",
+                        "file_size": fa["file_size"],
                     },
                 },
                 {
@@ -198,9 +198,9 @@ async def test_http_send_message_two_file_attachments_one_message(
                     "order": 1,
                     "data": {
                         "file_id": fb["file_id"],
-                        "filename": "b.txt",
-                        "mime_type": "text/plain",
-                        "size": fb["file_size"],
+                        "original_name": "b.txt",
+                        "content_type": "text/plain",
+                        "file_size": fb["file_size"],
                     },
                 },
             ],

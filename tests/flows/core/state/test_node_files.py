@@ -8,14 +8,14 @@ from apps.flows.src.state.node_files import collect_flow_node_files, validate_no
 
 def test_collect_flow_node_files_merges_in_stable_order() -> None:
     nodes = {
-        "a": {"type": "code", "files": [{"name": "x.txt", "path": "/p1"}]},
-        "b": {"type": "llm_node", "files": [{"name": "y.pdf", "path": "/p2", "mime_type": "application/pdf"}]},
+        "a": {"type": "code", "files": [{"original_name": "x.txt", "url": "/p1"}]},
+        "b": {"type": "llm_node", "files": [{"original_name": "y.pdf", "url": "/p2", "content_type": "application/pdf"}]},
     }
     got = collect_flow_node_files(nodes)
     assert len(got) == 2
-    assert got[0]["name"] == "x.txt"
-    assert got[1]["name"] == "y.pdf"
-    assert got[1]["mime_type"] == "application/pdf"
+    assert got[0]["original_name"] == "x.txt"
+    assert got[1]["original_name"] == "y.pdf"
+    assert got[1]["content_type"] == "application/pdf"
 
 
 def test_collect_flow_node_files_skips_empty() -> None:
@@ -26,10 +26,10 @@ def test_collect_flow_node_files_skips_empty() -> None:
 def test_validate_node_files_list_rejects_bad_shape() -> None:
     with pytest.raises(ValueError, match="списком"):
         validate_node_files_list({}, node_id="n1")
-    with pytest.raises(ValueError, match="name"):
-        validate_node_files_list([{"path": "/x"}], node_id="n1")
-    with pytest.raises(ValueError, match="path"):
-        validate_node_files_list([{"name": "a"}], node_id="n1")
+    with pytest.raises(ValueError, match="original_name"):
+        validate_node_files_list([{"url": "/x"}], node_id="n1")
+    with pytest.raises(ValueError, match="url"):
+        validate_node_files_list([{"original_name": "a"}], node_id="n1")
 
 
 @pytest.mark.asyncio
@@ -39,7 +39,7 @@ async def test_flow_validator_invalid_node_files() -> None:
         "main": {
             "type": "llm_node",
             "prompt": "hi",
-            "files": [{"name": "", "path": "/x"}],
+            "files": [{"original_name": "", "url": "/x"}],
         }
     }
     edges = [{"from": "main", "to": None}]

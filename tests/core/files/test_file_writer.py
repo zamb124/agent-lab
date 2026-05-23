@@ -62,7 +62,7 @@ def test_docx_with_patched_image_fetch() -> None:
     with patch("core.files.writer.service.fetch_url_bytes", side_effect=fake_fetch):
         r = w.build_bytes(md, "out.docx", content_mode="markdown")
     overwrite_artifact("unit_patched_image.docx", r.data)
-    assert r.mime_type.startswith("application/vnd.openxmlformats")
+    assert r.content_type.startswith("application/vnd.openxmlformats")
     zf = zipfile.ZipFile(BytesIO(r.data))
     names = zf.namelist()
     assert "word/document.xml" in names
@@ -86,7 +86,7 @@ def test_xlsx_table_and_image() -> None:
     with patch("core.files.writer.service.fetch_url_bytes", side_effect=fake_fetch):
         r = w.build_bytes(md, "sheet.xlsx", content_mode="markdown")
     overwrite_artifact("unit_table_image.xlsx", r.data)
-    assert "spreadsheetml" in r.mime_type
+    assert "spreadsheetml" in r.content_type
     zf = zipfile.ZipFile(BytesIO(r.data))
     assert any(n.startswith("xl/media/") for n in zf.namelist())
 

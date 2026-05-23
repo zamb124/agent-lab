@@ -13,7 +13,7 @@ from a2a.types import Message, Part, Role, TextPart
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_CHANNEL
 from core.context import get_context
 from core.logging import get_logger
-from core.state import ExecutionState
+from core.state import TERMINAL_TASK_STATES, ExecutionState, ExecutionTaskState
 
 if TYPE_CHECKING:
     from apps.flows.src.db import BaseStateRepository
@@ -21,17 +21,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 HOT_STATE_TTL_SECONDS = 7 * 24 * 60 * 60
-TERMINAL_STATUSES = {
-    "completed",
-    "input-required",
-    "canceled",
-    "failed",
-    "rejected",
-    "auth-required",
-    "unknown",
-}
-
-
 def create_initial_state(
     task_id: str,
     context_id: str,
@@ -154,7 +143,7 @@ class StateManager:
         if hot is not None:
             return hot
         terminal = await self._repository.get(session_id)
-        if terminal is not None and not terminal.terminal_status:
+        if terminal is not None and not terminal.terminal_task_state:
             return None
         return terminal
 
@@ -169,16 +158,16 @@ class StateManager:
         self,
         session_id: str,
         state: ExecutionState | dict[str, Any],
-        status: str,
+        terminal_task_state: ExecutionTaskState,
         *,
         error: str | None = None,
     ) -> bool:
         """Фиксирует terminal snapshot в БД и убирает hot state из Redis."""
-        if status not in TERMINAL_STATUSES:
-            raise ValueError(f"Unknown terminal state: {status!r}")
+        if terminal_task_state not in TERMINAL_TASK_STATES:
+            raise ValueError(f"Unknown terminal task state: {terminal_task_state!r}")
         st = ExecutionState.model_validate(state) if isinstance(state, dict) else state
-        st.terminal_status = status  # type: ignore[assignment]
-        st.terminal_error = error
+        st.terminal_task_state = terminal_task_state
+        st.terminal_task_error = error
         ok = await self._repository.set(session_id, st)
         await self._delete_hot_state(session_id, st)
         return ok

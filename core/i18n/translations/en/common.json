@@ -4,6 +4,7 @@
     "delete": "Delete",
     "edit": "Edit",
     "create": "Create",
+    "close": "Close",
     "loading": "Loading...",
     "refresh": "Refresh"
 }

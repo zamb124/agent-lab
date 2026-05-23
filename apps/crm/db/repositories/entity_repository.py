@@ -270,7 +270,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         return entity
 
     @override
-    async def get(self, entity_id: str) -> CRMEntity | None:
+    async def get(self, entity_id: str, /) -> CRMEntity | None:
         """Получает entity по ID."""
         async with self._db.session() as session:
             stmt = select(CRMEntity).where(CRMEntity.entity_id == entity_id)

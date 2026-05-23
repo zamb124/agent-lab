@@ -55,7 +55,7 @@ logger = get_logger(__name__)
 
 def should_use_platform_default_free_pool(
     *,
-    model_name: Optional[str],
+    model: Optional[str],
     provider: Optional[str],
     api_key: Optional[str],
     base_url: Optional[str],
@@ -64,7 +64,7 @@ def should_use_platform_default_free_pool(
 ) -> bool:
     """Public predicate for callers that must decide billing before creating a client."""
     return _should_use_platform_default_pool(
-        model=model_name,
+        model=model,
         provider=provider,
         api_key=api_key,
         base_url=base_url,
@@ -305,7 +305,8 @@ def get_llm_for_state(
             if llm_responses:
                 mock_responses = llm_responses
         if mock_responses:
-            mock = MockLLM(model_name=model_name or "mock-gpt-4")
+            mock_model = model_name if model_name is not None else "mock-gpt-4"
+            mock = MockLLM(model_name=mock_model)
             mock.configure(response_queue=mock_responses)
             return mock
 

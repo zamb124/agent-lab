@@ -175,7 +175,7 @@ class FileWriter:
         active_company = require_active_company()
         return await write_bytes_via_processor(
             data=built.data,
-            mime_type=built.mime_type,
+            content_type=built.content_type,
             original_name=original_name,
             file_processor=self._file_processor,
             uploaded_by=ctx.user.user_id,
@@ -253,7 +253,7 @@ class FileWriter:
         mime = _mime_for_extension(ext)
         return FileWriteResult(
             data=raw_b,
-            mime_type=mime,
+            content_type=mime,
             conversion_applied=False,
             checksum_sha256_hex=compute_content_checksum_sha256(raw_b),
         )
@@ -272,7 +272,7 @@ class FileWriter:
         mime = _mime_for_extension(ext)
         return FileWriteResult(
             data=raw_b,
-            mime_type=mime,
+            content_type=mime,
             conversion_applied=False,
             checksum_sha256_hex=compute_content_checksum_sha256(raw_b),
         )
@@ -289,7 +289,7 @@ class FileWriter:
             mime = "text/markdown" if ext == ".md" else "text/plain; charset=utf-8"
             return FileWriteResult(
                 data=data,
-                mime_type=mime,
+                content_type=mime,
                 conversion_applied=True,
                 checksum_sha256_hex=compute_content_checksum_sha256(data),
             )
@@ -297,7 +297,7 @@ class FileWriter:
             data = self._md_to_html_bytes(md_text, opts)
             return FileWriteResult(
                 data=data,
-                mime_type="text/html; charset=utf-8",
+                content_type="text/html; charset=utf-8",
                 conversion_applied=True,
                 checksum_sha256_hex=compute_content_checksum_sha256(data),
             )
@@ -305,7 +305,7 @@ class FileWriter:
             data = self._md_to_pdf_bytes(md_text, opts)
             return FileWriteResult(
                 data=data,
-                mime_type="application/pdf",
+                content_type="application/pdf",
                 conversion_applied=True,
                 checksum_sha256_hex=compute_content_checksum_sha256(data),
             )
@@ -313,7 +313,7 @@ class FileWriter:
             data = self._md_to_docx_bytes(md_text, opts)
             return FileWriteResult(
                 data=data,
-                mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 conversion_applied=True,
                 checksum_sha256_hex=compute_content_checksum_sha256(data),
             )
@@ -321,7 +321,7 @@ class FileWriter:
             data = self._md_to_xlsx_bytes(md_text, opts)
             return FileWriteResult(
                 data=data,
-                mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 conversion_applied=True,
                 checksum_sha256_hex=compute_content_checksum_sha256(data),
             )

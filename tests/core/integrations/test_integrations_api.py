@@ -204,7 +204,7 @@ class TestOAuthCallbackGuidedIntegrationError:
             message_en="EN body",
             links=(
                 GuidedIntegrationLink(
-                    href="/crm/settings/spaces",
+                    href="/crm/namespaces",
                     label_ru="Lru",
                     label_en="Len",
                 ),
@@ -223,7 +223,7 @@ class TestOAuthCallbackGuidedIntegrationError:
         assert payload["code"] == "test_oauth_guided"
         assert payload["detail"] == "EN body"
         assert payload["guided"]["title"] == "EN title"
-        assert payload["guided"]["links"][0]["href"] == "/crm/settings/spaces"
+        assert payload["guided"]["links"][0]["href"] == "/crm/namespaces"
         assert "request_id" in payload
 
     @pytest.mark.asyncio
@@ -236,7 +236,7 @@ class TestOAuthCallbackGuidedIntegrationError:
             message_en="EN body",
             links=(
                 GuidedIntegrationLink(
-                    href="/crm/settings/spaces",
+                    href="/crm/namespaces",
                     label_ru="Lru",
                     label_en="Len",
                 ),
@@ -255,7 +255,7 @@ class TestOAuthCallbackGuidedIntegrationError:
         assert resp.status_code == 400
         assert "text/html" in resp.headers.get("content-type", "")
         assert b"EN title" in resp.content
-        assert b"/crm/settings/spaces" in resp.content
+        assert b"/crm/namespaces" in resp.content
 
     @pytest.mark.asyncio
     async def test_returns_html_russian_when_language_cookie_ru(
@@ -269,7 +269,7 @@ class TestOAuthCallbackGuidedIntegrationError:
             message_en="EN body",
             links=(
                 GuidedIntegrationLink(
-                    href="/crm/settings/spaces",
+                    href="/crm/namespaces",
                     label_ru="Пространства",
                     label_en="Spaces",
                 ),
@@ -333,7 +333,7 @@ class TestOAuthCallbackGuidedIntegrationError:
             message_en="EN body",
             links=(
                 GuidedIntegrationLink(
-                    href="/crm/settings/spaces",
+                    href="/crm/namespaces",
                     label_ru="Lru",
                     label_en="Len",
                 ),
@@ -365,7 +365,7 @@ class TestOAuthCallbackGuidedIntegrationError:
             message_en="EN body",
             links=(
                 GuidedIntegrationLink(
-                    href="/crm/settings/spaces",
+                    href="/crm/namespaces",
                     label_ru="Lru",
                     label_en="Len",
                 ),

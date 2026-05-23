@@ -219,7 +219,7 @@ class FileProcessor:
         *,
         data: bytes,
         original_name: str,
-        content_type: Optional[str],
+        content_type: str,
         uploaded_by: Optional[str],
         company_id: str,
         public: bool,
@@ -231,7 +231,9 @@ class FileProcessor:
         """
         Байты с клиента → S3 + FileRecord + download_url; один элемент формата state.files.
         """
-        effective_type = content_type if content_type else "application/octet-stream"
+        effective_type = content_type.strip()
+        if not effective_type:
+            raise ValueError("content_type обязателен для state.files item")
         record = await self.persist_uploaded_file(
             data=data,
             original_name=original_name,
@@ -245,13 +247,13 @@ class FileProcessor:
             tags=tags,
         )
         prefix = download_url_prefix.rstrip("/")
-        path = record.download_url if record.download_url else f"{prefix}/{record.file_id}"
+        url = record.download_url if record.download_url else f"{prefix}/{record.file_id}"
         return {
-            "name": record.original_name,
-            "path": path,
-            "mime_type": record.content_type,
-            "size": record.file_size,
             "file_id": record.file_id,
+            "original_name": record.original_name,
+            "url": url,
+            "content_type": record.content_type,
+            "file_size": record.file_size,
         }
 
     async def get_file_record(self, file_id: str) -> Optional[FileMetadata]:
@@ -323,39 +325,26 @@ class FileProcessor:
     def extract_file_info_from_message(message_content: str) -> List[Dict[str, str]]:
         """
         Извлекает информацию о файлах из текста сообщения.
-        Поддерживает несколько форматов для обратной совместимости.
 
         Args:
             message_content: Текст сообщения
 
         Returns:
-            Список словарей с информацией о файлах (ключи: name, file_id, url, content_type, size)
+            Список словарей с информацией о файлах (ключи: original_name, file_id, url, content_type, file_size)
         """
         file_info_list = []
 
-        # Формат: [FILE] Файл: name (ID: id, URL: url, тип: type, размер: size) [/FILE]
-        # Может быть с переносами строк и эмодзи внутри
         pattern = r'\[FILE\][\s\n]*📎?\s*Файл:\s*([^\(]+)\s*\(ID:\s*([^,]+),\s*URL:\s*([^,]+),\s*тип:\s*([^,]+),\s*размер:\s*([^)]+)\)[\s\n]*\[/FILE\]'
         matches = re.findall(pattern, message_content, re.MULTILINE)
 
-        for filename, file_id, url, content_type, size in matches:
+        for original_name, file_id, url, content_type, file_size in matches:
             file_info_list.append({
-                "name": filename.strip(),
+                "original_name": original_name.strip(),
                 "file_id": file_id.strip(),
                 "url": url.strip(),
                 "content_type": content_type.strip(),
-                "size": size.strip(),
+                "file_size": file_size.strip(),
             })
-
-        # Также поддерживаем формат без [FILE]...[/FILE] для обратной совместимости
-        if not file_info_list:
-            old_pattern = r'📎\s*Файл:\s*([^\(]+)\s*\(ID:\s*(file_[a-f0-9]{12})'
-            old_matches = re.findall(old_pattern, message_content)
-            for filename, file_id in old_matches:
-                file_info_list.append({
-                    "name": filename.strip(),
-                    "file_id": file_id.strip(),
-                })
 
         return file_info_list
 

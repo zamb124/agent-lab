@@ -1,5 +1,5 @@
 """
-CORS заголовки для cross-origin загрузки ES modules с префикса /static/core (embed-виджет).
+CORS заголовки для публичных cross-origin ресурсов embed-виджета.
 """
 
 from __future__ import annotations
@@ -8,15 +8,19 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-STATIC_CORE_PREFIX = "/static/core"
+PUBLIC_EMBED_CORS_PREFIXES = (
+    "/static/core",
+    "/api/i18n/",
+    "/api/platform/file-types",
+)
 
 
 class StaticCoreModuleCorsMiddleware(BaseHTTPMiddleware):
-    """Добавляет Access-Control-Allow-Origin для статики core-frontend без учёта общего CORSMiddleware."""
+    """Добавляет Access-Control-Allow-Origin для публичных ресурсов embed без учёта общего CORSMiddleware."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
-        if not path.startswith(STATIC_CORE_PREFIX):
+        if not any(path.startswith(prefix) for prefix in PUBLIC_EMBED_CORS_PREFIXES):
             return await call_next(request)
 
         if request.method.upper() == "OPTIONS":

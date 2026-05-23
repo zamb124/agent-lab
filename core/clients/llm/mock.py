@@ -104,7 +104,9 @@ class MockLLM:
     """
 
     def __init__(self, model_name: str = "mock-gpt-4"):
-        self.model_name = model_name
+        if not model_name.strip():
+            raise ValueError("MockLLM model is required")
+        self.model = model_name
         self.llm_provider = "mock"
         self._response_queue: List[Any] = []
         self._responses: Dict[str, str] = {}
@@ -209,7 +211,7 @@ class MockLLM:
             _normalize_message_for_capture(message) for message in messages
         ]
         record = {
-            "model": model or self.model_name,
+            "model": model or self.model,
             "messages": normalized_messages,
             "tools": tools or [],
             "response_format": response_format,
@@ -706,14 +708,14 @@ def _normalize_message_for_capture(message: Any) -> Dict[str, Any]:
     }
 
 
-def get_global_mock_llm(model_name: str = "mock-gpt-4") -> Optional[MockLLM]:
+def get_global_mock_llm(model: str = "mock-gpt-4") -> Optional[MockLLM]:
     """Получает глобальный MockLLM для настройки в тестах"""
-    return _global_mock_registry.get(model_name)
+    return _global_mock_registry.get(model)
 
 
-def configure_mock_llm_redis(redis_client, model_name: str = "mock-gpt-4") -> Optional[MockLLM]:
+def configure_mock_llm_redis(redis_client, model: str = "mock-gpt-4") -> Optional[MockLLM]:
     """Настраивает MockLLM для чтения из Redis."""
-    mock_llm = get_global_mock_llm(model_name)
+    mock_llm = get_global_mock_llm(model)
     if mock_llm:
         mock_llm.set_redis_client(redis_client)
         logger.info("mock_llm.redis_configured")

@@ -264,7 +264,7 @@ async def test_parallel_llm_flow_db_query_budget(
 
         persisted_state = await container.state_repository.get(session_id)
         assert persisted_state is not None
-        assert persisted_state.terminal_status == "completed"
+        assert persisted_state.terminal_task_state == "completed"
 
         app_stats = _application_stats(stats)
         agents_stats = [stat for stat in app_stats if stat.database == "platform_agents"]

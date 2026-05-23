@@ -46,12 +46,13 @@ import { registerModalKind } from '../utils/modal-registry.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
 import { hasFactory } from '../events/factory-registry.js';
 
-const TEAM_MEMBERS_RESOURCE_NAME = 'frontend/team_members';
 import { CoreEvents } from '../events/contract.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import './platform-button.js';
 import './platform-icon.js';
 
+const TEAM_MEMBERS_RESOURCE_NAME = 'frontend/team_members';
+const SYNC_SHARED_CHANNELS_OP_NAME = 'sync/shared_channels';
 const AVAILABLE_ROLES = Object.freeze(['owner', 'admin', 'developer', 'viewer']);
 
 export class PlatformUserInfoModal extends PlatformFormModal {
@@ -64,6 +65,9 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         _roles: { state: true },
         _rolesDirty: { state: true },
         _avatarLgFallback: { state: true },
+        _sharedChannels: { state: true },
+        _sharedChannelsLoading: { state: true },
+        _sharedChannelsError: { state: true },
     };
 
     static styles = [
@@ -229,6 +233,49 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
             }
+
+            .channels-section {
+                margin-top: var(--space-4, 16px);
+                padding-top: var(--space-4, 16px);
+                border-top: 1px solid var(--glass-border-subtle);
+            }
+
+            .channels-section-title {
+                font-size: var(--text-sm, 14px);
+                font-weight: var(--font-semibold, 600);
+                color: var(--text-primary);
+                margin-bottom: var(--space-2, 8px);
+            }
+
+            .channels-grid {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-2, 8px);
+            }
+
+            .channel-cell {
+                display: block;
+                width: 100%;
+                padding: 0;
+                border: 0;
+                background: transparent;
+                color: inherit;
+                text-align: inherit;
+                cursor: pointer;
+            }
+
+            .channel-cell sync-channel-row {
+                pointer-events: none;
+            }
+
+            .channels-empty {
+                padding: var(--space-3, 12px);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: var(--radius-md);
+                color: var(--text-tertiary);
+                font-size: var(--text-sm, 14px);
+                background: var(--glass-solid-subtle);
+            }
         `,
     ];
 
@@ -239,6 +286,11 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this._rolesDirty = false;
         this._avatarLgFallback = 0;
         this._avatarLgSig = '';
+        this._sharedChannels = [];
+        this._sharedChannelsLoading = false;
+        this._sharedChannelsError = '';
+        this._sharedChannelsPeerId = '';
+        this._sharedChannelsOp = null;
         this._teamSel = this.select((s) => s.team);
         this._authSel = this.select((s) => s.auth);
         this._localeSel = this.select((s) => s.i18n.locale);
@@ -258,6 +310,13 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         return this._members;
     }
 
+    _ensureSharedChannelsOp() {
+        if (this._sharedChannelsOp) return this._sharedChannelsOp;
+        if (!hasFactory(SYNC_SHARED_CHANNELS_OP_NAME)) return null;
+        this._sharedChannelsOp = this.useOp(SYNC_SHARED_CHANNELS_OP_NAME);
+        return this._sharedChannelsOp;
+    }
+
     updated(changed) {
         super.updated(changed);
         const auth = this._authSel.value;
@@ -275,6 +334,10 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             this._rolesDirty = false;
             this._avatarLgFallback = 0;
             this._avatarLgSig = '';
+            this._sharedChannels = [];
+            this._sharedChannelsLoading = false;
+            this._sharedChannelsError = '';
+            this._sharedChannelsPeerId = '';
             const resolved = this._resolveUser();
             if (resolved && !resolved.isOwn && resolved.user) {
                 this._roles = new Set(resolved.user.roles);
@@ -299,6 +362,49 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             if (this._avatarLgSig !== sig) {
                 this._avatarLgSig = sig;
                 this._avatarLgFallback = 0;
+            }
+        }
+        this._maybeLoadSharedChannels(resolvedAvatar);
+    }
+
+    _maybeLoadSharedChannels(resolved) {
+        if (!resolved || resolved.isOwn || !resolved.user) return;
+        const peerId = typeof resolved.user.user_id === 'string' ? resolved.user.user_id : '';
+        if (peerId === '') return;
+        if (this._sharedChannelsPeerId === peerId || this._sharedChannelsLoading) return;
+        const op = this._ensureSharedChannelsOp();
+        if (!op) return;
+        this._sharedChannelsPeerId = peerId;
+        this._sharedChannels = [];
+        this._sharedChannelsError = '';
+        this._sharedChannelsLoading = true;
+        this._loadSharedChannels(peerId, op);
+    }
+
+    async _loadSharedChannels(peerId, op) {
+        try {
+            const result = await op.run({ peer_user_id: peerId });
+            if (this.userId !== peerId || this._sharedChannelsPeerId !== peerId) return;
+            const source = result && typeof result === 'object' ? result : op.lastResult;
+            const items = source && Array.isArray(source.items)
+                ? source.items
+                : (Array.isArray(source) ? source : []);
+            this._sharedChannels = items.filter((channel) => (
+                channel
+                && typeof channel === 'object'
+                && typeof channel.channel_id === 'string'
+                && channel.channel_id !== ''
+            ));
+        } catch (err) {
+            if (this.userId === peerId && this._sharedChannelsPeerId === peerId) {
+                this._sharedChannels = [];
+                this._sharedChannelsError = err && typeof err.message === 'string'
+                    ? err.message
+                    : 'failed';
+            }
+        } finally {
+            if (this.userId === peerId && this._sharedChannelsPeerId === peerId) {
+                this._sharedChannelsLoading = false;
             }
         }
     }
@@ -552,7 +658,36 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                         : null}
                 </div>
             </div>
+            ${this._renderSharedChannels()}
             ${showRolesEditor ? this._renderRolesEditor(user) : null}
+        `;
+    }
+
+    _renderSharedChannels() {
+        if (!hasFactory(SYNC_SHARED_CHANNELS_OP_NAME)) return null;
+        return html`
+            <div class="channels-section">
+                <div class="channels-section-title">${this.t('user_info_modal.shared_channels')}</div>
+                ${this._sharedChannelsLoading
+                    ? html`<div class="channels-empty">${this.t('user_info_modal.shared_channels_loading')}</div>`
+                    : this._sharedChannelsError !== ''
+                        ? html`<div class="channels-empty">${this.t('user_info_modal.shared_channels_error')}</div>`
+                        : this._sharedChannels.length === 0
+                            ? html`<div class="channels-empty">${this.t('user_info_modal.shared_channels_empty')}</div>`
+                            : html`
+                                <div class="channels-grid">
+                                    ${this._sharedChannels.map((channel) => html`
+                                        <button
+                                            type="button"
+                                            class="channel-cell"
+                                            @click=${() => this._openSharedChannel(channel)}
+                                        >
+                                            <sync-channel-row .channel=${channel} .pickMode=${true}></sync-channel-row>
+                                        </button>
+                                    `)}
+                                </div>
+                            `}
+            </div>
         `;
     }
 
@@ -655,6 +790,12 @@ export class PlatformUserInfoModal extends PlatformFormModal {
     _openTeamPage() {
         if (typeof this.userId !== 'string' || this.userId.length === 0) return;
         window.location.href = `/frontend/team?focus=${encodeURIComponent(this.userId)}`;
+    }
+
+    _openSharedChannel(channel) {
+        if (!channel || typeof channel.channel_id !== 'string' || channel.channel_id === '') return;
+        super.close();
+        this.navigate('channel', { channelId: channel.channel_id });
     }
 
     _copyId() {

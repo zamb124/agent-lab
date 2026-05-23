@@ -7,7 +7,7 @@
  *
  * Подключается в:
  *   - `apps/flows/ui/` — assistant и user сообщения в `chat-message`;
- *   - `core/frontend/static/lib/embed-chat/platform-embed-chat.js` — assistant/user.
+ *   - `core/frontend/static/lib/flows-chat/flows-chat-message.js` — assistant/user.
  *
  * Contract:
  *   - `text` (string, required);
@@ -180,11 +180,12 @@ export class PlatformAssistantMessageActions extends PlatformElement {
     _finishPlaySession() {
         this._playAbort = null;
         this._playSessionReject = null;
-        if (this._audio) {
-            this._audio.pause();
-            this._audio.removeAttribute('src');
-            this._audio.load();
-            this._audio = null;
+        const audio = this._audio;
+        this._audio = null;
+        if (audio) {
+            audio.pause();
+            audio.removeAttribute('src');
+            audio.load();
         }
         if (this._objectUrl) {
             URL.revokeObjectURL(this._objectUrl);

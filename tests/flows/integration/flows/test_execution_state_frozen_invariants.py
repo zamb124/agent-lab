@@ -56,6 +56,12 @@ class _BillingService:
         _ = company_id, user_id, operation_code, notification_service
 
 
+class _NoopStateManager:
+    async def save_state(self, session_id: str, state: ExecutionState) -> bool:
+        _ = session_id, state
+        return True
+
+
 class _CodeRunner:
     async def execute_tool(
         self,
@@ -95,7 +101,7 @@ class _RuntimeContainer:
     billing_service = _BillingService()
     flow_repository = object()
     flow_factory = object()
-    state_manager = object()
+    state_manager = _NoopStateManager()
     variables_service = object()
     resource_repository = object()
     resource_resolver = object()

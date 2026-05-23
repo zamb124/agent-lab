@@ -31,7 +31,7 @@ async def test_company_creation_with_agents_initialization(
     Шаги:
     1. Создаем компанию через frontend API
        (POST /frontend/api/companies синхронно делает межсервисные HTTP-вызовы:
-        flows /company/init и sync /spaces/, /channels/ — всё в рантайме REST,
+        flows /company/init и sync /channels/ с namespace — всё в рантайме REST,
         поэтому endpoint сам по себе занимает десятки секунд при холодном
         старте сервисов.)
     2. Проверяем что компания создалась
@@ -576,4 +576,3 @@ async def test_company_agents_api_with_context(
         print(f"✅ Получение конкретного агента работает: {test_agent_id}")
 
     print("✅ Все проверки API пройдены!")
-

@@ -804,7 +804,7 @@ def test_humanitec_llm_provider_uses_dynamic_pool_independent_of_default_strateg
     try:
         set_settings(settings)
         assert should_use_platform_default_free_pool(
-            model_name=HUMANITEC_LLM_AUTO_MODEL,
+            model=HUMANITEC_LLM_AUTO_MODEL,
             provider=HUMANITEC_LLM_PROVIDER,
             api_key=None,
             base_url=None,

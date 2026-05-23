@@ -2,8 +2,8 @@
     "sidebar": {
         "namespace_label": "Namespace",
         "all_namespaces": "All namespaces",
-        "create_space_tooltip": "Create namespace",
-        "edit_space_tooltip": "Edit namespace",
+        "create_namespace_tooltip": "Create namespace",
+        "edit_namespace_tooltip": "Edit namespace",
         "org_section": "Organization",
         "nav": {
             "namespaces": "Namespaces",
@@ -36,9 +36,9 @@
         "tasks": "Tasks",
         "suggests": "AI suggestions",
         "access_requests": "Access requests",
-        "spaces": "Namespaces",
-        "space": "Namespace",
-        "space_integrations": "Integrations",
+        "namespaces": "Namespaces",
+        "namespace": "Namespace",
+        "namespace_integrations": "Integrations",
         "templates": "Templates",
         "namespace_imports": "Namespace tasks",
         "relationship_types": "Relationship types"
@@ -51,15 +51,15 @@
         "profile": "Profile"
     },
     "workspace_picker": {
-        "title": "Workspace",
-        "all": "All workspaces"
+        "title": "Namespace",
+        "all": "All namespaces"
     },
     "notifications": {
         "period_summary_range_clamped_title": "Summary period was shortened",
         "period_summary_range_clamped_message": "The requested {requested_days}-day period exceeds the {max_days}-day limit; the summary was built for the available range.",
         "daily_summary_updated_title": "Daily Summary updated",
         "daily_summary_updated_message": "Summary updated for {date}",
-        "open_crm": "Open CRM"
+        "open_crm": "Open NetWorkle"
     },
     "entity_modal": {
         "header_create": "New entity",
@@ -141,10 +141,10 @@
         "field_due_date": "Due date"
     },
     "settings_hub_page": {
-        "title": "CRM settings",
+        "title": "NetWorkle settings",
         "subtitle": "Configure types, templates and access",
-        "card_spaces_title": "Namespaces",
-        "card_spaces_description": "Manage company namespaces, access and edit.",
+        "card_namespaces_title": "Namespaces",
+        "card_namespaces_description": "Manage company namespaces, access and edit.",
         "card_templates_title": "Namespace templates",
         "card_templates_description": "Predefined sets of entity and relationship types.",
         "card_namespace_imports_title": "Namespace imports",
@@ -201,7 +201,7 @@
         "mini_zoom_in": "Zoom in (Ctrl + wheel)",
         "mini_zoom_out": "Zoom out (Ctrl + wheel)",
         "mini_zoom_reset": "Reset zoom",
-        "mini_open_full": "Open full workspace",
+        "mini_open_full": "Open full graph",
         "mini_graph_overlay_aria": "Relationship graph around the entity",
         "canvas_view_group_label": "Canvas view",
         "view_mode_3d": "3D",
@@ -248,6 +248,7 @@
         "tags_label": "Tags",
         "tags_placeholder": "Enter a tag...",
         "date_label": "Date",
+        "view_status_empty": "Not set",
         "reset": "Reset filters"
     },
     "neighbor_row": {
@@ -296,7 +297,7 @@
     },
     "namespace_tasks_page": {
         "title": "Namespace tasks",
-        "subtitle": "CRM background jobs: imports, note analysis and Markdown formatting, summaries, integrations, scheduled ticks.",
+        "subtitle": "NetWorkle background jobs: imports, note analysis and Markdown formatting, summaries, integrations, scheduled ticks.",
         "namespace_label": "Namespace: {{namespace}}",
         "namespace_label_all": "All company namespaces",
         "loading": "Loading...",
@@ -577,7 +578,7 @@
         "label_integrations": "Integrations",
         "integrations_empty": "No connected integrations",
         "integrations_aria": "Connected integrations",
-        "action_open_space_settings": "Space settings",
+        "action_open_namespace_settings": "Namespace settings",
         "entity_count": "Entities in namespace",
         "used_types": "Types used",
         "can_update_types": "Allowed types editable",
@@ -835,7 +836,7 @@
         "action_undo": "Undo",
         "apply_error_title": "Draft could not be applied",
         "apply_error_hint": "Expand the row with the error: change entity type/subtype if needed, fill the attribute fields according to the type schema, then click \"Save changes\" and \"Apply\" again.",
-        "apply_error_ai_tooltip": "Fix draft with AI (field types from CRM catalog)",
+        "apply_error_ai_tooltip": "Fix draft with AI (field types from NetWorkle catalog)",
         "dismiss_error_tooltip": "Dismiss error message",
         "discard_draft_tooltip": "Remove draft from note",
         "discard_draft_title": "Remove AI draft",
@@ -934,7 +935,7 @@
         "status_archived": "Archived"
     },
     "import_wizard_cta": {
-        "empty_entities_hint": "This space has no entities yet—import your knowledge using the import wizard.",
+        "empty_entities_hint": "This namespace has no entities yet—import your knowledge using the import wizard.",
         "open_wizard": "Open import wizard"
     },
     "daily_notes_page": {
@@ -966,7 +967,7 @@
         "note_preview_analysis_failed_title": "Analysis error",
         "analysis_tooltip_after_error": "Analysis failed — click to retry"
     },
-    "spaces_page": {
+    "namespaces_page": {
         "title": "Namespaces",
         "subtitle": "All company namespaces",
         "integrations_connected": "Connected integrations",
@@ -989,7 +990,7 @@
         "show_ui_label": "Show note voice picker in the note editor",
         "show_ui_label_hint": "When off, the note voice control is hidden in the note editor."
     },
-    "space_detail_page": {
+    "namespace_detail_page": {
         "subtitle": "Namespace settings and entity types",
         "no_id": "Namespace not specified",
         "meta_section": "Meta",
@@ -1000,7 +1001,7 @@
         "back_to_types": "Back to type list",
         "action_allow": "Enable in namespace",
         "action_disallow": "Remove from namespace",
-        "type_all_spaces_hint": "This type is linked to all namespaces (*). You cannot remove it from this space only; edit the type's namespace list.",
+        "type_all_namespaces_hint": "This type is linked to all namespaces (*). You cannot remove it from this namespace only; edit the type's namespace list.",
         "amocrm_section": "AmoCRM",
         "amocrm_subdomain_label": "Amo subdomain (without .amocrm.ru)",
         "amocrm_subdomain_placeholder": "e.g. mycompany",
@@ -1010,7 +1011,7 @@
         "amocrm_subdomain_required": "Enter amo subdomain",
         "link_integrations": "Integrations",
         "sidebar_menu_section": "Sidebar menu",
-        "sidebar_menu_hint": "Navigation items in the CRM left rail for this namespace. By default the tree is built from allowed types; here you can save a snapshot or switch back to automatic layout.",
+        "sidebar_menu_hint": "Navigation items in the NetWorkle left rail for this namespace. By default the tree is built from allowed types; here you can save a snapshot or switch back to automatic layout.",
         "sidebar_menu_mode_custom": "Mode: saved tree",
         "sidebar_menu_mode_derived": "Mode: derived from types",
         "sidebar_menu_snapshot": "Save menu from types",
@@ -1047,12 +1048,12 @@
         "task_board_err_duplicate_id": "Duplicate stage id on the same board",
         "task_board_err_min_stages": "A board must keep at least one stage",
         "meta_section_hint": "Short info about the namespace, note defaults, and save; the namespace id itself is not edited here.",
-        "meta_name_hint": "Technical namespace id: used in URLs, APIs and data keys; set when the space is created.",
+        "meta_name_hint": "Technical namespace id: used in URLs, APIs and data keys; set when the namespace is created.",
         "meta_description_hint": "Team-facing note about what this namespace is for; does not affect permissions or schema.",
         "meta_stat_entity_count_hint": "How many entities are already stored in this namespace.",
         "meta_stat_used_types_hint": "How many distinct entity types appear in this namespace’s data.",
         "meta_stat_can_update_hint": "Whether the list of types attached to the namespace can be changed given policy and existing data.",
-        "sidebar_menu_section_hint": "Controls CRM left-rail items for this namespace: snapshot the current type-derived tree or revert to automatic layout.",
+        "sidebar_menu_section_hint": "Controls NetWorkle left-rail items for this namespace: snapshot the current type-derived tree or revert to automatic layout.",
         "task_board_section_hint": "Kanban columns for tasks: stage ids are written on tasks and drive the board columns.",
         "task_board_col_stage_id_label": "Stage id",
         "task_board_col_stage_id_hint": "Stored in task attributes.status; use a-z, 0-9 and underscore; first character must be a letter.",
@@ -1065,7 +1066,7 @@
     },
     "entity_type_create_mode_modal": {
         "title": "New entity type",
-        "intro": "Start from scratch or copy a definition from entity types defined in your space templates (for example deal, project).",
+        "intro": "Start from scratch or copy a definition from entity types defined in your namespace templates (for example deal, project).",
         "option_blank_title": "Blank type",
         "option_blank_desc": "Open the editor with an empty schema. You configure everything manually.",
         "option_presets_title": "From a template entity type",
@@ -1073,7 +1074,7 @@
         "cancel": "Cancel"
     },
     "entity_type_preset_picker_modal": {
-        "title": "Types from space templates",
+        "title": "Types from namespace templates",
         "intro": "Use the list on the left to filter by template. Select a type card and click Done — the editor opens with a copy of its fields and settings.",
         "filter_all": "All templates",
         "filter_kind_all": "All types",
@@ -1081,8 +1082,8 @@
         "filter_kind_task": "Tasks",
         "filter_kind_entity": "Entities",
         "kind_bar_aria": "Type category (note, task, entity)",
-        "sidebar_aria": "Space templates",
-        "empty_no_templates": "There are no space templates. Create a template under Templates and add entity types to it.",
+        "sidebar_aria": "Namespace templates",
+        "empty_no_templates": "There are no namespace templates. Create a template under Templates and add entity types to it.",
         "empty_no_presets": "None of your company templates define entity types yet. Add types under Templates.",
         "empty_no_types": "This template has no entity types",
         "empty_no_kind_match": "No types in this category. Change the filter.",
@@ -1093,8 +1094,8 @@
     },
     "integrations_page": {
         "title": "Integrations",
-        "subtitle": "Space «{name}»",
-        "scope_hint": "Connection and import apply only to this space; you do not need a separate namespace for the integration.",
+        "subtitle": "Namespace «{name}»",
+        "scope_hint": "Connection and import apply only to this namespace; you do not need a separate namespace for the integration.",
         "amocrm_oauth_credentials": "OAuth is configured by your platform administrator (the Amo app and server-side settings). Here you only enter your amo subdomain and start sign-in. If sign-in fails or you see an error, contact your administrator.",
         "amocrm_oauth_redirect": "If you configure the OAuth app in your Amo account, set Redirect URI to the address below — you can copy it.",
         "amocrm_oauth_callback_copy": "Copy",
@@ -1113,8 +1114,8 @@
         "amocrm_fields_done": "AmoCRM custom fields catalog updated",
         "amocrm_sync_task_failed": "AmoCRM import: {message}",
         "amocrm_fields_task_failed": "AmoCRM fields sync: {message}",
-        "amocrm_sync_active_conflict": "An AmoCRM import for this space is already running",
-        "amocrm_fields_active_conflict": "AmoCRM fields sync for this space is already running",
+        "amocrm_sync_active_conflict": "An AmoCRM import for this namespace is already running",
+        "amocrm_fields_active_conflict": "AmoCRM fields sync for this namespace is already running",
         "amocrm_task_poll_timeout": "Timed out waiting for the AmoCRM task in the UI. Check the Tasks page.",
         "auto_sync_title": "Scheduled sync",
         "auto_sync_hint": "On the platform schedule, the same flow runs as the Synchronize button: entities, then the custom fields catalog. Active AmoCRM OAuth is required for the user who saves these settings.",
@@ -1165,7 +1166,7 @@
         "panel_toggle_meta": "Toggle statistics",
         "meta_canvas": "canvas:",
         "empty_search": "No matches for the current filter",
-        "empty_import_hint": "The graph is empty in this mode. You can load an existing knowledge base into the current space.",
+        "empty_import_hint": "The graph is empty in this mode. You can load an existing knowledge base into the current namespace.",
         "empty_import_cta": "Initial upload",
         "meta_mode": "mode:",
         "meta_depth": "depth:",

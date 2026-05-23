@@ -1,4 +1,4 @@
-import { LitElement, html } from './lit-shim.js';
+import { LitElement, html } from '../lit-shim.js';
 import './platform-embed-chat-drawer.js';
 
 /**
@@ -12,7 +12,6 @@ export class PlatformLaraAssistant extends LitElement {
         flowId: { type: String, attribute: 'flow-id' },
         embedId: { type: String, attribute: 'embed-id' },
         branchId: { type: String, attribute: 'branch-id' },
-        skillId: { type: String, attribute: 'skill-id' },
         theme: { type: String, attribute: 'theme' },
         initialOpen: { type: Boolean, attribute: 'initial-open' },
         showLauncher: { type: Boolean, attribute: 'show-launcher' },
@@ -42,7 +41,6 @@ export class PlatformLaraAssistant extends LitElement {
         this.flowId = 'lara';
         this.embedId = '';
         this.branchId = '';
-        this.skillId = '';
         this.theme = 'auto';
         this.initialOpen = false;
         this.showLauncher = false;
@@ -59,6 +57,22 @@ export class PlatformLaraAssistant extends LitElement {
         this.voiceDefaultOn = false;
         this.voiceBaseUrl = '';
         this.companyId = '';
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this._ensureHostAnchorBox();
+    }
+
+    _ensureHostAnchorBox() {
+        const style = this.style;
+        if (!style.display) style.display = 'block';
+        if (!style.position) style.position = 'fixed';
+        if (!style.right) style.right = '0px';
+        if (!style.bottom) style.bottom = '0px';
+        if (!style.width) style.width = '1px';
+        if (!style.height) style.height = '1px';
+        if (!style.overflow) style.overflow = 'visible';
     }
 
     firstUpdated(changed) {
@@ -84,8 +98,7 @@ export class PlatformLaraAssistant extends LitElement {
                 .platformUiOrigin=${this.platformUiOrigin || ''}
                 flow-id=${this.flowId || 'lara'}
                 embed-id=${this.embedId || ''}
-                branch-id=${(this.branchId || this.skillId || '').trim()}
-                skill-id=${(this.skillId || this.branchId || '').trim()}
+                branch-id=${(this.branchId || '').trim()}
                 .assistantTitle=${this.assistantTitle || 'Lara'}
                 .locale=${this.locale || 'ru'}
                 ?use-credentials=${this.useCredentials}

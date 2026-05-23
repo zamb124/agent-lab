@@ -55,7 +55,7 @@ async def _setup_two_channels(
         user=op_user,
         container=op_container,
     )
-    return ch1.id, ch2.id
+    return ch1.channel_id, ch2.channel_id
 
 
 async def _send_text(
@@ -77,7 +77,7 @@ async def _send_text(
         user=op_user,
         container=op_container,
     )
-    return msg.id
+    return msg.message_id
 
 
 @pytest.mark.asyncio

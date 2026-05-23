@@ -15,9 +15,11 @@ from urllib.parse import urlparse
 import httpx
 from a2a.types import Message, Part, Role, TextPart
 
+from apps.capability_gateway.config import get_capability_gateway_settings
 from apps.capability_gateway.services.context_service import CapabilityContextService
 from apps.capability_gateway.services.contracts import CapabilityGatewayContainerProtocol
 from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
+from core.cache.ttl_model_cache import TtlModelCache
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
     CapabilityCallRequest,
@@ -378,18 +380,18 @@ def _deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]
     return merged
 
 
-def _find_file(files: list[Any], name: str | None) -> JsonValue:
+def _find_file(files: list[Any], original_name: str | None) -> JsonValue:
     candidates = [item for item in files if isinstance(item, dict)]
     if not candidates:
         return None
-    if name is None:
+    if original_name is None:
         return cast(JsonValue, candidates[-1])
     for item in candidates:
-        if item.get("name") == name or item.get("original_name") == name:
+        if item.get("original_name") == original_name:
             return cast(JsonValue, item)
-    name_lower = name.lower()
+    name_lower = original_name.lower()
     for item in candidates:
-        candidate_name = str(item.get("name") or item.get("original_name") or "").lower()
+        candidate_name = str(item.get("original_name") or "").lower()
         if name_lower in candidate_name:
             return cast(JsonValue, item)
     return None
@@ -446,6 +448,11 @@ class CapabilityRegistry:
         self._container: CapabilityGatewayContainerProtocol = container
         self._context_service: CapabilityContextService = context_service
         self._text_transform_service: TextTransformService = text_transform_service
+        self._manifest_cache = TtlModelCache(
+            name="capability_gateway.manifest_cache",
+            model_type=CapabilityManifest,
+            redis_client_factory=lambda: self._container.redis_client,
+        )
         self._static_definitions: dict[str, CapabilityDefinition] = self._build_static_definitions()
         self._handlers: dict[str, CapabilityHandler] = {
             "files.create": self._files_create,
@@ -494,6 +501,15 @@ class CapabilityRegistry:
             raise ValueError(message)
 
     async def manifest(self) -> CapabilityManifest:
+        settings = get_capability_gateway_settings()
+        return await self._manifest_cache.get_or_build(
+            enabled=settings.capability_manifest_cache_enabled,
+            key=settings.capability_manifest_cache_key,
+            ttl_seconds=settings.capability_manifest_cache_ttl_seconds,
+            builder=self._build_manifest,
+        )
+
+    async def _build_manifest(self) -> CapabilityManifest:
         definitions = dict(self._static_definitions)
         definitions.update(await self._load_tool_definitions())
         return CapabilityManifest(
@@ -1017,7 +1033,7 @@ class CapabilityRegistry:
                 title="Read persisted file as structured document",
                 description=(
                     "Читает persisted-файл через core.files.reader.FileReader и возвращает FileReadResult: "
-                    "pages, page_count, detected_kind, mime_type, warnings, source checksum/file_id."
+                    "pages, page_count, detected_kind, content_type, warnings, source checksum/file_id."
                 ),
                 input_schema=_schema_object(
                     properties={
@@ -1387,9 +1403,9 @@ class CapabilityRegistry:
             (
                 "find_file",
                 "Find state file",
-                "Ищет файл в state.files по имени; без имени возвращает последний файл.",
+                "Ищет файл в state.files по original_name; без имени возвращает последний файл.",
                 _schema_object(
-                    properties={"name": _string_schema("Опциональное имя файла")},
+                    properties={"original_name": _string_schema("Опциональное original_name файла")},
                     required=[],
                 ),
                 _json_schema("Найденный file object или null"),
@@ -1719,9 +1735,9 @@ class CapabilityRegistry:
 
     async def _state_find_file(self, request: CapabilityCallRequest) -> JsonValue:
         self._reject_positional_args(request)
-        name = _optional_string(request.kwargs.get("name"), "name")
+        original_name = _optional_string(request.kwargs.get("original_name"), "original_name")
         files = request.state.get("files")
-        return _find_file(files if isinstance(files, list) else [], name)
+        return _find_file(files if isinstance(files, list) else [], original_name)
 
     async def _state_get_user(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)

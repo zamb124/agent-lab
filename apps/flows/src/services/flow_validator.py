@@ -612,7 +612,7 @@ class FlowValidator:
         nodes: dict[str, dict[str, Any]],
         result: FlowValidationResult,
     ) -> None:
-        """Поле files: список объектов с непустыми строками name и path."""
+        """Поле files: список объектов с непустыми строками original_name и url."""
         for node_id, cfg in nodes.items():
             if not isinstance(cfg, dict):
                 continue

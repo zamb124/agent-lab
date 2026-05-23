@@ -35,11 +35,11 @@ async def test_op_git_resources_upsert_then_get_roundtrip(
     upserted = await op_git_resources_upsert(payload, user=op_user, container=op_container)
 
     fetched = await op_git_resources_get(
-        GitResourcesGetPayload(git_ref_id=upserted.id),
+        GitResourcesGetPayload(git_ref_id=upserted.git_ref_id),
         user=op_user,
         container=op_container,
     )
-    assert fetched.id == upserted.id
+    assert fetched.git_ref_id == upserted.git_ref_id
     assert fetched.url == payload.body.url
 
 
@@ -72,7 +72,7 @@ async def test_op_git_resources_upsert_idempotent(
         user=op_user,
         container=op_container,
     )
-    assert first.id == second.id
+    assert first.git_ref_id == second.git_ref_id
     assert second.url.endswith("refresh")
 
 

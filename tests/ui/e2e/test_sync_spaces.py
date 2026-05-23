@@ -1,10 +1,16 @@
-"""E2E: редактирование пространства Sync."""
+"""E2E: настройки пространства Sync."""
 
 from __future__ import annotations
+
+import re
 
 import pytest
 from playwright.async_api import Page, expect
 
+from tests.ui.e2e.sync_e2e_helpers import (
+    sync_e2e_click_platform_button,
+    sync_e2e_open_with_namespace,
+)
 from tests.ui.harness import AppUI
 from tests.ui.scenario_doc import ScenarioRecorder
 
@@ -13,10 +19,10 @@ from tests.ui.scenario_doc import ScenarioRecorder
     service="sync",
     tag="spaces",
     doc_slug="edit-space-name",
-    title="Sync: редактирование пространства",
+    title="Sync: настройки пространства",
     description=(
-        "Пользователь открывает настройки существующего пространства через иконку шестерёнки, "
-        "меняет название и сохраняет."
+        "Пользователь открывает Sync-настройки выбранного платформенного пространства "
+        "и включает опцию транскрибации голосовых сообщений."
     ),
 )
 @pytest.mark.asyncio
@@ -28,39 +34,22 @@ async def test_user_edits_space_name(
     ui_page_system: Page,
     unique_id: str,
 ) -> None:
-    space_name = f"E2E space edit {unique_id}"
-    updated_suffix = f" обновлено {unique_id}"
-
-    await sync_ui.open(ui_page_system)
-    await sync_ui.expect_shell(ui_page_system)
+    await sync_e2e_open_with_namespace(sync_ui, ui_page_system, unique_id, suffix="settings")
     await scenario.step("Sync открыт", ui_page_system)
 
-    await ui_page_system.get_by_role("button", name="Создать пространство").click()
-    create_modal = ui_page_system.locator("space-settings-modal")
-    await expect(create_modal).to_be_visible()
-    inputs_create = create_modal.locator('input.input:not([type="file"])')
-    await inputs_create.nth(0).fill(space_name)
-    await create_modal.get_by_role("button", name="Создать", exact=True).click()
-    await expect(
-        ui_page_system.locator("button.space-chip-main").filter(has_text=space_name)
-    ).to_be_visible(timeout=30_000)
-    await scenario.step("Создано пространство для последующего редактирования", ui_page_system)
-
-    chip = ui_page_system.locator(".space-chip").filter(
-        has=ui_page_system.locator("button.space-chip-main").filter(has_text=space_name)
-    )
-    await chip.get_by_role("button", name="Настройки пространства").click()
-    edit_modal = ui_page_system.locator("space-settings-modal")
+    await ui_page_system.locator("platform-sidebar-namespace-select button.btn-edit").click()
+    edit_modal = ui_page_system.locator("sync-namespace-modal")
     await expect(edit_modal).to_be_visible()
-    await expect(ui_page_system.get_by_role("heading", name="Настройки пространства")).to_be_visible()
+    await expect(edit_modal.locator(".modal-title")).to_contain_text(
+        re.compile(r"Sync-настройки пространства|Namespace sync settings")
+    )
     await scenario.step("Открыты настройки пространства", ui_page_system)
 
-    name_input = edit_modal.locator('input.input:not([type="file"])').first
-    await name_input.fill(space_name + updated_suffix)
-    await edit_modal.get_by_role("button", name="Сохранить", exact=True).click()
-    await expect(
-        ui_page_system.locator("button.space-chip-main").filter(
-            has_text=space_name + updated_suffix
-        )
-    ).to_be_visible(timeout=30_000)
-    await scenario.step("Название пространства обновлено в списке", ui_page_system)
+    transcribe_switch = edit_modal.locator(".row").filter(
+        has_text=re.compile(r"Авто-транскрипция голосовых|Auto-transcribe voice messages")
+    ).locator("platform-switch")
+    await transcribe_switch.click()
+    await expect(transcribe_switch).to_have_attribute("checked", "", timeout=15_000)
+    await sync_e2e_click_platform_button(edit_modal, "Сохранить", "Save")
+    await expect(edit_modal).to_be_hidden(timeout=30_000)
+    await scenario.step("Настройки пространства сохранены", ui_page_system)

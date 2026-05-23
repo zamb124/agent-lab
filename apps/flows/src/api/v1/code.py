@@ -1059,7 +1059,7 @@ def _compute_diff(old: dict[str, Any], new: dict[str, Any], path: str = "") -> l
         "pending_reasoning", "breakpoint_hit", "breakpoint_state", "interrupt",
         "join_arrived_preds", "hitl_handoff_correlation_id",
         "flow_deadline_monotonic", "flow_timeout_effective_seconds",
-        "terminal_status", "terminal_error",
+        "terminal_task_state", "terminal_task_error",
     }
     all_keys = set(old.keys()) | set(new.keys())
 
@@ -1115,8 +1115,8 @@ async def _merge_execute_state_with_flow(
 
     from_graph = collect_flow_node_files(runtime_flow.config.get("nodes") or {})
     req_files = input_state.get("files") or []
-    seen = {(f.get("name"), f.get("path")) for f in from_graph}
-    extra = [f for f in req_files if (f.get("name"), f.get("path")) not in seen]
+    seen = {(f.get("original_name"), f.get("url")) for f in from_graph}
+    extra = [f for f in req_files if (f.get("original_name"), f.get("url")) not in seen]
     input_state["files"] = list(from_graph) + extra
     input_state["variables"] = {
         **runtime_flow.variables,

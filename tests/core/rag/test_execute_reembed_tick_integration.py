@@ -90,7 +90,7 @@ async def test_run_reembed_round_embeds_chunk_for_solvent_company(
         user_repository=frontend_container.user_repository,
         batch_size=2000,
         target_embedding_model=target,
-        scheduler_task_id=f"t_{unique_id}",
+        schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
     )
     assert written >= 1
@@ -120,7 +120,7 @@ async def test_run_reembed_round_skips_low_balance_company(
         user_repository=frontend_container.user_repository,
         batch_size=2000,
         target_embedding_model=target,
-        scheduler_task_id=f"t_{unique_id}",
+        schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
     )
     model, _, exists = await _chunk_state(sf, chunk_id)
@@ -155,7 +155,7 @@ async def test_run_reembed_round_skips_company_without_billing_owner(
         user_repository=frontend_container.user_repository,
         batch_size=2000,
         target_embedding_model=target,
-        scheduler_task_id=f"t_{unique_id}",
+        schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
     )
     model, _, exists = await _chunk_state(sf, chunk_id)
@@ -183,7 +183,7 @@ async def test_run_reembed_round_skips_chunk_with_missing_company(
         user_repository=frontend_container.user_repository,
         batch_size=2000,
         target_embedding_model=target,
-        scheduler_task_id=f"t_{unique_id}",
+        schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
     )
     model, _, exists = await _chunk_state(sf, chunk_id)
@@ -220,7 +220,7 @@ async def test_run_reembed_round_one_bad_company_does_not_fail_others(
         user_repository=frontend_container.user_repository,
         batch_size=2000,
         target_embedding_model=target,
-        scheduler_task_id=f"t_{unique_id}",
+        schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
     )
     bad_model, _, _ = await _chunk_state(sf, chunk_bad)
@@ -231,14 +231,14 @@ async def test_run_reembed_round_one_bad_company_does_not_fail_others(
 
 
 @pytest.mark.asyncio
-async def test_execute_reembed_tick_requires_scheduler_task_id(frontend_container) -> None:
-    with pytest.raises(ValueError, match="scheduler_task_id"):
+async def test_execute_reembed_tick_requires_schedule_task_id(frontend_container) -> None:
+    with pytest.raises(ValueError, match="schedule_task_id"):
         await execute_reembed_tick(
-            container=frontend_container, channel="t", scheduler_task_id="  ",
+            container=frontend_container, channel="t", schedule_task_id="  ",
         )
-    with pytest.raises(ValueError, match="scheduler_task_id"):
+    with pytest.raises(ValueError, match="schedule_task_id"):
         await execute_reembed_tick(
-            container=frontend_container, channel="t", scheduler_task_id="",
+            container=frontend_container, channel="t", schedule_task_id="",
         )
 
 
@@ -246,7 +246,7 @@ async def test_execute_reembed_tick_requires_scheduler_task_id(frontend_containe
 async def test_execute_reembed_tick_requires_channel(frontend_container) -> None:
     with pytest.raises(ValueError, match="channel"):
         await execute_reembed_tick(
-            container=frontend_container, channel="  ", scheduler_task_id="t",
+            container=frontend_container, channel="  ", schedule_task_id="t",
         )
 
 
@@ -267,7 +267,7 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
     result = await execute_reembed_tick(
         container=frontend_container,
         channel="test_worker_e2e",
-        scheduler_task_id=f"e2e_{unique_id}",
+        schedule_task_id=f"e2e_{unique_id}",
     )
     assert result["skipped"] is False
     assert result["reembedded"] >= 1
@@ -295,7 +295,7 @@ async def test_orphan_cleanup_tick_removes_orphan_company_chunks(
                               company_id="", content="empty")
 
     result = await rag_cleanup_orphan_company_chunks_tick(
-        scheduler_task_id=f"orph_{unique_id}",
+        schedule_task_id=f"orph_{unique_id}",
     )
     assert result["skipped"] is False
     assert result["deleted"] >= 2
@@ -307,8 +307,8 @@ async def test_orphan_cleanup_tick_removes_orphan_company_chunks(
 
 
 @pytest.mark.asyncio
-async def test_orphan_cleanup_tick_requires_scheduler_task_id() -> None:
+async def test_orphan_cleanup_tick_requires_schedule_task_id() -> None:
     from apps.rag_worker.tasks.maintenance_tasks import rag_cleanup_orphan_company_chunks_tick
 
-    with pytest.raises(ValueError, match="scheduler_task_id"):
-        await rag_cleanup_orphan_company_chunks_tick(scheduler_task_id="  ")
+    with pytest.raises(ValueError, match="schedule_task_id"):
+        await rag_cleanup_orphan_company_chunks_tick(schedule_task_id="  ")

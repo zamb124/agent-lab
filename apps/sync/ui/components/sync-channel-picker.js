@@ -180,10 +180,10 @@ export class SyncChannelPicker extends PlatformElement {
     }
 
     _renderTileAvatar(channel) {
-        const seed = typeof channel.id === 'string' && channel.id !== '' ? channel.id : 'sync';
+        const seed = typeof channel.channel_id === 'string' && channel.channel_id !== '' ? channel.channel_id : 'sync';
         const hueVar = syncAvatarHueVar(seed);
         const name = typeof channel.name === 'string' && channel.name !== '' ? channel.name : '#';
-        const cid = typeof channel.id === 'string' ? channel.id : '';
+        const cid = typeof channel.channel_id === 'string' ? channel.channel_id : '';
         if (cid !== '' && this._tileAvatarFailed[cid] === true) {
             return html`<span class="tile-avatar pastel-initials" style=${hueVar}>${initialsFromName(name)}</span>`;
         }
@@ -232,7 +232,7 @@ export class SyncChannelPicker extends PlatformElement {
                 ` : html`
                     <div class="grid">
                         ${filtered.map((c) => html`
-                            <glass-card class="tile" @click=${() => this.navigate('channel', { channelId: c.id })}>
+                            <glass-card class="tile" @click=${() => this.navigate('channel', { channelId: c.channel_id })}>
                                 <div class="tile-head">
                                     ${this._renderTileAvatar(c)}
                                     <h3 class="tile-title">${channelDisplayTitle(c)}</h3>

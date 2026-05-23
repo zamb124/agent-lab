@@ -5,3 +5,7 @@
 ## Шаг 1. SPA Flows открыт
 
 ![SPA Flows открыт](screenshots/001.png)
+
+## Шаг 2. Оболочка flows-app видна
+
+![Оболочка flows-app видна](screenshots/002.png)

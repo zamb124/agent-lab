@@ -821,11 +821,11 @@ export class CRMNamespaceModal extends PlatformFormModal {
         this._activeForm().setField('description', v);
     }
 
-    _onOpenSpaceSettings() {
+    _onOpenNamespaceSettings() {
         if (typeof this.name !== 'string' || this.name.length === 0) {
-            throw new Error('CRMNamespaceModal: name required to open space settings');
+            throw new Error('CRMNamespaceModal: name required to open namespace settings');
         }
-        this.navigate('space', { itemId: this.name });
+        this.navigate('namespace', { itemId: this.name });
         this.close();
     }
 
@@ -861,9 +861,9 @@ export class CRMNamespaceModal extends PlatformFormModal {
             <button
                 type="button"
                 class="header-btn"
-                title=${this.t('namespace_modal.action_open_space_settings')}
-                aria-label=${this.t('namespace_modal.action_open_space_settings')}
-                @click=${() => this._onOpenSpaceSettings()}
+                title=${this.t('namespace_modal.action_open_namespace_settings')}
+                aria-label=${this.t('namespace_modal.action_open_namespace_settings')}
+                @click=${() => this._onOpenNamespaceSettings()}
             >
                 <platform-icon name="arrow-right" size="16"></platform-icon>
             </button>

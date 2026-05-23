@@ -1,6 +1,6 @@
 [project]
 site_name = "Humanitec"
-site_description = "Платформа для ИИ-агентов, RAG, CRM и автоматизации"
+site_description = "Платформа для ИИ-агентов, RAG, NetWorkle и автоматизации"
 site_url = "https://humanitec.ru/documentation/"
 site_author = "Humanitec"
 docs_dir = "build/documentation-ru"
@@ -14,9 +14,16 @@ extra_css = [
   "assets/stylesheets/documentation-header.css",
 ]
 
+extra_javascript = [
+  { path = "assets/javascripts/documentation-shell.js", defer = true },
+]
+
 [project.extra]
 homepage = "/"
 platform_home_title = "На главную"
+ask_ai_title = "Ask AI"
+ask_ai_aria_label = "Открыть поиск по документации"
+llms_title = "LLMs.txt"
 alternate = [
     { name = "English", link = "/documentation/en/", lang = "en" },
     { name = "Русский", link = "/documentation/", lang = "ru" },
@@ -24,8 +31,32 @@ alternate = [
 
 [project.theme]
 custom_dir = "docs/theme-overrides"
-variant = "classic"
+variant = "modern"
 language = "ru"
+logo = "assets/logo.svg"
+favicon = "assets/logo.svg"
+features = [
+  "navigation.footer",
+  "navigation.top",
+]
+
+[project.theme.font]
+text = "Onest"
+code = "JetBrains Mono"
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "octicons/moon-24"
+toggle.name = "Переключить на тёмную тему"
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "octicons/sun-24"
+toggle.name = "Переключить на светлую тему"
 
 [project.markdown_extensions.toc]
 permalink = true

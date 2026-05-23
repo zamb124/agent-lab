@@ -85,13 +85,9 @@ function _normalizeMessage(message) {
     if (!message || typeof message !== 'object') return message;
     const messageId = typeof message.message_id === 'string' && message.message_id !== ''
         ? message.message_id
-        : (typeof message.id === 'string' ? message.id : null);
-    const id = typeof message.id === 'string' && message.id !== ''
-        ? message.id
-        : messageId;
+        : null;
     return Object.freeze({
         ...message,
-        id,
         message_id: messageId,
         contents: Array.isArray(message.contents) ? message.contents : [],
         reactions: Array.isArray(message.reactions) ? message.reactions : [],
@@ -250,6 +246,9 @@ export const messagesStoreSlice = createSlice({
         OPTIMISTIC_RESEND_REQUESTED: 'optimistic_resend_requested',
         FLASH_REQUESTED: 'flash_requested',
         FLASH_CLEARED: 'flash_cleared',
+        INITIAL_LOAD_STARTED: 'initial_load_started',
+        INITIAL_LOAD_LOADED: 'initial_load_loaded',
+        INITIAL_LOAD_FAILED: 'initial_load_failed',
         HISTORY_OLDER_STARTED: 'history_older_started',
         HISTORY_NEWER_STARTED: 'history_newer_started',
         HISTORY_OLDER_LOADED: 'history_older_loaded',
@@ -265,6 +264,9 @@ export const messagesStoreSlice = createSlice({
         resendOptimistic: 'optimistic_resend_requested',
         flash: 'flash_requested',
         clearFlash: 'flash_cleared',
+        startInitial: 'initial_load_started',
+        loadedInitial: 'initial_load_loaded',
+        failInitial: 'initial_load_failed',
         startOlder: 'history_older_started',
         startNewer: 'history_newer_started',
         loadedOlder: 'history_older_loaded',
@@ -321,7 +323,50 @@ export const messagesStoreSlice = createSlice({
                         hasNewer,
                         newestCursor,
                     }),
+                    loading: false,
+                    error: null,
                 }));
+            }
+            case 'sync/messages_store/initial_load_started': {
+                const p = event.payload;
+                if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
+                return updateChannel(p.channelId, (cur) => ({ ...cur, loading: true, error: null }));
+            }
+            case 'sync/messages_store/initial_load_loaded': {
+                const p = event.payload;
+                if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
+                const result = p.result && typeof p.result === 'object' ? p.result : null;
+                const items = result && Array.isArray(result.items) ? _normalizeMessages(result.items) : [];
+                const hasOlder = result && typeof result.has_older === 'boolean'
+                    ? result.has_older
+                    : (result && typeof result.prev_cursor === 'string' && result.prev_cursor !== '');
+                const hasNewer = result && typeof result.has_newer === 'boolean'
+                    ? result.has_newer
+                    : (result && typeof result.next_cursor === 'string' && result.next_cursor !== '');
+                const oldestCursor = result && typeof result.oldest_cursor === 'string'
+                    ? result.oldest_cursor
+                    : (result && typeof result.prev_cursor === 'string' ? result.prev_cursor : null);
+                const newestCursor = result && typeof result.newest_cursor === 'string'
+                    ? result.newest_cursor
+                    : (result && typeof result.next_cursor === 'string' ? result.next_cursor : null);
+                return updateChannel(p.channelId, (cur) => ({
+                    ...cur,
+                    items: Object.freeze(items),
+                    loading: false,
+                    error: null,
+                    pagination: Object.freeze({
+                        hasOlder,
+                        oldestCursor,
+                        hasNewer,
+                        newestCursor,
+                    }),
+                }));
+            }
+            case 'sync/messages_store/initial_load_failed': {
+                const p = event.payload;
+                if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
+                const message = typeof p.message === 'string' && p.message !== '' ? p.message : 'failed';
+                return updateChannel(p.channelId, (cur) => ({ ...cur, loading: false, error: message }));
             }
             case 'sync/messages_store/history_older_loaded': {
                 const p = event.payload;

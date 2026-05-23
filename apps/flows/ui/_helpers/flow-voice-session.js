@@ -28,7 +28,7 @@ export { normalizeVoiceLocaleForWs as normalizeFlowVoiceSttLanguage };
  * @returns {string}
  */
 export function branchIdForFlowVoiceSessionQuery(branchId) {
-    return normalizeBranchIdForFlowVoiceSessionQuery(branchId, undefined);
+    return normalizeBranchIdForFlowVoiceSessionQuery(branchId);
 }
 
 /**

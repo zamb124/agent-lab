@@ -310,6 +310,8 @@ export class FlowsCatalogList extends PlatformElement {
                             type="button"
                             class="create-btn"
                             title=${this.t('flows_sidebar.create_flow_tooltip')}
+                            aria-label=${this.t('flows_sidebar.create_flow_tooltip')}
+                            data-action="create-flow"
                             @click=${this._createFlow}
                         >
                             <platform-icon name="plus" size="16"></platform-icon>

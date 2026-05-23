@@ -649,13 +649,13 @@ class TestBreakpointsAPIIntegration:
             context_data=mock_context.model_dump(),
         )
 
-        result = await task.wait_result()
+        result = await task.wait_result(timeout=5)
 
         assert not result.is_err, f"Task failed: {result.error}"
-        # Должен остановиться на breakpoint (статус input-required с breakpoint_hit)
-        status = result.return_value.get("status")
-        assert status == "input-required", \
-            f"Expected input-required for breakpoint, got status='{status}', full: {result.return_value}"
+        # Должен остановиться на breakpoint (task_state input-required с breakpoint_hit)
+        task_state = result.return_value.get("task_state")
+        assert task_state == "input-required", \
+            f"Expected input-required for breakpoint, got task_state='{task_state}', full: {result.return_value}"
         assert result.return_value.get("breakpoint_hit") == "step2"
 
     @pytest.mark.asyncio
@@ -725,9 +725,9 @@ class TestBreakpointsAPIIntegration:
             context_data=mock_context.model_dump(),
         )
 
-        result1 = await task1.wait_result()
+        result1 = await task1.wait_result(timeout=5)
         assert not result1.is_err
-        assert result1.return_value.get("status") == "input-required", \
+        assert result1.return_value.get("task_state") == "input-required", \
             f"Expected input-required, got: {result1.return_value}"
         assert result1.return_value.get("breakpoint_hit") == "step2"
 
@@ -743,10 +743,10 @@ class TestBreakpointsAPIIntegration:
             context_data=mock_context.model_dump(),
         )
 
-        result2 = await task2.wait_result()
+        result2 = await task2.wait_result(timeout=5)
 
         assert not result2.is_err, f"Resume failed: {result2.error}"
-        assert result2.return_value.get("status") == "completed", \
+        assert result2.return_value.get("task_state") == "completed", \
             f"Expected completed, got: {result2.return_value}"
         assert "All done" in result2.return_value.get("response", "")
 
@@ -806,8 +806,8 @@ class TestBreakpointsAPIIntegration:
             context_data=mock_context.model_dump(),
         )
 
-        result = await task.wait_result()
+        result = await task.wait_result(timeout=5)
 
         assert not result.is_err
-        assert result.return_value.get("status") == "completed"
+        assert result.return_value.get("task_state") == "completed"
         assert "All done" in result.return_value.get("response", "")

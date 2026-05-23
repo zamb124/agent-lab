@@ -34,7 +34,7 @@ class ScheduledTaskStatus(str, Enum):
 class ScheduledTaskInfo(FlexibleBaseModel):
     """Информация о scheduled task для ExecutionState."""
 
-    id: str = Field(..., description="ID задачи")
+    schedule_task_id: str = Field(..., description="ID записи платформенного scheduler")
     schedule_id: Optional[str] = Field(default=None, description="ID в RedisScheduleSource")
     flow_id: str = Field(..., description="ID агента")
     session_id: str = Field(..., description="ID сессии")
@@ -124,7 +124,7 @@ class PlatformScheduleFilter(FlexibleBaseModel):
 class PlatformScheduledTask(FlexibleBaseModel):
     """Сущность расписания платформенного scheduler."""
 
-    id: str
+    schedule_task_id: str
     company_id: str
     schedule_id: Optional[str] = None
     target_service: str
@@ -180,4 +180,3 @@ __all__ = [
     "PlatformScheduledTask",
     "PlatformRedisScheduleSnapshot",
 ]
-

@@ -61,7 +61,7 @@ class AccessRequestResponse(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
-    request_id: str = Field(title="ID запроса")
+    access_request_id: str = Field(title="ID запроса доступа")
     company_id: str = Field(title="ID компании")
     requester_id: str = Field(title="ID запрашивающего")
     owner_id: str = Field(title="ID владельца")

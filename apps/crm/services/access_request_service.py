@@ -25,11 +25,11 @@ class AccessRequestService:
         entity_repo: EntityRepository,
         relationship_repo: RelationshipRepository,
     ) -> None:
-        self._request_repo: AccessRequestRepository = access_request_repo
+        self._access_request_repo: AccessRequestRepository = access_request_repo
         self._entity_repo: EntityRepository = entity_repo
         self._relationship_repo: RelationshipRepository = relationship_repo
 
-    async def create_request(
+    async def create_access_request(
         self,
         entity_id: str,
         requester_user_id: str,
@@ -46,8 +46,8 @@ class AccessRequestService:
             raise ValueError("Entity not found")
 
         # Создаем запрос
-        request = AccessRequest(
-            request_id=str(uuid.uuid4()),
+        access_request = AccessRequest(
+            access_request_id=str(uuid.uuid4()),
             company_id=entity.company_id,  # Компания владельца
             requester_id=requester_user_id,
             requester_company_id=requester_company_id,
@@ -62,8 +62,10 @@ class AccessRequestService:
             updated_at=datetime.now(UTC),
         )
 
-        request = await self._request_repo.create(request)
-        logger.info(f"Access request created: {request.request_id} for entity {entity_id}")
+        access_request = await self._access_request_repo.create(access_request)
+        logger.info(
+            f"Access request created: {access_request.access_request_id} for entity {entity_id}"
+        )
 
         # Отправить уведомление владельцу entity
         await notify_user(
@@ -74,9 +76,9 @@ class AccessRequestService:
                 message=f"Запрос доступа к '{entity.name}' от пользователя {requester_user_id}",
                 service="crm",
                 priority="high",
-                action_url=f"/crm/access-requests/{request.request_id}",
+                action_url=f"/crm/access-requests/{access_request.access_request_id}",
                 data={
-                    "request_id": request.request_id,
+                    "access_request_id": access_request.access_request_id,
                     "entity_id": entity_id,
                     "entity_name": entity.name,
                     "requester_id": requester_user_id,
@@ -85,59 +87,61 @@ class AccessRequestService:
             ),
         )
 
-        return request
+        return access_request
 
-    async def approve_request(
+    async def approve_access_request(
         self,
-        request_id: str,
+        access_request_id: str,
         owner_user_id: str,
     ) -> AccessRequest:
         """Одобрить = скопировать entity в компанию запросившего"""
 
-        request = await self._request_repo.get(request_id)
-        if not request:
+        access_request = await self._access_request_repo.get(access_request_id)
+        if not access_request:
             raise ValueError("Request not found")
 
         # Проверка прав
-        if request.owner_id != owner_user_id:
+        if access_request.owner_id != owner_user_id:
             raise PermissionError("Only owner can approve")
 
-        if request.status != "pending":
-            raise ValueError(f"Request already {request.status}")
+        if access_request.status != "pending":
+            raise ValueError(f"Request already {access_request.status}")
 
         # Получаем оригинал
-        original = await self._entity_repo.get(request.resource_id)
+        original = await self._entity_repo.get(access_request.resource_id)
         if not original:
             raise ValueError("Original entity not found")
 
         # Копируем entity
-        if request.include_dependencies:
+        if access_request.include_dependencies:
             # Deep copy с relationships
             copy = await self._copy_with_dependencies(
                 original=original,
-                target_company_id=request.requester_company_id,
-                target_user_id=request.requester_id,
-                max_depth=request.max_depth,
+                target_company_id=access_request.requester_company_id,
+                target_user_id=access_request.requester_id,
+                max_depth=access_request.max_depth,
             )
         else:
             # Shallow copy с metadata
             copy = await self._copy_shallow(
                 original=original,
-                target_company_id=request.requester_company_id,
-                target_user_id=request.requester_id,
+                target_company_id=access_request.requester_company_id,
+                target_user_id=access_request.requester_id,
             )
 
         # Обновляем запрос
-        request.status = "approved"
-        request.created_entity_id = copy.entity_id
-        request.updated_at = datetime.now(UTC)
-        request = await self._request_repo.update(request)
+        access_request.status = "approved"
+        access_request.created_entity_id = copy.entity_id
+        access_request.updated_at = datetime.now(UTC)
+        access_request = await self._access_request_repo.update(access_request)
 
-        logger.info(f"Access request {request_id} approved, created entity {copy.entity_id}")
+        logger.info(
+            f"Access request {access_request_id} approved, created entity {copy.entity_id}"
+        )
 
         # Уведомление запросившему об одобрении
         await notify_user(
-            user_id=request.requester_id,
+            user_id=access_request.requester_id,
             notification=Notification(
                 type=NotificationType.ACCESS_REQUEST,
                 title="Запрос доступа одобрен",
@@ -146,7 +150,7 @@ class AccessRequestService:
                 priority="normal",
                 action_url=f"/crm/entities/{copy.entity_id}",
                 data={
-                    "request_id": request.request_id,
+                    "access_request_id": access_request.access_request_id,
                     "entity_id": copy.entity_id,
                     "original_entity_id": original.entity_id,
                     "status": "approved",
@@ -154,7 +158,7 @@ class AccessRequestService:
             ),
         )
 
-        return request
+        return access_request
 
     async def _copy_shallow(
         self,
@@ -301,33 +305,33 @@ class AccessRequestService:
 
         return copy
 
-    async def reject_request(
+    async def reject_access_request(
         self,
-        request_id: str,
+        access_request_id: str,
         owner_user_id: str,
         reason: str | None = None,
     ) -> AccessRequest:
         """Отклонить запрос"""
 
-        request = await self._request_repo.get(request_id)
-        if not request:
+        access_request = await self._access_request_repo.get(access_request_id)
+        if not access_request:
             raise ValueError("Request not found")
 
-        if request.owner_id != owner_user_id:
+        if access_request.owner_id != owner_user_id:
             raise PermissionError("Only owner can reject")
 
-        request.status = "rejected"
-        request.updated_at = datetime.now(UTC)
-        request = await self._request_repo.update(request)
+        access_request.status = "rejected"
+        access_request.updated_at = datetime.now(UTC)
+        access_request = await self._access_request_repo.update(access_request)
 
-        logger.info(f"Access request {request_id} rejected by {owner_user_id}")
+        logger.info(f"Access request {access_request_id} rejected by {owner_user_id}")
 
         # Уведомление запросившему об отклонении
-        entity = await self._entity_repo.get(request.resource_id)
+        entity = await self._entity_repo.get(access_request.resource_id)
         entity_name = entity.name if entity else "неизвестная сущность"
 
         await notify_user(
-            user_id=request.requester_id,
+            user_id=access_request.requester_id,
             notification=Notification(
                 type=NotificationType.ACCESS_REQUEST,
                 title="Запрос доступа отклонен",
@@ -335,25 +339,21 @@ class AccessRequestService:
                 service="crm",
                 priority="low",
                 data={
-                    "request_id": request.request_id,
-                    "entity_id": request.resource_id,
+                    "access_request_id": access_request.access_request_id,
+                    "entity_id": access_request.resource_id,
                     "status": "rejected",
                     "reason": reason,
                 },
             ),
         )
 
-        return request
+        return access_request
 
-    async def get(self, request_id: str) -> AccessRequest | None:
+    async def get_access_request(self, access_request_id: str) -> AccessRequest | None:
         """Получить запрос по ID"""
-        return await self._request_repo.get(request_id)
+        return await self._access_request_repo.get(access_request_id)
 
-    async def get_request(self, request_id: str) -> AccessRequest | None:
-        """Алиас для get"""
-        return await self.get(request_id)
-
-    async def list_requests(
+    async def list_access_requests(
         self,
         company_id: str,
         status: str | None = None,
@@ -361,14 +361,16 @@ class AccessRequestService:
         offset: int = 0,
     ) -> list[AccessRequest]:
         if status:
-            return await self._request_repo.list_by_company_and_status(
+            return await self._access_request_repo.list_by_company_and_status(
                 company_id, status, limit=limit, offset=offset
             )
-        return await self._request_repo.list_by_company(company_id, limit=limit, offset=offset)
+        return await self._access_request_repo.list_by_company(
+            company_id, limit=limit, offset=offset
+        )
 
-    async def count_requests(
+    async def count_access_requests(
         self,
         company_id: str,
         status: str | None = None,
     ) -> int:
-        return await self._request_repo.count_by_company(company_id, status=status)
+        return await self._access_request_repo.count_by_company(company_id, status=status)

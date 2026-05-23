@@ -15,7 +15,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '../components/common/flows-code-language-icon.js';
-import { embedAssistantMarkdownToHtml } from '@platform/lib/embed-chat/embed-chat-markdown.js';
+import { flowsChatMarkdownToHtml } from '@platform/lib/flows-chat/markdown.js';
 import { registryItemIconName, registryItemTitle } from '../_helpers/flows-registry-item-icon.js';
 import { isPlainObject } from '../_helpers/flows-resolvers.js';
 import { isMcpToolRegistryItem } from '../_helpers/flows-mcp-tool-registry.js';
@@ -680,7 +680,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
 
     /**
      * Описания в Markdown. `marked` по сырой строке (см. `index.html`); иначе кавычки в JSON/примерах
-     * уезжают в `&quot;` из-за `escapeHtml` в `embedAssistantMarkdownToHtml`. Fallback — embed-хелпер.
+     * уезжают в `&quot;` из-за `escapeHtml` в `flowsChatMarkdownToHtml`. Fallback — общий flows-chat helper.
      */
     _mdDescription(text) {
         if (typeof text !== 'string' || text.length === 0) {
@@ -692,7 +692,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 marked.parse(text, { breaks: true, gfm: true }),
             )}</div>`;
         }
-        const htmlStr = embedAssistantMarkdownToHtml(text);
+        const htmlStr = flowsChatMarkdownToHtml(text);
         if (htmlStr.length === 0) {
             return nothing;
         }

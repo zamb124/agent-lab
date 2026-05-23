@@ -330,7 +330,7 @@ class SchedulerTaskRecord(Base):
 
     __tablename__ = "scheduler_tasks"
 
-    id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
+    schedule_task_id: Mapped[str] = mapped_column("id", String(255), primary_key=True, index=True)
     company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     schedule_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     target_service: Mapped[str] = mapped_column(String(64), nullable=False, index=True)

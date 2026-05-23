@@ -7,7 +7,7 @@
 
 Дизайн:
 - Собирает записи в in-memory очередь (collections.deque) под threading.Lock.
-- Фоновый поток (не daemon) раз в _FLUSH_INTERVAL_SEC сливает batch в Loki
+- Фоновый daemon-поток раз в _FLUSH_INTERVAL_SEC сливает batch в Loki
   через http.client (без внешних зависимостей).
 - Batch ограничен по количеству записей и размеру; тело сжимается gzip.
 - При shutdown ждёт завершения потока через join(timeout).
@@ -80,6 +80,7 @@ class LokiHandler(logging.Handler):
         self._thread = threading.Thread(
             target=self._flush_loop,
             name="loki-log-flusher",
+            daemon=True,
         )
         self._thread.start()
         _LOKI_HANDLERS.append(self)

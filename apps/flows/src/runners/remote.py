@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import cast, override
+from typing import ClassVar, cast, override
 
 from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.runners.base import BaseCodeRunner
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from core.cache.ttl_model_cache import TtlModelCache
 from core.capabilities import (
     CapabilityExecutionContext,
     CapabilityExecutionTokenClaims,
@@ -24,6 +25,7 @@ from core.capabilities import (
     issue_execution_token,
 )
 from core.capabilities.source_sanitize import strip_forbidden_platform_import_lines
+from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.errors import CodeExecutionRuntimeError
@@ -60,6 +62,8 @@ class RemoteCodeRunner(BaseCodeRunner):
     """BaseCodeRunner adapter over isolated code-runner HTTP services."""
 
     language: str = "remote"
+    _manifest_cache: ClassVar[TtlModelCache[CapabilityManifest] | None] = None
+    _manifest_redis_client: ClassVar[RedisClient | None] = None
 
     def __init__(self, language: str):
         if language not in RUNNER_EXECUTE_PATHS:
@@ -216,12 +220,39 @@ class RemoteCodeRunner(BaseCodeRunner):
         return response
 
     async def _load_manifest(self) -> CapabilityManifest:
+        settings = get_flows_settings()
+        return await self._get_manifest_cache().get_or_build(
+            enabled=settings.capability_manifest_cache_enabled,
+            key=settings.capability_manifest_cache_key,
+            ttl_seconds=settings.capability_manifest_cache_ttl_seconds,
+            builder=self._fetch_manifest_from_gateway,
+        )
+
+    async def _fetch_manifest_from_gateway(self) -> CapabilityManifest:
         raw_manifest = await self._client.get(
             "capability_gateway",
             CAPABILITY_MANIFEST_PATH,
             timeout=30.0,
         )
         return CapabilityManifest.model_validate(raw_manifest)
+
+    def _get_manifest_cache(self) -> TtlModelCache[CapabilityManifest]:
+        cache = self.__class__._manifest_cache
+        if cache is None:
+            cache = TtlModelCache(
+                name="flows.capability_manifest_cache",
+                model_type=CapabilityManifest,
+                redis_client_factory=self._get_manifest_redis_client,
+            )
+            self.__class__._manifest_cache = cache
+        return cache
+
+    def _get_manifest_redis_client(self) -> RedisClient:
+        client = self.__class__._manifest_redis_client
+        if client is None or client.redis_url != get_flows_settings().database.redis_url:
+            client = RedisClient(get_flows_settings().database.redis_url)
+            self.__class__._manifest_redis_client = client
+        return client
 
     def _execution_context(self, state: ExecutionState) -> CapabilityExecutionContext:
         context = get_context()

@@ -51,7 +51,7 @@ class _InMemorySchedulerService:
     ) -> PlatformScheduledTask:
         self.created_requests.append(request)
         task = PlatformScheduledTask(
-            id=f"created-{len(self.created_requests)}",
+            schedule_task_id=f"created-{len(self.created_requests)}",
             company_id=company_id,
             schedule_id=f"redis-{len(self.created_requests)}",
             target_service=request.target_service,
@@ -77,7 +77,7 @@ class _InMemorySchedulerService:
     ) -> PlatformScheduledTask:
         self.resumed_ids.append(schedule_task_id)
         for index, task in enumerate(self.tasks):
-            if task.company_id == company_id and task.id == schedule_task_id:
+            if task.company_id == company_id and task.schedule_task_id == schedule_task_id:
                 resumed = task.model_copy(update={"status": ScheduledTaskStatus.PENDING})
                 self.tasks[index] = resumed
                 return resumed
@@ -99,7 +99,7 @@ class _Container:
 
 
 def _task(
-    task_id: str,
+    schedule_task_id: str,
     *,
     status: ScheduledTaskStatus,
     interval_seconds: int,
@@ -107,9 +107,9 @@ def _task(
     payload: dict[str, Any] | None = None,
 ) -> PlatformScheduledTask:
     return PlatformScheduledTask(
-        id=task_id,
+        schedule_task_id=schedule_task_id,
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
-        schedule_id=f"redis-{task_id}",
+        schedule_id=f"redis-{schedule_task_id}",
         target_service="flows",
         task_name=task_name,
         queue_name="idle",
@@ -200,7 +200,7 @@ async def test_ensure_idle_interval_schedule_leaves_incompatible_pending_and_cre
         run_now_on_start=True,
     )
 
-    assert [task.id for task in service.tasks] == ["old-interval", "created-1"]
+    assert [task.schedule_task_id for task in service.tasks] == ["old-interval", "created-1"]
     assert service.tasks[0].status == ScheduledTaskStatus.PENDING
     assert service.created_requests[0].interval_seconds == 3300
     assert service.run_now_ids == ["created-1"]

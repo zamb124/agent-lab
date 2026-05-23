@@ -56,7 +56,7 @@ export function buildChatSubtitle({
     if (!channel) return '';
     const typingLine = getTypingIndicatorLine({
         typingByChannel,
-        channelId: channel.id,
+        channelId: channel.channel_id,
         threadId: null,
         myUserId: typeof myUserId === 'string' ? myUserId : '',
         members: Array.isArray(members) ? members : [],

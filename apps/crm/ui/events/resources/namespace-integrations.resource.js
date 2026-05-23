@@ -50,7 +50,7 @@ export const namespaceIntegrationAuthorizeOp = createAsyncOp({
         }
         const rp = typeof payload.return_path === 'string' && payload.return_path.length > 0
             ? payload.return_path
-            : '/crm/spaces';
+            : '/crm/namespaces';
         const qs = new URLSearchParams();
         qs.set('subdomain', sub);
         qs.set('return_path', rp);

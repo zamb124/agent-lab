@@ -41,7 +41,7 @@ async def test_two_ws_clients_receive_message_created(
             },
         )
         assert cr.status_code == 201
-        channel_id = cr.json()["id"]
+        channel_id = cr.json()["channel_id"]
 
         token_service = get_token_service()
         u2_data = token_service.validate_token(sync_auth_token_user2)

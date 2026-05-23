@@ -32,7 +32,7 @@ async def request_access(
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        request = await container.access_request_service.create_request(
+        access_request = await container.access_request_service.create_access_request(
             entity_id=data.resource_id,
             requester_user_id=ctx.user.user_id,
             requester_company_id=ctx.active_company.company_id if ctx.active_company else "system",
@@ -40,29 +40,29 @@ async def request_access(
             include_dependencies=data.include_dependencies,
             max_depth=data.max_depth,
         )
-        return AccessRequestResponse.model_validate(request)
+        return AccessRequestResponse.model_validate(access_request)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
 
-@router.get("/{request_id}", response_model=AccessRequestResponse)
+@router.get("/{access_request_id}", response_model=AccessRequestResponse)
 async def get_access_request(
-    request_id: str,
+    access_request_id: str,
     container: ContainerDep,
 ):
     """Получить статус запроса на доступ"""
-    request = await container.access_request_service.get_request(request_id)
-    if not request:
+    access_request = await container.access_request_service.get_access_request(access_request_id)
+    if not access_request:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    return AccessRequestResponse.model_validate(request)
+    return AccessRequestResponse.model_validate(access_request)
 
 
-@router.put("/{request_id}", response_model=AccessRequestResponse)
+@router.put("/{access_request_id}", response_model=AccessRequestResponse)
 async def update_access_request(
-    request_id: str,
+    access_request_id: str,
     data: AccessRequestUpdate,
     container: ContainerDep,
 ):
@@ -73,17 +73,17 @@ async def update_access_request(
 
     try:
         if data.status == "approved":
-            request = await container.access_request_service.approve_request(
-                request_id, ctx.user.user_id
+            access_request = await container.access_request_service.approve_access_request(
+                access_request_id, ctx.user.user_id
             )
         elif data.status == "rejected":
-            request = await container.access_request_service.reject_request(
-                request_id, ctx.user.user_id
+            access_request = await container.access_request_service.reject_access_request(
+                access_request_id, ctx.user.user_id
             )
         else:
             raise HTTPException(status_code=400, detail="Invalid status")
 
-        return AccessRequestResponse.model_validate(request)
+        return AccessRequestResponse.model_validate(access_request)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
@@ -103,14 +103,16 @@ async def list_pending_requests(
 
     company_id = ctx.active_company.company_id if ctx.active_company else "system"
 
-    requests, total = await asyncio.gather(
-        container.access_request_service.list_requests(
+    access_requests, total = await asyncio.gather(
+        container.access_request_service.list_access_requests(
             company_id=company_id, status=status, limit=limit, offset=offset
         ),
-        container.access_request_service.count_requests(company_id=company_id, status=status),
+        container.access_request_service.count_access_requests(
+            company_id=company_id, status=status
+        ),
     )
     return OffsetPage[AccessRequestResponse](
-        items=[AccessRequestResponse.model_validate(r) for r in requests],
+        items=[AccessRequestResponse.model_validate(r) for r in access_requests],
         total=total,
         limit=limit,
         offset=offset,

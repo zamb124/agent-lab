@@ -346,9 +346,9 @@ def _replace_audio_transcription(
                 type=block.type,
                 data=AudioAttachmentContent(
                     file_id=block.data.file_id,
-                    filename=block.data.filename,
-                    mime_type=block.data.mime_type,
-                    size=block.data.size,
+                    original_name=block.data.original_name,
+                    content_type=block.data.content_type,
+                    file_size=block.data.file_size,
                     duration_ms=block.data.duration_ms,
                     waveform=block.data.waveform,
                     transcription_status=status,
@@ -399,9 +399,9 @@ def _replace_video_transcription(
                 type=block.type,
                 data=VideoAttachmentContent(
                     file_id=block.data.file_id,
-                    filename=block.data.filename,
-                    mime_type=block.data.mime_type,
-                    size=block.data.size,
+                    original_name=block.data.original_name,
+                    content_type=block.data.content_type,
+                    file_size=block.data.file_size,
                     duration_ms=block.data.duration_ms,
                     transcription_status=status,
                     transcription_text=transcription_text,
@@ -609,8 +609,8 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                 file_id=raw_file_id,
                 company_id=company_id,
                 original_name=raw_original_name,
-                mime_type="video/mp4",
-                size_bytes=recording_file_size,
+                content_type="video/mp4",
+                file_size=recording_file_size,
                 storage_url=raw_storage_url,
                 checksum=None,
             )
@@ -619,8 +619,8 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                 await container.sync_file_repository.create(raw_file)
             else:
                 existing_raw.original_name = raw_original_name
-                existing_raw.mime_type = "video/mp4"
-                existing_raw.size_bytes = recording_file_size
+                existing_raw.content_type = "video/mp4"
+                existing_raw.file_size = recording_file_size
                 existing_raw.storage_url = raw_storage_url
                 existing_raw.checksum = None
                 await container.sync_file_repository.update(existing_raw)
@@ -640,9 +640,9 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                         type=MessageContentType.FILE_VIDEO,
                         data=VideoAttachmentContent(
                             file_id=raw_file_id,
-                            filename=raw_original_name,
-                            mime_type="video/mp4",
-                            size=recording_file_size,
+                            original_name=raw_original_name,
+                            content_type="video/mp4",
+                            file_size=recording_file_size,
                             duration_ms=None,
                             transcription_status=AudioTranscriptionStatus.IDLE,
                             transcription_text=None,
@@ -729,10 +729,10 @@ async def transcribe_audio_message_core(
     audio_info = _extract_audio_info(source_contents)
     if audio_info.file_id == "":
         raise ValueError("file/audio.file_id обязателен.")
-    if audio_info.filename == "":
-        raise ValueError("file/audio.filename обязателен.")
-    if audio_info.mime_type == "":
-        raise ValueError("file/audio.mime_type обязателен.")
+    if audio_info.original_name == "":
+        raise ValueError("file/audio.original_name обязателен.")
+    if audio_info.content_type == "":
+        raise ValueError("file/audio.content_type обязателен.")
 
     settings = get_settings()
     redis_url = settings.database.redis_url
@@ -790,8 +790,8 @@ async def transcribe_audio_message_core(
                     job_id=message_id,
                     company_id=company_id,
                     audio_bytes=response.content,
-                    file_name=audio_info.filename,
-                    mime_type=audio_info.mime_type,
+                    file_name=audio_info.original_name,
+                    mime_type=audio_info.content_type,
                     language=settings.voice.stt.default_language,
                 )
                 stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, used_provider)
@@ -909,8 +909,8 @@ async def transcribe_video_message_core(
     video_info = _extract_video_info(source_contents)
     if video_info.file_id == "":
         raise ValueError("file/video.file_id обязателен.")
-    if video_info.filename == "":
-        raise ValueError("file/video.filename обязателен.")
+    if video_info.original_name == "":
+        raise ValueError("file/video.original_name обязателен.")
 
     settings = get_settings()
     timeout_seconds = settings.media_transcriber.batch_download_timeout_s
@@ -948,7 +948,7 @@ async def transcribe_video_message_core(
 
             audio_bytes, audio_name = extract_audio_from_video(
                 video_bytes=response.content,
-                base_name=video_info.filename,
+                base_name=video_info.original_name,
             )
 
             transcript_text, used_provider = await transcribe_audio_with_chunking(

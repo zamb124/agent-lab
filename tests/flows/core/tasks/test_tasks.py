@@ -196,13 +196,13 @@ class TestProcessAgentTask:
 
         assert result is not None
         assert "response" in result
-        assert "status" in result
+        assert "task_state" in result
 
     @pytest.mark.asyncio
-    async def test_process_flow_task_returns_completed_status(
+    async def test_process_flow_task_returns_completed_task_state(
         self, app, container, setup_flow, unique_id, mock_context
     ):
-        """process_flow_task возвращает status=completed."""
+        """process_flow_task возвращает task_state=completed."""
         session_id = f"task_test_flow:test-session-{unique_id}"
         mock_context.session_id = session_id
         mock_context.flow_id = "task_test_flow"
@@ -215,11 +215,11 @@ class TestProcessAgentTask:
             context_data=mock_context.model_dump(),
         )
 
-        assert result["status"] == "completed"
+        assert result["task_state"] == "completed"
         set_context(mock_context)
         persisted = await container.state_repository.get(session_id)
         assert persisted is not None
-        assert persisted.terminal_status == "completed"
+        assert persisted.terminal_task_state == "completed"
         assert await container.redis_client.get(container.state_manager._state_key(session_id)) is None
 
     @pytest.mark.asyncio
@@ -240,7 +240,7 @@ class TestProcessAgentTask:
         set_context(mock_context)
         persisted = await container.state_repository.get(session_id)
         assert persisted is not None
-        assert persisted.terminal_status == "failed"
+        assert persisted.terminal_task_state == "failed"
         assert await container.redis_client.get(container.state_manager._state_key(session_id)) is None
 
     @pytest.mark.asyncio
@@ -282,8 +282,8 @@ class TestProcessAgentTask:
             set_context(mock_context)
             persisted = await container.state_repository.get(session_id)
             assert persisted is not None
-            assert persisted.terminal_status == "failed"
-            assert "flow_id required" in (persisted.terminal_error or "")
+            assert persisted.terminal_task_state == "failed"
+            assert "flow_id required" in (persisted.terminal_task_error or "")
             assert await container.redis_client.get(container.state_manager._state_key(session_id)) is None
         finally:
             set_context(mock_context)
@@ -349,7 +349,7 @@ class TestProcessAgentTaskResume:
         )
 
         assert result is not None
-        assert "status" in result
+        assert "task_state" in result
 
     @pytest.mark.asyncio
     async def test_process_flow_task_resume_raises_on_unknown_flow(
@@ -425,7 +425,7 @@ class TestProcessFlowTaskSequentialLlmNodes:
             context_data=mock_context.model_dump(),
         )
 
-        assert result["status"] == "completed"
+        assert result["task_state"] == "completed"
         assert result["response"] == "SECOND_OK"
 
         set_context(mock_context)

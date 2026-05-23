@@ -90,6 +90,7 @@ export class SyncApp extends PlatformApp {
         this._typingPruneTimer = null;
         this._authUserSel = this.select((s) => s.auth && s.auth.user ? s.auth.user : null);
         this._channelsSliceSel = this.select((s) => s.syncChannels);
+        this._callUiSel = this.select((s) => s.syncCallUi);
         this._companiesListSel = this.select((s) => s.companies.list);
         this._companiesLoadingSel = this.select((s) => s.companies.loading);
         this.useEvent('sync/call/incoming', (event) => this._onIncomingCall(event));
@@ -118,6 +119,21 @@ export class SyncApp extends PlatformApp {
 
     updated(changed) {
         super.updated(changed);
+        const callUi = this._callUiSel.value;
+        const callActive = Boolean(callUi && callUi.activeCall);
+        const overlayExpanded = Boolean(callActive && callUi.overlayMinimized !== true);
+        this.toggleAttribute('data-call-active', callActive);
+        if (overlayExpanded) {
+            this.setAttribute('data-call-overlay-expanded', 'true');
+            if (typeof document !== 'undefined') {
+                document.documentElement.setAttribute('data-call-overlay-expanded', 'true');
+            }
+        } else {
+            this.removeAttribute('data-call-overlay-expanded');
+            if (typeof document !== 'undefined') {
+                document.documentElement.removeAttribute('data-call-overlay-expanded');
+            }
+        }
         if (this.rendersUnauthenticated()) {
             return;
         }

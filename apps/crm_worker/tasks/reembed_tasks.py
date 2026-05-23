@@ -26,7 +26,7 @@ from core.rag.reembed_stale_documents import execute_reembed_tick
     max_retries=2,
 )
 async def crm_reembed_stale_documents_tick(
-    scheduler_task_id: str,
+    schedule_task_id: str,
     company_id: str | None = None,
 ) -> Dict[str, object]:
     """
@@ -37,7 +37,7 @@ async def crm_reembed_stale_documents_tick(
     result = await execute_reembed_tick(
         container=get_crm_container(),
         channel="crm_worker",
-        scheduler_task_id=scheduler_task_id,
+        schedule_task_id=schedule_task_id,
     )
     raw_by_company = result.get("by_company_written")
     by_company: dict[str, int] = {}
@@ -65,7 +65,7 @@ async def crm_reembed_stale_documents_tick(
                 namespace=ALL_NAMESPACES_TASK_KEY,
                 user_id="system",
                 data={
-                    "scheduler_task_id": scheduler_task_id,
+                    "schedule_task_id": schedule_task_id,
                     "chunks_reembedded": cnt,
                     "skipped": skipped_flag,
                 },

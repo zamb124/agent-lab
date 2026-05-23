@@ -178,7 +178,7 @@ async def _sync_single_integration(
 
 @idle_broker.task(task_name="calendar_sync_tick", queue_name="idle")
 async def calendar_sync_tick(
-    scheduler_task_id: str | None = None,
+    schedule_task_id: str | None = None,
     company_id: str | None = None,
 ) -> dict[str, int]:
     settings = get_settings()
@@ -285,7 +285,7 @@ async def calendar_sync_tick(
         stats.notifications_sent += sent_notifications
 
     logger.info(
-        "calendar_sync_tick done: integrations_total=%s success=%s failed=%s auth_failed=%s network_failed=%s validation_failed=%s unknown_failed=%s new_events=%s notifications=%s scheduler_task_id=%s company_id=%s",
+        "calendar_sync_tick done: integrations_total=%s success=%s failed=%s auth_failed=%s network_failed=%s validation_failed=%s unknown_failed=%s new_events=%s notifications=%s schedule_task_id=%s company_id=%s",
         stats.integrations_total,
         stats.integrations_success,
         stats.integrations_failed,
@@ -295,7 +295,7 @@ async def calendar_sync_tick(
         stats.failures_unknown,
         stats.events_new,
         stats.notifications_sent,
-        scheduler_task_id,
+        schedule_task_id,
         company_id,
     )
     return {
@@ -313,7 +313,7 @@ async def calendar_sync_tick(
 
 @idle_broker.task(task_name="calendar_sync_meeting_reminder_tick", queue_name="idle")
 async def calendar_sync_meeting_reminder_tick(
-    scheduler_task_id: str | None = None,
+    schedule_task_id: str | None = None,
     company_id: str | None = None,
 ) -> dict[str, int]:
     """
@@ -371,10 +371,10 @@ async def calendar_sync_meeting_reminder_tick(
         await calendar_service.mark_sync_meeting_reminder_sent(event.event_id, event.company_id)
 
     logger.info(
-        "calendar_sync_meeting_reminder_tick done: events=%s notifications=%s scheduler_task_id=%s company_id=%s",
+        "calendar_sync_meeting_reminder_tick done: events=%s notifications=%s schedule_task_id=%s company_id=%s",
         len(events),
         sent,
-        scheduler_task_id,
+        schedule_task_id,
         company_id,
     )
     return {"events_checked": len(events), "notifications_sent": sent}

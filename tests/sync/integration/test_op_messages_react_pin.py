@@ -41,7 +41,7 @@ async def _setup_message(
     )
     msg = await op_messages_send(
         MessagesSendPayload(
-            channel_id=ch.id,
+            channel_id=ch.channel_id,
             body=MessageCreate(
                 contents=[
                     MessageContentModel(
@@ -55,7 +55,7 @@ async def _setup_message(
         user=op_user,
         container=op_container,
     )
-    return ch.id, msg.id
+    return ch.channel_id, msg.message_id
 
 
 @pytest.mark.asyncio

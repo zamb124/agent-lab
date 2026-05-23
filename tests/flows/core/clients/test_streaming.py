@@ -23,7 +23,7 @@ from a2a.utils.message import new_agent_text_message
 
 from apps.flows.config import get_settings
 from apps.flows.src.streaming import Emitter, EventSubscriber, InMemoryEmitter
-from apps.flows.src.streaming.subscriber import TERMINAL_STATES, is_final_event
+from apps.flows.src.streaming.subscriber import TERMINAL_TASK_STATES, is_final_event
 from core.clients.redis_client import RedisClient
 from core.state import ExecutionState
 
@@ -144,12 +144,12 @@ class TestIsFinalEvent:
 
     def test_terminal_states_constant(self):
         """Проверяем что все терминальные состояния учтены."""
-        assert "completed" in TERMINAL_STATES
-        assert "failed" in TERMINAL_STATES
-        assert "canceled" in TERMINAL_STATES
-        assert "input-required" in TERMINAL_STATES
-        assert "working" not in TERMINAL_STATES
-        assert "submitted" not in TERMINAL_STATES
+        assert "completed" in TERMINAL_TASK_STATES
+        assert "failed" in TERMINAL_TASK_STATES
+        assert "canceled" in TERMINAL_TASK_STATES
+        assert "input-required" in TERMINAL_TASK_STATES
+        assert "working" not in TERMINAL_TASK_STATES
+        assert "submitted" not in TERMINAL_TASK_STATES
 
 
 @pytest.mark.real_taskiq

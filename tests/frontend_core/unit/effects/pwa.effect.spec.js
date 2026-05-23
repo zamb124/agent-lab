@@ -7,6 +7,7 @@ import { buildCtx } from '../../helpers/bus-fixtures.js';
 
 let dom;
 let fetchMock;
+const DEPLOYMENT_VERSION_STORAGE_KEY = 'platform:core:deployment_version';
 
 beforeEach(() => {
     dom = installDomShim();
@@ -16,10 +17,30 @@ beforeEach(() => {
 afterEach(() => {
     vi.useRealTimers();
     fetchMock.uninstall();
+    delete globalThis.caches;
+    delete globalThis.localStorage;
     dom.uninstall();
 });
 
 const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: { ts: 0, source: 'system' } });
+
+function installLocalStorage(initial = {}) {
+    const values = new Map(Object.entries(initial));
+    const storage = {
+        getItem(key) {
+            return values.has(key) ? values.get(key) : null;
+        },
+        setItem(key, value) {
+            values.set(key, String(value));
+        },
+        removeItem(key) {
+            values.delete(key);
+        },
+    };
+    globalThis.localStorage = storage;
+    dom.window.localStorage = storage;
+    return storage;
+}
 
 describe('pwaEffect: bootstrap', () => {
     it('эмитит permission и крутит проверку версии', async () => {
@@ -66,6 +87,49 @@ describe('pwaEffect: DEPLOYMENT_VERSION_CHECK_REQUESTED', () => {
             buildCtx(() => ({ pwa: { deploymentVersion: null } }), dispatched),
         );
         expect(dispatched.find((d) => d.type === PWA_EVENTS.DEPLOYMENT_VERSION_LOADED).payload.version).toBe('v2');
+    });
+
+    it('успех сохраняет deployment version между запусками', async () => {
+        fetchMock.respondJson('GET', '/svc/health', { deployment_version: 'v2' });
+        const storage = installLocalStorage();
+        const dispatched = [];
+        await createPwaEffect({ baseUrl: '/svc' })(
+            ev(PWA_EVENTS.DEPLOYMENT_VERSION_CHECK_REQUESTED),
+            buildCtx(() => ({ pwa: { deploymentVersion: null } }), dispatched),
+        );
+        expect(storage.getItem(DEPLOYMENT_VERSION_STORAGE_KEY)).toBe('v2');
+        expect(dispatched.find((d) => d.type === CoreEvents.PWA_UPDATE_AVAILABLE)).toBeFalsy();
+    });
+
+    it('холодный запуск со старой stored version → UPDATE_AVAILABLE, очистка кэшей и reload', async () => {
+        fetchMock.respondJson('GET', '/svc/health', { deployment_version: 'v2' });
+        const storage = installLocalStorage({ [DEPLOYMENT_VERSION_STORAGE_KEY]: 'v1' });
+        const dispatched = [];
+        const deleted = [];
+        globalThis.caches = {
+            keys: async () => ['humanitec-static-v6', 'humanitec-dynamic-v6', 'other-cache'],
+            delete: async (name) => {
+                deleted.push(name);
+                return true;
+            },
+        };
+        const update = vi.fn(async () => {});
+        dom.window.navigator.serviceWorker = {
+            getRegistration: async () => ({ update, waiting: null }),
+        };
+        const reload = vi.fn();
+        dom.window.location.reload = reload;
+
+        await createPwaEffect({ baseUrl: '/svc' })(
+            ev(PWA_EVENTS.DEPLOYMENT_VERSION_CHECK_REQUESTED),
+            buildCtx(() => ({ pwa: { deploymentVersion: null } }), dispatched),
+        );
+        const upd = dispatched.find((d) => d.type === CoreEvents.PWA_UPDATE_AVAILABLE);
+        expect(upd.payload).toEqual({ from: 'v1', to: 'v2' });
+        expect(deleted).toEqual(['humanitec-static-v6', 'humanitec-dynamic-v6']);
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(storage.getItem(DEPLOYMENT_VERSION_STORAGE_KEY)).toBe('v2');
     });
 
     it('новая версия → UPDATE_AVAILABLE, очистка humanitec-кэшей, update SW и reload', async () => {

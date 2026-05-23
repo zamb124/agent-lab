@@ -554,7 +554,7 @@ class PgVectorProvider(BaseRAGProvider):
         page = ReadPage(index=0, text=text_content, assets=[], label=None)
         read_result = FileReadResult(
             file_name=document_name,
-            mime_type="text/plain",
+            content_type="text/plain",
             detected_kind=FileReadKind.TEXT,
             page_count=1,
             pages=[page],

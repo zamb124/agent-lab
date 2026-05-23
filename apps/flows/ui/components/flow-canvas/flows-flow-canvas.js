@@ -2010,6 +2010,8 @@ export class FlowsFlowCanvas extends PlatformElement {
         return svg`
             <g
                 class="node"
+                data-node-id=${id}
+                data-node-type=${asString(node.type)}
                 transform=${`translate(${x}, ${y})`}
                 ?data-selected=${isSelected}
                 ?data-multi-selected=${isMulti}

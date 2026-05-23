@@ -3,9 +3,9 @@
  *
  * Backend (`/crm/api/v1/access-requests`):
  *   GET  /                 → OffsetPage[AccessRequestResponse]
- *   GET  /{request_id}     → AccessRequestResponse
+ *   GET  /{access_request_id}     → AccessRequestResponse
  *   POST /                 → AccessRequestResponse  (create)
- *   PUT  /{request_id}     → AccessRequestResponse  (approve/reject через PUT)
+ *   PUT  /{access_request_id}     → AccessRequestResponse  (approve/reject через PUT)
  *
  * `update` отдельным `accessRequestUpdateOp` (PUT).
  */
@@ -19,7 +19,7 @@ import { httpRequest } from '@platform/lib/events/http.js';
 export const accessRequestsResource = createResourceCollection({
     name: 'crm/access_requests',
     baseUrl: '/crm/api/v1/access-requests',
-    idField: 'request_id',
+    idField: 'access_request_id',
     operations: ['list', 'get', 'create'],
     listQuery: (payload) => {
         const query = { limit: 100, offset: 0 };
@@ -41,14 +41,14 @@ export const accessRequestUpdateOp = createAsyncOp({
     name: 'crm/access_request_update',
     successToastKey: 'crm:toast.access_request.updated',
     errorToastKey: 'crm:toast.access_request.update_failed',
-    restMirror: { method: 'PUT', path: '/crm/api/v1/access-requests/:request_id' },
+    restMirror: { method: 'PUT', path: '/crm/api/v1/access-requests/:access_request_id' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload.request_id !== 'string' || !payload.body) {
-            throw new Error('accessRequestUpdateOp: { request_id, body } required');
+        if (!payload || typeof payload.access_request_id !== 'string' || !payload.body) {
+            throw new Error('accessRequestUpdateOp: { access_request_id, body } required');
         }
         return await httpRequest({
             method: 'PUT',
-            url: `/crm/api/v1/access-requests/${encodeURIComponent(payload.request_id)}`,
+            url: `/crm/api/v1/access-requests/${encodeURIComponent(payload.access_request_id)}`,
             body: payload.body,
         });
     },

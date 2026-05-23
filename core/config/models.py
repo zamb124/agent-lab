@@ -55,8 +55,25 @@ class AuthProviderConfig(BaseModel):
 class AuthConfig(BaseModel):
     """Конфигурация системы авторизации"""
 
-    enabled: bool = True
+    enabled: bool = Field(
+        default=True,
+        description=(
+            "Включает обязательную авторизацию. Отключение auth.enabled само по себе "
+            "не создаёт пользователя; локальный dev auto-context включается отдельным флагом."
+        ),
+    )
     permissions_enabled: bool = True
+    dev_auto_context_enabled: bool = Field(
+        default=False,
+        description=(
+            "Только для локальной разработки: при auth.enabled=false в non-production "
+            "создаёт dev-пользователя для защищённых маршрутов. В testing игнорируется."
+        ),
+    )
+    dev_auto_user_id: str = "dev-auto-user"
+    dev_auto_company_id: str = "system"
+    dev_auto_company_name: str = "System"
+    dev_auto_groups: List[str] = Field(default_factory=lambda: ["admin", "developers"])
     secret_key: Optional[str] = None
     jwt_secret_key: Optional[str] = None
     session_timeout: int = 3600

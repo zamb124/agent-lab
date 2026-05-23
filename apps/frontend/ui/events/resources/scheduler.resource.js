@@ -8,10 +8,10 @@
  *   - schedulerPauseOp / schedulerResumeOp / schedulerCancelOp: createAsyncOp, silent,
  *     по успеху перезагружают список (onSuccess).
  *   - schedulerRunNowOp: createAsyncOp, silent, по успеху эмитит toast и перезагружает.
- *   - schedulerRedisOp: createAsyncOp, silent, держит snapshot Redis по task_id в slice
- *     (`snapshotById`) — UI показывает inline под строкой задачи без модалки.
+ *   - schedulerRedisOp: createAsyncOp, silent, держит snapshot Redis по schedule_task_id в slice
+ *     (`snapshotByScheduleTaskId`) — UI показывает inline под строкой задачи без модалки.
  *
- * task.id — основной идентификатор (поле `id`, не `task_id`).
+ * schedule_task_id — основной идентификатор записи платформенного scheduler.
  */
 
 import {
@@ -26,7 +26,7 @@ const BASE = '/frontend/api/scheduler/schedules';
 export const schedulerTasksResource = createResourceCollection({
     name: 'frontend/scheduler_tasks',
     baseUrl: '/frontend/api/scheduler/schedules',
-    idField: 'id',
+    idField: 'schedule_task_id',
     operations: ['list', 'create'],
     toastKeys: {
         create: 'frontend:scheduler_modal.toast_created',
@@ -49,11 +49,11 @@ export const schedulerPauseOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/pause' },
     request: async ({ payload }) => {
-        const id = payload && payload.task_id;
-        if (!id) throw new Error('schedulerPauseOp: task_id required');
+        const scheduleTaskId = payload && payload.schedule_task_id;
+        if (!scheduleTaskId) throw new Error('schedulerPauseOp: schedule_task_id required');
         return await httpRequest({
             method: 'POST',
-            url: `${BASE}/${encodeURIComponent(id)}/pause`,
+            url: `${BASE}/${encodeURIComponent(scheduleTaskId)}/pause`,
         });
     },
     onSuccess: (ctx) => _reloadList(ctx),
@@ -64,11 +64,11 @@ export const schedulerResumeOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/resume' },
     request: async ({ payload }) => {
-        const id = payload && payload.task_id;
-        if (!id) throw new Error('schedulerResumeOp: task_id required');
+        const scheduleTaskId = payload && payload.schedule_task_id;
+        if (!scheduleTaskId) throw new Error('schedulerResumeOp: schedule_task_id required');
         return await httpRequest({
             method: 'POST',
-            url: `${BASE}/${encodeURIComponent(id)}/resume`,
+            url: `${BASE}/${encodeURIComponent(scheduleTaskId)}/resume`,
         });
     },
     onSuccess: (ctx) => _reloadList(ctx),
@@ -79,11 +79,11 @@ export const schedulerCancelOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/cancel' },
     request: async ({ payload }) => {
-        const id = payload && payload.task_id;
-        if (!id) throw new Error('schedulerCancelOp: task_id required');
+        const scheduleTaskId = payload && payload.schedule_task_id;
+        if (!scheduleTaskId) throw new Error('schedulerCancelOp: schedule_task_id required');
         return await httpRequest({
             method: 'POST',
-            url: `${BASE}/${encodeURIComponent(id)}/cancel`,
+            url: `${BASE}/${encodeURIComponent(scheduleTaskId)}/cancel`,
         });
     },
     onSuccess: (ctx) => _reloadList(ctx),
@@ -94,11 +94,11 @@ export const schedulerRunNowOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'POST', path: '/frontend/api/scheduler/schedules/:schedule_task_id/run-now' },
     request: async ({ payload }) => {
-        const id = payload && payload.task_id;
-        if (!id) throw new Error('schedulerRunNowOp: task_id required');
+        const scheduleTaskId = payload && payload.schedule_task_id;
+        if (!scheduleTaskId) throw new Error('schedulerRunNowOp: schedule_task_id required');
         return await httpRequest({
             method: 'POST',
-            url: `${BASE}/${encodeURIComponent(id)}/run-now`,
+            url: `${BASE}/${encodeURIComponent(scheduleTaskId)}/run-now`,
         });
     },
     onSuccess: (ctx) => {
@@ -116,34 +116,43 @@ export const schedulerRedisOp = createAsyncOp({
     silent: true,
     restMirror: { method: 'GET', path: '/frontend/api/scheduler/schedules/:schedule_task_id/redis' },
     request: async ({ payload }) => {
-        const id = payload && payload.task_id;
-        if (!id) throw new Error('schedulerRedisOp: task_id required');
+        const scheduleTaskId = payload && payload.schedule_task_id;
+        if (!scheduleTaskId) throw new Error('schedulerRedisOp: schedule_task_id required');
         const snapshot = await httpRequest({
             method: 'GET',
-            url: `${BASE}/${encodeURIComponent(id)}/redis`,
+            url: `${BASE}/${encodeURIComponent(scheduleTaskId)}/redis`,
         });
-        return { task_id: id, snapshot };
+        return { schedule_task_id: scheduleTaskId, snapshot };
     },
-    extraInitial: { snapshotById: {}, loadingById: {} },
+    extraInitial: { snapshotByScheduleTaskId: {}, loadingByScheduleTaskId: {} },
     extraReducer: (state, event, events) => {
         if (event.type === events.REQUESTED) {
-            const id = event.payload && event.payload.task_id;
-            if (!id) return state;
-            return { ...state, loadingById: { ...state.loadingById, [id]: true } };
+            const scheduleTaskId = event.payload && event.payload.schedule_task_id;
+            if (!scheduleTaskId) return state;
+            return {
+                ...state,
+                loadingByScheduleTaskId: {
+                    ...state.loadingByScheduleTaskId,
+                    [scheduleTaskId]: true,
+                },
+            };
         }
         if (event.type === events.SUCCEEDED) {
             const r = event.payload && event.payload.result;
-            if (!r || !r.task_id) return state;
-            const nextLoading = { ...state.loadingById };
-            delete nextLoading[r.task_id];
+            if (!r || !r.schedule_task_id) return state;
+            const nextLoading = { ...state.loadingByScheduleTaskId };
+            delete nextLoading[r.schedule_task_id];
             return {
                 ...state,
-                snapshotById: { ...state.snapshotById, [r.task_id]: r.snapshot },
-                loadingById: nextLoading,
+                snapshotByScheduleTaskId: {
+                    ...state.snapshotByScheduleTaskId,
+                    [r.schedule_task_id]: r.snapshot,
+                },
+                loadingByScheduleTaskId: nextLoading,
             };
         }
         if (event.type === events.FAILED) {
-            return { ...state, loadingById: {} };
+            return { ...state, loadingByScheduleTaskId: {} };
         }
         return state;
     },

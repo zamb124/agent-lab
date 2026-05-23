@@ -74,8 +74,8 @@
         },
         "crm": {
             "name": "NetWorkle",
-            "menu_description": "CRM and deal knowledge graph",
-            "description": "CRM plus a knowledge graph: contacts, relationships, and deal context in one network so nothing falls through the cracks"
+            "menu_description": "NetWorkle and deal knowledge graph",
+            "description": "NetWorkle plus a knowledge graph: contacts, relationships, and deal context in one network so nothing falls through the cracks"
         },
         "rag": {
             "name": "RAG",
@@ -161,9 +161,13 @@
         "you": "You"
     },
     "user_info_modal": {
-        "header": "User profile",
+        "header": "Profile",
         "roles_label": "Roles",
         "joined_at": "Joined",
+        "shared_channels": "Shared channels",
+        "shared_channels_loading": "Loading shared channels...",
+        "shared_channels_empty": "No shared channels yet",
+        "shared_channels_error": "Could not load shared channels",
         "action_write_sync": "Message in Sync",
         "action_open_team": "Open in Team",
         "action_copy_id": "Copy ID",

@@ -394,7 +394,19 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                 ${presets.length === 0
                     ? html`<div class="empty-row">${this.t('flow_create_modal.empty_search')}</div>`
                     : presets.map((p) => html`
-                        <div class="card" @click=${() => this._selectPreset(p)}>
+                        <div
+                            class="card"
+                            data-preset-id=${p.id}
+                            role="button"
+                            tabindex="0"
+                            @click=${() => this._selectPreset(p)}
+                            @keydown=${(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    this._selectPreset(p);
+                                }
+                            }}
+                        >
                             <div class="card-icon" style=${`background:${p.gradient};`}>
                                 <platform-icon name=${p.icon} size="28"></platform-icon>
                             </div>
@@ -419,7 +431,19 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         return html`
             <div class="grid">
                 ${bundles.map((b) => html`
-                    <div class="card" @click=${() => this._selectBundle(b)}>
+                    <div
+                        class="card"
+                        data-bundle-id=${b.bundle_id}
+                        role="button"
+                        tabindex="0"
+                        @click=${() => this._selectBundle(b)}
+                        @keydown=${(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                this._selectBundle(b);
+                            }
+                        }}
+                    >
                         <div class="card-icon" style="background: linear-gradient(135deg, #94B49F 0%, #5D9CEC 100%);">
                             <platform-icon name="box" size="28"></platform-icon>
                         </div>
@@ -521,7 +545,7 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         const isBundle = this._selection && this._selection.kind === 'bundle';
         return html`
             <platform-button @click=${this._backToStep1}>${this.t('flow_create_modal.action_back')}</platform-button>
-            <platform-button variant="primary" ?disabled=${!valid} @click=${this._onSubmit}>
+            <platform-button variant="primary" ?disabled=${!valid || this.loading} @click=${this._onSubmit}>
                 ${isBundle
                     ? this.t('flow_create_modal.action_install')
                     : this.t('flow_create_modal.action_create')}
@@ -529,27 +553,77 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
         `;
     }
 
+    _waitForFlowCreated(flowId, triggerCreate) {
+        const events = this._flows.resource.events;
+        return new Promise((resolve, reject) => {
+            let finished = false;
+            let offCreated = null;
+            let offFailed = null;
+            let timer = null;
+            const cleanup = () => {
+                if (offCreated) offCreated();
+                if (offFailed) offFailed();
+                if (timer) window.clearTimeout(timer);
+            };
+            const settle = (fn, value) => {
+                if (finished) return;
+                finished = true;
+                cleanup();
+                fn(value);
+            };
+            offCreated = this.bus.subscribeType(events.CREATED, (event) => {
+                const item = event?.payload?.item;
+                if (item && item.flow_id === flowId) {
+                    settle(resolve, item);
+                }
+            });
+            offFailed = this.bus.subscribeType(events.CREATE_FAILED, (event) => {
+                const message = event?.payload?.message || this.t('toast.flow_create_error');
+                settle(reject, new Error(message));
+            });
+            timer = window.setTimeout(() => {
+                settle(reject, new Error('Timed out waiting for flow creation'));
+            }, 30_000);
+            try {
+                const dispatched = triggerCreate();
+                if (dispatched === undefined) {
+                    settle(reject, new Error('Flow creation is already in progress'));
+                }
+            } catch (error) {
+                settle(reject, error);
+            }
+        });
+    }
+
     async _onSubmit() {
+        if (this.loading) return;
         const sel = this._selection;
         if (!sel) return;
         const flow_id = this._flowId.trim();
         const name = this._name.trim();
-        if (sel.kind === 'preset') {
-            const config = sel.preset.buildConfig({
-                flow_id,
-                name,
-                description: this._description,
-            });
-            this._flows.create(config);
+        this.loading = true;
+        try {
+            if (sel.kind === 'preset') {
+                const config = sel.preset.buildConfig({
+                    flow_id,
+                    name,
+                    description: this._description,
+                });
+                await this._waitForFlowCreated(config.flow_id, () => this._flows.create(config));
+                this.closeAfterSave();
+                this.navigate('flow_editor', { flowId: config.flow_id });
+                return;
+            }
+            const result = await this._installOp.run({ flow_id: sel.bundle.bundle_id });
+            const installedId = (result && result.flow_id) || sel.bundle.bundle_id;
             this.closeAfterSave();
-            this.navigate('flow_editor', { flowId: config.flow_id });
-            return;
+            this._flows.load();
+            this.navigate('flow_editor', { flowId: installedId });
+        } finally {
+            if (this.open) {
+                this.loading = false;
+            }
         }
-        const result = await this._installOp.run({ flow_id: sel.bundle.bundle_id });
-        const installedId = (result && result.flow_id) || sel.bundle.bundle_id;
-        this.closeAfterSave();
-        this._flows.load();
-        this.navigate('flow_editor', { flowId: installedId });
     }
 }
 

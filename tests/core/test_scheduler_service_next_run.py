@@ -32,7 +32,7 @@ class _InMemorySchedulerRepository:
             return None
         if self.task.company_id != company_id:
             return None
-        if self.task.id != schedule_task_id:
+        if self.task.schedule_task_id != schedule_task_id:
             return None
         return self.task
 
@@ -56,7 +56,7 @@ class _InMemorySchedulerRepository:
     ) -> bool:
         if self.task is None:
             return False
-        if self.task.company_id != company_id or self.task.id != schedule_task_id:
+        if self.task.company_id != company_id or self.task.schedule_task_id != schedule_task_id:
             return False
         self.task.status = status
         if schedule_id is not None:
@@ -116,7 +116,7 @@ async def test_create_cron_schedule_sets_next_run_at() -> None:
 @pytest.mark.asyncio
 async def test_list_enriches_missing_next_run_at_for_pending_cron() -> None:
     task = PlatformScheduledTask(
-        id="task-1",
+        schedule_task_id="task-1",
         company_id="system",
         schedule_id="schedule-1",
         target_service="flows",
@@ -152,7 +152,7 @@ async def test_list_enriches_missing_next_run_at_for_pending_cron() -> None:
 @pytest.mark.asyncio
 async def test_resume_cron_schedule_updates_next_run_at() -> None:
     task = PlatformScheduledTask(
-        id="task-1",
+        schedule_task_id="task-1",
         company_id="system",
         schedule_id=None,
         target_service="flows",
@@ -195,7 +195,7 @@ async def test_resume_cron_schedule_updates_next_run_at() -> None:
 @pytest.mark.asyncio
 async def test_get_redis_snapshot_returns_taskiq_schedule_data(monkeypatch: pytest.MonkeyPatch) -> None:
     task = PlatformScheduledTask(
-        id="task-1",
+        schedule_task_id="task-1",
         company_id="system",
         schedule_id="schedule-redis-1",
         target_service="flows",
@@ -225,7 +225,7 @@ async def test_get_redis_snapshot_returns_taskiq_schedule_data(monkeypatch: pyte
         task_name="sync_llm_models_task",
         labels={"source": "taskiq"},
         args=[],
-        kwargs={"scheduler_task_id": "task-1"},
+        kwargs={"schedule_task_id": "task-1"},
         task_id="message-1",
         schedule_id="schedule-redis-1",
         cron=None,
@@ -242,7 +242,7 @@ async def test_get_redis_snapshot_returns_taskiq_schedule_data(monkeypatch: pyte
     assert snapshot.schedule_id == "schedule-redis-1"
     assert snapshot.interval_seconds == 60
     assert snapshot.taskiq_task_id == "message-1"
-    assert snapshot.kwargs["scheduler_task_id"] == "task-1"
+    assert snapshot.kwargs["schedule_task_id"] == "task-1"
 
 
 @pytest.mark.asyncio
@@ -250,7 +250,7 @@ async def test_get_redis_snapshot_handles_missing_schedule_id_without_redis_call
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     task = PlatformScheduledTask(
-        id="task-2",
+        schedule_task_id="task-2",
         company_id="system",
         schedule_id=None,
         target_service="flows",
@@ -290,7 +290,7 @@ async def test_get_redis_snapshot_handles_missing_schedule_id_without_redis_call
 @pytest.mark.asyncio
 async def test_run_now_adds_required_logging_labels(monkeypatch: pytest.MonkeyPatch) -> None:
     task = PlatformScheduledTask(
-        id="task-run-now",
+        schedule_task_id="task-run-now",
         company_id="system",
         schedule_id="schedule-run-now",
         target_service="flows",
@@ -301,7 +301,7 @@ async def test_run_now_adds_required_logging_labels(monkeypatch: pytest.MonkeyPa
         interval_seconds=60,
         run_at=None,
         timezone="UTC",
-        payload={"scheduler_task_id": "task-run-now", "company_id": "system"},
+        payload={"schedule_task_id": "task-run-now", "company_id": "system"},
         status=ScheduledTaskStatus.PENDING,
         created_by_user_id=None,
         created_at=datetime.now(timezone.utc),
@@ -325,7 +325,7 @@ async def test_run_now_adds_required_logging_labels(monkeypatch: pytest.MonkeyPa
             captured_labels.update(labels)
 
         async def kiq(self, **kwargs) -> None:
-            assert kwargs["scheduler_task_id"] == "task-run-now"
+            assert kwargs["schedule_task_id"] == "task-run-now"
 
     monkeypatch.setattr("core.scheduler.service.AsyncKicker", _FakeKicker)
     monkeypatch.setattr(

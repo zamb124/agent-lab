@@ -19,7 +19,7 @@ def test_read_file_tool_metadata() -> None:
 async def test_read_file_mock_with_state(tmp_path) -> None:
     f = tmp_path / "a.txt"
     f.write_text("x", encoding="utf-8")
-    state = {"files": [{"name": "a.txt", "path": str(f), "mime_type": "text/plain"}]}
+    state = {"files": [{"original_name": "a.txt", "url": str(f), "content_type": "text/plain", "file_size": 1}]}
     out = _read_file_mock({"file_name": "a.txt"}, state)
     assert out["success"] is True
     assert out["file_name"] == "a.txt"
@@ -35,7 +35,7 @@ async def test_read_file_integration_txt(tmp_path) -> None:
         context_id="c1",
         user_id="u1",
         session_id="flow:c1",
-        files=[{"name": "a.txt", "path": str(f), "mime_type": "text/plain"}],
+        files=[{"original_name": "a.txt", "url": str(f), "content_type": "text/plain", "file_size": 5}],
     )
     result = await read_file._run_impl(
         {"file_name": "a.txt", "include_asset_bytes": False},
@@ -56,7 +56,7 @@ async def test_read_file_matches_unicode_combining_marks(tmp_path) -> None:
         context_id="c1",
         user_id="u1",
         session_id="flow:c1",
-        files=[{"name": actual_name, "path": str(f), "mime_type": "text/plain"}],
+        files=[{"original_name": actual_name, "url": str(f), "content_type": "text/plain", "file_size": 8}],
     )
     result = await read_file._run_impl(
         {"file_name": requested_name, "include_asset_bytes": False},

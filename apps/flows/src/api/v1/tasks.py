@@ -3,7 +3,7 @@ API endpoints для задач через A2A типы.
 """
 
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from a2a.types import (
     Message,
@@ -106,11 +106,22 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> di
             raise HTTPException(status_code=404, detail=error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
-    task_result = result.return_value
+    raw_task_result = result.return_value
+    if not isinstance(raw_task_result, dict):
+        raise ValueError("process_flow_task returned non-dict payload")
+    task_result = cast(dict[str, Any], raw_task_result)
+    if "task_state" not in task_result:
+        raise ValueError("process_flow_task result requires task_state")
+    task_state = TaskState(task_result["task_state"])
+    if "response" not in task_result:
+        raise ValueError("process_flow_task result requires response")
+    response_text = task_result["response"]
+    if not isinstance(response_text, str):
+        raise TypeError("process_flow_task result response must be str")
 
     # Breakpoint или interrupt - оба используют input_required
-    breakpoint_hit = task_result.get("breakpoint_hit")
-    interrupt_data = task_result.get("interrupt")
+    breakpoint_hit = task_result["breakpoint_hit"] if "breakpoint_hit" in task_result else None
+    interrupt_data = task_result["interrupt"] if "interrupt" in task_result else None
 
     if breakpoint_hit:
         response_text = f"Breakpoint at node '{breakpoint_hit}'"
@@ -119,9 +130,6 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> di
         ir = InterruptData.model_validate(interrupt_data)
         response_text = ir.question
         task_state = TaskState.input_required
-    else:
-        response_text = task_result.get("response", "")
-        task_state = TaskState.completed
 
     a2a_task = Task(
         id=task_id,

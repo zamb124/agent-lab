@@ -632,7 +632,7 @@ async def update_namespace(
                     payload={"company_id": ns.company_id, "namespace": normalized_namespace_name},
                 )
                 created = await container.scheduler_client.create_schedule(req)
-                new_settings.suggests.schedule_task_id = created.id
+                new_settings.suggests.schedule_task_id = created.schedule_task_id
 
         ns.crm_settings = new_settings
         _ = await container.namespace_repository.set(ns)

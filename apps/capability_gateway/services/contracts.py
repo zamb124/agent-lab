@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
@@ -28,3 +29,6 @@ class CapabilityGatewayContainerProtocol(Protocol):
 
     @property
     def service_client(self) -> ServiceClient: ...
+
+    @property
+    def redis_client(self) -> RedisClient: ...

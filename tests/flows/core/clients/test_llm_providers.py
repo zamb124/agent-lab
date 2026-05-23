@@ -440,7 +440,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
         scheduler_client.list_schedules.return_value = self._schedule_page(
             self._schedule_model(
                 {
-                    "id": "existing-task",
+                    "schedule_task_id": "existing-task",
                     "company_id": "system",
                     "schedule_id": "sched-1",
                     "target_service": "flows",
@@ -478,7 +478,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
         scheduler_client.list_schedules.return_value = self._schedule_page(
             self._schedule_model(
                 {
-                    "id": "paused-task",
+                    "schedule_task_id": "paused-task",
                     "company_id": "system",
                     "schedule_id": None,
                     "target_service": "flows",
@@ -502,7 +502,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
         )
         scheduler_client.resume_schedule.return_value = self._schedule_model(
             {
-                "id": "paused-task",
+                "schedule_task_id": "paused-task",
                 "company_id": "system",
                 "schedule_id": "sched-resumed",
                 "target_service": "flows",
@@ -539,7 +539,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
         scheduler_client.list_schedules.return_value = self._schedule_page(
             self._schedule_model(
                 {
-                    "id": "task-1",
+                    "schedule_task_id": "task-1",
                     "company_id": "system",
                     "schedule_id": "sched-1",
                     "target_service": "flows",
@@ -562,7 +562,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
             ),
             self._schedule_model(
                 {
-                    "id": "task-2",
+                    "schedule_task_id": "task-2",
                     "company_id": "system",
                     "schedule_id": "sched-2",
                     "target_service": "flows",
@@ -597,7 +597,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
         scheduler_client = AsyncMock()
         scheduler_client.cancel_schedule.return_value = self._schedule_model(
             {
-                "id": "existing-task",
+                "schedule_task_id": "existing-task",
                 "company_id": "system",
                 "schedule_id": None,
                 "target_service": "flows",
@@ -619,7 +619,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
             }
         )
         service = LLMModelsService(repository, scheduler_client)
-        service._sync_schedule_id = "existing-task"
+        service._sync_schedule_task_id = "existing-task"
 
         await service.stop_background_sync()
 

@@ -68,7 +68,7 @@ def message_read_from_entity(
         )
     mids = mentioned_user_ids_from_contents(contents)
     return MessageRead(
-        id=m.message_id,
+        message_id=m.message_id,
         channel_id=m.channel_id,
         thread_id=m.thread_id,
         parent_message_id=m.parent_message_id,

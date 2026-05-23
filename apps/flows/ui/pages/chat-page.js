@@ -763,36 +763,45 @@ export class ChatPage extends PlatformPage {
             if (!result || typeof result.file_id !== 'string' || result.file_id.length === 0) {
                 throw new Error('flows chat: file_upload op must return file_id');
             }
-            const name = typeof result.original_name === 'string' && result.original_name.length > 0
-                ? result.original_name
-                : file.name;
-            const mimeType = typeof result.content_type === 'string' && result.content_type.length > 0
-                ? result.content_type
-                : (typeof file.type === 'string' && file.type.length > 0 ? file.type : 'application/octet-stream');
-            const size = typeof result.file_size === 'number' ? result.file_size : file.size;
-            const path = typeof result.url === 'string' && result.url.length > 0
-                ? result.url
-                : `/flows/api/v1/files/download/${encodeURIComponent(result.file_id)}`;
+            if (typeof result.original_name !== 'string' || result.original_name.length === 0) {
+                throw new Error('flows chat: file_upload op must return original_name');
+            }
+            if (typeof result.content_type !== 'string' || result.content_type.length === 0) {
+                throw new Error('flows chat: file_upload op must return content_type');
+            }
+            if (typeof result.file_size !== 'number') {
+                throw new Error('flows chat: file_upload op must return file_size');
+            }
+            if (typeof result.url !== 'string' || result.url.length === 0) {
+                throw new Error('flows chat: file_upload op must return url');
+            }
             uploaded.push({
                 file_id: result.file_id,
-                name,
-                path,
-                url: path,
-                mime_type: mimeType,
-                type: mimeType,
-                size,
+                original_name: result.original_name,
+                url: result.url,
+                content_type: result.content_type,
+                file_size: result.file_size,
             });
         }
         return uploaded;
     }
 
     _uploadedFileToPart(file) {
+        if (!file || typeof file.original_name !== 'string' || file.original_name.length === 0) {
+            throw new Error('flows chat: uploaded file original_name is required');
+        }
+        if (typeof file.content_type !== 'string' || file.content_type.length === 0) {
+            throw new Error('flows chat: uploaded file content_type is required');
+        }
+        if (typeof file.url !== 'string' || file.url.length === 0) {
+            throw new Error('flows chat: uploaded file url is required');
+        }
         return {
             kind: 'file',
             file: {
-                name: file.name,
-                mimeType: file.mime_type || file.type || 'application/octet-stream',
-                uri: file.path || file.url,
+                name: file.original_name,
+                mimeType: file.content_type,
+                uri: file.url,
             },
         };
     }

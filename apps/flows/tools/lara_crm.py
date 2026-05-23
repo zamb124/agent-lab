@@ -739,8 +739,8 @@ async def crm_analyze_note_text(
             ensure_ascii=False,
         )
 
-    terminal_status = terminal.get("status")
-    if terminal_status == "failed":
+    analyze_task_state = terminal.get("status")
+    if analyze_task_state == "failed":
         msg = terminal.get("error_message")
         if not isinstance(msg, str) or not msg.strip():
             msg = "analyze failed"
@@ -753,7 +753,7 @@ async def crm_analyze_note_text(
             },
             ensure_ascii=False,
         )
-    if terminal_status == "cancelled":
+    if analyze_task_state == "cancelled":
         return json.dumps(
             {
                 "success": False,
@@ -763,11 +763,11 @@ async def crm_analyze_note_text(
             },
             ensure_ascii=False,
         )
-    if terminal_status != "completed":
+    if analyze_task_state != "completed":
         return json.dumps(
             {
                 "success": False,
-                "error": f"unexpected analyze task status: {terminal_status}",
+                "error": f"unexpected analyze task status: {analyze_task_state}",
                 "task_id": task_id,
                 "task": terminal,
             },

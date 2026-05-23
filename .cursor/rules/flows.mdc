@@ -111,7 +111,7 @@ UI-фабрика `chatSendOp`/`chatCancelOp` (`transport: 'http'`, `apps/flows/
 
 ## `files` на ноде
 
-В конфиге любой ноды может быть `files` (список объектов как элементы `state.files`: обязательны непустые `name` и `path`; опционально `mime_type`/`size`/`file_id`).
+В конфиге любой ноды может быть `files` (список объектов как элементы `state.files`: обязательны непустые `original_name` и `url`; после материализации присутствуют `content_type`, `file_size`, `file_id`).
 
 При **первом** создании `ExecutionState` для сессии (`BaseChannel.process_task`, ветка нового state) вложения из всех нод эффективного графа собираются `collect_flow_node_files` → `state.files`, затем дописываются файлы из запроса (`params.files_data`). При resume повторной подмеси нет.
 

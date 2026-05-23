@@ -82,9 +82,9 @@ class FileAttachmentContent(BaseModel):
     """Вложение файла — фото/видео (file/image) или документ (file/document)."""
 
     file_id: str = Field(description="Идентификатор файла в системе.")
-    filename: str = Field(description="Оригинальное имя файла.")
-    mime_type: str = Field(description="MIME-тип файла.")
-    size: int = Field(description="Размер файла в байтах.")
+    original_name: str = Field(description="Оригинальное имя файла.")
+    content_type: str = Field(description="MIME-тип файла.")
+    file_size: int = Field(description="Размер файла в байтах.")
 
 
 class GitReferenceContent(BaseModel):
@@ -162,9 +162,9 @@ class MessageContentModel(BaseModel):
                 "data",
                 VideoAttachmentContent(
                     file_id=fa.file_id,
-                    filename=fa.filename,
-                    mime_type=fa.mime_type,
-                    size=fa.size,
+                    original_name=fa.original_name,
+                    content_type=fa.content_type,
+                    file_size=fa.file_size,
                     duration_ms=None,
                 ),
             )
@@ -192,7 +192,7 @@ class ForwardedFromChannel(BaseModel):
 class MessageRead(BaseModel):
     """Сообщение, возвращаемое из API."""
 
-    id: str = Field(description="Идентификатор сообщения.")
+    message_id: str = Field(description="Идентификатор сообщения.")
     channel_id: str = Field(description="Канал, в котором находится сообщение.")
     thread_id: str | None = Field(
         default=None,
@@ -273,7 +273,7 @@ class MessageEdit(BaseModel):
 class MessageRow(BaseModel):
     """Строка сообщения в базе данных."""
 
-    id: str = Field(description="Идентификатор сообщения.")
+    message_id: str = Field(description="Идентификатор сообщения.")
     channel_id: str = Field(description="Канал, в котором находится сообщение.")
     thread_id: str | None = Field(default=None, description="Тред сообщения.")
     parent_message_id: str | None = Field(default=None, description="Родительское сообщение.")

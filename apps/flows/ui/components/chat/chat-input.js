@@ -1,17 +1,14 @@
 /**
- * Поле ввода сообщения в чате
+ * App adapter for the canonical flows chat composer.
  */
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import '@platform/lib/components/platform-icon.js';
-import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
-import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
+import '@platform/lib/flows-chat/flows-chat-input.js';
 import {
     readTtsOutputEnabled,
     TTS_OUTPUT_CHANGED_EVENT,
     TTS_OUTPUT_STORAGE_KEY,
 } from '@platform/lib/voice/tts-output-pref.js';
-import { asString } from '../../_helpers/flows-resolvers.js';
 
 export class ChatInput extends PlatformElement {
     static i18nNamespace = 'flows';
@@ -22,27 +19,33 @@ export class ChatInput extends PlatformElement {
                 display: block;
                 padding: var(--space-4) var(--space-6);
             }
-            
-            .input-container {
-                display: flex;
-                align-items: flex-end;
-                gap: var(--space-3);
-                max-width: 900px;
-                margin: 0 auto;
-                padding: var(--space-3);
-                background: var(--glass-solid-medium);
-                backdrop-filter: blur(var(--glass-blur-subtle));
-                -webkit-backdrop-filter: blur(var(--glass-blur-subtle));
-                border: 1px solid var(--glass-border-medium);
-                border-radius: var(--radius-2xl);
-                box-shadow: var(--glass-shadow-subtle), var(--glass-inner-glow-subtle);
+            flows-chat-input {
+                --flows-chat-input-max-width: 900px;
+                --flows-chat-input-margin: 0 auto;
+                --flows-chat-input-padding: var(--space-3);
+                --flows-chat-input-radius: var(--radius-2xl);
+                --flows-chat-input-bg: var(--glass-solid-medium);
+                --flows-chat-input-border: var(--glass-border-medium);
+                --flows-chat-input-text: var(--text-primary);
+                --flows-chat-input-muted: var(--text-tertiary);
+                --flows-chat-input-accent: var(--accent);
+                --flows-chat-input-shadow: var(--glass-shadow-subtle), var(--glass-inner-glow-subtle);
+                --flows-chat-input-focus-shadow: var(--glass-shadow-medium), var(--glass-inner-glow-medium), var(--hover-glow);
+                --flows-chat-input-backdrop-filter: blur(var(--glass-blur-subtle));
+                --flows-chat-input-button-radius: var(--radius-lg);
+                --flows-chat-input-button-bg: transparent;
+                --flows-chat-input-button-hover-bg: var(--glass-solid-strong);
+                --flows-chat-input-send-radius: var(--radius-xl);
+                --flows-chat-input-send-bg: var(--accent-gradient);
+                --flows-chat-input-send-color: white;
+                --flows-chat-input-send-shadow: 0 4px 12px rgba(153, 166, 249, 0.3);
+                --flows-chat-input-send-hover-shadow: 0 6px 20px rgba(153, 166, 249, 0.4);
+                --flows-chat-input-chip-bg: var(--glass-solid-subtle);
+                --flows-chat-input-file-radius: var(--radius-md);
+                --flows-chat-input-file-padding: var(--space-2) var(--space-3);
+                --flows-chat-input-danger: var(--error, #ef4444);
+                --flows-chat-input-danger-bg: var(--error-bg);
             }
-            
-            .input-container:focus-within {
-                border-color: var(--accent);
-                box-shadow: var(--glass-shadow-medium), var(--glass-inner-glow-medium), var(--hover-glow);
-            }
-            
             @media (max-width: 768px) {
                 :host {
                     padding: var(--space-5) var(--space-4);
@@ -52,231 +55,35 @@ export class ChatInput extends PlatformElement {
                     border-top-right-radius: 20px;
                     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
                 }
-                
-                .input-container {
-                    max-width: none;
-                    margin: 0;
-                    padding: 0;
-                    background: transparent;
-                    backdrop-filter: none;
-                    border: none;
-                    border-radius: 0;
-                    box-shadow: none;
-                }
-                
-                .input-container:focus-within {
-                    box-shadow: none;
-                }
-                
-                textarea {
-                    min-height: 44px;
-                    background: transparent;
+                flows-chat-input {
+                    --flows-chat-input-max-width: none;
+                    --flows-chat-input-margin: 0;
+                    --flows-chat-input-padding: 0;
+                    --flows-chat-input-bg: transparent;
+                    --flows-chat-input-border: transparent;
+                    --flows-chat-input-shadow: none;
+                    --flows-chat-input-focus-shadow: none;
+                    --flows-chat-input-backdrop-filter: none;
+                    --flows-chat-input-radius: 0;
+                    --flows-chat-input-textarea-min-height: 44px;
                 }
             }
-            
-            .attach-button {
-                flex-shrink: 0;
-                width: 40px;
-                height: 40px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-tertiary);
-                background: transparent;
-                border: none;
-                border-radius: var(--radius-lg);
-                transition: var(--motion-transition-interactive);
-            }
-            
-            .attach-button:hover {
-                color: var(--text-primary);
-                background: var(--glass-solid-strong);
-            }
-
-            .voice-button {
-                flex-shrink: 0;
-                width: 40px;
-                height: 40px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-tertiary);
-                background: transparent;
-                border: none;
-                border-radius: var(--radius-lg);
-                transition: var(--motion-transition-interactive);
-            }
-
-            .voice-button:hover:not(:disabled) {
-                color: var(--text-primary);
-                background: var(--glass-solid-strong);
-            }
-
-            .voice-button:disabled {
-                opacity: 0.45;
-                cursor: not-allowed;
-            }
-
-            .voice-button.active {
-                color: var(--accent);
-                background: color-mix(in srgb, var(--accent) 18%, var(--glass-solid-strong));
-            }
-
-            .input-wrapper {
-                flex: 1;
-                position: relative;
-            }
-            
-            textarea {
-                width: 100%;
-                min-height: 40px;
-                max-height: 180px;
-                padding: var(--space-2) var(--space-1);
-                font-family: var(--font-sans);
-                font-size: var(--text-base);
-                line-height: var(--leading-normal);
-                color: var(--text-primary);
-                background: transparent;
-                border: none;
-                resize: none;
-                overflow-y: auto;
-                outline: none;
-            }
-            
-            textarea::placeholder {
-                color: var(--text-tertiary);
-            }
-            
-            textarea:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-            
-            .send-button {
-                flex-shrink: 0;
-                width: 44px;
-                height: 44px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: var(--accent-gradient);
-                border: none;
-                color: white;
-                border-radius: var(--radius-xl);
-                box-shadow: 0 4px 12px rgba(153, 166, 249, 0.3);
-                transition: var(--motion-transition-interactive);
-            }
-            
-            .send-button:hover:not(:disabled) {
-                transform: translateY(-2px) scale(1.02);
-                box-shadow: 0 6px 20px rgba(153, 166, 249, 0.4);
-            }
-            
-            .send-button:active:not(:disabled) {
-                transform: translateY(0) scale(0.98);
-            }
-            
-            .send-button:disabled {
-                opacity: 0.4;
-                cursor: not-allowed;
-                transform: none;
-                box-shadow: none;
-            }
-            
-            .send-button.stop {
-                background: var(--error, #ef4444);
-                box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-            }
-            
-            .send-button.stop:hover {
-                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
-            }
-            
-            .file-input {
-                display: none;
-            }
-            
-            .files-preview {
-                display: flex;
-                flex-wrap: wrap;
-                gap: var(--space-2);
-                margin-bottom: var(--space-3);
-            }
-            
-            .file-item {
-                display: flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-md);
-                font-size: var(--text-sm);
-            }
-            
-            .file-image-preview {
-                width: 40px;
-                height: 40px;
-                object-fit: cover;
-                border-radius: var(--radius-sm);
-            }
-            
-            .file-info {
-                flex: 1;
-                min-width: 0;
-            }
-            
-            .file-name {
-                color: var(--text-primary);
-                font-weight: var(--font-medium);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            
-            .file-size {
-                color: var(--text-tertiary);
-                font-size: var(--text-xs);
-            }
-            
-            .file-remove {
-                flex-shrink: 0;
-                width: 24px;
-                height: 24px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-tertiary);
-                background: transparent;
-                border: none;
-                border-radius: var(--radius-sm);
-                transition: var(--motion-transition-interactive);
-                cursor: pointer;
-            }
-            
-            .file-remove:hover {
-                color: var(--error);
-                background: var(--error-bg);
-            }
-        `
+        `,
     ];
 
     static properties = {
         disabled: { type: Boolean },
         loading: { type: Boolean },
-        /** Синхронизируется с родителем (`chat-page` передаёт стриминг A2A). */
         streaming: { type: Boolean },
         placeholder: { type: String },
+        accept: { type: String },
         maxLength: { type: Number },
         maxFileSize: { type: Number },
         showVoice: { type: Boolean, attribute: 'show-voice' },
         voiceActive: { type: Boolean, attribute: 'voice-active' },
         voiceStatus: { type: String, attribute: 'voice-status' },
         ttsOutputEnabled: { type: Boolean, attribute: 'tts-output-enabled' },
-        /** Пока уходит `flows/chat_cancel` (HTTP tasks/cancel). */
         cancelBusy: { type: Boolean, attribute: 'cancel-busy' },
-        _value: { state: true },
-        _selectedFiles: { state: true },
     };
 
     constructor() {
@@ -285,15 +92,14 @@ export class ChatInput extends PlatformElement {
         this.loading = false;
         this.streaming = false;
         this.placeholder = 'Send a message';
+        this.accept = '';
         this.maxLength = 10000;
-        this.maxFileSize = 10 * 1024 * 1024; // 10MB
+        this.maxFileSize = 10 * 1024 * 1024;
         this.showVoice = false;
         this.voiceActive = false;
         this.voiceStatus = 'idle';
         this.ttsOutputEnabled = true;
         this.cancelBusy = false;
-        this._value = '';
-        this._selectedFiles = [];
         this._onTtsPrefChatInput = () => {
             this.ttsOutputEnabled = readTtsOutputEnabled();
             this.requestUpdate();
@@ -323,296 +129,106 @@ export class ChatInput extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    get textareaEl() {
-        return this.shadowRoot?.querySelector('textarea');
-    }
-
-    get fileInputEl() {
-        return this.shadowRoot?.querySelector('.file-input');
-    }
-
-    willUpdate(changed) {
-        super.willUpdate(changed);
-        if (changed.has('streaming')) {
-            this.loading = this.streaming;
+    _inputEl() {
+        const input = this.shadowRoot?.querySelector('flows-chat-input');
+        if (
+            !input
+            || typeof input.setDraft !== 'function'
+            || typeof input.clear !== 'function'
+            || typeof input.focus !== 'function'
+        ) {
+            throw new Error('chat-input: flows-chat-input missing');
         }
+        return input;
     }
 
-    _onInput(e) {
-        this._value = e.target.value;
-        this._adjustHeight();
-    }
-
-    _onKeyDown(e) {
-        // Ctrl+Enter или Cmd+Enter для отправки
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            this._send();
-        }
-        // Просто Enter без Shift тоже отправляет
-        else if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            this._send();
-        }
-    }
-
-    _adjustHeight() {
-        const el = this.textareaEl;
-        if (!el) return;
-        
-        el.style.height = 'auto';
-        el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-    }
-
-    _send() {
-        const text = this._value.trim();
-        if ((!text && this._selectedFiles.length === 0) || this.disabled || this.loading) return;
-
-        this.emit('send', { 
-            message: text,
-            files: this._selectedFiles 
-        });
-        this._value = '';
-        this._selectedFiles = [];
-        
-        if (this.textareaEl) {
-            this.textareaEl.style.height = 'auto';
-        }
-    }
-
-    _onAttachClick() {
-        this.fileInputEl?.click();
-    }
-
-    _onFilesSelected(e) {
-        const files = e.target.files ? Array.from(e.target.files) : [];
-        
-        for (const file of files) {
-            if (this._validateFile(file)) {
-                this._selectedFiles = [...this._selectedFiles, file];
-            }
-        }
-        
-        if (this.fileInputEl) {
-            this.fileInputEl.value = '';
-        }
-    }
-
-    _validateFile(file) {
-        if (file.size > this.maxFileSize) {
-            this.toast('chat_input.err_file_too_large', {
-                type: 'error',
-                vars: {
-                    name: file.name,
-                    max: this._formatFileSize(this.maxFileSize),
-                },
-            });
-            return false;
-        }
-        return true;
-    }
-
-    _removeFile(index) {
-        this._selectedFiles = this._selectedFiles.filter((_, i) => i !== index);
-    }
-
-    _formatFileSize(bytes) {
-        return formatFileSize(bytes);
-    }
-
-    _isImage(file) {
-        return file.type.startsWith('image/');
+    _labels() {
+        return {
+            title_attach: this.t('chat_input.title_attach'),
+            title_remove_file: this.t('chat_input.title_remove_file'),
+            title_stop: this.t('chat_input.title_stop'),
+            title_stop_pending: this.t('chat_input.title_stop_pending'),
+            send: this.t('chat_input.title_send'),
+            err_file_too_large: this.t('chat_input.err_file_too_large'),
+            voice_on: this.t('platform_chat.btn_voice_on'),
+            voice_off: this.t('platform_chat.btn_voice_off'),
+            voice_status_idle: this.t('platform_chat.voice_status_idle'),
+            voice_status_listening: this.t('platform_chat.voice_status_listening'),
+            voice_status_speaking: this.t('platform_chat.voice_status_speaking'),
+            voice_status_error: this.t('platform_chat.voice_status_error'),
+            voice_status_closed: this.t('platform_chat.voice_status_closed'),
+            tts_output_enable: this.t('platform_chat.tts_output_enable'),
+            tts_output_disable: this.t('platform_chat.tts_output_disable'),
+        };
     }
 
     focus() {
-        this.textareaEl?.focus();
+        this._inputEl().focus();
     }
 
     clear() {
-        this._value = '';
-        if (this.textareaEl) {
-            this.textareaEl.style.height = 'auto';
-        }
+        this._inputEl().clear();
     }
 
-    /**
-     * Подставить текст в композер (например из «исправить» на сообщении пользователя).
-     * @param {string} text
-     */
     setDraft(text) {
         if (typeof text !== 'string') {
             throw new TypeError('chat-input.setDraft expects a string');
         }
-        this._value = text;
-        this.requestUpdate();
-        void this.updateComplete.then(() => {
-            this._adjustHeight();
-            this.focus();
-        });
+        this._inputEl().setDraft(text);
     }
 
-    _stop() {
-        if (this.cancelBusy) return;
+    _onSend(e) {
+        e.stopPropagation();
+        this.emit('send', e.detail);
+    }
+
+    _onStop(e) {
+        e.stopPropagation();
         this.emit('stop');
     }
 
-    _onVoiceClick() {
+    _onVoiceToggle(e) {
+        e.stopPropagation();
         this.emit('voice-toggle');
     }
 
-    _voiceMicDetailedLabel() {
-        const vs = typeof this.voiceStatus === 'string' ? this.voiceStatus : 'idle';
-        const primary = this.voiceActive
-            ? this.t('platform_chat.btn_voice_off')
-            : this.t('platform_chat.btn_voice_on');
-        const summaryVisible =
-            this.voiceActive || (vs !== 'idle' && vs !== 'closed');
-        if (!summaryVisible || !this.showVoice) {
-            return primary;
-        }
-        const statusHint = this.t(`platform_chat.voice_status_${vs}`);
-        return `${primary}. ${statusHint}`;
-    }
-
-    _onTtsOutputClick() {
+    _onTtsOutputToggle(e) {
+        e.stopPropagation();
         this.emit('tts-output-toggle');
     }
 
-    render() {
-        const canSend = (this._value.trim().length > 0 || this._selectedFiles.length > 0) && !this.disabled && !this.loading;
-
-        return html`
-            ${this._selectedFiles.length > 0 ? html`
-                <div class="files-preview">
-                    ${this._selectedFiles.map((file, index) => this._renderFilePreview(file, index))}
-                </div>
-            ` : ''}
-            
-            <div class="input-container">
-                <input
-                    type="file"
-                    class="file-input"
-                    multiple
-                    @change=${this._onFilesSelected}
-                >
-                
-                <button 
-                    class="attach-button" 
-                    title=${this.t('chat_input.title_attach')}
-                    @click=${this._onAttachClick}
-                    ?disabled=${this.disabled || this.loading}
-                >
-                    <platform-icon name="paperclip" size="20"></platform-icon>
-                </button>
-                
-                <div class="input-wrapper">
-                    <textarea
-                        data-canon="composer"
-                        .value=${this._value}
-                        placeholder=${this.placeholder}
-                        maxlength=${this.maxLength}
-                        ?disabled=${this.disabled || this.loading}
-                        @input=${this._onInput}
-                        @keydown=${this._onKeyDown}
-                        rows="1"
-                    ></textarea>
-                </div>
-
-                ${this.showVoice
-                    ? html`
-                          <button
-                              type="button"
-                              class="voice-button ${this.ttsOutputEnabled ? 'active' : ''}"
-                              title=${this.ttsOutputEnabled
-                                  ? this.t('platform_chat.tts_output_disable')
-                                  : this.t('platform_chat.tts_output_enable')}
-                              aria-label=${this.ttsOutputEnabled
-                                  ? this.t('platform_chat.tts_output_disable')
-                                  : this.t('platform_chat.tts_output_enable')}
-                              aria-pressed=${this.ttsOutputEnabled ? 'true' : 'false'}
-                              ?disabled=${this.disabled}
-                              @click=${this._onTtsOutputClick}
-                          >
-                              <platform-icon
-                                  name=${this.ttsOutputEnabled ? 'volume-up' : 'volume-off'}
-                                  size="20"
-                              ></platform-icon>
-                          </button>
-                          <button
-                              type="button"
-                              class="voice-button ${this.voiceActive ? 'active' : ''}"
-                              title=${this._voiceMicDetailedLabel()}
-                              aria-label=${this._voiceMicDetailedLabel()}
-                              aria-pressed=${this.voiceActive ? 'true' : 'false'}
-                              ?disabled=${this.disabled}
-                              @click=${this._onVoiceClick}
-                          >
-                              <platform-icon
-                                  name=${this.voiceActive ? 'mic' : 'mic-off'}
-                                  size="20"
-                              ></platform-icon>
-                          </button>
-                      `
-                    : ''}
-                
-                ${this.loading ? html`
-                    <button 
-                        type="button"
-                        class="send-button stop"
-                        title=${this.cancelBusy ? this.t('chat_input.title_stop_pending') : this.t('chat_input.title_stop')}
-                        aria-label=${this.cancelBusy ? this.t('chat_input.title_stop_pending') : this.t('chat_input.title_stop')}
-                        ?disabled=${this.cancelBusy}
-                        @click=${this._stop}
-                    >
-                        <platform-icon
-                            name="stop"
-                            size="20"
-                            ?filled=${!this.cancelBusy}
-                        ></platform-icon>
-                    </button>
-                ` : html`
-                    <button 
-                        class="send-button" 
-                        ?disabled=${!canSend}
-                        @click=${this._send}
-                    >
-                        <platform-icon name="send" size="20"></platform-icon>
-                    </button>
-                `}
-            </div>
-        `;
+    _onToast(e) {
+        e.stopPropagation();
+        const detail = e.detail && typeof e.detail === 'object' ? e.detail : {};
+        if (detail.key === 'err_file_too_large') {
+            this.toast('chat_input.err_file_too_large', {
+                type: 'error',
+                vars: detail.vars && typeof detail.vars === 'object' ? detail.vars : {},
+            });
+        }
     }
 
-    _renderFilePreview(file, index) {
+    render() {
         return html`
-            <div class="file-item">
-                ${this._isImage(file) ? html`
-                    <img 
-                        class="file-image-preview" 
-                        src=${URL.createObjectURL(file)} 
-                        alt=${file.name}
-                    >
-                ` : html`
-                    <platform-icon
-                        file-icon
-                        name=${resolveFileIconKey(asString(file.name), asString(file.type))}
-                        size="24"
-                    ></platform-icon>
-                `}
-                
-                <div class="file-info">
-                    <div class="file-name">${file.name}</div>
-                    <div class="file-size">${this._formatFileSize(file.size)}</div>
-                </div>
-                
-                <button 
-                    class="file-remove"
-                    @click=${() => this._removeFile(index)}
-                    title=${this.t('chat_input.title_remove_file')}
-                >
-                    <platform-icon name="close" size="16"></platform-icon>
-                </button>
-            </div>
+            <flows-chat-input
+                .disabled=${this.disabled}
+                .loading=${this.loading || this.streaming}
+                .cancelBusy=${this.cancelBusy}
+                .placeholder=${this.placeholder}
+                .accept=${this.accept}
+                .maxLength=${this.maxLength}
+                .maxFileSize=${this.maxFileSize}
+                .showVoice=${this.showVoice}
+                .voiceActive=${this.voiceActive}
+                .voiceStatus=${this.voiceStatus}
+                .ttsOutputEnabled=${this.ttsOutputEnabled}
+                .labels=${this._labels()}
+                @send=${this._onSend}
+                @stop=${this._onStop}
+                @voice-toggle=${this._onVoiceToggle}
+                @tts-output-toggle=${this._onTtsOutputToggle}
+                @toast=${this._onToast}
+            ></flows-chat-input>
         `;
     }
 }

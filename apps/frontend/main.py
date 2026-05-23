@@ -53,6 +53,7 @@ from apps.frontend.services.flow_preview_guest_html import (
     build_flow_preview_unavailable_html,
 )
 from core.app.factory import create_service_app
+from core.app.health_payload import build_health_payload
 from core.clients.payment import PaymentProviderFactory
 from core.clients.voice_resolver import invalidate_platform_pronunciation_cache
 from core.config import get_settings
@@ -189,7 +190,7 @@ def _build_sitemap_xml(base_url: str) -> str:
 def _build_llms_txt(base_url: str) -> str:
     return (
         "# Humanitec\n\n"
-        "> Humanitec is a business automation platform with AI flows and LLM agents, RAG knowledge search, CRM graph, "
+        "> Humanitec is a business automation platform with AI flows and LLM agents, RAG knowledge search, NetWorkle graph, "
         "team collaboration tools, and scheduler automation.\n\n"
         "Use canonical HTTPS URLs only.\n"
         "Prioritize public product and documentation pages.\n"
@@ -198,7 +199,7 @@ def _build_llms_txt(base_url: str) -> str:
         f"- Platform Overview: {base_url}/\n"
         f"- Product Agents: {base_url}/products/agents\n"
         f"- Product RAG: {base_url}/products/rag\n"
-        f"- Product CRM: {base_url}/products/crm\n"
+        f"- Product NetWorkle: {base_url}/products/crm\n"
         f"- Product Sync: {base_url}/products/sync\n"
         f"- Product Documents: {base_url}/products/documents\n"
         f"- Product Documentation: {base_url}/documentation/\n"
@@ -340,7 +341,7 @@ for route in list(app.routes):
 @app.get("/health")
 async def health(container: ContainerDep):
     _ = container
-    return {"status": "ok", "service": "frontend"}
+    return build_health_payload(get_frontend_settings())
 
 @app.api_route("/l/{code}", methods=["GET", "HEAD"])
 async def resolve_short_link(request: Request, container: ContainerDep, code: str):

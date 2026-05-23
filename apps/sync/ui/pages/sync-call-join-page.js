@@ -247,8 +247,9 @@ export class SyncCallJoinPage extends PlatformPage {
             && typeof accepted.participant_names === 'object'
             ? accepted.participant_names
             : {};
-        const id = typeof accepted.identity === 'string' ? accepted.identity : '';
-        const guestIdentity = id.startsWith('guest:') ? id : '';
+        const participantIdentity = typeof accepted.participant_identity === 'string'
+            ? accepted.participant_identity
+            : '';
         this.openModal('sync.call_overlay', {
             callId: accepted.call_id,
             callType,
@@ -256,7 +257,7 @@ export class SyncCallJoinPage extends PlatformPage {
             livekitToken,
             livekitUrl,
             participantNames,
-            guestIdentity,
+            participantIdentity,
         });
     }
 

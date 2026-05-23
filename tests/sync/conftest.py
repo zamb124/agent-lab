@@ -232,8 +232,7 @@ async def sync_namespace(sync_auth_token: str, company_id: str, unique_id: str) 
     """Создаёт уникальный namespace в shared `NamespaceRepository` и возвращает его имя.
 
     Sync-каналы привязываются к платформенному namespace (1:1); тесты,
-    создающие topic-канал, должны использовать этот namespace вместо
-    устаревшего `space_id`.
+    создающие topic-канал, должны использовать это имя напрямую.
     """
     from apps.sync.container import get_sync_container
 

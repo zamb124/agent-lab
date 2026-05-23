@@ -37,7 +37,7 @@ class FileWriteResult(BaseModel):
     """Результат build_bytes до загрузки в S3."""
 
     data: bytes
-    mime_type: str
+    content_type: str
     conversion_applied: bool = Field(
         description="True если применялся markdown-пайплайн (не raw/base64 passthrough)"
     )

@@ -48,7 +48,7 @@ async def _create_namespace_and_channel(
         user=op_user,
         container=op_container,
     )
-    return channel.id
+    return channel.channel_id
 
 
 async def _send_root_message(
@@ -73,7 +73,7 @@ async def _send_root_message(
         user=op_user,
         container=op_container,
     )
-    return msg.id
+    return msg.message_id
 
 
 @pytest.mark.asyncio
@@ -97,11 +97,11 @@ async def test_op_threads_create_and_item(
     assert thread.channel_id == channel_id
 
     item = await op_threads_item(
-        ThreadsItemPayload(thread_id=thread.id),
+        ThreadsItemPayload(thread_id=thread.thread_id),
         user=op_user,
         container=op_container,
     )
-    assert item.id == thread.id
+    assert item.thread_id == thread.thread_id
     assert item.title == f"T {unique_id}"
 
 

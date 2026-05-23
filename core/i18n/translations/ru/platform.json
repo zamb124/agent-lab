@@ -74,8 +74,8 @@
         },
         "crm": {
             "name": "NetWorkle",
-            "menu_description": "CRM и граф связей по сделкам",
-            "description": "CRM и граф знаний: контакты, связи и контекст сделок в одной сети, чтобы ничего не терялось между командами"
+            "menu_description": "NetWorkle и граф связей по сделкам",
+            "description": "NetWorkle и граф знаний: контакты, связи и контекст сделок в одной сети, чтобы ничего не терялось между командами"
         },
         "rag": {
             "name": "RAG",
@@ -161,9 +161,13 @@
         "you": "Вы"
     },
     "user_info_modal": {
-        "header": "Профиль пользователя",
+        "header": "Профиль",
         "roles_label": "Роли",
         "joined_at": "В команде с",
+        "shared_channels": "Каналы вместе",
+        "shared_channels_loading": "Загружаем общие каналы…",
+        "shared_channels_empty": "Общих каналов пока нет",
+        "shared_channels_error": "Не удалось загрузить общие каналы",
         "action_write_sync": "Написать в Sync",
         "action_open_team": "Открыть в Команде",
         "action_copy_id": "Скопировать ID",

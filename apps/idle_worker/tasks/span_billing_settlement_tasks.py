@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 
 @idle_broker.task(task_name="span_billing_settlement_tick", queue_name="idle")
 async def span_billing_settlement_tick(
-    scheduler_task_id: str | None = None,
+    schedule_task_id: str | None = None,
     company_id: str | None = None,
 ) -> dict[str, int]:
     settings = get_settings()
@@ -93,11 +93,11 @@ async def span_billing_settlement_tick(
             )
 
     logger.info(
-        "span_billing_settlement_tick done: spans_fetched=%s settled=%s errors=%s scheduler_task_id=%s company_id=%s",
+        "span_billing_settlement_tick done: spans_fetched=%s settled=%s errors=%s schedule_task_id=%s company_id=%s",
         len(spans),
         settled,
         errors,
-        scheduler_task_id,
+        schedule_task_id,
         company_id,
     )
     return {"spans_fetched": len(spans), "settled": settled, "errors": errors}

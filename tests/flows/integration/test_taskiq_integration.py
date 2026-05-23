@@ -134,7 +134,7 @@ async def run(args, state):
 
         results = []
         for i, task in tasks:
-            result = await task.wait_result()
+            result = await task.wait_result(timeout=5)
             assert not result.is_err, f"Task {i} failed: {result.error}"
             results.append(result.return_value["result"])
 
@@ -173,7 +173,7 @@ async def run(args, state):
             context_data=mock_context.to_dict(),
         )
 
-        result = await task.wait_result()
+        result = await task.wait_result(timeout=5)
 
         assert not result.is_err
         assert result.return_value["tool_id"] == "taskiq_state_tool"
@@ -296,10 +296,10 @@ class TestTaskIQFlowExecution:
             context_data=mock_context.model_dump(),
         )
 
-        result = await task.wait_result()
+        result = await task.wait_result(timeout=5)
 
         assert not result.is_err, f"Task failed: {result.error}"
-        assert result.return_value["status"] == "completed"
+        assert result.return_value["task_state"] == "completed"
         assert result.return_value["response"] == "Done"
 
 
@@ -368,7 +368,7 @@ async def run(args, state):
             context_data=mock_context.model_dump(),
         )
 
-        result = await task.wait_result()
+        result = await task.wait_result(timeout=5)
 
         if result.is_err:
             print("\n❌ Task failed!")
@@ -383,7 +383,7 @@ async def run(args, state):
                 )
 
         assert not result.is_err, f"Task failed: {result.error}"
-        assert result.return_value["status"] == "input-required"
+        assert result.return_value["task_state"] == "input-required"
         assert result.return_value["interrupt"]["question"] == "What is your name?"
 
     @pytest.mark.asyncio
@@ -404,14 +404,14 @@ async def run(args, state):
             content="Start",
             context_data=mock_context.model_dump(),
         )
-        result1 = await task1.wait_result()
+        result1 = await task1.wait_result(timeout=5)
 
         if result1.is_err:
             print("\n❌ Task1 failed!")
             print(f"Error: {result1.error}")
 
         assert not result1.is_err, f"Task1 failed: {result1.error}"
-        assert result1.return_value["status"] == "input-required"
+        assert result1.return_value["task_state"] == "input-required"
 
         task2 = await process_flow_task.kiq(
             flow_id=flow_id,
@@ -422,10 +422,10 @@ async def run(args, state):
             context_data=mock_context.model_dump(),
         )
 
-        result2 = await task2.wait_result()
+        result2 = await task2.wait_result(timeout=5)
 
         assert not result2.is_err, f"Resume failed: {result2.error}"
-        assert result2.return_value["status"] == "completed"
+        assert result2.return_value["task_state"] == "completed"
         assert "Alice" in result2.return_value["response"]
 
 

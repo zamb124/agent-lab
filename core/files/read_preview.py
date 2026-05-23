@@ -29,7 +29,7 @@ async def build_stored_file_text_preview(*, file_id: str, original_name: str) ->
             truncated=False,
             page_count=0,
             detected_kind=info.detected_kind.value,
-            mime_type=info.mime_type,
+            content_type=info.content_type,
             warnings=[],
             preview_note=_IMAGE_PREVIEW_NOTE,
         )
@@ -57,7 +57,7 @@ async def build_stored_file_text_preview(*, file_id: str, original_name: str) ->
         truncated=truncated,
         page_count=result.page_count,
         detected_kind=result.detected_kind.value,
-        mime_type=result.mime_type,
+        content_type=result.content_type,
         warnings=list(result.warnings),
         preview_note=None,
     )

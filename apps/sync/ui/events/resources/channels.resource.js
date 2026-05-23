@@ -15,10 +15,10 @@ import { createAsyncOp, createResourceCollection } from '@platform/lib/events/in
 const EMPTY_TYPING = Object.freeze({});
 
 function _mergeChannelReadIntoItems(state, result) {
-    if (!result || typeof result !== 'object' || typeof result.id !== 'string' || result.id === '') {
+    if (!result || typeof result !== 'object' || typeof result.channel_id !== 'string' || result.channel_id === '') {
         return state;
     }
-    const idx = state.items.findIndex((x) => x.id === result.id);
+    const idx = state.items.findIndex((x) => x.channel_id === result.channel_id);
     if (idx === -1) return state;
     const merged = _normalizeChannel({ ...state.items[idx], ...result });
     const items = state.items.map((x, i) => (i === idx ? merged : x));
@@ -43,7 +43,7 @@ function _normalizeChannel(channel) {
 export const channelsResource = createResourceCollection({
     name: 'sync/channels',
     baseUrl: '/sync/api/v1/channels',
-    idField: 'id',
+    idField: 'channel_id',
     operations: ['list', 'create'],
     transport: 'ws',
     wsTimeoutMs: 5_000,
@@ -90,8 +90,8 @@ export const channelsResource = createResourceCollection({
             }
             case 'sync/channel/created': {
                 const raw = event.payload;
-                if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return state;
-                if (state.items.some((x) => x.id === raw.id)) return state;
+                if (!raw || typeof raw !== 'object' || typeof raw.channel_id !== 'string') return state;
+                if (state.items.some((x) => x.channel_id === raw.channel_id)) return state;
                 const item = _normalizeChannel(raw);
                 return { ...state, items: Object.freeze([...state.items, item]) };
             }
@@ -149,8 +149,8 @@ export const channelsResource = createResourceCollection({
             }
             case 'sync/channel/pins_changed': {
                 const p = event.payload;
-                if (!p || typeof p.id !== 'string') return state;
-                const idx = state.items.findIndex((x) => x.id === p.id);
+                if (!p || typeof p.channel_id !== 'string') return state;
+                const idx = state.items.findIndex((x) => x.channel_id === p.channel_id);
                 if (idx === -1) return state;
                 const items = state.items.map((x, i) => (i === idx ? _normalizeChannel({ ...x, ...p }) : x));
                 return { ...state, items: Object.freeze(items) };
@@ -163,7 +163,7 @@ export const channelsResource = createResourceCollection({
             case 'sync/message/created': {
                 const m = event.payload;
                 if (!m || typeof m.channel_id !== 'string') return state;
-                const idx = state.items.findIndex((x) => x.id === m.channel_id);
+                const idx = state.items.findIndex((x) => x.channel_id === m.channel_id);
                 if (idx === -1) return state;
                 const channel = state.items[idx];
                 const isSelected = state.selectedChannelId === m.channel_id;
@@ -187,7 +187,7 @@ export const channelsResource = createResourceCollection({
             case 'sync/channels/own_read_set': {
                 const p = event.payload;
                 if (!p || typeof p.channelId !== 'string' || p.channelId === '') return state;
-                const idx = state.items.findIndex((x) => x.id === p.channelId);
+                const idx = state.items.findIndex((x) => x.channel_id === p.channelId);
                 if (idx === -1) return state;
                 const channel = state.items[idx];
                 if (channel.unread_count === 0 && channel.mention_unread_count === 0) return state;

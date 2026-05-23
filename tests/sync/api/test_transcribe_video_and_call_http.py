@@ -87,7 +87,7 @@ async def test_transcribe_video_endpoint_marks_done_via_worker(
             },
         )
         assert cr.status_code == 201
-        channel_id = cr.json()["id"]
+        channel_id = cr.json()["channel_id"]
 
         up = await client.post(
             "/sync/api/v1/files/",
@@ -108,16 +108,16 @@ async def test_transcribe_video_endpoint_marks_done_via_worker(
                         "order": 0,
                         "data": {
                             "file_id": f["file_id"],
-                            "filename": "clip.mp4",
-                            "mime_type": "video/mp4",
-                            "size": f["file_size"],
+                            "original_name": "clip.mp4",
+                            "content_type": "video/mp4",
+                            "file_size": f["file_size"],
                         },
                     },
                 ],
             },
         )
         assert sr.status_code == 201
-        message_id = sr.json()["id"]
+        message_id = sr.json()["message_id"]
 
         tx = await client.post(
             f"/sync/api/v1/channels/{channel_id}/messages/{message_id}/transcribe-video",
@@ -136,7 +136,7 @@ async def test_transcribe_video_endpoint_marks_done_via_worker(
             )
             assert lr.status_code == 200
             for m in lr.json()["items"]:
-                if m["id"] != message_id:
+                if m["message_id"] != message_id:
                     continue
                 for c in m["contents"]:
                     if c["type"] != "file/video":
@@ -196,7 +196,7 @@ async def test_transcribe_call_aggregate_includes_guest_line(
             },
         )
         assert cr.status_code == 201
-        channel_id = cr.json()["id"]
+        channel_id = cr.json()["channel_id"]
         patch = await client.patch(
             f"/sync/api/v1/channels/{channel_id}",
             headers=sync_auth_headers,
@@ -224,15 +224,15 @@ async def test_transcribe_call_aggregate_includes_guest_line(
             json={"guest_name": guest_label},
         )
         assert join_guest.status_code == 200
-        guest_id = join_guest.json()["identity"]
+        guest_id = join_guest.json()["participant_identity"]
         assert guest_id.startswith("guest:")
-        owner_identity = join_reg.json()["identity"]
+        owner_identity = join_reg.json()["participant_identity"]
 
         container = get_sync_container()
         for uid in (owner_identity, guest_id):
             await container.call_repository.add_participant(
                 SyncCallParticipant(
-                    id=uuid.uuid4().hex,
+                    call_participant_id=uuid.uuid4().hex,
                     call_id=call_id,
                     user_id=uid,
                     status="joined",
@@ -275,9 +275,9 @@ async def test_transcribe_call_aggregate_includes_guest_line(
                     type=MessageContentType.FILE_AUDIO,
                     data=AudioAttachmentContent(
                         file_id=f["file_id"],
-                        filename="g.wav",
-                        mime_type="audio/wav",
-                        size=f["file_size"],
+                        original_name="g.wav",
+                        content_type="audio/wav",
+                        file_size=f["file_size"],
                         duration_ms=500,
                     ),
                     order=0,
@@ -312,7 +312,7 @@ async def test_transcribe_call_aggregate_includes_guest_line(
             )
         finally:
             clear_context()
-        guest_message_id = guest_message.id
+        guest_message_id = guest_message.message_id
 
         deadline = time.monotonic() + 90.0
         guest_done = False
@@ -323,7 +323,7 @@ async def test_transcribe_call_aggregate_includes_guest_line(
             )
             assert lr.status_code == 200
             for m in lr.json()["items"]:
-                if m["id"] != guest_message_id:
+                if m["message_id"] != guest_message_id:
                     continue
                 for c in m["contents"]:
                     if c["type"] == "file/audio" and c["data"].get("transcription_status") == "done":

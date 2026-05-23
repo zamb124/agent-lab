@@ -11,6 +11,7 @@ import {
     chatResource,
     chatSendOp,
     chatCancelOp,
+    relayA2aVoiceStreamRpcFrame,
 } from '../../../../apps/flows/ui/events/resources/chat.resource.js';
 import { resetFactories } from '../../helpers/factory-fixtures.js';
 import { buildBus } from '../../helpers/bus-fixtures.js';
@@ -297,6 +298,37 @@ describe('flows/chat extraReducer: push-события', () => {
         const op = msgs.filter((m) => m.role === 'operator');
         expect(op.length).toBe(1);
         expect(op[0].fileIds).toEqual(['f1', 'f2']);
+    });
+
+    it('voice relay использует тот же A2A runtime mapper', () => {
+        const { bus, getState } = build();
+        bus.dispatch('flows/chat/session_init', { flowId: 'demo', contextId: 'ctx_voice' });
+        const streamState = { contextId: 'ctx_voice', taskId: null, taskPrimed: false };
+
+        relayA2aVoiceStreamRpcFrame(
+            { dispatch: bus.dispatch.bind(bus) },
+            streamState,
+            {
+                jsonrpc: '2.0',
+                id: 'voice-1',
+                result: {
+                    kind: 'artifact-update',
+                    taskId: 'voice_t1',
+                    contextId: 'ctx_voice',
+                    artifact: {
+                        parts: [{ kind: 'text', text: 'voice answer' }],
+                    },
+                    final: false,
+                },
+            },
+            'voice-cause',
+        );
+
+        expect(streamState.taskPrimed).toBe(true);
+        expect(streamState.taskId).toBe('voice_t1');
+        const msgs = getState().flowsChat.messagesByContextId.ctx_voice.messages;
+        const assistant = msgs.find((m) => m.role === 'assistant' && m.taskId === 'voice_t1');
+        expect(assistant.content).toBe('voice answer');
     });
 });
 

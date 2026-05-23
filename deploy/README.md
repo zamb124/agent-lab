@@ -52,7 +52,7 @@ MicroK8s cluster
 
 | Input | Значение |
 |---|---|
-| `image_tag` | Пусто = тег из build (короткий SHA); иначе явный тег образа. |
+| `image_tag` | Пусто = тег из build (короткий SHA); иначе явный immutable тег образа. `latest` запрещён. |
 | `apps_node` | Нода для всех 9 apps. `unchanged` = дефолт из `values.yaml` (master). |
 | `workers_node` | Нода для всех 6 workers. `unchanged` = дефолт (master). |
 | `data_node` | Нода для StatefulSets (postgres/redis/loki/tempo/grafana). `unchanged` = master. **ВНИМАНИЕ:** переезд требует `migrate-pvc.sh`. |
@@ -71,7 +71,7 @@ MicroK8s cluster
 
 - **Канон** структуры и значений по умолчанию — только корневой **`conf.json`**.
 - **`deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`** — только узкие дельты без Helm ENV. Это **не** блок **`server`** (URL между сервисами там не трогаем — их даёт Helm ENV). Пример: вложенная секция **`services.browser.browser`** (рантайм browser в конфиге приложения), например **`cdp_endpoints.lightpanda: null`**, чтобы в кластере не тащить локальный endpoint из канона.
-- **`deploy/helm/agent-lab/files/app-conf.json`** — **генерируется**, в репозитории **не хранится** (`.gitignore`). Перед **`helm template`** / **`helm lint`** / **`helm upgrade`** без целей **`make k8s-*`** нужно один раз выполнить **`make render-helm-app-conf`** или полагаться на CI (**`.github/workflows/deploy.yml`** рендерит файл перед **`helm lint`**).
+- **`deploy/helm/agent-lab/files/app-conf.json`** — **генерируется**, в репозитории **не хранится** (`.gitignore`). Перед **`helm template`** / **`helm lint`** / **`helm upgrade`** без целей **`make k8s-*`** нужно один раз выполнить **`make render-helm-app-conf`** и передать **`--set image.tag=<immutable-tag>`**, или полагаться на CI (**`.github/workflows/deploy.yml`** рендерит файл перед **`helm lint`**).
 
 Скрипт: **`deploy/scripts/render_helm_app_conf.py`**.
 
@@ -186,7 +186,7 @@ export GRAFANA_ADMIN_PASSWORD=...
 # Опционально: исходящий прокси (в GitHub те же значения под именами PROXY__ENABLED / PROXY__PROXIES):
 # export PROXY_ENABLED=true
 # export PROXY_PROXIES='["http://user:pass@proxy.example:3128"]'
-make k8s-deploy IMAGE_TAG=latest
+make k8s-deploy IMAGE_TAG=<sha>
 
 # При необходимости обновить только секреты (релиз уже есть):
 # source .env.k8s.secrets && make k8s-secrets-sync
@@ -200,7 +200,7 @@ make k8s-logs SVC=frontend
 
 ```bash
 make k8s-lint       # helm lint
-make k8s-template   # рендер всех манифестов в stdout
+make k8s-template IMAGE_TAG=<sha>   # рендер всех манифестов в stdout
 ```
 
 ## Откат

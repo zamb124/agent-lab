@@ -36,8 +36,15 @@ class _BillingService:
         _ = company_id, user_id, operation_code, notification_service
 
 
+class _NoopStateManager:
+    async def save_state(self, session_id: str, state: ExecutionState) -> bool:
+        _ = session_id, state
+        return True
+
+
 class _RuntimeContainer:
     billing_service = _BillingService()
+    state_manager = _NoopStateManager()
 
 
 async def run_agent_to_completion(runner, input_data, state):

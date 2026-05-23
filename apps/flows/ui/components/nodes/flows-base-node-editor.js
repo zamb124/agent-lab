@@ -836,19 +836,25 @@ export class FlowsBaseNodeEditor extends PlatformElement {
         if (!result || typeof result.file_id !== 'string') {
             throw new Error('flows-base-node-editor: file_upload op must return result.file_id');
         }
-        const name = typeof result.original_name === 'string' && result.original_name !== ''
-            ? result.original_name
-            : file.name;
-        const mimeType = typeof result.content_type === 'string' && result.content_type !== ''
-            ? result.content_type
-            : file.type;
-        const size = typeof result.file_size === 'number' ? result.file_size : file.size;
+        if (typeof result.original_name !== 'string' || result.original_name === '') {
+            throw new Error('flows-base-node-editor: file_upload op must return result.original_name');
+        }
+        if (typeof result.content_type !== 'string' || result.content_type === '') {
+            throw new Error('flows-base-node-editor: file_upload op must return result.content_type');
+        }
+        if (typeof result.file_size !== 'number') {
+            throw new Error('flows-base-node-editor: file_upload op must return result.file_size');
+        }
+        if (typeof result.url !== 'string' || result.url === '') {
+            throw new Error('flows-base-node-editor: file_upload op must return result.url');
+        }
         const files = Array.isArray(this.nodeConfig?.files) ? this.nodeConfig.files : [];
         const next = [...files, {
             file_id: result.file_id,
-            name,
-            mime_type: mimeType,
-            size,
+            original_name: result.original_name,
+            url: result.url,
+            content_type: result.content_type,
+            file_size: result.file_size,
         }];
         this._emitPatch({ files: next });
         input.value = '';
@@ -1160,9 +1166,9 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                             ${files.length === 0
                                 ? html`<p class="field-pill-empty">${this.t('base_node_editor.files_empty')}</p>`
                                 : files.map((f, i) => {
-                                    const fname = typeof f.name === 'string' && f.name !== '' ? f.name : f.file_id;
-                                    const fmime = typeof f.mime_type === 'string' ? f.mime_type : '';
-                                    const fsize = this._formatFileSize(f.size);
+                                    const fname = typeof f.original_name === 'string' && f.original_name !== '' ? f.original_name : f.file_id;
+                                    const fmime = typeof f.content_type === 'string' ? f.content_type : '';
+                                    const fsize = this._formatFileSize(f.file_size);
                                     return html`
                                         <div class="field-pill-file-ref-row">
                                             <platform-icon

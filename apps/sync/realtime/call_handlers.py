@@ -177,7 +177,7 @@ async def handle_call_invite(
 
     for uid in member_ids:
         participant = SyncCallParticipant(
-            id=uuid4().hex,
+            call_participant_id=uuid4().hex,
             call_id=call.call_id,
             user_id=uid,
             status="joined" if uid == cmd.actor_user_id else "invited",

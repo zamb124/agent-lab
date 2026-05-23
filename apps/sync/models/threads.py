@@ -12,7 +12,7 @@ from apps.sync.models.common import UserBrief
 class ThreadRow(BaseModel):
     """Строка треда в базе данных."""
 
-    id: str = Field(description="Идентификатор треда.")
+    thread_id: str = Field(description="Идентификатор треда.")
     channel_id: str = Field(description="Канал, в котором находится тред.")
     root_message_id: str = Field(description="Корневое сообщение треда.")
     title: str | None = Field(default=None, description="Опциональный заголовок треда.")
@@ -23,7 +23,7 @@ class ThreadRow(BaseModel):
 class ThreadRead(BaseModel):
     """Полная информация о треде."""
 
-    id: str = Field(description="Идентификатор треда.")
+    thread_id: str = Field(description="Идентификатор треда.")
     channel_id: str = Field(description="Канал, в котором находится тред.")
     root_message_id: str = Field(description="Корневое сообщение треда.")
     title: str | None = Field(
@@ -47,7 +47,7 @@ class ThreadCreate(BaseModel):
 class ThreadSummary(BaseModel):
     """Краткое представление треда для списков."""
 
-    id: str = Field(description="Идентификатор треда.")
+    thread_id: str = Field(description="Идентификатор треда.")
     channel_id: str = Field(description="Канал треда.")
     root_message_preview: str = Field(
         description="Краткий текстовый превью корневого сообщения.",

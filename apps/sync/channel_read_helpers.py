@@ -59,7 +59,7 @@ async def channel_read_from_entity(
         company_id=company_id,
     )
     return ChannelRead(
-        id=entity.channel_id,
+        channel_id=entity.channel_id,
         namespace=entity.namespace,
         type=ChannelType(entity.type),
         name=entity.name,
@@ -84,7 +84,7 @@ def channel_read_entity_minimal(entity: SyncChannel) -> ChannelRead:
     """ChannelRead без peer (ответ команд создания до полной выборки)."""
     pids = entity.pinned_message_ids if isinstance(entity.pinned_message_ids, list) else []
     return ChannelRead(
-        id=entity.channel_id,
+        channel_id=entity.channel_id,
         namespace=entity.namespace,
         type=ChannelType(entity.type),
         name=entity.name,

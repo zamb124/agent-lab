@@ -24,7 +24,7 @@ export function resolveDisplayName(member) {
 
 /**
  * Заголовок канала: для `direct` — `peer.display_name | peer.user_id`,
- * иначе — `channel.name | channel.id`. Никогда не undefined.
+ * иначе — `channel.name | channel.channel_id`. Никогда не undefined.
  */
 export function resolveChannelTitle(channel) {
     if (!channel || typeof channel !== 'object') return '';
@@ -35,7 +35,7 @@ export function resolveChannelTitle(channel) {
         if (typeof channel.peer.user_id === 'string') return channel.peer.user_id;
     }
     if (typeof channel.name === 'string' && channel.name !== '') return channel.name;
-    if (typeof channel.id === 'string') return channel.id;
+    if (typeof channel.channel_id === 'string') return channel.channel_id;
     return '';
 }
 

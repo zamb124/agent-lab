@@ -315,22 +315,20 @@ function _partsFiles(msg) {
             continue;
         }
         const f = p.file;
-        const path = typeof f.uri === 'string' ? f.uri : '';
-        const match = path.match(/\/files\/download\/([^/?#]+)/);
+        const url = typeof f.uri === 'string' ? f.uri : '';
+        const match = url.match(/\/files\/download\/([^/?#]+)/);
         const fileId = match ? match[1] : '';
-        const mime =
-            typeof f.mimeType === 'string' && f.mimeType.length > 0
-                ? f.mimeType
-                : typeof f.mime_type === 'string'
-                  ? f.mime_type
-                  : '';
+        const contentType = typeof f.mimeType === 'string' && f.mimeType.length > 0 ? f.mimeType : '';
+        const originalName = typeof f.name === 'string' ? f.name : '';
+        if (url.length === 0 || contentType.length === 0 || originalName.length === 0) {
+            continue;
+        }
         files.push({
             file_id: fileId,
-            name: typeof f.name === 'string' ? f.name : fileId,
-            path,
-            url: path,
-            mime_type: mime,
-            type: mime,
+            original_name: originalName,
+            url,
+            content_type: contentType,
+            file_size: typeof f.size === 'number' ? f.size : 0,
         });
     }
     return files;

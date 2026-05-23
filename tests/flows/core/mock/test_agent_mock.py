@@ -51,11 +51,18 @@ class _ResourceRepository:
         return None
 
 
+class _NoopStateManager:
+    async def save_state(self, session_id: str, state: ExecutionState) -> bool:
+        _ = session_id, state
+        return True
+
+
 class _RuntimeContainer:
     redis_client = _RedisClient()
     billing_service = _BillingService()
     flow_factory = _FlowFactory()
     resource_repository = _ResourceRepository()
+    state_manager = _NoopStateManager()
 
 
 @pytest.fixture

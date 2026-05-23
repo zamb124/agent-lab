@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 @idle_broker.task(task_name="payment_sync_tick", queue_name="idle")
 async def payment_sync_tick(
-    scheduler_task_id: str | None = None,
+    schedule_task_id: str | None = None,
     company_id: str | None = None,
 ) -> dict[str, int]:
     settings = get_settings()

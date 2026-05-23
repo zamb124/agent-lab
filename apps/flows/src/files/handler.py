@@ -1,14 +1,11 @@
 """
 Извлечение вложений FilePart из A2A Message в память (без записи на диск).
 
-Имя без расширения и S3/метаданные нормализует FileProcessor.process_file_from_bytes;
-канал A2A вызывает persist_uploaded_file_as_state_files_item.
+A2A SDK-поля нормализуются в canonical state.files на границе канала.
 """
 
 import base64
-import uuid
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from a2a.types import FilePart, FileWithBytes, FileWithUri, Message
@@ -33,30 +30,32 @@ def get_file_parts(message: Message) -> list[FilePart]:
 class IncomingA2aFile:
     """Вложение из A2A: либо байты (FileWithBytes), либо URI (FileWithUri)."""
 
-    name: str
-    mime_type: str | None
-    size: int
+    original_name: str
+    content_type: str | None
+    file_size: int
     data: bytes | None = None
     uri: str | None = None
 
 
 def _payload_from_bytes(file_data: FileWithBytes) -> IncomingA2aFile:
     file_bytes = base64.b64decode(file_data.bytes)
-    name = file_data.name or f"file_{uuid.uuid4().hex[:8]}"
+    if not file_data.name:
+        raise ValueError("FileWithBytes.name обязателен")
     return IncomingA2aFile(
-        name=name,
-        mime_type=file_data.mime_type,
-        size=len(file_bytes),
+        original_name=file_data.name,
+        content_type=file_data.mime_type,
+        file_size=len(file_bytes),
         data=file_bytes,
     )
 
 
 def _payload_from_uri(file_data: FileWithUri) -> IncomingA2aFile:
-    name = file_data.name or Path(file_data.uri).name or f"file_{uuid.uuid4().hex[:8]}"
+    if not file_data.name:
+        raise ValueError("FileWithUri.name обязателен")
     return IncomingA2aFile(
-        name=name,
-        mime_type=file_data.mime_type,
-        size=0,
+        original_name=file_data.name,
+        content_type=file_data.mime_type,
+        file_size=0,
         uri=file_data.uri,
     )
 
@@ -86,16 +85,18 @@ def format_a2a_files_content(files_data: list[dict[str, Any]]) -> str:
     """
     Добавляет в текст сообщения блоки [FILE]...[/FILE] по записям для state.files.
 
-    Ожидаются ключи name, path, mime_type (как после персиста или для URI).
+    Ожидаются canonical keys original_name, url, content_type.
     """
     if not files_data:
         return ""
 
     parts: list[str] = []
     for fd in files_data:
-        name = fd.get("name", "")
-        path = fd.get("path", "")
-        mime = fd.get("mime_type") or "unknown"
-        parts.append(f"\n[FILE]\nname: {name}\npath: {path}\nmime_type: {mime}\n[/FILE]")
+        original_name = fd.get("original_name", "")
+        url = fd.get("url", "")
+        content_type = fd.get("content_type", "")
+        parts.append(
+            f"\n[FILE]\noriginal_name: {original_name}\nurl: {url}\ncontent_type: {content_type}\n[/FILE]"
+        )
 
     return "".join(parts)

@@ -111,6 +111,17 @@
             "type": "string",
             "format": "binary",
             "title": "File"
+          },
+          "public": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public"
           }
         },
         "type": "object",
@@ -261,6 +272,7 @@
             "default": true
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "provider",
@@ -816,6 +828,7 @@
             "title": "Metadata"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "title",
@@ -918,7 +931,7 @@
             "title": "Detected Kind",
             "description": "Тип файла по FileReader"
           },
-          "mime_type": {
+          "content_type": {
             "anyOf": [
               {
                 "type": "string"
@@ -927,8 +940,8 @@
                 "type": "null"
               }
             ],
-            "title": "Mime Type",
-            "description": "MIME после распознавания"
+            "title": "Content Type",
+            "description": "Content-Type после распознавания"
           },
           "warnings": {
             "items": {
@@ -1033,6 +1046,74 @@
             "type": "integer",
             "title": "Limit",
             "default": 5
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters"
+          },
+          "channels": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channels"
+          },
+          "rrf_k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf K"
+          },
+          "per_channel_top_k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Channel Top K"
+          },
+          "rerank": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank"
+          },
+          "retrieval": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval"
           }
         },
         "type": "object",
@@ -1041,7 +1122,7 @@
           "namespace_ids"
         ],
         "title": "GlobalSearchRequest",
-        "description": "Запрос на глобальный поиск"
+        "description": "Запрос на глобальный поиск (опции поиска совпадают с namespace search, кроме namespace_id)."
       },
       "GlobalSearchResponse": {
         "properties": {
@@ -1225,7 +1306,7 @@
         ],
         "title": "ListResponse[UserSearchResult]"
       },
-      "ListResponse_dict_": {
+      "ListResponse_dict_str__Any__": {
         "properties": {
           "items": {
             "items": {
@@ -1240,7 +1321,7 @@
         "required": [
           "items"
         ],
-        "title": "ListResponse[dict]"
+        "title": "ListResponse[dict[str, Any]]"
       },
       "Namespace": {
         "properties": {
@@ -1438,6 +1519,10 @@
             "type": "object",
             "title": "Пресеты колонок доски задач",
             "description": "Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор."
+          },
+          "suggests": {
+            "$ref": "#/components/schemas/SuggestsSettings",
+            "title": "Настройки саджестов"
           }
         },
         "type": "object",
@@ -1841,6 +1926,17 @@
               }
             ],
             "title": "Rerank"
+          },
+          "retrieval": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval"
           }
         },
         "type": "object",
@@ -1975,6 +2071,35 @@
         "type": "object",
         "title": "SubscribeRequest",
         "description": "Тело POST /api/push/subscribe."
+      },
+      "SuggestsSettings": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Включить фоновый поиск саджестов",
+            "default": false
+          },
+          "cron": {
+            "type": "string",
+            "title": "Cron-расписание для генерации",
+            "default": "0 2 * * *"
+          },
+          "schedule_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Task Id",
+            "description": "ID платформенной задачи расписания"
+          }
+        },
+        "type": "object",
+        "title": "SuggestsSettings",
+        "description": "Настройки фоновой генерации саджестов (дубли/пропущенные)."
       },
       "SwitchCompanyRequest": {
         "properties": {

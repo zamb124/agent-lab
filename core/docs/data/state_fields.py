@@ -39,9 +39,21 @@ STATE_FIELDS: List[Dict[str, Any]] = [
         "readonly": True,
     },
     {
+        "name": "terminal_task_state",
+        "type": "Optional[ExecutionTaskState]",
+        "description": "Сохранённый terminal A2A TaskState (`completed`, `input-required`, `failed` и др.).",
+        "readonly": True,
+    },
+    {
+        "name": "terminal_task_error",
+        "type": "Optional[str]",
+        "description": "Текст ошибки для terminal_task_state `failed`, `rejected`, `unknown`.",
+        "readonly": True,
+    },
+    {
         "name": "branch_id",
         "type": "str",
-        "description": "Активный skill (по умолчанию `default`).",
+        "description": "Активный branch (по умолчанию `default`).",
         "readonly": True,
     },
     {
@@ -101,7 +113,7 @@ STATE_FIELDS: List[Dict[str, Any]] = [
     {
         "name": "files",
         "type": "List[dict]",
-        "description": "Вложения: `name`, `path`, `mime_type`, `size`, `file_id` и др.",
+        "description": "Вложения: `original_name`, `url`, `content_type`, `file_size`, `file_id` и др.",
         "readonly": True,
     },
     {

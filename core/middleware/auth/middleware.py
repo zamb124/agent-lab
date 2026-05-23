@@ -25,7 +25,7 @@ from core.logging.attributes import (
     LOG_SESSION_ID,
     LOG_USER_ID,
 )
-from core.models.identity_models import User
+from core.models.identity_models import Company, User, UserStatus
 from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.domain import extract_subdomain
 from core.utils.tokens import TokenData, TokenType, get_token_service
@@ -191,6 +191,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
     ):
         """Создает контекст на основе правила маршрутизации"""
 
+        if self._auth_disabled_auto_context_allowed(request, rule):
+            return await self._create_auth_disabled_auto_context(
+                request,
+                container,
+                context_factory,
+                trace_id,
+                rule.context_type,
+            )
+
         # Webhook обработка
         if rule.context_type == "webhook" and rule.channel:
             return await self._handle_webhook(request, rule, container, context_factory, trace_id)
@@ -290,6 +299,68 @@ class AuthMiddleware(BaseHTTPMiddleware):
             platform=rule.channel,  # channel используется как platform для webhook
             auth_token=auth_token,
             trace_id=trace_id
+        )
+
+    def _auth_disabled_auto_context_allowed(self, request: Request, rule: RouteRule) -> bool:
+        settings = getattr(request.app.state, "settings", None)
+        auth = getattr(settings, "auth", None)
+        server = getattr(settings, "server", None)
+        if not auth or getattr(auth, "enabled", True):
+            return False
+        if not getattr(auth, "dev_auto_context_enabled", False):
+            return False
+        if getattr(settings, "testing", False):
+            return False
+        if getattr(server, "env", "production") == "production":
+            return False
+        return rule.auth_required
+
+    async def _create_auth_disabled_auto_context(
+        self,
+        request: Request,
+        container,
+        context_factory: ContextFactory,
+        trace_id: str,
+        context_type: str,
+    ):
+        settings = request.app.state.settings
+        auth = settings.auth
+        company_id = auth.dev_auto_company_id or "system"
+        company = await container.company_repository.get(company_id)
+        if company is None:
+            company = Company(
+                company_id=company_id,
+                name=auth.dev_auto_company_name or company_id,
+                subdomain=None,
+                owner_user_id=auth.dev_auto_user_id,
+                members={auth.dev_auto_user_id: ["admin"]},
+            )
+
+        groups = list(dict.fromkeys(auth.dev_auto_groups or ["admin", "developers"]))
+        user = User(
+            user_id=auth.dev_auto_user_id,
+            name="Dev Auto User",
+            status=UserStatus.ACTIVE,
+            groups=groups,
+            companies={company.company_id: groups},
+            active_company_id=company.company_id,
+            emails=[f"{auth.dev_auto_user_id}@dev.local"],
+        )
+        logger.warning(
+            "auth.disabled_auto_context",
+            path=request.url.path,
+            user_id=user.user_id,
+            company_id=company.company_id,
+            context_type=context_type,
+        )
+        return await context_factory.create(
+            request,
+            context_type,
+            company,
+            user,
+            token_data=None,
+            auth_token=None,
+            trace_id=trace_id,
         )
 
     async def _handle_webhook(

@@ -216,17 +216,15 @@ def _is_file_ref_source(source: SourceInput | FileRef) -> TypeIs[FileRef]:
     if isinstance(source, (FileRecord, FileResponse)):
         return True
     if isinstance(source, Mapping) and not isinstance(source, (str, bytes, bytearray)):
-        path_v = source.get("path")
         fid_v = source.get("file_id")
         url_v = source.get("url")
         if (
-            (isinstance(path_v, str) and path_v.strip())
-            or (isinstance(fid_v, str) and fid_v.strip())
+            (isinstance(fid_v, str) and fid_v.strip())
             or (isinstance(url_v, str) and url_v.strip())
         ):
             return True
         raise TypeError(
-            "Если source — словарь, укажите непустой path, file_id или url (запись вложения)."
+            "Если source — словарь, укажите непустой file_id или url (запись вложения)."
         )
     return False
 
@@ -471,7 +469,7 @@ class FileReader:
                 kind = FileReadKind.HTML
             elif mime in ("text/plain", "text/markdown", "text/csv"):
                 kind = FileReadKind.TEXT
-        return FileTypeInfo(detected_kind=kind, mime_type=mime, extension=ext)
+        return FileTypeInfo(detected_kind=kind, content_type=mime, extension=ext)
 
     async def resolve_source(
         self,
@@ -518,7 +516,7 @@ class FileReader:
     ) -> FileReadResult:
         source_checksum = opts.source_checksum or compute_content_checksum_sha256(raw)
         info = self.recognize_file_type(file_name=name, head=raw[:8192])
-        mime = info.mime_type or _guess_mime(name)
+        mime = info.content_type or _guess_mime(name)
 
         if info.detected_kind == FileReadKind.PDF or _sniff_pdf(raw):
             result = await asyncio.to_thread(_read_pdf_sync, raw, name, mime, opts)
@@ -576,15 +574,13 @@ class FileReader:
         finfo: Mapping[str, object],
         opts: ReadOptions,
     ) -> tuple[bytes, str]:
-        display_name = _mapping_text(finfo, "name", "original_name")
-
-        path_str = _mapping_text(finfo, "path")
-        if path_str is not None:
-            p = Path(path_str)
-            if p.is_file():
-                return await self.resolve_source(p, display_name, opts)
+        display_name = _mapping_text(finfo, "original_name")
+        if display_name is None:
+            raise ValueError("FileRef.original_name обязателен")
 
         url_val = _mapping_text(finfo, "url")
+        if url_val is None and _mapping_text(finfo, "file_id") is None:
+            raise ValueError("FileRef должен содержать file_id или url")
         if url_val is not None and url_val.startswith(("http://", "https://")):
             return await self.resolve_source(url_val, display_name, opts)
 
@@ -684,7 +680,7 @@ async def _read_image_impl(
     page = ReadPage(index=0, text=text, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime,
+        content_type=mime,
         detected_kind=FileReadKind.IMAGE,
         page_count=1,
         pages=[page],
@@ -723,7 +719,7 @@ def _read_html_sync(
     page = ReadPage(index=0, text=extracted, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "text/html",
+        content_type=mime or "text/html",
         detected_kind=FileReadKind.HTML,
         page_count=1,
         pages=[page],
@@ -764,7 +760,7 @@ def _read_plain_text_sync(
     page = ReadPage(index=0, text=text, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "text/plain",
+        content_type=mime or "text/plain",
         detected_kind=FileReadKind.TEXT,
         page_count=1,
         pages=[page],
@@ -808,7 +804,7 @@ def _read_xls_sync(
         raise FileReadError(f"xlrd не извлёк данные: {file_name}")
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "application/vnd.ms-excel",
+        content_type=mime or "application/vnd.ms-excel",
         detected_kind=FileReadKind.SPREADSHEET,
         page_count=len(pages),
         pages=pages,
@@ -853,7 +849,7 @@ def _read_doc_ole_sync(
     page = ReadPage(index=0, text=text, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "application/msword",
+        content_type=mime or "application/msword",
         detected_kind=FileReadKind.OFFICE,
         page_count=1,
         pages=[page],
@@ -906,7 +902,7 @@ def _read_pdf_sync(
                 assets.append(
                     ReadAsset(
                         kind=ReadAssetKind.PAGE_RASTER,
-                        mime_type="image/png",
+                        content_type="image/png",
                         checksum=ch,
                         width=pix.width,
                         height=pix.height,
@@ -920,7 +916,7 @@ def _read_pdf_sync(
         warnings.append("PDF не содержит страниц")
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "application/pdf",
+        content_type=mime or "application/pdf",
         detected_kind=FileReadKind.PDF,
         page_count=len(pages),
         pages=pages,
@@ -983,7 +979,7 @@ def _read_unstructured_sync(
         detected = FileReadKind.OFFICE
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime,
+        content_type=mime,
         detected_kind=detected,
         page_count=len(pages),
         pages=pages,
@@ -1027,7 +1023,7 @@ def _read_pptx_sync(
         raise FileReadError(f"PPTX не содержит слайдов: {file_name}")
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime
+        content_type=mime
         or "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         detected_kind=FileReadKind.OFFICE,
         page_count=len(pages),
@@ -1074,7 +1070,7 @@ def _read_rtf_sync(
         raise FileReadError(f"RTF пустой: {file_name}")
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "application/rtf",
+        content_type=mime or "application/rtf",
         detected_kind=FileReadKind.OFFICE,
         page_count=1,
         pages=[ReadPage(index=0, text=text, assets=[], label=None)],
@@ -1115,7 +1111,7 @@ def _read_odt_sync(
         raise FileReadError(f"ODT пустой: {file_name}")
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "application/vnd.oasis.opendocument.text",
+        content_type=mime or "application/vnd.oasis.opendocument.text",
         detected_kind=FileReadKind.OFFICE,
         page_count=1,
         pages=[ReadPage(index=0, text=body, assets=[], label=None)],
@@ -1162,7 +1158,7 @@ def _read_epub_sync(
         raise FileReadError(f"EPUB не содержит документов: {file_name}")
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "application/epub+zip",
+        content_type=mime or "application/epub+zip",
         detected_kind=FileReadKind.OFFICE,
         page_count=len(pages),
         pages=pages,
@@ -1218,7 +1214,7 @@ def _read_msg_sync(
         raise FileReadError(f"MSG пустой: {file_name}")
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "application/vnd.ms-outlook",
+        content_type=mime or "application/vnd.ms-outlook",
         detected_kind=FileReadKind.OFFICE,
         page_count=1,
         pages=[ReadPage(index=0, text=text, assets=[], label=None)],
@@ -1282,7 +1278,7 @@ def _read_eml_sync(
         raise FileReadError(f"EML пустой: {file_name}")
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime or "message/rfc822",
+        content_type=mime or "message/rfc822",
         detected_kind=FileReadKind.OFFICE,
         page_count=1,
         pages=[ReadPage(index=0, text=text, assets=[], label=None)],
@@ -1318,7 +1314,7 @@ async def _read_audio_impl(
     page = ReadPage(index=0, text=transcription.text, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime,
+        content_type=mime,
         detected_kind=FileReadKind.AUDIO,
         page_count=1,
         pages=[page],
@@ -1341,7 +1337,7 @@ async def _read_video_impl(
     page = ReadPage(index=0, text=transcription.text, assets=[], label=None)
     return FileReadResult(
         file_name=file_name,
-        mime_type=mime,
+        content_type=mime,
         detected_kind=FileReadKind.VIDEO,
         page_count=1,
         pages=[page],

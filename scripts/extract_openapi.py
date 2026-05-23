@@ -12,6 +12,8 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import subprocess
+import sys
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -128,29 +130,53 @@ def extract_service_openapi(service_name: str, app_path: str) -> dict:
         raise
 
 
+def write_service_openapi(service_name: str, app_path: str, output_file: Path) -> None:
+    """Пишет OpenAPI одного сервиса. Вызывается в отдельном процессе."""
+    schema = extract_service_openapi(service_name, app_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text(
+        json.dumps(schema, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    logger.info(f"✅ Сохранена схема для {service_name}: {output_file}")
+
+
+def _run_service_child(script_path: Path, service_name: str, app_path: str, output_file: Path) -> None:
+    """Изоляция важна: сервисы на импорте настраивают logging и регистрируют глобальные хуки."""
+    subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--service",
+            service_name,
+            "--app-path",
+            app_path,
+            "--output",
+            str(output_file),
+        ],
+        check=True,
+    )
+
+
 def main() -> None:
     """Извлекает OpenAPI схемы для всех сервисов."""
+    if "--service" in sys.argv:
+        service_name = sys.argv[sys.argv.index("--service") + 1]
+        app_path = sys.argv[sys.argv.index("--app-path") + 1]
+        output_file = Path(sys.argv[sys.argv.index("--output") + 1])
+        write_service_openapi(service_name, app_path, output_file)
+        return
+
     root = Path(__file__).resolve().parents[1]
     output_dir = root / "docs" / "openapi"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Директория для OpenAPI схем: {output_dir}")
 
+    script_path = Path(__file__).resolve()
     for service_name, app_path in SERVICES:
-        try:
-            schema = extract_service_openapi(service_name, app_path)
-
-            output_file = output_dir / f"{service_name}.json"
-            output_file.write_text(
-                json.dumps(schema, indent=2, ensure_ascii=False),
-                encoding="utf-8"
-            )
-
-            logger.info(f"✅ Сохранена схема для {service_name}: {output_file}")
-
-        except Exception as e:
-            logger.warning(f"⚠️ Пропуск {service_name}: {e}")
-            continue
+        output_file = output_dir / f"{service_name}.json"
+        _run_service_child(script_path, service_name, app_path, output_file)
 
     logger.info("Извлечение OpenAPI схем завершено")
 

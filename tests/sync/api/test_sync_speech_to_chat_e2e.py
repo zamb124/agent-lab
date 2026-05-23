@@ -65,7 +65,7 @@ async def test_speech_to_chat_posts_audio_segment_to_channel_feed(
             },
         )
         assert cr.status_code == 201, cr.text
-        channel_id = cr.json()["id"]
+        channel_id = cr.json()["channel_id"]
 
         invite = await http.post(
             "/sync/api/v1/calls/any/invite",

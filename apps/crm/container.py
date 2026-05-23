@@ -31,7 +31,7 @@ from apps.crm.services.daily_summary_cache_service import DailySummaryCacheServi
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.graph_service import GraphService
 from apps.crm.services.integration_auto_sync_service import IntegrationAutoSyncService
-from apps.crm.services.lara_workspace_service import LaraWorkspaceService
+from apps.crm.services.lara_namespace_service import LaraNamespaceService
 from apps.crm.services.namespace_template_service import NamespaceTemplateService
 from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
 from apps.crm.services.note_processing_service import NoteProcessingService
@@ -262,8 +262,8 @@ class CRMContainer(BaseContainer):
         )
 
     @lazy
-    def lara_workspace_service(self) -> LaraWorkspaceService:
-        return LaraWorkspaceService(
+    def lara_namespace_service(self) -> LaraNamespaceService:
+        return LaraNamespaceService(
             task_repo=self.task_repository,
             entity_repo=self.entity_repository,
         )

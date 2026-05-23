@@ -32,7 +32,7 @@ async def execute_reembed_tick(
     *,
     container: BaseContainer,
     channel: str,
-    scheduler_task_id: str,
+    schedule_task_id: str,
 ) -> Dict[str, object]:
     """
     Запускает один тик перевекторизации для воркера.
@@ -40,8 +40,8 @@ async def execute_reembed_tick(
     Берёт in-process pgvector-провайдер из фабрики, репозитории — из ``container``.
     Возвращает унифицированный dict-результат для TaskIQ.
     """
-    if not scheduler_task_id or not scheduler_task_id.strip():
-        raise ValueError("execute_reembed_tick: scheduler_task_id обязателен")
+    if not schedule_task_id or not schedule_task_id.strip():
+        raise ValueError("execute_reembed_tick: schedule_task_id обязателен")
     if not channel or not channel.strip():
         raise ValueError("execute_reembed_tick: channel обязателен")
 
@@ -50,7 +50,7 @@ async def execute_reembed_tick(
     if not reembed_cfg.reembed_enabled:
         return {
             "skipped": True,
-            "scheduler_task_id": scheduler_task_id,
+            "schedule_task_id": schedule_task_id,
             "reembedded": 0,
             "by_company_written": {},
         }
@@ -68,13 +68,13 @@ async def execute_reembed_tick(
         user_repository=container.user_repository,
         batch_size=batch_size,
         target_embedding_model=target_model,
-        scheduler_task_id=scheduler_task_id,
+        schedule_task_id=schedule_task_id,
         channel=channel,
     )
 
     logger.info(
         "reembed_stale.tick_done",
-        scheduler_task_id=scheduler_task_id,
+        schedule_task_id=schedule_task_id,
         target_embedding_model=target_model,
         batch_size=batch_size,
         reembedded=reembedded,
@@ -83,7 +83,7 @@ async def execute_reembed_tick(
 
     return {
         "skipped": False,
-        "scheduler_task_id": scheduler_task_id,
+        "schedule_task_id": schedule_task_id,
         "target_embedding_model": target_model,
         "batch_size": batch_size,
         "reembedded": reembedded,
@@ -98,7 +98,7 @@ async def _run_reembed_round(
     user_repository: UserRepository,
     batch_size: int,
     target_embedding_model: str,
-    scheduler_task_id: str,
+    schedule_task_id: str,
     channel: str,
 ) -> tuple[int, dict[str, int]]:
     """Один SELECT batch_size кандидатов + группировка по company_id + embed-write."""
@@ -153,7 +153,7 @@ async def _run_reembed_round(
             )
             continue
 
-        tid = f"reembed:{scheduler_task_id}:{cid}"
+        tid = f"reembed:{schedule_task_id}:{cid}"
         ctx = build_job_context(
             company=company,
             user=bill_user,

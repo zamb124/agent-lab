@@ -20,6 +20,8 @@ FROZEN_STATE_FIELDS: frozenset[str] = frozenset(
         "user_id",
         "session_id",
         "flow_config_version",
+        "terminal_task_state",
+        "terminal_task_error",
         "branch_id",
         "flow_deadline_monotonic",
         "flow_timeout_effective_seconds",

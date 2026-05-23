@@ -8,6 +8,7 @@ from apps.capability_gateway.config import get_capability_gateway_settings
 from apps.capability_gateway.services.context_service import CapabilityContextService
 from apps.capability_gateway.services.contracts import CapabilityGatewayContainerProtocol
 from apps.capability_gateway.services.registry import CapabilityRegistry
+from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
 from core.container import BaseContainer, lazy
 from core.logging import get_logger
@@ -32,6 +33,11 @@ class CapabilityGatewayContainer(BaseContainer):
     @lazy
     def service_client(self) -> ServiceClient:
         return ServiceClient()
+
+    @lazy
+    def redis_client(self) -> RedisClient:
+        settings = get_capability_gateway_settings()
+        return RedisClient(settings.database.redis_url)
 
     @lazy
     def capability_registry(self) -> CapabilityRegistry:

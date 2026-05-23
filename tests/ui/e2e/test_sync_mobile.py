@@ -13,10 +13,10 @@ from tests.ui.scenario_doc import ScenarioRecorder
     service="sync",
     tag="mobile",
     doc_slug="mobile-sidebar-menu",
-    title="Sync: мобильное меню и сайдбар",
+    title="Sync: мобильный список чатов",
     description=(
-        "При ширине viewport как на телефоне отображается кнопка «Открыть меню»; "
-        "по нажатию открывается боковая панель."
+        "При ширине viewport как на телефоне Sync показывает список чатов прямо на главном экране, "
+        "без дополнительного раскрытия сайдбара."
     ),
 )
 @pytest.mark.asyncio
@@ -33,9 +33,9 @@ async def test_mobile_opens_sidebar_from_header_menu(
     await sync_ui.expect_shell(ui_page_system)
     await scenario.step("Sync на узком viewport", ui_page_system)
 
-    menu_btn = ui_page_system.get_by_role("button", name="Открыть меню")
-    await expect(menu_btn).to_be_visible(timeout=30_000)
-    await menu_btn.click()
-
-    await expect(ui_page_system.locator("platform-sidebar")).to_be_visible()
-    await scenario.step("Сайдбар открыт с кнопки меню", ui_page_system)
+    mobile_list = ui_page_system.locator("sync-shell-page sync-chat-list")
+    await expect(mobile_list).to_be_visible(timeout=30_000)
+    await expect(
+        mobile_list.locator("input.sync-chat-list-search-input")
+    ).to_be_visible(timeout=30_000)
+    await scenario.step("Список чатов доступен без лишнего клика", ui_page_system)

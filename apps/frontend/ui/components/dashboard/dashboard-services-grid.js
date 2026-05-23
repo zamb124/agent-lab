@@ -13,6 +13,7 @@ import '@platform/lib/components/platform-services-launcher.js';
 import './dashboard-service-card.js';
 
 const DASHBOARD_SERVICES = PLATFORM_SERVICES.filter((s) => s.id !== 'frontend');
+const SYSTEM_ONLY_SERVICE_IDS = new Set(['grafana', 'litserve']);
 
 /**
  * @param {string} nameKey
@@ -85,7 +86,7 @@ export class DashboardServicesGrid extends PlatformElement {
     }
 
     _visibleServices(activeCompanyId) {
-        return DASHBOARD_SERVICES.filter((svc) => activeCompanyId === 'system' || svc.id !== 'grafana');
+        return DASHBOARD_SERVICES.filter((svc) => activeCompanyId === 'system' || !SYSTEM_ONLY_SERVICE_IDS.has(svc.id));
     }
 
     updated() {

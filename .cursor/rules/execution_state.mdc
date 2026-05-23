@@ -12,6 +12,8 @@ alwaysApply: false
 task_id, context_id, user_id
 session_id              # flow_id:context_id
 flow_config_version     # снимок FlowConfig в flows_versions; None = latest при загрузке
+terminal_task_state     # сохранённый terminal A2A TaskState: completed/input-required/canceled/failed/...
+terminal_task_error     # текст ошибки для terminal_task_state failed/rejected/unknown
 
 content                 # входной запрос
 response                # итоговый ответ
@@ -73,6 +75,7 @@ def execute(args, state):
 Запрещено менять из CodeNode / inline tool (прямое присваивание, `merge_state`/`set_nested` с этими ключами, ключи в возвращаемом dict без `output_mapping`):
 
 - Идентификаторы и сессия: `task_id`, `context_id`, `user_id`, `session_id`, `flow_config_version`, `branch_id`.
+- Terminal snapshot: `terminal_task_state`, `terminal_task_error`.
 - Лимиты: `flow_deadline_monotonic`, `flow_timeout_effective_seconds`.
 - Управление графом: `current_nodes`, `join_arrived_preds`.
 - HITL: `interrupt`, `interrupt_path`, `hitl_handoff_correlation_id`.

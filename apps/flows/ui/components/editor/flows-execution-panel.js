@@ -6,8 +6,7 @@
  *   - useResource('flows/chat') — currentContextId/currentTaskId/streaming, сообщения;
  *   - useOp('flows/chat_send') / useOp('flows/chat_cancel') — SSE A2A
  *     (`POST /flows/api/v1/{flow_id}` с `message/stream` / `tasks/cancel`);
- *   - useSlice('flows/execution_ui') — локальный ввод, прикреплённые файлы,
- *     persistContext и mock-ответы для LLM.
+ *   - useSlice('flows/execution_ui') — persistContext и mock-ответы для LLM.
  *
  * Вкладка Chat: лента `chat-message` из `flows/chat` (тот же bucket, что и SSE).
  * Разворот — кнопка в шапке: `position: fixed` + `nextModalLayerZIndex()`, иначе z-index
@@ -31,6 +30,7 @@ import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/glass-button.js';
 import '../chat/flows-chat-run-trace.js';
 import '../chat/chat-message.js';
+import '../chat/chat-input.js';
 import '../chat/chat-files-panel.js';
 import {
     asArray,
@@ -74,40 +74,14 @@ const PANEL_MIN_HEIGHT = 320;
 const PANEL_DEFAULT_HEIGHT = 620;
 const PANEL_COLLAPSED_HEIGHT = 64;
 
-function _readAsBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const result = reader.result;
-            if (typeof result !== 'string') {
-                reject(new Error('execution-panel: file read result is not a string'));
-                return;
-            }
-            const comma = result.indexOf(',');
-            const bytes = comma >= 0 ? result.slice(comma + 1) : '';
-            resolve(bytes);
-        };
-        reader.onerror = () => reject(reader.error ? reader.error : new Error('file read failed'));
-        reader.readAsDataURL(file);
-    });
-}
-
 function _executionFileToUploadFile(raw) {
-    const name = asString(raw?.name);
-    const bytes = asString(raw?.bytes);
-    if (name.length === 0 || bytes.length === 0) {
-        throw new Error('flows-execution-panel: attached file is missing name or bytes');
-    }
-    if (typeof File === 'undefined' || typeof atob !== 'function') {
+    if (typeof File === 'undefined') {
         throw new Error('flows-execution-panel: File API is unavailable');
     }
-    const binary = atob(bytes);
-    const data = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-        data[i] = binary.charCodeAt(i);
+    if (!(raw instanceof File)) {
+        throw new Error('flows-execution-panel: chat-input must pass File instances');
     }
-    const type = asString(raw?.type) || 'application/octet-stream';
-    return new File([data], name, { type });
+    return raw;
 }
 
 export class FlowsExecutionPanel extends PlatformElement {
@@ -377,9 +351,12 @@ export class FlowsExecutionPanel extends PlatformElement {
                 gap: var(--space-2);
                 overflow: hidden;
             }
-            .tab-panel[data-tab='chat'] .compose {
+            .tab-panel[data-tab='chat'] .execution-chat-input {
                 flex-shrink: 0;
                 margin-top: auto;
+            }
+            chat-input.execution-chat-input {
+                padding: 0;
             }
             .trace-panel-inner {
                 flex: 1;
@@ -418,103 +395,6 @@ export class FlowsExecutionPanel extends PlatformElement {
                 gap: var(--space-3);
                 padding: var(--space-2) 2px var(--space-2) 0;
             }
-            .compose {
-                position: relative;
-                display: block;
-                width: 100%;
-                border: 1px solid var(--glass-border-subtle);
-                border-radius: var(--radius-lg);
-                background: var(--glass-solid-subtle);
-                transition: border-color var(--duration-fast);
-            }
-            .compose:focus-within {
-                border-color: var(--accent);
-            }
-            .compose textarea {
-                display: block;
-                width: 100%;
-                min-height: 84px;
-                max-height: 180px;
-                resize: none;
-                margin: 0;
-                padding: var(--space-3) var(--space-4);
-                padding-right: calc(3 * 36px + 2 * var(--space-2) + var(--space-3));
-                padding-bottom: calc(36px + var(--space-3));
-                background: transparent;
-                border: none;
-                border-radius: var(--radius-lg);
-                color: var(--text-primary);
-                font: inherit;
-                font-size: var(--text-sm);
-                line-height: 1.45;
-                box-sizing: border-box;
-            }
-            .compose textarea:focus {
-                outline: none;
-            }
-            .compose-actions {
-                position: absolute;
-                right: var(--space-2);
-                bottom: var(--space-2);
-                display: flex;
-                flex-direction: row;
-                align-items: center;
-                gap: var(--space-2);
-                /* Пусть клики проходят к textarea в промежутках; сами кнопки — auto. */
-                pointer-events: none;
-            }
-            .compose-actions glass-button {
-                pointer-events: auto;
-            }
-            .compose-actions glass-button[data-voice-active] {
-                box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
-            }
-            .file-input-hidden {
-                position: absolute;
-                width: 1px;
-                height: 1px;
-                padding: 0;
-                margin: -1px;
-                overflow: hidden;
-                clip: rect(0, 0, 0, 0);
-                white-space: nowrap;
-                border: 0;
-            }
-            .files-row {
-                flex-shrink: 0;
-                display: flex;
-                flex-wrap: wrap;
-                gap: 6px;
-            }
-            .file-chip {
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-                padding: 2px 6px 2px 8px;
-                background: var(--glass-solid-subtle);
-                border: 1px solid var(--border-subtle);
-                border-radius: var(--radius-full);
-                font-size: var(--text-xs);
-                color: var(--text-secondary);
-                max-width: 200px;
-            }
-            .file-chip span {
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .file-chip button {
-                width: 18px;
-                height: 18px;
-                background: transparent;
-                border: none;
-                color: var(--text-tertiary);
-                cursor: pointer;
-                font-size: 14px;
-                line-height: 1;
-                padding: 0;
-            }
-            .file-chip button:hover { color: var(--text-primary); }
             .persist-wrap {
                 display: inline-flex;
                 align-items: center;
@@ -586,15 +466,8 @@ export class FlowsExecutionPanel extends PlatformElement {
             if (text === '') {
                 return;
             }
-            this._ui.setInputText({ text });
             void this.updateComplete.then(() => {
-                const ta = this.renderRoot?.querySelector('#flows-exec-compose-textarea');
-                if (!(ta instanceof HTMLTextAreaElement)) {
-                    throw new Error('flows-execution-panel: compose textarea missing');
-                }
-                ta.focus();
-                const len = text.length;
-                ta.setSelectionRange(len, len);
+                this._chatInputElement().setDraft(text);
             });
         });
         if (typeof window !== 'undefined') {
@@ -623,6 +496,19 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
         super.disconnectedCallback();
     }
+
+    _chatInputElement() {
+        const input = this.renderRoot?.querySelector('chat-input');
+        if (
+            !input
+            || typeof input.setDraft !== 'function'
+            || typeof input.clear !== 'function'
+        ) {
+            throw new Error('flows-execution-panel: chat-input missing');
+        }
+        return input;
+    }
+
     updated(changedProperties) {
         const editorStateForVoice = asObject(this._editor.state);
         if (!editorStateForVoice.executionPanelOpen && this._voiceOn) {
@@ -778,24 +664,6 @@ export class FlowsExecutionPanel extends PlatformElement {
     _onPersistChange(e) {
         const value = Boolean(e.detail && e.detail.value);
         this._ui.togglePersistContext({ value });
-    }
-
-    _onInputChange(e) {
-        this._ui.setInputText({ text: asString(e.target.value) });
-    }
-
-    /**
-     * @param {KeyboardEvent} e
-     */
-    _onComposeKeydown(e) {
-        if (e.isComposing) {
-            return;
-        }
-        if (e.key !== 'Enter' || e.shiftKey) {
-            return;
-        }
-        e.preventDefault();
-        void this._onRun();
     }
 
     _panelViewport() {
@@ -1073,79 +941,61 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
     }
 
-    async _handleFileSelect(e) {
-        const input = e.currentTarget instanceof HTMLInputElement
-            ? e.currentTarget
-            : (e.target instanceof HTMLInputElement ? e.target : null);
-        const list = input?.files;
-        if (!list || list.length === 0) return;
-        const files = Array.from(list);
-        const prepared = await Promise.all(files.map(async (file) => ({
-            name: file.name,
-            size: file.size,
-            type: typeof file.type === 'string' && file.type.length > 0 ? file.type : 'application/octet-stream',
-            bytes: await _readAsBase64(file),
-        })));
-        this._ui.addFiles({ files: prepared });
-        if (input) {
-            input.value = '';
-        }
-    }
-
-    _pickAttachedFiles() {
-        const root = this.renderRoot;
-        if (!root || typeof root.getElementById !== 'function') {
-            return;
-        }
-        const input = root.getElementById('flows-exec-file-input');
-        if (!(input instanceof HTMLInputElement)) {
-            return;
-        }
-        input.click();
-    }
-
-    _removeFile(index) {
-        this._ui.removeFile({ index });
-    }
-
     async _uploadExecutionFiles(files) {
-        const list = asArray(files);
+        if (!Array.isArray(files)) {
+            throw new Error('flows-execution-panel: files must be an array');
+        }
         const uploaded = [];
-        for (const raw of list) {
+        for (const raw of files) {
             const file = _executionFileToUploadFile(raw);
             const result = await this._upload.run({ file, public: 'false' });
             if (!result || typeof result.file_id !== 'string' || result.file_id.length === 0) {
                 throw new Error('flows execution: file_upload op must return file_id');
             }
-            const name = asString(result.original_name) || file.name;
-            const mimeType = asString(result.content_type) || file.type || 'application/octet-stream';
-            const size = typeof result.file_size === 'number' ? result.file_size : file.size;
-            const path = asString(result.url) || `/flows/api/v1/files/download/${encodeURIComponent(result.file_id)}`;
+            if (typeof result.original_name !== 'string' || result.original_name.length === 0) {
+                throw new Error('flows execution: file_upload op must return original_name');
+            }
+            if (typeof result.content_type !== 'string' || result.content_type.length === 0) {
+                throw new Error('flows execution: file_upload op must return content_type');
+            }
+            if (typeof result.file_size !== 'number') {
+                throw new Error('flows execution: file_upload op must return file_size');
+            }
+            if (typeof result.url !== 'string' || result.url.length === 0) {
+                throw new Error('flows execution: file_upload op must return url');
+            }
             uploaded.push({
                 file_id: result.file_id,
-                name,
-                path,
-                url: path,
-                mime_type: mimeType,
-                type: mimeType,
-                size,
+                original_name: result.original_name,
+                url: result.url,
+                content_type: result.content_type,
+                file_size: result.file_size,
             });
         }
         return uploaded;
     }
 
     _uploadedFileToPart(file) {
+        if (!file || typeof file.original_name !== 'string' || file.original_name.length === 0) {
+            throw new Error('flows execution: uploaded file original_name is required');
+        }
+        if (typeof file.content_type !== 'string' || file.content_type.length === 0) {
+            throw new Error('flows execution: uploaded file content_type is required');
+        }
+        if (typeof file.url !== 'string' || file.url.length === 0) {
+            throw new Error('flows execution: uploaded file url is required');
+        }
         return {
             kind: 'file',
             file: {
-                name: asString(file.name),
-                mimeType: asString(file.mime_type) || asString(file.type) || 'application/octet-stream',
-                uri: asString(file.path) || asString(file.url),
+                name: file.original_name,
+                mimeType: file.content_type,
+                uri: file.url,
             },
         };
     }
 
-    async _onRun() {
+    async _onRun(event) {
         if (!this.flowId) return;
         const editorState = asObject(this._editor.state);
         const chatStateBefore = asObject(this._chat.state);
@@ -1153,9 +1003,15 @@ export class FlowsExecutionPanel extends PlatformElement {
             return;
         }
 
+        const detail = event && typeof event === 'object' && isPlainObject(event.detail)
+            ? event.detail
+            : null;
+        if (!detail || typeof detail.message !== 'string' || !Array.isArray(detail.files)) {
+            throw new Error('flows-execution-panel: chat-input send detail required');
+        }
         const ui = this._ui.value;
-        const text = asString(ui.inputText).trim();
-        const files = asArray(ui.attachedFiles);
+        const text = detail.message.trim();
+        const files = detail.files;
         if (text.length === 0 && files.length === 0) return;
 
         const hasContext = Boolean(chatStateBefore.currentContextId);
@@ -1179,9 +1035,10 @@ export class FlowsExecutionPanel extends PlatformElement {
             };
             this._chat.addUserMessage({ contextId, message: userMessage });
 
-            const parts = [{ kind: 'text', text }, ...fileParts];
+            const parts = text.length > 0
+                ? [{ kind: 'text', text }, ...fileParts]
+                : fileParts;
 
-            this._ui.clear({});
             const a2aMessage = {
                 messageId: `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
                 role: 'user',
@@ -1431,7 +1288,7 @@ export class FlowsExecutionPanel extends PlatformElement {
     }
 
     /**
-     * Новая сессия чата: остановка текущей задачи при необходимости, сброс контекста и поля ввода.
+     * Новая сессия чата: остановка текущей задачи при необходимости и сброс контекста.
      */
     async _onResetChat() {
         if (!this.flowId) {
@@ -1445,7 +1302,7 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
         this._editor.setAgentExecutionRunning({ running: false });
         this._chat.resetSession({});
-        this._ui.clear({});
+        this._chatInputElement().clear();
     }
 
     async _startExecPanelVoice() {
@@ -1630,16 +1487,6 @@ export class FlowsExecutionPanel extends PlatformElement {
         this._voiceStatus = 'idle';
     }
 
-    _execVoiceMicTitle() {
-        if (!this._voiceOn) {
-            return this.t('platform_chat.btn_voice_on');
-        }
-        const vs = typeof this._voiceStatus === 'string' ? this._voiceStatus : 'idle';
-        const primary = this.t('platform_chat.btn_voice_off');
-        const statusHint = this.t(`platform_chat.voice_status_${vs}`);
-        return `${primary}. ${statusHint}`;
-    }
-
     _toggleExecPanelVoice() {
         if (this._voiceOn) {
             void this._stopExecPanelVoice();
@@ -1680,9 +1527,6 @@ export class FlowsExecutionPanel extends PlatformElement {
         const placeholderKey = inputRequired
             ? 'execution_panel.placeholder_answer'
             : 'execution_panel.placeholder_message';
-        const runDisabled = runInFlight
-            ? false
-            : (ui.inputText.trim().length === 0 && ui.attachedFiles.length === 0);
 
         const runTrace = this._currentRunTrace();
         const panelMessages = this._panelChatMessages();
@@ -1841,17 +1685,6 @@ export class FlowsExecutionPanel extends PlatformElement {
                 <div class="panel-body">
                     <div class="tab-panel" data-tab=${tab}>
                         ${tab === 'chat' ? html`
-                            ${ui.attachedFiles.length > 0 ? html`
-                                <div class="files-row">
-                                    ${ui.attachedFiles.map((f, i) => html`
-                                        <div class="file-chip" title=${f.name}>
-                                            <platform-icon name="paperclip" size="12"></platform-icon>
-                                            <span>${f.name}</span>
-                                            <button type="button" @click=${() => this._removeFile(i)}>×</button>
-                                        </div>
-                                    `)}
-                                </div>
-                            ` : nothing}
                             ${panelMessages.length > 0 ? html`
                                 <div class="message-feed">
                                     ${repeat(
@@ -1890,100 +1723,22 @@ export class FlowsExecutionPanel extends PlatformElement {
                                     )}
                                 </div>
                             ` : nothing}
-                            <div class="compose">
-                                <input
-                                    id="flows-exec-file-input"
-                                    class="file-input-hidden"
-                                    type="file"
-                                    multiple
-                                    accept=${ACCEPT_FILE_TYPES}
-                                    @change=${this._handleFileSelect}
-                                />
-                                <textarea
-                                    id="flows-exec-compose-textarea"
-                                    class="flows-exec-compose-textarea"
-                                    data-canon="composer"
-                                    .value=${ui.inputText}
-                                    placeholder=${this.t(placeholderKey)}
-                                    @input=${this._onInputChange}
-                                    @keydown=${this._onComposeKeydown}
-                                ></textarea>
-                                <div class="compose-actions">
-                                    <glass-button
-                                        variant="secondary"
-                                        size="sm"
-                                        iconOnly
-                                        title=${this.t('execution_panel.attach_files')}
-                                        type="button"
-                                        @click=${this._pickAttachedFiles}
-                                    >
-                                        <platform-icon name="paperclip" size="16"></platform-icon>
-                                    </glass-button>
-                                    ${typeof this.flowId === 'string' && this.flowId.length > 0
-                                        ? html`
-                                              <glass-button
-                                                  variant="secondary"
-                                                  size="sm"
-                                                  iconOnly
-                                                  type="button"
-                                                  title=${readTtsOutputEnabled()
-                                                      ? this.t('platform_chat.tts_output_disable')
-                                                      : this.t('platform_chat.tts_output_enable')}
-                                                  @click=${this._toggleExecTtsOutput}
-                                              >
-                                                  <platform-icon
-                                                      name=${readTtsOutputEnabled() ? 'volume-up' : 'volume-off'}
-                                                      size="16"
-                                                  ></platform-icon>
-                                              </glass-button>
-                                              <glass-button
-                                                  variant="secondary"
-                                                  size="sm"
-                                                  iconOnly
-                                                  type="button"
-                                                  ?data-voice-active=${this._voiceOn}
-                                                  title=${this._execVoiceMicTitle()}
-                                                  @click=${this._toggleExecPanelVoice}
-                                              >
-                                                  <platform-icon
-                                                      name=${this._voiceOn ? 'mic' : 'mic-off'}
-                                                      size="16"
-                                                  ></platform-icon>
-                                              </glass-button>
-                                          `
-                                        : nothing}
-                                    ${runInFlight ? html`
-                                        <glass-button
-                                            variant="danger"
-                                            size="sm"
-                                            iconOnly
-                                            type="button"
-                                            ?disabled=${this._cancel.busy}
-                                            title=${this._cancel.busy
-                                                ? this.t('execution_panel.stop_pending')
-                                                : this.t('execution_panel.stop')}
-                                            @click=${this._onStop}
-                                        >
-                                            <platform-icon
-                                                name="stop"
-                                                size="16"
-                                            ></platform-icon>
-                                        </glass-button>
-                                    ` : html`
-                                        <glass-button
-                                            variant="primary"
-                                            size="sm"
-                                            iconOnly
-                                            type="button"
-                                            ?disabled=${runDisabled || sendBusy}
-                                            title=${this.t('execution_panel.run_start')}
-                                            @click=${this._onRun}
-                                        >
-                                            <platform-icon name="play" size="16"></platform-icon>
-                                        </glass-button>
-                                    `}
-                                </div>
-                            </div>
+                            <chat-input
+                                class="execution-chat-input"
+                                .placeholder=${this.t(placeholderKey)}
+                                .streaming=${runInFlight}
+                                .disabled=${sendBusy}
+                                .cancelBusy=${this._cancel.busy}
+                                .showVoice=${typeof this.flowId === 'string' && this.flowId.length > 0}
+                                .voiceActive=${this._voiceOn}
+                                .voiceStatus=${this._voiceStatus}
+                                .ttsOutputEnabled=${readTtsOutputEnabled()}
+                                .accept=${ACCEPT_FILE_TYPES}
+                                @send=${this._onRun}
+                                @stop=${this._onStop}
+                                @voice-toggle=${this._toggleExecPanelVoice}
+                                @tts-output-toggle=${this._toggleExecTtsOutput}
+                            ></chat-input>
                         ` : nothing}
 
                         ${tab === 'trace' ? html`

@@ -94,7 +94,7 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нати
 |---|---|---|
 | User | `user_id`, `User` | `name`, `first_name`, `last_name`, `emails`, `phones`, `companies`, `active_company_id`, `attrs`; не `id` для пользователя. |
 | Company | `company_id`, `Company` | `name`, `subdomain`, `owner_user_id`, `members`, `tariff_plan`, `balance`; host/subdomain helpers называют `company_subdomain`, `company_host`, `company_host_context`; не `tenant_id`, не `workspace_id`, не `org_id`. |
-| Namespace | `namespace`, `Namespace` | Человеческое workspace/space имя внутри `company_id`; UI может писать "workspace/space" только в текстах и названиях компонентов. Код/API/DB — `namespace`. |
+| Namespace | `namespace`, `Namespace` | Человеческое workspace/space имя внутри `company_id`; UI может писать "workspace/space" только в текстах и названиях компонентов. Код/API/DB/backend routes — `namespace`/`namespaces`, не `/workspace` и не `/spaces`. |
 | RAG/vector namespace | `namespace_id` | Только технический id индекса/векторного хранилища, обычно производный от `company_id` + `namespace`. Не подменяет CRM/Sync/Office `namespace`. |
 | Flow | `flow_id`, `FlowConfig`, `flow` | Исполняемый граф. Не `agent_id`; термин `agent` допустим только в A2A spec (`agent-card`, `Role.agent`, `new_agent_text_message`) и legacy test names до миграции. |
 | Branch | `branch_id`, `BranchConfig`, `branch` | Вариант графа внутри `flow_id`; не `skill_id`, не `scenario_id`. |
@@ -103,24 +103,26 @@ Python 3.13+, FastAPI, PostgreSQL (pgvector), Redis, TaskIQ, UV, Lit 3, нати
 | Resource | `resource_id`, `ResourceDefinition`, `resource_type` | `resource_type` вместо голого `type`; `resource_id` вместо `id`. |
 | LLM | `provider`, `model`, `llm_*` только где перечислено ниже | См. LLM naming glossary; `model_name` не вводить внутри реализации. |
 | Runtime session | `session_id`, `context_id`, `task_id` | `session_id = flow_id:context_id` для исполнения flow; auth-session — отдельный `AuthSession.session_id`. |
-| Request/trace/span | `request_id`, `trace_id`, `span_id`, `parent_span_id` | `request_id` — request/log scope, не доменная заявка. Для CRM access request целевое имя — `access_request_id` при миграции. |
-| File | `file_id`, `FileRecord` | `original_name`, `content_type`, `file_size`, `checksum`, `storage_url`, `company_id`; не `document_id` для платформенного файла. |
+| A2A task lifecycle | `task_state`, `terminal_task_state`, `terminal_task_error` | Внутри платформы итог выполнения — `task_state`; сохранённый terminal snapshot в `ExecutionState` — `terminal_task_state` + `terminal_task_error`. Внешняя A2A-спека сохраняет `TaskStatus.state` / JSON `status.state` только на транспортной границе. Запрещены `terminal_status`, `terminal_error`, внутренний result `status` для A2A/flow task state. |
+| Request/trace/span | `request_id`, `trace_id`, `span_id`, `parent_span_id` | `request_id` — request/log scope, не доменная заявка. CRM access request — только `access_request_id`. |
+| File | `file_id`, `FileRecord`, `FileResponse`, `FileReadResult`, `FileWriteResult` | `original_name`, `content_type`, `file_size`, `checksum`, `storage_url`, `company_id`; `mime_type` допустим только на границе внешних SDK/STT/MIME registry, не в платформенных file-моделях/API. Не `document_id` для платформенного файла. |
+| FileRef / state file | `FileRef`, `state.files[]` | `file_id`, `original_name`, `url`, `content_type`, `file_size`, `capabilities`; внешние SDK-поля (`FileWithBytes.name`, `mimeType`, browser `File.name/type/size`) мапятся на границе. В runtime state/API/UI запрещены `name`, `path`, `mime_type`, `size`, `type` для файлов. |
 | RAG document | `document_id`, `VectorDocument`, `DocumentProcessingStatus` | `namespace_id`, `document_name`, `chunk_index`, `metadata`; не `file_id`, если запись уже в индексе. |
 | Calendar event | `event_id`, `CalendarEvent` | `source`, `source_id`, `namespace`, `start_at`, `end_at`, `external_refs`; `source` — происхождение, не provider. |
 | Integration credential | `credential_id`, `provider`, `service` | `provider` — внешний вендор, `service` — область использования; токены только в credential/secrets. |
 | Billing usage | `usage_id`, `UsageRecord` | `usage_type`, `resource_name`, `quantity`, `cost`, `metadata`; не `data`. |
 | Payment transaction | `transaction_id`, `Transaction` | `payment_provider`, `external_payment_id`, `payment_url`; не `payment_id`. |
 | API key | `key_id`, `ApiKeyRecord` | `key_hash`, `key_prefix`, `scopes`, `created_by`; не `id`. |
-| Schedule | `schedule_task_id`, `schedule_id`, `PlatformScheduledTask` | `schedule_task_id` — запись платформенного scheduler, `schedule_id` — логический id расписания; голый `id` в scheduler-моделях — migration debt. |
+| Schedule | `schedule_task_id`, `schedule_id`, `PlatformScheduledTask` | `schedule_task_id` — запись платформенного scheduler/API/TaskIQ kwargs/state, `schedule_id` — id RedisScheduleSource; `taskiq_task_id` — id сообщения TaskIQ. Запрещены `id`, `task_id`, `scheduler_task_id`, `scheduled_task_id` для schedule-записи. |
 | UI event | `UIEvent.id`, `type`, `payload`, `meta` | `payload` разрешён только для event envelope/transport. Доменную часть внутри payload называть конкретно. |
 | Operator queue/task | `queue_id`, `operator_task_id` | `operator_queue_slug`, `claimed_by_user_id`, `a2a_task_id`; role `"agent"` допустима как операторская роль до отдельной миграции. |
 | CRM entity | `entity_id`, `CRMEntity`, `entity_type`, `entity_subtype` | `attributes` — доменные кастомные поля; `type_id` только для каталога `EntityType`/`RelationshipType`. |
 | CRM relationship | `relationship_id`, `relationship_type` | `source_entity_id`, `target_entity_id`, `weight`, `confidence`, `attributes`; не `edge_id` вне graph DTO. |
 | CRM namespace template | `template_id`, `template_key` | `template_key` — DB primary key, `template_id` — продуктовый slug шаблона; не смешивать. |
-| CRM task/suggest | `task_id`, `suggest_id` | `CRMTask.task_id`; у `CRMSuggest` целевое имя `suggest_id` при миграции вместо голого `id`. |
-| Sync channel/thread/message | `channel_id`, `thread_id`, `message_id` | API response с голым `id` — migration debt; новый код использует конкретный id. |
-| Sync call | `call_id`, `recording_id`, `link_token` | `participant_identity` — LiveKit identity, не `user_id`. |
-| Git resource ref | `git_ref_id`, `GitResourceRef` | `provider`, `kind`, `project_key`, `external_id`, `url`; API response с голым `id` — migration debt. |
+| CRM task/suggest | `task_id`, `suggest_id` | `CRMTask.task_id`; `CRMSuggest.suggest_id`; API/JSON поле `suggest_id`; голый `id` для suggest запрещён. |
+| Sync channel/thread/message | `channel_id`, `thread_id`, `message_id` | API/WS/Pydantic/UI используют только конкретный id. Голый `id` для этих сущностей запрещён. |
+| Sync call | `call_id`, `call_participant_id`, `recording_id`, `link_token` | `participant_identity` — LiveKit identity, не `user_id`; `identity` допустим только как поле внешнего LiveKit SDK. |
+| Git resource ref | `git_ref_id`, `GitResourceRef` | `provider`, `kind`, `project_key`, `external_id`, `url`; API/WS payload поле `git_ref_id`; голый `id` запрещён. |
 | Office catalog/document | `catalog_id`, `binding_id`, `file_id` | `binding_id` — связь документа Office с файлом; `document_type` — word/cell/slide, не MIME. |
 | Capability | `capability_name`, `execution_token` | В manifest поле `name` — имя capability по контракту; в runtime рядом использовать `capability_name`. |
 | Voice provider | `provider`, `model`, `voice`, `language`, `sample_rate` | `kind ∈ stt/tts/vad`; `company_voice_providers.kind` не заменять на `type`. |
@@ -206,7 +208,7 @@ response = await client.get("flows", "/flows/api/v1/flows/")
 
 | Понятие | Каноническое имя | Запрет/исключение |
 |---|---|---|
-| ID модели провайдера | `model` | `model_name` допустим только в legacy/public API `get_llm(...)`, `get_llm_for_state(...)`, `setup_mock_responses(...)`, `MockLLM(...)`, `get_vision_llm(...)`; внутри реализации сразу нормализуется в `model`. |
+| ID модели провайдера | `model` | `model_name` допустим только в legacy/public API `get_llm(...)`, `get_llm_for_state(...)`, `setup_mock_responses(...)`, `MockLLM(...)`, `get_vision_llm(...)`; внутри реализации и helper/predicate API сразу нормализуется в `model`. |
 | Slug провайдера | `provider` | `llm_provider` допустим только как runtime-атрибут `LLMClient`/`MockLLM` и tracing/metadata compatibility. |
 | Источник candidate/config | `source` | `llm_source` допустим только как runtime-атрибут `LLMClient` и metadata compatibility. |
 | Base URL / ключ / Yandex folder | `base_url`, `api_key`, `folder_id` | `url`, `key`, `fid` для этих смыслов запрещены. |

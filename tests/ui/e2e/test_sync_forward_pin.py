@@ -2,15 +2,33 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from playwright.async_api import Page, expect
 
 from tests.ui.e2e.sync_e2e_helpers import (
+    sync_e2e_click_platform_button,
     sync_e2e_create_topic_channel_and_open,
     sync_e2e_create_topic_channel_in_current_space,
+    sync_e2e_open_with_namespace,
     sync_sidebar_channel_nav,
 )
 from tests.ui.harness import AppUI
+
+
+async def _open_message_context_menu(page: Page, bubble) -> None:
+    await bubble.click(button="right")
+    await expect(page.locator("sync-message-context-menu")).to_have_attribute(
+        "open", "", timeout=10_000
+    )
+
+
+async def _click_context_item(page: Page, *labels: str) -> None:
+    pattern = re.compile("|".join(re.escape(label) for label in labels))
+    item = page.locator("sync-message-context-menu").locator(".item").filter(has_text=pattern).first
+    await expect(item).to_be_visible(timeout=10_000)
+    await item.click()
 
 
 @pytest.mark.asyncio
@@ -21,8 +39,7 @@ async def test_user_forwards_message_to_second_channel(
     ui_page_system: Page,
     unique_id: str,
 ) -> None:
-    await sync_ui.open(ui_page_system)
-    await sync_ui.expect_shell(ui_page_system)
+    await sync_e2e_open_with_namespace(sync_ui, ui_page_system, unique_id, suffix="forward")
 
     channel_a = await sync_e2e_create_topic_channel_and_open(
         ui_page_system,
@@ -30,11 +47,11 @@ async def test_user_forwards_message_to_second_channel(
         channel_prefix="Канал A",
     )
     body = f"Текст пересылки {unique_id}"
-    composer = ui_page_system.locator("message-composer")
-    await composer.locator("textarea[placeholder='Сообщение...']").fill(body)
-    await composer.locator('button.send[title="Отправить"]').click()
+    composer = ui_page_system.locator("sync-message-composer")
+    await composer.locator('textarea[data-canon="composer"]').fill(body)
+    await composer.locator('button.send').click()
     await expect(
-        ui_page_system.locator("message-bubble").get_by_text(body, exact=True)
+        ui_page_system.locator("sync-message-bubble").get_by_text(body, exact=True)
     ).to_be_visible(timeout=30_000)
 
     channel_b = await sync_e2e_create_topic_channel_in_current_space(
@@ -42,28 +59,23 @@ async def test_user_forwards_message_to_second_channel(
     )
 
     await sync_sidebar_channel_nav(ui_page_system, channel_a).click()
-    await expect(ui_page_system.locator("chat-view")).to_be_visible()
-    bubble = ui_page_system.locator("message-bubble").filter(has_text=body)
-    await bubble.click(button="right")
-    fwd_menu = ui_page_system.get_by_role("button", name="Переслать").or_(
-        ui_page_system.get_by_role("button", name="Forward")
-    )
-    await fwd_menu.click()
+    await expect(ui_page_system.locator("sync-channel-page")).to_be_visible()
+    bubble = ui_page_system.locator("sync-message-bubble").filter(has_text=body)
+    await _open_message_context_menu(ui_page_system, bubble)
+    await _click_context_item(ui_page_system, "Переслать", "Forward")
 
     fwd = ui_page_system.locator("sync-forward-modal")
     await expect(fwd).to_be_visible()
-    fwd_title = fwd.get_by_role("heading", name="Куда переслать").or_(fwd.get_by_role("heading", name="Forward to"))
-    await expect(fwd_title).to_be_visible()
-    await fwd.locator(".form-item").filter(has_text=channel_b).first.click()
-    fwd_submit = fwd.locator(".form-actions").get_by_role("button", name="Переслать").or_(
-        fwd.locator(".form-actions").get_by_role("button", name="Forward")
+    await expect(fwd.locator(".modal-title")).to_contain_text(
+        re.compile(r"Куда переслать|Forward to")
     )
-    await fwd_submit.click()
+    await fwd.locator(".form-item").filter(has_text=channel_b).first.click()
+    await sync_e2e_click_platform_button(fwd.locator(".form-actions"), "Переслать", "Forward")
     await expect(fwd).to_be_hidden(timeout=30_000)
 
     await sync_sidebar_channel_nav(ui_page_system, channel_b).click()
     await expect(
-        ui_page_system.locator("message-bubble").get_by_text(body, exact=True)
+        ui_page_system.locator("sync-message-bubble").get_by_text(body, exact=True)
     ).to_be_visible(timeout=30_000)
 
 
@@ -75,8 +87,7 @@ async def test_user_pins_message_shows_pin_strip(
     ui_page_system: Page,
     unique_id: str,
 ) -> None:
-    await sync_ui.open(ui_page_system)
-    await sync_ui.expect_shell(ui_page_system)
+    await sync_e2e_open_with_namespace(sync_ui, ui_page_system, unique_id, suffix="pin")
 
     await sync_e2e_create_topic_channel_and_open(
         ui_page_system,
@@ -84,19 +95,16 @@ async def test_user_pins_message_shows_pin_strip(
         channel_prefix="Канал закрепов",
     )
     body = f"Закрепляемое {unique_id}"
-    composer = ui_page_system.locator("message-composer")
-    await composer.locator("textarea[placeholder='Сообщение...']").fill(body)
-    await composer.locator('button.send[title="Отправить"]').click()
+    composer = ui_page_system.locator("sync-message-composer")
+    await composer.locator('textarea[data-canon="composer"]').fill(body)
+    await composer.locator('button.send').click()
     await expect(
-        ui_page_system.locator("message-bubble").get_by_text(body, exact=True)
+        ui_page_system.locator("sync-message-bubble").get_by_text(body, exact=True)
     ).to_be_visible(timeout=30_000)
 
-    bubble = ui_page_system.locator("message-bubble").filter(has_text=body)
-    await bubble.click(button="right")
-    pin_btn = ui_page_system.get_by_role("button", name="Закрепить").or_(
-        ui_page_system.get_by_role("button", name="Pin")
-    )
-    await pin_btn.click()
+    bubble = ui_page_system.locator("sync-message-bubble").filter(has_text=body)
+    await _open_message_context_menu(ui_page_system, bubble)
+    await _click_context_item(ui_page_system, "Закрепить", "Pin")
 
     pin_strip = ui_page_system.locator("sync-pin-strip")
     await expect(pin_strip).to_be_visible(timeout=30_000)

@@ -1,7 +1,7 @@
 /**
  * Embed configs page — список встраиваемых виджетов.
  *
- * Колонки: name, embed_id, flow, skill, status, usage. Действия: get_code,
+ * Колонки: name, embed_id, flow, branch, status, usage. Действия: get_code,
  * edit, delete. Edit открывает create-embed-modal с переданным embedConfig.
  */
 import { html, css } from 'lit';
@@ -159,7 +159,7 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
                                 <th>${this.t('embed_page.col_name')}</th>
                                 <th>${this.t('embed_page.col_embed_id')}</th>
                                 <th>${this.t('embed_page.col_flow')}</th>
-                                <th>${this.t('embed_page.col_skill')}</th>
+                                <th>${this.t('embed_page.col_branch')}</th>
                                 <th>${this.t('embed_page.col_status')}</th>
                                 <th>${this.t('embed_page.col_usage')}</th>
                                 <th>${this.t('embed_page.col_actions')}</th>

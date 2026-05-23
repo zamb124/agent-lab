@@ -346,7 +346,7 @@ export class SyncChatHeader extends PlatformElement {
                 const au = typeof peer.avatar_url === 'string' ? peer.avatar_url : '';
                 sig = `dm:${peer.user_id}|${au}`;
             } else {
-                const id = typeof channel.id === 'string' ? channel.id : '';
+                const id = typeof channel.channel_id === 'string' ? channel.channel_id : '';
                 const au = typeof channel.avatar_url === 'string' ? channel.avatar_url : '';
                 const coll = syncChannelPlaceholderCollection(channel);
                 sig = `ch:${id}|${au}|${coll}`;
@@ -359,7 +359,7 @@ export class SyncChatHeader extends PlatformElement {
     }
 
     _channel() {
-        return this._channels.items.find((c) => c.id === this.channelId);
+        return this._channels.items.find((c) => c.channel_id === this.channelId);
     }
 
     _onBackClick() {
@@ -469,7 +469,7 @@ export class SyncChatHeader extends PlatformElement {
                 </span>
             `;
         }
-        const seed = typeof channel.id === 'string' ? channel.id : 'sync';
+        const seed = typeof channel.channel_id === 'string' ? channel.channel_id : 'sync';
         const hueVar = syncAvatarHueVar(seed);
         const name = typeof channel.name === 'string' && channel.name !== '' ? channel.name : '#';
         if (this._headerAvatarFailed) {
@@ -554,11 +554,11 @@ export class SyncChatHeader extends PlatformElement {
             </div>
             <div class="actions">
                 ${callActiveHere && callUi.overlayMinimized ? html`
-                    <button class="icon-btn" @click=${this._onHangupCall} title=${this.t('chat_view.call_banner_hangup_aria')}>
+                    <button class="icon-btn" @click=${this._onHangupCall} title=${this.t('chat_view.call_banner_hangup_aria')} aria-label=${this.t('chat_view.call_banner_hangup_aria')}>
                         <platform-icon name="phone-off" size="18"></platform-icon>
                     </button>
                 ` : this._headerMobile ? html`
-                    <button class="icon-btn accent" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_call')}>
+                    <button class="icon-btn accent" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_call')} aria-label=${this.t('chat_header.action_call')}>
                         <platform-icon name="phone" size="20"></platform-icon>
                     </button>
                     <div class="overflow-anchor">
@@ -569,6 +569,7 @@ export class SyncChatHeader extends PlatformElement {
                             aria-haspopup="true"
                             @click=${this._onMoreToggle}
                             title=${this.t('chat_view.more_title')}
+                            aria-label=${this.t('chat_view.more_title')}
                         >
                             <platform-icon name="more-vertical" size="20"></platform-icon>
                         </button>
@@ -596,17 +597,17 @@ export class SyncChatHeader extends PlatformElement {
                         ` : ''}
                     </div>
                 ` : html`
-                    <button class="icon-btn accent" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_call')}>
+                    <button class="icon-btn accent" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_call')} aria-label=${this.t('chat_header.action_call')}>
                         <platform-icon name="phone" size="20"></platform-icon>
                     </button>
-                    <button class="icon-btn accent" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_video_call')}>
+                    <button class="icon-btn accent" @click=${this._onInviteCall} ?disabled=${this._callInvite.busy} title=${this.t('chat_header.action_video_call')} aria-label=${this.t('chat_header.action_video_call')}>
                         <platform-icon name="video" size="20"></platform-icon>
                     </button>
                     <span class="actions-divider"></span>
-                    <button class="icon-btn" @click=${this._onSettings} title=${this.t('chat_header.action_settings')}>
+                    <button class="icon-btn" @click=${this._onSettings} title=${this.t('chat_header.action_settings')} aria-label=${this.t('chat_header.action_settings')}>
                         <platform-icon name="settings" size="20"></platform-icon>
                     </button>
-                    <button type="button" class="icon-btn" @click=${this._onMoreToggle} title=${this.t('chat_view.more_title')}>
+                    <button type="button" class="icon-btn" @click=${this._onMoreToggle} title=${this.t('chat_view.more_title')} aria-label=${this.t('chat_view.more_title')}>
                         <platform-icon name="more-vertical" size="20"></platform-icon>
                     </button>
                     ${this._menuOpen ? html`

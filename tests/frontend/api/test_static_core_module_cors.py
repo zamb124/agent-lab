@@ -27,3 +27,11 @@ async def test_static_core_options_preflight_returns_acao(frontend_client):
     )
     assert response.status_code == 204
     assert response.headers.get("access-control-allow-origin") == "*"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/api/i18n/en", "/api/platform/file-types"])
+async def test_public_embed_bootstrap_endpoints_include_acao(frontend_client, path):
+    response = await frontend_client.get(path, headers={"Origin": "https://example.invalid"})
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "*"

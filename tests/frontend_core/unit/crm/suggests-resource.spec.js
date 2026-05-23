@@ -25,7 +25,7 @@ describe('crm/suggests resource ops', () => {
         const page = {
             items: [
                 {
-                    id: 'sug_1',
+                    suggest_id: 'sug_1',
                     suggest_type: 'duplicate',
                     status: 'pending',
                     target_entity_ids: ['a', 'b'],
@@ -93,7 +93,7 @@ describe('crm/suggests resource ops', () => {
 
     it('suggestResolveOp posts resolve endpoint', async () => {
         const response = {
-            id: 'sug_1',
+            suggest_id: 'sug_1',
             suggest_type: 'duplicate',
             status: 'resolved',
             target_entity_ids: ['a', 'b'],
@@ -123,7 +123,7 @@ describe('crm/suggests resource ops', () => {
 
     it('suggestDismissOp posts dismiss endpoint', async () => {
         const response = {
-            id: 'sug_2',
+            suggest_id: 'sug_2',
             suggest_type: 'missed_entity',
             status: 'dismissed',
             target_entity_ids: ['note_1'],

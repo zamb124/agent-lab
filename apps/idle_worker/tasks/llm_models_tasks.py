@@ -50,7 +50,7 @@ async def _build_scheduler_auth_context(container, trace_id: str, session_id: st
 
 @idle_broker.task(task_name="sync_llm_models_task", queue_name="idle")
 async def sync_llm_models_task(
-    scheduler_task_id: str | None = None,
+    schedule_task_id: str | None = None,
     company_id: str | None = None,
     system_task: str | None = None,
 ) -> LLMModelsSyncTaskResult:
@@ -60,8 +60,8 @@ async def sync_llm_models_task(
     # Создаём системный контекст для доступа к сервису
     scheduler_context = await _build_scheduler_auth_context(
         container=container,
-        trace_id=f"scheduler:sync_llm_models:{scheduler_task_id}",
-        session_id=f"sync_llm_models:{scheduler_task_id}",
+        trace_id=f"scheduler:sync_llm_models:{schedule_task_id}",
+        session_id=f"sync_llm_models:{schedule_task_id}",
     )
     set_context(scheduler_context)
 

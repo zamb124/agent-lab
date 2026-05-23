@@ -25,13 +25,12 @@ logger = get_logger(__name__)
 
 @broker.task(task_name=TASK_EXECUTE_SCHEDULED, queue_name="flows_worker")
 async def execute_scheduled_task(
-    scheduled_task_id: str,
+    schedule_task_id: str,
     flow_id: str,
     session_id: str,
     user_id: str,
     task_type: str,
     payload: dict[str, Any],
-    scheduler_task_id: str | None = None,
     company_id: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -44,7 +43,7 @@ async def execute_scheduled_task(
     - Удаляет schedule из Redis (чтобы не повторялась)
 
     Args:
-        scheduled_task_id: ID scheduled task в БД
+        schedule_task_id: ID записи платформенного scheduler
         flow_id: ID flow
         session_id: ID сессии
         user_id: ID пользователя
@@ -54,13 +53,13 @@ async def execute_scheduled_task(
     Returns:
         Результат выполнения
     """
-    logger.info(f"Executing scheduled task: id={scheduled_task_id}, type={task_type}")
+    logger.info("Executing scheduled task: schedule_task_id=%s, type=%s", schedule_task_id, task_type)
 
     container = get_container()
     scheduled_task_repo = container.scheduled_task_repository
 
     # Получаем задачу из БД
-    task_info = await scheduled_task_repo.get_by_id(scheduled_task_id)
+    task_info = await scheduled_task_repo.get_by_schedule_task_id(schedule_task_id)
 
     # Извлекаем flow_id из session_id если не передан (формат: flow_id:context_id)
     effective_flow_id = flow_id
@@ -70,7 +69,6 @@ async def execute_scheduled_task(
     content = payload.get("content", "")
     tool_args = payload.get("tool_args")
 
-    effective_scheduler_task_id = scheduler_task_id or scheduled_task_id
     effective_company_id = company_id or "system"
 
     scheduler_repo = get_scheduler_container().scheduler_task_repository
@@ -112,11 +110,11 @@ async def execute_scheduled_task(
             schedule_type = task_info.schedule_type if isinstance(task_info.schedule_type, str) else task_info.schedule_type.value
             if schedule_type == "one_time":
                 await scheduled_task_repo.update_status(
-                    scheduled_task_id,
+                    schedule_task_id,
                     ScheduledTaskStatus.EXECUTED
                 )
 
-        logger.info(f"Scheduled task executed: id={scheduled_task_id}")
+        logger.info("Scheduled task executed: schedule_task_id=%s", schedule_task_id)
         scheduler_status = ScheduledTaskStatus.PENDING
         if task_info:
             schedule_type = task_info.schedule_type if isinstance(task_info.schedule_type, str) else task_info.schedule_type.value
@@ -124,7 +122,7 @@ async def execute_scheduled_task(
                 scheduler_status = ScheduledTaskStatus.EXECUTED
         await scheduler_repo.update_status(
             company_id=effective_company_id,
-            schedule_task_id=effective_scheduler_task_id,
+            schedule_task_id=schedule_task_id,
             status=scheduler_status,
             last_run_at=datetime.now(timezone.utc),
             error_message=None,
@@ -132,17 +130,17 @@ async def execute_scheduled_task(
         return result
 
     except Exception as e:
-        logger.error(f"Scheduled task failed: id={scheduled_task_id}, error={e}")
+        logger.error("Scheduled task failed: schedule_task_id=%s, error=%s", schedule_task_id, e)
 
         # Помечаем как FAILED
         await scheduled_task_repo.update_status(
-            scheduled_task_id,
+            schedule_task_id,
             ScheduledTaskStatus.FAILED,
             error_message=str(e),
         )
         await scheduler_repo.update_status(
             company_id=effective_company_id,
-            schedule_task_id=effective_scheduler_task_id,
+            schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.FAILED,
             error_message=str(e),
         )
@@ -191,7 +189,7 @@ async def _execute_message_task(
     result = await channel_instance.process_task(params)
 
     # Отправляем уведомление о завершении задачи (WebSocket + Web Push)
-    if result.get("status") == "completed":
+    if result.get("task_state") == "completed":
         final_response = result.get("response", "")
         preview = final_response[:100] + ("..." if len(final_response) > 100 else "")
 

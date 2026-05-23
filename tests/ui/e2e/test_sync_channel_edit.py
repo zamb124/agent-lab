@@ -6,7 +6,9 @@ import pytest
 from playwright.async_api import Page, expect
 
 from tests.ui.e2e.sync_e2e_helpers import (
+    sync_e2e_click_platform_button,
     sync_e2e_create_topic_channel_and_open,
+    sync_e2e_open_with_namespace,
     sync_sidebar_channel_nav,
 )
 from tests.ui.harness import AppUI
@@ -20,8 +22,7 @@ async def test_user_edits_channel_name_header_footer_and_opens_members_add(
     ui_page_system: Page,
     unique_id: str,
 ) -> None:
-    await sync_ui.open(ui_page_system)
-    await sync_ui.expect_shell(ui_page_system)
+    await sync_e2e_open_with_namespace(sync_ui, ui_page_system, unique_id, suffix="edit")
 
     await sync_e2e_create_topic_channel_and_open(
         ui_page_system,
@@ -36,7 +37,7 @@ async def test_user_edits_channel_name_header_footer_and_opens_members_add(
     await settings_btn.first.click()
     edit = ui_page_system.locator("sync-channel-edit-modal")
     await expect(edit).to_be_visible()
-    await edit.locator("input.form-input").fill(name_after_header)
+    await edit.locator("input.field-pill-input").first.fill(name_after_header)
     await edit.locator("button.header-save-btn").click()
     await expect(edit).to_be_hidden(timeout=30_000)
     await expect(sync_sidebar_channel_nav(ui_page_system, name_after_header)).to_be_visible(timeout=30_000)
@@ -45,11 +46,8 @@ async def test_user_edits_channel_name_header_footer_and_opens_members_add(
     await settings_btn.first.click()
     edit = ui_page_system.locator("sync-channel-edit-modal")
     await expect(edit).to_be_visible()
-    await edit.locator("input.form-input").fill(name_after_footer)
-    footer_save = edit.locator(".form-actions").get_by_role("button", name="Сохранить").or_(
-        edit.locator(".form-actions").get_by_role("button", name="Save")
-    )
-    await footer_save.click()
+    await edit.locator("input.field-pill-input").first.fill(name_after_footer)
+    await sync_e2e_click_platform_button(edit.locator(".form-actions"), "Сохранить", "Save")
     await expect(edit).to_be_hidden(timeout=30_000)
     await expect(sync_sidebar_channel_nav(ui_page_system, name_after_footer)).to_be_visible(timeout=30_000)
 

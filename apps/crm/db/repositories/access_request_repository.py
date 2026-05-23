@@ -27,7 +27,7 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
     @property
     @override
     def id_field(self) -> str:
-        return "request_id"
+        return "access_request_id"
 
     async def remap_entity_resource_id(
         self,
@@ -63,16 +63,18 @@ class AccessRequestRepository(BaseCRMRepository[AccessRequest]):
             if key not in seen:
                 seen.add(key)
                 continue
-            to_delete.append(r.request_id)
+            to_delete.append(r.access_request_id)
         if not to_delete:
             return
         async with self._db.session() as session:
-            for rid in to_delete:
+            for access_request_id in to_delete:
                 result = await session.execute(
-                    delete(AccessRequest).where(AccessRequest.request_id == rid)
+                    delete(AccessRequest).where(
+                        AccessRequest.access_request_id == access_request_id
+                    )
                 )
                 if get_rowcount(result) != 1:
-                    raise ValueError(f"Access request {rid} was not deleted")
+                    raise ValueError(f"Access request {access_request_id} was not deleted")
             await session.commit()
 
     async def _fetch_pending_entity_requests(self, entity_id: str) -> list[AccessRequest]:

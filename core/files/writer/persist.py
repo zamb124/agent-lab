@@ -11,7 +11,7 @@ from core.files.processors import FileProcessor
 async def write_bytes_via_processor(
     *,
     data: bytes,
-    mime_type: str,
+    content_type: str,
     original_name: str,
     file_processor: FileProcessor,
     uploaded_by: Optional[str],
@@ -23,7 +23,7 @@ async def write_bytes_via_processor(
     return await file_processor.persist_uploaded_file(
         data=data,
         original_name=original_name,
-        content_type=mime_type,
+        content_type=content_type,
         uploaded_by=uploaded_by,
         company_id=company_id,
         public=public,

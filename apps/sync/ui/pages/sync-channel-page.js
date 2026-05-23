@@ -55,9 +55,11 @@ export class SyncChannelPage extends PlatformPage {
         this.channelId = '';
         this._channels = this.useResource('sync/channels', { autoload: true });
         this._messages = this.useOp('sync/messages');
+        this._messagesStore = this.useSlice('sync/messages_store');
         this._markRead = this.useOp('sync/channel_mark_read');
         this._authSel = this.select((s) => s.auth && s.auth.user);
         this._lastLoadedChannel = '';
+        this._loadSeq = 0;
         this.useEvent('sync/message/created', (event) => this._onMessageCreated(event));
     }
 
@@ -86,11 +88,26 @@ export class SyncChannelPage extends PlatformPage {
     updated(changed) {
         super.updated?.(changed);
         if (this.channelId && this._lastLoadedChannel !== this.channelId) {
-            this._lastLoadedChannel = this.channelId;
-            this._messages.run({ channel_id: this.channelId, limit: 50 });
-            this._channels.selectChannel({ channelId: this.channelId });
-            this._markRead.run({ channel_id: this.channelId });
+            const channelId = this.channelId;
+            this._lastLoadedChannel = channelId;
+            this._channels.selectChannel({ channelId });
+            this._loadMessagesForChannel(channelId);
+            this._markRead.run({ channel_id: channelId });
         }
+    }
+
+    async _loadMessagesForChannel(channelId) {
+        const seq = ++this._loadSeq;
+        this._messagesStore.startInitial({ channelId });
+        try {
+            await this._messages.run({ channel_id: channelId, limit: 50 });
+        } catch (err) {
+            const message = err && typeof err.message === 'string' ? err.message : 'failed';
+            this._messagesStore.failInitial({ channelId, message });
+            return;
+        }
+        if (seq !== this._loadSeq || this.channelId !== channelId) return;
+        this._messagesStore.loadedInitial({ channelId, result: this._messages.lastResult });
     }
 
     _onMessageCreated(event) {
@@ -106,7 +123,7 @@ export class SyncChannelPage extends PlatformPage {
     }
 
     _channel() {
-        return this._channels.items.find((c) => c.id === this.channelId);
+        return this._channels.items.find((c) => c.channel_id === this.channelId);
     }
 
     render() {

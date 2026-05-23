@@ -115,13 +115,43 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
     embed_id: str | None = None
 
     errors: list[str] = []
+    network_events: list[str] = []
 
     def _on_console(msg) -> None:
         if msg.type == "error":
             errors.append(f"console.{msg.type}: {msg.text}")
 
-    page.on("pageerror", lambda exc: errors.append(f"pageerror: {exc}"))
+    def _record_embed_request(req) -> None:
+        if "/api/v1/embed/" in req.url:
+            network_events.append(f"request {req.method} {req.url}")
+
+    def _record_embed_response(resp) -> None:
+        if "/api/v1/embed/" in resp.url:
+            network_events.append(f"response {resp.status} {resp.url}")
+
+    await page.add_init_script(
+        """
+        window.addEventListener('error', (event) => {
+            console.error(
+                '[embed-e2e-window-error]',
+                event.filename || '<inline>',
+                event.lineno || 0,
+                event.colno || 0,
+                event.message || '',
+                event.error && event.error.stack ? event.error.stack : ''
+            );
+        });
+        """
+    )
+
+    def _on_pageerror(exc) -> None:
+        stack = getattr(exc, "stack", None)
+        errors.append(f"pageerror: {exc}\n{stack}" if stack else f"pageerror: {exc}")
+
+    page.on("pageerror", _on_pageerror)
     page.on("console", _on_console)
+    page.on("request", _record_embed_request)
+    page.on("response", _record_embed_response)
 
     async with AsyncClient(
         base_url=frontend_origin,
@@ -141,7 +171,7 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
                 "interface_locale": "ru",
             },
         )
-        assert create.status_code == 200
+        assert create.status_code == 200, create.text
         embed_id = create.json()["embed_id"]
 
         mint = await fc.post(
@@ -149,7 +179,7 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
             headers=auth_headers,
             json={"expires_in_seconds": 300},
         )
-        assert mint.status_code == 200
+        assert mint.status_code == 200, mint.text
         token_body = mint.json()
         embed_token = token_body["token"]
         token_payload_for_host = {"token": embed_token}
@@ -200,22 +230,34 @@ async def test_embed_autoload_script_mounts_chat_and_streams_reply(
             await expect(send_btn).to_be_enabled(timeout=10_000)
             await send_btn.click()
             _log.info("embed_browser_e2e: сообщение отправлено, ждём ответ потока A2A")
-            await expect(page.get_by_text(f"embed-ok:{user_line}", exact=True)).to_be_visible(
-                timeout=90_000
-            )
+            try:
+                await expect(page.get_by_text(f"embed-ok:{user_line}", exact=True)).to_be_visible(
+                    timeout=90_000
+                )
+            except AssertionError as exc:
+                root_text = await root.inner_text(timeout=5_000)
+                raise AssertionError(
+                    "embed браузер: не получен ожидаемый A2A ответ\n"
+                    f"root_text:\n{root_text}\n\n"
+                    f"network:\n{chr(10).join(network_events) or '<empty>'}\n\n"
+                    f"errors:\n{chr(10).join(errors) or '<empty>'}"
+                ) from exc
             _log.info("embed_browser_e2e: ответ агента в UI получен")
             if errors:
                 pytest.fail("embed браузер: ошибки страницы/консоли:\n" + "\n".join(errors))
     finally:
         if embed_id is None:
             return
-        async with AsyncClient(
-            base_url=frontend_origin,
-            follow_redirects=True,
-            timeout=_HTTP_TIMEOUT,
-        ) as fc_delete:
-            del_r = await fc_delete.delete(
-                f"/frontend/api/embed/configs/{embed_id}",
-                headers=auth_headers,
-            )
-            assert del_r.status_code == 200
+        try:
+            async with AsyncClient(
+                base_url=frontend_origin,
+                follow_redirects=True,
+                timeout=_HTTP_TIMEOUT,
+            ) as fc_delete:
+                del_r = await fc_delete.delete(
+                    f"/frontend/api/embed/configs/{embed_id}",
+                    headers=auth_headers,
+                )
+                assert del_r.status_code == 200
+        except Exception:
+            _log.exception("embed_browser_e2e: cleanup embed config failed embed_id=%s", embed_id)

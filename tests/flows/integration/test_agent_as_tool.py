@@ -389,7 +389,7 @@ async def run(args, state):
     files = state.get("files", [])
     if not files:
         return {"success": False, "error": "No files in state"}
-    return {"success": True, "files_count": len(files), "first_file": files[0].get("name")}
+    return {"success": True, "files_count": len(files), "first_file": files[0].get("original_name")}
 '''
         return {
             "id": "file_test_flow",
@@ -445,10 +445,10 @@ async def run(args, state):
             content="Обработай мои файлы",
             files=[
                 {
-                    "name": "test.jpg",
-                    "path": "/tmp/test.jpg",
-                    "mime_type": "image/jpeg",
-                    "size": 1024,
+                    "original_name": "test.jpg",
+                    "url": "/tmp/test.jpg",
+                    "content_type": "image/jpeg",
+                    "file_size": 1024,
                 }
             ]
         )

@@ -7,15 +7,29 @@ Zero-Guess: все системные поля явно типизированы
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, get_args
 
 from a2a.types import Message
-from pydantic import Field, field_serializer, field_validator
+from pydantic import Field, field_serializer, field_validator, model_validator
 
 from core.models import FlexibleBaseModel
 from core.state.interrupt import InterruptData
 from core.state.mutation_policy import guard_setattr_if_user_code
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
+
+ExecutionTaskState = Literal[
+    "completed",
+    "input-required",
+    "canceled",
+    "failed",
+    "rejected",
+    "auth-required",
+    "unknown",
+]
+TERMINAL_TASK_STATES: frozenset[str] = frozenset(get_args(ExecutionTaskState))
+DEPRECATED_EXECUTION_STATE_FIELD_NAMES: frozenset[str] = frozenset(
+    {"terminal_status", "terminal_error"}
+)
 
 
 class InterruptPathItem(FlexibleBaseModel):
@@ -150,23 +164,13 @@ class ExecutionState(FlexibleBaseModel):
         default=None,
         description="Версия FlowConfig в flows_versions; None = при выполнении брать последнюю из flows",
     )
-    terminal_status: Optional[
-        Literal[
-            "completed",
-            "input-required",
-            "canceled",
-            "failed",
-            "rejected",
-            "auth-required",
-            "unknown",
-        ]
-    ] = Field(
+    terminal_task_state: Optional[ExecutionTaskState] = Field(
         default=None,
-        description="Финальный A2A status, сохранённый в БД только на terminal boundary.",
+        description="Финальный A2A TaskState, сохранённый в БД только на terminal boundary.",
     )
-    terminal_error: Optional[str] = Field(
+    terminal_task_error: Optional[str] = Field(
         default=None,
-        description="Текст ошибки для terminal_status='failed'/'rejected'/'unknown'.",
+        description="Текст ошибки для terminal_task_state='failed'/'rejected'/'unknown'.",
     )
 
     # ========================================================================
@@ -174,7 +178,23 @@ class ExecutionState(FlexibleBaseModel):
     # ========================================================================
 
     current_nodes: List[str] = Field(default_factory=list, description="Текущие ноды для выполнения")
-    branch_id: str = Field(default="default", description="ID skill")
+    branch_id: str = Field(default="default", description="ID branch")
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_deprecated_system_field_names(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        deprecated_field_names = sorted(
+            DEPRECATED_EXECUTION_STATE_FIELD_NAMES.intersection(value.keys())
+        )
+        if deprecated_field_names:
+            names = ", ".join(deprecated_field_names)
+            raise ValueError(
+                f"ExecutionState deprecated field names are forbidden: {names}. "
+                "Use terminal_task_state and terminal_task_error."
+            )
+        return value
 
     @field_validator("session_id")
     @classmethod
@@ -335,6 +355,11 @@ class ExecutionState(FlexibleBaseModel):
         if name.startswith("__pydantic"):
             super().__setattr__(name, value)
             return
+        if name in DEPRECATED_EXECUTION_STATE_FIELD_NAMES:
+            raise ValueError(
+                f"ExecutionState deprecated field name is forbidden: {name}. "
+                "Use terminal_task_state or terminal_task_error."
+            )
         guard_setattr_if_user_code(name)
         if name == "interrupt" and value is not None and isinstance(value, dict):
             value = InterruptData.model_validate(value)
@@ -564,7 +589,9 @@ State = ExecutionState
 
 __all__ = [
     "ExecutionState",
+    "ExecutionTaskState",
     "State",
+    "TERMINAL_TASK_STATES",
     "InterruptData",
     "InterruptPathItem",
     "NodeCallInfo",

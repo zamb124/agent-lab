@@ -27,6 +27,8 @@ class TestAccessRequests:
         assert request_resp.status_code == 200
 
         request = request_resp.json()
+        assert "access_request_id" in request
+        assert "request_id" not in request
         assert request["status"] == "pending"
         assert request["resource_id"] == entity_id
 
@@ -44,14 +46,14 @@ class TestAccessRequests:
             "resource_id": entity_id,
             "message": "Прошу доступ"
         }, headers=auth_headers_system)
-        request_id = request_resp.json()["request_id"]
+        access_request_id = request_resp.json()["access_request_id"]
 
-        approve_resp = await crm_client.put(f"/crm/api/v1/access-requests/{request_id}", json={
+        approve_resp = await crm_client.put(f"/crm/api/v1/access-requests/{access_request_id}", json={
             "status": "approved"
         }, headers=auth_headers_system)
         assert approve_resp.status_code == 200
 
-        get_resp = await crm_client.get(f"/crm/api/v1/access-requests/{request_id}", headers=auth_headers_system)
+        get_resp = await crm_client.get(f"/crm/api/v1/access-requests/{access_request_id}", headers=auth_headers_system)
         request = get_resp.json()
         assert request["status"] == "approved"
 
@@ -69,9 +71,9 @@ class TestAccessRequests:
             "resource_id": entity_id,
             "message": "Запрос"
         }, headers=auth_headers_system)
-        request_id = request_resp.json()["request_id"]
+        access_request_id = request_resp.json()["access_request_id"]
 
-        reject_resp = await crm_client.put(f"/crm/api/v1/access-requests/{request_id}", json={
+        reject_resp = await crm_client.put(f"/crm/api/v1/access-requests/{access_request_id}", json={
             "status": "rejected"
         }, headers=auth_headers_system)
         assert reject_resp.status_code == 200
@@ -97,4 +99,3 @@ class TestAccessRequests:
         requests = list_resp.json()["items"]
         pending = [r for r in requests if unique_id in r.get("message", "")]
         assert len(pending) >= 1
-

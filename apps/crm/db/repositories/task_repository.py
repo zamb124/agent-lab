@@ -50,11 +50,11 @@ class TaskRepository(BaseCRMRepository[CRMTask]):
         return entity
 
     @override
-    async def get(self, entity_id: str, *, company_id: str | None = None) -> CRMTask | None:
+    async def get(self, task_id: str, /, *, company_id: str | None = None) -> CRMTask | None:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
             stmt = select(CRMTask).where(
-                CRMTask.task_id == entity_id,
+                CRMTask.task_id == task_id,
                 CRMTask.company_id == cid,
             )
             result = await session.execute(stmt)

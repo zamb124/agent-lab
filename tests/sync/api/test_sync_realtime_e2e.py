@@ -80,13 +80,13 @@ async def test_three_clients_message_created_broadcast(
                 channel_id=channel_id,
                 text=f"three-broadcast {unique_id}",
             )
-        message_id = sent["id"]
+        message_id = sent["message_id"]
 
         async def wait_for(ws):
             return await wait_frame(
                 ws,
                 type_="sync/message/created",
-                where=lambda p: p.get("channel_id") == channel_id and p.get("id") == message_id,
+                where=lambda p: p.get("channel_id") == channel_id and p.get("message_id") == message_id,
                 timeout=20.0,
             )
 
@@ -95,7 +95,7 @@ async def test_three_clients_message_created_broadcast(
         )
 
     for frame in (owner_frame, user2_frame, user3_frame):
-        assert frame["payload"]["id"] == message_id
+        assert frame["payload"]["message_id"] == message_id
         assert frame["payload"]["channel_id"] == channel_id
         text_block = next(c for c in frame["payload"]["contents"] if c["type"] == "text/plain")
         assert text_block["data"]["body"] == f"three-broadcast {unique_id}"
@@ -122,7 +122,7 @@ async def test_message_reaction_changed_broadcast(
         )
         await add_member_via_http(http, http.headers, channel_id=channel_id, user_id=user2_id)
         sent = await send_text_message(http, http.headers, channel_id=channel_id, text=f"hi {unique_id}")
-    message_id = sent["id"]
+    message_id = sent["message_id"]
 
     async with connect_ws(sync_auth_token) as ws_owner:
         await asyncio.sleep(0.3)
@@ -167,7 +167,7 @@ async def test_message_reply_propagates_parent_message_id(
         )
         await add_member_via_http(http, http.headers, channel_id=channel_id, user_id=user2_id)
         root = await send_text_message(http, http.headers, channel_id=channel_id, text=f"root {unique_id}")
-    root_id = root["id"]
+    root_id = root["message_id"]
 
     async with connect_ws(sync_auth_token) as ws_owner:
         await asyncio.sleep(0.3)
@@ -178,12 +178,12 @@ async def test_message_reply_propagates_parent_message_id(
                 text=f"reply {unique_id}",
                 parent_message_id=root_id,
             )
-        reply_id = reply["id"]
+        reply_id = reply["message_id"]
 
         frame = await wait_frame(
             ws_owner,
             type_="sync/message/created",
-            where=lambda p: p.get("id") == reply_id,
+            where=lambda p: p.get("message_id") == reply_id,
             timeout=15.0,
         )
 
@@ -212,7 +212,7 @@ async def test_message_updated_broadcast_on_edit(
         )
         await add_member_via_http(http, http.headers, channel_id=channel_id, user_id=user2_id)
         sent = await send_text_message(http, http.headers, channel_id=channel_id, text=f"v1 {unique_id}")
-    message_id = sent["id"]
+    message_id = sent["message_id"]
 
     async with connect_ws(sync_auth_token_user2) as ws_user2:
         await asyncio.sleep(0.3)
@@ -230,7 +230,7 @@ async def test_message_updated_broadcast_on_edit(
         frame = await wait_frame(
             ws_user2,
             type_="sync/message/updated",
-            where=lambda p: p.get("id") == message_id,
+            where=lambda p: p.get("message_id") == message_id,
             timeout=15.0,
         )
 
@@ -260,7 +260,7 @@ async def test_message_deleted_broadcast(
         )
         await add_member_via_http(http, http.headers, channel_id=channel_id, user_id=user2_id)
         sent = await send_text_message(http, http.headers, channel_id=channel_id, text=f"to-delete {unique_id}")
-    message_id = sent["id"]
+    message_id = sent["message_id"]
 
     async with connect_ws(sync_auth_token_user2) as ws_user2:
         await asyncio.sleep(0.3)
@@ -344,18 +344,18 @@ async def test_forward_publishes_message_created_in_target_channel(
             json={"namespace": ns_a, "type": "topic", "name": "fwd_src", "is_private": False},
         )
         assert cr_a.status_code == 201
-        channel_a = cr_a.json()["id"]
+        channel_a = cr_a.json()["channel_id"]
         cr_b = await http.post(
             "/sync/api/v1/channels/",
             json={"namespace": ns_b, "type": "topic", "name": "fwd_dst", "is_private": False},
         )
         assert cr_b.status_code == 201
-        channel_b = cr_b.json()["id"]
+        channel_b = cr_b.json()["channel_id"]
 
         await add_member_via_http(http, http.headers, channel_id=channel_a, user_id=user2_id)
         await add_member_via_http(http, http.headers, channel_id=channel_b, user_id=user3_id)
         sent = await send_text_message(http, http.headers, channel_id=channel_a, text=f"to-fwd {unique_id}")
-        message_id = sent["id"]
+        message_id = sent["message_id"]
 
     async with connect_ws(sync_auth_token_user3) as ws_user3:
         await asyncio.sleep(0.3)
@@ -365,12 +365,12 @@ async def test_forward_publishes_message_created_in_target_channel(
                 json={"to_channel_id": channel_b},
             )
             assert r.status_code == 201, r.text
-            forwarded_id = r.json()["id"]
+            forwarded_id = r.json()["message_id"]
 
         frame = await wait_frame(
             ws_user3,
             type_="sync/message/created",
-            where=lambda p: p.get("channel_id") == channel_b and p.get("id") == forwarded_id,
+            where=lambda p: p.get("channel_id") == channel_b and p.get("message_id") == forwarded_id,
             timeout=15.0,
         )
 
@@ -409,12 +409,12 @@ async def test_mention_broadcast_includes_mentioned_user_ids(
                 text=f"hey @{user2_id} {unique_id}",
                 mentioned_user_ids=[user2_id],
             )
-        message_id = sent["id"]
+        message_id = sent["message_id"]
 
         frame = await wait_frame(
             ws_user2,
             type_="sync/message/created",
-            where=lambda p: p.get("id") == message_id,
+            where=lambda p: p.get("message_id") == message_id,
             timeout=15.0,
         )
 

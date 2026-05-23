@@ -18,6 +18,7 @@ from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.models.context_models import Context
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
 from core.models.identity_models import User
+from core.utils.tokens import get_token_service
 
 
 @pytest_asyncio.fixture
@@ -268,6 +269,15 @@ async def test_public_landing_session_mints_token(
     assert len(data["token"]) > 20
     assert data["flow_id"] == "universal_agent"
     assert data["branch_id"] == "default"
+    token_data = get_token_service().validate_token(data["token"])
+    assert token_data is not None
+    assert token_data.company_id == SYSTEM_COMPANY_ID
+    assert token_data.token_type.value == "embed_session"
+    assert token_data.roles == ["guest"]
+    assert token_data.metadata["embed_id"] == embed_id
+    assert token_data.metadata["embed_flow_id"] == "universal_agent"
+    assert token_data.metadata["embed_branch_id"] == "default"
+    assert token_data.metadata["allowed_origin"] == ""
 
 
 @pytest.mark.asyncio

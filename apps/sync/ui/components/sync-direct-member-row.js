@@ -143,9 +143,9 @@ export class SyncDirectMemberRow extends PlatformElement {
         const peerId = peer && typeof peer.user_id === 'string' ? peer.user_id : '';
         if (peerId === '' || peerId !== this._pendingOpenDmPeerId) return;
         this._pendingOpenDmPeerId = null;
-        const id = item.id;
-        if (typeof id !== 'string' || id === '') return;
-        this.navigate('channel', { channelId: id });
+        const channelId = item.channel_id;
+        if (typeof channelId !== 'string' || channelId === '') return;
+        this.navigate('channel', { channelId });
         this._closeSidebarMobile();
     }
 
@@ -175,7 +175,7 @@ export class SyncDirectMemberRow extends PlatformElement {
         if (!this.member) return;
         const existing = this._findDirectChannel();
         if (existing) {
-            this.navigate('channel', { channelId: existing.id });
+            this.navigate('channel', { channelId: existing.channel_id });
             this._closeSidebarMobile();
             return;
         }

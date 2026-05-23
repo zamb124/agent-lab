@@ -25,6 +25,25 @@ def _msg(text: str, role: Role = Role.user) -> Message:
 class TestStateManager:
     """Тесты StateManager."""
 
+    def test_execution_state_rejects_deprecated_terminal_field_names(self):
+        with pytest.raises(ValueError, match="deprecated field names"):
+            ExecutionState(
+                task_id="test-task",
+                context_id="test-context",
+                user_id="test-user",
+                session_id="test-flow:test-context",
+                terminal_status="completed",
+            )
+
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="test-user",
+            session_id="test-flow:test-context",
+        )
+        with pytest.raises(ValueError, match="deprecated field name"):
+            state.terminal_error = "failed"
+
     @pytest.fixture
     def state_manager(self, app) -> StateManager:
         """Production StateManager с реальными Redis и БД."""
@@ -299,11 +318,11 @@ class TestRedisBackedStateManager:
 
             persisted = await repo.get(session_id)
             assert persisted is not None
-            assert persisted.terminal_status == "completed"
+            assert persisted.terminal_task_state == "completed"
 
             loaded = await manager.get_state(session_id)
             assert loaded is not None
-            assert loaded.terminal_status == "completed"
+            assert loaded.terminal_task_state == "completed"
             assert loaded.response == "done"
         finally:
             await manager.delete_state(session_id)

@@ -4,18 +4,16 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
+
+from apps.sync.models.common import UserBrief
 
 
 def _validate_avatar_url(v: str | None) -> str | None:
     if v is not None and not v.startswith("/"):
         raise ValueError("avatar_url должен быть относительным URL платформы (начинается с /)")
     return v
-
-
-from apps.sync.models.common import UserBrief  # noqa: E402
 
 
 class ChannelType(str, Enum):
@@ -30,7 +28,7 @@ class ChannelType(str, Enum):
 class ChannelRead(BaseModel):
     """Канал или чат (единая сущность)."""
 
-    id: str = Field(description="Идентификатор канала.")
+    channel_id: str = Field(description="Идентификатор канала.")
     namespace: str = Field(
         description="Платформенный namespace, в котором живёт канал (1:1 c shared NamespaceRepository).",
     )
@@ -72,7 +70,7 @@ class ChannelRead(BaseModel):
         default=None,
         description="Время последнего сообщения основной ленты.",
     )
-    peer_last_read_at: Optional[datetime] = Field(
+    peer_last_read_at: datetime | None = Field(
         default=None,
         description="Время, до которого собеседник прочитал основную ленту (только для direct).",
     )

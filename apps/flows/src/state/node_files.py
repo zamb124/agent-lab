@@ -14,7 +14,7 @@ def validate_node_files_list(
     node_id: str,
 ) -> None:
     """
-    Zero-guess: files — список объектов с обязательными строковыми name и path.
+    Zero-guess: files — список объектов с обязательными строковыми original_name и url.
     """
     if files is None:
         return
@@ -23,17 +23,17 @@ def validate_node_files_list(
     for idx, item in enumerate(files):
         if not isinstance(item, dict):
             raise ValueError(
-                f"Нода '{node_id}': files[{idx}] должен быть объектом с полями name и path"
+                f"Нода '{node_id}': files[{idx}] должен быть объектом с полями original_name и url"
             )
-        name = item.get("name")
-        path = item.get("path")
-        if not isinstance(name, str) or not name.strip():
+        original_name = item.get("original_name")
+        url = item.get("url")
+        if not isinstance(original_name, str) or not original_name.strip():
             raise ValueError(
-                f"Нода '{node_id}': files[{idx}].name — непустая строка обязательна"
+                f"Нода '{node_id}': files[{idx}].original_name — непустая строка обязательна"
             )
-        if not isinstance(path, str) or not path.strip():
+        if not isinstance(url, str) or not url.strip():
             raise ValueError(
-                f"Нода '{node_id}': files[{idx}].path — непустая строка обязательна"
+                f"Нода '{node_id}': files[{idx}].url — непустая строка обязательна"
             )
 
 

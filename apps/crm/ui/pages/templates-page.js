@@ -4,7 +4,7 @@
  * Левая колонка — список шаблонов и inline-форма создания нового. Правая —
  * метаданные выбранного шаблона; блок «Типы в шаблоне» и форма типа
  * в одной колонке: при редактировании/создании типа сетка карточек заменяется
- * на `crm-entity-type-editor` (как на `space-detail-page`).
+ * на `crm-entity-type-editor` (как на `namespace-detail-page`).
  *
  * Состояние:
  *  - useResource('crm/templates', { autoload: true }) — список + get/create/remove.
@@ -566,7 +566,7 @@ export class CRMTemplatesPage extends PlatformPage {
         this.useEvent(this._templateTaskBoardEditorStateOp.op.events.FAILED, (event) => {
             this._taskBoardDraft = null;
             const msg = event.payload && typeof event.payload.message === 'string' ? event.payload.message : '';
-            this.toast('crm:space_detail_page.task_board_load_failed', { type: 'error', vars: { message: msg } });
+            this.toast('crm:namespace_detail_page.task_board_load_failed', { type: 'error', vars: { message: msg } });
         });
         this.useEvent(this._templates.resource.events.LIST_LOADED, () => {
             this._maybeAutoSelect();
@@ -757,11 +757,11 @@ export class CRMTemplatesPage extends PlatformPage {
                 const label = typeof st.label === 'string' ? st.label.trim() : '';
                 if (!id.length || !label.length) continue;
                 if (!this._taskBoardStageIdValid(id)) {
-                    this.toast('crm:space_detail_page.task_board_err_stage_id', { type: 'error' });
+                    this.toast('crm:namespace_detail_page.task_board_err_stage_id', { type: 'error' });
                     return;
                 }
                 if (seen.has(id)) {
-                    this.toast('crm:space_detail_page.task_board_err_duplicate_id', { type: 'error' });
+                    this.toast('crm:namespace_detail_page.task_board_err_duplicate_id', { type: 'error' });
                     return;
                 }
                 seen.add(id);
@@ -771,13 +771,13 @@ export class CRMTemplatesPage extends PlatformPage {
                 stages.push(cell);
             }
             if (stages.length === 0) {
-                this.toast('crm:space_detail_page.task_board_err_stages', { type: 'error' });
+                this.toast('crm:namespace_detail_page.task_board_err_stages', { type: 'error' });
                 return;
             }
             presets[board_key] = { stages };
         }
         if (Object.keys(presets).length === 0) {
-            this.toast('crm:space_detail_page.task_board_err_stages', { type: 'error' });
+            this.toast('crm:namespace_detail_page.task_board_err_stages', { type: 'error' });
             return;
         }
         if (!this._selectedTemplateId) {
@@ -822,7 +822,7 @@ export class CRMTemplatesPage extends PlatformPage {
         if (!Array.isArray(draft) || !draft[boardIdx]) return;
         const row = draft[boardIdx];
         if (row.stages.length <= 1) {
-            this.toast('crm:space_detail_page.task_board_err_min_stages', { type: 'error' });
+            this.toast('crm:namespace_detail_page.task_board_err_min_stages', { type: 'error' });
             return;
         }
         const next = draft.map((r, bi) => {
@@ -857,21 +857,21 @@ export class CRMTemplatesPage extends PlatformPage {
                 <div class="panel-header">
                     <span class="panel-title panel-title-row-hint">
                         <platform-icon name="layers" size="18"></platform-icon>
-                        <span>${this.t('space_detail_page.task_board_section')}</span>
+                        <span>${this.t('namespace_detail_page.task_board_section')}</span>
                         <platform-help-hint
-                            .text=${this.t('space_detail_page.task_board_section_hint')}
+                            .text=${this.t('namespace_detail_page.task_board_section_hint')}
                             label=${this.t('templates_page.field_hint_button_aria')}
                         ></platform-help-hint>
                     </span>
                 </div>
-                <p class="hint">${this.t('space_detail_page.task_board_hint')}</p>
+                <p class="hint">${this.t('namespace_detail_page.task_board_hint')}</p>
                 <p class="hint">${this.t('templates_page.task_board_template_hint')}</p>
                 ${tbOp.busy && !Array.isArray(draft)
                     ? html`<div class="center" style="padding: var(--space-3);"><glass-spinner size="md"></glass-spinner></div>`
                     : ''}
                 ${!tbOp.busy && tbOp.error !== null && !Array.isArray(draft)
                     ? html`
-                        <p class="hint">${this.t('space_detail_page.task_board_retry_hint', {
+                        <p class="hint">${this.t('namespace_detail_page.task_board_retry_hint', {
                             message:
                                 typeof tbOp.error === 'string' && tbOp.error.length !== 0
                                     ? tbOp.error
@@ -879,7 +879,7 @@ export class CRMTemplatesPage extends PlatformPage {
                         })}</p>
                         <div class="actions-row">
                             <button class="btn btn-soft" type="button" @click=${this._loadTemplateTaskBoardEditorState}>
-                                ${this.t('space_detail_page.task_board_retry')}
+                                ${this.t('namespace_detail_page.task_board_retry')}
                             </button>
                         </div>
                     `
@@ -897,8 +897,8 @@ export class CRMTemplatesPage extends PlatformPage {
                                         <button
                                             class="btn btn-soft task-board-add-stage"
                                             type="button"
-                                            title=${this.t('space_detail_page.task_board_add_stage')}
-                                            aria-label=${this.t('space_detail_page.task_board_add_stage')}
+                                            title=${this.t('namespace_detail_page.task_board_add_stage')}
+                                            aria-label=${this.t('namespace_detail_page.task_board_add_stage')}
                                             @click=${() => this._addTaskBoardStage(bi)}
                                         >
                                             <platform-icon name="plus" size="18"></platform-icon>
@@ -908,23 +908,23 @@ export class CRMTemplatesPage extends PlatformPage {
                                 </div>
                                 <div class="stage-header-row">
                                     <div class="stage-head-cell">
-                                        <span>${this.t('space_detail_page.task_board_col_stage_id_label')}</span>
+                                        <span>${this.t('namespace_detail_page.task_board_col_stage_id_label')}</span>
                                         <platform-help-hint
-                                            .text=${this.t('space_detail_page.task_board_col_stage_id_hint')}
+                                            .text=${this.t('namespace_detail_page.task_board_col_stage_id_hint')}
                                             label=${this.t('templates_page.field_hint_button_aria')}
                                         ></platform-help-hint>
                                     </div>
                                     <div class="stage-head-cell">
-                                        <span>${this.t('space_detail_page.task_board_col_stage_title_label')}</span>
+                                        <span>${this.t('namespace_detail_page.task_board_col_stage_title_label')}</span>
                                         <platform-help-hint
-                                            .text=${this.t('space_detail_page.task_board_col_stage_title_hint')}
+                                            .text=${this.t('namespace_detail_page.task_board_col_stage_title_hint')}
                                             label=${this.t('templates_page.field_hint_button_aria')}
                                         ></platform-help-hint>
                                     </div>
                                     <div class="stage-head-cell">
-                                        <span>${this.t('space_detail_page.task_board_col_color_label')}</span>
+                                        <span>${this.t('namespace_detail_page.task_board_col_color_label')}</span>
                                         <platform-help-hint
-                                            .text=${this.t('space_detail_page.task_board_col_color_hint')}
+                                            .text=${this.t('namespace_detail_page.task_board_col_color_hint')}
                                             label=${this.t('templates_page.field_hint_button_aria')}
                                         ></platform-help-hint>
                                     </div>
@@ -936,7 +936,7 @@ export class CRMTemplatesPage extends PlatformPage {
                                             type="string"
                                             mode="edit"
                                             input-type="text"
-                                            .placeholder=${this.t('space_detail_page.task_board_stage_id_ph')}
+                                            .placeholder=${this.t('namespace_detail_page.task_board_stage_id_ph')}
                                             .value=${st.id}
                                             ?disabled=${this._taskBoardSaveBusy
                                                 || this._savingMeta
@@ -951,7 +951,7 @@ export class CRMTemplatesPage extends PlatformPage {
                                             type="string"
                                             mode="edit"
                                             input-type="text"
-                                            .placeholder=${this.t('space_detail_page.task_board_stage_label_ph')}
+                                            .placeholder=${this.t('namespace_detail_page.task_board_stage_label_ph')}
                                             .value=${st.label}
                                             ?disabled=${this._taskBoardSaveBusy
                                                 || this._savingMeta
@@ -983,25 +983,25 @@ export class CRMTemplatesPage extends PlatformPage {
                                                 type="button"
                                                 ?disabled=${si === 0}
                                                 @click=${() => this._moveTaskBoardStage(bi, si, -1)}
-                                                title=${this.t('space_detail_page.task_board_move_up')}
+                                                title=${this.t('namespace_detail_page.task_board_move_up')}
                                             >
-                                                ${this.t('space_detail_page.task_board_move_up')}
+                                                ${this.t('namespace_detail_page.task_board_move_up')}
                                             </button>
                                             <button
                                                 class="btn btn-soft"
                                                 type="button"
                                                 ?disabled=${si >= board.stages.length - 1}
                                                 @click=${() => this._moveTaskBoardStage(bi, si, 1)}
-                                                title=${this.t('space_detail_page.task_board_move_down')}
+                                                title=${this.t('namespace_detail_page.task_board_move_down')}
                                             >
-                                                ${this.t('space_detail_page.task_board_move_down')}
+                                                ${this.t('namespace_detail_page.task_board_move_down')}
                                             </button>
                                             <button
                                                 class="btn btn-danger"
                                                 type="button"
                                                 @click=${() => this._removeTaskBoardStage(bi, si)}
                                             >
-                                                ${this.t('space_detail_page.task_board_remove_stage')}
+                                                ${this.t('namespace_detail_page.task_board_remove_stage')}
                                             </button>
                                         </div>
                                     </div>
@@ -1019,8 +1019,8 @@ export class CRMTemplatesPage extends PlatformPage {
                                 @click=${this._onSaveTemplateTaskBoard}
                             >
                                 ${this._taskBoardSaveBusy
-                                    ? this.t('space_detail_page.task_board_saving')
-                                    : this.t('space_detail_page.task_board_save')}
+                                    ? this.t('namespace_detail_page.task_board_saving')
+                                    : this.t('namespace_detail_page.task_board_save')}
                             </button>
                         </div>
                     `

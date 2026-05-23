@@ -428,6 +428,9 @@
       },
       "flow_execution_wall_time_cap_seconds": 3600,
       "node_execution_wall_time_cap_seconds": 3600,
+      "capability_manifest_cache_enabled": true,
+      "capability_manifest_cache_ttl_seconds": 60,
+      "capability_manifest_cache_key": "capability_gateway:manifest:v1",
       "default_flow_timeout_seconds": 600,
       "graph_max_iterations": 100,
       "external_flows": {
@@ -638,6 +641,9 @@
     },
     "capability_gateway": {
       "service_name": "capability_gateway",
+      "capability_manifest_cache_enabled": true,
+      "capability_manifest_cache_ttl_seconds": 60,
+      "capability_manifest_cache_key": "capability_gateway:manifest:v1",
       "server": {
         "name": "capability_gateway",
         "host": "0.0.0.0",

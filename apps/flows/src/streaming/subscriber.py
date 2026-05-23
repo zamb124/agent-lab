@@ -13,6 +13,7 @@ from a2a.types import (
 
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
+from core.state import TERMINAL_TASK_STATES
 
 from .base import BaseSubscriber, StreamEvent
 
@@ -32,16 +33,13 @@ def parse_event(data: str) -> StreamEvent:
     raise ValueError(f"Unknown event kind: {kind}")
 
 
-TERMINAL_STATES = {"completed", "failed", "canceled", "input-required"}
-
-
 def is_final_event(event: StreamEvent) -> bool:
     """
     Проверяет является ли событие финальным.
 
     Финальное событие - TaskStatusUpdateEvent с:
     1. final=True
-    2. state в терминальном состоянии (completed, failed, canceled, input-required)
+    2. state в терминальном task state (completed, failed, canceled, input-required)
 
     Промежуточные события с final=True (например tool_call) НЕ являются финальными!
     """
@@ -52,7 +50,7 @@ def is_final_event(event: StreamEvent) -> bool:
         if state is None:
             return False
         state_str = state.value if hasattr(state, "value") else str(state)
-        if state_str in TERMINAL_STATES:
+        if state_str in TERMINAL_TASK_STATES:
             md = event.metadata or {}
             if state_str == "input-required" and md.get("platform_handoff_continue") is True:
                 return False
@@ -137,4 +135,10 @@ class EventSubscriber(BaseSubscriber):
 RedisSubscriber = EventSubscriber
 
 
-__all__ = ["EventSubscriber", "RedisSubscriber", "parse_event", "is_final_event"]
+__all__ = [
+    "EventSubscriber",
+    "RedisSubscriber",
+    "TERMINAL_TASK_STATES",
+    "parse_event",
+    "is_final_event",
+]

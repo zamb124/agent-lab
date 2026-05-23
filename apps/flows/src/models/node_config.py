@@ -272,8 +272,8 @@ class NodeConfig(StrictBaseModel):
     files: list[dict[str, JsonValue]] = Field(
         default_factory=list,
         description=(
-            "Закреплённые файлы ноды (как элементы state.files: name, path; опционально "
-            "mime_type, size, file_id). При старте новой сессии агрегируются в state.files."
+            "Закреплённые файлы ноды (как элементы state.files: original_name, url, "
+            "content_type, file_size, file_id). При старте новой сессии агрегируются в state.files."
         ),
     )
 

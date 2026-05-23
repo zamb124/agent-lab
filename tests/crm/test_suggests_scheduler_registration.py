@@ -42,12 +42,12 @@ def test_crm_scheduled_tasks_accept_scheduler_payload() -> None:
         inspect.unwrap(scheduled_namespace_integration_unified_sync)
     )
 
-    assert "scheduler_task_id" in suggest_sig.parameters
-    assert "scheduler_task_id" in reconcile_sig.parameters
+    assert "schedule_task_id" in suggest_sig.parameters
+    assert "schedule_task_id" in reconcile_sig.parameters
     assert "company_id" in reconcile_sig.parameters
-    assert "scheduler_task_id" in reembed_sig.parameters
+    assert "schedule_task_id" in reembed_sig.parameters
     assert "company_id" in reembed_sig.parameters
-    assert "scheduler_task_id" in integration_sig.parameters
+    assert "schedule_task_id" in integration_sig.parameters
 
 
 def test_crm_worker_entrypoint_imports_scheduler_task_modules() -> None:

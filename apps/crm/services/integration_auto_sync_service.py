@@ -112,9 +112,9 @@ class IntegrationAutoSyncService:
 
         tz = (auto_sync_timezone or "UTC").strip()
         if not auto_sync_enabled:
-            sid = block.get("auto_sync_schedule_task_id")
-            if isinstance(sid, str) and sid.strip():
-                _ = await self._scheduler_client.cancel_schedule(sid.strip())
+            current_schedule_task_id = block.get("auto_sync_schedule_task_id")
+            if isinstance(current_schedule_task_id, str) and current_schedule_task_id.strip():
+                _ = await self._scheduler_client.cancel_schedule(current_schedule_task_id.strip())
             block["auto_sync_enabled"] = False
             block["auto_sync_schedule_task_id"] = None
             integ[pid] = block
@@ -146,23 +146,27 @@ class IntegrationAutoSyncService:
         prev_enabled = bool(block.get("auto_sync_enabled"))
         old_cron = block.get("auto_sync_cron")
         old_tz = block.get("auto_sync_timezone")
-        old_sid = block.get("auto_sync_schedule_task_id")
+        old_schedule_task_id = block.get("auto_sync_schedule_task_id")
 
         old_cron_s = old_cron.strip() if isinstance(old_cron, str) else ""
         old_tz_s = old_tz.strip() if isinstance(old_tz, str) and old_tz.strip() else "UTC"
 
         need_new_schedule = (
-            not isinstance(old_sid, str)
-            or not old_sid.strip()
+            not isinstance(old_schedule_task_id, str)
+            or not old_schedule_task_id.strip()
             or not prev_enabled
             or old_cron_s != cron
             or old_tz_s != tz
         )
 
-        if need_new_schedule and isinstance(old_sid, str) and old_sid.strip():
-            _ = await self._scheduler_client.cancel_schedule(old_sid.strip())
+        if (
+            need_new_schedule
+            and isinstance(old_schedule_task_id, str)
+            and old_schedule_task_id.strip()
+        ):
+            _ = await self._scheduler_client.cancel_schedule(old_schedule_task_id.strip())
 
-        new_schedule_id: str
+        new_schedule_task_id: str
         if need_new_schedule:
             req = PlatformScheduleCreateRequest(
                 target_service="crm",
@@ -178,15 +182,15 @@ class IntegrationAutoSyncService:
                 },
             )
             created = await self._scheduler_client.create_schedule(req)
-            new_schedule_id = created.id
+            new_schedule_task_id = created.schedule_task_id
         else:
-            new_schedule_id = str(old_sid).strip()
+            new_schedule_task_id = str(old_schedule_task_id).strip()
 
         block["auto_sync_enabled"] = True
         block["auto_sync_cron"] = cron
         block["auto_sync_timezone"] = tz
         block["auto_sync_oauth_user_id"] = oauth_user
-        block["auto_sync_schedule_task_id"] = new_schedule_id
+        block["auto_sync_schedule_task_id"] = new_schedule_task_id
         integ[pid] = block
         existing.crm_settings = crm.model_copy(update={"integrations": integ})
         _ = await self._namespace_repository.set(existing)

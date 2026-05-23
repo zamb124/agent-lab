@@ -370,8 +370,10 @@
   "chat_input": {
     "title_attach": "Прикрепить файл",
     "title_remove_file": "Удалить файл",
+    "title_send": "Отправить",
     "title_stop": "Остановить ответ",
-    "title_stop_pending": "Останавливаю ответ…"
+    "title_stop_pending": "Останавливаю ответ…",
+    "err_file_too_large": "Файл {name} слишком большой. Максимум: {max}"
   },
   "bottom_toolbar": {
     "title_select": "Выбор (V)",

@@ -98,6 +98,16 @@ def _get_evaluation_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] 
     return evaluation if isinstance(evaluation, dict) else None
 
 
+def _is_async_message_send(metadata: dict[str, Any] | None) -> bool:
+    """Совместимый async-режим для A2A message/send без ожидания финального результата."""
+    if not metadata:
+        return False
+    raw = metadata.get("execution_mode")
+    if raw is None:
+        raw = metadata.get("mode")
+    return isinstance(raw, str) and raw.strip().lower() in {"async", "background"}
+
+
 async def _build_task_from_events(
     events: list[StreamEvent],
     task_id: str,
@@ -297,13 +307,13 @@ class A2AChannel(BaseChannel):
                 if fid:
                     file_ids.append(str(fid))
                     continue
-                path = fd.get("path")
-                if path and str(path).startswith(("http://", "https://")):
+                url = fd.get("url")
+                if url and str(url).startswith(("http://", "https://")):
                     continue
-                if path:
+                if url:
                     raise ValueError(
                         "Вложение A2A без file_id: ожидается персист через API (S3), "
-                        "локальные path в state.files не поддерживаются."
+                        "локальные url в state.files не поддерживаются."
                     )
 
         await svc.receive_user_reply(
@@ -330,7 +340,7 @@ class A2AChannel(BaseChannel):
         )
 
     async def _persist_incoming_a2a_files(self, message: Message) -> tuple[list[dict[str, Any]], str]:
-        """Байты FileWithBytes -> S3 + FileRecord; FileWithUri -> только path в state."""
+        """Байты FileWithBytes -> S3 + FileRecord; FileWithUri -> canonical url в state."""
         incoming = extract_incoming_a2a_files(message)
         if not incoming:
             return [], ""
@@ -347,10 +357,12 @@ class A2AChannel(BaseChannel):
 
         for inc in incoming:
             if inc.data is not None:
+                if not inc.content_type or not inc.content_type.strip():
+                    raise ValueError("FileWithBytes.content_type обязателен для state.files")
                 item = await self.container.file_processor.persist_uploaded_file_as_state_files_item(
                     data=inc.data,
-                    original_name=inc.name,
-                    content_type=inc.mime_type,
+                    original_name=inc.original_name,
+                    content_type=inc.content_type.strip(),
                     uploaded_by=user_id,
                     company_id=company_id,
                     public=False,
@@ -360,11 +372,13 @@ class A2AChannel(BaseChannel):
             else:
                 if not inc.uri:
                     raise ValueError("FileWithUri без uri")
+                if not inc.content_type or not inc.content_type.strip():
+                    raise ValueError("FileWithUri.content_type обязателен для state.files")
                 item: dict[str, Any] = {
-                    "name": inc.name,
-                    "path": inc.uri,
-                    "mime_type": inc.mime_type,
-                    "size": inc.size,
+                    "original_name": inc.original_name,
+                    "url": inc.uri,
+                    "content_type": inc.content_type.strip(),
+                    "file_size": inc.file_size,
                 }
                 linked_file_id = file_id_from_download_url(inc.uri)
                 if linked_file_id:
@@ -376,10 +390,10 @@ class A2AChannel(BaseChannel):
                     item.update(
                         {
                             "file_id": record.file_id,
-                            "name": record.original_name,
-                            "path": record.download_url or inc.uri,
-                            "mime_type": record.content_type,
-                            "size": record.file_size,
+                            "original_name": record.original_name,
+                            "url": record.download_url or inc.uri,
+                            "content_type": record.content_type,
+                            "file_size": record.file_size,
                         }
                     )
                 files_data.append(item)
@@ -435,7 +449,9 @@ class A2AChannel(BaseChannel):
         self, params: MessageSendParams, context: Any = None
     ) -> Task | Message:
         """
-        Синхронное выполнение - кикает task и собирает события через collect().
+        По умолчанию совместимый синхронный режим: кикает task и собирает события через collect().
+        Если metadata.execution_mode == "async", возвращает submitted Task сразу; результат
+        забирается через tasks/get по task_id или context_id.
 
         Поддерживает evaluation через metadata.evaluation:
         - test_case_id: ID тест-кейса для запуска
@@ -487,6 +503,18 @@ class A2AChannel(BaseChannel):
                 input_message=prepared.message,
                 flow_id=self.flow_id,
                 container=self.container,
+            )
+
+        if _is_async_message_send(params.metadata):
+            await self.create_task(prepared)
+            return Task(
+                id=prepared.task_id,
+                context_id=prepared.context_id,
+                status=TaskStatus(
+                    state=TaskState.submitted,
+                    message=new_agent_text_message("Task submitted"),
+                ),
+                history=[prepared.message] if prepared.message is not None else None,
             )
 
         # Таймаут короче для тестов

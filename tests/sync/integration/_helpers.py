@@ -55,4 +55,4 @@ async def create_test_topic_channel(
         user=op_user,
         container=op_container,
     )
-    return ch.id
+    return ch.channel_id

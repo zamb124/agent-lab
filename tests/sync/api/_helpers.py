@@ -98,4 +98,4 @@ async def create_topic_channel_via_http(
         },
     )
     assert cr.status_code == 201, cr.text
-    return cr.json()["id"]
+    return cr.json()["channel_id"]

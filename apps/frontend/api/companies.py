@@ -212,34 +212,21 @@ async def create_company(
         )
         # НЕ падаем - компания уже создана
 
-    # Создать пространство и канал в sync для новой компании
+    # Создать default namespace-backed канал в sync для новой компании
     try:
         service_client = container.service_client
+        namespace = "default"
 
-        # Создаем пространство с названием компании
-        space_response = _service_json_object(
-            await service_client.post(
-                "sync",
-                "/sync/api/v1/spaces/",
-                json={"name": name, "description": f"Пространство компании {name}"},
-                headers={"X-Company-Id": company_id, "X-User-Id": user.user_id},
-            ),
-            service="sync",
-            path="/sync/api/v1/spaces/",
-        )
-        space_id = space_response["id"]
-        logger.info(
-            "frontend.space_created",
-            space_id=space_id,
-            company_id=company_id,
-        )
-
-        # Создаем канал с названием компании в этом пространстве
         channel_response = _service_json_object(
             await service_client.post(
                 "sync",
                 "/sync/api/v1/channels/",
-                json={"space_id": space_id, "type": "topic", "name": name, "is_private": False},
+                json={
+                    "namespace": namespace,
+                    "type": "topic",
+                    "name": name,
+                    "is_private": False,
+                },
                 headers={"X-Company-Id": company_id, "X-User-Id": user.user_id},
             ),
             service="sync",
@@ -249,13 +236,13 @@ async def create_company(
         logger.info(
             "frontend.channel_created",
             channel_id=channel_id,
-            space_id=space_id,
+            namespace=namespace,
             company_id=company_id,
         )
 
     except Exception as e:
         logger.error(
-            f"Не удалось создать пространство/канал в sync для {company_id}: {e}", exc_info=True
+            f"Не удалось создать namespace/канал в sync для {company_id}: {e}", exc_info=True
         )
         # НЕ падаем - компания уже создана
 

@@ -23,7 +23,7 @@ async def test_openrouter_free_models_task_accepts_scheduler_payload(monkeypatch
     monkeypatch.setattr(task_module, "refresh_openrouter_free_models_cache", fake_refresh)
 
     result = await task_module.refresh_openrouter_free_models_task(
-        scheduler_task_id="schedule-1",
+        schedule_task_id="schedule-1",
         company_id="system",
         system_task="openrouter_free_models_background_sync",
     )

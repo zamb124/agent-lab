@@ -784,7 +784,7 @@ export class SyncMessageBubble extends PlatformElement {
         if (url === '') return '';
         const alt = (typeof data.alt_text === 'string' && data.alt_text !== '')
             ? data.alt_text
-            : (typeof data.filename === 'string' ? data.filename : '');
+            : (typeof data.original_name === 'string' ? data.original_name : '');
         return html`<div class="image-wrap"><img src=${url} alt=${alt} loading="lazy" @click=${() => window.open(url, '_blank')} /></div>`;
     }
 
@@ -793,13 +793,12 @@ export class SyncMessageBubble extends PlatformElement {
         const fileId = data ? data.file_id : null;
         if (typeof fileId !== 'string') return '';
         let name = '';
-        if (data && typeof data.filename === 'string' && data.filename !== '') name = data.filename;
-        else if (data && typeof data.original_name === 'string' && data.original_name !== '') name = data.original_name;
+        if (data && typeof data.original_name === 'string' && data.original_name !== '') name = data.original_name;
         else if (data && typeof data.name === 'string' && data.name !== '') name = data.name;
         else name = this.t('bubble.file_fallback');
         const url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(fileId)}`;
-        const size = data && typeof data.size === 'number'
-            ? formatFileSize(data.size)
+        const size = data && typeof data.file_size === 'number'
+            ? formatFileSize(data.file_size)
             : '';
         return html`
             <div class="file">
@@ -848,8 +847,8 @@ export class SyncMessageBubble extends PlatformElement {
         const url = `${FILE_DOWNLOAD_BASE}/${encodeURIComponent(fileId)}`;
         const status = data ? data.transcription_status : null;
         let name = '';
-        if (data && typeof data.filename === 'string' && data.filename !== '') {
-            name = data.filename;
+        if (data && typeof data.original_name === 'string' && data.original_name !== '') {
+            name = data.original_name;
         } else {
             name = this.t('bubble.file_fallback');
         }

@@ -406,7 +406,7 @@ async def rebuild_period_summary_task(
 @broker.task(task_name=CRM_RECONCILE_DAILY_SUMMARY_TASK_NAME, queue_name="crm")
 async def reconcile_daily_summary_task(
     days_back: int = 1,
-    scheduler_task_id: str | None = None,
+    schedule_task_id: str | None = None,
     company_id: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -457,7 +457,7 @@ async def reconcile_daily_summary_task(
                 namespace=ALL_NAMESPACES_TASK_KEY,
                 user_id="system",
                 data={
-                    "scheduler_task_id": scheduler_task_id,
+                    "schedule_task_id": schedule_task_id,
                     "days_back": days_back,
                     "distinct_note_day_rows": len(company_rows),
                     "enqueued": 0,

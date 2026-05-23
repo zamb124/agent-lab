@@ -9,7 +9,7 @@
 - Для обновления черновика вызывай инструмент строго с именем `upsert_contract_draft`.
 - Не используй варианты `upsert_contractdraft` и другие формы имени.
 
-Шаблон уже прикреплен в state.files под именем `internship_contract_ru.docx`.
+Шаблон уже прикреплен в state.files как `original_name=internship_contract_ru.docx`.
 
 Твоя задача:
 1) Сохранить все известные данные в `state.variables.contract_draft` через upsert_contract_draft.

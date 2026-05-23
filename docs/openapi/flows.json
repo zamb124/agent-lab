@@ -326,11 +326,7 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Create Branch Flows Api V1  Flow Id  Branches Post"
-                }
+                "schema": {}
               }
             }
           },
@@ -670,6 +666,17 @@
             "type": "string",
             "format": "binary",
             "title": "File"
+          },
+          "public": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public"
           }
         },
         "type": "object",
@@ -773,6 +780,16 @@
               }
             ],
             "title": "Variables Mode"
+          },
+          "speech": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowSpeechSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -877,6 +894,18 @@
               }
             ],
             "title": "Variables Mode"
+          },
+          "speech": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech"
           }
         },
         "type": "object",
@@ -885,6 +914,56 @@
         ],
         "title": "BranchResponse",
         "description": "Ветка (branch) в ответе"
+      },
+      "BrowserPreviewClickBody": {
+        "properties": {
+          "x": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "X"
+          },
+          "y": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Y"
+          },
+          "image_width": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Image Width"
+          },
+          "image_height": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Image Height"
+          },
+          "button": {
+            "type": "string",
+            "enum": [
+              "left",
+              "right",
+              "middle"
+            ],
+            "title": "Button",
+            "default": "left"
+          },
+          "click_count": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Click Count",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "x",
+          "y",
+          "image_width",
+          "image_height"
+        ],
+        "title": "BrowserPreviewClickBody"
       },
       "BulkDeleteNodesRequest": {
         "properties": {
@@ -1072,6 +1151,7 @@
             "default": true
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "provider",
@@ -1627,6 +1707,7 @@
             "title": "Metadata"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "title",
@@ -1634,6 +1715,428 @@
           "end_at"
         ],
         "title": "CalendarUpsertRequest"
+      },
+      "CapabilityDefinition": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Description"
+          },
+          "execution_mode": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "async"
+            ],
+            "title": "Execution Mode",
+            "default": "async"
+          },
+          "input_schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Output Schema"
+          },
+          "languages": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "python",
+                "javascript",
+                "typescript",
+                "go",
+                "csharp"
+              ]
+            },
+            "type": "array",
+            "title": "Languages"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "sdk_namespace": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sdk Namespace"
+          },
+          "sdk_method": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sdk Method"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "title",
+          "description"
+        ],
+        "title": "CapabilityDefinition",
+        "description": "Публичное описание одной platform capability."
+      },
+      "CapabilityExecutionContext": {
+        "properties": {
+          "execution_token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Execution Token"
+          },
+          "company_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Company Id"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "flow_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Branch Id"
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "execution_token",
+          "company_id",
+          "flow_id",
+          "branch_id",
+          "session_id",
+          "task_id",
+          "context_id"
+        ],
+        "title": "CapabilityExecutionContext",
+        "description": "Доверенный контекст текущего вызова capability."
+      },
+      "CapabilityInterruptEnvelope": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Kind"
+          },
+          "body": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Body"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "CapabilityInterruptEnvelope",
+        "description": "Языконезависимое представление FlowInterrupt."
+      },
+      "CapabilityManifest": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Version"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityDefinition"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "CapabilityManifest",
+        "description": "Версионированный manifest capabilities для sandbox SDK."
+      },
+      "CapabilityNamespaceDocumentation": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Type"
+          },
+          "methods": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Methods"
+          },
+          "capability_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capability Names"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "CapabilityNamespaceDocumentation",
+        "description": "SDK namespace для языка: files/http/tools/..."
+      },
+      "CapabilitySchemaFieldDocumentation": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Path"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Type"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "has_default": {
+            "type": "boolean",
+            "title": "Has Default",
+            "default": false
+          },
+          "default_value": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "enum_values": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enum Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "name",
+          "type"
+        ],
+        "title": "CapabilitySchemaFieldDocumentation",
+        "description": "Описанное поле JSON Schema для capability docs/autocomplete."
+      },
+      "CapabilitySdkMethodDocumentation": {
+        "properties": {
+          "capability_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Capability Name"
+          },
+          "namespace": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Namespace"
+          },
+          "method": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Method"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Label"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Description"
+          },
+          "signature": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Signature"
+          },
+          "insert_text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Insert Text"
+          },
+          "documentation": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Documentation"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "input_schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Output Schema"
+          },
+          "input_fields": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilitySchemaFieldDocumentation"
+            },
+            "type": "array",
+            "title": "Input Fields"
+          },
+          "output_fields": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilitySchemaFieldDocumentation"
+            },
+            "type": "array",
+            "title": "Output Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "capability_name",
+          "namespace",
+          "method",
+          "label",
+          "title",
+          "description",
+          "signature",
+          "insert_text",
+          "documentation"
+        ],
+        "title": "CapabilitySdkMethodDocumentation",
+        "description": "Языковой SDK method, построенный из capability manifest."
       },
       "ChannelType": {
         "type": "string",
@@ -1703,6 +2206,22 @@
             },
             "type": "array",
             "title": "Platform Tools",
+            "default": []
+          },
+          "capability_namespaces": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityNamespaceDocumentation"
+            },
+            "type": "array",
+            "title": "Capability Namespaces",
+            "default": []
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilitySdkMethodDocumentation"
+            },
+            "type": "array",
+            "title": "Capabilities",
             "default": []
           },
           "runtime_namespace_extras": {
@@ -1775,6 +2294,30 @@
             "type": "string",
             "title": "Language",
             "default": "python"
+          },
+          "args_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Args Schema"
+          },
+          "parameters_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameters Schema"
           }
         },
         "type": "object",
@@ -2031,10 +2574,32 @@
             "title": "Node Config",
             "default": {}
           },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
           "state": {
             "additionalProperties": true,
             "type": "object",
             "title": "State"
+          },
+          "entrypoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entrypoint"
           },
           "flow_id": {
             "anyOf": [
@@ -2115,6 +2680,18 @@
             ],
             "title": "Error"
           },
+          "error_payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Payload"
+          },
           "duration_ms": {
             "type": "integer",
             "title": "Duration Ms",
@@ -2151,7 +2728,7 @@
             "title": "Detected Kind",
             "description": "Тип файла по FileReader"
           },
-          "mime_type": {
+          "content_type": {
             "anyOf": [
               {
                 "type": "string"
@@ -2160,8 +2737,8 @@
                 "type": "null"
               }
             ],
-            "title": "Mime Type",
-            "description": "MIME после распознавания"
+            "title": "Content Type",
+            "description": "Content-Type после распознавания"
           },
           "warnings": {
             "items": {
@@ -2343,6 +2920,16 @@
               }
             ],
             "title": "Store Card Image Url"
+          },
+          "speech": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowSpeechSettings"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -2355,6 +2942,72 @@
         ],
         "title": "FlowCreateRequest",
         "description": "Запрос на создание агента"
+      },
+      "FlowDataflowInspectRequest": {
+        "properties": {
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id",
+            "default": "default"
+          },
+          "entry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry"
+          },
+          "nodes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {},
+            "type": "array",
+            "title": "Edges"
+          },
+          "variables": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Variables"
+          },
+          "sample_state": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample State"
+          },
+          "observed_runs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Observed Runs"
+          }
+        },
+        "type": "object",
+        "title": "FlowDataflowInspectRequest",
+        "description": "Запрос статического анализа state до/после нод редактора."
       },
       "FlowFunctionInfo": {
         "properties": {
@@ -2459,6 +3112,45 @@
           "metadata"
         ],
         "title": "FlowMetadataResponse"
+      },
+      "FlowPreviewShareRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id",
+            "description": "Ветка графа (skill)",
+            "default": "default"
+          },
+          "guest_max_user_messages": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 500.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guest Max User Messages",
+            "description": "Лимит пользовательских сообщений гостя на один диалог (embed-session); не задано — без лимита"
+          }
+        },
+        "type": "object",
+        "title": "FlowPreviewShareRequest"
+      },
+      "FlowPreviewShareResponse": {
+        "properties": {
+          "share_url": {
+            "type": "string",
+            "title": "Share Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "share_url"
+        ],
+        "title": "FlowPreviewShareResponse"
       },
       "FlowResponse": {
         "properties": {
@@ -2680,6 +3372,18 @@
             "type": "string",
             "title": "Source",
             "default": "manual"
+          },
+          "speech": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech"
           }
         },
         "type": "object",
@@ -2690,6 +3394,226 @@
         ],
         "title": "FlowResponse",
         "description": "Ответ с данными агента"
+      },
+      "FlowSpeechSettings": {
+        "properties": {
+          "stt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowSpeechSttBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowSpeechTtsBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vad": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowSpeechVadBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowSpeechSettings"
+      },
+      "FlowSpeechSttBlock": {
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "litserve",
+                  "cloud_ru",
+                  "yandex",
+                  "sber",
+                  "mock"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowSpeechSttBlock"
+      },
+      "FlowSpeechTtsBlock": {
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "litserve",
+                  "cloud_ru",
+                  "yandex",
+                  "sber",
+                  "mock"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "response_format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "wav",
+                  "mp3",
+                  "ogg",
+                  "pcm",
+                  "lpcm"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Format"
+          },
+          "sample_rate": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Rate"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowSpeechTtsBlock"
+      },
+      "FlowSpeechVadBlock": {
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "litserve",
+                  "silero_local",
+                  "mock"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "sample_rate": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Rate"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FlowSpeechVadBlock"
       },
       "FlowStoreBundleResponse": {
         "properties": {
@@ -2745,7 +3669,7 @@
           "external"
         ],
         "title": "FlowType",
-        "description": "Тип агента"
+        "description": "Тип flow"
       },
       "FlowValidateRequest": {
         "properties": {
@@ -2830,6 +3754,23 @@
         ],
         "title": "FlowValidateResponse",
         "description": "Ответ на валидацию агента"
+      },
+      "FlowVoiceSessionQueryResponse": {
+        "properties": {
+          "query": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Query"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "FlowVoiceSessionQueryResponse",
+        "description": "Query-параметры для WS voice-сессии (effective flow + branch speech)."
       },
       "GlobalVariable": {
         "properties": {
@@ -2944,6 +3885,39 @@
         "title": "InitCompanyResponse",
         "description": "Ответ инициализации компании"
       },
+      "JsonValue": {},
+      "LaraPendingActionsApplyBody": {
+        "properties": {
+          "pending_action_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Pending Action Id"
+          },
+          "context_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Context Id"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key",
+            "description": "Опционально; по умолчанию из сохранённого действия"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pending_action_id",
+          "context_id"
+        ],
+        "title": "LaraPendingActionsApplyBody"
+      },
       "ListResponse_CalendarIntegrationPublic_": {
         "properties": {
           "items": {
@@ -3024,7 +3998,7 @@
         ],
         "title": "ListResponse[UserSearchResult]"
       },
-      "ListResponse_dict_": {
+      "ListResponse_dict_str__Any__": {
         "properties": {
           "items": {
             "items": {
@@ -3039,7 +4013,7 @@
         "required": [
           "items"
         ],
-        "title": "ListResponse[dict]"
+        "title": "ListResponse[dict[str, Any]]"
       },
       "ListResponse_str_": {
         "properties": {
@@ -3083,7 +4057,9 @@
             "default": "http"
           },
           "headers": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "type": "string"
+            },
             "type": "object",
             "title": "Headers",
             "description": "HTTP headers"
@@ -3129,7 +4105,9 @@
             "title": "Transport Type"
           },
           "headers": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "type": "string"
+            },
             "type": "object",
             "title": "Headers"
           },
@@ -3221,7 +4199,9 @@
           "headers": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "type": "string"
+                },
                 "type": "object"
               },
               {
@@ -3405,13 +4385,12 @@
           "tools": {
             "items": {},
             "type": "array",
-            "title": "Tools",
-            "default": []
+            "title": "Tools"
           },
           "llm": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/NodeLLMOverrideRequest"
+                "$ref": "#/components/schemas/NodeLLMConfigRequest"
               },
               {
                 "type": "null"
@@ -3421,16 +4400,14 @@
           "variables": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Variables",
-            "default": {}
+            "title": "Variables"
           },
           "tags": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Tags",
-            "default": []
+            "title": "Tags"
           }
         },
         "type": "object",
@@ -3442,7 +4419,7 @@
         "title": "NodeCreateRequest",
         "description": "Запрос на создание ноды"
       },
-      "NodeLLMOverrideRequest": {
+      "NodeLLMConfigRequest": {
         "properties": {
           "model": {
             "anyOf": [
@@ -3479,8 +4456,8 @@
           }
         },
         "type": "object",
-        "title": "NodeLLMOverrideRequest",
-        "description": "Request для переопределения LLM настроек ноды."
+        "title": "NodeLLMConfigRequest",
+        "description": "Request для LLM настроек ноды."
       },
       "NodeResponse": {
         "properties": {
@@ -3538,16 +4515,14 @@
           "variables": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Variables",
-            "default": {}
+            "title": "Variables"
           },
           "tags": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Tags",
-            "default": []
+            "title": "Tags"
           },
           "source": {
             "type": "string",
@@ -4691,14 +5666,8 @@
       "ResourceType": {
         "type": "string",
         "enum": [
-          "code",
-          "rag",
-          "files",
-          "prompt",
           "llm",
-          "secret",
-          "http",
-          "cache"
+          "files"
         ],
         "title": "ResourceType",
         "description": "Типы ресурсов."
@@ -5015,8 +5984,7 @@
           "metadata": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Metadata",
-            "default": {}
+            "title": "Metadata"
           }
         },
         "type": "object",
@@ -5157,6 +6125,22 @@
             ],
             "title": "Code"
           },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "python"
+          },
+          "entrypoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entrypoint"
+          },
           "args_schema": {
             "anyOf": [
               {
@@ -5253,6 +6237,22 @@
             ],
             "title": "Code"
           },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "python"
+          },
+          "entrypoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entrypoint"
+          },
           "args_schema": {
             "anyOf": [
               {
@@ -5282,8 +6282,7 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Tags",
-            "default": []
+            "title": "Tags"
           },
           "permission": {
             "anyOf": [
@@ -5360,6 +6359,69 @@
         ],
         "title": "ToolResponse",
         "description": "Ответ с данными tool"
+      },
+      "ToolRuntimeCallRequest": {
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/CapabilityExecutionContext"
+          },
+          "tool_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Tool Id"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
+          "state": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "context",
+          "tool_id"
+        ],
+        "title": "ToolRuntimeCallRequest"
+      },
+      "ToolRuntimeCallResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "interrupt"
+            ],
+            "title": "Status"
+          },
+          "result": {
+            "title": "Result"
+          },
+          "state": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "State"
+          },
+          "interrupt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CapabilityInterruptEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ToolRuntimeCallResponse"
       },
       "TriggerCreateRequest": {
         "properties": {
@@ -5741,6 +6803,39 @@
         "title": "TriggerVerifyResponse",
         "description": "Результат проверки (getMe, cron, схема пути)."
       },
+      "TtsLitserveVoiceHint": {
+        "properties": {
+          "api_model_id": {
+            "type": "string",
+            "title": "Api Model Id"
+          },
+          "default_voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Voice"
+          },
+          "voice_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Voice Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "api_model_id"
+        ],
+        "title": "TtsLitserveVoiceHint",
+        "description": "Подсказка по голосу для одной Litserve TTS-модели."
+      },
       "UserSearchResult": {
         "properties": {
           "user_id": {
@@ -5918,6 +7013,55 @@
             ],
             "title": "Node Type",
             "default": "code"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "python"
+          },
+          "entrypoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entrypoint"
+          },
+          "flow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flow Id"
+          },
+          "branch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Id"
           }
         },
         "type": "object",
@@ -5951,6 +7095,39 @@
             "type": "array",
             "title": "Warnings",
             "default": []
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service"
+          },
+          "exception_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exception Type"
           }
         },
         "type": "object",
@@ -6103,6 +7280,146 @@
         ],
         "title": "VariableResponse",
         "description": "Ответ с данными переменной"
+      },
+      "VoiceProvidersCatalogDTO": {
+        "properties": {
+          "stt_tts_provider_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stt Tts Provider Ids"
+          },
+          "response_format_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Response Format Ids"
+          },
+          "credential_field_groups": {
+            "additionalProperties": {
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Credential Field Groups"
+          },
+          "stt_litserve_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stt Litserve Models"
+          },
+          "tts_litserve_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tts Litserve Models"
+          },
+          "tts_litserve_voice_hints": {
+            "items": {
+              "$ref": "#/components/schemas/TtsLitserveVoiceHint"
+            },
+            "type": "array",
+            "title": "Tts Litserve Voice Hints"
+          },
+          "cloud_ru_stt_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cloud Ru Stt Models"
+          },
+          "cloud_ru_tts_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cloud Ru Tts Models"
+          },
+          "yandex_speech_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Yandex Speech Models"
+          },
+          "sber_speech_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sber Speech Models"
+          },
+          "speech_language_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Speech Language Ids"
+          },
+          "vad_provider_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Vad Provider Ids"
+          },
+          "tts_sample_rate_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Tts Sample Rate Ids"
+          },
+          "vad_sample_rate_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Vad Sample Rate Ids"
+          },
+          "litserve_silero_tts_sample_rate_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Litserve Silero Tts Sample Rate Ids"
+          },
+          "cloud_ru_tts_voice_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cloud Ru Tts Voice Ids"
+          },
+          "yandex_tts_voice_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Yandex Tts Voice Ids"
+          },
+          "sber_tts_voice_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sber Tts Voice Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "VoiceProvidersCatalogDTO",
+        "description": "Ответ GET .../voice-providers/catalog (без конфиденциальных данных из conf)."
       }
     }
   },

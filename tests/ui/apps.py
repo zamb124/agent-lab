@@ -39,7 +39,7 @@ SERVICE_UI_REGISTRY: dict[str, ServiceUiSpec] = {
         port=9003,
         spa_path="/crm/",
         shell_selector="crm-app",
-        title="CRM - Умная Записная Книжка",
+        title="NetWorkle - Умная Записная Книжка",
         subdomain_prefix="system",
     ),
     "frontend": ServiceUiSpec(
@@ -47,7 +47,7 @@ SERVICE_UI_REGISTRY: dict[str, ServiceUiSpec] = {
         port=9004,
         spa_path="/",
         shell_selector="frontend-app",
-        title="Humanitec - AI-агенты для автоматизации бизнеса",
+        title=None,
     ),
     "sync": ServiceUiSpec(
         key="sync",

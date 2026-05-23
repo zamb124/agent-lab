@@ -176,7 +176,7 @@ def get_files(state: 'ExecutionState | JsonDict') -> list[dict[str, Any]]:
         state: Текущий state (ExecutionState или dict)
 
     Returns:
-        Список файлов [{name, path, mime_type, size}, ...]
+        Список файлов [{original_name, url, content_type, file_size}, ...]
     """
     if isinstance(state, ExecutionState):
         return state.files or []
@@ -190,7 +190,7 @@ def find_file(files: list[dict[str, Any]], name: str | None = None) -> dict[str,
     """
     Ищет файл в списке state.files по имени.
 
-    Точное совпадение по полю name, затем Unicode-normalized/case-insensitive
+    Точное совпадение по полю original_name, затем Unicode-normalized/case-insensitive
     сравнение, затем сравнение без combining marks и подстрока.
     Без name — последний элемент списка (как у read_file без file_name).
 
@@ -206,18 +206,18 @@ def find_file(files: list[dict[str, Any]], name: str | None = None) -> dict[str,
     if not name:
         return files[-1]
     for f in files:
-        if f.get("name") == name:
+        if f.get("original_name") == name:
             return f
     normalized_name = normalize_file_lookup_name(name)
     for f in files:
-        if normalize_file_lookup_name(f.get("name")) == normalized_name:
+        if normalize_file_lookup_name(f.get("original_name")) == normalized_name:
             return f
     name_key = normalize_file_lookup_key(name)
     for f in files:
-        if normalize_file_lookup_key(f.get("name")) == name_key:
+        if normalize_file_lookup_key(f.get("original_name")) == name_key:
             return f
     for f in files:
-        file_key = normalize_file_lookup_key(f.get("name"))
+        file_key = normalize_file_lookup_key(f.get("original_name"))
         if name_key and name_key in file_key:
             return f
     return None

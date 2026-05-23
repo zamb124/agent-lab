@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pytest
 from httpx import AsyncClient
 
+from core.models.identity_models import Company
 from core.utils.tokens import get_token_service
 
 
@@ -293,9 +294,164 @@ async def test_embed_session_token_rejects_forbidden_method(
     assert deny_response.status_code == 200
     deny_payload = deny_response.json()
     assert deny_payload["error"]["code"] == -32000
-    assert "supports only message/send and message/stream" in deny_payload["error"]["message"]
+    assert "supports only message/send, message/stream and tasks/cancel" in deny_payload["error"]["message"]
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_embed_session_token_allows_tasks_cancel(
+    flows_client: AsyncClient,
+    frontend_client: AsyncClient,
+    embed_test_auth,
+    container,
+    unique_id,
+):
+    auth_headers, flow_id, _, _ = embed_test_auth
+    embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
+    token_response = await frontend_client.post(
+        f"/frontend/api/embed/configs/{embed_id}/session-token",
+        headers=auth_headers,
+        json={"origin": "https://larashved.ru", "expires_in_seconds": 300},
+    )
+    assert token_response.status_code == 200
+    embed_token = token_response.json()["token"]
+    task_id = f"missing-embed-cancel-{unique_id}"
+
+    try:
+        cancel_response = await flows_client.post(
+            f"/flows/api/v1/embed/{embed_id}",
+            headers={
+                "Authorization": f"Bearer {embed_token}",
+                "Origin": "https://larashved.ru",
+            },
+            json={
+                "jsonrpc": "2.0",
+                "id": f"test-cancel-{unique_id}",
+                "method": "tasks/cancel",
+                "params": {"id": task_id},
+            },
+        )
+        assert cancel_response.status_code == 200
+        cancel_payload = cancel_response.json()
+        assert cancel_payload["error"]["code"] == -32000
+        assert cancel_payload["error"]["message"] == "Task not found"
+    finally:
+        await container.redis_client.delete(f"cancel:{task_id}")
+
+    await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_embed_session_token_rejects_company_mismatch(
+    flows_client: AsyncClient,
+    frontend_client: AsyncClient,
+    frontend_container,
+    embed_test_auth,
+    unique_id,
+):
+    auth_headers, flow_id, company_id, _ = embed_test_auth
+    embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
+    other_company_id = f"other_embed_company_{unique_id}"
+    await frontend_container.company_repository.set(
+        Company(
+            company_id=other_company_id,
+            name="Other Embed Company",
+            owner_id=f"other_owner_{unique_id}",
+        )
+    )
+    embed_token = get_token_service().create_embed_session_token(
+        user_id=f"embed_guest_{unique_id}",
+        company_id=other_company_id,
+        roles=["guest"],
+        expires_in=300,
+        metadata={
+            "embed_id": embed_id,
+            "embed_flow_id": flow_id,
+            "embed_branch_id": "default",
+            "allowed_origin": "https://larashved.ru",
+            "issued_by": "test.company_mismatch",
+        },
+    )
+
+    try:
+        deny_response = await flows_client.post(
+            f"/flows/api/v1/embed/{embed_id}",
+            headers={
+                "Authorization": f"Bearer {embed_token}",
+                "Origin": "https://larashved.ru",
+            },
+            json={
+                "jsonrpc": "2.0",
+                "id": f"test-company-mismatch-{unique_id}",
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "messageId": f"m-company-mismatch-{unique_id}",
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": "Привет"}],
+                    }
+                },
+            },
+        )
+        assert deny_response.status_code == 200
+        deny_payload = deny_response.json()
+        assert deny_payload["error"]["code"] == -32000
+        assert "not allowed for this company" in deny_payload["error"]["message"]
+        assert company_id != other_company_id
+    finally:
+        await frontend_container.company_repository.delete(other_company_id)
+        await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_embed_session_token_rejects_missing_branch_claim(
+    flows_client: AsyncClient,
+    frontend_client: AsyncClient,
+    embed_test_auth,
+    unique_id,
+):
+    auth_headers, flow_id, company_id, _ = embed_test_auth
+    embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
+    embed_token = get_token_service().create_embed_session_token(
+        user_id=f"embed_guest_no_branch_{unique_id}",
+        company_id=company_id,
+        roles=["guest"],
+        expires_in=300,
+        metadata={
+            "embed_id": embed_id,
+            "embed_flow_id": flow_id,
+            "allowed_origin": "https://larashved.ru",
+            "issued_by": "test.missing_branch",
+        },
+    )
+
+    try:
+        deny_response = await flows_client.post(
+            f"/flows/api/v1/embed/{embed_id}",
+            headers={
+                "Authorization": f"Bearer {embed_token}",
+                "Origin": "https://larashved.ru",
+            },
+            json={
+                "jsonrpc": "2.0",
+                "id": f"test-missing-branch-{unique_id}",
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "messageId": f"m-missing-branch-{unique_id}",
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": "Привет"}],
+                    }
+                },
+            },
+        )
+        assert deny_response.status_code == 200
+        deny_payload = deny_response.json()
+        assert deny_payload["error"]["code"] == -32000
+        assert "embed_branch_id is required" in deny_payload["error"]["message"]
+    finally:
+        await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 
 
 @pytest.mark.asyncio
@@ -359,12 +515,13 @@ async def test_embed_route_preflight_allows_configured_origin(
         headers={
             "Origin": "https://larashved.ru",
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "authorization,content-type",
+            "Access-Control-Request-Headers": "authorization,content-type,x-platform-namespace",
         },
     )
     assert response.status_code == 204
     assert response.headers.get("Access-Control-Allow-Origin") == "https://larashved.ru"
     assert response.headers.get("Access-Control-Allow-Credentials") == "true"
+    assert "X-Platform-Namespace" in response.headers.get("Access-Control-Allow-Headers", "")
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 
@@ -395,4 +552,3 @@ async def test_embed_route_preflight_denies_unconfigured_origin(
 async def test_legacy_embed_route_removed(flows_client: AsyncClient):
     response = await flows_client.get("/flows/api/v1/embed/some-widget/settings")
     assert response.status_code == 401
-

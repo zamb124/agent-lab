@@ -161,7 +161,7 @@ def test_message_read_from_entity_builds_read() -> None:
     ]
     sender = UserBrief(user_id="sender1", display_name="Sender", avatar_url=None)
     out: MessageRead = message_read_from_entity(m=m, contents=contents, sender=sender)
-    assert out.id == "m1"
+    assert out.message_id == "m1"
     assert out.sender.display_name == "Sender"
     assert len(out.contents) == 1
     assert len(out.reactions) == 1

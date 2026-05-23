@@ -280,7 +280,7 @@ async def _setup_channels_update(
             },
         )
         assert ch.status_code == 201, ch.text
-        channel_id = ch.json()["id"]
+        channel_id = ch.json()["channel_id"]
     return (
         {"channel_id": channel_id, "body": {"name": f"Renamed {unique_id}"}},
         {"channel_id": channel_id},

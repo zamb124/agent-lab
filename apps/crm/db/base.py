@@ -116,7 +116,7 @@ class BaseCRMRepository(ABC, Generic[T]):
             type_cast(object, getattr(self.model_class, self.id_field)),
         )
 
-    async def get(self, entity_id: str) -> T | None:
+    async def get(self, entity_id: str, /) -> T | None:
         """Получает запись по ID"""
         async with self._db.session() as session:
             stmt = select(self.model_class).where(self._get_id_column() == entity_id)

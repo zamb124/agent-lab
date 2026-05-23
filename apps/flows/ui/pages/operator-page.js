@@ -393,9 +393,13 @@ export class OperatorPage extends PlatformPage {
         const uploaded = [];
         for (const file of files) {
             const result = await this._upload.run({ file });
-            if (result?.file_id) {
-                uploaded.push({ file_id: result.file_id, name: file.name });
+            if (!result?.file_id) {
+                throw new Error('operator file_upload op must return file_id');
             }
+            if (typeof result.original_name !== 'string' || result.original_name.length === 0) {
+                throw new Error('operator file_upload op must return original_name');
+            }
+            uploaded.push({ file_id: result.file_id, original_name: result.original_name });
         }
         this._pendingFiles = [...this._pendingFiles, ...uploaded];
         event.target.value = '';
@@ -613,7 +617,7 @@ export class OperatorPage extends PlatformPage {
                         ${this._pendingFiles.map((f, i) => html`
                             <span class="pending-file">
                                 <platform-icon name="file" size="12"></platform-icon>
-                                <span>${f.name}</span>
+                                <span>${f.original_name}</span>
                                 <button type="button" @click=${() => this._removePendingFile(i)}>
                                     <platform-icon name="close" size="10"></platform-icon>
                                 </button>

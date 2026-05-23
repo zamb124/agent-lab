@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Crm Public API",
-    "description": "API для управления CRM: сущности, заметки, задачи, связи",
+    "description": "API для управления NetWorkle: сущности, заметки, задачи, связи",
     "version": "1.0.0",
     "x-service": "crm"
   },
@@ -42,6 +42,20 @@
             },
             "type": "array",
             "title": "Patch Relationships"
+          },
+          "add_entities": {
+            "items": {
+              "$ref": "#/components/schemas/AIExtractedEntity"
+            },
+            "type": "array",
+            "title": "Add Entities"
+          },
+          "add_relationships": {
+            "items": {
+              "$ref": "#/components/schemas/AIAnalysisRelationshipDraft"
+            },
+            "type": "array",
+            "title": "Add Relationships"
           }
         },
         "type": "object",
@@ -134,14 +148,12 @@
           "attributes": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Attributes"
+            ]
           }
         },
         "type": "object",
@@ -201,14 +213,12 @@
           "attributes": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Attributes"
+            ]
           },
           "note_date": {
             "anyOf": [
@@ -460,9 +470,9 @@
       },
       "AccessRequestResponse": {
         "properties": {
-          "request_id": {
+          "access_request_id": {
             "type": "string",
-            "title": "ID запроса"
+            "title": "ID запроса доступа"
           },
           "company_id": {
             "type": "string",
@@ -534,7 +544,7 @@
         },
         "type": "object",
         "required": [
-          "request_id",
+          "access_request_id",
           "company_id",
           "requester_id",
           "owner_id",
@@ -696,6 +706,17 @@
             "type": "string",
             "format": "binary",
             "title": "File"
+          },
+          "public": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public"
           }
         },
         "type": "object",
@@ -852,9 +873,7 @@
             "title": "Entity Id"
           },
           "updates": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Updates"
+            "$ref": "#/components/schemas/JsonObject"
           }
         },
         "type": "object",
@@ -1046,6 +1065,7 @@
             "default": true
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "provider",
@@ -1601,6 +1621,7 @@
             "title": "Metadata"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "title",
@@ -1699,6 +1720,39 @@
         ],
         "title": "CursorPage[RelationshipResponse]"
       },
+      "DailySummaryRequest": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Date",
+            "description": "Дата в формате YYYY-MM-DD"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace",
+            "description": "Пространство назначения"
+          },
+          "force_rebuild": {
+            "type": "boolean",
+            "title": "Force Rebuild",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "date"
+        ],
+        "title": "DailySummaryRequest",
+        "description": "Получение cached/SWR дневной сводки через /entities/daily-summary."
+      },
       "DemoLoginRequest": {
         "properties": {
           "email": {
@@ -1722,6 +1776,17 @@
           "draft_entity_id": {
             "type": "string",
             "title": "Draft Entity Id"
+          },
+          "entity_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Type"
           },
           "name": {
             "anyOf": [
@@ -1748,14 +1813,12 @@
           "attributes": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Attributes"
+            ]
           },
           "entity_subtype": {
             "anyOf": [
@@ -1855,14 +1918,12 @@
           "attributes": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Attributes"
+            ]
           }
         },
         "type": "object",
@@ -1912,14 +1973,12 @@
           "attributes": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Attributes"
+            ]
           },
           "tags": {
             "anyOf": [
@@ -2145,9 +2204,7 @@
             "title": "Status"
           },
           "attributes": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Attributes"
+            "$ref": "#/components/schemas/JsonObject"
           },
           "tags": {
             "items": {
@@ -2240,8 +2297,7 @@
           },
           "external_relationships": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/JsonObject"
             },
             "type": "array",
             "title": "External Relationships",
@@ -2286,6 +2342,23 @@
             ],
             "title": "Match Type",
             "description": "Источник совпадения в гибридном поиске, когда применимо."
+          },
+          "semantic_text_index_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "absent",
+                  "pending_embedding",
+                  "ready"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Text Index Status",
+            "description": "Семантический индекс основного текста сущности (pgvector, document_id = entity_id). None — не pgvector или поле не включено в ответ."
           },
           "created_at": {
             "type": "string",
@@ -2379,12 +2452,13 @@
           },
           "value": {
             "anyOf": [
-              {},
+              {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               {
                 "type": "null"
               }
-            ],
-            "title": "Value"
+            ]
           }
         },
         "additionalProperties": false,
@@ -2575,26 +2649,22 @@
           "required_fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Required Fields"
+            ]
           },
           "optional_fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Optional Fields"
+            ]
           },
           "icon": {
             "anyOf": [
@@ -2636,6 +2706,11 @@
           "is_voice_target": {
             "type": "boolean",
             "title": "Is Voice Target",
+            "default": false
+          },
+          "auto_resolve_suggests": {
+            "type": "boolean",
+            "title": "Auto Resolve Suggests",
             "default": false
           }
         },
@@ -2699,14 +2774,10 @@
             "title": "Prompt"
           },
           "required_fields": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Required Fields"
+            "$ref": "#/components/schemas/JsonObject"
           },
           "optional_fields": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Optional Fields"
+            "$ref": "#/components/schemas/JsonObject"
           },
           "public_fields": {
             "items": {
@@ -2761,6 +2832,10 @@
             "type": "boolean",
             "title": "Is Voice Target"
           },
+          "auto_resolve_suggests": {
+            "type": "boolean",
+            "title": "Auto Resolve Suggests"
+          },
           "extractable": {
             "type": "boolean",
             "title": "Extractable"
@@ -2806,6 +2881,7 @@
           "weight_coefficient",
           "is_context_anchor",
           "is_voice_target",
+          "auto_resolve_suggests",
           "extractable",
           "created_at",
           "list_entity_type"
@@ -2862,26 +2938,22 @@
           "required_fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Required Fields"
+            ]
           },
           "optional_fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Optional Fields"
+            ]
           },
           "icon": {
             "anyOf": [
@@ -2926,6 +2998,17 @@
               }
             ],
             "title": "Is Voice Target"
+          },
+          "auto_resolve_suggests": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Resolve Suggests"
           }
         },
         "type": "object",
@@ -2970,14 +3053,12 @@
           "attributes": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Attributes"
+            ]
           },
           "tags": {
             "anyOf": [
@@ -3128,7 +3209,7 @@
             "title": "Detected Kind",
             "description": "Тип файла по FileReader"
           },
-          "mime_type": {
+          "content_type": {
             "anyOf": [
               {
                 "type": "string"
@@ -3137,8 +3218,8 @@
                 "type": "null"
               }
             ],
-            "title": "Mime Type",
-            "description": "MIME после распознавания"
+            "title": "Content Type",
+            "description": "Content-Type после распознавания"
           },
           "warnings": {
             "items": {
@@ -3330,14 +3411,12 @@
           "attributes": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Attributes",
             "description": "Дополнительные атрибуты связи"
           }
         },
@@ -3396,14 +3475,12 @@
           "attributes": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Attributes",
             "description": "Атрибуты entity (только если access=True)"
           }
         },
@@ -3621,6 +3698,11 @@
         ],
         "title": "IntegrationsListResponse"
       },
+      "JsonObject": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "JsonValue": {},
       "KnowledgeImportCreatedEntityItem": {
         "properties": {
           "entity_id": {
@@ -3660,7 +3742,7 @@
         ],
         "title": "KnowledgeImportCreatedEntityItem"
       },
-      "LaraWorkspaceSummaryResponse": {
+      "LaraNamespaceSummaryResponse": {
         "properties": {
           "namespace": {
             "type": "string",
@@ -3692,7 +3774,7 @@
           "knowledge_imports_in_progress",
           "notes_with_analysis_draft_not_applied"
         ],
-        "title": "LaraWorkspaceSummaryResponse",
+        "title": "LaraNamespaceSummaryResponse",
         "description": "Сводка для Lara: импорты и черновики AI-анализа заметок в namespace."
       },
       "ListResponse_CalendarIntegrationPublic_": {
@@ -3759,7 +3841,7 @@
         ],
         "title": "ListResponse[UserSearchResult]"
       },
-      "ListResponse_dict_": {
+      "ListResponse_dict_str__Any__": {
         "properties": {
           "items": {
             "items": {
@@ -3774,7 +3856,7 @@
         "required": [
           "items"
         ],
-        "title": "ListResponse[dict]"
+        "title": "ListResponse[dict[str, Any]]"
       },
       "NamespaceAutomationRule": {
         "properties": {
@@ -3896,6 +3978,10 @@
             "type": "object",
             "title": "Пресеты колонок доски задач",
             "description": "Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор."
+          },
+          "suggests": {
+            "$ref": "#/components/schemas/SuggestsSettings",
+            "title": "Настройки саджестов"
           }
         },
         "type": "object",
@@ -3975,6 +4061,10 @@
             "type": "object",
             "title": "Пресеты колонок доски задач",
             "description": "Ключ доски (task или task:<subtype>) → упорядоченные стадии. Пусто: резолвер CRM подставляет системный набор."
+          },
+          "suggests": {
+            "$ref": "#/components/schemas/SuggestsSettings",
+            "title": "Настройки саджестов"
           }
         },
         "type": "object",
@@ -4064,12 +4154,12 @@
             "type": "array",
             "title": "Removable Type Ids"
           },
-          "all_spaces_type_ids": {
+          "all_namespaces_type_ids": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "All Spaces Type Ids"
+            "title": "All Namespaces Type Ids"
           },
           "lock_reason": {
             "anyOf": [
@@ -4094,7 +4184,7 @@
           "can_add_types",
           "locked_type_ids",
           "removable_type_ids",
-          "all_spaces_type_ids"
+          "all_namespaces_type_ids"
         ],
         "title": "NamespaceEditabilityResponse",
         "description": "Ограничения редактирования namespace."
@@ -4431,9 +4521,7 @@
             "title": "Operators"
           },
           "defaults": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Defaults"
+            "$ref": "#/components/schemas/JsonObject"
           },
           "validation_limits": {
             "additionalProperties": {
@@ -4495,14 +4583,10 @@
             "title": "Prompt"
           },
           "required_fields": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Required Fields"
+            "$ref": "#/components/schemas/JsonObject"
           },
           "optional_fields": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Optional Fields"
+            "$ref": "#/components/schemas/JsonObject"
           },
           "icon": {
             "anyOf": [
@@ -4613,14 +4697,10 @@
             "title": "Prompt"
           },
           "required_fields": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Required Fields"
+            "$ref": "#/components/schemas/JsonObject"
           },
           "optional_fields": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Optional Fields"
+            "$ref": "#/components/schemas/JsonObject"
           },
           "icon": {
             "anyOf": [
@@ -4774,6 +4854,55 @@
         "type": "object",
         "title": "NamespaceUpdateRequest",
         "description": "Обновление существующего namespace."
+      },
+      "NoteAnalysisDraftRepairQueuedResponse": {
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "title": "Note Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "queued": {
+            "type": "boolean",
+            "title": "Queued",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "note_id",
+          "task_id"
+        ],
+        "title": "NoteAnalysisDraftRepairQueuedResponse",
+        "description": "Ответ POST постановки починки черновика в очередь TaskIQ."
+      },
+      "NoteMarkdownFormatQueuedResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status",
+            "default": "queued"
+          },
+          "note_id": {
+            "type": "string",
+            "title": "Note Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "note_id",
+          "task_id"
+        ],
+        "title": "NoteMarkdownFormatQueuedResponse",
+        "description": "Ответ POST …/notes/{note_id}/format-markdown — задача поставлена в TaskIQ."
       },
       "OffsetPage_AccessGrantResponse_": {
         "properties": {
@@ -4961,6 +5090,37 @@
         ],
         "title": "OffsetPage[RelationshipTypeResponse]"
       },
+      "OffsetPage_SuggestResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OffsetPage[SuggestResponse]"
+      },
       "OffsetPage_TaskResponse_": {
         "properties": {
           "items": {
@@ -5055,7 +5215,13 @@
               }
             ],
             "title": "Namespace",
-            "description": "Namespace для проверки лимита сущностей в БД"
+            "description": "Namespace пространства данных. При непустом значении используется и для лимита сущностей, и как фильтр Relationship.namespace при обходе графа."
+          },
+          "include_all_namespaces": {
+            "type": "boolean",
+            "title": "Include All Namespaces",
+            "description": "Если true и задан namespace — обход берёт связи всех Relationship.namespace (оставлено для редких отладочных вызовов).",
+            "default": false
           }
         },
         "type": "object",
@@ -5063,6 +5229,46 @@
           "entity_ids"
         ],
         "title": "OverviewGraphRequest"
+      },
+      "PeriodSummaryRequest": {
+        "properties": {
+          "date_from": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Date From",
+            "description": "Начало периода YYYY-MM-DD"
+          },
+          "date_to": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Date To",
+            "description": "Конец периода YYYY-MM-DD"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace",
+            "description": "Пространство назначения"
+          },
+          "force_rebuild": {
+            "type": "boolean",
+            "title": "Force Rebuild",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "date_from",
+          "date_to"
+        ],
+        "title": "PeriodSummaryRequest",
+        "description": "Получение cached/SWR сводки за период через /entities/period-summary."
       },
       "RelatedEntitiesResponse": {
         "properties": {
@@ -5143,14 +5349,12 @@
           "attributes": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/JsonObject"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Attributes"
+            ]
           }
         },
         "type": "object",
@@ -5199,9 +5403,7 @@
             "description": "Достоверность связи; на длину пути и на поиск сущностей не влияет."
           },
           "attributes": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Attributes"
+            "$ref": "#/components/schemas/JsonObject"
           },
           "created_at": {
             "type": "string",
@@ -5891,16 +6093,14 @@
           },
           "entities": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/JsonObject"
             },
             "type": "array",
             "title": "Entities"
           },
           "relationships": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/JsonObject"
             },
             "type": "array",
             "title": "Relationships"
@@ -5946,6 +6146,70 @@
         "type": "object",
         "title": "SubscribeRequest",
         "description": "Тело POST /api/push/subscribe."
+      },
+      "SuggestResponse": {
+        "properties": {
+          "suggest_id": {
+            "type": "string",
+            "title": "Suggest Id"
+          },
+          "suggest_type": {
+            "type": "string",
+            "title": "Suggest Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "target_entity_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Target Entity Ids"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/JsonObject"
+          }
+        },
+        "type": "object",
+        "required": [
+          "suggest_id",
+          "suggest_type",
+          "status",
+          "target_entity_ids",
+          "payload"
+        ],
+        "title": "SuggestResponse"
+      },
+      "SuggestsSettings": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Включить фоновый поиск саджестов",
+            "default": false
+          },
+          "cron": {
+            "type": "string",
+            "title": "Cron-расписание для генерации",
+            "default": "0 2 * * *"
+          },
+          "schedule_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Task Id",
+            "description": "ID платформенной задачи расписания"
+          }
+        },
+        "type": "object",
+        "title": "SuggestsSettings",
+        "description": "Настройки фоновой генерации саджестов (дубли/пропущенные)."
       },
       "SwitchCompanyRequest": {
         "properties": {
@@ -6154,9 +6418,7 @@
             "title": "Error Message"
           },
           "data": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Data"
+            "$ref": "#/components/schemas/JsonObject"
           },
           "taskiq_task_id": {
             "anyOf": [

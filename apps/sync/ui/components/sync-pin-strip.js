@@ -1,7 +1,7 @@
 /**
  * sync-pin-strip — горизонтальная полоска закреплённых сообщений канала.
  *
- * Источник id: useResource('sync/channels').items.find(...).pinned_message_ids.
+ * Источник message_id: useResource('sync/channels').items.find(...).pinned_message_ids.
  * Превью текста: сообщение из slice `sync/messages_store.byChannelId[channelId].items`,
  * иначе подпись по умолчанию.
  * Индекс навигации: useSlice('sync/chat_ui').pinnedNavigateIndex.
@@ -75,7 +75,7 @@ export class SyncPinStrip extends PlatformElement {
     }
 
     _channel() {
-        return this._channels.items.find((c) => c.id === this.channelId);
+        return this._channels.items.find((c) => c.channel_id === this.channelId);
     }
 
     _messageById(messageId) {

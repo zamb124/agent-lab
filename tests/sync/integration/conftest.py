@@ -94,7 +94,7 @@ async def redis_pubsub_listener() -> AsyncIterator[PubSubReceive]:
         async def test_op_X_publishes_push(redis_pubsub_listener, op_context, ...):
             await op_X(...)
             events = await redis_pubsub_listener("sync/space/created", timeout=2.0)
-            assert events[0]["payload"]["id"] == "..."
+            assert events[0]["payload"]["message_id"] == "..."
     """
     settings = get_settings()
     if not settings.database.redis_url:

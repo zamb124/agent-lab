@@ -11,14 +11,10 @@
 
 /**
  * @param {string|null|undefined} branchId
- * @param {string|null|undefined} skillIdLegacy — атрибут skill-id (легаси embed)
  * @returns {string}
  */
-export function normalizeBranchIdForFlowVoiceSessionQuery(branchId, skillIdLegacy) {
-    const first = typeof branchId === 'string' && branchId.trim() !== '' ? branchId.trim() : '';
-    const second =
-        typeof skillIdLegacy === 'string' && skillIdLegacy.trim() !== '' ? skillIdLegacy.trim() : '';
-    const raw = first !== '' ? first : second;
+export function normalizeBranchIdForFlowVoiceSessionQuery(branchId) {
+    const raw = typeof branchId === 'string' && branchId.trim() !== '' ? branchId.trim() : '';
     if (raw === '' || raw === 'base') {
         return 'default';
     }
@@ -48,7 +44,6 @@ export function voiceSessionQueryToStringRecord(query) {
  * @param {string} p.flowsApiRoot — префикс API flows без завершающего `/` (например `/flows`)
  * @param {string} p.flowId
  * @param {string|null|undefined} [p.branchId]
- * @param {string|null|undefined} [p.skillIdLegacy]
  * @param {RequestCredentials} [p.credentials]
  * @param {() => Promise<Record<string, string>>} [p.getHeaders]
  * @returns {Promise<Record<string, string>>}
@@ -59,7 +54,7 @@ export async function fetchFlowVoiceSessionQueryDict(p) {
     if (fid === '' || root === '') {
         throw new Error('fetchFlowVoiceSessionQueryDict: flowId and flowsApiRoot required');
     }
-    const bid = normalizeBranchIdForFlowVoiceSessionQuery(p.branchId, p.skillIdLegacy);
+    const bid = normalizeBranchIdForFlowVoiceSessionQuery(p.branchId);
     const url = `${root}/api/v1/flows/${encodeURIComponent(fid)}/voice-session-query?branch_id=${encodeURIComponent(bid)}`;
     const credentials = p.credentials === 'omit' ? 'omit' : 'include';
     const headersRaw =
