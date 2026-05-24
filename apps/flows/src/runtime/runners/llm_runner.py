@@ -1310,7 +1310,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             if self.llm_node:
                 rendered_prompt = await self.llm_node.after_prompt_render(rendered_prompt, state)
 
-            tracer.record_prompt_result(span, rendered_prompt, resolved_vars)
+            tracer.record_prompt_result(span, rendered_prompt)
             self._save_prompt_to_history(state, prompt_template, rendered_prompt, resolved_vars, node_id)
 
         return rendered_prompt

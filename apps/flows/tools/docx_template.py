@@ -4,7 +4,7 @@ Tool: заполнение DOCX-шаблона через DocxTemplater (пои�
 
 from __future__ import annotations
 
-from typing import Any
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,8 +13,9 @@ from apps.flows.src.tools.decorator import tool
 from core.files.docx_template import DocxTemplater
 from core.files.models import FileResponse
 from core.state import ExecutionState
+from core.types import JsonObject, require_json_object
 
-JsonDict = dict[str, Any]
+JsonDict = JsonObject
 
 _FILL_DOCX_DESCRIPTION = """
 Заполняет шаблон Word (.docx) с плейсхолдерами Jinja2 (docxtpl: {{ var }}, вложенные {{ a.b }}, {% if %}…{% else %}…{% endif %}, {% for x in items %}…{% endfor %}, фильтры {{ name|upper }} и т.д.).
@@ -44,11 +45,15 @@ _FILL_DOCX_DESCRIPTION = """
 """.strip()
 
 
-def _fill_docx_mock(args: JsonDict, state: Any = None) -> JsonDict:
+def _fill_docx_mock(args: JsonDict, state: ExecutionState | None = None) -> JsonDict:
+    _ = state
+    output_original_name = args["output_original_name"]
+    if not isinstance(output_original_name, str) or not output_original_name.strip():
+        raise ValueError("fill_docx_template.output_original_name must be a non-empty string")
     return {
         "success": True,
         "file_id": "file_mockdocx01",
-        "original_name": args.get("output_original_name") or "out.docx",
+        "original_name": output_original_name,
         "content_type": (
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ),
@@ -60,7 +65,7 @@ def _fill_docx_mock(args: JsonDict, state: Any = None) -> JsonDict:
 
 
 class FillDocxTemplateArgs(BaseModel):
-    model_config = ConfigDict(
+    model_config: ClassVar[ConfigDict] = ConfigDict(
         extra="forbid",
         json_schema_extra={
             "examples": [
@@ -74,7 +79,7 @@ class FillDocxTemplateArgs(BaseModel):
         },
     )
 
-    variables: dict[str, Any] = Field(
+    variables: JsonObject = Field(
         ...,
         description=(
             "Данные для Jinja2 в шаблоне: строки, числа, bool, null, вложенные объекты и массивы; "
@@ -108,7 +113,7 @@ class FillDocxTemplateArgs(BaseModel):
     args_schema=FillDocxTemplateArgs,
 )
 async def fill_docx_template(
-    variables: dict[str, Any],
+    variables: JsonObject,
     output_original_name: str,
     file_name: str | None = None,
     strict: bool = False,
@@ -137,10 +142,9 @@ async def fill_docx_template(
         }
 
     docx_entries = [
-        f
-        for f in files
-        if isinstance(f, dict)
-        and str(f.get("original_name") or "").lower().endswith(".docx")
+        file_ref
+        for file_ref in files
+        if file_ref.original_name.lower().endswith(".docx")
     ]
     normalized_file_name = _normalize_file_name(file_name)
     if normalized_file_name:
@@ -151,14 +155,13 @@ async def fill_docx_template(
     if finfo is None:
         return {
             "success": False,
-            "error": f"Файл не найден. Доступные: {[f.get('original_name') for f in files]}",
+            "error": f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in files]}",
         }
 
-    n = str(finfo.get("original_name") or "")
-    if not n.lower().endswith(".docx"):
+    if not finfo.original_name.lower().endswith(".docx"):
         return {
             "success": False,
-            "error": f"Шаблон должен быть .docx, получено: {n!r}",
+            "error": f"Шаблон должен быть .docx, получено: {finfo.original_name!r}",
         }
 
     try:
@@ -182,7 +185,10 @@ async def fill_docx_template(
         raise
 
     response = FileResponse.from_record(record)
-    return {"success": True, **response.model_dump(mode="json")}
+    return {
+        "success": True,
+        **require_json_object(response.model_dump(mode="json"), "fill_docx_template.response"),
+    }
 
 
 __all__ = ["fill_docx_template"]

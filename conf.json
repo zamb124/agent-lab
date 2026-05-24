@@ -216,7 +216,7 @@
     }
   },
   "llm": {
-    "provider": "openrouter",
+    "provider": "humanitec_llm",
     "openrouter": {
       "api_key": "YOUR_OPENROUTER_API_KEY",
       "base_url": "https://openrouter.ai/api/v1",
@@ -232,7 +232,7 @@
       "folder_id": "b1go18q7gmbn3vmrqp0f",
       "base_url": "https://llm.api.cloud.yandex.net/v1"
     },
-    "default_model": "x-ai/grok-code-fast-1",
+    "default_model": "auto",
     "default_strategy": "openrouter_free_pool",
     "openrouter_free_pool": {
       "enabled": true,
@@ -317,7 +317,7 @@
   "nano_banana": {
     "enabled": true,
     "api_key": "YOUR_NANO_BANANA_API_KEY",
-    "model_name": "google/gemini-2.5-flash-preview-image",
+    "model_name": "auto",
     "timeout": 60
   },
   "payment_providers": {
@@ -404,9 +404,9 @@
         "permissions_enabled": false
       },
       "llm": {
-        "provider": "openrouter",
-        "default_model": "anthropic/claude-sonnet-4.5",
-        "vision_model": "google/gemini-2.5-pro",
+        "provider": "humanitec_llm",
+        "default_model": "auto",
+        "vision_model": "auto",
         "default_strategy": "openrouter_free_pool",
         "openrouter_free_pool": {
           "enabled": true,

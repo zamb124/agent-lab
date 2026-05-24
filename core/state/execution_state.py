@@ -14,7 +14,8 @@ from a2a.types import Message
 from pydantic import Field, field_serializer, field_validator, model_validator
 
 from core.clients.llm.messages import LLMToolCall
-from core.models import FlexibleBaseModel
+from core.files.file_ref import FileRef
+from core.models import FlexibleBaseModel, StrictBaseModel
 from core.state.interrupt import InterruptData
 from core.state.mutation_policy import guard_setattr_if_user_code
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
@@ -48,7 +49,7 @@ class ExecutionStateCreateKwargs(TypedDict, total=False):
     user_groups: list[str]
     variables: JsonObject
     triggers: dict[str, TriggerRuntimeSnapshot]
-    files: list[JsonObject]
+    files: list[FileRef]
     interrupt: InterruptData | None
     interrupt_path: list[InterruptPathItem]
     hitl_handoff_correlation_id: str | None
@@ -67,6 +68,7 @@ class ExecutionStateCreateKwargs(TypedDict, total=False):
     flow_deadline_monotonic: float | None
     flow_timeout_effective_seconds: int | None
     prompt_history: list[PromptHistoryItem]
+    ui_events_pending: list[PendingUIEvent]
     llm_context_memory_cursor: dict[str, int]
 
 
@@ -98,6 +100,18 @@ class ExecutionExceptionRecord(FlexibleBaseModel):
     message: str = Field(..., description="Текст исключения")
     tool_name: str | None = Field(default=None, description="Имя tool при source=tool")
     tool_call_id: str | None = Field(default=None, description="ID tool_call при source=tool")
+
+
+class PendingUIEvent(StrictBaseModel):
+    """UI event, queued in ExecutionState until the runtime emits it to the A2A stream."""
+
+    id: str = Field(..., description="ID события")
+    type: str = Field(..., description="Тип события")
+    payload: JsonObject = Field(..., description="Payload события")
+    version: str = Field(..., description="Версия события")
+    timestamp: str = Field(..., description="Время создания ISO")
+    source: str = Field(..., description="Источник события")
+    correlation_id: str | None = Field(default=None, description="Correlation id")
 
 
 class PromptHistoryItem(FlexibleBaseModel):
@@ -365,7 +379,7 @@ class ExecutionState(FlexibleBaseModel):
         default_factory=dict,
         description="Снимок по trigger_id: { payload, context } — не смешивать с variables",
     )
-    files: list[JsonObject] = Field(default_factory=list, description="Прикреплённые файлы")
+    files: list[FileRef] = Field(default_factory=list, description="Прикреплённые файлы")
 
     # ========================================================================
     # Interrupt (ask_user)
@@ -534,6 +548,10 @@ class ExecutionState(FlexibleBaseModel):
     prompt_history: list[PromptHistoryItem] = Field(
         default_factory=list,
         description="История изменений системного промпта"
+    )
+    ui_events_pending: list[PendingUIEvent] = Field(
+        default_factory=list,
+        description="UI events, ожидающие публикации в A2A stream",
     )
     llm_context_memory_cursor: dict[str, int] = Field(
         default_factory=dict,
