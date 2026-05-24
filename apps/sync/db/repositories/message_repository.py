@@ -3,7 +3,6 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import and_, func, literal, or_, select, text, tuple_, update
 from sqlalchemy import delete as sql_delete
@@ -11,8 +10,9 @@ from sqlalchemy import delete as sql_delete
 from apps.sync.channel_lane_preview import ChannelLaneSummary, lane_preview_from_content_row
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncChannelMember, SyncMessage, SyncMessageContent
-from apps.sync.models.messages import MessageContentModel
+from apps.sync.models.messages import MessageContentModel, ReactionEntry
 from core.logging import get_logger
+from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
 @dataclass(frozen=True)
@@ -339,13 +339,17 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
     async def set_message_reactions(
         self,
         message_id: str,
-        reactions: list[dict[str, Any]],
+        reactions: list[ReactionEntry],
     ) -> None:
+        reaction_payload: list[JsonObject] = [
+            parse_json_object(reaction.model_dump_json(), "ReactionEntry")
+            for reaction in reactions
+        ]
         async with self._db.session() as session:
             await session.execute(
                 update(SyncMessage)
                 .where(SyncMessage.message_id == message_id)
-                .values(reactions=reactions)
+                .values(reactions=reaction_payload)
             )
             await session.commit()
 

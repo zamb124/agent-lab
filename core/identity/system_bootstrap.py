@@ -20,9 +20,14 @@ ADMIN_ROLE = "admin"
 
 
 class SystemBootstrapContainer(Protocol):
-    company_repository: CompanyRepository
-    subdomain_repository: SubdomainRepository
-    user_repository: UserRepository
+    @property
+    def company_repository(self) -> CompanyRepository: ...
+
+    @property
+    def subdomain_repository(self) -> SubdomainRepository: ...
+
+    @property
+    def user_repository(self) -> UserRepository: ...
 
 
 def as_system_bootstrap_container(container: object) -> SystemBootstrapContainer:
@@ -39,7 +44,7 @@ async def ensure_system_company_exists(container: SystemBootstrapContainer) -> C
             subdomain=SYSTEM_COMPANY_SUBDOMAIN,
             members={},
         )
-        await container.company_repository.set(company)
+        _ = await container.company_repository.set(company)
         logger.info("Bootstrap created system company")
 
     company_needs_update = False
@@ -48,10 +53,10 @@ async def ensure_system_company_exists(container: SystemBootstrapContainer) -> C
         company_needs_update = True
 
     if company_needs_update:
-        await container.company_repository.set(company)
+        _ = await container.company_repository.set(company)
         logger.info("Bootstrap updated system company subdomain to %s", SYSTEM_COMPANY_SUBDOMAIN)
 
-    await container.subdomain_repository.set_mapping(SYSTEM_COMPANY_SUBDOMAIN, SYSTEM_COMPANY_ID)
+    _ = await container.subdomain_repository.set_mapping(SYSTEM_COMPANY_SUBDOMAIN, SYSTEM_COMPANY_ID)
     return company
 
 
@@ -87,8 +92,8 @@ async def ensure_system_admin_membership(
         target_user.companies[system_company.company_id] = [*user_roles, ADMIN_ROLE]
 
     if company_needs_update or user_needs_update:
-        await container.company_repository.set(system_company)
-        await container.user_repository.set(target_user)
+        _ = await container.company_repository.set(system_company)
+        _ = await container.user_repository.set(target_user)
         logger.info(
             "Bootstrap updated: granted admin role for %s in company %s",
             user_email,

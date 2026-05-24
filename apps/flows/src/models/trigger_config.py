@@ -8,11 +8,12 @@ TriggerConfig - конфигурация триггера для запуска 
 """
 
 import re
-from typing import Any
+from typing import ClassVar
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from core.models import StrictBaseModel
+from core.types import JsonObject
 
 from .channel_config import OutputAction
 from .enums import TriggerStatus, TriggerType
@@ -46,13 +47,15 @@ class TriggerConfig(StrictBaseModel):
     Формат output_mapping: слева только content и/или context.*; variables.* запрещены.
     """
 
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
+
     trigger_id: str = Field(..., description="Уникальный ID триггера (без «.» в id)")
     name: str = Field(..., description="Название триггера")
     type: TriggerType = Field(..., description="Тип триггера")
     enabled: bool = Field(default=True, description="Активен ли триггер")
 
     # Специфичные настройки по типу триггера
-    config: dict[str, Any] = Field(
+    config: JsonObject = Field(
         default_factory=dict,
         description="Конфигурация триггера (bot_token, cron, etc.)"
     )
@@ -132,7 +135,16 @@ class TriggerConfig(StrictBaseModel):
 class TelegramTriggerConfig(StrictBaseModel):
     """Конфигурация Telegram триггера."""
 
-    bot_token: str = Field(..., description="Токен бота (@var:key для секрета)")
+    bot_token: str | None = Field(default=None, description="Токен бота (@var:key для секрета)")
+    api_base: str | None = Field(
+        default=None,
+        description="Override Telegram Bot API base URL for tests/local integrations.",
+    )
+    internal_secret_token: str | None = Field(
+        default=None,
+        alias="_secret_token",
+        description="Runtime secret для проверки Telegram webhook header.",
+    )
     allowed_users: list[int] = Field(
         default_factory=list,
         description="Разрешенные user_id (пусто = все)"
@@ -152,6 +164,10 @@ class TelegramTriggerConfig(StrictBaseModel):
             "(см. TelegramTriggerHandler.normalize_allowed_updates)"
         ),
     )
+    drop_pending_updates: bool = Field(
+        default=False,
+        description="Передавать drop_pending_updates в Telegram setWebhook.",
+    )
 
 
 class CronTriggerConfig(StrictBaseModel):
@@ -163,7 +179,7 @@ class CronTriggerConfig(StrictBaseModel):
         default="",
         description="Начальный content для state"
     )
-    initial_variables: dict[str, Any] = Field(
+    initial_variables: JsonObject = Field(
         default_factory=dict,
         description="Начальные переменные для state"
     )

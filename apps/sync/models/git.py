@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
 
 from pydantic import BaseModel, Field
+
+from core.types import JsonObject
 
 
 class GitProvider(str, Enum):
@@ -37,7 +38,7 @@ class GitResourceRefRead(BaseModel):
     project_key: str = Field(description="Ключ/путь проекта в провайдере.")
     external_id: str = Field(description="Идентификатор ресурса у провайдера.")
     url: str = Field(description="Канонический URL ресурса.")
-    extra: dict[str, Any] = Field(
+    extra: JsonObject = Field(
         default_factory=dict,
         description="Дополнительные метаданные ресурса.",
     )
@@ -51,7 +52,7 @@ class GitResourceRefCreate(BaseModel):
     project_key: str = Field(description="Ключ/путь проекта в провайдере.")
     external_id: str = Field(description="Идентификатор ресурса у провайдера.")
     url: str = Field(description="Канонический URL ресурса.")
-    extra: dict[str, Any] | None = Field(
+    extra: JsonObject | None = Field(
         default=None,
         description="Дополнительные метаданные ресурса.",
     )

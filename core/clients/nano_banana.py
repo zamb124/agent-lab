@@ -1,9 +1,4 @@
-"""
-Nano Banana клиент для генерации изображений через OpenRouter.
-Использует LLM с multimodal support вместо прямого обращения к Google.
-
-АДАПТИРОВАНО: убраны зависимости от app/*, используется только core/*
-"""
+"""Image generation клиент через platform LLM capability."""
 
 import base64
 import json
@@ -33,31 +28,30 @@ class _ChatLLM(Protocol):
 
 class NanoBananaClient:
     """
-    Клиент для генерации изображений через OpenRouter.
-    Использует LLM с multimodal support.
+    Клиент для генерации изображений через platform LLM capability.
     """
 
     def __init__(
         self,
         storage: "Storage",
-        model_name: str = "google/gemini-2.5-flash-preview-image",
         timeout: int = 60,
     ):
         """
         Args:
             storage: Storage для работы с БД
-            model_name: Имя модели для генерации
             timeout: Таймаут запросов
         """
         self._storage = storage
-        self._model_name = model_name
         self._timeout = timeout
         self._llm: _ChatLLM | None = None
 
     def _get_llm(self) -> _ChatLLM:
-        """Получает LLM с multimodal support"""
+        """Получает LLM для image generation."""
         if self._llm is None:
-            resolved = resolve_llm_for_capability(AICapability.IMAGE_GEN)
+            resolved = resolve_llm_for_capability(
+                AICapability.IMAGE_GEN,
+                include_platform_default=True,
+            )
             if resolved is not None:
                 self._llm = get_llm(
                     model_name=resolved.model,
@@ -69,8 +63,7 @@ class NanoBananaClient:
                 )
             else:
                 raise ValueError(
-                    "NanoBananaClient требует company override для capability=image_gen; "
-                    "скрытый fallback на settings.nano_banana.model_name запрещён"
+                    "NanoBananaClient: platform default для capability=image_gen не настроен"
                 )
         return self._llm
 
@@ -190,6 +183,5 @@ class NanoBananaClientFactory:
 
         return NanoBananaClient(
             storage=storage,
-            model_name=settings.nano_banana.model_name,
             timeout=settings.nano_banana.timeout,
         )

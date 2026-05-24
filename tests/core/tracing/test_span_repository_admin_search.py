@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+from core.tracing.models import TraceSpanWrite
+
 
 def _row(
     *,
@@ -20,32 +22,32 @@ def _row(
     user_id: str | None = "u1",
     namespace: str = "default",
     event_type: str | None = None,
-) -> dict:
-    return {
-        "span_id": span_id,
-        "trace_id": trace_id,
-        "parent_span_id": None,
-        "operation_name": operation_name,
-        "kind": "INTERNAL",
-        "start_time": start_time,
-        "end_time": start_time,
-        "duration_ms": 0,
-        "status": "OK",
-        "service_name": service_name,
-        "company_id": company_id,
-        "namespace": namespace,
-        "user_id": user_id,
-        "user_name": None,
-        "user_groups": None,
-        "session_auth": None,
-        "session_agent": None,
-        "channel": None,
-        "event_type": event_type,
-        "resource_type": None,
-        "resource_id": None,
-        "attributes": {},
-        "events": [],
-    }
+) -> TraceSpanWrite:
+    return TraceSpanWrite(
+        span_id=span_id,
+        trace_id=trace_id,
+        parent_span_id=None,
+        operation_name=operation_name,
+        kind="INTERNAL",
+        start_time=start_time,
+        end_time=start_time,
+        duration_ms=0,
+        status="OK",
+        service_name=service_name,
+        company_id=company_id,
+        namespace=namespace,
+        user_id=user_id,
+        user_name=None,
+        user_groups=None,
+        session_auth=None,
+        session_agent=None,
+        channel=None,
+        event_type=event_type,
+        resource_type=None,
+        resource_id=None,
+        attributes={},
+        events=[],
+    )
 
 
 @pytest.mark.asyncio
@@ -66,7 +68,7 @@ async def test_admin_search_spans_ilike_company(container, unique_id: str):
         company_id_query="acme",
         limit=20,
     )
-    ids = {r["span_id"] for r in rows}
+    ids = {r.span_id for r in rows}
     assert f"{unique_id}_1" in ids
 
 
@@ -204,9 +206,9 @@ async def test_admin_search_spans_namespace_and_service_ilike(container, unique_
         namespace_query=unique_id,
         limit=20,
     )
-    assert any(r["span_id"] == f"{unique_id}_ns" for r in rows_ns)
+    assert any(r.span_id == f"{unique_id}_ns" for r in rows_ns)
     rows_svc, _ = await repo.admin_search_spans(
         service_name_query=unique_id,
         limit=20,
     )
-    assert any(r["span_id"] == f"{unique_id}_ns" for r in rows_svc)
+    assert any(r.span_id == f"{unique_id}_ns" for r in rows_svc)

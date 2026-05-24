@@ -30,7 +30,7 @@ from apps.flows.src.models.operator_schemas import (
     OperatorTaskPatch,
     OperatorTaskStatus,
 )
-from apps.flows.src.services.operator_handoff_service import parse_handoff_mode
+from apps.flows.src.services.operator_handoff_service import operator_task_to_out
 from apps.flows.src.services.operator_tasks_broadcast import publish_operator_tasks_refresh
 from core.context import get_context
 from core.logging import get_logger
@@ -38,8 +38,6 @@ from core.pagination import OffsetPage
 from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
-
-HANDOFF_PREVIEW_MAX_LEN = 200
 
 router = APIRouter(tags=["operator"])
 
@@ -106,66 +104,6 @@ async def _caller_may_mutate_queue(
     if _company_operator_roles_normalized() & {"admin", "owner"}:
         return True
     return False
-
-
-def _interrupt_handoff_texts(row: OperatorTasks) -> tuple[str | None, str | None]:
-    if row.interrupt_snapshot is None:
-        raise ValueError("OperatorTasks.interrupt_snapshot обязателен для handoff preview")
-    snapshot = OperatorInterruptSnapshot.model_validate(row.interrupt_snapshot)
-    title = snapshot.task_title
-    preview: str | None = None
-    question = snapshot.question
-    if len(question) > HANDOFF_PREVIEW_MAX_LEN:
-        preview = question[: HANDOFF_PREVIEW_MAX_LEN - 1].rstrip() + "\u2026"
-    else:
-        preview = question
-    return title, preview
-
-
-def _flow_display_name(flow_cfg: FlowConfig | None, flow_id: str) -> str:
-    if flow_cfg is None:
-        return flow_id
-    n = flow_cfg.name.strip()
-    return n if n else flow_id
-
-
-def _skill_display_name(flow_cfg: FlowConfig | None, branch_id: str) -> str:
-    if flow_cfg is not None and flow_cfg.branches:
-        sk = flow_cfg.branches.get(branch_id)
-        if sk is not None:
-            sn = sk.name.strip()
-            return sn if sn else branch_id
-    return branch_id
-
-
-def _task_to_out(
-    row: OperatorTasks,
-    *,
-    flow_cfg: FlowConfig | None = None,
-) -> OperatorTaskOut:
-    ht, hp = _interrupt_handoff_texts(row)
-    handoff_mode = parse_handoff_mode(row)
-    return OperatorTaskOut(
-        id=row.id,
-        company_id=row.company_id,
-        queue_id=row.queue_id,
-        status=OperatorTaskStatus(row.status),
-        session_id=row.session_id,
-        end_user_id=row.end_user_id,
-        flow_id=row.flow_id,
-        branch_id=row.branch_id,
-        flow_display_name=_flow_display_name(flow_cfg, row.flow_id),
-        skill_display_name=_skill_display_name(flow_cfg, row.branch_id),
-        handoff_title=ht,
-        handoff_message_preview=hp,
-        handoff_mode=handoff_mode,
-        a2a_task_id=row.a2a_task_id,
-        context_id=row.context_id,
-        correlation_id=row.correlation_id,
-        claimed_by_user_id=row.claimed_by_user_id,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
 
 
 async def _flow_config_map_for_tasks(
@@ -314,7 +252,7 @@ async def list_operator_tasks(
     flow_cfgs = await _flow_config_map_for_tasks(container, rows_list)
     return OffsetPage[OperatorTaskOut](
         items=[
-            _task_to_out(r, flow_cfg=flow_cfgs.get(r.flow_id)) for r in rows_list
+            operator_task_to_out(r, flow_config=flow_cfgs.get(r.flow_id)) for r in rows_list
         ],
         total=total,
         limit=limit,
@@ -343,7 +281,7 @@ async def get_operator_task(
     if task.interrupt_snapshot is None:
         raise HTTPException(status_code=500, detail="Задача оператора без interrupt_snapshot")
     return OperatorTaskDetailOut(
-        task=_task_to_out(task, flow_cfg=flow_cfg),
+        task=operator_task_to_out(task, flow_config=flow_cfg),
         interrupt_snapshot=OperatorInterruptSnapshot.model_validate(task.interrupt_snapshot),
         resolution_payload=(
             OperatorResolutionPayload.model_validate(task.resolution_payload)
@@ -375,7 +313,7 @@ async def patch_operator_task(
     if updated is None:
         raise HTTPException(status_code=500, detail="Задача не найдена после обновления")
     flow_cfg = await container.flow_repository.get(updated.flow_id)
-    return _task_to_out(updated, flow_cfg=flow_cfg)
+    return operator_task_to_out(updated, flow_config=flow_cfg)
 
 
 @router.post("/tasks/{task_id}/claim", response_model=OperatorTaskOut)
@@ -395,7 +333,7 @@ async def claim_operator_task(
     if updated is None:
         raise HTTPException(status_code=404, detail="Задача не найдена")
     flow_cfg = await container.flow_repository.get(updated.flow_id)
-    return _task_to_out(updated, flow_cfg=flow_cfg)
+    return operator_task_to_out(updated, flow_config=flow_cfg)
 
 
 @router.post("/tasks/{task_id}/messages")

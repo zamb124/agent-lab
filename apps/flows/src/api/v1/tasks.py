@@ -3,7 +3,6 @@ API endpoints для задач через A2A типы.
 """
 
 import uuid
-from typing import Any, cast
 
 from a2a.types import (
     Message,
@@ -16,43 +15,49 @@ from a2a.types import (
 )
 from a2a.utils.message import new_agent_text_message
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import Field
 
+from apps.flows.src.channels.types import FlowTaskResult
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from core.context import get_context
 from core.logging import get_logger
-from core.state import ExecutionState, InterruptData
+from core.models import StrictBaseModel
+from core.state import ExecutionState
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["tasks"])
 
 
-class TaskSubmitRequest(BaseModel):
-    flow_id: str
-    content: str
-    branch_id: str = "default"
-    user_id: str | None = None
-    session_id: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+class TaskSubmitRequest(StrictBaseModel):
+    flow_id: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
+    branch_id: str = Field(default="default", min_length=1)
+    user_id: str | None = Field(default=None, min_length=1)
+    session_id: str | None = Field(default=None, min_length=1)
+    metadata: JsonObject = Field(default_factory=dict)
 
 
-@router.post("/submit")
-async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> dict[str, Any]:
+@router.post("/submit", response_model=Task)
+async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Task:
     """Отправляет задачу на выполнение. Возвращает A2A Task."""
     task_id = str(uuid.uuid4())
-    user_id = request.user_id or task_id
+    context = get_context()
+    if context is None:
+        raise ValueError("Context is required. Context must be created in middleware.")
+    user_id = request.user_id if request.user_id is not None else context.user.user_id
 
     # session_id должен быть в формате flow_id:context_id
-    if request.session_id:
+    if request.session_id is not None:
         session_id = request.session_id
         # Валидация формата session_id
         if ":" not in session_id:
             raise HTTPException(
                 status_code=400,
-                detail=f"session_id must be in format 'flow_id:context_id', got: '{session_id}'"
+                detail=f"session_id must be in format 'flow_id:context_id', got: '{session_id}'",
             )
         # Извлекаем context_id из session_id
         context_id = session_id.split(":", 1)[1]
@@ -73,15 +78,10 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> di
         is_resume = bool(state.interrupt)
         logger.info(
             f"API: Existing session {session_id}, "
-            f"current_nodes={state.current_nodes}, "
-            f"interrupt={bool(state.interrupt)}, "
-            f"is_resume={is_resume}"
+            + f"current_nodes={state.current_nodes}, "
+            + f"interrupt={bool(state.interrupt)}, "
+            + f"is_resume={is_resume}"
         )
-
-    # Получаем Context из middleware (middleware всегда создает Context)
-    context = get_context()
-    if context is None:
-        raise ValueError("Context is required. Context must be created in middleware.")
 
     task = await process_flow_task.kiq(
         flow_id=request.flow_id,
@@ -94,7 +94,7 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> di
         context_id=context_id,
         metadata=request.metadata,
         is_resume=is_resume,
-        context_data=context.model_dump(exclude_none=False),
+        context_data=context.to_dict(),
     )
 
     result = await task.wait_result()
@@ -106,29 +106,16 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> di
             raise HTTPException(status_code=404, detail=error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
-    raw_task_result = result.return_value
-    if not isinstance(raw_task_result, dict):
-        raise ValueError("process_flow_task returned non-dict payload")
-    task_result = cast(dict[str, Any], raw_task_result)
-    if "task_state" not in task_result:
-        raise ValueError("process_flow_task result requires task_state")
-    task_state = TaskState(task_result["task_state"])
-    if "response" not in task_result:
-        raise ValueError("process_flow_task result requires response")
-    response_text = task_result["response"]
-    if not isinstance(response_text, str):
-        raise TypeError("process_flow_task result response must be str")
+    task_result = FlowTaskResult.model_validate(result.return_value)
+    task_state = TaskState(task_result.task_state)
+    response_text = task_result.response
 
     # Breakpoint или interrupt - оба используют input_required
-    breakpoint_hit = task_result["breakpoint_hit"] if "breakpoint_hit" in task_result else None
-    interrupt_data = task_result["interrupt"] if "interrupt" in task_result else None
-
-    if breakpoint_hit:
-        response_text = f"Breakpoint at node '{breakpoint_hit}'"
+    if task_result.breakpoint_hit is not None:
+        response_text = f"Breakpoint at node '{task_result.breakpoint_hit}'"
         task_state = TaskState.input_required
-    elif interrupt_data:
-        ir = InterruptData.model_validate(interrupt_data)
-        response_text = ir.question
+    elif task_result.interrupt is not None:
+        response_text = task_result.interrupt.question
         task_state = TaskState.input_required
 
     a2a_task = Task(
@@ -155,21 +142,22 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> di
         ],
     )
 
-    return a2a_task.model_dump(by_alias=True, exclude_none=True)
+    return a2a_task
 
 
-class StateUpdateRequest(BaseModel):
+class StateUpdateRequest(StrictBaseModel):
     """Запрос на обновление state"""
-    state: dict[str, Any]
+
+    state: ExecutionState
 
 
-@router.get("/state")
+@router.get("/state", response_model=ExecutionState)
 async def get_state(
     container: ContainerDep,
     session_id: str | None = None,
     context_id: str | None = None,
     flow_id: str | None = None,
-) -> dict[str, Any]:
+) -> ExecutionState:
     """
     Получает state по session_id или context_id+flow_id.
 
@@ -195,19 +183,19 @@ async def get_state(
         )
 
     if state is None:
-        return {"messages": [], "task_id": None}
+        raise HTTPException(status_code=404, detail="State not found")
 
-    return state.model_dump()
+    return state
 
 
-@router.put("/state")
+@router.put("/state", response_model=ExecutionState)
 async def update_state(
     request: StateUpdateRequest,
     container: ContainerDep,
     session_id: str | None = None,
     context_id: str | None = None,
     flow_id: str | None = None,
-) -> dict[str, Any]:
+) -> ExecutionState:
     """
     Сохраняет изменения state.
 
@@ -231,11 +219,10 @@ async def update_state(
             detail="Need session_id or context_id+flow_id"
         )
 
-    state_obj = ExecutionState.model_validate(request.state)
-    await container.state_manager.save_state(session_id, state_obj)
+    _ = await container.state_manager.save_state(session_id, request.state)
     updated_state = await container.state_manager.get_state(session_id)
 
     if updated_state is None:
         raise HTTPException(status_code=500, detail="Failed to save state")
 
-    return updated_state.model_dump()
+    return updated_state

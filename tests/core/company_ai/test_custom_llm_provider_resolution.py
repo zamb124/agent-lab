@@ -88,6 +88,38 @@ def test_resolve_humanitec_llm_company_override_is_platform_virtual_provider():
     assert resolved.cost_origin == "platform"
 
 
+def test_resolve_llm_platform_default_is_humanitec_auto():
+    resolved = resolve_llm_for_capability(
+        AICapability.LLM_VISION,
+        include_platform_default=True,
+    )
+
+    assert resolved is not None
+    assert resolved.provider == HUMANITEC_LLM_PROVIDER
+    assert resolved.model == HUMANITEC_LLM_AUTO_MODEL
+    assert resolved.cost_origin == "platform"
+
+
+def test_humanitec_llm_company_override_supports_vision_capability():
+    company = Company(
+        company_id="c3",
+        name="Company 3",
+        metadata={
+            METADATA_KEY: CompanyAIProviders(
+                llm_vision=CompanyLLMOverride(provider=HUMANITEC_LLM_PROVIDER)
+            ).to_metadata_dict()
+        },
+    )
+    user = User(user_id="u3", name="User 3", active_company_id="c3")
+    set_context(Context(user=user, active_company=company, channel="test"))
+
+    resolved = resolve_llm_for_capability(AICapability.LLM_VISION)
+
+    assert resolved is not None
+    assert resolved.provider == HUMANITEC_LLM_PROVIDER
+    assert resolved.model == HUMANITEC_LLM_AUTO_MODEL
+
+
 def test_text_transform_resolves_explicit_custom_provider(monkeypatch):
     monkeypatch.setattr("core.company_ai.resolver.decrypt_secret", lambda token: "plain-key")
     service = TextTransformService()
@@ -117,12 +149,29 @@ def test_text_transform_resolves_explicit_custom_provider(monkeypatch):
     assert cost_origin == "company"
 
 
-def test_text_transform_rejects_hidden_default_route_without_company_override():
+def test_text_transform_uses_humanitec_default_without_company_override():
     service = TextTransformService()
 
-    with pytest.raises(ValueError, match="settings.llm"):
-        service._resolve_company_llm_args(
-            AICapability.LLM_SUMMARIZE,
-            provider=None,
-            model=None,
-        )
+    (
+        provider,
+        model,
+        api_key,
+        base_url,
+        headers,
+        body,
+        fallback_models,
+        cost_origin,
+    ) = service._resolve_company_llm_args(
+        AICapability.LLM_SUMMARIZE,
+        provider=None,
+        model=None,
+    )
+
+    assert provider == HUMANITEC_LLM_PROVIDER
+    assert model == HUMANITEC_LLM_AUTO_MODEL
+    assert api_key is None
+    assert base_url is None
+    assert headers is None
+    assert body is None
+    assert fallback_models is None
+    assert cost_origin == "platform"

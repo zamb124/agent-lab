@@ -54,7 +54,7 @@ from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_SEND_TASK_UPDATE
 from core.config.testing import is_testing
 from core.context import set_current_channel
-from core.files.file_ref import file_id_from_download_url
+from core.files.file_ref import FileRef, file_id_from_download_url
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.state import ExecutionState
@@ -330,15 +330,13 @@ class A2AChannel(BaseChannel):
 
         file_ids: list[str] = []
         if prepared.files_data:
-            for fd in prepared.files_data:
-                fid = fd.get("file_id")
-                if fid:
-                    file_ids.append(str(fid))
+            for file_ref in prepared.files_data:
+                if file_ref.file_id is not None:
+                    file_ids.append(file_ref.file_id)
                     continue
-                url = fd.get("url")
-                if url and str(url).startswith(("http://", "https://")):
+                if file_ref.url is not None and file_ref.url.startswith(("http://", "https://")):
                     continue
-                if url:
+                if file_ref.url is not None:
                     raise ValueError(
                         "Вложение A2A без file_id: ожидается персист через API (S3), "
                         + "локальные url в state.files не поддерживаются."
@@ -371,7 +369,7 @@ class A2AChannel(BaseChannel):
             final=True,
         )
 
-    async def _persist_incoming_a2a_files(self, message: Message) -> tuple[list[JsonObject], str]:
+    async def _persist_incoming_a2a_files(self, message: Message) -> tuple[list[FileRef], str]:
         """Байты FileWithBytes -> S3 + FileRecord; FileWithUri -> canonical url в state."""
         incoming = extract_incoming_a2a_files(message)
         if not incoming:
@@ -385,13 +383,13 @@ class A2AChannel(BaseChannel):
         company_id = self.context.active_company.company_id
         user_id = self.context.user.user_id if self.context.user else None
         prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
-        files_data: list[JsonObject] = []
+        files_data: list[FileRef] = []
 
         for inc in incoming:
             if inc.data is not None:
                 if not inc.content_type or not inc.content_type.strip():
                     raise ValueError("FileWithBytes.content_type обязателен для state.files")
-                item = await self.container.file_processor.persist_uploaded_file_as_state_files_item(
+                item = await self.container.file_processor.persist_uploaded_file_as_file_ref(
                     data=inc.data,
                     original_name=inc.original_name,
                     content_type=inc.content_type.strip(),
@@ -406,12 +404,6 @@ class A2AChannel(BaseChannel):
                     raise ValueError("FileWithUri без uri")
                 if not inc.content_type or not inc.content_type.strip():
                     raise ValueError("FileWithUri.content_type обязателен для state.files")
-                item: JsonObject = {
-                    "original_name": inc.original_name,
-                    "url": inc.uri,
-                    "content_type": inc.content_type.strip(),
-                    "file_size": inc.file_size,
-                }
                 linked_file_id = file_id_from_download_url(inc.uri)
                 if linked_file_id:
                     record = await self.container.file_processor.get_file_record(linked_file_id)
@@ -419,21 +411,28 @@ class A2AChannel(BaseChannel):
                         raise ValueError(f"FileWithUri с неизвестным file_id: {linked_file_id}")
                     if record.company_id != company_id:
                         raise ValueError("FileWithUri file_id не принадлежит активной компании")
-                    item.update(
-                        {
-                            "file_id": record.file_id,
-                            "original_name": record.original_name,
-                            "url": record.download_url or inc.uri,
-                            "content_type": record.content_type,
-                            "file_size": record.file_size,
-                        }
+                    item = FileRef(
+                        file_id=record.file_id,
+                        original_name=record.original_name,
+                        url=record.download_url if record.download_url is not None else inc.uri,
+                        content_type=record.content_type,
+                        file_size=record.file_size,
+                        checksum=record.checksum,
+                        is_public=record.is_public,
+                    )
+                else:
+                    item = FileRef(
+                        original_name=inc.original_name,
+                        url=inc.uri,
+                        content_type=inc.content_type.strip(),
+                        file_size=inc.file_size,
                     )
                 files_data.append(item)
 
         return files_data, format_a2a_files_content(files_data)
 
     async def _transcribe_incoming_audio(
-        self, files_data: list[JsonObject]
+        self, files_data: list[FileRef]
     ) -> str:
         """
         Авто-STT для входящих audio-вложений (`audio/*` по mime/расширению).

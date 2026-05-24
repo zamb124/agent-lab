@@ -128,11 +128,23 @@ class OperatorTaskPatch(StrictBaseModel):
     status: OperatorTaskStatus
 
 
+class OperatorTaskClaimCommand(StrictBaseModel):
+    task_id: str = Field(..., min_length=1)
+
+
 class OperatorTaskMessageBody(StrictBaseModel):
     text: str = Field(..., min_length=1)
     file_ids: list[str] = Field(default_factory=list)
 
 
+class OperatorTaskMessageCommand(OperatorTaskMessageBody):
+    task_id: str = Field(..., min_length=1)
+
+
 class OperatorTaskCompleteBody(StrictBaseModel):
     resolution: str = Field(..., min_length=1)
     file_ids: list[str] = Field(default_factory=list)
+
+
+class OperatorTaskCompleteCommand(OperatorTaskCompleteBody):
+    task_id: str = Field(..., min_length=1)

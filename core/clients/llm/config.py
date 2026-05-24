@@ -7,12 +7,14 @@ it from core without creating a core -> apps dependency.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from collections.abc import Mapping
+from typing import Literal, cast
 
 from pydantic import Field, field_validator, model_validator
 
 from core.clients.llm.model_routing import split_provider_prefixed_model
 from core.models import StrictBaseModel
+from core.types import JsonObject, JsonValue, require_json_object
 
 ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
 
@@ -37,7 +39,7 @@ class LLMCallConfig(StrictBaseModel):
     presence_penalty: float | None = Field(default=None)
     seed: int | None = Field(default=None)
     reasoning_effort: ReasoningEffort | None = Field(default=None)
-    extra_request_body: dict[str, Any] | None = Field(default=None)
+    extra_request_body: JsonObject | None = Field(default=None)
     extra_request_headers: dict[str, str] | None = Field(default=None)
 
     # Runtime-метаданные, которые core LLM client использует для resolved attempts.
@@ -50,7 +52,7 @@ class LLMCallConfig(StrictBaseModel):
 
     @field_validator("provider", "model", "api_key", "folder_id", "base_url", mode="before")
     @classmethod
-    def _strip_optional_strings(cls, value: Any) -> Any:
+    def _strip_optional_strings(cls, value: JsonValue) -> JsonValue:
         if value is None:
             return None
         if isinstance(value, str):
@@ -60,41 +62,41 @@ class LLMCallConfig(StrictBaseModel):
 
     @field_validator("extra_request_body", mode="before")
     @classmethod
-    def _extra_body_must_be_object(cls, value: Any) -> Any:
+    def _extra_body_must_be_object(cls, value: JsonValue) -> JsonObject | None:
         if value is None:
             return None
-        if isinstance(value, dict):
-            return value
-        raise ValueError("extra_request_body должен быть объектом JSON, не массивом и не скаляром")
+        return require_json_object(value, "extra_request_body")
 
     @field_validator("extra_request_headers", mode="before")
     @classmethod
-    def _extra_headers_must_be_object(cls, value: Any) -> Any:
+    def _extra_headers_must_be_object(cls, value: JsonValue) -> dict[str, str] | None:
         if value is None:
             return None
-        if not isinstance(value, dict):
-            raise ValueError("extra_request_headers должен быть объектом JSON, не массивом и не скаляром")
-        for key, header_value in value.items():
-            if not isinstance(key, str) or not key.strip():
+        headers = require_json_object(value, "extra_request_headers")
+        out: dict[str, str] = {}
+        for key, header_value in headers.items():
+            if not key.strip():
                 raise ValueError("extra_request_headers: ключи — непустые строки")
             if not isinstance(header_value, str):
                 raise ValueError("extra_request_headers: значения должны быть строками")
-        return value
+            out[key] = header_value
+        return out
 
     @model_validator(mode="before")
     @classmethod
-    def _split_provider_prefixed_model(cls, raw_config: Any) -> Any:
-        if not isinstance(raw_config, dict):
+    def _split_provider_prefixed_model(cls, raw_config: object) -> object:
+        if not isinstance(raw_config, Mapping):
             return raw_config
-        raw_provider = raw_config.get("provider")
+        config: dict[str, object] = dict(cast(Mapping[str, object], raw_config))
+        raw_provider = config.get("provider")
         provider_is_set = (
             raw_provider is not None
             and isinstance(raw_provider, str)
             and raw_provider.strip() != ""
         )
         if provider_is_set:
-            return raw_config
-        raw_model = raw_config.get("model")
+            return config
+        raw_model = config.get("model")
         if isinstance(raw_model, str):
             raw_model = raw_model.strip()
         split_provider, split_model = split_provider_prefixed_model(
@@ -102,8 +104,8 @@ class LLMCallConfig(StrictBaseModel):
             raw_model if isinstance(raw_model, str) else None,
         )
         if split_provider is None:
-            return raw_config
-        normalized_config = dict(raw_config)
+            return config
+        normalized_config = dict(config)
         normalized_config["provider"] = split_provider
         normalized_config["model"] = split_model
         return normalized_config

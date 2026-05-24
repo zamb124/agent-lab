@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models import Base
+from core.types import JsonObject
 
 
 class SyncChannel(Base):
@@ -142,7 +143,7 @@ class SyncMessage(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    reactions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    reactions: Mapped[list[JsonObject]] = mapped_column(JSONB, nullable=False, default=list)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     forwarded_from_channel_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     forwarded_from_channel_name: Mapped[str | None] = mapped_column(String(255), nullable=True)

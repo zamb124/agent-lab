@@ -3,116 +3,77 @@ API endpoints для resources.
 """
 
 import asyncio
-from typing import Any
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import ResourceDefinition, ResourceType
-from apps.flows.src.models.resource import parse_typed_resource_config
 from core.logging import get_logger
+from core.models import StrictBaseModel
 from core.pagination import OffsetPage
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["resources"])
 
 
-class ResourceCreateRequest(BaseModel):
-    """Запрос на создание ресурса"""
-
-    resource_id: str = Field(..., description="Уникальный ID ресурса")
-    type: ResourceType = Field(..., description="Тип ресурса")
-    name: str | None = Field(default=None, description="Название")
-    description: str | None = Field(default=None, description="Описание")
-    config: dict[str, Any] = Field(..., description="Конфигурация ресурса")
-    tags: list[str] = Field(default_factory=list)
-    permission: list[str] = Field(default_factory=list)
-
-
-class ResourceUpdateRequest(BaseModel):
+class ResourceUpdateRequest(StrictBaseModel):
     """Запрос на обновление ресурса"""
 
     name: str | None = None
     description: str | None = None
-    config: dict[str, Any] | None = None
+    config: JsonObject | None = None
     tags: list[str] | None = None
     permission: list[str] | None = None
 
 
-class ResourceResponse(BaseModel):
-    """Ответ с данными ресурса"""
-
-    resource_id: str
-    type: ResourceType
-    name: str | None = None
-    description: str | None = None
-    config: dict[str, Any]
-    tags: list[str] = []
-    permission: list[str] = []
-
-
-@router.get("", response_model=OffsetPage[ResourceResponse])
-@router.get("/", response_model=OffsetPage[ResourceResponse])
+@router.get("", response_model=OffsetPage[ResourceDefinition])
+@router.get("/", response_model=OffsetPage[ResourceDefinition])
 async def list_resources(
     container: ContainerDep,
-    type: ResourceType | None = None,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-) -> OffsetPage[ResourceResponse]:
+    resource_type: Annotated[ResourceType | None, Query(alias="type")] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> OffsetPage[ResourceDefinition]:
     resources, total = await asyncio.gather(
         container.resource_repository.list(limit=limit, offset=offset),
         container.resource_repository.count_all(),
     )
 
-    if type:
-        resources = [r for r in resources if r.type == type]
+    if resource_type:
+        resources = [r for r in resources if r.type == resource_type]
 
-    items = [
-        ResourceResponse(
-            resource_id=r.resource_id,
-            type=r.type,
-            name=r.name,
-            description=r.description,
-            config=r.config,
-            tags=r.tags,
-            permission=r.permission,
-        )
-        for r in resources
-    ]
-    return OffsetPage[ResourceResponse](items=items, total=total, limit=limit, offset=offset)
+    return OffsetPage[ResourceDefinition](
+        items=resources,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
-@router.get("/{resource_id}", response_model=ResourceResponse)
+@router.get("/{resource_id}", response_model=ResourceDefinition)
 async def get_resource(
     resource_id: str,
     container: ContainerDep,
-) -> ResourceResponse:
+) -> ResourceDefinition:
     """Получить ресурс по ID"""
     resource = await container.resource_repository.get(resource_id)
     if resource is None:
         raise HTTPException(status_code=404, detail="Resource not found")
 
-    return ResourceResponse(
-        resource_id=resource.resource_id,
-        type=resource.type,
-        name=resource.name,
-        description=resource.description,
-        config=resource.config,
-        tags=resource.tags,
-        permission=resource.permission,
-    )
+    return resource
 
 
-@router.post("", response_model=ResourceResponse)
-@router.post("/", response_model=ResourceResponse)
+@router.post("", response_model=ResourceDefinition)
+@router.post("/", response_model=ResourceDefinition)
 async def create_resource(
-    request: ResourceCreateRequest,
+    request: ResourceDefinition,
     container: ContainerDep,
-) -> ResourceResponse:
+) -> ResourceDefinition:
     """Создать shared ресурс"""
-    parse_typed_resource_config(request.type, request.config)
+    _ = request.get_typed_config()
     existing = await container.resource_repository.get(request.resource_id)
     if existing:
         raise HTTPException(
@@ -120,60 +81,57 @@ async def create_resource(
             detail=f"Resource '{request.resource_id}' already exists"
         )
 
-    resource = ResourceDefinition(
-        resource_id=request.resource_id,
-        type=request.type,
-        name=request.name,
-        description=request.description,
-        config=request.config,
-        tags=request.tags,
-        permission=request.permission,
-    )
+    _ = await container.resource_repository.set(request)
+    logger.info(f"Resource created: {request.resource_id}")
 
-    await container.resource_repository.set(resource)
-    logger.info(f"Resource created: {resource.resource_id}")
-
-    return ResourceResponse(
-        resource_id=resource.resource_id,
-        type=resource.type,
-        name=resource.name,
-        description=resource.description,
-        config=resource.config,
-        tags=resource.tags,
-        permission=resource.permission,
-    )
+    return request
 
 
-@router.put("/{resource_id}", response_model=ResourceResponse)
+@router.put("/{resource_id}", response_model=ResourceDefinition)
 async def update_resource(
     resource_id: str,
     request: ResourceUpdateRequest,
     container: ContainerDep,
-) -> ResourceResponse:
+) -> ResourceDefinition:
     """Обновить ресурс"""
     resource = await container.resource_repository.get(resource_id)
     if resource is None:
         raise HTTPException(status_code=404, detail="Resource not found")
 
-    # Обновляем только переданные поля
-    update_data = request.model_dump(exclude_unset=True)
-    resource_dict = resource.model_dump()
-    resource_dict.update(update_data)
-    parse_typed_resource_config(ResourceType(resource_dict["type"]), resource_dict["config"])
+    fields_set = request.model_fields_set
+    if "config" in fields_set and request.config is None:
+        raise HTTPException(status_code=422, detail="Resource config must be a JSON object")
+    if "tags" in fields_set and request.tags is None:
+        raise HTTPException(status_code=422, detail="Resource tags must be a list")
+    if "permission" in fields_set and request.permission is None:
+        raise HTTPException(status_code=422, detail="Resource permission must be a list")
 
-    updated_resource = ResourceDefinition.model_validate(resource_dict)
-    await container.resource_repository.set(updated_resource)
+    config = request.config if "config" in fields_set else resource.config
+    tags = request.tags if "tags" in fields_set else resource.tags
+    permission = request.permission if "permission" in fields_set else resource.permission
+    if config is None or tags is None or permission is None:
+        raise HTTPException(status_code=422, detail="Resource patch contains invalid null field")
+
+    updated_resource = ResourceDefinition(
+        resource_id=resource.resource_id,
+        type=resource.type,
+        name=request.name if "name" in fields_set else resource.name,
+        description=(
+            request.description
+            if "description" in fields_set
+            else resource.description
+        ),
+        config=config,
+        tags=tags,
+        permission=permission,
+        created_at=resource.created_at,
+        updated_at=resource.updated_at,
+    )
+    _ = updated_resource.get_typed_config()
+    _ = await container.resource_repository.set(updated_resource)
     logger.info(f"Resource updated: {resource_id}")
 
-    return ResourceResponse(
-        resource_id=updated_resource.resource_id,
-        type=updated_resource.type,
-        name=updated_resource.name,
-        description=updated_resource.description,
-        config=updated_resource.config,
-        tags=updated_resource.tags,
-        permission=updated_resource.permission,
-    )
+    return updated_resource
 
 
 @router.delete("/{resource_id}")

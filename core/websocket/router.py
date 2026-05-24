@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -52,6 +51,7 @@ from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import User
 from core.observability.error_payload import try_merge_platform_error_into_dict
+from core.types import JsonObject, parse_json_object
 from core.websocket.auth import get_user_from_websocket
 from core.websocket.command_router import (
     WsCommandError,
@@ -64,13 +64,13 @@ logger = get_logger(__name__)
 
 
 def _merge_ws_failure_payload(
-    payload: dict[str, Any],
+    payload: JsonObject,
     *,
     trace_id: str | None,
     platform_request_id: str | None,
     service_name: str,
     active_company_id: str | None,
-) -> dict[str, Any]:
+) -> JsonObject:
     settings = get_settings()
     return try_merge_platform_error_into_dict(
         payload,
@@ -82,19 +82,9 @@ def _merge_ws_failure_payload(
     )
 
 
-async def _build_ws_context(websocket: WebSocket, user: User) -> Context:
-    container = websocket.app.state.container
-    company = None
-    user_companies = []
-    active_company_id = user.active_company_id
-    if isinstance(active_company_id, str) and active_company_id:
-        company = await container.company_repository.get(active_company_id)
-        if company is not None:
-            user_companies = [company]
+def _build_ws_context(user: User) -> Context:
     return Context(
         user=user,
-        active_company=company,
-        user_companies=user_companies,
         channel="ws",
         language=Language.RU,
     )
@@ -112,9 +102,9 @@ def _build_failure_frame(
     platform_request_id_for_correlation: str | None,
     service_name: str,
     active_company_id: str | None,
-) -> dict[str, Any]:
+) -> JsonObject:
     fail_type = derive_failed_type(command_type) if command_type else "system/ws/invalid_frame"
-    base_payload: dict[str, Any] = {"error_code": code, "error_detail": detail}
+    base_payload: JsonObject = {"error_code": code, "error_detail": detail}
     merged = _merge_ws_failure_payload(
         base_payload,
         trace_id=trace_id_for_correlation,
@@ -127,7 +117,7 @@ def _build_failure_frame(
 
 async def _handle_command_frame(
     websocket: WebSocket,
-    frame: dict[str, Any],
+    frame: JsonObject,
     user: User,
     *,
     service_name: str,
@@ -137,11 +127,7 @@ async def _handle_command_frame(
     request_id = frame.get("request_id")
     command_type = frame.get("type")
     payload = frame.get("payload")
-    company_scope = (
-        user.active_company_id
-        if isinstance(user.active_company_id, str) and user.active_company_id
-        else None
-    )
+    company_scope = user.active_company_id if user.active_company_id else None
 
     if not isinstance(request_id, str) or not request_id:
         await websocket.send_text(json.dumps(
@@ -179,7 +165,7 @@ async def _handle_command_frame(
 
     company_id = company_scope
 
-    command_scope_extra: dict[str, Any] = {
+    command_scope_extra: dict[str, str] = {
         LOG_WS_REQUEST_ID: request_id,
         LOG_WS_COMMAND: command_type,
         "ws.connection_request_id": connection_request_id,
@@ -190,17 +176,21 @@ async def _handle_command_frame(
         service_name=service_name,
         user_id=user.user_id,
         company_id=company_id,
-        **command_scope_extra,
     )
-    context = await _build_ws_context(websocket, user)
-    set_context(context)
+    bind_log_context(**command_scope_extra)
+    context = _build_ws_context(user)
+    _ = set_context(context)
     try:
         logger.info(EVENT_WS_COMMAND, **{LOG_WS_COMMAND: command_type})
+        reply_payload: JsonObject | None
         try:
             reply_type, reply_payload = await dispatch_ws_command(command_type, payload, user)
         except WsCommandError as err:
             reply_type = derive_failed_type(command_type)
-            reply_payload = {"error_code": err.code, "error_detail": err.detail}
+            reply_payload = {
+                "error_code": err.code,
+                "error_detail": err.detail,
+            }
         except Exception as exc:
             logger.exception(
                 "ws.command_crashed",
@@ -212,7 +202,7 @@ async def _handle_command_frame(
             reply_type = derive_failed_type(command_type)
             reply_payload = {"error_code": "ws_internal_error", "error_detail": str(exc)}
         out_payload = reply_payload
-        if isinstance(reply_payload, dict) and reply_type.endswith("_failed"):
+        if reply_payload is not None and reply_type.endswith("_failed"):
             out_payload = _merge_ws_failure_payload(
                 reply_payload,
                 trace_id=trace_id,
@@ -246,15 +236,15 @@ async def notifications_endpoint(websocket: WebSocket) -> None:
     connection_request_id = f"ws-conn:{uuid.uuid4().hex}"
     connection_trace_id = f"ws:{uuid.uuid4().hex}"
 
-    connection_scope_extra: dict[str, Any] = {"ws.connection_kind": "notifications"}
+    connection_scope_extra: dict[str, str] = {"ws.connection_kind": "notifications"}
     scope_token = enter_request_scope(
         request_id=connection_request_id,
         trace_id=connection_trace_id,
         service_name=service_name,
         user_id=user_id,
-        company_id=company_id if isinstance(company_id, str) and company_id else None,
-        **connection_scope_extra,
+        company_id=company_id if company_id else None,
     )
+    bind_log_context(**connection_scope_extra)
     logger.info(EVENT_WS_CONNECTED, **{LOG_USER_ID: user_id})
 
     await notification_manager.connect(websocket, user_id, company_id)
@@ -265,15 +255,12 @@ async def notifications_endpoint(websocket: WebSocket) -> None:
                 await websocket.send_text("pong")
                 continue
             try:
-                frame = json.loads(data)
-            except json.JSONDecodeError as exc:
+                frame = parse_json_object(data, "WS frame")
+            except ValueError as exc:
                 logger.warning(
                     "ws.invalid_json",
                     **{LOG_USER_ID: user_id, "exception.message": str(exc)},
                 )
-                continue
-            if not isinstance(frame, dict):
-                logger.warning("ws.frame_not_object", **{LOG_USER_ID: user_id})
                 continue
             await _handle_command_frame(
                 websocket,
@@ -302,5 +289,5 @@ async def notifications_endpoint(websocket: WebSocket) -> None:
 
 
 @router.get("/ws/stats")
-async def websocket_stats() -> dict[str, Any]:
+async def websocket_stats() -> dict[str, int | bool]:
     return notification_manager.get_stats()

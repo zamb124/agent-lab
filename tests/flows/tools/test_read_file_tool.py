@@ -19,7 +19,13 @@ def test_read_file_tool_metadata() -> None:
 async def test_read_file_mock_with_state(tmp_path) -> None:
     f = tmp_path / "a.txt"
     f.write_text("x", encoding="utf-8")
-    state = {"files": [{"original_name": "a.txt", "url": str(f), "content_type": "text/plain", "file_size": 1}]}
+    state = ExecutionState.create(
+        task_id="t1",
+        context_id="c1",
+        user_id="u1",
+        session_id="flow:c1",
+        files=[{"original_name": "a.txt", "url": str(f), "content_type": "text/plain", "file_size": 1}],
+    )
     out = _read_file_mock({"file_name": "a.txt"}, state)
     assert out["success"] is True
     assert out["file_name"] == "a.txt"

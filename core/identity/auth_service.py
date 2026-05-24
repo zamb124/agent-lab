@@ -1,22 +1,20 @@
-"""
-Основной сервис авторизации.
-Управляет всеми провайдерами и пользователями.
+"""Основной сервис авторизации."""
 
-АДАПТИРОВАНО: убраны try-except блоки (кроме критичных с raise), локальные импорты
-"""
+from __future__ import annotations
 
-import json
 import secrets
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from pydantic import TypeAdapter
 from sqlalchemy import text
 
 from core.auth.utils import compare_passwords
 from core.config import get_settings
 from core.config.models import AuthProviderConfig
+from core.db.storage import Storage
 from core.identity.base_provider import BaseAuthProvider
 from core.identity.providers.apple import AppleProvider
 from core.identity.providers.github import GithubProvider
@@ -24,12 +22,16 @@ from core.identity.providers.google import GoogleProvider
 from core.identity.providers.yandex import YandexProvider
 from core.logging import get_logger
 from core.models.identity_models import (
+    AuthCodeCache,
     AuthProvider,
     AuthRequest,
     AuthResult,
     AuthSession,
+    AuthState,
+    Company,
     ProviderUserInfo,
     User,
+    UserProviderRecord,
 )
 from core.utils.tokens import get_token_service
 
@@ -39,6 +41,11 @@ if TYPE_CHECKING:
     from core.db.repositories.user_repository import UserRepository
 
 logger = get_logger(__name__)
+_USER_PROVIDER_RECORDS_ADAPTER: TypeAdapter[dict[str, UserProviderRecord]] = TypeAdapter(
+    dict[str, UserProviderRecord]
+)
+
+
 class AuthService:
     """
     Центральный сервис авторизации.
@@ -47,24 +54,25 @@ class AuthService:
 
     def __init__(
         self,
-        user_repository: "UserRepository",
-        company_repository: "CompanyRepository",
-        auth_session_repository: "AuthSessionRepository"
-    ):
+        user_repository: UserRepository,
+        company_repository: CompanyRepository,
+        auth_session_repository: AuthSessionRepository,
+        storage: Storage,
+    ) -> None:
         """
         Args:
             user_repository: Репозиторий для работы с пользователями
             company_repository: Репозиторий для работы с компаниями
             auth_session_repository: Репозиторий для работы с сессиями
         """
-        self._user_repository = user_repository
-        self._company_repository = company_repository
-        self._auth_session_repository = auth_session_repository
-        self._storage = user_repository._storage
+        self._user_repository: UserRepository = user_repository
+        self._company_repository: CompanyRepository = company_repository
+        self._auth_session_repository: AuthSessionRepository = auth_session_repository
+        self._storage: Storage = storage
         self._providers: dict[AuthProvider, BaseAuthProvider] = {}
         self._initialize_providers()
 
-    def _initialize_providers(self):
+    def _initialize_providers(self) -> None:
         """Инициализирует доступные провайдеры на основе конфигурации"""
         settings = get_settings()
 
@@ -88,7 +96,7 @@ class AuthService:
             else:
                 logger.info(f"Провайдер {provider_name.value} отключен")
 
-    def reinitialize_providers(self):
+    def reinitialize_providers(self) -> None:
         """Переинициализирует провайдеры на основе текущей конфигурации"""
         self._providers.clear()
         self._initialize_providers()
@@ -99,7 +107,11 @@ class AuthService:
 
     @property
     def storage_configured(self) -> bool:
-        return self._storage is not None
+        return self._storage.session_factory is not None
+
+    @property
+    def provider_count(self) -> int:
+        return len(self._providers)
 
     def get_provider(self, provider_name: AuthProvider) -> BaseAuthProvider | None:
         """Получает провайдер по имени"""
@@ -153,27 +165,35 @@ class AuthService:
         cached_result = await self._storage.get(code_key)
         if cached_result:
             logger.info("OAuth код уже использован - возвращаем кешированный результат")
-            result_data = json.loads(cached_result)
+            result_cache = AuthCodeCache.model_validate_json(cached_result)
 
-            user = await self._get_user(result_data["user_id"])
-            session = await self.get_session(result_data["session_id"])
+            user = await self.get_user(result_cache.user_id)
+            session = await self.get_session(result_cache.session_id)
 
             if user and session:
-                cached_token = result_data.get("token")
-                return AuthResult(success=True, user=user, session=session, token=cached_token)
+                return AuthResult(
+                    success=True, user=user, session=session, token=result_cache.token
+                )
 
-        auth_state = await self._get_auth_state(auth_request.state)
+        auth_state = await self.get_auth_state(auth_request.state)
         if not auth_state:
             return AuthResult(success=False, error_message="Недействительный state авторизации")
 
         provider = self.get_provider(auth_request.provider)
         if not provider:
-            return AuthResult(success=False, error_message=f"Провайдер {auth_request.provider.value} недоступен")
+            return AuthResult(
+                success=False,
+                error_message=f"Провайдер {auth_request.provider.value} недоступен",
+            )
+
+        redirect_uri = auth_request.redirect_uri
+        if redirect_uri is None:
+            redirect_uri = auth_state.redirect_uri
 
         try:
             access_token, refresh_token = await provider.exchange_code_for_token(
                 auth_request.code,
-                auth_request.redirect_uri or auth_state["redirect_uri"],
+                redirect_uri,
             )
         except ValueError as e:
             error_msg = str(e)
@@ -187,7 +207,9 @@ class AuthService:
 
         user = await self._get_or_create_user(auth_request.provider, user_info)
 
-        session = await self._create_session(user, auth_request.provider, access_token, refresh_token)
+        session = await self._create_session(
+            user, auth_request.provider, access_token, refresh_token
+        )
 
         token_service = get_token_service()
 
@@ -202,12 +224,12 @@ class AuthService:
             email=user.email,
         )
 
-        result_cache = json.dumps({
-            "user_id": user.user_id,
-            "session_id": session.session_id,
-            "token": jwt_token
-        })
-        await self._storage.set(code_key, result_cache, ttl=300)
+        result_cache = AuthCodeCache(
+            user_id=user.user_id,
+            session_id=session.session_id,
+            token=jwt_token,
+        ).model_dump_json()
+        _ = await self._storage.set(code_key, result_cache, ttl=300)
 
         await self._cleanup_auth_state(auth_request.state)
 
@@ -228,11 +250,7 @@ class AuthService:
             return AuthResult(success=False, error_message="Неверные учётные данные")
 
         users = await self._user_repository.list(limit=10000)
-        matched = [
-            u
-            for u in users
-            if any(norm(e) == norm(demo.email) for e in u.emails)
-        ]
+        matched = [u for u in users if any(norm(e) == norm(demo.email) for e in u.emails)]
         if len(matched) != 1:
             return AuthResult(success=False, error_message="Неверные учётные данные")
 
@@ -247,7 +265,7 @@ class AuthService:
 
         if user.active_company_id != company_id:
             user.active_company_id = company_id
-            await self._user_repository.set(user)
+            _ = await self._user_repository.set(user)
 
         session = await self._create_session(user, AuthProvider.DEMO, "demo", None)
 
@@ -268,7 +286,7 @@ class AuthService:
         if not session:
             return None
 
-        return await self._get_user(session.user_id)
+        return await self.get_user(session.user_id)
 
     async def logout(self, session_id: str) -> bool:
         """Завершает сессию пользователя"""
@@ -283,39 +301,34 @@ class AuthService:
         redirect_uri: str,
         original_host: str | None = None,
         return_path: str | None = None,
-    ):
+    ) -> None:
         """Сохраняет временное состояние авторизации"""
-        state_data = {
-            "provider": provider.value,
-            "redirect_uri": redirect_uri,
-            "original_host": original_host,
-            "return_path": return_path,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-
+        auth_state = AuthState(
+            provider=provider,
+            redirect_uri=redirect_uri,
+            original_host=original_host,
+            return_path=return_path,
+            created_at=datetime.now(timezone.utc),
+        )
         key = f"auth_state:{state}"
-        await self._storage.set(key, json.dumps(state_data), ttl=600)
+        _ = await self._storage.set(key, auth_state.model_dump_json(), ttl=600)
 
-    async def _get_auth_state(self, state: str) -> dict[str, Any] | None:
+    async def get_auth_state(self, state: str) -> AuthState | None:
         """Получает временное состояние авторизации"""
         if not state:
             return None
 
         key = f"auth_state:{state}"
         data = await self._storage.get(key)
+        if data is None:
+            return None
+        return AuthState.model_validate_json(data)
 
-        if data:
-            parsed = json.loads(data)
-            if not isinstance(parsed, dict):
-                raise ValueError("auth_state payload must be a JSON object")
-            return parsed
-        return None
-
-    async def _cleanup_auth_state(self, state: str):
+    async def _cleanup_auth_state(self, state: str) -> None:
         """Удаляет временное состояние авторизации"""
         if state:
             key = f"auth_state:{state}"
-            await self._storage.delete(key)
+            _ = await self._storage.delete(key)
 
     async def _get_or_create_user(
         self, provider: AuthProvider, user_info: ProviderUserInfo
@@ -331,7 +344,7 @@ class AuthService:
                 raise ValueError(f"Пользователь {user_id} не найден")
 
             user.updated_at = datetime.now(timezone.utc)
-            await self._user_repository.set(user)
+            _ = await self._user_repository.set(user)
 
             await self._update_provider_data(user.user_id, provider, user_info)
 
@@ -342,13 +355,11 @@ class AuthService:
                 raise ValueError(
                     f"Провайдер {provider.value} не вернул email; регистрация нового пользователя невозможна"
                 )
-            existing_list = await self._user_repository.find_all_by_email_ci(
-                user_info.email
-            )
+            existing_list = await self._user_repository.find_all_by_email_ci(user_info.email)
             if len(existing_list) > 1:
                 raise ValueError(
                     f"Несколько пользователей с email {user_info.email}: "
-                    f"{', '.join(u.user_id for u in existing_list)}"
+                    + ", ".join(u.user_id for u in existing_list)
                 )
             if len(existing_list) == 1:
                 user = existing_list[0]
@@ -357,7 +368,7 @@ class AuthService:
                     user.name = user_info.name
                 if user_info.avatar_url and not user.avatar_url:
                     user.avatar_url = user_info.avatar_url
-                await self._user_repository.set(user)
+                _ = await self._user_repository.set(user)
                 await self._add_user_provider(user.user_id, provider, user_info)
                 logger.info(
                     "Провайдер %s привязан к существующему пользователю %s",
@@ -377,7 +388,7 @@ class AuthService:
                 active_company_id="",
             )
 
-            await self._user_repository.set(user)
+            _ = await self._user_repository.set(user)
             await self._add_user_provider(user_id, provider, user_info)
 
             logger.info(f"Создан новый пользователь {user_info.email}")
@@ -394,47 +405,62 @@ class AuthService:
                 LIMIT 1
             """)
             result = await session.execute(query, {"provider_user_id": provider_user_id})
-            row = result.first()
-            return row[0] if row else None
+            user_id = result.scalar_one_or_none()
+            if user_id is None:
+                return None
+            if not isinstance(user_id, str):
+                raise ValueError("provider user index returned non-string user_id")
+            return user_id
 
-    async def _add_user_provider(self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo):
+    async def _add_user_provider(
+        self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo
+    ) -> None:
         """Добавляет провайдера в список провайдеров пользователя"""
         providers_key = f"user_providers:{user_id}"
-        # user_providers глобальные - пользователь может быть в нескольких компаниях
         providers_data = await self._storage.get(providers_key, force_global=True)
 
-        if providers_data:
-            providers = json.loads(providers_data)
+        if providers_data is not None:
+            providers = _USER_PROVIDER_RECORDS_ADAPTER.validate_json(providers_data)
         else:
-            providers = {}
+            providers: dict[str, UserProviderRecord] = {}
 
-        providers[user_info.provider_user_id] = {
-            "provider_name": provider.value,
-            "email": user_info.email,
-            "avatar_url": user_info.avatar_url,
-            "metadata": user_info.raw_data
-        }
+        providers[user_info.provider_user_id] = UserProviderRecord(
+            provider_name=provider,
+            email=user_info.email,
+            avatar_url=user_info.avatar_url,
+            metadata=user_info.raw_data,
+        )
 
-        await self._storage.set(providers_key, json.dumps(providers), force_global=True)
+        _ = await self._storage.set(
+            providers_key,
+            _USER_PROVIDER_RECORDS_ADAPTER.dump_json(providers).decode(),
+            force_global=True,
+        )
 
-    async def _update_provider_data(self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo):
+    async def _update_provider_data(
+        self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo
+    ) -> None:
         """Обновляет данные провайдера"""
         await self._add_user_provider(user_id, provider, user_info)
 
-    async def link_provider(self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo) -> bool:
+    async def link_provider(
+        self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo
+    ) -> bool:
         """
         Связывает нового провайдера с существующим пользователем.
 
         Returns:
             True если провайдер успешно связан
         """
-        user = await self._get_user(user_id)
+        user = await self.get_user(user_id)
         if not user:
             return False
 
         existing_user_id = await self._find_user_by_provider_id(user_info.provider_user_id)
         if existing_user_id:
-            logger.warning(f"Провайдер {provider}:{user_info.provider_user_id} уже используется другим пользователем")
+            logger.warning(
+                f"Провайдер {provider}:{user_info.provider_user_id} уже используется другим пользователем"
+            )
             return False
 
         await self._add_user_provider(user.user_id, provider, user_info)
@@ -442,44 +468,44 @@ class AuthService:
         logger.info(f"Связан провайдер {provider} с пользователем {user_info.email}")
         return True
 
-    async def _get_user(self, user_id: str) -> User | None:
+    async def get_user(self, user_id: str) -> User | None:
         """Получает пользователя по ID"""
         return await self._user_repository.get(user_id)
+
+    async def save_user(self, user: User) -> bool:
+        """Сохраняет пользователя."""
+        return await self._user_repository.set(user)
+
+    async def get_company(self, company_id: str) -> Company | None:
+        """Получает компанию по ID"""
+        return await self._company_repository.get(company_id)
 
     async def get_user_provider_info(
         self,
         user_id: str,
         provider: AuthProvider,
-    ) -> dict[str, Any] | None:
+    ) -> UserProviderRecord | None:
         """Получает информацию о провайдере пользователя"""
-        providers_key = f"user_providers:{user_id}"
-        providers_data = await self._storage.get(providers_key)
-
-        if not providers_data:
+        providers = await self.get_all_user_providers_info(user_id)
+        if providers is None:
             return None
 
-        providers = json.loads(providers_data)
-        if not isinstance(providers, dict):
-            raise ValueError("user providers payload must be a JSON object")
-        for provider_user_id, info in providers.items():
-            _ = provider_user_id
-            if isinstance(info, dict) and info.get("provider_name") == provider.value:
+        for info in providers.values():
+            if info.provider_name == provider:
                 return info
 
         return None
 
-    async def get_all_user_providers_info(self, user_id: str) -> dict[str, Any] | None:
+    async def get_all_user_providers_info(
+        self, user_id: str
+    ) -> dict[str, UserProviderRecord] | None:
         """Получает информацию о всех провайдерах пользователя"""
         providers_key = f"user_providers:{user_id}"
         providers_data = await self._storage.get(providers_key)
 
-        if not providers_data:
+        if providers_data is None:
             return None
-
-        providers = json.loads(providers_data)
-        if not isinstance(providers, dict):
-            raise ValueError("user providers payload must be a JSON object")
-        return providers
+        return _USER_PROVIDER_RECORDS_ADAPTER.validate_json(providers_data)
 
     async def _create_session(
         self, user: User, provider: AuthProvider, access_token: str, refresh_token: str | None
@@ -501,7 +527,7 @@ class AuthService:
             expires_at=expires_at,
         )
 
-        await self._auth_session_repository.set(session)
+        _ = await self._auth_session_repository.set(session)
 
         logger.info(f"Создана сессия {session_id} для пользователя {user.user_id}")
         return session
@@ -510,6 +536,6 @@ class AuthService:
         """Получает сессию по ID"""
         return await self._auth_session_repository.get(session_id)
 
-    async def _delete_session(self, session_id: str):
+    async def _delete_session(self, session_id: str) -> None:
         """Удаляет сессию"""
-        await self._auth_session_repository.delete(session_id)
+        _ = await self._auth_session_repository.delete(session_id)

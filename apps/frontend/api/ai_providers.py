@@ -73,6 +73,8 @@ _HUMANITEC_LLM_CAPABILITIES: frozenset[AICapability] = frozenset(
         AICapability.LLM_SUMMARIZE,
         AICapability.LLM_FORMAT_MARKDOWN,
         AICapability.LLM_CODEGEN,
+        AICapability.LLM_VISION,
+        AICapability.IMAGE_GEN,
     }
 )
 _VOICE_CAPABILITIES: tuple[AICapability, ...] = (
@@ -626,13 +628,13 @@ async def get_resolved(request: Request, container: ContainerDep):
     try:
         items: list[dict[str, Any]] = []
         for cap in _LLM_CAPABILITIES:
-            r = resolve_llm_for_capability(cap)
+            r = resolve_llm_for_capability(cap, include_platform_default=True)
             if r is None:
                 items.append(
                     {
                         "capability": cap.value,
                         "resolved": False,
-                        "reason": "no_company_override_using_platform_defaults",
+                        "reason": "platform_default_not_configured",
                     }
                 )
             else:

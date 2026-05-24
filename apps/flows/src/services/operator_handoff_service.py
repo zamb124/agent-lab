@@ -10,10 +10,12 @@ from uuid import UUID
 
 from apps.flows.src.db.models import OperatorTasks
 from apps.flows.src.db.operator_repository import OperatorRepository
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.operator_schemas import (
     OperatorDialogLogEntry,
     OperatorInterruptSnapshot,
     OperatorResolutionPayload,
+    OperatorTaskOut,
     OperatorTaskStatus,
 )
 from apps.flows.src.services.operator_tasks_broadcast import publish_operator_tasks_refresh
@@ -31,6 +33,7 @@ from core.tasks.kicker import kiq_task_name_with_context
 from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
+HANDOFF_PREVIEW_MAX_LEN = 200
 
 
 def parse_handoff_mode(task: "OperatorTasks") -> HandoffMode:
@@ -39,6 +42,66 @@ def parse_handoff_mode(task: "OperatorTasks") -> HandoffMode:
         raise ValueError("OperatorTasks.interrupt_snapshot обязателен для handoff mode")
     snapshot = OperatorInterruptSnapshot.model_validate(task.interrupt_snapshot)
     return snapshot.handoff_mode
+
+
+def operator_task_handoff_texts(task: OperatorTasks) -> tuple[str, str]:
+    if task.interrupt_snapshot is None:
+        raise ValueError("OperatorTasks.interrupt_snapshot обязателен для handoff preview")
+    snapshot = OperatorInterruptSnapshot.model_validate(task.interrupt_snapshot)
+    question = snapshot.question
+    if len(question) > HANDOFF_PREVIEW_MAX_LEN:
+        preview = question[: HANDOFF_PREVIEW_MAX_LEN - 1].rstrip() + "\u2026"
+    else:
+        preview = question
+    return snapshot.task_title, preview
+
+
+def _flow_display_name(flow_config: FlowConfig | None, flow_id: str) -> str:
+    if flow_config is None:
+        return flow_id
+    flow_name = flow_config.name.strip()
+    if not flow_name:
+        return flow_id
+    return flow_name
+
+
+def _skill_display_name(flow_config: FlowConfig | None, branch_id: str) -> str:
+    if flow_config is not None and flow_config.branches:
+        branch_config = flow_config.branches.get(branch_id)
+        if branch_config is not None:
+            branch_name = branch_config.name.strip()
+            if branch_name:
+                return branch_name
+    return branch_id
+
+
+def operator_task_to_out(
+    task: OperatorTasks,
+    *,
+    flow_config: FlowConfig | None = None,
+) -> OperatorTaskOut:
+    handoff_title, handoff_preview = operator_task_handoff_texts(task)
+    return OperatorTaskOut(
+        id=task.id,
+        company_id=task.company_id,
+        queue_id=task.queue_id,
+        status=OperatorTaskStatus(task.status),
+        session_id=task.session_id,
+        end_user_id=task.end_user_id,
+        flow_id=task.flow_id,
+        branch_id=task.branch_id,
+        flow_display_name=_flow_display_name(flow_config, task.flow_id),
+        skill_display_name=_skill_display_name(flow_config, task.branch_id),
+        handoff_title=handoff_title,
+        handoff_message_preview=handoff_preview,
+        handoff_mode=parse_handoff_mode(task),
+        a2a_task_id=task.a2a_task_id,
+        context_id=task.context_id,
+        correlation_id=task.correlation_id,
+        claimed_by_user_id=task.claimed_by_user_id,
+        created_at=task.created_at,
+        updated_at=task.updated_at,
+    )
 
 
 class OperatorHandoffService:

@@ -18,8 +18,31 @@ from core.billing.settlement_rules import (
 from core.billing.span_billing_settlement import LEGACY_SPAN_ONLY_RULE_ID, SpanBillingSettlement
 from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan
 from core.models.identity_models import Company
+from core.tracing.models import BillingSettlementSpan
+from core.types import JsonObject
 
 pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
+
+
+def _settlement_span(
+    *,
+    span_id: str,
+    trace_id: str,
+    operation_name: str,
+    company_id: str | None,
+    user_id: str | None,
+    service_name: str = "flows",
+    attributes: JsonObject | None = None,
+) -> BillingSettlementSpan:
+    return BillingSettlementSpan(
+        span_id=span_id,
+        trace_id=trace_id,
+        operation_name=operation_name,
+        service_name=service_name,
+        company_id=company_id,
+        user_id=user_id,
+        attributes=attributes if attributes is not None else {},
+    )
 
 
 @pytest.mark.asyncio
@@ -38,15 +61,13 @@ async def test_settle_span_rule_charge_idempotent(frontend_container, unique_id,
 
     span_id = f"sp_{unique_id}"
     rule_id = f"rule_{unique_id}"
-    span_dict = {
-        "span_id": span_id,
-        "trace_id": f"tr_{unique_id}",
-        "operation_name": f"op.{unique_id}.run",
-        "service_name": "flows",
-        "company_id": company_id,
-        "user_id": system_user_id,
-        "attributes": {},
-    }
+    span = _settlement_span(
+        span_id=span_id,
+        trace_id=f"tr_{unique_id}",
+        operation_name=f"op.{unique_id}.run",
+        company_id=company_id,
+        user_id=system_user_id,
+    )
     rule = SettlementRule(
         rule_id=rule_id,
         priority=1,
@@ -59,13 +80,13 @@ async def test_settle_span_rule_charge_idempotent(frontend_container, unique_id,
     billing = frontend_container.billing_service
 
     uid1 = await billing.settle_span_rule_charge(
-        span_dict=span_dict,
+        span=span,
         rule=rule,
         settlement=settlement,
         fallback_user_id="",
     )
     uid2 = await billing.settle_span_rule_charge(
-        span_dict=span_dict,
+        span=span,
         rule=rule,
         settlement=settlement,
         fallback_user_id="",
@@ -95,15 +116,13 @@ async def test_settle_pending_two_rules_two_usages(frontend_container, unique_id
     await frontend_container.company_repository.set(company)
 
     span_id = f"sp2_{unique_id}"
-    span_dict = {
-        "span_id": span_id,
-        "trace_id": f"tr2_{unique_id}",
-        "operation_name": f"multi.{unique_id}.x",
-        "service_name": "flows",
-        "company_id": company_id,
-        "user_id": system_user_id,
-        "attributes": {},
-    }
+    span = _settlement_span(
+        span_id=span_id,
+        trace_id=f"tr2_{unique_id}",
+        operation_name=f"multi.{unique_id}.x",
+        company_id=company_id,
+        user_id=system_user_id,
+    )
     doc = SettlementRulesDocument(
         application_mode=SettlementApplicationMode.ALL_MATCHING,
         rules=[
@@ -129,7 +148,7 @@ async def test_settle_pending_two_rules_two_usages(frontend_container, unique_id
     billing = frontend_container.billing_service
 
     n = await billing.settle_pending_span_in_job(
-        span_dict=span_dict,
+        span=span,
         settlement=settlement,
         fallback_user_id="",
         rules_doc=doc,
@@ -137,7 +156,7 @@ async def test_settle_pending_two_rules_two_usages(frontend_container, unique_id
     assert n == 2
 
     n2 = await billing.settle_pending_span_in_job(
-        span_dict=span_dict,
+        span=span,
         settlement=settlement,
         fallback_user_id="",
         rules_doc=doc,
@@ -194,24 +213,23 @@ async def test_legacy_settlement_uses_composite_and_old_key(frontend_container, 
     import core.tracing.attributes as trace_attr
 
     span_id = f"spL_{unique_id}"
-    span_dict = {
-        "span_id": span_id,
-        "trace_id": f"trL_{unique_id}",
-        "operation_name": "legacy.op",
-        "service_name": "flows",
-        "company_id": company_id,
-        "user_id": system_user_id,
-        "attributes": {
+    span = _settlement_span(
+        span_id=span_id,
+        trace_id=f"trL_{unique_id}",
+        operation_name="legacy.op",
+        company_id=company_id,
+        user_id=system_user_id,
+        attributes={
             trace_attr.ATTR_BILLING_RESOURCE_NAME: "llm:*",
             trace_attr.ATTR_BILLING_USAGE_TYPE: "llm_request",
             trace_attr.ATTR_BILLING_QUANTITY: 1,
         },
-    }
+    )
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     billing = frontend_container.billing_service
 
     uid = await billing.settle_span_charge(
-        span_dict=span_dict,
+        span=span,
         settlement=settlement,
         fallback_user_id="",
     )
@@ -240,18 +258,16 @@ async def test_settle_span_charge_missing_resource_name_raises(
     await frontend_container.company_repository.set(company)
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     billing = frontend_container.billing_service
-    span_dict = {
-        "span_id": f"sp5_{unique_id}",
-        "trace_id": "t",
-        "operation_name": "x",
-        "service_name": "flows",
-        "company_id": company_id,
-        "user_id": system_user_id,
-        "attributes": {},
-    }
+    span = _settlement_span(
+        span_id=f"sp5_{unique_id}",
+        trace_id="t",
+        operation_name="x",
+        company_id=company_id,
+        user_id=system_user_id,
+    )
     with pytest.raises(ValueError, match="platform.billing.resource_name"):
         await billing.settle_span_charge(
-            span_dict=span_dict,
+            span=span,
             settlement=settlement,
             fallback_user_id="",
         )
@@ -265,21 +281,20 @@ async def test_settle_span_charge_missing_company_id_raises(
 
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     billing = frontend_container.billing_service
-    span_dict = {
-        "span_id": f"sp6_{unique_id}",
-        "trace_id": "t",
-        "operation_name": "x",
-        "service_name": "flows",
-        "company_id": None,
-        "user_id": system_user_id,
-        "attributes": {
+    span = _settlement_span(
+        span_id=f"sp6_{unique_id}",
+        trace_id="t",
+        operation_name="x",
+        company_id=None,
+        user_id=system_user_id,
+        attributes={
             trace_attr.ATTR_BILLING_RESOURCE_NAME: "llm:*",
             trace_attr.ATTR_BILLING_QUANTITY: 1,
         },
-    }
+    )
     with pytest.raises(ValueError, match="company_id"):
         await billing.settle_span_charge(
-            span_dict=span_dict,
+            span=span,
             settlement=settlement,
             fallback_user_id="",
         )
@@ -308,19 +323,17 @@ async def test_settle_span_rule_charge_uses_fallback_user_id(
         quantity_from="const:1",
         match=SettlementRuleMatch(operation_name_prefix=f"fb.{unique_id}."),
     )
-    span_dict = {
-        "span_id": f"sp7_{unique_id}",
-        "trace_id": "t",
-        "operation_name": f"fb.{unique_id}.x",
-        "service_name": "flows",
-        "company_id": company_id,
-        "user_id": None,
-        "attributes": {},
-    }
+    span = _settlement_span(
+        span_id=f"sp7_{unique_id}",
+        trace_id="t",
+        operation_name=f"fb.{unique_id}.x",
+        company_id=company_id,
+        user_id=None,
+    )
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     billing = frontend_container.billing_service
     uid = await billing.settle_span_rule_charge(
-        span_dict=span_dict,
+        span=span,
         rule=rule,
         settlement=settlement,
         fallback_user_id=system_user_id,
@@ -349,31 +362,30 @@ async def test_settle_pending_legacy_second_run_zero_without_double_usage(
     await frontend_container.company_repository.set(company)
     import core.tracing.attributes as trace_attr
 
-    span_dict = {
-        "span_id": f"sp8_{unique_id}",
-        "trace_id": "t",
-        "operation_name": "leg2",
-        "service_name": "flows",
-        "company_id": company_id,
-        "user_id": system_user_id,
-        "attributes": {
+    span = _settlement_span(
+        span_id=f"sp8_{unique_id}",
+        trace_id="t",
+        operation_name="leg2",
+        company_id=company_id,
+        user_id=system_user_id,
+        attributes={
             trace_attr.ATTR_BILLING_RESOURCE_NAME: "llm:*",
             trace_attr.ATTR_BILLING_USAGE_TYPE: "llm_request",
             trace_attr.ATTR_BILLING_QUANTITY: 1,
         },
-    }
+    )
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     billing = frontend_container.billing_service
     doc = SettlementRulesDocument()
     n1 = await billing.settle_pending_span_in_job(
-        span_dict=span_dict,
+        span=span,
         settlement=settlement,
         fallback_user_id="",
         rules_doc=doc,
     )
     assert n1 == 1
     n2 = await billing.settle_pending_span_in_job(
-        span_dict=span_dict,
+        span=span,
         settlement=settlement,
         fallback_user_id="",
         rules_doc=doc,
@@ -382,7 +394,7 @@ async def test_settle_pending_legacy_second_run_zero_without_double_usage(
     recs = await frontend_container.usage_repository.admin_search_usage_records(
         company_id=company_id, limit=20
     )
-    span_usages = [r for r in recs if r.metadata.get("span_id") == span_dict["span_id"]]
+    span_usages = [r for r in recs if r.metadata.get("span_id") == span.span_id]
     assert len(span_usages) == 1
 
 
@@ -401,15 +413,13 @@ async def test_settle_pending_rules_no_match_returns_zero(
         current_month_spent=0.0,
     )
     await frontend_container.company_repository.set(company)
-    span_dict = {
-        "span_id": f"sp9_{unique_id}",
-        "trace_id": "t",
-        "operation_name": "nomatch.op",
-        "service_name": "flows",
-        "company_id": company_id,
-        "user_id": system_user_id,
-        "attributes": {},
-    }
+    span = _settlement_span(
+        span_id=f"sp9_{unique_id}",
+        trace_id="t",
+        operation_name="nomatch.op",
+        company_id=company_id,
+        user_id=system_user_id,
+    )
     doc = SettlementRulesDocument(
         rules=[
             SettlementRule(
@@ -423,7 +433,7 @@ async def test_settle_pending_rules_no_match_returns_zero(
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     billing = frontend_container.billing_service
     n = await billing.settle_pending_span_in_job(
-        span_dict=span_dict,
+        span=span,
         settlement=settlement,
         fallback_user_id="",
         rules_doc=doc,

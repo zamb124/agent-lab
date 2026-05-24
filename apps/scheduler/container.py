@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from taskiq.abc.broker import AsyncBroker
 
 from apps.crm_worker.broker import broker as crm_broker
 from apps.flows_worker.broker import broker as flows_broker
@@ -17,9 +17,9 @@ from core.scheduler import SchedulerService, SchedulerTaskRepository
 logger = get_logger(__name__)
 
 
-def scheduler_broker_for_queue(queue_name: str) -> Any:
+def scheduler_broker_for_queue(queue_name: str) -> AsyncBroker:
     """Брокер TaskIQ для AsyncKicker: задача должна быть зарегистрирована на этом брокере."""
-    mapping: dict[str, Any] = {
+    mapping: dict[str, AsyncBroker] = {
         "flows_worker": flows_broker,
         "idle": idle_broker,
         "crm": crm_broker,
@@ -35,14 +35,14 @@ class SchedulerContainer(BaseContainer):
     """Контейнер зависимостей scheduler."""
 
     @lazy
-    def scheduler_task_repository(self):
+    def scheduler_task_repository(self) -> SchedulerTaskRepository:
         settings = get_scheduler_settings()
         if not settings.database.shared_url:
             raise ValueError("database.shared_url is required for scheduler repository")
         return SchedulerTaskRepository(db_url=settings.database.shared_url)
 
     @lazy
-    def scheduler_service(self):
+    def scheduler_service(self) -> SchedulerService:
         settings = get_scheduler_settings()
         return SchedulerService(
             repository=self.scheduler_task_repository,

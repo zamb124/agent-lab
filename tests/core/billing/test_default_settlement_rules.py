@@ -7,16 +7,18 @@ from __future__ import annotations
 import core.tracing.attributes as trace_attr
 from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.billing.settlement_rules import resolve_matched_rules
+from core.tracing.models import BillingSettlementSpan
+from core.types import JsonObject
 
 
-def _span(operation_name: str, attrs: dict | None = None) -> dict:
-    return {
-        "span_id": "s1",
-        "operation_name": operation_name,
-        "service_name": "flows",
-        "event_type": None,
-        "attributes": attrs or {},
-    }
+def _span(operation_name: str, attrs: JsonObject | None = None) -> BillingSettlementSpan:
+    return BillingSettlementSpan(
+        span_id="s1",
+        trace_id="t1",
+        operation_name=operation_name,
+        service_name="flows",
+        attributes=attrs if attrs is not None else {},
+    )
 
 
 def test_default_document_first_win_single_rule_per_family() -> None:

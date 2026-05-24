@@ -6,6 +6,7 @@ import litserve as ls
 
 from apps.provider_litserve.shared import resolve_embedding_device, resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
+from core.types import JsonObject, JsonValue
 
 from .engines import LocalEmbeddingEngine, parse_embedding_body
 
@@ -26,3 +27,7 @@ class EmbeddingLitAPI(ls.LitAPI):
 
     def predict(self, x, **kwargs):
         return self._engine.embed(x["model"], x["input"])
+
+    def encode_response(self, output: JsonObject, **kwargs: JsonValue) -> JsonObject:
+        _ = kwargs
+        return output

@@ -298,7 +298,7 @@ class NodeAsToolWrapper(BaseTool):
         parent_state.tool_results.update(nested_state.tool_results)
 
         # Копируем все extra поля которые субагент записал в state
-        extra = cast(JsonObject, nested_state.model_extra or {})
+        extra = nested_state.json_extra()
         if extra:
             for key, value in extra.items():
                 setattr(parent_state, key, value)

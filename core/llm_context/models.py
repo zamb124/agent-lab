@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
 from core.models import StrictBaseModel
+from core.types import JsonObject
 
 LLMContextMode = Literal["off", "window", "smart", "agent"]
 LLMContextMemoryScope = Literal["off", "session", "node", "flow", "company"]
@@ -234,7 +235,10 @@ class LLMContextConfig(StrictBaseModel):
 
     @field_validator("budgets", "profiles")
     @classmethod
-    def keys_must_be_slugs(cls, value: dict[str, Any]) -> dict[str, Any]:
+    def keys_must_be_slugs(
+        cls,
+        value: dict[str, LLMContextBudget] | dict[str, LLMContextProfile],
+    ) -> dict[str, LLMContextBudget] | dict[str, LLMContextProfile]:
         for key in value:
             if not key or not all(ch.isalnum() or ch in ("_", "-") for ch in key):
                 raise ValueError(f"context profile/budget key is not a slug: {key!r}")
@@ -259,19 +263,19 @@ class LLMContextBlock(StrictBaseModel):
     score: float | None = Field(default=None, ge=0.0, le=1.0)
     token_count: int | None = Field(default=None, ge=0)
     required: bool = False
-    provenance: dict[str, Any] = Field(default_factory=dict)
+    provenance: JsonObject = Field(default_factory=dict)
 
 
 class LLMContextCompileRequest(StrictBaseModel):
     """Input to the platform context compiler."""
 
-    messages: list[dict[str, Any]] = Field(default_factory=list)
+    messages: list[JsonObject] = Field(default_factory=list)
     candidate_blocks: list[LLMContextBlock] = Field(default_factory=list)
     policy: LLMContextProfile = Field(default_factory=LLMContextProfile)
     tools_schema_tokens: int = Field(default=0, ge=0)
     model_context_length: int | None = Field(default=None, gt=0)
     output_token_reserve: int | None = Field(default=None, ge=0)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
 
 
 class LLMContextUsage(StrictBaseModel):
@@ -294,11 +298,11 @@ class LLMContextUsage(StrictBaseModel):
 class CompiledLLMContext(StrictBaseModel):
     """Final messages and debug data after context compilation."""
 
-    messages: list[dict[str, Any]]
+    messages: list[JsonObject]
     selected_blocks: list[LLMContextBlock] = Field(default_factory=list)
     dropped_blocks: list[LLMContextBlock] = Field(default_factory=list)
     usage: LLMContextUsage
-    provider_hints: dict[str, Any] = Field(default_factory=dict)
+    provider_hints: JsonObject = Field(default_factory=dict)
 
 
 __all__ = [

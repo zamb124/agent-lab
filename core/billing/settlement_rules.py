@@ -7,11 +7,13 @@ from __future__ import annotations
 import json
 import re
 from enum import Enum
-from typing import Any
+from typing import cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core.models.billing_models import UsageType
+from core.tracing.models import BillingSettlementSpan
+from core.types import JsonObject, JsonValue, require_json_object
 
 
 class SettlementApplicationMode(str, Enum):
@@ -31,7 +33,7 @@ class SettlementRuleMatch(BaseModel):
     service_name_regex: str | None = None
     event_type_equals: str | None = None
     event_type_regex: str | None = None
-    attribute_equals: dict[str, Any] = Field(default_factory=dict)
+    attribute_equals: dict[str, JsonValue] = Field(default_factory=dict)
     attribute_regex: dict[str, str] = Field(
         default_factory=dict,
         description="Все перечисленные attributes должны матчить regex через re.search(str(value))",
@@ -43,19 +45,20 @@ class SettlementRuleMatch(BaseModel):
 
     @model_validator(mode="after")
     def regex_patterns_must_compile(self) -> "SettlementRuleMatch":
-        patterns: list[tuple[str, str]] = []
-        for field_name in ("operation_name_regex", "service_name_regex", "event_type_regex"):
-            value = getattr(self, field_name)
-            if value:
-                patterns.append((field_name, value))
+        patterns: list[tuple[str, str | None]] = [
+            ("operation_name_regex", self.operation_name_regex),
+            ("service_name_regex", self.service_name_regex),
+            ("event_type_regex", self.event_type_regex),
+        ]
         for key, value in self.attribute_regex.items():
             if value:
                 patterns.append((f"attribute_regex.{key}", value))
         for label, pattern in patterns:
-            try:
-                re.compile(pattern)
-            except re.error as e:
-                raise ValueError(f"невалидный regex {label}: {e}") from e
+            if pattern:
+                try:
+                    _ = re.compile(pattern)
+                except re.error as e:
+                    raise ValueError(f"невалидный regex {label}: {e}") from e
         return self
 
 
@@ -73,7 +76,7 @@ class SettlementRule(BaseModel):
     @classmethod
     def usage_type_must_be_valid(cls, v: str) -> str:
         try:
-            UsageType(v)
+            _ = UsageType(v)
         except ValueError as e:
             raise ValueError(f"неизвестный UsageType: {v!r}") from e
         return v
@@ -93,19 +96,20 @@ class SettlementRulesDocument(BaseModel):
 
 
 def parse_settlement_rules_json(raw: str) -> SettlementRulesDocument:
-    data = json.loads(raw)
-    if not isinstance(data, dict):
+    parsed = cast(JsonValue, json.loads(raw))
+    if not isinstance(parsed, dict):
         raise ValueError("settlement rules: корень должен быть объектом")
+    data = require_json_object(parsed, "settlement rules")
     return SettlementRulesDocument.model_validate(data)
 
 
-def _attr_value(attrs: dict[str, Any], key: str) -> Any:
+def _attr_value(attrs: JsonObject, key: str) -> JsonValue:
     if key in attrs:
         return attrs[key]
     return None
 
 
-def _regex_matches(pattern: str | None, value: Any) -> bool:
+def _regex_matches(pattern: str | None, value: JsonValue) -> bool:
     if not pattern:
         return True
     if value is None:
@@ -116,30 +120,27 @@ def _regex_matches(pattern: str | None, value: Any) -> bool:
         raise ValueError(f"невалидный regex {pattern!r}: {e}") from e
 
 
-def rule_matches_span(rule: SettlementRule, span_dict: dict[str, Any]) -> bool:
+def rule_matches_span(rule: SettlementRule, span: BillingSettlementSpan) -> bool:
     m = rule.match
     if m.operation_name_prefix:
-        op = span_dict.get("operation_name") or ""
-        if not isinstance(op, str) or not op.startswith(m.operation_name_prefix):
+        if not span.operation_name.startswith(m.operation_name_prefix):
             return False
     if m.operation_name_equals is not None:
-        if span_dict.get("operation_name") != m.operation_name_equals:
+        if span.operation_name != m.operation_name_equals:
             return False
-    if not _regex_matches(m.operation_name_regex, span_dict.get("operation_name")):
+    if not _regex_matches(m.operation_name_regex, span.operation_name):
         return False
     if m.service_name_equals is not None:
-        if span_dict.get("service_name") != m.service_name_equals:
+        if span.service_name != m.service_name_equals:
             return False
-    if not _regex_matches(m.service_name_regex, span_dict.get("service_name")):
+    if not _regex_matches(m.service_name_regex, span.service_name):
         return False
     if m.event_type_equals is not None:
-        if span_dict.get("event_type") != m.event_type_equals:
+        if span.event_type != m.event_type_equals:
             return False
-    if not _regex_matches(m.event_type_regex, span_dict.get("event_type")):
+    if not _regex_matches(m.event_type_regex, span.event_type):
         return False
-    attrs = span_dict.get("attributes") or {}
-    if not isinstance(attrs, dict):
-        return False
+    attrs = span.attributes
     for attr_key, expected in m.attribute_equals.items():
         if _attr_value(attrs, attr_key) != expected:
             return False
@@ -152,8 +153,8 @@ def rule_matches_span(rule: SettlementRule, span_dict: dict[str, Any]) -> bool:
     return True
 
 
-def resolve_matched_rules(doc: SettlementRulesDocument, span_dict: dict[str, Any]) -> list[SettlementRule]:
-    matched = [r for r in doc.rules if r.enabled and rule_matches_span(r, span_dict)]
+def resolve_matched_rules(doc: SettlementRulesDocument, span: BillingSettlementSpan) -> list[SettlementRule]:
+    matched = [r for r in doc.rules if r.enabled and rule_matches_span(r, span)]
     if not matched:
         return []
 
@@ -176,7 +177,7 @@ def resolve_matched_rules(doc: SettlementRulesDocument, span_dict: dict[str, Any
     return after_groups
 
 
-def quantity_from_span(quantity_from: str, span_dict: dict[str, Any]) -> int:
+def quantity_from_span(quantity_from: str, span: BillingSettlementSpan) -> int:
     if quantity_from.startswith("const:"):
         rest = quantity_from[len("const:") :].strip()
         q = int(rest)
@@ -187,14 +188,24 @@ def quantity_from_span(quantity_from: str, span_dict: dict[str, Any]) -> int:
         key = quantity_from[len("attr:") :].strip()
         if not key:
             raise ValueError(f"пустой ключ атрибута в {quantity_from!r}")
-        attrs = span_dict.get("attributes") or {}
-        if not isinstance(attrs, dict):
-            raise ValueError("span без dict attributes")
-        raw = attrs.get(key)
-        if raw is None:
+        if key not in span.attributes:
             raise ValueError(f"атрибут {key!r} отсутствует для quantity_from")
-        q = int(raw)
+        q = _json_value_to_int(span.attributes[key], f"атрибут {key!r}")
         if q < 0:
             raise ValueError(f"quantity из атрибута {key!r} должна быть >= 0")
         return q
     raise ValueError(f"неизвестный формат quantity_from: {quantity_from!r}")
+
+
+def _json_value_to_int(value: JsonValue, label: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{label} должен быть целым числом")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not value.is_integer():
+            raise ValueError(f"{label} должен быть целым числом")
+        return int(value)
+    if isinstance(value, str):
+        return int(value)
+    raise ValueError(f"{label} должен быть целым числом")

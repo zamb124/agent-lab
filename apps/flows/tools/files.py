@@ -6,23 +6,26 @@ read_file — чтение вложений; create_file — FileWriter() + crea
 
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import ClassVar, Literal
 from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from apps.flows.src.files.state_file_refs import upsert_state_file, with_document_capability
 from apps.flows.src.runtime_helpers.state_utils import find_file, push_ui_event
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.service_client import NAMESPACE_HEADER, ServiceClient, ServiceClientError
 from core.context import get_context
+from core.files.file_ref import FileRef
 from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
 from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.files.writer import FileWriteError, FileWriter
 from core.state import ExecutionState
+from core.types import JsonObject, require_json_object
 
-JsonDict = dict[str, Any]
+JsonDict = JsonObject
 OFFICE_EXT_RE = r"\.(docx?|odt|rtf|txt|pdf|xlsx?|ods|csv|pptx?|odp)$"
 OFFICE_MIME_RE = r"(pdf|word|excel|spreadsheet|presentation|powerpoint|officedocument|opendocument|text/csv|text/plain)"
 
@@ -30,97 +33,45 @@ OFFICE_MIME_RE = r"(pdf|word|excel|spreadsheet|presentation|powerpoint|officedoc
 def _context_namespace() -> str:
     ctx = get_context()
     if ctx is None:
-        return "default"
+        raise RuntimeError("Context is not set")
     ns = (ctx.active_namespace or "default").strip()
     return ns or "default"
 
 
-def _is_office_file(item: JsonDict) -> bool:
-    original_name = str(item.get("original_name") or "").lower()
-    content_type = str(item.get("content_type") or "").lower()
+def _is_office_file(item: FileRef) -> bool:
+    original_name = item.original_name.lower()
+    content_type = item.content_type.lower()
     return re.search(OFFICE_EXT_RE, original_name) is not None or re.search(OFFICE_MIME_RE, content_type) is not None
 
 
-def _document_capability(raw: JsonDict, namespace: str) -> JsonDict:
-    return {
-        "kind": "onlyoffice",
-        "binding_id": raw["binding_id"],
-        "file_id": raw["file_id"],
-        "catalog_id": raw["catalog_id"],
-        "document_type": raw.get("document_type") or "",
-        "title": raw.get("title") or "",
-        "namespace": namespace,
-        "editor_url": raw.get("editor_url") or "",
-        "editable": True,
-    }
-
-
-def _with_document_capability(item: JsonDict, raw: JsonDict, namespace: str) -> JsonDict:
-    capabilities = item.get("capabilities")
-    if not isinstance(capabilities, dict):
-        capabilities = {}
-    doc = _document_capability(raw, namespace)
-    return {
-        **item,
-        "file_id": raw["file_id"],
-        "capabilities": {**capabilities, "document": doc},
-        "document": doc,
-    }
-
-
-def _upsert_state_file(state: ExecutionState, item: JsonDict) -> None:
-    fid = str(item.get("file_id") or "").strip()
-    files = list(state.files or [])
-    if fid:
-        for idx, existing in enumerate(files):
-            if str(existing.get("file_id") or "") == fid:
-                files[idx] = {**existing, **item}
-                state.files = files
-                return
-    files.append(item)
-    state.files = files
-
-
-async def _sync_office_file_before_read(state: ExecutionState, item: JsonDict) -> tuple[JsonDict, str | None]:
-    fid = str(item.get("file_id") or "").strip()
-    if not fid or not _is_office_file(item):
+async def _sync_office_file_before_read(state: ExecutionState, item: FileRef) -> tuple[FileRef, str | None]:
+    if item.file_id is None or not _is_office_file(item):
         return item, None
 
     namespace = _context_namespace()
-    document = item.get("document")
-    capabilities = item.get("capabilities")
-    if not isinstance(document, dict) and isinstance(capabilities, dict):
-        cap_doc = capabilities.get("document")
-        if isinstance(cap_doc, dict):
-            document = cap_doc
+    document = item.capabilities.document
 
-    raw: JsonDict | None = None
-    if isinstance(document, dict) and isinstance(document.get("binding_id"), str):
-        raw = {
-            "binding_id": document["binding_id"],
-            "file_id": fid,
-            "catalog_id": document.get("catalog_id") or "",
-            "document_type": document.get("document_type") or "",
-            "title": document.get("title") or item.get("original_name") or "",
-            "editor_url": document.get("editor_url") or "",
-        }
+    if document is not None:
+        raw = require_json_object(
+            document.model_dump(mode="json", exclude_none=True),
+            "FileRef.capabilities.document",
+        )
     else:
         try:
             candidate = await ServiceClient().post(
                 "office",
                 "/documents/api/v1/documents/from-file",
-                json={"file_id": fid, "title": str(item.get("original_name") or fid)},
+                json={"file_id": item.file_id, "title": item.original_name},
                 headers={NAMESPACE_HEADER: namespace},
             )
         except ServiceClientError:
             return item, None
-        if isinstance(candidate, dict) and isinstance(candidate.get("binding_id"), str):
-            raw = candidate
+        raw = require_json_object(candidate, "office.documents.from_file")
 
-    if raw is None:
-        return item, None
-
-    binding_id = str(raw["binding_id"])
+    binding_id_value = raw["binding_id"]
+    if not isinstance(binding_id_value, str) or not binding_id_value.strip():
+        raise ValueError("office.documents.binding_id must be a non-empty string")
+    binding_id = binding_id_value
     try:
         synced = await ServiceClient().post(
             "office",
@@ -130,15 +81,15 @@ async def _sync_office_file_before_read(state: ExecutionState, item: JsonDict) -
         )
     except ServiceClientError as exc:
         return item, f"Не удалось синхронизировать открытый редактор documents перед чтением: {exc}"
-    if isinstance(synced, dict):
-        raw = {**raw, **synced}
+    synced_payload = require_json_object(synced, "office.documents.sync")
+    raw = {**raw, **synced_payload}
 
-    enriched = _with_document_capability(item, raw, namespace)
-    _upsert_state_file(state, enriched)
-    push_ui_event(
+    enriched = with_document_capability(item, raw, namespace)
+    upsert_state_file(state, enriched)
+    _ = push_ui_event(
         state,
         event_type="files.updated",
-        payload={"files": [enriched]},
+        payload={"files": [enriched.to_json_object()]},
         source="documents",
         correlation_id=binding_id,
     )
@@ -188,47 +139,52 @@ file_size, checksum (если есть), is_public.
 """.strip()
 
 
-def _read_file_mock(args: JsonDict, state: Any = None) -> JsonDict:
+def _read_file_mock(args: JsonDict, state: ExecutionState | None = None) -> JsonDict:
     file_name_arg = args.get("file_name")
+    if file_name_arg is not None and not isinstance(file_name_arg, str):
+        raise ValueError("read_file.file_name must be a string")
     if state is not None:
-        files = getattr(state, "files", None)
-        if files is None and isinstance(state, dict):
-            files = state.get("files", [])
-        files = files or []
+        files = state.files
         if not files:
             return {"success": False, "error": "Нет файлов для чтения"}
         finfo = find_file(files, file_name_arg)
         if finfo is None:
             return {
                 "success": False,
-                "error": f"Файл не найден. Доступные: {[f.get('original_name') for f in files]}",
+                "error": f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in files]}",
             }
-        url = finfo.get("url")
-        if url and not str(url).startswith(("http://", "https://")) and not Path(str(url)).exists():
+        url = finfo.url
+        if url is not None and not url.startswith(("http://", "https://")) and not Path(url).exists():
             return {"success": False, "error": f"Файл не найден: {url}"}
         res = FileReadResult(
-            file_name=str(finfo.get("original_name") or "file"),
-            content_type=finfo.get("content_type"),
+            file_name=finfo.original_name,
+            content_type=finfo.content_type,
             detected_kind=FileReadKind.TEXT,
             page_count=1,
             pages=[ReadPage(index=0, text="Mock read_file content", assets=[], label=None)],
             warnings=[],
-            source_file_id=finfo.get("file_id"),
+            source_file_id=finfo.file_id,
         )
-        return {"success": True, **res.model_dump(mode="json")}
+        return {
+            "success": True,
+            **require_json_object(res.model_dump(mode="json"), "read_file.mock_result"),
+        }
     res = FileReadResult(
-        file_name=file_name_arg or "mock",
+        file_name=file_name_arg if file_name_arg is not None else "mock",
         content_type="text/plain",
         detected_kind=FileReadKind.TEXT,
         page_count=1,
         pages=[ReadPage(index=0, text="Mock read_file without state", assets=[], label=None)],
         warnings=[],
     )
-    return {"success": True, **res.model_dump(mode="json")}
+    return {
+        "success": True,
+        **require_json_object(res.model_dump(mode="json"), "read_file.mock_result"),
+    }
 
 
 class ReadFileArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     file_name: str | None = Field(
         None,
@@ -245,7 +201,7 @@ class ReadFileArgs(BaseModel):
 
 
 class CreateFileArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     content: str = Field(
         ...,
@@ -290,7 +246,7 @@ async def read_file(
     if finfo is None:
         return {
             "success": False,
-            "error": f"Файл не найден. Доступные: {[f.get('original_name') for f in files]}",
+            "error": f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in files]}",
         }
 
     finfo, sync_error = await _sync_office_file_before_read(state, finfo)
@@ -307,14 +263,21 @@ async def read_file(
     except FileReadError as exc:
         return {"success": False, "error": str(exc)}
 
-    return {"success": True, **result.model_dump(mode="json")}
+    return {
+        "success": True,
+        **require_json_object(result.model_dump(mode="json"), "read_file.result"),
+    }
 
 
-def _create_file_mock(args: JsonDict, state: Any = None) -> JsonDict:
+def _create_file_mock(args: JsonDict, state: ExecutionState | None = None) -> JsonDict:
+    _ = state
+    original_name = args["original_name"]
+    if not isinstance(original_name, str) or not original_name.strip():
+        raise ValueError("create_file.original_name must be a non-empty string")
     return {
         "success": True,
         "file_id": "file_mockcreate01",
-        "original_name": args.get("original_name") or "out.md",
+        "original_name": original_name,
         "content_type": "text/plain",
         "file_size": 1,
         "url": "/flows/api/v1/files/download/file_mockcreate01",
@@ -351,19 +314,13 @@ async def create_file(
         return {"success": False, "error": str(exc)}
 
     response = FileResponse.from_record(record)
-    payload = response.model_dump(mode="json")
-    file_item = {
-        "file_id": response.file_id,
-        "original_name": response.original_name,
-        "url": response.url,
-        "content_type": response.content_type,
-        "file_size": response.file_size,
-    }
-    _upsert_state_file(state, file_item)
-    push_ui_event(
+    payload = require_json_object(response.model_dump(mode="json"), "create_file.response")
+    file_item = FileRef.from_response(response)
+    upsert_state_file(state, file_item)
+    _ = push_ui_event(
         state,
         event_type="files.added",
-        payload={"files": [file_item]},
+        payload={"files": [file_item.to_json_object()]},
         source="files",
         correlation_id=response.file_id,
     )

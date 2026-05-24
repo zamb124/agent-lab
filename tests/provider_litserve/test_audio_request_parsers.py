@@ -32,9 +32,9 @@ def test_parse_stt_body_uses_default_when_model_omitted(unique_id):
     parsed = parse_stt_body(
         {"file": pcm}, default_api_model_id=f"gigaam-{unique_id}"
     )
-    assert parsed["audio_bytes"] == pcm
-    assert parsed["model"] == f"gigaam-{unique_id}"
-    assert parsed["language"] is None
+    assert parsed.audio_bytes == pcm
+    assert parsed.model == f"gigaam-{unique_id}"
+    assert parsed.language is None
 
 
 def test_parse_stt_body_accepts_explicit_model_and_language(unique_id):
@@ -43,8 +43,8 @@ def test_parse_stt_body_accepts_explicit_model_and_language(unique_id):
         {"file": pcm, "model": f"whisper-{unique_id}", "language": "en"},
         default_api_model_id=f"gigaam-{unique_id}",
     )
-    assert parsed["model"] == f"whisper-{unique_id}"
-    assert parsed["language"] == "en"
+    assert parsed.model == f"whisper-{unique_id}"
+    assert parsed.language == "en"
 
 
 def test_parse_stt_body_missing_file_raises_422(unique_id):

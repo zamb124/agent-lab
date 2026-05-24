@@ -45,6 +45,7 @@ from core.docs.models import (
     StateField,
 )
 from core.errors import CodeExecutionRuntimeError, ImanBaseError
+from core.files.file_ref import FileRef
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.types import (
@@ -1171,28 +1172,26 @@ async def _merge_execute_state_with_flow(
     }
     from_graph = collect_flow_node_files(cfg_nodes)
     raw_files = input_state.get("files")
-    req_files: list[JsonObject] = []
+    req_files: list[FileRef] = []
     if raw_files is not None:
         req_files = [
-            require_json_object(item, f"execute.state.files[{index}]")
+            FileRef.model_validate(
+                require_json_object(item, f"execute.state.files[{index}]")
+            )
             for index, item in enumerate(require_json_array(raw_files, "execute.state.files"))
         ]
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str | None, str | None, str]] = set()
     for file_item in from_graph:
-        original_name = file_item.get("original_name")
-        url = file_item.get("url")
-        if not isinstance(original_name, str) or not isinstance(url, str):
-            raise ValueError("flow node file entries must contain string original_name and url")
-        seen.add((original_name, url))
-    extra: list[JsonObject] = []
-    for index, file_item in enumerate(req_files):
-        original_name = file_item.get("original_name")
-        url = file_item.get("url")
-        if not isinstance(original_name, str) or not isinstance(url, str):
-            raise ValueError(f"execute.state.files[{index}] must contain string original_name and url")
-        if (original_name, url) not in seen:
+        seen.add((file_item.file_id, file_item.url, file_item.original_name))
+    extra: list[FileRef] = []
+    for file_item in req_files:
+        file_key = (file_item.file_id, file_item.url, file_item.original_name)
+        if file_key not in seen:
             extra.append(file_item)
-    input_state["files"] = list(from_graph) + extra
+    input_state["files"] = [
+        file_item.to_json_object()
+        for file_item in [*from_graph, *extra]
+    ]
     request_variables_raw = input_state.get("variables")
     request_variables = (
         require_json_object(request_variables_raw, "execute.state.variables")

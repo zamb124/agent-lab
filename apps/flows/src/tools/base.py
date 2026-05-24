@@ -170,7 +170,7 @@ class BaseTool(ABC):
         if state.user_groups:
             return state.user_groups
 
-        extra = require_json_object(state.model_extra or {}, "state.extra")
+        extra = state.json_extra()
         raw_user = extra.get("user")
         if isinstance(raw_user, Mapping):
             user = require_json_object(raw_user, "state.user")

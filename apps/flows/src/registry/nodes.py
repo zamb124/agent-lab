@@ -5,11 +5,12 @@ NodeRegistry - реестр типов нод.
 Zero-Guess: все типы нод регистрируются явно при startup.
 """
 
-from typing import Any
+from typing import override
 
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.runtime.nodes import RUNTIME_NODE_CLASSES, BaseNode
 from core.registry.base import ResourceRegistry
+from core.types import JsonObject
 
 
 class NodeRegistry(ResourceRegistry[type[BaseNode]]):
@@ -34,11 +35,12 @@ class NodeRegistry(ResourceRegistry[type[BaseNode]]):
     def _node_key(node_type: str | NodeType) -> str:
         return node_type.value if isinstance(node_type, NodeType) else node_type
 
+    @override
     def register(
         self,
         key: str | NodeType,
         resource: type[BaseNode],
-        metadata: dict[str, Any] | None = None,
+        metadata: JsonObject | None = None,
     ) -> None:
         """
         Регистрирует класс ноды.
@@ -51,8 +53,9 @@ class NodeRegistry(ResourceRegistry[type[BaseNode]]):
         Raises:
             ResourceAlreadyExistsError: Если тип уже зарегистрирован
         """
-        super().register(self._node_key(key), resource, metadata or {})
+        super().register(self._node_key(key), resource, metadata)
 
+    @override
     def get(self, key: str | NodeType) -> type[BaseNode]:
         """
         Получает класс ноды по типу.

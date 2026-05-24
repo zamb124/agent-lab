@@ -6,44 +6,67 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Mapping, Sequence
 from datetime import datetime
-from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import Protocol, TypeAlias, cast, override
 
+from a2a.types import FilePart, Message, Part, Role, TextPart
 from pydantic import BaseModel
 from sqlalchemy import text
-
-if TYPE_CHECKING:
-    from asyncpg import Connection
 
 from apps.flows.src.models import SessionConfig, SessionStatus
 from core.context import get_context
 from core.db import Storage
 from core.logging import get_logger
 from core.state import ExecutionState
+from core.types import JsonObject, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 
+StateQueryParam: TypeAlias = str | int | datetime
+StateStorageValue: TypeAlias = str | JsonObject
+StateRowValue: TypeAlias = str | int | datetime | JsonObject | None
+StateSearchRow: TypeAlias = Mapping[str, StateRowValue]
 
-def _execution_state_from_storage_dict(data: dict[str, Any]) -> ExecutionState:
+
+class StateTransactionConnection(Protocol):
+    """Минимальный контракт asyncpg-соединения, используемый state-репозиторием."""
+
+    def fetchrow(
+        self,
+        query: str,
+        *args: StateQueryParam,
+    ) -> Awaitable[Mapping[str, StateStorageValue] | None]: ...
+
+    def execute(
+        self,
+        query: str,
+        *args: StateQueryParam,
+    ) -> Awaitable[str]: ...
+
+
+def _execution_state_from_storage_dict(data: JsonObject) -> ExecutionState:
     """Убирает устаревший ключ flow_config из JSON, переносит version в flow_config_version."""
-    fc = data.pop("flow_config", None)
-    if isinstance(fc, dict) and fc.get("version") and not data.get("flow_config_version"):
-        data["flow_config_version"] = str(fc["version"])
-    return ExecutionState.model_validate(data)
+    payload: JsonObject = dict(data)
+    flow_config = payload.pop("flow_config", None)
+    if isinstance(flow_config, Mapping):
+        raw_version = flow_config.get("version")
+        if raw_version and not payload.get("flow_config_version"):
+            payload["flow_config_version"] = str(raw_version)
+    return ExecutionState.model_validate(payload)
 
 
 def _execution_state_for_storage(
-    state: ExecutionState | dict[str, Any],
+    state: ExecutionState | JsonObject,
 ) -> ExecutionState:
     """Сериализация без тяжёлого flow_config (раньше писался в states)."""
-    model = (
-        ExecutionState.model_validate(state) if isinstance(state, dict) else state
+    model = ExecutionState.model_validate(state) if isinstance(state, dict) else state
+    payload = require_json_object(
+        model.model_dump(mode="json", exclude_none=False),
+        "ExecutionState",
     )
-    payload = model.model_dump(mode="json", exclude_none=False)
-    payload.pop("flow_config", None)
+    _ = payload.pop("flow_config", None)
     return ExecutionState.model_validate(payload)
 
 
@@ -54,46 +77,53 @@ class StateData(BaseModel):
     data: ExecutionState
 
 
+def _state_data_from_storage_value(value: StateStorageValue) -> StateData:
+    payload = parse_json_object(value, "state row value") if isinstance(value, str) else value
+    return StateData.model_validate(payload)
+
+
 class BaseStateRepository(ABC):
     """Базовый интерфейс для StateRepository (для InMemory реализации)."""
 
     @abstractmethod
     async def get(self, session_id: str) -> ExecutionState | None:
         """Получает состояние сессии."""
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def set(
-        self, session_id: str, state: ExecutionState | dict[str, Any]
+        self, session_id: str, state: ExecutionState | JsonObject
     ) -> bool:
         """Сохраняет состояние сессии (ExecutionState или dict для границы тестов/репозитория)."""
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def delete(self, session_id: str) -> bool:
         """Удаляет состояние сессии."""
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def resolve_session_id_by_flow_and_identifier(
         self, flow_id: str, lookup_id: str
     ) -> str | None:
         """По ``task_id`` или ``context_id`` возвращает ``session_id`` вида ``flow_id:context_id``."""
-        pass
+        raise NotImplementedError
 
     async def get_for_update(
-        self, session_id: str, conn: Any
+        self, session_id: str, conn: StateTransactionConnection
     ) -> ExecutionState | None:
         """Получает состояние с блокировкой."""
+        _ = conn
         return await self.get(session_id)
 
     async def set_in_transaction(
         self,
         session_id: str,
-        state: ExecutionState | dict[str, Any],
-        conn: Any,
+        state: ExecutionState | JsonObject,
+        conn: StateTransactionConnection,
     ) -> bool:
         """Сохраняет состояние в рамках транзакции."""
+        _ = conn
         return await self.set(session_id, state)
 
 
@@ -103,11 +133,11 @@ class DatabaseStateRepository(BaseStateRepository):
     States изолированы по компаниям.
     """
 
-    is_global = False
-    owner_service = "flows"
+    is_global: bool = False
+    owner_service: str = "flows"
 
     def __init__(self, storage: Storage):
-        self._storage = storage
+        self._storage: Storage = storage
 
     def _get_key(self, entity_id: str) -> str:
         return f"state:{entity_id}"
@@ -131,7 +161,7 @@ class DatabaseStateRepository(BaseStateRepository):
         if not context or not context.active_company:
             raise ValueError(
                 f"Репозиторий {self.__class__.__name__} требует активную компанию в контексте "
-                f"(is_global=False)"
+                + "(is_global=False)"
             )
         company_identifier = context.active_company.subdomain or context.active_company.company_id
         return f"company:{company_identifier}:{key}"
@@ -145,6 +175,7 @@ class DatabaseStateRepository(BaseStateRepository):
         company_identifier = context.active_company.subdomain or context.active_company.company_id
         return f"company:{company_identifier}:{self._get_prefix()}"
 
+    @override
     async def get(self, session_id: str) -> ExecutionState | None:
         """
         Получает состояние сессии.
@@ -159,12 +190,16 @@ class DatabaseStateRepository(BaseStateRepository):
         data = await self._storage.get_with_session_and_table(final_key, self._get_table())
         if data is None:
             return None
-        entity = StateData.model_validate_json(data)
-        raw = entity.data.model_dump(mode="json", exclude_none=False)
+        entity = _state_data_from_storage_value(data)
+        raw = require_json_object(
+            entity.data.model_dump(mode="json", exclude_none=False),
+            "ExecutionState",
+        )
         return _execution_state_from_storage_dict(raw)
 
+    @override
     async def set(
-        self, session_id: str, state: ExecutionState | dict[str, Any]
+        self, session_id: str, state: ExecutionState | JsonObject
     ) -> bool:
         """
         Сохраняет состояние сессии.
@@ -185,13 +220,15 @@ class DatabaseStateRepository(BaseStateRepository):
             self._get_table(),
         )
 
+    @override
     async def delete(self, session_id: str) -> bool:
         """Удаляет состояние сессии."""
         final_key = self._build_final_key(self._get_key(session_id))
         return await self._storage.delete_with_table(final_key, self._get_table())
 
+    @override
     async def get_for_update(
-        self, session_id: str, conn: "Connection"
+        self, session_id: str, conn: StateTransactionConnection
     ) -> ExecutionState | None:
         """
         Получает состояние с блокировкой строки (FOR UPDATE).
@@ -210,17 +247,19 @@ class DatabaseStateRepository(BaseStateRepository):
         )
         if row is None:
             return None
-        value = row["value"]
-        data = value if isinstance(value, str) else json.dumps(value)
-        entity = StateData.model_validate_json(data)
-        raw = entity.data.model_dump(mode="json", exclude_none=False)
+        entity = _state_data_from_storage_value(row["value"])
+        raw = require_json_object(
+            entity.data.model_dump(mode="json", exclude_none=False),
+            "ExecutionState",
+        )
         return _execution_state_from_storage_dict(raw)
 
+    @override
     async def set_in_transaction(
         self,
         session_id: str,
-        state: ExecutionState | dict[str, Any],
-        conn: "Connection",
+        state: ExecutionState | JsonObject,
+        conn: StateTransactionConnection,
     ) -> bool:
         """
         Сохраняет состояние в рамках транзакции.
@@ -237,7 +276,7 @@ class DatabaseStateRepository(BaseStateRepository):
         to_store = _execution_state_for_storage(state)
         entity = StateData(session_id=session_id, data=to_store)
         data = entity.model_dump_json()
-        await conn.execute(
+        _ = await conn.execute(
             f"""
             INSERT INTO {self._get_table()} (key, value, created_at, updated_at)
             VALUES ($1, $2::jsonb, NOW(), NOW())
@@ -250,6 +289,7 @@ class DatabaseStateRepository(BaseStateRepository):
         )
         return True
 
+    @override
     async def resolve_session_id_by_flow_and_identifier(
         self, flow_id: str, lookup_id: str
     ) -> str | None:
@@ -287,7 +327,8 @@ class DatabaseStateRepository(BaseStateRepository):
             if row is None:
                 return None
 
-            raw_id: str = row["key"]
+            row_mapping = cast(Mapping[str, str], row)
+            raw_id = row_mapping["key"]
             session_id = raw_id
             if session_id.startswith(company_state_key_prefix):
                 session_id = session_id[len(company_state_key_prefix) :]
@@ -296,7 +337,9 @@ class DatabaseStateRepository(BaseStateRepository):
             if session_id.startswith(sp):
                 session_id = session_id[len(sp) :]
 
-            return session_id if session_id != "" else None
+            if session_id == "":
+                raise ValueError("state key resolved to empty session_id")
+            return session_id
 
     async def search_sessions(
         self,
@@ -326,10 +369,9 @@ class DatabaseStateRepository(BaseStateRepository):
             raise RuntimeError("Storage не подключен")
 
         conditions: list[str] = []
-        params: dict[str, object] = {}
+        params: dict[str, StateQueryParam] = {}
         param_idx = 1
 
-        # Добавляем company-scope фильтр если не global
         company_state_key_prefix = self._build_final_prefix()
         if company_state_key_prefix:
             param_name = f"param{param_idx}"
@@ -373,8 +415,7 @@ class DatabaseStateRepository(BaseStateRepository):
         async with self._storage.get_session() as session:
             count_query = text(f"SELECT COUNT(*) FROM {table} WHERE {where_clause}")
             count_result = await session.execute(count_query, params)
-            total_raw = count_result.scalar_one()
-            total = int(total_raw)
+            total = cast(int, count_result.scalar_one())
 
             query = text(f"""
                 SELECT key, value, created_at, updated_at FROM {table}
@@ -382,129 +423,92 @@ class DatabaseStateRepository(BaseStateRepository):
                 ORDER BY COALESCE(created_at, '1970-01-01'::timestamptz) DESC, key DESC
                 LIMIT :limit OFFSET :offset
             """)
-            query_params = params.copy()
-            query_params.update({"limit": limit, "offset": offset})
+            query_params: dict[str, StateQueryParam] = {
+                **params,
+                "limit": limit,
+                "offset": offset,
+            }
 
             result = await session.execute(query, query_params)
-            rows = result.mappings().all()
+            rows = cast(Sequence[StateSearchRow], result.mappings().all())
 
             sessions: list[SessionConfig] = []
             for row in rows:
-                raw_id = str(row["key"])
-                raw_data = row["value"]
-                if isinstance(raw_data, str):
-                    raw_data = json.loads(raw_data)
-                if not isinstance(raw_data, dict):
-                    raise ValueError("state row value must be a JSON object")
+                raw_session_key = row["key"]
+                if not isinstance(raw_session_key, str):
+                    raise TypeError("state row key must be str")
 
-                # Извлекаем state.data (так как храним StateData)
-                state_data = raw_data.get("data", raw_data)
-                if not isinstance(state_data, dict):
-                    raise ValueError("state row data must be a JSON object")
+                raw_storage_value = row["value"]
+                if not isinstance(raw_storage_value, str | dict):
+                    raise TypeError("state row value must be StateData JSON")
 
-                # Убираем company-scope prefix из session_id
-                session_id = raw_id
+                state_data = _state_data_from_storage_value(raw_storage_value)
+                execution_state = state_data.data
+
+                session_id = raw_session_key
                 if company_state_key_prefix and session_id.startswith(company_state_key_prefix):
-                    session_id = session_id[len(company_state_key_prefix):]
+                    session_id = session_id[len(company_state_key_prefix) :]
+                state_key_prefix = self._get_prefix()
+                if session_id.startswith(state_key_prefix):
+                    session_id = session_id[len(state_key_prefix) :]
 
-                user_id_value = state_data.get("user_id", "")
-                user_id_from_state = user_id_value if isinstance(user_id_value, str) else ""
+                session_parts = session_id.split(":")
 
-                session_parts = session_id.split(":") if ":" in session_id else [session_id]
-
-                if len(session_parts) >= 3 and session_parts[0] == "eval":
+                if len(session_parts) == 2:
+                    flow_id_from_session = session_parts[0]
+                    context_id_from_session = session_parts[1]
+                elif len(session_parts) >= 3 and session_parts[0] == "eval":
                     flow_id_from_session = session_parts[1]
                     context_id_from_session = session_parts[2]
                 else:
-                    flow_id_from_session = session_parts[0] if session_parts else ""
-                    context_id_from_session = session_parts[-1] if len(session_parts) > 1 else session_id
+                    raise ValueError(f"state session_id must be flow_id:context_id, got: {session_id}")
 
-                messages = state_data.get("messages", [])
-                message_count = len(messages) if isinstance(messages, list) else 0
-
-                first_message = self._extract_first_message(messages)
+                created_at = row["created_at"]
+                if created_at is not None and not isinstance(created_at, datetime):
+                    raise TypeError("state row created_at must be datetime")
+                updated_at = row["updated_at"]
+                if updated_at is not None and not isinstance(updated_at, datetime):
+                    raise TypeError("state row updated_at must be datetime")
 
                 session = SessionConfig(
                     session_id=session_id,
                     channel="a2a",
-                    user_id=user_id_from_state,
+                    user_id=execution_state.user_id,
                     flow_id=flow_id_from_session,
                     context_id=context_id_from_session,
                     status=SessionStatus.ACTIVE,
-                    message_count=message_count,
-                    first_message=first_message,
-                    created_at=row.get("created_at"),
-                    last_activity=row.get("updated_at"),
+                    message_count=len(execution_state.messages),
+                    first_message=self._extract_first_message(execution_state.messages),
+                    created_at=created_at,
+                    last_activity=updated_at,
                 )
                 sessions.append(session)
 
             return sessions, total
 
-    def _extract_first_message(self, messages: list[Any]) -> str | None:
+    def _extract_first_message(self, messages: Sequence[Message]) -> str | None:
         """Извлекает первое сообщение пользователя."""
-        if not messages:
-            return None
-
-        for msg in messages:
-            if isinstance(msg, dict):
-                msg_role = msg.get("role", "")
-            else:
-                msg_role = getattr(msg, "role", "")
-
-            if isinstance(msg_role, Enum):
-                msg_role = msg_role.value
-            msg_role = str(msg_role).lower()
-
-            if msg_role == "user":
-                content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
-                if content:
-                    return str(content)
-
-                parts = msg.get("parts", []) if isinstance(msg, dict) else getattr(msg, "parts", [])
-                if parts:
-                    content_parts = []
-                    for part in parts:
-                        text = self._extract_text_from_part(part)
-                        if text:
-                            content_parts.append(str(text))
-
-                    if content_parts:
-                        return " ".join(content_parts)
-
+        for message in messages:
+            if message.role != Role.user:
+                continue
+            content_parts: list[str] = []
+            for part in message.parts:
+                text_content = self._extract_text_from_part(part)
+                if text_content:
+                    content_parts.append(text_content)
+            if content_parts:
+                return " ".join(content_parts)
         return None
 
-    def _extract_text_from_part(self, part: Any) -> str | None:
+    def _extract_text_from_part(self, part: Part) -> str | None:
         """Извлекает текст из part сообщения."""
-        if isinstance(part, dict):
-            root = part.get("root", part)
-            if isinstance(root, dict):
-                if "text" in root:
-                    return root["text"]
-                elif "data" in root:
-                    return str(root["data"])
-                elif "file" in root:
-                    file_info = root["file"]
-                    if isinstance(file_info, dict):
-                        file_name = file_info.get("name", "")
-                    else:
-                        file_name = getattr(file_info, "name", "") if file_info else ""
-                    return f"[File: {file_name}]" if file_name else "[File]"
-
-        elif hasattr(part, "root"):
-            root = part.root
-            if hasattr(root, "text"):
-                return root.text
-            elif hasattr(root, "data"):
-                return str(root.data)
-            elif hasattr(root, "file"):
-                file_obj = root.file
-                file_name = getattr(file_obj, "name", None) if file_obj else None
-                return f"[File: {file_name}]" if file_name else "[File]"
-
-        elif hasattr(part, "text"):
-            return part.text
-
-        return None
+        root = part.root
+        if isinstance(root, TextPart):
+            return root.text
+        if isinstance(root, FilePart):
+            file_name = root.file.name
+            return f"[File: {file_name}]" if file_name else "[File]"
+        return root.model_dump_json()
 
 
 class InMemoryStateRepository(BaseStateRepository):
@@ -523,19 +527,22 @@ class InMemoryStateRepository(BaseStateRepository):
             self._locks[session_id] = asyncio.Lock()
         return self._locks[session_id]
 
+    @override
     async def get(self, session_id: str) -> ExecutionState | None:
         """Получает состояние сессии."""
         async with self._get_lock(session_id):
             return self._storage.get(session_id)
 
+    @override
     async def set(
-        self, session_id: str, state: ExecutionState | dict[str, Any]
+        self, session_id: str, state: ExecutionState | JsonObject
     ) -> bool:
         """Сохраняет состояние сессии."""
         async with self._get_lock(session_id):
             self._storage[session_id] = _execution_state_for_storage(state)
             return True
 
+    @override
     async def delete(self, session_id: str) -> bool:
         """Удаляет состояние сессии."""
         async with self._get_lock(session_id):
@@ -546,6 +553,7 @@ class InMemoryStateRepository(BaseStateRepository):
                 return True
             return False
 
+    @override
     async def resolve_session_id_by_flow_and_identifier(
         self, flow_id: str, lookup_id: str
     ) -> str | None:

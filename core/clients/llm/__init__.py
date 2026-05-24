@@ -11,7 +11,7 @@ from .errors import (
     LLMStreamUserCancelledError,
 )
 from .messages import LLMToolCall, LLMToolCallFunction, MessageInput, StreamEvent
-from .mock import MockLLM, get_global_mock_llm
+from .mock import MockLLM, get_global_mock_llm, get_or_create_global_mock_llm
 from .model_routing import (
     HUMANITEC_LLM_AUTO_MODEL,
     HUMANITEC_LLM_PROVIDER,
@@ -39,6 +39,7 @@ __all__ = [
     "setup_mock_responses",
     "should_use_platform_default_free_pool",
     "get_global_mock_llm",
+    "get_or_create_global_mock_llm",
     "StreamEvent",
     "HUMANITEC_LLM_AUTO_MODEL",
     "HUMANITEC_LLM_PROVIDER",

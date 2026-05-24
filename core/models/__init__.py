@@ -27,16 +27,19 @@ from core.models.calendar_models import (
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import (
+    AuthCodeCache,
     AuthProvider,
     AuthRequest,
     AuthResult,
     AuthSession,
+    AuthState,
     Company,
     ProviderUserInfo,
     User,
+    UserProviderRecord,
     UserStatus,
 )
-from core.models.variable_models import VariableDefinition, VariableDefinitionInput
+from core.models.variable_models import VariableDefinition
 
 __all__ = [
     "StrictBaseModel",
@@ -47,12 +50,14 @@ __all__ = [
     "AuthProvider",
     "AuthSession",
     "ProviderUserInfo",
+    "UserProviderRecord",
     "AuthRequest",
+    "AuthState",
+    "AuthCodeCache",
     "AuthResult",
     "Language",
     "Context",
     "VariableDefinition",
-    "VariableDefinitionInput",
     "CalendarProvider",
     "CalendarEventSource",
     "CalendarEventStatus",

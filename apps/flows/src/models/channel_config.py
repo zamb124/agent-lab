@@ -6,11 +6,10 @@ ChannelConfig - конфигурация каналов для отправки 
 - TriggerConfig.output_actions (автоматическая отправка после агента)
 """
 
-from typing import Any
-
 from pydantic import Field
 
 from core.models import StrictBaseModel
+from core.types import JsonObject
 
 from .enums import ChannelType, TriggerType
 
@@ -45,7 +44,7 @@ class OutputAction(StrictBaseModel):
         description="Маппинг параметров: param_name -> @state:field.path"
     )
 
-    config: dict[str, Any] = Field(
+    config: JsonObject = Field(
         default_factory=dict,
         description="Статические параметры (parse_mode, etc)"
     )
@@ -79,7 +78,7 @@ class ChannelNodeConfig(StrictBaseModel):
     channel: ChannelType = Field(..., description="Тип канала")
     action: str = Field(default="send_message", description="Действие")
 
-    channel_config: dict[str, Any] = Field(
+    channel_config: JsonObject = Field(
         default_factory=dict,
         description="Параметры канала (bot_token для Telegram, smtp для Email)"
     )

@@ -3,25 +3,27 @@ API endpoints для tools.
 """
 
 import asyncio
-from typing import Any
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models import CallParameter, ToolReference
+from apps.flows.src.models import CallParameter, FlowConfig, ToolReference
 from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.json_schema_parameters import call_parameters_to_parameters_schema
 from core.logging import get_logger
+from core.models import StrictBaseModel
 from core.pagination import OffsetPage
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["tools"])
-JsonDict = dict[str, Any]
 
 
-class ToolCreateRequest(BaseModel):
+class ToolCreateRequest(StrictBaseModel):
     """Запрос на создание tool"""
 
     tool_id: str
@@ -30,13 +32,13 @@ class ToolCreateRequest(BaseModel):
     code: str | None = None
     language: str = "python"
     entrypoint: str | None = None
-    args_schema: JsonDict | None = None
-    parameters_schema: JsonDict | None = None
+    args_schema: dict[str, CallParameter] | None = None
+    parameters_schema: JsonObject | None = None
     tags: list[str] | None = None
     react_role: str | None = None
 
 
-class ToolResponse(BaseModel):
+class ToolResponse(StrictBaseModel):
     """Ответ с данными tool"""
 
     tool_id: str
@@ -45,8 +47,8 @@ class ToolResponse(BaseModel):
     code: str | None = None
     language: str = "python"
     entrypoint: str | None = None
-    args_schema: JsonDict | None = None
-    parameters_schema: JsonDict | None = None
+    args_schema: dict[str, CallParameter] | None = None
+    parameters_schema: JsonObject | None = None
     tags: list[str] = Field(default_factory=list)
     permission: str | list[str] | None = None
     item_type: str = "tool"  # tool или flow (запись из репозитория flows)
@@ -57,10 +59,6 @@ class ToolResponse(BaseModel):
 
 
 _TOOLS_MAX_LIMIT = 2000
-
-
-def _enum_value(value: Any) -> Any:
-    return value.value if hasattr(value, "value") else value
 
 
 def _tool_response_from_reference(t: ToolReference) -> ToolResponse:
@@ -77,34 +75,33 @@ def _tool_response_from_reference(t: ToolReference) -> ToolResponse:
         permission=t.permission,
         item_type="tool",
         react_role=t.react_role.value,
-        code_mode=t.code_mode.value if t.code_mode else None,
+        code_mode=t.code_mode.value,
         mcp_server_id=t.mcp_server_id,
         mcp_tool_name=t.mcp_tool_name,
     )
 
 
-def _tool_response_from_registry_tool(tool: Any) -> ToolResponse:
-    react_role = _enum_value(getattr(tool, "react_role", ReactToolRole.STANDARD))
+def _tool_response_from_registry_tool(tool: BaseTool) -> ToolResponse:
     return ToolResponse(
-        tool_id=str(getattr(tool, "name", "")),
-        title=str(getattr(tool, "name", "")),
-        description=str(getattr(tool, "description", "")),
+        tool_id=tool.name,
+        title=tool.name,
+        description=tool.description,
         code=None,
         language="python",
         entrypoint=None,
         args_schema=None,
-        parameters_schema=getattr(tool, "parameters", None),
-        tags=list(tool.get_tags()) if callable(getattr(tool, "get_tags", None)) else ["misc"],
-        permission=getattr(tool, "permission", None),
+        parameters_schema=tool.parameters,
+        tags=tool.get_tags(),
+        permission=tool.permission,
         item_type="tool",
-        react_role=str(react_role) if react_role is not None else None,
+        react_role=tool.react_role.value,
         code_mode=None,
         mcp_server_id=None,
         mcp_tool_name=None,
     )
 
 
-def _flow_response(flow_row: Any) -> ToolResponse:
+def _flow_response(flow_row: FlowConfig) -> ToolResponse:
     return ToolResponse(
         tool_id=flow_row.flow_id,
         title=flow_row.name,
@@ -118,8 +115,8 @@ def _flow_response(flow_row: Any) -> ToolResponse:
 @router.get("/", response_model=OffsetPage[ToolResponse])
 async def list_tools(
     container: ContainerDep,
-    limit: int = Query(500, ge=1, le=_TOOLS_MAX_LIMIT, description="Максимум tools"),
-    offset: int = Query(0, ge=0, description="Смещение для пагинации"),
+    limit: Annotated[int, Query(ge=1, le=_TOOLS_MAX_LIMIT, description="Максимум tools")] = 500,
+    offset: Annotated[int, Query(ge=0, description="Смещение для пагинации")] = 0,
 ) -> OffsetPage[ToolResponse]:
     """Список tools с пагинацией."""
     tools, total = await asyncio.gather(
@@ -137,8 +134,11 @@ async def list_tools(
 @router.get("/all", response_model=OffsetPage[ToolResponse])
 async def list_all_tools_and_flows(
     container: ContainerDep,
-    limit: int = Query(500, ge=1, le=_TOOLS_MAX_LIMIT, description="Максимум tools+flows вместе"),
-    offset: int = Query(0, ge=0, description="Смещение для пагинации"),
+    limit: Annotated[
+        int,
+        Query(ge=1, le=_TOOLS_MAX_LIMIT, description="Максимум tools+flows вместе"),
+    ] = 500,
+    offset: Annotated[int, Query(ge=0, description="Смещение для пагинации")] = 0,
 ) -> OffsetPage[ToolResponse]:
     """Список tools и flows для picker с общим лимитом."""
     tools_list, flows_list, tools_count, flows_count = await asyncio.gather(
@@ -159,7 +159,7 @@ async def list_all_tools_and_flows(
     for tool_id, tool in sorted(registry.list_all().items(), key=lambda item: item[0]):
         if tool_id in seen_tool_ids:
             continue
-        if not getattr(type(tool), "listed_in_platform_tool_docs", True):
+        if not tool.listed_in_platform_tool_docs:
             continue
         items.append(_tool_response_from_registry_tool(tool))
         seen_tool_ids.add(tool_id)
@@ -177,14 +177,14 @@ async def list_all_tools_and_flows(
     )
 
 
-class DraftParametersSchemaRequest(BaseModel):
+class DraftParametersSchemaRequest(StrictBaseModel):
     """Черновик JSON Schema для LLM из legacy args_schema (CallParameter)."""
 
-    args_schema: JsonDict
+    args_schema: dict[str, CallParameter]
 
 
-class DraftParametersSchemaResponse(BaseModel):
-    parameters_schema: JsonDict
+class DraftParametersSchemaResponse(StrictBaseModel):
+    parameters_schema: JsonObject
 
 
 @router.post(
@@ -201,20 +201,7 @@ async def draft_parameters_schema(
             status_code=422,
             detail="args_schema must not be empty",
         )
-    args_schema: dict[str, CallParameter] = {}
-    for param_name, param_def in request.args_schema.items():
-        if isinstance(param_def, dict):
-            args_schema[param_name] = CallParameter(
-                type=param_def.get("type", "string"),
-                description=param_def.get("description", ""),
-                required=param_def.get("required", True),
-            )
-        else:
-            raise HTTPException(
-                status_code=422,
-                detail=f"args_schema.{param_name} must be an object",
-            )
-    parameters_schema = call_parameters_to_parameters_schema(args_schema)
+    parameters_schema = call_parameters_to_parameters_schema(request.args_schema)
     return DraftParametersSchemaResponse(parameters_schema=parameters_schema)
 
 
@@ -238,7 +225,7 @@ async def get_tool(
             permission=tool.permission,
             item_type="tool",
             react_role=tool.react_role.value,
-            code_mode=tool.code_mode.value if tool.code_mode else None,
+            code_mode=tool.code_mode.value,
             mcp_server_id=tool.mcp_server_id,
             mcp_tool_name=tool.mcp_tool_name,
         )
@@ -260,15 +247,7 @@ async def create_tool(
     request: ToolCreateRequest, container: ContainerDep
 ) -> ToolResponse:
     """Создает новый tool"""
-    args_schema: dict[str, CallParameter] = {}
-    if request.args_schema:
-        for param_name, param_def in request.args_schema.items():
-            if isinstance(param_def, dict):
-                args_schema[param_name] = CallParameter(
-                    type=param_def.get("type", "string"),
-                    description=param_def.get("description", ""),
-                    required=param_def.get("required", True),
-                )
+    args_schema = request.args_schema or {}
 
     react_role = (
         ReactToolRole(request.react_role)
@@ -277,9 +256,8 @@ async def create_tool(
     )
 
     ps = request.parameters_schema
-    if ps is not None and (
-        not isinstance(ps, dict) or ps.get("type") != "object" or "properties" not in ps
-    ):
+    raw_properties = ps.get("properties") if ps is not None else None
+    if ps is not None and (ps.get("type") != "object" or not isinstance(raw_properties, dict)):
         raise HTTPException(
             status_code=422,
             detail="parameters_schema must be JSON Schema object with type: object and properties",
@@ -291,14 +269,14 @@ async def create_tool(
         description=request.description,
         code=request.code,
         language=request.language,
-        entrypoint=request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else None,
+        entrypoint=request.entrypoint.strip() if request.entrypoint and request.entrypoint.strip() else None,
         parameters_schema=ps,
         args_schema=args_schema,
         tags=request.tags or [],
         react_role=react_role,
     )
 
-    await container.tool_repository.set(ref)
+    _ = await container.tool_repository.set(ref)
 
     return ToolResponse(
         tool_id=ref.tool_id,

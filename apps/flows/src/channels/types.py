@@ -5,11 +5,25 @@
 from typing import TypeAlias
 
 from a2a.types import Message
+from pydantic import Field
 
+from core.files.file_ref import FileRef
+from core.models import StrictBaseModel
 from core.models.context_models import Context
+from core.state import ExecutionTaskState, InterruptData
 from core.types import JsonObject
 
 ChannelRequestContext: TypeAlias = Context | JsonObject | None
+
+
+class FlowTaskResult(StrictBaseModel):
+    """Результат выполнения flow на границе channel -> task."""
+
+    response: str
+    task_state: ExecutionTaskState
+    interrupt: InterruptData | None = None
+    breakpoint_hit: str | None = Field(default=None, min_length=1)
+    breakpoint_state: JsonObject | None = None
 
 
 class PreparedTaskParams:
@@ -21,7 +35,7 @@ class PreparedTaskParams:
     content: str
     branch_id: str
     is_resume: bool
-    files_data: list[JsonObject]
+    files_data: list[FileRef]
     message: Message | None
     metadata: JsonObject | None
     user_id: str
@@ -36,7 +50,7 @@ class PreparedTaskParams:
         content: str,
         branch_id: str,
         is_resume: bool,
-        files_data: list[JsonObject],
+        files_data: list[FileRef],
         message: Message | None,
         metadata: JsonObject | None,
         user_id: str | None = None,

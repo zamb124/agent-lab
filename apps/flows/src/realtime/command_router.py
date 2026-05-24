@@ -14,15 +14,24 @@ RPC: вызывают сервис, возвращают результат ка
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Any
-
 from apps.flows.src.container import get_container
+from apps.flows.src.models.operator_schemas import (
+    OperatorTaskClaimCommand,
+    OperatorTaskCompleteCommand,
+    OperatorTaskMessageCommand,
+)
+from apps.flows.src.services.operator_handoff_service import operator_task_to_out
 from core.context import get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.identity_models import User
-from core.websocket import WsCommandError, register_ws_command_handler
+from core.types import JsonObject, parse_json_object
+from core.websocket import (
+    CommandHandler,
+    WsCommandError,
+    register_ws_command_handler,
+    validate_ws_payload,
+)
 
 logger = get_logger(__name__)
 
@@ -30,16 +39,6 @@ logger = get_logger(__name__)
 CMD_OPERATOR_CLAIM = "flows/operator_task/claim_requested"
 CMD_OPERATOR_POST_MESSAGE = "flows/operator_task/post_message_requested"
 CMD_OPERATOR_COMPLETE = "flows/operator_task/complete_requested"
-
-
-def _require_str(payload: dict[str, Any], key: str) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value:
-        raise WsCommandError(
-            "ws_invalid_payload",
-            f"Поле '{key}' обязательно и должно быть непустой строкой",
-        )
-    return value
 
 
 async def _ensure_ws_context(user: User) -> Context:
@@ -78,117 +77,81 @@ async def _ensure_ws_context(user: User) -> Context:
         user_companies=[company],
         active_namespace="default",
     )
-    set_context(ctx)
+    _ = set_context(ctx)
     return ctx
 
 
-def _company_id(user: User) -> str:
+def _company_id() -> str:
     ctx = get_context()
     if ctx and ctx.active_company:
         return ctx.active_company.company_id
     raise WsCommandError("ws_no_company", "Нет active_company в контексте")
 
 
-async def _handle_operator_claim(payload: dict[str, Any], user: User) -> dict[str, Any]:
-    task_id = _require_str(payload, "task_id")
-    await _ensure_ws_context(user)
+async def _handle_operator_claim(payload: JsonObject, user: User) -> JsonObject:
+    command = validate_ws_payload(OperatorTaskClaimCommand, payload)
+    _ = await _ensure_ws_context(user)
     container = get_container()
-    company_id = _company_id(user)
+    company_id = _company_id()
     try:
         await container.operator_handoff_service.claim_task(
-            company_id=company_id, task_id=task_id, operator_user_id=user.user_id
+            company_id=company_id, task_id=command.task_id, operator_user_id=user.user_id
         )
     except PermissionError as exc:
-        raise WsCommandError("forbidden", str(exc))
+        raise WsCommandError("forbidden", str(exc)) from exc
     except ValueError as exc:
-        raise WsCommandError("not_found", str(exc))
-    updated = await container.operator_repository.get_task(company_id, task_id)
+        raise WsCommandError("not_found", str(exc)) from exc
+    updated = await container.operator_repository.get_task(company_id, command.task_id)
     if updated is None:
-        raise WsCommandError("not_found", f"Задача {task_id} не найдена")
-    return _operator_task_dump(updated)
+        raise WsCommandError("not_found", f"Задача {command.task_id} не найдена")
+    flow_config = await container.flow_repository.get(updated.flow_id)
+    return parse_json_object(
+        operator_task_to_out(updated, flow_config=flow_config).model_dump_json(),
+        "OperatorTaskOut",
+    )
 
 
-async def _handle_operator_post_message(payload: dict[str, Any], user: User) -> dict[str, Any]:
-    task_id = _require_str(payload, "task_id")
-    text = payload.get("text")
-    if not isinstance(text, str):
-        raise WsCommandError("ws_invalid_payload", "Поле 'text' обязательно")
-    file_ids = payload.get("file_ids") or []
-    if not isinstance(file_ids, list):
-        raise WsCommandError("ws_invalid_payload", "Поле 'file_ids' должно быть массивом")
-
-    await _ensure_ws_context(user)
+async def _handle_operator_post_message(payload: JsonObject, user: User) -> JsonObject:
+    command = validate_ws_payload(OperatorTaskMessageCommand, payload)
+    _ = await _ensure_ws_context(user)
     container = get_container()
-    company_id = _company_id(user)
+    company_id = _company_id()
     try:
         await container.operator_handoff_service.publish_operator_message_to_user_stream(
             company_id=company_id,
-            task_id=task_id,
+            task_id=command.task_id,
             operator_user_id=user.user_id,
-            text=text,
-            file_ids=[str(fid) for fid in file_ids],
+            text=command.text,
+            file_ids=command.file_ids,
         )
     except PermissionError as exc:
-        raise WsCommandError("forbidden", str(exc))
+        raise WsCommandError("forbidden", str(exc)) from exc
     except ValueError as exc:
-        raise WsCommandError("not_found", str(exc))
-    return {"status": "sent", "task_id": task_id}
+        raise WsCommandError("not_found", str(exc)) from exc
+    return {"status": "sent", "task_id": command.task_id}
 
 
-async def _handle_operator_complete(payload: dict[str, Any], user: User) -> dict[str, Any]:
-    task_id = _require_str(payload, "task_id")
-    resolution = payload.get("resolution")
-    if not isinstance(resolution, str):
-        raise WsCommandError("ws_invalid_payload", "Поле 'resolution' обязательно")
-    file_ids = payload.get("file_ids") or []
-    if not isinstance(file_ids, list):
-        raise WsCommandError("ws_invalid_payload", "Поле 'file_ids' должно быть массивом")
-
-    await _ensure_ws_context(user)
+async def _handle_operator_complete(payload: JsonObject, user: User) -> JsonObject:
+    command = validate_ws_payload(OperatorTaskCompleteCommand, payload)
+    _ = await _ensure_ws_context(user)
     container = get_container()
-    company_id = _company_id(user)
+    company_id = _company_id()
     try:
         await container.operator_handoff_service.complete_handoff(
             company_id=company_id,
-            task_id=task_id,
+            task_id=command.task_id,
             operator_user_id=user.user_id,
-            resolution=resolution,
-            file_ids=[str(fid) for fid in file_ids],
+            resolution=command.resolution,
+            file_ids=command.file_ids,
         )
     except PermissionError as exc:
-        raise WsCommandError("forbidden", str(exc))
+        raise WsCommandError("forbidden", str(exc)) from exc
     except ValueError as exc:
-        raise WsCommandError("not_found", str(exc))
-    return {"status": "completed", "task_id": task_id}
+        raise WsCommandError("not_found", str(exc)) from exc
+    return {"status": "completed", "task_id": command.task_id}
 
 
-def _operator_task_dump(task: Any) -> dict[str, Any]:
-    if hasattr(task, "model_dump"):
-        return task.model_dump(mode="json")
-    if isinstance(task, dict):
-        return task
-    fields: dict[str, Any] = {}
-    for key in (
-        "id",
-        "company_id",
-        "queue_id",
-        "flow_id",
-        "session_id",
-        "context_id",
-        "status",
-        "claimed_by_user_id",
-        "end_user_id",
-        "branch_id",
-        "created_at",
-        "updated_at",
-    ):
-        value = getattr(task, key, None)
-        if value is not None:
-            fields[key] = value if isinstance(value, (str, int, float, bool, list, dict)) else str(value)
-    return fields
-
-
-_HANDLERS: dict[str, Callable[[dict[str, Any], User], Awaitable[dict[str, Any] | None]]] = {
+_HANDLERS: dict[str, CommandHandler] = {
     CMD_OPERATOR_CLAIM: _handle_operator_claim,
     CMD_OPERATOR_POST_MESSAGE: _handle_operator_post_message,
     CMD_OPERATOR_COMPLETE: _handle_operator_complete,

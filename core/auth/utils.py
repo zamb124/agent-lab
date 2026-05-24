@@ -6,24 +6,36 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TypedDict
 
 import bcrypt
 from jose import JWTError, jwt
 
 from core.logging import get_logger
+from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
+
+
+class RefreshTokenData(TypedDict):
+    refresh_token: str
+    expires_at: datetime
+
+
+def _string_claim_list(value: JsonValue | None) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
 
 
 def get_token_info(
     token: str,
     jwt_secret: str,
     jwt_algorithm: str,
-) -> dict[str, Any] | None:
+) -> JsonObject | None:
     """Валидирует access token и возвращает хранящуюся в нем информацию"""
     try:
-        payload = jwt.decode(
+        decoded_payload: object = jwt.decode(
             token,
             jwt_secret,
             algorithms=[jwt_algorithm],
@@ -41,16 +53,34 @@ def get_token_info(
         logger.warning(f"Invalid JWT: {e}")
         return None
 
+    try:
+        payload = require_json_object(decoded_payload, "jwt.payload")
+    except ValueError as e:
+        logger.warning(f"Invalid JWT payload: {e}")
+        return None
+
+    user_id = payload.get("id")
+    issuer = payload.get("iss")
+    email = payload.get("email")
+    session_id = payload.get("session_id")
+    if (
+        isinstance(user_id, bool)
+        or not isinstance(user_id, (str, int))
+        or not isinstance(issuer, str)
+        or not isinstance(email, str)
+        or not isinstance(session_id, str)
+    ):
+        logger.warning("Invalid JWT payload claims")
+        return None
+
     # grps - claim из Blitz IDP (AddGroupsToToken flow)
-    grps = payload.get("grps", [])
-    if not isinstance(grps, list):
-        grps = []
+    grps = _string_claim_list(payload.get("grps"))
 
     return {
-        "id": payload.get("id"),
-        "iss": payload.get("iss"),
-        "email": payload.get("email"),
-        "session_id": payload.get("session_id"),
+        "id": user_id,
+        "iss": issuer,
+        "email": email,
+        "session_id": session_id,
         "grps": grps,
     }
 
@@ -98,7 +128,7 @@ def compare_passwords(incoming_password: str, password_hash: str | None) -> bool
     return bcrypt.checkpw(incoming_password.encode(), password_hash.encode())
 
 
-def generate_refresh_token(token_exp_days: int) -> dict[str, Any]:
+def generate_refresh_token(token_exp_days: int) -> RefreshTokenData:
     """Генерирует refresh token"""
     return {
         "refresh_token": secrets.token_urlsafe(64),

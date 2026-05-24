@@ -19,6 +19,7 @@ from apps.flows.src.constants.execution_limits import (
     get_node_execution_wall_time_cap_seconds,
 )
 from core.clients.llm.config import LLMCallConfig, validate_fallback_model_configs
+from core.files.file_ref import FileRef
 from core.llm_context import LLMContextPatch
 from core.models import StrictBaseModel
 from core.types import JsonObject, JsonValue
@@ -371,7 +372,7 @@ class NodeConfig(StrictBaseModel):
         description="LLM resources for llm_resource_key/resource islands. Sandbox code uses capabilities instead."
     )
 
-    files: list[dict[str, JsonValue]] = Field(
+    files: list[FileRef] = Field(
         default_factory=list,
         description=(
             "Закреплённые файлы ноды (как элементы state.files: original_name, url, "
@@ -525,6 +526,8 @@ class GraphNodeConfig(StrictBaseModel):
     node_id: str | None = Field(default=None, description="ID библиотечной ноды-шаблона")
     name: str = Field(default="", description="Название ноды на графе")
     description: str = Field(default="", description="Описание ноды")
+    pos_x: float | None = Field(default=None, description="X-координата ноды на canvas редактора")
+    pos_y: float | None = Field(default=None, description="Y-координата ноды на canvas редактора")
 
     prompt: str | None = Field(default=None, description="Системный промпт llm_node")
     tools: list[ToolReference | JsonObject | str] = Field(default_factory=list, description="Tools llm_node")
@@ -582,7 +585,7 @@ class GraphNodeConfig(StrictBaseModel):
     local_variables: dict[str, JsonValue] = Field(default_factory=dict)
     store: dict[str, JsonValue] = Field(default_factory=dict)
     resources: dict[str, ResourceReference] = Field(default_factory=dict)
-    files: list[dict[str, JsonValue]] = Field(default_factory=list)
+    files: list[FileRef] = Field(default_factory=list)
 
     operator_queue_slug: str | None = Field(default=None)
     operator_queue_id: str | None = Field(default=None)

@@ -4,12 +4,11 @@ API endpoints для триггеров агентов.
 CRUD для триггеров + webhook endpoints для приема входящих событий.
 """
 
-import json
 import secrets
-from typing import Any
+from typing import Annotated, ClassVar
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
 
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
@@ -34,9 +33,11 @@ from apps.flows.src.triggers.verify_draft import verify_trigger_draft as run_ver
 from apps.flows.src.triggers.webhook_inbound import check_webhook_rate_limit, client_ip_allowed
 from core.context import get_context, set_context
 from core.logging import get_logger
+from core.models import StrictBaseModel
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from core.types import JsonObject, parse_json_object
 from core.variables.resolver import VariableResolutionError
 
 logger = get_logger(__name__)
@@ -50,9 +51,9 @@ _SENSITIVE_TRIGGER_CONFIG_KEYS = frozenset(
 _REDACTED_CONFIG_SECRET = "(redacted)"
 
 
-def _public_trigger_config(config: dict[str, Any]) -> dict[str, Any]:
+def _public_trigger_config(config: JsonObject) -> JsonObject:
     """Убирает служебные ключи и скрывает секреты в ответах API."""
-    out: dict[str, Any] = {}
+    out: JsonObject = {}
     for k, v in config.items():
         if k.startswith("_"):
             continue
@@ -72,7 +73,7 @@ def _webhook_secret_from_request(request: Request) -> str | None:
 
 
 async def _resolve_company_from_flow_storage_identifier(
-    container: Any,
+    container: ContainerDep,
     company_identifier: str,
 ) -> Company:
     """
@@ -108,13 +109,16 @@ router = APIRouter(tags=["triggers"])
 
 # Request/Response models
 
-class TriggerCreateRequest(BaseModel):
+class TriggerCreateRequest(StrictBaseModel):
     """Запрос на создание триггера."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
+
     trigger_id: str = Field(..., description="ID триггера")
     name: str = Field(..., description="Название")
     type: TriggerType = Field(..., description="Тип триггера")
     enabled: bool = Field(default=True, description="Активен")
-    config: dict[str, Any] = Field(default_factory=dict, description="Конфигурация")
+    config: JsonObject = Field(default_factory=dict, description="Конфигурация")
     output_mapping: dict[str, str] = Field(
         default_factory=dict,
         description="Маппинг payload -> state (state.path -> payload.path)",
@@ -137,11 +141,11 @@ class TriggerCreateRequest(BaseModel):
     )
 
 
-class TriggerUpdateRequest(BaseModel):
+class TriggerUpdateRequest(StrictBaseModel):
     """Запрос на обновление триггера."""
     name: str | None = None
     enabled: bool | None = None
-    config: dict[str, Any] | None = None
+    config: JsonObject | None = None
     output_mapping: dict[str, str] | None = None
     input_mapping: dict[str, str] | None = None
     output_actions: list[OutputAction] | None = None
@@ -149,13 +153,16 @@ class TriggerUpdateRequest(BaseModel):
     branch_id: str | None = None
 
 
-class TriggerResponse(BaseModel):
+class TriggerResponse(StrictBaseModel):
     """Ответ с данными триггера."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
+
     trigger_id: str
     name: str
     type: TriggerType
     enabled: bool
-    config: dict[str, Any]
+    config: JsonObject
     output_mapping: dict[str, str]
     input_mapping: dict[str, str]
     output_actions: list[OutputAction]
@@ -166,10 +173,13 @@ class TriggerResponse(BaseModel):
     last_error: str | None = None
 
 
-class TriggerVerifyRequest(BaseModel):
+class TriggerVerifyRequest(StrictBaseModel):
     """Проверка чернового конфига триггера (без сохранения)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
+
     type: TriggerType = Field(..., description="Тип триггера")
-    config: dict[str, Any] = Field(default_factory=dict, description="Конфиг как в trigger.config")
+    config: JsonObject = Field(default_factory=dict, description="Конфиг как в trigger.config")
     trigger_id: str | None = Field(
         default=None,
         description="Черновой ID триггера (для подсказки пути webhook)",
@@ -180,10 +190,10 @@ class TriggerVerifyRequest(BaseModel):
     )
 
 
-class TriggerVerifyResponse(BaseModel):
+class TriggerVerifyResponse(StrictBaseModel):
     """Результат проверки (getMe, cron, схема пути)."""
     ok: bool
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
     error_code: str | None = None
     error_message: str | None = None
 
@@ -259,7 +269,7 @@ async def verify_trigger_draft(
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow not found: {flow_id}")
 
-    cfg: dict[str, Any] = dict(request.config)
+    cfg: JsonObject = dict(request.config)
     if request.type == TriggerType.TELEGRAM:
         raw_token = cfg.get("bot_token")
         if isinstance(raw_token, str) and raw_token == _REDACTED_CONFIG_SECRET:
@@ -357,7 +367,7 @@ async def create_trigger(flow_id: str, request: TriggerCreateRequest, container:
     )
 
     # Сохраняем агента
-    await container.flow_repository.set(flow_config)
+    _ = await container.flow_repository.set(flow_config)
 
     updated_trigger = flow_config.triggers.get(request.trigger_id)
     if updated_trigger is None:
@@ -433,7 +443,7 @@ async def update_trigger(
     )
 
     # Сохраняем агента
-    await container.flow_repository.set(flow_config)
+    _ = await container.flow_repository.set(flow_config)
 
     updated_trigger = flow_config.triggers.get(trigger_id)
     if updated_trigger is None:
@@ -481,11 +491,7 @@ async def reregister_flow_trigger(
             detail="Включите триггер перед перерегистрацией хуков.",
         ) from e
     except TriggerReregisterUnsupportedError as e:
-        tstr = (
-            e.trigger_type.value
-            if hasattr(e.trigger_type, "value")
-            else str(e.trigger_type)
-        )
+        tstr = e.trigger_type.value
         raise HTTPException(
             status_code=409,
             detail=(
@@ -495,7 +501,7 @@ async def reregister_flow_trigger(
         ) from e
 
     flow_config.triggers[trigger_id] = updated
-    await container.flow_repository.set(flow_config)
+    _ = await container.flow_repository.set(flow_config)
     out = flow_config.triggers[trigger_id]
     logger.info("Trigger reregistered: flow_id=%s trigger=%s", flow_id, trigger_id)
     return TriggerResponse(
@@ -540,7 +546,7 @@ async def delete_trigger(flow_id: str, trigger_id: str, container: ContainerDep)
     )
 
     # Сохраняем агента
-    await container.flow_repository.set(flow_config)
+    _ = await container.flow_repository.set(flow_config)
 
     logger.info(f"Trigger deleted: flow_id={flow_id}, trigger={trigger_id}")
 
@@ -555,7 +561,7 @@ async def telegram_webhook(
     trigger_id: str,
     request: Request,
     container: ContainerDep,
-    x_telegram_bot_api_secret_token: str | None = Header(None),
+    x_telegram_bot_api_secret_token: Annotated[str | None, Header()] = None,
 ) -> dict[str, str]:
     """
     Webhook endpoint для Telegram Bot API.
@@ -635,14 +641,16 @@ async def telegram_webhook(
 
     # Парсим Update
     try:
-        payload = await request.json()
-    except Exception as e:
+        payload = parse_json_object(await request.body(), "Telegram webhook payload")
+    except ValueError as e:
         logger.error(f"Telegram webhook: failed to parse JSON: {e}")
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        raise HTTPException(status_code=400, detail="Invalid JSON") from e
 
     logger.info(
-        f"Telegram webhook received: flow_id={flow_id}, trigger={trigger_id}, "
-        f"update_id={payload.get('update_id')}"
+        "Telegram webhook received: flow_id=%s, trigger=%s, update_id=%s",
+        flow_id,
+        trigger_id,
+        payload.get("update_id"),
     )
 
     # Обрабатываем
@@ -663,7 +671,7 @@ async def generic_webhook(
     trigger_id: str,
     request: Request,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Generic webhook endpoint для внешних сервисов.
     """
@@ -708,22 +716,21 @@ async def generic_webhook(
             raise HTTPException(status_code=403, detail="Invalid secret")
 
     try:
-        payload = await request.json()
-    except json.JSONDecodeError as e:
+        payload = parse_json_object(await request.body(), "Webhook payload")
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid JSON body: {e}") from e
 
-    if isinstance(payload, dict):
-        keys = list(payload.keys())
-        n = len(keys)
-        if n > 24:
-            keys = keys[:24] + ["..."]
-        logger.info(
-            f"Webhook received: flow_id={flow_id}, trigger={trigger_id}, key_count={n}, top_keys={keys}"
-        )
-    else:
-        logger.info(
-            f"Webhook received: flow_id={flow_id}, trigger={trigger_id}, payload_type={type(payload).__name__}"
-        )
+    keys = list(payload.keys())
+    n = len(keys)
+    if n > 24:
+        keys = keys[:24] + ["..."]
+    logger.info(
+        "Webhook received: flow_id=%s, trigger=%s, key_count=%s, top_keys=%s",
+        flow_id,
+        trigger_id,
+        n,
+        keys,
+    )
 
     raise HTTPException(
         status_code=501,
@@ -737,9 +744,9 @@ async def generic_webhook(
 async def test_trigger(
     flow_id: str,
     trigger_id: str,
-    payload: dict[str, Any],
+    payload: JsonObject,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Тестирует триггер с заданным payload.
 
@@ -759,12 +766,10 @@ async def test_trigger(
     mapping = {**dict(trigger.input_mapping), **dict(trigger.output_mapping)}
     mapped_data = mapper.map(trigger_id, payload, mapping)
 
-    trigger_type_str = trigger.type.value if hasattr(trigger.type, 'value') else str(trigger.type)
-
     return {
         "status": "ok",
         "trigger_id": trigger_id,
-        "trigger_type": trigger_type_str,
+        "trigger_type": trigger.type.value,
         "input_payload": payload,
         "mapped_data": mapped_data,
     }

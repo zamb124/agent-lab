@@ -5,7 +5,8 @@
 import ipaddress
 import time
 from collections import deque
-from typing import Any
+
+from core.types import JsonValue
 
 _webhook_hits: dict[tuple[str, str, str], deque[float]] = {}
 
@@ -23,14 +24,14 @@ def check_webhook_rate_limit(
     now = time.monotonic()
     q = _webhook_hits.setdefault(key, deque())
     while q and q[0] < now - window_seconds:
-        q.popleft()
+        _ = q.popleft()
     if len(q) >= max_per_minute:
         return False
     q.append(now)
     return True
 
 
-def client_ip_allowed(client_host: str, allowed: Any) -> bool:
+def client_ip_allowed(client_host: str, allowed: JsonValue) -> bool:
     """
     allowed: строка с IP/CIDR через запятую, список строк, или пусто = без ограничения.
     """

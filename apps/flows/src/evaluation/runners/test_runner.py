@@ -263,7 +263,7 @@ class TestRunner:
         tester_config = await self._get_node_config(turn.input, execution_state)
 
         # Первое сообщение тестера
-        tester_messages: list[dict[str, str]] = []
+        tester_messages: list[JsonObject] = []
         tester_response = await self._invoke_node(
             tester_config,
             tester_messages,
@@ -572,13 +572,13 @@ class TestRunner:
     async def _invoke_node(
         self,
         node_config: NodeConfig,
-        messages: list[dict[str, str]],
+        messages: list[JsonObject],
         last_message: str,
     ) -> str:
         """Вызывает ноду (tester/judge) через LLM."""
         system_prompt = node_config.prompt or "Ты тестер. Веди диалог с агентом."
 
-        llm_messages = [{"role": "system", "content": system_prompt}]
+        llm_messages: list[JsonObject] = [{"role": "system", "content": system_prompt}]
         llm_messages.extend(messages)
         if last_message and not messages:
             llm_messages.append({"role": "user", "content": last_message})
@@ -667,7 +667,7 @@ class TestRunner:
     async def _invoke_evaluation_llm(
         self,
         *,
-        messages: list[dict[str, str]],
+        messages: list[JsonObject],
         tools: list[JsonObject] | None,
         task_id: str,
         context_id: str,
@@ -680,11 +680,13 @@ class TestRunner:
             raise ValueError("Контекст с user обязателен для evaluation LLM")
 
         uid = str(actx.user.user_id).strip()
-        resolved = resolve_llm_for_capability(AICapability.LLM_CHAT)
+        resolved = resolve_llm_for_capability(
+            AICapability.LLM_CHAT,
+            include_platform_default=True,
+        )
         if resolved is None:
             raise ValueError(
-                "evaluation LLM требует company override для capability=llm_chat; "
-                + "скрытый fallback на settings.llm.default_model запрещён"
+                "evaluation LLM: platform default для capability=llm_chat не настроен"
             )
         llm = get_llm(
             model_name=resolved.model,

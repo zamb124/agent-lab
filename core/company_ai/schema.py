@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Any, Literal
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -30,6 +30,7 @@ from core.clients.llm.model_routing import (
     LLM_ROUTING_PROVIDER_SLUGS,
 )
 from core.llm_context.models import LLMContextPatch
+from core.types import JsonObject, require_json_object
 
 METADATA_KEY = "ai_providers"
 
@@ -119,7 +120,7 @@ class CompanyLLMOverride(BaseModel):
       платформенной модели; иначе берётся ``platform_defaults`` или alias custom-провайдера.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: str
     api_key_encrypted: str | None = None
@@ -159,7 +160,7 @@ class CompanyLLMOverride(BaseModel):
             if self.api_key_encrypted or self.base_url or self.extra_request_headers:
                 raise ValueError(
                     "Для provider=custom:<id> поля api_key_encrypted/base_url/extra_request_headers "
-                    "не используются — задайте их в custom_providers"
+                    + "не используются — задайте их в custom_providers"
                 )
         if self.provider == HUMANITEC_LLM_PROVIDER:
             if (
@@ -170,24 +171,24 @@ class CompanyLLMOverride(BaseModel):
             ):
                 raise ValueError(
                     "provider=humanitec_llm — виртуальный платформенный провайдер; "
-                    "api_key_encrypted/base_url/folder_id/extra_request_headers не задаются"
+                    + "api_key_encrypted/base_url/folder_id/extra_request_headers не задаются"
                 )
             if self.model and self.model != HUMANITEC_LLM_AUTO_MODEL:
                 raise ValueError("provider=humanitec_llm поддерживает только model='auto' или пусто")
             if self.fallback_models:
                 raise ValueError(
                     "provider=humanitec_llm не поддерживает fallback_models: "
-                    "Humanitec LLM сам выбирает бесплатную модель через виртуальный маршрут"
+                    + "Humanitec LLM сам выбирает бесплатную модель через виртуальный маршрут"
                 )
         self.fallback_models = validate_fallback_model_configs(self.fallback_models)
         for idx, fallback in enumerate(self.fallback_models or []):
             if fallback.provider == HUMANITEC_LLM_PROVIDER:
                 raise ValueError(
                     f"fallback_models[{idx}]: humanitec_llm нельзя использовать как fallback; "
-                    "настройте Humanitec LLM как primary provider capability"
+                    + "настройте Humanitec LLM как primary provider capability"
                 )
             if fallback.provider is not None:
-                _validate_provider_ref(fallback.provider, allow_custom=True)
+                _ = _validate_provider_ref(fallback.provider, allow_custom=True)
             secret_fields = {
                 "api_key": fallback.api_key,
                 "base_url": fallback.base_url,
@@ -200,7 +201,7 @@ class CompanyLLMOverride(BaseModel):
             if present_secret_fields:
                 raise ValueError(
                     f"fallback_models[{idx}]: поля {present_secret_fields} запрещены в "
-                    "company metadata; используйте platform provider без секрета или custom:<id>"
+                    + "company metadata; используйте platform provider без секрета или custom:<id>"
                 )
         return self
 
@@ -208,7 +209,7 @@ class CompanyLLMOverride(BaseModel):
 class CompanyEmbeddingOverride(BaseModel):
     """Override embedding-провайдера компании. Модель — платформенная или alias custom-провайдера."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: str
     api_key_encrypted: str | None = None
@@ -243,7 +244,7 @@ class CompanyRerankOverride(BaseModel):
     - ``custom:<id>`` — кастомный провайдер с заданным ``rerank_path``.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     policy: str
 
@@ -263,7 +264,7 @@ class CompanyRerankOverride(BaseModel):
 class CompanyVoiceOverride(BaseModel):
     """Override провайдера речи компании (один из stt/tts/vad)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: str
     api_key_encrypted: str | None = None
@@ -293,14 +294,14 @@ class CompanyVoiceOverride(BaseModel):
 class CompanyCustomOpenAICompatibleProvider(BaseModel):
     """OpenAI-совместимый endpoint компании (vLLM / Ollama / прокси / корпоративный шлюз)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     id: Annotated[str, Field(min_length=1, max_length=32)]
     label: Annotated[str, Field(min_length=1, max_length=128)]
     base_url: str
     api_key_encrypted: str
     extra_request_headers: dict[str, str] | None = None
-    extra_request_body: dict[str, Any] | None = None
+    extra_request_body: JsonObject | None = None
     rerank_path: str | None = None
     capabilities: list[CapabilityLiteral] = Field(default_factory=list)
     model_by_capability: dict[str, str] = Field(default_factory=dict)
@@ -346,7 +347,7 @@ class CompanyCustomOpenAICompatibleProvider(BaseModel):
 class CompanyAIProviders(BaseModel):
     """Корневая схема ``Company.metadata['ai_providers']``."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     custom_providers: list[CompanyCustomOpenAICompatibleProvider] = Field(default_factory=list)
 
@@ -371,15 +372,14 @@ class CompanyAIProviders(BaseModel):
             raise ValueError(f"custom_providers: дубликаты id {dups}")
         custom_index = {p.id: p for p in self.custom_providers}
 
-        for cap in (
-            "llm_chat",
-            "llm_summarize",
-            "llm_format_markdown",
-            "llm_codegen",
-            "llm_vision",
-            "image_gen",
+        for cap, ov in (
+            ("llm_chat", self.llm_chat),
+            ("llm_summarize", self.llm_summarize),
+            ("llm_format_markdown", self.llm_format_markdown),
+            ("llm_codegen", self.llm_codegen),
+            ("llm_vision", self.llm_vision),
+            ("image_gen", self.image_gen),
         ):
-            ov: CompanyLLMOverride | None = getattr(self, cap)
             if ov is None:
                 continue
             self._check_provider_ref(ov.provider, capability=cap, custom_index=custom_index)
@@ -399,8 +399,7 @@ class CompanyAIProviders(BaseModel):
             pol = self.rerank.policy
             if _is_custom_ref(pol):
                 self._check_provider_ref(pol, capability="rerank", custom_index=custom_index)
-        for cap in ("voice_stt", "voice_tts"):
-            ov_v: CompanyVoiceOverride | None = getattr(self, cap)
+        for cap, ov_v in (("voice_stt", self.voice_stt), ("voice_tts", self.voice_tts)):
             if ov_v is None:
                 continue
             if _is_custom_ref(ov_v.provider):
@@ -430,24 +429,25 @@ class CompanyAIProviders(BaseModel):
         if capability not in prov.capabilities:
             raise ValueError(
                 f"capability={capability}: custom_provider {cid!r} не поддерживает её "
-                f"(capabilities={prov.capabilities})"
+                + f"(capabilities={prov.capabilities})"
             )
 
     @classmethod
-    def from_metadata(cls, metadata: dict[str, Any]) -> "CompanyAIProviders":
+    def from_metadata(cls, metadata: JsonObject) -> "CompanyAIProviders":
         """Парсит ``metadata['ai_providers']``; пустой/отсутствующий → пустая модель."""
-        if not isinstance(metadata, dict):
-            raise ValueError("metadata должен быть dict")
         raw = metadata.get(METADATA_KEY)
         if raw is None:
             return cls()
-        if not isinstance(raw, dict):
-            raise ValueError(f"company.metadata[{METADATA_KEY!r}] должен быть object")
-        return cls.model_validate(raw)
+        return cls.model_validate(
+            require_json_object(raw, f"company.metadata[{METADATA_KEY!r}]")
+        )
 
-    def to_metadata_dict(self) -> dict[str, Any]:
+    def to_metadata_dict(self) -> JsonObject:
         """Сериализация для записи в ``Company.metadata[METADATA_KEY]``."""
-        return self.model_dump(mode="json", exclude_none=True)
+        return require_json_object(
+            self.model_dump(mode="json", exclude_none=True),
+            "CompanyAIProviders.metadata",
+        )
 
     def find_custom(self, custom_id: str) -> CompanyCustomOpenAICompatibleProvider:
         for p in self.custom_providers:
@@ -458,7 +458,29 @@ class CompanyAIProviders(BaseModel):
     def get_capability_override(
         self, capability: AICapability
     ) -> CompanyLLMOverride | CompanyEmbeddingOverride | CompanyRerankOverride | CompanyVoiceOverride | None:
-        return getattr(self, capability.value)
+        match capability:
+            case AICapability.LLM_CHAT:
+                return self.llm_chat
+            case AICapability.LLM_SUMMARIZE:
+                return self.llm_summarize
+            case AICapability.LLM_FORMAT_MARKDOWN:
+                return self.llm_format_markdown
+            case AICapability.LLM_CODEGEN:
+                return self.llm_codegen
+            case AICapability.LLM_VISION:
+                return self.llm_vision
+            case AICapability.EMBEDDING:
+                return self.embedding
+            case AICapability.RERANK:
+                return self.rerank
+            case AICapability.IMAGE_GEN:
+                return self.image_gen
+            case AICapability.VOICE_STT:
+                return self.voice_stt
+            case AICapability.VOICE_TTS:
+                return self.voice_tts
+            case AICapability.VOICE_VAD:
+                return self.voice_vad
 
 
 __all__ = [

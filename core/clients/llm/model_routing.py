@@ -39,7 +39,7 @@ def split_provider_prefixed_model(
     """
     if _provider_field_set(provider):
         return provider, model
-    if not model or not isinstance(model, str):
+    if not model:
         return None, model
     if ":" not in model:
         return None, model

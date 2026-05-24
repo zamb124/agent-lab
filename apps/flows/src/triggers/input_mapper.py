@@ -9,7 +9,9 @@ InputMapper — маппинг данных триггера в state.
 
 import copy
 import re
-from typing import Any
+from typing import ClassVar
+
+from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 
 PathPart = str | int
 
@@ -22,15 +24,15 @@ class InputMapper:
     triggers[trigger_id] = { "payload": <копия входа>, "context": { ... } }.
     """
 
-    CONST_PREFIX = "@const:"
-    TRIGGER_PREFIX = "@trigger:"
+    CONST_PREFIX: ClassVar[str] = "@const:"
+    TRIGGER_PREFIX: ClassVar[str] = "@trigger:"
 
     def map(
         self,
         trigger_id: str,
-        payload: dict[str, Any],
+        payload: JsonObject,
         output_mapping: dict[str, str],
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """
         Применяет маппинг к payload.
 
@@ -40,19 +42,16 @@ class InputMapper:
         if not trigger_id or not str(trigger_id).strip():
             msg = "trigger_id is required for InputMapper.map"
             raise ValueError(msg)
-        if not isinstance(payload, dict):
-            msg = f"payload must be a dict, got {type(payload).__name__}"
-            raise TypeError(msg)
-
-        result: dict[str, Any] = {
+        trigger_context: JsonObject = {}
+        trigger_snapshot: JsonObject = {
+            "payload": copy.deepcopy(payload),
+            "context": trigger_context,
+        }
+        result: JsonObject = {
             "triggers": {
-                trigger_id: {
-                    "payload": copy.deepcopy(payload),
-                    "context": {},
-                }
+                trigger_id: trigger_snapshot,
             }
         }
-        context_root = result["triggers"][trigger_id]["context"]
         for state_path, payload_path in output_mapping.items():
             value = self._get_value(payload_path, payload)
             if state_path == "content" or state_path.strip() == "content":
@@ -65,9 +64,9 @@ class InputMapper:
                     if not isinstance(value, dict):
                         msg = "output_mapping: для ключа 'context' ожидается объект-словарь в payload"
                         raise TypeError(msg)
-                    self._merge_shallow(context_root, value)
+                    self._merge_shallow(trigger_context, require_json_object(value, "trigger.context"))
                 else:
-                    self._set_nested(context_root, sub, value)
+                    self._set_nested(trigger_context, sub, value)
                 continue
             msg = f"InputMapper: неподдерживаемая левая часть маппинга: {state_path!r}"
             raise ValueError(msg)
@@ -76,11 +75,11 @@ class InputMapper:
             result["content"] = ""
         return result
 
-    def _merge_shallow(self, target: dict[str, Any], source: dict[str, Any]) -> None:
+    def _merge_shallow(self, target: JsonObject, source: JsonObject) -> None:
         for k, v in source.items():
             target[k] = v
 
-    def _get_value(self, expr: str, payload: dict[str, Any]) -> Any:
+    def _get_value(self, expr: str, payload: JsonObject) -> JsonValue:
         if expr.startswith(self.CONST_PREFIX):
             return expr[len(self.CONST_PREFIX) :]
 
@@ -90,11 +89,11 @@ class InputMapper:
 
         return self._get_nested(payload, expr)
 
-    def _get_nested(self, data: dict[str, Any], path: str) -> Any:
+    def _get_nested(self, data: JsonObject, path: str) -> JsonValue:
         if not path:
             return data
 
-        current: Any = data
+        current: JsonValue = data
         parts = self._parse_path(path)
 
         for part in parts:
@@ -102,8 +101,9 @@ class InputMapper:
                 return None
 
             if isinstance(part, int):
-                if isinstance(current, (list, tuple)) and 0 <= part < len(current):
-                    current = current[part]
+                if isinstance(current, list) and 0 <= part < len(current):
+                    current_array = require_json_array(current, "trigger payload array")
+                    current = current_array[part]
                 else:
                     return None
             else:
@@ -126,7 +126,7 @@ class InputMapper:
 
         return parts
 
-    def _set_nested(self, data: dict[str, Any], path: str, value: Any) -> None:
+    def _set_nested(self, data: JsonObject, path: str, value: JsonValue) -> None:
         if not path:
             msg = "вложенный путь для context пуст"
             raise ValueError(msg)

@@ -8,4 +8,4 @@ from apps.flows.src.channels.a2a import A2AChannel
 
 
 class TelegramInboundChannel(A2AChannel):
-    name = "telegram"
+    name: str = "telegram"

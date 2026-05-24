@@ -52,8 +52,8 @@ async def test_traced_operation_persists_company_id_from_span_attributes(
     )
     assert len(rows) == 1
     row = rows[0]
-    assert row["operation_name"] == op
-    assert row["company_id"] == company
-    assert row["namespace"] == "ns_test"
-    attrs = row.get("attributes") or {}
+    assert row.operation_name == op
+    assert row.company_id == company
+    assert row.namespace == "ns_test"
+    attrs = row.attributes
     assert attrs.get(trace_attributes.ATTR_TENANT_COMPANY_ID) == company

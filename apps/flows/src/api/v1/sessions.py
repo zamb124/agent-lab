@@ -3,11 +3,12 @@ API endpoints для сессий.
 """
 
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query
-from pydantic import BaseModel
 
 from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.models import SessionConfig
 from core.logging import get_logger
 from core.pagination import OffsetPage
 
@@ -16,31 +17,17 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["sessions"])
 
 
-class SessionResponse(BaseModel):
-    """Сессия в ответе"""
-
-    session_id: str
-    channel: str
-    user_id: str
-    flow_id: str
-    status: str
-    message_count: int
-    first_message: str | None = None
-    created_at: datetime | None = None
-    last_activity: datetime | None = None
-
-
-@router.get("/", response_model=OffsetPage[SessionResponse])
+@router.get("/", response_model=OffsetPage[SessionConfig])
 async def list_sessions(
     container: ContainerDep,
-    user_id: str | None = Query(None, description="Фильтр по пользователю"),
-    flow_id: str | None = Query(None, description="Фильтр по flow"),
-    branch_id: str | None = Query(None, description="Фильтр по ветке (branch_id)"),
-    date_from: datetime | None = Query(None, description="Начало периода"),
-    date_to: datetime | None = Query(None, description="Конец периода"),
-    limit: int = Query(50, ge=1, le=200, description="Максимум записей"),
-    offset: int = Query(0, ge=0, description="Смещение"),
-) -> OffsetPage[SessionResponse]:
+    user_id: Annotated[str | None, Query(description="Фильтр по пользователю")] = None,
+    flow_id: Annotated[str | None, Query(description="Фильтр по flow")] = None,
+    branch_id: Annotated[str | None, Query(description="Фильтр по ветке (branch_id)")] = None,
+    date_from: Annotated[datetime | None, Query(description="Начало периода")] = None,
+    date_to: Annotated[datetime | None, Query(description="Конец периода")] = None,
+    limit: Annotated[int, Query(ge=1, le=200, description="Максимум записей")] = 50,
+    offset: Annotated[int, Query(ge=0, description="Смещение")] = 0,
+) -> OffsetPage[SessionConfig]:
     """
     Получает список сессий с фильтрами.
 
@@ -66,21 +53,8 @@ async def list_sessions(
         offset=offset,
     )
 
-    return OffsetPage[SessionResponse](
-        items=[
-            SessionResponse(
-                session_id=s.session_id,
-                channel=s.channel,
-                user_id=s.user_id,
-                flow_id=s.flow_id,
-                status=s.status.value if hasattr(s.status, "value") else str(s.status),
-                message_count=s.message_count,
-                first_message=s.first_message,
-                created_at=s.created_at,
-                last_activity=s.last_activity,
-            )
-            for s in sessions
-        ],
+    return OffsetPage[SessionConfig](
+        items=sessions,
         total=total,
         limit=limit,
         offset=offset,
@@ -90,7 +64,7 @@ async def list_sessions(
 @router.delete("/{session_id}")
 async def delete_session(
     container: ContainerDep,
-    session_id: str = Path(..., description="ID сессии для удаления"),
+    session_id: Annotated[str, Path(description="ID сессии для удаления")],
 ) -> dict[str, bool | str]:
     """
     Удаляет сессию по ID.

@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from core.tracing.models import TraceSpanWrite
+
 
 def _span_row(
     *,
@@ -21,32 +23,32 @@ def _span_row(
     company_id: str | None = "system",
     namespace: str | None = "default",
     event_type: str | None = None,
-) -> dict:
-    return {
-        "span_id": span_id,
-        "trace_id": trace_id,
-        "parent_span_id": None,
-        "operation_name": operation_name,
-        "kind": "INTERNAL",
-        "start_time": start_time,
-        "end_time": start_time,
-        "duration_ms": 0,
-        "status": "OK",
-        "service_name": service_name,
-        "company_id": company_id,
-        "namespace": namespace,
-        "user_id": None,
-        "user_name": None,
-        "user_groups": None,
-        "session_auth": None,
-        "session_agent": None,
-        "channel": None,
-        "event_type": event_type,
-        "resource_type": None,
-        "resource_id": None,
-        "attributes": {},
-        "events": [],
-    }
+) -> TraceSpanWrite:
+    return TraceSpanWrite(
+        span_id=span_id,
+        trace_id=trace_id,
+        parent_span_id=None,
+        operation_name=operation_name,
+        kind="INTERNAL",
+        start_time=start_time,
+        end_time=start_time,
+        duration_ms=0,
+        status="OK",
+        service_name=service_name,
+        company_id=company_id,
+        namespace=namespace,
+        user_id=None,
+        user_name=None,
+        user_groups=None,
+        session_auth=None,
+        session_agent=None,
+        channel=None,
+        event_type=event_type,
+        resource_type=None,
+        resource_id=None,
+        attributes={},
+        events=[],
+    )
 
 
 @pytest.mark.asyncio
@@ -72,11 +74,11 @@ class TestSpanRepositoryServiceQuery:
         )
         row = await repo.get_span_by_id(sid)
         assert row is not None
-        assert row["span_id"] == sid
-        assert row["service_name"] == f"svc_{unique_id}"
-        assert row["operation_name"] == "crm.note.touch"
-        assert row["event_type"] == "note.updated"
-        assert row["trace_id"] == tid
+        assert row.span_id == sid
+        assert row.service_name == f"svc_{unique_id}"
+        assert row.operation_name == "crm.note.touch"
+        assert row.event_type == "note.updated"
+        assert row.trace_id == tid
 
     async def test_get_span_by_id_missing_returns_none(self, container, unique_id: str):
         row = await container.span_repository.get_span_by_id(f"{unique_id}_nope")
@@ -106,7 +108,7 @@ class TestSpanRepositoryServiceQuery:
             limit=10,
         )
         assert len(rows) == 2
-        assert {r["operation_name"] for r in rows} == {"sync.pull"}
+        assert {r.operation_name for r in rows} == {"sync.pull"}
 
     async def test_list_spans_for_service_filters_by_event_type(
         self,
@@ -133,7 +135,7 @@ class TestSpanRepositoryServiceQuery:
             limit=10,
         )
         assert len(rows) == 2
-        assert {r["event_type"] for r in rows} == {"embed.started"}
+        assert {r.event_type for r in rows} == {"embed.started"}
 
     async def test_list_spans_for_service_respects_company_and_namespace(
         self,
@@ -171,7 +173,7 @@ class TestSpanRepositoryServiceQuery:
             limit=10,
         )
         assert len(a_only) == 1
-        assert a_only[0]["company_id"] == "company_a"
+        assert a_only[0].company_id == "company_a"
 
         ns_only, _ = await repo.list_spans_for_service(
             service_name=svc,
@@ -180,7 +182,7 @@ class TestSpanRepositoryServiceQuery:
             limit=10,
         )
         assert len(ns_only) == 1
-        assert ns_only[0]["span_id"] == f"{unique_id}_c2"
+        assert ns_only[0].span_id == f"{unique_id}_c2"
 
     async def test_list_spans_for_service_cursor_no_duplicates_full_scan(
         self,
@@ -213,8 +215,8 @@ class TestSpanRepositoryServiceQuery:
             )
             pages += 1
             for r in rows:
-                assert r["span_id"] not in seen
-                seen.add(r["span_id"])
+                assert r.span_id not in seen
+                seen.add(r.span_id)
             if next_c is None:
                 break
             cursor = next_c
@@ -265,7 +267,6 @@ class TestSpanRepositoryServiceQuery:
         sync_rows, _ = await repo.list_spans_for_service(service_name=f"sync_{unique_id}", limit=20)
         assert len(crm_rows) == 1
         assert len(sync_rows) == 1
-        assert crm_rows[0]["operation_name"] == "entity.save"
-        assert sync_rows[0]["operation_name"] == "channel.send"
-
+        assert crm_rows[0].operation_name == "entity.save"
+        assert sync_rows[0].operation_name == "channel.send"
 

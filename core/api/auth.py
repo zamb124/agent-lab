@@ -6,10 +6,11 @@ API эндпоинты для авторизации.
 """
 
 from datetime import datetime, timezone
-from typing import Annotated, Any
+from typing import Annotated, Protocol, runtime_checkable
+from typing import cast as type_cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
@@ -18,14 +19,46 @@ from core.config import get_settings
 from core.identity import AuthService
 from core.logging import get_logger
 from core.models import AuthProvider, AuthRequest
+from core.types import JsonObject, require_json_object
 from core.utils.domain import build_url, get_cookie_domain, get_host_with_port, is_local
-from core.utils.tokens import TokenService, get_token_service
+from core.utils.tokens import TokenData, TokenService, get_token_service
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["auth"])
 
+
+class _AuthContainer(Protocol):
+    @property
+    def auth_service(self) -> AuthService: ...
+
+
+class _GoogleCalendarOAuthService(Protocol):
+    async def complete_google_oauth(self, *, state: str, code: str) -> str: ...
+
+
+class _OAuthCallbackContainer(_AuthContainer, Protocol):
+    @property
+    def calendar_service(self) -> _GoogleCalendarOAuthService: ...
+
+
+@runtime_checkable
+class _AuthAppState(Protocol):
+    container: _AuthContainer
+
+
+@runtime_checkable
+class _OAuthCallbackAppState(Protocol):
+    container: _OAuthCallbackContainer
+
+
+@runtime_checkable
+class _AuthRequestState(Protocol):
+    token_data: TokenData | None
+
+
 class UserUpdate(BaseModel):
     """Обновление данных пользователя"""
+
     name: str | None = PydanticField(None, max_length=200)
     first_name: str | None = PydanticField(None, max_length=100)
     last_name: str | None = PydanticField(None, max_length=100)
@@ -34,21 +67,54 @@ class UserUpdate(BaseModel):
     messengers: dict[str, str] | None = None
     avatar_url: str | None = None
     bio: str | None = PydanticField(None, max_length=4000)
-    ui_preferences: dict[str, Any] | None = None
+    ui_preferences: JsonObject | None = None
+
 
 class SwitchCompanyRequest(BaseModel):
     """Переключение активной компании пользователя"""
+
     company_id: str
+
 
 class DemoLoginRequest(BaseModel):
     email: str
     password: str
 
+
 def get_auth_service(request: Request) -> AuthService:
     """Получает AuthService из контейнера приложения"""
-    return request.app.state.container.auth_service
+    return _auth_container(request).auth_service
+
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def _auth_container(request: Request) -> _AuthContainer:
+    app = type_cast(FastAPI, request.app)
+    if not isinstance(app.state, _AuthAppState):
+        raise RuntimeError("Auth container is not configured")
+    return app.state.container
+
+
+def _oauth_callback_container(request: Request) -> _OAuthCallbackContainer:
+    app = type_cast(FastAPI, request.app)
+    if not isinstance(app.state, _OAuthCallbackAppState):
+        raise RuntimeError("OAuth callback container is not configured")
+    return app.state.container
+
+
+def _request_token_data(request: Request) -> TokenData | None:
+    if not isinstance(request.state, _AuthRequestState):
+        raise RuntimeError("AuthMiddleware did not populate request.state.token_data")
+    return request.state.token_data
+
+
+def _require_token_data(request: Request) -> TokenData:
+    token_data = _request_token_data(request)
+    if token_data is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return token_data
+
 
 def _clear_platform_auth_cookies(response: JSONResponse, request: Request) -> None:
     """
@@ -77,12 +143,14 @@ def _clear_platform_auth_cookies(response: JSONResponse, request: Request) -> No
         samesite="lax",
     )
 
+
 def _append_query(url: str, params: dict[str, str]) -> str:
     parsed = urlsplit(url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     query.update(params)
     next_query = urlencode(query)
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, next_query, parsed.fragment))
+
 
 @router.get("/demo/status")
 async def demo_auth_status():
@@ -92,6 +160,7 @@ async def demo_auth_status():
     if not demo.login_enabled:
         return {"enabled": False}
     return {"enabled": True, "email": demo.email}
+
 
 @router.post("/login/demo")
 async def login_demo(
@@ -144,6 +213,7 @@ async def login_demo(
 
     return response
 
+
 @router.get("/providers")
 async def get_auth_providers(auth_service: AuthServiceDep):
     """Возвращает список доступных провайдеров авторизации"""
@@ -159,6 +229,7 @@ async def get_auth_providers(auth_service: AuthServiceDep):
             for provider in providers
         ]
     }
+
 
 @router.get("/login/{provider_name}")
 async def start_auth(
@@ -179,14 +250,10 @@ async def start_auth(
     Returns:
         JSON с auth_url для редиректа на стороне клиента
     """
-    get_settings()
-
     try:
         provider = AuthProvider(provider_name)
     except ValueError:
-        raise HTTPException(
-            status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}"
-        )
+        raise HTTPException(status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}")
 
     if provider == AuthProvider.DEMO:
         raise HTTPException(
@@ -231,6 +298,7 @@ async def start_auth(
         logger.error(f"Ошибка начала авторизации {provider_name}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
 async def _complete_oauth_callback(
     request: Request,
     provider_name: str,
@@ -248,21 +316,17 @@ async def _complete_oauth_callback(
         raise HTTPException(status_code=400, detail=f"Ошибка авторизации: {error}")
 
     if not code or not state:
-        raise HTTPException(
-            status_code=400, detail="Отсутствуют обязательные параметры"
-        )
+        raise HTTPException(status_code=400, detail="Отсутствуют обязательные параметры")
 
     try:
         provider = AuthProvider(provider_name)
     except ValueError:
-        raise HTTPException(
-            status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}"
-        )
+        raise HTTPException(status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}")
 
-    auth_state = await auth_service._get_auth_state(state)
+    auth_state = await auth_service.get_auth_state(state)
     if not auth_state:
         if provider_name == AuthProvider.GOOGLE.value:
-            calendar_service = request.app.state.container.calendar_service
+            calendar_service = _oauth_callback_container(request).calendar_service
             try:
                 return_path = await calendar_service.complete_google_oauth(state=state, code=code)
             except ValueError as err:
@@ -278,9 +342,9 @@ async def _complete_oauth_callback(
             return RedirectResponse(url=redirect_url)
         raise HTTPException(status_code=400, detail="Недействительный state")
 
-    original_host = auth_state.get("original_host")
-    redirect_uri = auth_state.get("redirect_uri")
-    return_path = auth_state.get("return_path")
+    original_host = auth_state.original_host
+    redirect_uri = auth_state.redirect_uri
+    return_path = auth_state.return_path
 
     logger.info(f"auth_callback: redirect_uri={redirect_uri}, original_host={original_host}")
 
@@ -314,7 +378,7 @@ async def _complete_oauth_callback(
         redirect_url = build_url(target_host, "/select-company?action=create")
     elif len(user.companies) == 1:
         company_id = list(user.companies.keys())[0]
-        company = await auth_service._company_repository.get(company_id)
+        company = await auth_service.get_company(company_id)
         if not company or not company.subdomain:
             redirect_url = build_url(target_host, "/select-company?action=create")
         else:
@@ -322,7 +386,7 @@ async def _complete_oauth_callback(
     else:
         active_company_id = user.active_company_id
         if active_company_id and active_company_id in user.companies:
-            company = await auth_service._company_repository.get(active_company_id)
+            company = await auth_service.get_company(active_company_id)
             if company and company.subdomain:
                 redirect_url = build_url(target_host, "/dashboard?post_login=1", company.subdomain)
             else:
@@ -335,7 +399,9 @@ async def _complete_oauth_callback(
 
     cookie_domain = get_cookie_domain(target_host)
 
-    logger.info(f"Устанавливаем cookies: session_id={session.session_id}, auth_token={token[:8]}..., domain={cookie_domain}, secure={is_production}")
+    logger.info(
+        f"Устанавливаем cookies: session_id={session.session_id}, auth_token={token[:8]}..., domain={cookie_domain}, secure={is_production}"
+    )
 
     cookie_max_age = TokenService.SESSION_EXPIRES
     response.set_cookie(
@@ -360,6 +426,7 @@ async def _complete_oauth_callback(
     logger.info(f"Успешная авторизация пользователя {user.user_id}")
     return response
 
+
 @router.get("/callback/{provider_name}")
 async def auth_callback(
     request: Request,
@@ -381,15 +448,16 @@ async def auth_callback(
         oauth_first_login_user_json=user,
     )
 
+
 @router.post("/callback/{provider_name}")
 async def auth_callback_post(
     request: Request,
     provider_name: str,
     auth_service: AuthServiceDep,
-    code: str = Form(...),
-    state: str = Form(...),
-    error: str | None = Form(None),
-    user: str | None = Form(None),
+    code: Annotated[str, Form()],
+    state: Annotated[str, Form()],
+    error: Annotated[str | None, Form()] = None,
+    user: Annotated[str | None, Form()] = None,
 ):
     """Sign in with Apple: response_mode=form_post — code/state/user в application/x-www-form-urlencoded."""
     return await _complete_oauth_callback(
@@ -402,6 +470,7 @@ async def auth_callback_post(
         oauth_first_login_user_json=user,
     )
 
+
 @router.post("/logout")
 async def logout(
     request: Request,
@@ -412,30 +481,26 @@ async def logout(
     Завершает сессию: берёт session_id из query (опционально) или из JWT в cookie,
     удаляет запись сессии и снимает auth_token/session_id в браузере.
     """
-    token_data = getattr(request.state, "token_data", None)
-    resolved_session_id = session_id or (
-        token_data.session_id if token_data and token_data.session_id else None
-    )
-    if resolved_session_id:
-        await auth_service.logout(resolved_session_id)
+    token_data = _request_token_data(request)
+    resolved_session_id = session_id
+    if resolved_session_id is None and token_data is not None:
+        resolved_session_id = token_data.session_id
+    if resolved_session_id is not None:
+        _ = await auth_service.logout(resolved_session_id)
 
     response = JSONResponse({"success": True, "message": "Сессия завершена"})
     _clear_platform_auth_cookies(response, request)
     return response
+
 
 @router.get("/me")
 async def get_current_user(request: Request, auth_service: AuthServiceDep):
     """
     Возвращает полную информацию о текущем авторизованном пользователе.
     """
-    token_data = getattr(request.state, "token_data", None)
+    token_data = _require_token_data(request)
 
-    if not token_data:
-        logger.warning("Запрос к /api/auth/me без авторизации")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    user_repo = auth_service._user_repository
-    user = await user_repo.get(token_data.user_id)
+    user = await auth_service.get_user(token_data.user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -462,6 +527,7 @@ async def get_current_user(request: Request, auth_service: AuthServiceDep):
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
 
+
 @router.post("/switch-company")
 async def switch_company(
     request: Request,
@@ -469,12 +535,9 @@ async def switch_company(
     auth_service: AuthServiceDep,
 ):
     """Переключает активную компанию пользователя и перевыпускает auth_token."""
-    token_data = getattr(request.state, "token_data", None)
-    if not token_data:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+    token_data = _require_token_data(request)
 
-    user_repo = auth_service._user_repository
-    user = await user_repo.get(token_data.user_id)
+    user = await auth_service.get_user(token_data.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -482,7 +545,7 @@ async def switch_company(
         raise HTTPException(status_code=403, detail="Нет доступа к выбранной компании")
 
     user.active_company_id = payload.company_id
-    await user_repo.set(user)
+    _ = await auth_service.save_user(user)
 
     company_roles = user.companies[payload.company_id]
     token_service = get_token_service()
@@ -490,7 +553,7 @@ async def switch_company(
         user_id=user.user_id,
         company_id=payload.company_id,
         roles=company_roles,
-        session_id=getattr(token_data, "session_id", None),
+        session_id=token_data.session_id,
         email=user.email,
     )
 
@@ -507,32 +570,44 @@ async def switch_company(
     )
     return response
 
+
 @router.put("/me")
 async def update_current_user(
-    request: Request,
-    updates: "UserUpdate",
-    auth_service: AuthServiceDep
+    request: Request, updates: "UserUpdate", auth_service: AuthServiceDep
 ):
     """
     Обновляет данные текущего пользователя.
     """
-    token_data = getattr(request.state, "token_data", None)
+    token_data = _require_token_data(request)
 
-    if not token_data:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    user_repo = auth_service._user_repository
-    user = await user_repo.get(token_data.user_id)
+    user = await auth_service.get_user(token_data.user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    update_data = updates.model_dump(exclude_none=True)
+    name_parts_changed = False
+    if updates.name is not None:
+        user.name = updates.name
+    if updates.first_name is not None:
+        user.first_name = updates.first_name
+        name_parts_changed = True
+    if updates.last_name is not None:
+        user.last_name = updates.last_name
+        name_parts_changed = True
+    if updates.emails is not None:
+        user.emails = updates.emails
+    if updates.phones is not None:
+        user.phones = updates.phones
+    if updates.messengers is not None:
+        user.messengers = updates.messengers
+    if updates.avatar_url is not None:
+        user.avatar_url = updates.avatar_url
+    if updates.bio is not None:
+        user.bio = updates.bio
+    if updates.ui_preferences is not None:
+        user.ui_preferences = updates.ui_preferences
 
-    for field, value in update_data.items():
-        setattr(user, field, value)
-
-    if "first_name" in update_data or "last_name" in update_data:
+    if name_parts_changed:
         parts: list[str] = []
         if user.first_name and user.first_name.strip():
             parts.append(user.first_name.strip())
@@ -542,42 +617,38 @@ async def update_current_user(
             user.name = " ".join(parts)
 
     user.updated_at = datetime.now(timezone.utc)
-    await user_repo.set(user)
+    _ = await auth_service.save_user(user)
 
     return {"success": True, "message": "User updated"}
 
+
 @router.get("/me/attrs/{service}")
 async def get_service_attrs(
-    request: Request,
-    service: str,
-    auth_service: AuthServiceDep
-):
+    request: Request, service: str, auth_service: AuthServiceDep
+) -> JsonObject:
     """
     Получает service-specific атрибуты для текущего пользователя.
 
     Args:
         service: Имя сервиса (crm, agents, rag)
     """
-    token_data = getattr(request.state, "token_data", None)
+    token_data = _require_token_data(request)
 
-    if not token_data:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    user_repo = auth_service._user_repository
-    user = await user_repo.get(token_data.user_id)
+    user = await auth_service.get_user(token_data.user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return user.attrs.get(service, {})
+    service_attrs = user.attrs.get(service)
+    if service_attrs is None:
+        return {}
+    return require_json_object(service_attrs, f"user.attrs[{service!r}]")
+
 
 @router.put("/me/attrs/{service}")
 async def update_service_attrs(
-    request: Request,
-    service: str,
-    attrs: dict[str, Any],
-    auth_service: AuthServiceDep
-):
+    request: Request, service: str, attrs: JsonObject, auth_service: AuthServiceDep
+) -> JsonObject:
     """
     Обновляет service-specific атрибуты для текущего пользователя (merge).
 
@@ -585,25 +656,25 @@ async def update_service_attrs(
         service: Имя сервиса (crm, agents, rag)
         attrs: Атрибуты для обновления (merge с существующими)
     """
-    token_data = getattr(request.state, "token_data", None)
+    token_data = _require_token_data(request)
 
-    if not token_data:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    user_repo = auth_service._user_repository
-    user = await user_repo.get(token_data.user_id)
+    user = await auth_service.get_user(token_data.user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if service not in user.attrs:
-        user.attrs[service] = {}
+    existing_attrs = user.attrs.get(service)
+    if existing_attrs is None:
+        service_attrs: JsonObject = {}
+    else:
+        service_attrs = require_json_object(existing_attrs, f"user.attrs[{service!r}]")
 
-    user.attrs[service].update(attrs)
+    user.attrs[service] = {**service_attrs, **attrs}
     user.updated_at = datetime.now(timezone.utc)
-    await user_repo.set(user)
+    _ = await auth_service.save_user(user)
 
     return {"success": True, "service": service, "attrs": user.attrs[service]}
+
 
 @router.get("/grafana-check")
 async def grafana_auth_check(request: Request):
@@ -616,14 +687,16 @@ async def grafana_auth_check(request: Request):
     При успехе возвращает 200 + заголовок X-Auth-User (email или user_id), который Traefik
     пробрасывает в Grafana как auth.proxy (GF_AUTH_PROXY_HEADER_NAME).
     """
-    token_data = getattr(request.state, "token_data", None)
-    if not token_data:
+    token_data = _request_token_data(request)
+    if token_data is None:
         return Response(status_code=401)
 
-    if getattr(token_data, "company_id", None) != "system":
+    if token_data.company_id != "system":
         return Response(status_code=403)
 
-    user_email = getattr(token_data, "email", None) or getattr(token_data, "user_id", "admin")
+    user_email = token_data.email
+    if not user_email:
+        user_email = token_data.user_id
     return Response(
         status_code=200,
         headers={"X-Auth-User": str(user_email)},
@@ -635,8 +708,6 @@ async def auth_status(auth_service: AuthServiceDep):
     """Возвращает статус системы авторизации"""
     return {
         "auth_enabled": auth_service.storage_configured,
-        "available_providers": [
-            p.value for p in auth_service.get_available_providers()
-        ],
-        "total_providers": len(auth_service._providers),
+        "available_providers": [p.value for p in auth_service.get_available_providers()],
+        "total_providers": auth_service.provider_count,
     }

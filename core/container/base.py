@@ -123,6 +123,7 @@ def lazy(func: Callable[[Any], _LazyT]) -> _LazyProperty[_LazyT]:
     """
     return _LazyProperty(func)
 
+
 class BaseContainer:
     """
     Базовый контейнер зависимостей с ленивой инициализацией.
@@ -140,7 +141,7 @@ class BaseContainer:
         self,
         db_url: str | None = None,
         shared_db_url: str | None = None,
-        service_db_url: str | None = None  # Алиас для db_url
+        service_db_url: str | None = None,  # Алиас для db_url
     ):
         """
         Args:
@@ -182,17 +183,17 @@ class BaseContainer:
     # === Storage ===
 
     @lazy
-    def storage(self):
+    def storage(self) -> Storage:
         """Service Storage для работы с БД"""
         return Storage(db_url=self.db_url, get_context_func=get_context)
 
     @lazy
-    def shared_storage(self):
+    def shared_storage(self) -> Storage:
         """Shared Storage для работы с общими данными (users, companies)"""
         return Storage(db_url=self.shared_db_url, get_context_func=get_context)
 
     @lazy
-    def tracing_storage(self):
+    def tracing_storage(self) -> Storage:
         """Storage только для platform_tracing (spans), не shared."""
         url = get_settings().database.tracing_url
         if not url:
@@ -202,12 +203,12 @@ class BaseContainer:
     # === Репозитории (shared БД) ===
 
     @lazy
-    def user_repository(self):
+    def user_repository(self) -> UserRepository:
         """UserRepository для работы с пользователями"""
         return UserRepository(storage=self.shared_storage)
 
     @lazy
-    def company_repository(self):
+    def company_repository(self) -> CompanyRepository:
         """CompanyRepository для работы с компаниями"""
         return CompanyRepository(storage=self.shared_storage)
 
@@ -303,7 +304,8 @@ class BaseContainer:
         return AuthService(
             user_repository=self.user_repository,
             company_repository=self.company_repository,
-            auth_session_repository=self.auth_session_repository
+            auth_session_repository=self.auth_session_repository,
+            storage=self.shared_storage,
         )
 
     @lazy
@@ -427,7 +429,7 @@ class BaseContainer:
             repository=repository,
             prefix=prefix,
             tags=tags,
-            repository_dependency=repository_dependency
+            repository_dependency=repository_dependency,
         )
 
         router = generator.generate_router()

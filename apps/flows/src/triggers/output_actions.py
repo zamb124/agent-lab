@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models.channel_config import OutputAction
 from apps.flows.src.triggers.input_mapper import InputMapper
 from apps.flows.src.triggers.output_condition import evaluate_output_action_condition
 from core.logging import get_logger
+from core.types import JsonObject, require_json_object, require_json_value
 
 logger = get_logger(__name__)
 
@@ -20,21 +19,21 @@ class OutputActionExecutor:
     """
 
     def __init__(self, *, container: FlowRuntimeContainer):
-        self.container = container
-        self._input_mapper = InputMapper()
+        self.container: FlowRuntimeContainer = container
+        self._input_mapper: InputMapper = InputMapper()
 
     async def execute(
         self,
         output_actions: list[OutputAction],
-        state: dict[str, Any],
-        trigger_config: dict[str, Any],
-        original_payload: dict[str, Any],
-    ) -> list[dict[str, Any]]:
+        state: JsonObject,
+        trigger_config: JsonObject,
+        original_payload: JsonObject,
+    ) -> list[JsonObject]:
         if not output_actions:
             return []
 
-        results = []
-        variables = state.get("variables", {})
+        results: list[JsonObject] = []
+        variables = require_json_object(state.get("variables", {}), "state.variables")
 
         for action in output_actions:
             if action.condition:
@@ -48,7 +47,7 @@ class OutputActionExecutor:
             params.update(action.config)
 
             handler = self.container.channel_registry.get(action.channel)
-            channel_config = {**trigger_config, **action.config}
+            channel_config: JsonObject = {**trigger_config, **action.config}
 
             try:
                 result = await handler.execute_action(
@@ -73,17 +72,23 @@ class OutputActionExecutor:
     def _resolve_mapping(
         self,
         mapping: dict[str, str],
-        state: dict[str, Any],
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
-        result = {}
+        state: JsonObject,
+        payload: JsonObject,
+    ) -> JsonObject:
+        result: JsonObject = {}
 
         for param_name, expr in mapping.items():
             if expr.startswith("@state:") or expr.startswith("@var:"):
-                result[param_name] = MappingResolver.resolve_value(expr, state)
+                result[param_name] = require_json_value(
+                    MappingResolver.resolve_value(expr, state),
+                    f"output_action.mapping.{param_name}",
+                )
             elif expr.startswith("@trigger:"):
                 path = expr[9:]
-                result[param_name] = MappingResolver.get_nested_value(payload, path)
+                result[param_name] = require_json_value(
+                    MappingResolver.get_nested_value(payload, path),
+                    f"output_action.mapping.{param_name}",
+                )
             elif expr.startswith("@const:"):
                 result[param_name] = expr[7:]
             else:

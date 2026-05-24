@@ -8,14 +8,34 @@ from apps.flows.src.state.node_files import collect_flow_node_files, validate_no
 
 def test_collect_flow_node_files_merges_in_stable_order() -> None:
     nodes = {
-        "a": {"type": "code", "files": [{"original_name": "x.txt", "url": "/p1"}]},
-        "b": {"type": "llm_node", "files": [{"original_name": "y.pdf", "url": "/p2", "content_type": "application/pdf"}]},
+        "a": {
+            "type": "code",
+            "files": [
+                {
+                    "original_name": "x.txt",
+                    "url": "/p1",
+                    "content_type": "text/plain",
+                    "file_size": 1,
+                }
+            ],
+        },
+        "b": {
+            "type": "llm_node",
+            "files": [
+                {
+                    "original_name": "y.pdf",
+                    "url": "/p2",
+                    "content_type": "application/pdf",
+                    "file_size": 2,
+                }
+            ],
+        },
     }
     got = collect_flow_node_files(nodes)
     assert len(got) == 2
-    assert got[0]["original_name"] == "x.txt"
-    assert got[1]["original_name"] == "y.pdf"
-    assert got[1]["content_type"] == "application/pdf"
+    assert got[0].original_name == "x.txt"
+    assert got[1].original_name == "y.pdf"
+    assert got[1].content_type == "application/pdf"
 
 
 def test_collect_flow_node_files_skips_empty() -> None:
@@ -27,9 +47,15 @@ def test_validate_node_files_list_rejects_bad_shape() -> None:
     with pytest.raises(ValueError, match="списком"):
         validate_node_files_list({}, node_id="n1")
     with pytest.raises(ValueError, match="original_name"):
-        validate_node_files_list([{"url": "/x"}], node_id="n1")
-    with pytest.raises(ValueError, match="url"):
-        validate_node_files_list([{"original_name": "a"}], node_id="n1")
+        validate_node_files_list(
+            [{"url": "/x", "content_type": "text/plain", "file_size": 1}],
+            node_id="n1",
+        )
+    with pytest.raises(ValueError, match="file_id или url"):
+        validate_node_files_list(
+            [{"original_name": "a", "content_type": "text/plain", "file_size": 1}],
+            node_id="n1",
+        )
 
 
 @pytest.mark.asyncio

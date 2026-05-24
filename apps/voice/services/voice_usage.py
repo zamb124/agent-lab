@@ -25,13 +25,13 @@ Real-time длительность voice-сессии и поминутный у
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
 
 from core.billing import get_billing_service
 from core.billing.service import COST_ORIGIN_COMPANY, COST_ORIGIN_PLATFORM
 from core.logging import get_logger
-from core.models.billing_models import UsageType
+from core.models.billing_models import BillingCostOrigin, UsageType
 from core.models.identity_models import Company, User
+from core.types import JsonObject, JsonValue
 
 logger = get_logger(__name__)
 
@@ -44,21 +44,28 @@ def _resolve_actor(*, user: User | None, company: Company | None) -> tuple[User,
     return user, company
 
 
+def _usage_metadata(base: JsonObject, extra: Mapping[str, JsonValue] | None) -> JsonObject:
+    metadata: JsonObject = dict(base)
+    if extra is not None:
+        metadata.update(extra)
+    return metadata
+
+
 async def record_stt_usage(
     *,
     user: User,
     company: Company,
     provider: str,
     audio_seconds: float,
-    metadata: Mapping[str, Any] | None = None,
-    cost_origin: str = COST_ORIGIN_PLATFORM,
+    metadata: Mapping[str, JsonValue] | None = None,
+    cost_origin: BillingCostOrigin = COST_ORIGIN_PLATFORM,
 ) -> str:
     """Записать списание за STT-вызов.
 
     quantity = округлённое вверх число секунд аудио (минимум 1). При ``cost_origin=company``
     запись пишется с ``cost=0`` (компания платит провайдеру напрямую).
     """
-    if not provider or not isinstance(provider, str):
+    if not provider:
         raise ValueError("voice_usage.record_stt_usage: provider обязателен.")
     if audio_seconds < 0:
         raise ValueError("voice_usage.record_stt_usage: audio_seconds < 0.")
@@ -82,12 +89,14 @@ async def record_stt_usage(
         cost=total_cost,
         usage_type=UsageType.TOOL_CALL,
         quantity=quantity,
-        metadata={
-            "provider": provider,
-            "audio_seconds": audio_seconds,
-            "kind": "stt",
-            **(dict(metadata) if metadata else {}),
-        },
+        metadata=_usage_metadata(
+            {
+                "provider": provider,
+                "audio_seconds": audio_seconds,
+                "kind": "stt",
+            },
+            metadata,
+        ),
         cost_origin=cost_origin,
     )
 
@@ -98,11 +107,11 @@ async def record_tts_usage(
     company: Company,
     provider: str,
     char_count: int,
-    metadata: Mapping[str, Any] | None = None,
-    cost_origin: str = COST_ORIGIN_PLATFORM,
+    metadata: Mapping[str, JsonValue] | None = None,
+    cost_origin: BillingCostOrigin = COST_ORIGIN_PLATFORM,
 ) -> str:
     """Записать списание за TTS-вызов; при ``cost_origin=company`` cost=0."""
-    if not provider or not isinstance(provider, str):
+    if not provider:
         raise ValueError("voice_usage.record_tts_usage: provider обязателен.")
     if char_count < 0:
         raise ValueError("voice_usage.record_tts_usage: char_count < 0.")
@@ -126,12 +135,14 @@ async def record_tts_usage(
         cost=total_cost,
         usage_type=UsageType.TOOL_CALL,
         quantity=quantity,
-        metadata={
-            "provider": provider,
-            "char_count": char_count,
-            "kind": "tts",
-            **(dict(metadata) if metadata else {}),
-        },
+        metadata=_usage_metadata(
+            {
+                "provider": provider,
+                "char_count": char_count,
+                "kind": "tts",
+            },
+            metadata,
+        ),
         cost_origin=cost_origin,
     )
 

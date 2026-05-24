@@ -6,21 +6,20 @@
 - flows_versions: история версий
 """
 
-import json
 from datetime import datetime, timezone
+from typing import override
 
 from apps.flows.src.models import FlowConfig
-from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
 from core.db import BaseRepository, Storage
 from core.logging import get_logger
+from core.types import parse_json_object
 
 logger = get_logger(__name__)
 
 
 def _flow_config_from_storage_json(raw: str) -> FlowConfig:
-    payload = json.loads(raw)
-    normalized = normalize_flow_config_dict(payload)
-    return FlowConfig.model_validate(normalized)
+    payload = parse_json_object(raw, "flow_config")
+    return FlowConfig.model_validate(payload)
 
 
 class FlowRepository(BaseRepository[FlowConfig]):
@@ -29,27 +28,32 @@ class FlowRepository(BaseRepository[FlowConfig]):
     Данные изолированы по компаниям (is_global=False).
     """
 
-    is_global = False
-    owner_service = "flows"
+    is_global: bool = False
+    owner_service: str = "flows"
 
     def __init__(self, storage: Storage):
         super().__init__(storage, FlowConfig)
 
+    @override
     def _get_key(self, entity_id: str) -> str:
         return f"flow:{entity_id}"
 
+    @override
     def _get_prefix(self) -> str:
         return "flow:"
 
+    @override
     def _get_table_name(self) -> str:
         return "flows"
 
     def _get_versions_table(self) -> str:
         return "flows_versions"
 
+    @override
     def _extract_entity_id(self, entity: FlowConfig) -> str:
         return entity.flow_id
 
+    @override
     async def set(self, entity: FlowConfig) -> bool:
         """
         Сохраняет новую версию агента.
@@ -69,14 +73,15 @@ class FlowRepository(BaseRepository[FlowConfig]):
         # Сохраняем версию в flows_versions
         version_key = self._get_key(f"{flow_id}_v{new_version}")
         final_version_key = self._build_final_key(version_key)
-        await self._storage.set_with_table(final_version_key, data, self._get_versions_table())
+        _ = await self._storage.set_with_table(final_version_key, data, self._get_versions_table())
 
         # Сохраняем актуальный конфиг в flows
-        await super().set(entity)
+        _ = await super().set(entity)
 
         logger.info(f"Flow '{flow_id}' saved as version {new_version}")
         return True
 
+    @override
     async def get(self, entity_id: str) -> FlowConfig | None:
         """Получает последнюю версию агента."""
         return await self.get_latest(entity_id)
@@ -141,7 +146,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         final_prefix = self._build_final_key(prefix)
         all_data = await self._storage.get_all_by_prefix_and_table(final_prefix, self._get_versions_table(), 1000)
 
-        versions = []
+        versions: list[str] = []
         for key in all_data.keys():
             # Формат: flow:{flow_id}_v{timestamp} или company:{company_id}:flow:{flow_id}_v{timestamp}
             # Ищем последнее вхождение _v чтобы извлечь timestamp
@@ -151,6 +156,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
 
         return sorted(versions, reverse=True)
 
+    @override
     async def get_many(self, entity_ids: list[str]) -> dict[str, FlowConfig]:
         if not entity_ids:
             return {}
@@ -167,6 +173,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
                     logger.warning("Failed to parse flow %s: %s", entity_id, e)
         return result
 
+    @override
     async def list(self, *, limit: int, offset: int = 0) -> list[FlowConfig]:
         """Страница flow (последние версии). Читает из таблицы flows."""
         base_prefix = self._get_prefix()
@@ -186,6 +193,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
 
         return items
 
+    @override
     async def delete(self, entity_id: str) -> bool:
         """
         Удаляет flow со всеми версиями из обеих таблиц.
@@ -203,12 +211,12 @@ class FlowRepository(BaseRepository[FlowConfig]):
         if current:
             row_key = self._get_key(flow_id)
             final_flow_key = self._build_final_key(row_key)
-            await self._storage.delete_with_table(final_flow_key, self._get_table_name())
+            _ = await self._storage.delete_with_table(final_flow_key, self._get_table_name())
 
         for version in versions:
             version_key = self._get_key(f"{flow_id}_v{version}")
             final_version_key = self._build_final_key(version_key)
-            await self._storage.delete_with_table(final_version_key, self._get_versions_table())
+            _ = await self._storage.delete_with_table(final_version_key, self._get_versions_table())
 
         logger.info(f"Flow '{flow_id}' deleted with {len(versions)} versions")
         return True
@@ -226,7 +234,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
         data = snapshot.model_dump_json()
         key = self._get_key(flow_id)
         final_key = self._build_final_key(key)
-        await self._storage.set_with_table(final_key, data, self._get_table_name())
+        _ = await self._storage.set_with_table(final_key, data, self._get_table_name())
 
         logger.info(f"Flow '{flow_id}' rolled back to version {version}")
         return True

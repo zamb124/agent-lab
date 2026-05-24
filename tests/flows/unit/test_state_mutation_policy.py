@@ -7,7 +7,6 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.src.runtime.nodes import BaseNode
-from apps.flows.src.runtime_helpers.state_utils import merge_state, set_nested
 from core.errors import FrozenStateFieldError
 from core.state import ExecutionState
 from core.state.mutation_policy import (
@@ -41,18 +40,6 @@ def test_runtime_allows_frozen_setattr() -> None:
     state = _minimal_state()
     state.task_id = "task_2"
     assert state.task_id == "task_2"
-
-
-def test_merge_state_rejects_frozen_key_on_execution_state() -> None:
-    state = _minimal_state()
-    with pytest.raises(FrozenStateFieldError):
-        merge_state(state, {"flow_deadline_monotonic": 999.0})
-
-
-def test_set_nested_rejects_frozen_root() -> None:
-    state = _minimal_state()
-    with pytest.raises(FrozenStateFieldError):
-        set_nested(state, "node_history.x", {})
 
 
 def test_snapshot_detects_in_place_mutation() -> None:

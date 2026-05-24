@@ -1,17 +1,11 @@
-"""
-WebhookChannelHandler - отправка сообщений через HTTP callback/webhook.
+"""WebhookChannelHandler - отправка сообщений через HTTP callback/webhook."""
 
-Используется для:
-- A2A нотификаций
-- Callback в внешние системы
-- Интеграции с любыми HTTP API
-"""
-
-from typing import Any
+from typing import override
 
 from apps.flows.src.models.enums import ChannelType
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 from .base import BaseChannelHandler
 
@@ -39,16 +33,17 @@ class WebhookChannelHandler(BaseChannelHandler):
     }
     """
 
-    channel_type = ChannelType.WEBHOOK
+    channel_type: ChannelType = ChannelType.WEBHOOK
 
+    @override
     async def send_message(
         self,
         recipient: str,
         text: str,
-        config: dict[str, Any],
-        variables: dict[str, Any],
-        **kwargs,
-    ) -> dict[str, Any]:
+        config: JsonObject,
+        variables: JsonObject,
+        **kwargs: JsonValue,
+    ) -> JsonObject:
         """
         Отправляет текстовое сообщение через HTTP.
 
@@ -61,7 +56,7 @@ class WebhookChannelHandler(BaseChannelHandler):
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
 
-        payload = {
+        payload: JsonObject = {
             "type": "message",
             "text": text,
             **kwargs,
@@ -69,22 +64,23 @@ class WebhookChannelHandler(BaseChannelHandler):
 
         return await self._send_request(url, payload, headers, config)
 
+    @override
     async def send_photo(
         self,
         recipient: str,
         photo: str | bytes,
-        config: dict[str, Any],
-        variables: dict[str, Any],
+        config: JsonObject,
+        variables: JsonObject,
         caption: str | None = None,
-        **kwargs,
-    ) -> dict[str, Any]:
+        **kwargs: JsonValue,
+    ) -> JsonObject:
         """Отправляет фото через HTTP (как URL или base64)."""
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
 
         photo_data = photo if isinstance(photo, str) else None
 
-        payload = {
+        payload: JsonObject = {
             "type": "photo",
             "photo_url": photo_data,
             "caption": caption,
@@ -93,23 +89,24 @@ class WebhookChannelHandler(BaseChannelHandler):
 
         return await self._send_request(url, payload, headers, config)
 
+    @override
     async def send_document(
         self,
         recipient: str,
         document: str | bytes,
-        config: dict[str, Any],
-        variables: dict[str, Any],
+        config: JsonObject,
+        variables: JsonObject,
         caption: str | None = None,
         filename: str | None = None,
-        **kwargs,
-    ) -> dict[str, Any]:
+        **kwargs: JsonValue,
+    ) -> JsonObject:
         """Отправляет документ через HTTP (как URL)."""
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
 
         doc_data = document if isinstance(document, str) else None
 
-        payload = {
+        payload: JsonObject = {
             "type": "document",
             "document_url": doc_data,
             "filename": filename,
@@ -122,16 +119,17 @@ class WebhookChannelHandler(BaseChannelHandler):
     async def send_payload(
         self,
         recipient: str,
-        payload: dict[str, Any],
-        config: dict[str, Any],
-        variables: dict[str, Any],
-        **kwargs,
-    ) -> dict[str, Any]:
+        payload: JsonObject,
+        config: JsonObject,
+        variables: JsonObject,
+        **kwargs: JsonValue,
+    ) -> JsonObject:
         """
         Отправляет произвольный JSON payload.
 
         Используется для гибких интеграций.
         """
+        _ = kwargs
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
 
@@ -141,13 +139,13 @@ class WebhookChannelHandler(BaseChannelHandler):
         self,
         recipient: str,
         event_type: str,
-        data: dict[str, Any],
-        config: dict[str, Any],
-        variables: dict[str, Any],
+        data: JsonObject,
+        config: JsonObject,
+        variables: JsonObject,
         task_id: str | None = None,
         session_id: str | None = None,
-        **kwargs,
-    ) -> dict[str, Any]:
+        **kwargs: JsonValue,
+    ) -> JsonObject:
         """
         Отправляет нотификацию в A2A формате.
 
@@ -158,10 +156,11 @@ class WebhookChannelHandler(BaseChannelHandler):
             task_id: ID задачи
             session_id: ID сессии
         """
+        _ = kwargs
         url = self._get_url(recipient, config, variables)
         headers = self._build_headers(config, variables)
 
-        payload = {
+        payload: JsonObject = {
             "jsonrpc": "2.0",
             "method": "tasks/pushNotification",
             "params": {
@@ -179,13 +178,20 @@ class WebhookChannelHandler(BaseChannelHandler):
     async def _send_request(
         self,
         url: str,
-        payload: dict[str, Any],
+        payload: JsonObject,
         headers: dict[str, str],
-        config: dict[str, Any],
-    ) -> dict[str, Any]:
+        config: JsonObject,
+    ) -> JsonObject:
         """Выполняет HTTP запрос."""
-        method = config.get("method", "POST").upper()
-        timeout = config.get("timeout", 30.0)
+        raw_method = config.get("method", "POST")
+        if not isinstance(raw_method, str) or not raw_method:
+            raise ValueError("webhook config.method must be a non-empty string")
+        method = raw_method.upper()
+
+        raw_timeout = config.get("timeout", 30.0)
+        if isinstance(raw_timeout, bool) or not isinstance(raw_timeout, (int, float)):
+            raise ValueError("webhook config.timeout must be a number")
+        timeout = float(raw_timeout)
 
         async with get_httpx_client(timeout=timeout) as client:
             if method == "POST":
@@ -205,43 +211,55 @@ class WebhookChannelHandler(BaseChannelHandler):
 
             logger.info(f"Webhook sent to {url}: {response.status_code}")
 
-            try:
-                return response.json()
-            except Exception:
-                return {"status": "ok", "status_code": response.status_code}
+            return parse_json_object(response.content, "webhook.response")
 
     def _get_url(
         self,
         recipient: str,
-        config: dict[str, Any],
-        variables: dict[str, Any],
+        config: JsonObject,
+        variables: JsonObject,
     ) -> str:
         """Определяет URL для отправки."""
         url = recipient or config.get("url")
 
-        if not url:
+        if not isinstance(url, str) or not url:
             raise ValueError("URL is required for webhook channel")
 
-        return self._resolve_value(url, variables)
+        resolved_url = self._resolve_value(url, variables)
+        if not isinstance(resolved_url, str) or not resolved_url:
+            raise ValueError("webhook URL must resolve to a non-empty string")
+        return resolved_url
 
     def _build_headers(
         self,
-        config: dict[str, Any],
-        variables: dict[str, Any],
+        config: JsonObject,
+        variables: JsonObject,
     ) -> dict[str, str]:
         """Строит заголовки с резолвингом переменных."""
         headers = {"Content-Type": "application/json"}
 
-        config_headers = config.get("headers")
-        if not isinstance(config_headers, dict):
+        raw_config_headers = config.get("headers")
+        if raw_config_headers is None:
             config_headers = {}
-        legacy_auth = config.get("auth_headers")
-        if isinstance(legacy_auth, dict) and len(legacy_auth) > 0:
+        else:
+            config_headers = require_json_object(raw_config_headers, "webhook.config.headers")
+
+        raw_legacy_auth = config.get("auth_headers")
+        if raw_legacy_auth is None:
+            legacy_auth: JsonObject = {}
+        else:
+            legacy_auth = require_json_object(raw_legacy_auth, "webhook.config.auth_headers")
+
+        if legacy_auth:
             merged_h = {**config_headers, **legacy_auth}
         else:
-            merged_h = dict(config_headers)
+            merged_h = config_headers
+
         for key, value in merged_h.items():
-            headers[key] = self._resolve_value(value, variables)
+            resolved_value = self._resolve_value(value, variables)
+            if not isinstance(resolved_value, str):
+                raise ValueError(f"webhook header {key!r} must resolve to a string")
+            headers[key] = resolved_value
 
         return headers
 

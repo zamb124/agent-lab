@@ -7,7 +7,6 @@ notification_manager здесь не используется — call-собы�
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
 from uuid import uuid4
 
 import aiohttp
@@ -20,16 +19,14 @@ from apps.sync.models.calls import (
     CallMode,
     CallParticipantRead,
     CallRead,
+    CallsAcceptPayload,
+    CallsDeclinePayload,
+    CallsHangupPayload,
+    CallsInvitePayload,
     CallStatus,
     ParticipantStatus,
 )
 from apps.sync.models.channels import ChannelType
-from apps.sync.realtime.commands import (
-    CallAcceptPayload,
-    CallDeclinePayload,
-    CallHangupPayload,
-    CallInvitePayload,
-)
 from apps.sync.realtime.events import (
     RealtimeEvent,
     event_call_accepted,
@@ -94,7 +91,7 @@ def _participant_status(value: str) -> ParticipantStatus:
     raise ValueError(f"Unknown participant status: {value!r}")
 
 
-def _call_read_from_entities(call: SyncCall, participants: list[SyncCallParticipant]) -> CallRead:
+def call_read_from_entities(call: SyncCall, participants: list[SyncCallParticipant]) -> CallRead:
     return CallRead(
         call_id=call.call_id,
         channel_id=call.channel_id,
@@ -119,18 +116,19 @@ def _call_read_from_entities(call: SyncCall, participants: list[SyncCallParticip
 
 
 async def handle_call_invite(
-    cmd: Any,
+    payload: CallsInvitePayload,
+    *,
+    actor_user_id: str,
+    company_id: str,
     calls: CallRepository,
     channels: ChannelRepository,
     user_repository: UserRepository | None = None,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
     """Создаёт звонок и событие call.incoming только для участников канала."""
-    payload = CallInvitePayload.model_validate(cmd.payload)
-
-    if not await channels.is_member(payload.channel_id, cmd.actor_user_id, company_id=cmd.company_id):
+    if not await channels.is_member(payload.channel_id, actor_user_id, company_id=company_id):
         raise PermissionError("Нет доступа к каналу.")
 
-    existing = await calls.get_active_call_for_channel(payload.channel_id, cmd.company_id)
+    existing = await calls.get_active_call_for_channel(payload.channel_id, company_id)
     if existing is not None:
         now = datetime.now(UTC)
         await calls.update_call_status(existing.call_id, "ended", ended_at=now)
@@ -138,7 +136,7 @@ async def handle_call_invite(
             if p.status == "joined":
                 await calls.update_participant_status(existing.call_id, p.user_id, "left", left_at=now)
 
-    member_ids = await channels.list_member_user_ids(payload.channel_id, company_id=cmd.company_id)
+    member_ids = await channels.list_member_user_ids(payload.channel_id, company_id=company_id)
     mode = "p2p" if len(member_ids) <= P2P_MAX else "sfu"
 
     livekit_room_name: str | None = None
@@ -150,7 +148,7 @@ async def handle_call_invite(
             api_secret=settings.calls.livekit_api_secret,
         )
         persistent = await calls.get_persistent_channel_link(
-            cmd.company_id, payload.channel_id
+            company_id, payload.channel_id
         )
         if persistent is not None:
             # Та же комната, что у гостевой ссылки без call_id (join / op_calls_join_accept).
@@ -159,49 +157,49 @@ async def handle_call_invite(
             livekit_room_name = f"call-{uuid4().hex}"
         await lk.create_room(
             livekit_room_name,
-            company_id=cmd.company_id,
-            user_id=cmd.actor_user_id,
+            company_id=company_id,
+            user_id=actor_user_id,
         )
 
     call = SyncCall(
         call_id=uuid4().hex,
-        company_id=cmd.company_id,
+        company_id=company_id,
         channel_id=payload.channel_id,
         mode=mode,
         call_type="video",
         status="ringing",
         livekit_room_name=livekit_room_name,
-        created_by_user_id=cmd.actor_user_id,
+        created_by_user_id=actor_user_id,
     )
-    await calls.create_call(call)
+    _ = await calls.create_call(call)
 
     for uid in member_ids:
         participant = SyncCallParticipant(
             call_participant_id=uuid4().hex,
             call_id=call.call_id,
             user_id=uid,
-            status="joined" if uid == cmd.actor_user_id else "invited",
-            joined_at=datetime.now(UTC) if uid == cmd.actor_user_id else None,
+            status="joined" if uid == actor_user_id else "invited",
+            joined_at=datetime.now(UTC) if uid == actor_user_id else None,
         )
-        await calls.add_participant(participant)
+        _ = await calls.add_participant(participant)
 
     participants = await calls.list_participants(call.call_id)
-    call_read = _call_read_from_entities(call, participants)
+    call_read = call_read_from_entities(call, participants)
 
     incoming = event_call_incoming(
         call_read,
-        company_id=cmd.company_id,
+        company_id=company_id,
         recipient_user_ids=member_ids,
     )
-    incoming.payload["initiator_user_id"] = cmd.actor_user_id
+    incoming.payload["initiator_user_id"] = actor_user_id
 
     ch_entity = await channels.get(payload.channel_id)
     if ch_entity is None:
         raise ValueError(f"Канал {payload.channel_id} не найден.")
 
-    caller_display_name = cmd.actor_user_id
+    caller_display_name = actor_user_id
     if user_repository is not None:
-        creator = await user_repository.get(cmd.actor_user_id)
+        creator = await user_repository.get(actor_user_id)
         if creator is not None:
             caller_display_name = creator.name
     incoming.payload["caller_display_name"] = caller_display_name
@@ -215,13 +213,15 @@ async def handle_call_invite(
 
 
 async def handle_call_accept(
-    cmd: Any,
+    payload: CallsAcceptPayload,
+    *,
+    actor_user_id: str,
+    company_id: str,
     calls: CallRepository,
     channels: ChannelRepository,
 ) -> tuple[CallRead, list[RealtimeEvent], bool]:
     """Третий элемент: звонок только что перешёл ringing → active (для маркера в чате)."""
-    payload = CallAcceptPayload.model_validate(cmd.payload)
-    call = await calls.get_call(payload.call_id, cmd.company_id)
+    call = await calls.get_call(payload.call_id, company_id)
 
     if call.status == "ended":
         raise ValueError("Звонок уже завершён.")
@@ -229,7 +229,7 @@ async def handle_call_accept(
     was_ringing = call.status == "ringing"
     now = datetime.now(UTC)
     await calls.update_participant_status(
-        payload.call_id, cmd.actor_user_id, "joined", joined_at=now
+        payload.call_id, actor_user_id, "joined", joined_at=now
     )
 
     active_count = await calls.count_active_participants(payload.call_id)
@@ -239,85 +239,89 @@ async def handle_call_accept(
         became_active = True
 
     participants = await calls.list_participants(payload.call_id)
-    call_read = _call_read_from_entities(
-        await calls.get_call(payload.call_id, cmd.company_id), participants
+    call_read = call_read_from_entities(
+        await calls.get_call(payload.call_id, company_id), participants
     )
 
     recipients = await _call_event_recipients(
-        channels, channel_id=call.channel_id, company_id=cmd.company_id
+        channels, channel_id=call.channel_id, company_id=company_id
     )
     return call_read, [
         event_call_accepted(
             payload.call_id,
-            cmd.actor_user_id,
-            company_id=cmd.company_id,
+            actor_user_id,
+            company_id=company_id,
             recipient_user_ids=recipients,
         ),
         event_call_participant_joined(
             payload.call_id,
-            cmd.actor_user_id,
-            company_id=cmd.company_id,
+            actor_user_id,
+            company_id=company_id,
             recipient_user_ids=recipients,
         ),
     ], bool(became_active and was_ringing)
 
 
 async def handle_call_decline(
-    cmd: Any,
+    payload: CallsDeclinePayload,
+    *,
+    actor_user_id: str,
+    company_id: str,
     calls: CallRepository,
     channels: ChannelRepository,
 ) -> tuple[CallRead, list[RealtimeEvent]]:
-    payload = CallDeclinePayload.model_validate(cmd.payload)
-    call = await calls.get_call(payload.call_id, cmd.company_id)
+    call = await calls.get_call(payload.call_id, company_id)
 
     if call.status == "ended":
         raise ValueError("Звонок уже завершён.")
 
-    await calls.update_participant_status(payload.call_id, cmd.actor_user_id, "declined")
+    await calls.update_participant_status(payload.call_id, actor_user_id, "declined")
     participants = await calls.list_participants(payload.call_id)
-    call_read = _call_read_from_entities(call, participants)
+    call_read = call_read_from_entities(call, participants)
 
     recipients = await _call_event_recipients(
-        channels, channel_id=call.channel_id, company_id=cmd.company_id
+        channels, channel_id=call.channel_id, company_id=company_id
     )
     return call_read, [
         event_call_declined(
             payload.call_id,
-            cmd.actor_user_id,
-            company_id=cmd.company_id,
+            actor_user_id,
+            company_id=company_id,
             recipient_user_ids=recipients,
         ),
     ]
 
 
 async def handle_call_hangup(
-    cmd: Any,
+    payload: CallsHangupPayload,
+    *,
+    actor_user_id: str,
+    company_id: str,
     calls: CallRepository,
     channels: ChannelRepository,
 ) -> tuple[CallRead, list[RealtimeEvent], bool]:
     """Третий элемент: звонок полностью завершён (последний участник вышел)."""
-    payload = CallHangupPayload.model_validate(cmd.payload)
-    call = await calls.get_call(payload.call_id, cmd.company_id)
+    call = await calls.get_call(payload.call_id, company_id)
 
     if call.status == "ended":
         raise ValueError("Звонок уже завершён.")
 
     now = datetime.now(UTC)
     await calls.update_participant_status(
-        payload.call_id, cmd.actor_user_id, "left", left_at=now
+        payload.call_id, actor_user_id, "left", left_at=now
     )
 
     participants = await calls.list_participants(payload.call_id)
     active_count = sum(1 for p in participants if p.status == "joined")
 
     recipients = await _call_event_recipients(
-        channels, channel_id=call.channel_id, company_id=cmd.company_id
+        channels, channel_id=call.channel_id, company_id=company_id
     )
     events: list[RealtimeEvent] = [
         event_call_participant_left(
             payload.call_id,
-            cmd.actor_user_id,
-            company_id=cmd.company_id,
+            actor_user_id,
+            company_id=company_id,
             recipient_user_ids=recipients,
         ),
     ]
@@ -328,9 +332,9 @@ async def handle_call_hangup(
         if call.mode == "sfu" and call.livekit_room_name:
             await stop_speech_egresses_for_call_room(
                 call_id=payload.call_id,
-                company_id=cmd.company_id,
+                company_id=company_id,
                 room_name=call.livekit_room_name,
-                actor_user_id=cmd.actor_user_id,
+                actor_user_id=actor_user_id,
             )
             settings = get_settings()
             lk = LiveKitClient(
@@ -341,8 +345,8 @@ async def handle_call_hangup(
             try:
                 await lk.delete_room(
                     call.livekit_room_name,
-                    company_id=cmd.company_id,
-                    user_id=cmd.actor_user_id,
+                    company_id=company_id,
+                    user_id=actor_user_id,
                 )
             except TwirpError as exc:
                 if exc.code in (TwirpErrorCode.NOT_FOUND, TwirpErrorCode.FAILED_PRECONDITION):
@@ -358,14 +362,14 @@ async def handle_call_hangup(
                     f"LiveKit delete_room: сетевая ошибка aiohttp room={call.livekit_room_name}"
                 ) from exc
 
-        ended_call = await calls.get_call(payload.call_id, cmd.company_id)
+        ended_call = await calls.get_call(payload.call_id, company_id)
         if (
             ended_call.mode == "sfu"
             and ended_call.livekit_room_name is not None
             and ended_call.livekit_room_name != ""
         ):
             await trace_livekit_room_session_usage(
-                company_id=cmd.company_id,
+                company_id=company_id,
                 user_id=ended_call.created_by_user_id,
                 call_id=payload.call_id,
                 livekit_room_name=ended_call.livekit_room_name,
@@ -373,16 +377,16 @@ async def handle_call_hangup(
                 ended_at=ended_call.ended_at,
             )
         final_participants = await calls.list_participants(payload.call_id)
-        call_read = _call_read_from_entities(ended_call, final_participants)
+        call_read = call_read_from_entities(ended_call, final_participants)
         events.append(
             event_call_ended(
                 call_read,
-                company_id=cmd.company_id,
+                company_id=company_id,
                 recipient_user_ids=recipients,
             ),
         )
         call_fully_ended = True
     else:
-        call_read = _call_read_from_entities(call, participants)
+        call_read = call_read_from_entities(call, participants)
 
     return call_read, events, call_fully_ended

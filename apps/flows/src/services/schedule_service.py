@@ -1,8 +1,8 @@
 """Сервис управления scheduled tasks через единый scheduler API."""
 
 import datetime
-from typing import Any
 
+from apps.flows.src.db.scheduled_task_repository import ScheduledTaskRepository
 from core.clients.scheduler_client import SchedulerClient
 from core.context import get_context
 from core.logging import get_logger
@@ -16,6 +16,8 @@ from core.scheduler.models import (
     ScheduledTaskStatus,
     ScheduleType,
 )
+from core.scheduler.service import SchedulerService
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 
@@ -26,12 +28,12 @@ class ScheduleService:
     def __init__(
         self,
         scheduler_client: SchedulerClient,
-        scheduler_service=None,
-        scheduled_task_repository=None,
-    ):
-        self._scheduler_client = scheduler_client
-        self._scheduler_service = scheduler_service
-        self._scheduled_task_repository = scheduled_task_repository
+        scheduler_service: SchedulerService | None = None,
+        scheduled_task_repository: ScheduledTaskRepository | None = None,
+    ) -> None:
+        self._scheduler_client: SchedulerClient = scheduler_client
+        self._scheduler_service: SchedulerService | None = scheduler_service
+        self._scheduled_task_repository: ScheduledTaskRepository | None = scheduled_task_repository
 
     def _map_task(self, task: PlatformScheduledTask) -> ScheduledTaskInfo:
         payload = task.payload
@@ -42,6 +44,9 @@ class ScheduleService:
         if not isinstance(content, str):
             raise ValueError("scheduler payload.content must be string")
         tool_args = nested_payload.get("tool_args")
+        description = nested_payload.get("description")
+        if description is not None and not isinstance(description, str):
+            raise ValueError("scheduler payload.description must be string or null")
         task_type = payload.get("task_type")
         if not isinstance(task_type, str):
             raise ValueError("scheduler payload.task_type must be string")
@@ -54,9 +59,11 @@ class ScheduleService:
             raise ValueError("scheduler payload.session_id must be string")
         if not isinstance(user_id, str):
             raise ValueError("scheduler payload.user_id must be string")
-        schedule_type_raw = task.schedule_type
-        schedule_type = ScheduleType(
-            schedule_type_raw.value if hasattr(schedule_type_raw, "value") else str(schedule_type_raw)
+        schedule_type = ScheduleType(task.schedule_type.value)
+        typed_tool_args = (
+            require_json_object(tool_args, "scheduler payload.tool_args")
+            if tool_args is not None
+            else None
         )
 
         return ScheduledTaskInfo(
@@ -71,8 +78,8 @@ class ScheduleService:
             interval_minutes=int(task.interval_seconds / 60) if task.interval_seconds else None,
             run_at=task.run_at,
             content=content,
-            tool_args=tool_args if isinstance(tool_args, dict) else None,
-            description=None,
+            tool_args=typed_tool_args,
+            description=description,
             status=task.status,
             created_at=task.created_at,
             executed_at=task.last_run_at,
@@ -89,12 +96,13 @@ class ScheduleService:
         user_id: str,
         content_type: ContentType,
         content: str,
-        tool_args: dict[str, Any] | None,
+        tool_args: JsonObject | None,
+        description: str | None = None,
         cron: str | None = None,
         interval_seconds: int | None = None,
         run_at: datetime.datetime | None = None,
     ) -> ScheduledTaskInfo:
-        payload = {
+        payload: JsonObject = {
             "flow_id": flow_id,
             "session_id": session_id,
             "user_id": user_id,
@@ -102,6 +110,7 @@ class ScheduleService:
             "payload": {
                 "content": content,
                 "tool_args": tool_args,
+                "description": description,
             },
         }
         request = PlatformScheduleCreateRequest(
@@ -127,7 +136,7 @@ class ScheduleService:
             created = await self._scheduler_client.create_schedule(request)
         mapped = self._map_task(created)
         if self._scheduled_task_repository is not None:
-            await self._scheduled_task_repository.save(mapped)
+            _ = await self._scheduled_task_repository.save(mapped)
         return mapped
 
     async def schedule_cron_task(
@@ -138,7 +147,7 @@ class ScheduleService:
         cron: str,
         content_type: ContentType,
         content: str,
-        tool_args: dict[str, Any] | None = None,
+        tool_args: JsonObject | None = None,
         description: str | None = None,
     ) -> ScheduledTaskInfo:
         """
@@ -165,6 +174,7 @@ class ScheduleService:
             content_type=content_type,
             content=content,
             tool_args=tool_args,
+            description=description,
             cron=cron,
         )
         logger.info(
@@ -182,7 +192,7 @@ class ScheduleService:
         interval_minutes: int,
         content_type: ContentType,
         content: str,
-        tool_args: dict[str, Any] | None = None,
+        tool_args: JsonObject | None = None,
         description: str | None = None,
     ) -> ScheduledTaskInfo:
         """
@@ -209,6 +219,7 @@ class ScheduleService:
             content_type=content_type,
             content=content,
             tool_args=tool_args,
+            description=description,
             interval_seconds=interval_minutes * 60,
         )
         logger.info(
@@ -226,7 +237,7 @@ class ScheduleService:
         run_at: datetime.datetime,
         content_type: ContentType,
         content: str,
-        tool_args: dict[str, Any] | None = None,
+        tool_args: JsonObject | None = None,
         description: str | None = None,
     ) -> ScheduledTaskInfo:
         """
@@ -253,6 +264,7 @@ class ScheduleService:
             content_type=content_type,
             content=content,
             tool_args=tool_args,
+            description=description,
             run_at=run_at,
         )
         logger.info(
@@ -302,7 +314,7 @@ class ScheduleService:
                 )
             )
             task_items = tasks_page.items
-        filtered = []
+        filtered: list[ScheduledTaskInfo] = []
         for item in task_items:
             item_session = item.payload.get("session_id")
             if item_session == session_id:
@@ -337,7 +349,7 @@ class ScheduleService:
             cancelled.schedule_task_id,
         )
         if self._scheduled_task_repository is not None:
-            await self._scheduled_task_repository.update_status(
+            _ = await self._scheduled_task_repository.update_status(
                 schedule_task_id,
                 ScheduledTaskStatus.CANCELLED,
             )
@@ -361,4 +373,6 @@ class ScheduleService:
 
     async def mark_executed(self, schedule_task_id: str) -> bool:
         """Помечает задачу как выполненную."""
-        raise NotImplementedError("mark_executed is not supported in scheduler API mode")
+        raise NotImplementedError(
+            f"mark_executed is not supported in scheduler API mode: {schedule_task_id}"
+        )

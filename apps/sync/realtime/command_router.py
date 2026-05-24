@@ -16,18 +16,19 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from apps.sync.container import get_sync_container
-from apps.sync.models.calls import CallLinkCreate
-from apps.sync.models.channels import ChannelCreate
-from apps.sync.realtime.operations import (
+from apps.sync.models.calls import (
+    CallLinkCreate,
     CallsAcceptPayload,
-    CallsAdminTransferPayload,
     CallsDeclinePayload,
-    CallsGetPayload,
     CallsHangupPayload,
     CallsInvitePayload,
+    CallsSignalPayload,
+)
+from apps.sync.models.channels import ChannelCreate
+from apps.sync.realtime.operations import (
+    CallsAdminTransferPayload,
+    CallsGetPayload,
     CallsJoinAcceptPayload,
     CallsJoinInfoPayload,
     CallsLinksListPayload,
@@ -36,7 +37,6 @@ from apps.sync.realtime.operations import (
     CallsRecordingsListPayload,
     CallsRecordingStartPayload,
     CallsRecordingStopPayload,
-    CallsSignalPayload,
     CallsTokenPayload,
     CallsTurnCredentialsPayload,
     ChannelsAddMemberPayload,
@@ -63,10 +63,10 @@ from apps.sync.realtime.operations import (
     MessagesTranscribeCallPayload,
     MessagesTranscribeVideoPayload,
     Operation,
+    RegisteredOperation,
     ThreadsCreatePayload,
     ThreadsItemPayload,
     ThreadsListPayload,
-    dump_result,
     op_calls_accept,
     op_calls_admin_transfer,
     op_calls_decline,
@@ -112,17 +112,16 @@ from apps.sync.realtime.operations import (
     op_threads_create,
     op_threads_item,
     op_threads_list,
-    parse_payload,
 )
 from core.logging import get_logger
 from core.models.identity_models import User
-from core.websocket import register_ws_command_handler
+from core.types import JsonObject
+from core.websocket import CommandHandler, register_ws_command_handler
 
 logger = get_logger(__name__)
 
-SyncOperation = Operation[Any, Any]
 
-SYNC_OPERATIONS: dict[str, SyncOperation] = {
+SYNC_OPERATIONS: dict[str, RegisteredOperation] = {
     # channels
     "sync/channels/list_requested": Operation(
         canonical_type="sync/channels/list_requested",
@@ -359,7 +358,7 @@ SYNC_OPERATIONS: dict[str, SyncOperation] = {
 }
 
 
-def _make_ws_handler(op: SyncOperation):
+def _make_ws_handler(op: RegisteredOperation) -> CommandHandler:
     """Тонкая обвязка WS-handler'а: validate payload → call op.fn → dump result.
 
     `WsCommandError` пробрасываем как есть — `core.websocket.command_router`
@@ -367,11 +366,9 @@ def _make_ws_handler(op: SyncOperation):
     middleware/log/observer обработают.
     """
 
-    async def handler(payload: dict[str, Any], user: User) -> dict[str, Any] | None:
-        validated = parse_payload(op.payload_model, payload)
+    async def handler(payload: JsonObject, user: User) -> JsonObject | None:
         container = get_sync_container()
-        result = await op.fn(validated, user=user, container=container)
-        return dump_result(result)
+        return await op.run(payload, user=user, container=container)
 
     handler.__name__ = f"ws_handler_{op.canonical_type.replace('/', '_')}"
     return handler
@@ -381,10 +378,11 @@ def register_sync_ws_commands() -> None:
     """Зарегистрировать все sync command-handler'ы. Вызывать на on_startup."""
     for canonical_type, op in SYNC_OPERATIONS.items():
         if canonical_type != op.canonical_type:
-            raise ValueError(
+            message = (
                 f"SYNC_OPERATIONS key {canonical_type!r} != Operation.canonical_type "
-                f"{op.canonical_type!r}"
+                + f"{op.canonical_type!r}"
             )
+            raise ValueError(message)
         register_ws_command_handler(canonical_type, _make_ws_handler(op))
     logger.info(
         "Sync WS command-handlers зарегистрированы (%d операций)", len(SYNC_OPERATIONS)

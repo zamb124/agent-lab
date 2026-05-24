@@ -1,7 +1,6 @@
 """FastAPI entrypoint для scheduler control-plane."""
 
 from datetime import datetime, timezone
-from typing import Any
 
 from fastapi import FastAPI
 
@@ -11,10 +10,13 @@ from apps.crm.scheduled_task_constants import (
 )
 from apps.scheduler.api.v1 import api_v1_router
 from apps.scheduler.config import SchedulerSettings, get_scheduler_settings
-from apps.scheduler.container import get_scheduler_container
+from apps.scheduler.container import SchedulerContainer, get_scheduler_container
 from core.app import create_service_app
 from core.config.testing import is_testing
-from core.identity.system_bootstrap import ensure_system_company_exists
+from core.identity.system_bootstrap import (
+    as_system_bootstrap_container,
+    ensure_system_company_exists,
+)
 from core.logging import get_logger
 from core.scheduler.models import (
     PlatformScheduleCreateRequest,
@@ -22,6 +24,7 @@ from core.scheduler.models import (
     PlatformScheduleType,
     ScheduledTaskStatus,
 )
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -42,7 +45,7 @@ OPENROUTER_FREE_MODELS_SYNC_PAYLOAD_MARKER = "openrouter_free_models_background_
 
 async def _ensure_calendar_schedule(
     *,
-    container,
+    container: SchedulerContainer,
     config_enabled: bool,
     task_name: str,
     cron: str,
@@ -100,11 +103,11 @@ async def _ensure_calendar_schedule(
 
 async def _ensure_idle_interval_schedule(
     *,
-    container,
+    container: SchedulerContainer,
     config_enabled: bool,
     task_name: str,
     interval_seconds: int,
-    payload: dict[str, Any],
+    payload: JsonObject,
     log_label: str,
     run_now_on_start: bool = False,
 ) -> None:
@@ -176,7 +179,7 @@ async def _ensure_idle_interval_schedule(
                 task.schedule_id,
             )
     if run_now_on_start:
-        await container.scheduler_service.run_now(
+        _ = await container.scheduler_service.run_now(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=task.schedule_task_id,
         )
@@ -189,7 +192,7 @@ async def _ensure_idle_interval_schedule(
 
 async def _ensure_rag_ttl_cleanup_schedule(
     *,
-    container,
+    container: SchedulerContainer,
     config_enabled: bool,
     task_name: str,
     cron: str,
@@ -247,7 +250,7 @@ async def _ensure_rag_ttl_cleanup_schedule(
 
 async def _ensure_crm_cron_schedule(
     *,
-    container,
+    container: SchedulerContainer,
     config_enabled: bool,
     task_name: str,
     cron: str,
@@ -303,9 +306,10 @@ async def _ensure_crm_cron_schedule(
     )
 
 
-async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> None:
+async def on_startup(app: FastAPI, container: SchedulerContainer, settings: SchedulerSettings) -> None:
+    _ = app
     if not is_testing():
-        await ensure_system_company_exists(container)
+        _ = await ensure_system_company_exists(as_system_bootstrap_container(container))
     config = settings.calendar_sync
     await _ensure_calendar_schedule(
         container=container,
@@ -393,7 +397,9 @@ async def on_startup(app: FastAPI, container, settings: SchedulerSettings) -> No
     )
 
 
-async def on_shutdown(app: FastAPI, container) -> None:
+async def on_shutdown(app: FastAPI, container: SchedulerContainer) -> None:
+    _ = app
+    _ = container
     return None
 
 

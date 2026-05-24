@@ -12,7 +12,7 @@ from typing import Any
 
 from apps.flows.config import get_settings as flows_get_settings
 from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
+from apps.flows.src.models import TelegramTriggerConfig, TriggerConfig, TriggerStatus, TriggerType
 from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
 from apps.flows.src.triggers.executor import TriggerExecutor
 from apps.flows.src.triggers.handlers.base import (
@@ -73,8 +73,8 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         """
         self._log_register(flow_id, trigger.trigger_id)
 
-        config = trigger.config
-        bot_token = config.get("bot_token")
+        config = TelegramTriggerConfig.model_validate(trigger.config)
+        bot_token = config.bot_token
 
         if not bot_token:
             raise TriggerRegistrationError(
@@ -125,7 +125,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             "url": webhook_url,
             "secret_token": secret_token,
             "allowed_updates": allowed_updates,
-            "drop_pending_updates": config.get("drop_pending_updates", False),
+            "drop_pending_updates": config.drop_pending_updates,
         }
 
         async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.SMART) as client:
@@ -265,18 +265,9 @@ class TelegramTriggerHandler(BaseTriggerHandler):
     def normalize_allowed_updates(
         flow_id: str,
         trigger_id: str,
-        config: dict[str, Any],
+        config: TelegramTriggerConfig,
     ) -> list[str]:
-        raw = config.get("allowed_updates")
-        if raw is None:
-            return ["message"]
-        if not isinstance(raw, list):
-            raise TriggerRegistrationError(
-                trigger_type="telegram",
-                flow_id=flow_id,
-                trigger_id=trigger_id,
-                message="allowed_updates must be a list of strings",
-            )
+        raw = config.allowed_updates
         ordered: list[str] = []
         for item in raw:
             if not isinstance(item, str) or not item.strip():
@@ -314,7 +305,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         payload: dict[str, Any],
     ) -> None:
         """Валидирует Telegram Update (message или callback_query)."""
-        config = trigger.config
+        config = TelegramTriggerConfig.model_validate(trigger.config)
 
         cq = payload.get("callback_query")
         if isinstance(cq, dict) and cq:
@@ -333,15 +324,15 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             data = cq.get("data")
             data_str = data if isinstance(data, str) else ""
 
-            allowed_users = config.get("allowed_users", [])
+            allowed_users = config.allowed_users
             if allowed_users and user_id not in allowed_users:
                 raise TriggerValidationError(f"User {user_id} not allowed")
 
-            allowed_chats = config.get("allowed_chats", [])
+            allowed_chats = config.allowed_chats
             if allowed_chats and chat_id not in allowed_chats:
                 raise TriggerValidationError(f"Chat {chat_id} not allowed")
 
-            commands = config.get("commands", [])
+            commands = config.commands
             if commands:
                 matched = any(data_str.startswith(cmd) for cmd in commands)
                 if not matched:
@@ -364,15 +355,15 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         user_id = from_user.get("id")
         chat_id = chat.get("id")
 
-        allowed_users = config.get("allowed_users", [])
+        allowed_users = config.allowed_users
         if allowed_users and user_id not in allowed_users:
             raise TriggerValidationError(f"User {user_id} not allowed")
 
-        allowed_chats = config.get("allowed_chats", [])
+        allowed_chats = config.allowed_chats
         if allowed_chats and chat_id not in allowed_chats:
             raise TriggerValidationError(f"Chat {chat_id} not allowed")
 
-        commands = config.get("commands", [])
+        commands = config.commands
         if commands:
             matched = any(text.startswith(cmd) for cmd in commands)
             if not matched:

@@ -2,9 +2,9 @@
 Apple (Sign in with Apple) OAuth провайдер — веб-флоу authorization code.
 """
 
-import json
 import time
-from typing import Any
+from typing import cast as type_cast
+from typing import override
 from urllib.parse import urlencode
 
 import jwt
@@ -15,6 +15,7 @@ from core.http import request_public_oauth
 from core.identity.base_provider import BaseAuthProvider
 from core.logging import get_logger
 from core.models.identity_models import AuthProvider, ProviderUserInfo
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 APPLE_ISSUER = "https://appleid.apple.com"
@@ -24,11 +25,13 @@ DEFAULT_AUTH_URL = "https://appleid.apple.com/auth/authorize"
 DEFAULT_TOKEN_URL = "https://appleid.apple.com/auth/token"
 DEFAULT_SCOPE = "name email"
 
+
 def _normalize_apple_pem(raw: str) -> str:
     text = raw.strip().replace("\\n", "\n")
     if "BEGIN PRIVATE KEY" not in text:
         raise ValueError("apple_private_key должен быть PEM (BEGIN PRIVATE KEY)")
     return text
+
 
 def build_apple_client_secret(
     team_id: str,
@@ -48,44 +51,61 @@ def build_apple_client_secret(
     }
     return jwt.encode(payload, private_key_pem, algorithm="ES256", headers=headers)
 
-def decode_apple_id_token(id_token: str, audience: str) -> dict[str, Any]:
+
+def decode_apple_id_token(id_token: str, audience: str) -> JsonObject:
     jwks_client = PyJWKClient(APPLE_JWKS_URL)
     signing_key = jwks_client.get_signing_key_from_jwt(id_token)
-    decoded: dict[str, Any] = jwt.decode(
-        id_token,
-        signing_key.key,
-        algorithms=["RS256"],
-        audience=audience,
-        issuer=APPLE_ISSUER,
+    return require_json_object(
+        type_cast(
+            JsonValue,
+            jwt.decode(
+                id_token,
+                signing_key.key,
+                algorithms=["RS256"],
+                audience=audience,
+                issuer=APPLE_ISSUER,
+            ),
+        ),
+        "apple.id_token.claims",
     )
-    return decoded
+
 
 def _name_from_apple_user_json(user_json: str) -> str | None:
-    parsed = json.loads(user_json)
+    parsed = parse_json_object(user_json, "apple.user_json")
     name_obj = parsed.get("name")
-    if not isinstance(name_obj, dict):
+    if name_obj is None:
         return None
-    first = (name_obj.get("firstName") or "").strip()
-    last = (name_obj.get("lastName") or "").strip()
+    name_data = require_json_object(name_obj, "apple.user_json.name")
+    first_value = name_data.get("firstName")
+    if first_value is not None and not isinstance(first_value, str):
+        raise ValueError("Apple user_json.name.firstName must be a string")
+    last_value = name_data.get("lastName")
+    if last_value is not None and not isinstance(last_value, str):
+        raise ValueError("Apple user_json.name.lastName must be a string")
+    first = "" if first_value is None else first_value.strip()
+    last = "" if last_value is None else last_value.strip()
     combined = f"{first} {last}".strip()
     return combined if combined else None
+
 
 class AppleProvider(BaseAuthProvider):
     """Провайдер Sign in with Apple (OAuth 2.0, Services ID как client_id)."""
 
     def __init__(self, config: AuthProviderConfig):
         super().__init__(AuthProvider.APPLE, config)
-        if not self.auth_url:
-            self.auth_url = DEFAULT_AUTH_URL
-        if not self.token_url:
-            self.token_url = DEFAULT_TOKEN_URL
-        if not self.scope or self.scope == "openid profile email":
-            self.scope = DEFAULT_SCOPE
-        raw_key = config.apple_private_key or ""
-        self._private_key_pem = _normalize_apple_pem(raw_key) if raw_key.strip() else ""
-        self._team_id = config.apple_team_id or ""
-        self._key_id = config.apple_key_id or ""
+        self.auth_url: str = DEFAULT_AUTH_URL if not self.auth_url else self.auth_url
+        self.token_url: str = DEFAULT_TOKEN_URL if not self.token_url else self.token_url
+        self.scope: str = (
+            DEFAULT_SCOPE if not self.scope or self.scope == "openid profile email" else self.scope
+        )
+        raw_key = config.apple_private_key
+        self._private_key_pem: str | None = (
+            _normalize_apple_pem(raw_key) if raw_key is not None and raw_key.strip() else None
+        )
+        self._team_id: str | None = config.apple_team_id
+        self._key_id: str | None = config.apple_key_id
 
+    @override
     def validate_config(self) -> bool:
         if not self.config.enabled:
             logger.warning("Провайдер apple отключен")
@@ -103,7 +123,7 @@ class AppleProvider(BaseAuthProvider):
             logger.warning("apple_private_key не настроен для apple")
             return False
         try:
-            _normalize_apple_pem(self.config.apple_private_key)
+            _ = _normalize_apple_pem(self.config.apple_private_key)
         except ValueError as e:
             logger.warning("apple_private_key некорректен: %s", e)
             return False
@@ -112,7 +132,10 @@ class AppleProvider(BaseAuthProvider):
             return False
         return True
 
+    @override
     def get_authorization_url(self, state: str, redirect_uri: str) -> str:
+        if not self.client_id:
+            raise ValueError("client_id (Services ID) не настроен для apple")
         params = {
             "client_id": self.client_id,
             "redirect_uri": redirect_uri,
@@ -123,12 +146,19 @@ class AppleProvider(BaseAuthProvider):
         }
         return f"{self.auth_url}?{urlencode(params)}"
 
-    async def exchange_code_for_token(
-        self, code: str, redirect_uri: str
-    ) -> tuple[str, str | None]:
+    @override
+    async def exchange_code_for_token(self, code: str, redirect_uri: str) -> tuple[str, str | None]:
+        if not self.client_id:
+            raise ValueError("client_id (Services ID) не настроен для apple")
+        if not self._team_id:
+            raise ValueError("apple_team_id не настроен для apple")
+        if not self._key_id:
+            raise ValueError("apple_key_id не настроен для apple")
+        if not self._private_key_pem:
+            raise ValueError("apple_private_key не настроен для apple")
         client_secret = build_apple_client_secret(
             self._team_id,
-            self.client_id or "",
+            self.client_id,
             self._key_id,
             self._private_key_pem,
         )
@@ -149,47 +179,48 @@ class AppleProvider(BaseAuthProvider):
         if response.status_code != 200:
             logger.error("Ошибка токена Apple: %s", response.text)
             raise ValueError(f"Apple вернул ошибку: {response.status_code}")
-        token_data = response.json()
+        token_data = parse_json_object(response.content, "apple.token.response")
         id_token = token_data.get("id_token")
-        if not id_token:
+        if not isinstance(id_token, str) or not id_token:
             raise ValueError("Apple не вернул id_token")
         refresh_token = token_data.get("refresh_token")
+        if refresh_token is not None and not isinstance(refresh_token, str):
+            raise ValueError("Apple вернул refresh_token не строкой")
         return id_token, refresh_token
 
+    @override
     async def get_user_info(
         self,
         access_token: str,
         first_login_user_json: str | None = None,
     ) -> ProviderUserInfo:
-        claims = decode_apple_id_token(access_token, self.client_id or "")
+        if not self.client_id:
+            raise ValueError("client_id (Services ID) не настроен для apple")
+        claims = decode_apple_id_token(access_token, self.client_id)
         sub = claims.get("sub")
-        if not sub:
+        if not isinstance(sub, str) or not sub:
             raise ValueError("Apple id_token без sub")
 
-        email = claims.get("email")
-        if isinstance(email, str):
-            email = email.strip()
-        else:
-            email = ""
+        email_value = claims.get("email")
+        if not isinstance(email_value, str) or not email_value.strip():
+            raise ValueError("Apple id_token без email")
+        email = email_value.strip()
 
         name = ""
         if first_login_user_json:
-            try:
-                parsed_name = _name_from_apple_user_json(first_login_user_json)
-                if parsed_name:
-                    name = parsed_name
-            except json.JSONDecodeError:
-                logger.warning("Некорректный oauth_first_login_user_json от Apple")
+            parsed_name = _name_from_apple_user_json(first_login_user_json)
+            if parsed_name:
+                name = parsed_name
 
         if not name and email:
             name = email.split("@")[0]
         if not name:
-            name = str(sub)
+            name = sub
 
         return ProviderUserInfo(
-            provider_user_id=str(sub),
+            provider_user_id=sub,
             email=email,
             name=name,
             avatar_url=None,
-            raw_data=dict(claims),
+            raw_data=claims,
         )

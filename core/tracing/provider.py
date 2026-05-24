@@ -65,7 +65,7 @@ def setup_tracing(config: "TracingConfig") -> None:
     trace.set_tracer_provider(_tracer_provider)
     _initialized = True
     if not _shutdown_registered:
-        atexit.register(shutdown_tracing)
+        _ = atexit.register(shutdown_tracing)
         _shutdown_registered = True
     logger.info(f"Tracing initialized: service={config.service_name}, sampling={config.sampling_rate}")
 
@@ -81,11 +81,11 @@ def shutdown_tracing() -> None:
         return
 
     try:
-        provider.force_flush(timeout_millis=1000)
+        _ = provider.force_flush(timeout_millis=1000)
     except Exception:
         pass
     try:
-        provider.shutdown()
+        _ = provider.shutdown()
     except Exception:
         pass
 

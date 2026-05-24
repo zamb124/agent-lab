@@ -20,18 +20,25 @@ from core.billing.settlement_rules import (
     resolve_matched_rules,
     rule_matches_span,
 )
+from core.tracing.models import BillingSettlementSpan
+from core.types import JsonObject
 
 
-def _span(**kwargs: object) -> dict:
-    base = {
-        "span_id": "s1",
-        "operation_name": "flows.node.run",
-        "service_name": "flows",
-        "event_type": None,
-        "attributes": {},
-    }
-    base.update(kwargs)
-    return base
+def _span(
+    *,
+    operation_name: str = "flows.node.run",
+    service_name: str = "flows",
+    event_type: str | None = None,
+    attributes: JsonObject | None = None,
+) -> BillingSettlementSpan:
+    return BillingSettlementSpan(
+        span_id="s1",
+        trace_id="t1",
+        operation_name=operation_name,
+        service_name=service_name,
+        event_type=event_type,
+        attributes=attributes if attributes is not None else {},
+    )
 
 
 def test_parse_settlement_rules_json_minimal_document() -> None:
@@ -225,24 +232,25 @@ def test_rule_matches_attribute_keys_present() -> None:
     ) is True
 
 
-def test_rule_matches_span_attributes_not_dict_returns_false() -> None:
-    rule = SettlementRule(
-        rule_id="r1",
-        resource_name="llm:*",
-        usage_type="llm_request",
-        match=SettlementRuleMatch(attribute_equals={"a": 1}),
-    )
-    assert rule_matches_span(rule, _span(attributes="not-a-dict")) is False  # type: ignore[arg-type]
+def test_billing_settlement_span_rejects_non_object_attributes() -> None:
+    with pytest.raises(ValidationError):
+        BillingSettlementSpan(
+            span_id="s1",
+            trace_id="t1",
+            operation_name="x",
+            service_name="flows",
+            attributes="not-a-dict",
+        )
 
 
-def test_rule_matches_operation_name_not_string_prefix_fails() -> None:
-    rule = SettlementRule(
-        rule_id="r1",
-        resource_name="llm:*",
-        usage_type="llm_request",
-        match=SettlementRuleMatch(operation_name_prefix="x."),
-    )
-    assert rule_matches_span(rule, _span(operation_name=123)) is False  # type: ignore[arg-type]
+def test_billing_settlement_span_rejects_non_string_operation_name() -> None:
+    with pytest.raises(ValidationError):
+        BillingSettlementSpan(
+            span_id="s1",
+            trace_id="t1",
+            operation_name=123,
+            service_name="flows",
+        )
 
 
 def test_resolve_matched_rules_empty_rules() -> None:
@@ -453,7 +461,7 @@ def test_quantity_attr_missing_raises() -> None:
 
 
 def test_quantity_attr_not_int_raises() -> None:
-    with pytest.raises(ValueError, match="int()"):
+    with pytest.raises(ValueError, match="invalid literal"):
         quantity_from_span("attr:platform.x", _span(attributes={"platform.x": "nope"}))
 
 

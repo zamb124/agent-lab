@@ -9,6 +9,8 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
+from core.types import JsonObject, require_json_object
+
 
 class StrictBaseModel(BaseModel):
     """
@@ -65,6 +67,13 @@ class FlexibleBaseModel(BaseModel):
         use_enum_values=True,
         str_strip_whitespace=True,
     )
+
+    def json_extra(self) -> JsonObject:
+        """Вернуть extra-поля как строгий JSON object."""
+        extra = self.model_extra
+        if extra is None:
+            return {}
+        return require_json_object(extra, f"{type(self).__name__}.extra")
 
 
 __all__ = [

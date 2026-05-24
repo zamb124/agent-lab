@@ -9,7 +9,7 @@ import time
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
-from typing import Any, cast
+from typing import Protocol
 
 import httpx
 from a2a.types import (
@@ -51,17 +51,40 @@ from core.http.egress_route_preference import (
     normalized_http_origin,
 )
 from core.logging import get_logger
-from core.types import JsonValue, require_json_object
+from core.types import (
+    JsonArray,
+    JsonObject,
+    JsonValue,
+    parse_json_object,
+    parse_json_value,
+    require_json_array,
+    require_json_object,
+)
 from core.utils.background import run_with_log_context
 
 logger = get_logger(__name__)
 
 
+class LLMTransportClient(Protocol):
+    """Attribute contract consumed by the OpenAI-compatible transport."""
+
+    model: str
+    api_key: str
+    base_url: str
+    temperature: float
+    max_tokens: int | None
+    default_headers: dict[str, str]
+    timeout: float
+    llm_provider: str
+    llm_source: str
+    first_token_timeout: float
+
+
 async def stream_once(
-    client: Any,
+    client: LLMTransportClient,
     messages: list[Message],
-    tools: list[dict[str, Any]] | None = None,
-    response_format: dict[str, Any] | None = None,
+    tools: list[JsonObject] | None = None,
+    response_format: JsonObject | None = None,
     task_id: str | None = None,
     context_id: str | None = None,
     temperature: float | None = None,
@@ -72,7 +95,7 @@ async def stream_once(
     presence_penalty: float | None = None,
     seed: int | None = None,
     reasoning_effort: str | None = None,
-    extra_body: dict[str, Any] | None = None,
+    extra_body: JsonObject | None = None,
     extra_headers: dict[str, str] | None = None,
     stream_cancel_poll: Callable[[], Awaitable[bool]] | None = None,
 ) -> AsyncGenerator[StreamEvent, None]:
@@ -114,7 +137,7 @@ async def stream_once(
     request_temperature = temperature if temperature is not None else client.temperature
     request_max_tokens = max_tokens if max_tokens is not None else client.max_tokens
 
-    body: dict[str, Any] = {
+    body: JsonObject = {
         "model": client.model,
         "messages": openai_messages,
         "temperature": request_temperature,
@@ -172,8 +195,8 @@ async def stream_once(
 
     full_content = ""
     full_reasoning = ""
-    tool_calls_buffer: dict[int, dict[str, Any]] = {}
-    usage_data: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    tool_calls_buffer: dict[int, dict[str, str]] = {}
+    usage_data: JsonObject = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     stream_start_time = time.monotonic()
 
     async with get_httpx_client(timeout=client.timeout, strategy=ProxyStrategy.SMART) as http_client:
@@ -181,14 +204,12 @@ async def stream_once(
             async with http_client.stream(
                 "POST", f"{client.base_url}/chat/completions", headers=headers, json=body
             ) as http_response:
-                if http_response is None:
-                    raise RuntimeError("LLM HTTP stream did not return a response")
                 if http_response.status_code != 200:
                     # Для stream response пытаемся прочитать тело ошибки
                     error_text = f"HTTP {http_response.status_code}"
                     try:
                         # Читаем первые байты ответа для получения деталей ошибки
-                        error_chunks = []
+                        error_chunks: list[bytes] = []
                         async for chunk in http_response.aiter_bytes():
                             error_chunks.append(chunk)
                             if len(b"".join(error_chunks)) > 2000:  # Ограничиваем размер
@@ -198,7 +219,10 @@ async def stream_once(
                             # Пытаемся найти JSON в ответе
                             json_match = re.search(r"\{.*\}", full_error, re.DOTALL)
                             if json_match:
-                                error_json = json.loads(json_match.group())
+                                error_json = parse_json_object(
+                                    json_match.group(),
+                                    "llm.error_response",
+                                )
                                 error_text = json.dumps(
                                     error_json, indent=2, ensure_ascii=False
                                 )
@@ -221,18 +245,20 @@ async def stream_once(
                     )
                     # Логируем первые и последние сообщения для отладки
                     if openai_messages:
+                        first_content = openai_messages[0].get("content")
                         logger.error(
                             "llm.api_error.first_message",
                             role=openai_messages[0].get("role"),
-                            content_length=len(openai_messages[0].get("content", "")),
+                            content_length=len(first_content) if isinstance(first_content, str) else 0,
                         )
                         if len(openai_messages) > 1:
+                            last_content = openai_messages[-1].get("content")
                             logger.error(
                                 "llm.api_error.last_message",
                                 role=openai_messages[-1].get("role"),
-                                content_length=len(openai_messages[-1].get("content", "")),
+                                content_length=len(last_content) if isinstance(last_content, str) else 0,
                             )
-                    http_response.raise_for_status()
+                    _ = http_response.raise_for_status()
 
                 cancelled_evt = asyncio.Event()
                 idle_timeout_evt = asyncio.Event()
@@ -262,8 +288,7 @@ async def stream_once(
                             )
                             if idle_seconds >= idle_limit:
                                 logger.error(
-                                    "LLM stream idle timeout: %.1fs without data, "
-                                    "chunks_received=%d, model=%s",
+                                    "LLM stream idle timeout: %.1fs without data, chunks_received=%d, model=%s",
                                     idle_seconds,
                                     chunks_received,
                                     client.model,
@@ -292,8 +317,7 @@ async def stream_once(
                             chunks_received += 1
                             if inter_chunk_seconds > _INTER_CHUNK_WARN_SECONDS:
                                 logger.warning(
-                                    "LLM stream slow chunk: %.1fs gap before chunk #%d, "
-                                    "model=%s",
+                                    "LLM stream slow chunk: %.1fs gap before chunk #%d, model=%s",
                                     inter_chunk_seconds,
                                     chunks_received,
                                     client.model,
@@ -305,28 +329,46 @@ async def stream_once(
                             if sse_payload_text == "[DONE]":
                                 break
 
-                            chunk = json.loads(sse_payload_text)
+                            chunk = parse_json_object(
+                                sse_payload_text,
+                                "llm.stream.chunk",
+                            )
 
                             # Парсим usage из последнего chunk (stream_options: include_usage)
-                            if chunk.get("usage"):
+                            usage = chunk.get("usage")
+                            if usage is not None:
                                 _merge_openai_compatible_usage_into_usage_data(
-                                    chunk["usage"], usage_data
+                                    require_json_object(usage, "llm.stream.chunk.usage"),
+                                    usage_data,
                                 )
 
-                            if not chunk.get("choices"):
+                            choices = chunk.get("choices")
+                            if not isinstance(choices, list) or not choices:
                                 continue
 
-                            choice = chunk["choices"][0]
-                            delta = choice.get("delta", {}) or {}
+                            choice = require_json_object(
+                                choices[0],
+                                "llm.stream.chunk.choices[0]",
+                            )
+                            delta_raw = choice.get("delta")
+                            delta = (
+                                require_json_object(delta_raw, "llm.stream.chunk.choices[0].delta")
+                                if delta_raw is not None
+                                else {}
+                            )
 
                             # Некоторые шлюзы отдают весь текст только в message.content финального чанка (delta пустой).
-                            choice_message = choice.get("message")
-                            if isinstance(choice_message, dict):
+                            choice_message_raw = choice.get("message")
+                            if isinstance(choice_message_raw, dict):
+                                choice_message = require_json_object(
+                                    choice_message_raw,
+                                    "llm.stream.chunk.choices[0].message",
+                                )
                                 message_content = choice_message.get("content")
                                 if (
                                     isinstance(message_content, str)
                                     and message_content
-                                    and not delta.get("content")
+                                    and not isinstance(delta.get("content"), str)
                                     and not full_content
                                 ):
                                     full_content = message_content
@@ -349,8 +391,9 @@ async def stream_once(
                             ):
                                 logger.debug("llm.reasoning_delta", delta=delta)
 
-                            if delta.get("content"):
-                                text = delta["content"]
+                            content_delta = delta.get("content")
+                            if isinstance(content_delta, str) and content_delta:
+                                text = content_delta
                                 full_content += text
                                 yield TaskArtifactUpdateEvent(
                                     context_id=context_id,
@@ -369,16 +412,15 @@ async def stream_once(
                             # - delta.reasoning_content (альтернативный формат)
                             # - delta.content с type="reasoning" (некоторые провайдеры)
                             # - choice.delta.reasoning (OpenRouter может использовать другой формат)
-                            reasoning_text = None
-                            if delta.get("reasoning"):
-                                reasoning_text = delta["reasoning"]
-                            elif delta.get("reasoning_content"):
-                                reasoning_text = delta["reasoning_content"]
-                            elif delta.get("type") == "reasoning" and delta.get("content"):
-                                reasoning_text = delta["content"]
-                            # Проверяем также в самом choice (для некоторых провайдеров)
-                            if not reasoning_text and choice.get("delta", {}).get("reasoning"):
-                                reasoning_text = choice["delta"]["reasoning"]
+                            reasoning_text: str | None = None
+                            reasoning = delta.get("reasoning")
+                            reasoning_content = delta.get("reasoning_content")
+                            if isinstance(reasoning, str) and reasoning:
+                                reasoning_text = reasoning
+                            elif isinstance(reasoning_content, str) and reasoning_content:
+                                reasoning_text = reasoning_content
+                            elif delta.get("type") == "reasoning" and isinstance(content_delta, str):
+                                reasoning_text = content_delta
 
                             if reasoning_text:
                                 full_reasoning += reasoning_text
@@ -398,33 +440,58 @@ async def stream_once(
                                     last_chunk=False,
                                 )
 
-                            if delta.get("tool_calls"):
-                                for tool_call_delta in delta["tool_calls"]:
-                                    tool_call_index = tool_call_delta["index"]
+                            tool_calls_raw = delta.get("tool_calls")
+                            if tool_calls_raw is not None:
+                                tool_calls = require_json_array(
+                                    tool_calls_raw,
+                                    "llm.stream.chunk.choices[0].delta.tool_calls",
+                                )
+                                for tool_call_value in tool_calls:
+                                    tool_call_delta = require_json_object(
+                                        tool_call_value,
+                                        "llm.stream.chunk.choices[0].delta.tool_calls[]",
+                                    )
+                                    tool_call_index_raw = tool_call_delta.get("index")
+                                    if not isinstance(tool_call_index_raw, int) or isinstance(
+                                        tool_call_index_raw,
+                                        bool,
+                                    ):
+                                        raise ValueError("LLM tool_call.index must be an integer")
+                                    tool_call_index = tool_call_index_raw
                                     if tool_call_index not in tool_calls_buffer:
+                                        tool_call_id = tool_call_delta.get("id")
                                         tool_calls_buffer[tool_call_index] = {
-                                            "id": tool_call_delta.get("id", ""),
+                                            "id": tool_call_id if isinstance(tool_call_id, str) else "",
                                             "name": "",
                                             "arguments": "",
                                         }
-                                    if tool_call_delta.get("id"):
-                                        tool_calls_buffer[tool_call_index]["id"] = tool_call_delta[
-                                            "id"
-                                        ]
-                                    if tool_call_delta.get("function"):
-                                        function_delta = tool_call_delta["function"]
-                                        if function_delta.get("name"):
+                                    tool_call_id = tool_call_delta.get("id")
+                                    if isinstance(tool_call_id, str) and tool_call_id:
+                                        tool_calls_buffer[tool_call_index]["id"] = tool_call_id
+                                    function_delta_raw = tool_call_delta.get("function")
+                                    if isinstance(function_delta_raw, dict):
+                                        function_delta = require_json_object(
+                                            function_delta_raw,
+                                            "llm.stream.chunk.choices[0].delta.tool_calls[].function",
+                                        )
+                                        function_name = function_delta.get("name")
+                                        if isinstance(function_name, str) and function_name:
                                             tool_calls_buffer[tool_call_index]["name"] = (
-                                                function_delta["name"]
+                                                function_name
                                             )
-                                        if function_delta.get("arguments"):
+                                        function_arguments = function_delta.get("arguments")
+                                        if (
+                                            isinstance(function_arguments, str)
+                                            and function_arguments
+                                        ):
                                             tool_calls_buffer[tool_call_index]["arguments"] += (
-                                                function_delta["arguments"]
+                                                function_arguments
                                             )
                     except (
                         httpx.HTTPError,
                         OSError,
                         json.JSONDecodeError,
+                        ValueError,
                     ) as exc:
                         if cancelled_evt.is_set():
                             raise LLMStreamUserCancelledError() from exc
@@ -457,10 +524,9 @@ async def stream_once(
                             ) from exc
                         raise
                 finally:
-                    if idle_watch_task is not None:
-                        idle_watch_task.cancel()
-                        with suppress(asyncio.CancelledError, RuntimeError):
-                            await idle_watch_task
+                    _ = idle_watch_task.cancel()
+                    with suppress(asyncio.CancelledError, RuntimeError):
+                        await idle_watch_task
         except httpx.HTTPStatusError as exc:
             logger.error(
                 "llm.api_http_error",
@@ -474,17 +540,18 @@ async def stream_once(
         parsed_tool_calls: list[LLMToolCall] = []
         for tool_call_index in sorted(tool_calls_buffer.keys()):
             tool_call_buffer_entry = tool_calls_buffer[tool_call_index]
-            try:
-                parsed_arguments = (
-                    cast(JsonValue, json.loads(tool_call_buffer_entry["arguments"]))
-                    if tool_call_buffer_entry["arguments"]
-                    else {}
-                )
-            except json.JSONDecodeError as exc:
-                raise ValueError(
-                    "LLM tool call arguments must be valid JSON: "
-                    f"{tool_call_buffer_entry['name']}"
-                ) from exc
+            if tool_call_buffer_entry["arguments"]:
+                try:
+                    parsed_arguments: JsonValue = parse_json_value(
+                        tool_call_buffer_entry["arguments"],
+                        f"llm.tool_calls[{tool_call_index}].arguments",
+                    )
+                except ValueError as exc:
+                    raise ValueError(
+                        f"LLM tool call arguments must be valid JSON: {tool_call_buffer_entry['name']}"
+                    ) from exc
+            else:
+                parsed_arguments = {}
             tool_call_arguments = require_json_object(
                 parsed_arguments,
                 f"llm.tool_calls[{tool_call_index}].arguments",
@@ -502,15 +569,19 @@ async def stream_once(
                 )
             )
 
+        tool_call_payloads: JsonArray = [
+            require_json_object(
+                tool_call.model_dump(mode="json", exclude_none=True),
+                "llm.tool_calls[]",
+            )
+            for tool_call in parsed_tool_calls
+        ]
         message = Message(
             message_id=str(uuid.uuid4()),
             role=Role.agent,
             parts=[Part(root=TextPart(text=full_content))],
             metadata={
-                "tool_calls": [
-                    tool_call.model_dump(mode="json", exclude_none=True)
-                    for tool_call in parsed_tool_calls
-                ],
+                "tool_calls": tool_call_payloads,
                 "usage": usage_data,
                 "model": client.model,
                 "provider": client.llm_provider,
@@ -561,7 +632,16 @@ async def stream_once(
         url=f"{client.base_url}/chat/completions",
         content=full_content,
         reasoning=full_reasoning if full_reasoning else None,
-        tool_calls=list(tool_calls_buffer.values()) if tool_calls_buffer else None,
+        tool_calls=[
+            {
+                "id": entry["id"],
+                "name": entry["name"],
+                "arguments": entry["arguments"],
+            }
+            for entry in tool_calls_buffer.values()
+        ]
+        if tool_calls_buffer
+        else None,
         usage=usage_data,
         provider=client.llm_provider,
         model=client.model,
@@ -571,13 +651,13 @@ async def stream_once(
 
 
 async def invoke_once(
-    client: Any,
+    client: LLMTransportClient,
     messages: list[Message],
     json_output: bool = False,
     max_tokens: int | None = None,
-    extra_body: dict[str, Any] | None = None,
+    extra_body: JsonObject | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> str | dict[str, Any]:
+) -> str | JsonObject:
     """
     Non-streaming вызов LLM.
 
@@ -603,7 +683,7 @@ async def invoke_once(
     if extra_headers:
         headers.update(extra_headers)
 
-    body: dict[str, Any] = {
+    body: JsonObject = {
         "model": client.model,
         "messages": openai_messages,
         "temperature": client.temperature,
@@ -648,12 +728,21 @@ async def invoke_once(
                 status_code=http_response.status_code,
                 error_text=error_text,
             )
-            http_response.raise_for_status()
+            _ = http_response.raise_for_status()
 
-        response_payload = http_response.json()
+        response_payload = parse_json_object(http_response.content, "llm.invoke.response")
         logger.info("llm.invoke_response", llm_response=_pretty_json(response_payload))
 
-    content = response_payload["choices"][0]["message"]["content"]
+    choices = require_json_array(response_payload.get("choices"), "llm.invoke.response.choices")
+    if not choices:
+        raise ValueError("LLM invoke response must contain at least one choice")
+    choice = require_json_object(choices[0], "llm.invoke.response.choices[0]")
+    response_message = require_json_object(
+        choice.get("message"),
+        "llm.invoke.response.choices[0].message",
+    )
+    content_raw = response_message.get("content")
+    content = content_raw if isinstance(content_raw, str) else ""
 
     logger.info(
         "llm.invoke_complete",
@@ -661,7 +750,10 @@ async def invoke_once(
     )
 
     if json_output and content:
-        return json.loads(content)
+        return require_json_object(
+            parse_json_value(content, "llm.invoke.response.content"),
+            "llm.invoke.response.content",
+        )
 
     return content or ""
 

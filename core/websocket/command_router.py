@@ -28,16 +28,20 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TypeVar
+
+from pydantic import BaseModel, ValidationError
 
 from core.logging import get_logger
 from core.models.identity_models import User
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 
 
 _REQUESTED_SUFFIX = "_requested"
 _EVENT_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\/[a-z][a-z0-9_]*){2,}$")
+PayloadModelT = TypeVar("PayloadModelT", bound=BaseModel)
 
 
 class WsCommandError(Exception):
@@ -45,33 +49,37 @@ class WsCommandError(Exception):
 
     def __init__(self, code: str, detail: str) -> None:
         super().__init__(detail)
-        if not isinstance(code, str) or not code:
+        if not code:
             raise ValueError("WsCommandError.code must be non-empty string")
-        if not isinstance(detail, str) or not detail:
+        if not detail:
             raise ValueError("WsCommandError.detail must be non-empty string")
-        self.code = code
-        self.detail = detail
+        self.code: str = code
+        self.detail: str = detail
 
 
-CommandHandler = Callable[[dict[str, Any], User], Awaitable[dict[str, Any] | None]]
+CommandHandler = Callable[[JsonObject, User], Awaitable[JsonObject | None]]
 
 
 _handlers: dict[str, CommandHandler] = {}
 
 
 def _validate_command_type(command_type: str) -> None:
-    if not isinstance(command_type, str) or not command_type:
+    if not command_type:
         raise ValueError("WS command type must be non-empty string")
     if not _EVENT_TYPE_PATTERN.match(command_type):
-        raise ValueError(
-            f'WS command type "{command_type}" violates contract. '
-            "Expected scope/entity/verb (lowercase, snake_case, >= 3 segments)."
+        message = (
+            f'WS command type "{command_type}" violates contract. Expected scope/entity/verb '
+            +
+            "(lowercase, snake_case, >= 3 segments)."
         )
+        raise ValueError(message)
     if not command_type.endswith(_REQUESTED_SUFFIX):
-        raise ValueError(
+        message = (
             f'WS command type "{command_type}" must end with "_requested" '
+            +
             "(reply types are derived as *_succeeded / *_failed)."
         )
+        raise ValueError(message)
 
 
 def register_ws_command_handler(command_type: str, handler: CommandHandler) -> None:
@@ -83,8 +91,6 @@ def register_ws_command_handler(command_type: str, handler: CommandHandler) -> N
     ошибка — `raise WsCommandError(code, detail)`.
     """
     _validate_command_type(command_type)
-    if not callable(handler):
-        raise TypeError(f"register_ws_command_handler({command_type}): handler must be callable")
     if command_type in _handlers:
         raise ValueError(f"WS command handler for {command_type!r} already registered")
     _handlers[command_type] = handler
@@ -112,15 +118,28 @@ def derive_failed_type(command_type: str) -> str:
     return command_type[: -len(_REQUESTED_SUFFIX)] + "_failed"
 
 
-def _reset_handlers_for_tests() -> None:
-    _handlers.clear()
+def validate_ws_payload(model: type[PayloadModelT], payload: JsonObject) -> PayloadModelT:
+    """Проверить WS payload на Pydantic-модели владельца команды."""
+    try:
+        return model.model_validate(payload)
+    except ValidationError as exc:
+        raise WsCommandError("ws_invalid_payload", str(exc)) from exc
+
+
+def dump_ws_result(result: BaseModel | JsonValue | None) -> JsonObject | None:
+    """Сериализовать результат WS-команды в JSON object транспортного payload."""
+    if result is None:
+        return None
+    if isinstance(result, BaseModel):
+        return parse_json_object(result.model_dump_json(), type(result).__name__)
+    return require_json_object(result, "WS command result")
 
 
 async def dispatch_ws_command(
     command_type: str,
-    payload: Any,
+    payload: JsonValue | None,
     user: User,
-) -> tuple[str, dict[str, Any] | None]:
+) -> tuple[str, JsonObject | None]:
     """
     Выполнить command-handler. Возвращает кортеж `(reply_type, reply_payload)`.
 
@@ -132,22 +151,22 @@ async def dispatch_ws_command(
     handler = get_ws_command_handler(command_type)
     if handler is None:
         raise WsCommandError("ws_handler_not_found", f"No WS command handler for {command_type!r}")
-    if not isinstance(payload, dict) and payload is not None:
-        raise WsCommandError(
-            "ws_invalid_payload",
-            f"WS command {command_type!r} payload must be object|null, got {type(payload).__name__}",
-        )
-    payload_dict: dict[str, Any] = payload if isinstance(payload, dict) else {}
+    if payload is None:
+        payload_dict: JsonObject = {}
+    else:
+        try:
+            payload_dict = require_json_object(payload, f"WS command {command_type!r} payload")
+        except ValueError as exc:
+            raise WsCommandError(
+                "ws_invalid_payload",
+                f"WS command {command_type!r} payload must be object|null",
+            ) from exc
     try:
         result = await handler(payload_dict, user)
     except WsCommandError as err:
+        failed_payload: JsonObject = {"error_code": err.code, "error_detail": err.detail}
         return (
             derive_failed_type(command_type),
-            {"error_code": err.code, "error_detail": err.detail},
-        )
-    if result is not None and not isinstance(result, dict):
-        raise WsCommandError(
-            "ws_invalid_result",
-            f"WS command {command_type!r} handler returned {type(result).__name__}, expected dict|None",
+            failed_payload,
         )
     return (derive_succeeded_type(command_type), result)

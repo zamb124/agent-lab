@@ -35,13 +35,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Generic, Literal, TypeVar
+from typing import Generic, Literal, Protocol, TypeVar
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, Field, ValidationError
 
 from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
@@ -54,7 +54,12 @@ from apps.sync.models.calls import (
     CallLinkPatch,
     CallLinkRead,
     CallRead,
+    CallsAcceptPayload,
     CallScheduledLinkRead,
+    CallsDeclinePayload,
+    CallsHangupPayload,
+    CallsInvitePayload,
+    CallsSignalPayload,
     GuestJoinRequest,
     JoinResponse,
 )
@@ -81,11 +86,12 @@ from apps.sync.models.messages import (
     MessageEdit,
     MessageRead,
     MessageStatus,
+    ReactionEntry,
 )
 from apps.sync.models.threads import ThreadCreate, ThreadRead, ThreadRow
 from apps.sync.realtime.broker import broker as sync_worker_broker
 from apps.sync.realtime.call_handlers import (
-    _call_read_from_entities,
+    call_read_from_entities,
     handle_call_accept,
     handle_call_decline,
     handle_call_hangup,
@@ -113,21 +119,21 @@ from apps.sync.realtime.events import (
     event_thread_created,
 )
 from apps.sync.realtime.handlers import (
-    _build_livekit_recording_client,
-    _channel_read_entity,
-    _channel_recipient_user_ids,
-    _create_channel,
-    _create_thread,
-    _maybe_start_speech_to_chat_poll,
-    _message_read_from_db,
-    _normalize_s3_egress_endpoint,
-    _send_message,
-    _set_audio_transcription_state,
-    _set_video_transcription_state,
-    _stop_and_finalize_recording,
-    _update_channel,
-    _upsert_git_resource,
+    build_livekit_recording_client,
+    channel_read_entity,
+    channel_recipient_user_ids,
+    create_channel,
+    create_thread,
+    maybe_start_speech_to_chat_poll,
+    message_read_from_db,
+    normalize_s3_egress_endpoint,
+    send_message,
     send_message_with_side_effects,
+    set_audio_transcription_state,
+    set_video_transcription_state,
+    stop_and_finalize_recording,
+    update_channel,
+    upsert_git_resource,
 )
 from apps.sync.realtime.publish_events import publish_realtime_events
 from apps.sync.realtime.task_names import (
@@ -137,73 +143,98 @@ from apps.sync.realtime.task_names import (
 )
 from apps.sync.ws_presence import batch_peer_presence
 from core.calls.livekit_client import LiveKitClient
-from core.calls.models import SignalType, TurnCredentials
+from core.calls.models import TurnCredentials
 from core.calls.turn import generate_turn_credentials
-from core.config import get_settings
+from core.config import BaseSettings, get_settings
 from core.files.models import AudioTranscriptionStatus, FileRecord
 from core.logging import get_logger
 from core.models.identity_models import User
 from core.tasks.kicker import kiq_task_name_with_context
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
 PayloadT = TypeVar("PayloadT", bound=BaseModel)
-ResultT = TypeVar("ResultT", bound=BaseModel)
+OperationPayloadT = TypeVar("OperationPayloadT", bound=BaseModel, contravariant=True)
 
 
-OperationFn = Callable[..., Awaitable[Any]]
+class OperationFn(Protocol[OperationPayloadT]):
+    def __call__(
+        self,
+        payload: OperationPayloadT,
+        /,
+        *,
+        user: User,
+        container: SyncContainer,
+    ) -> Awaitable[BaseModel | JsonValue | None]: ...
+
+
+class RegisteredOperation(Protocol):
+    @property
+    def canonical_type(self) -> str: ...
+
+    @property
+    def payload_model(self) -> type[BaseModel]: ...
+
+    async def run(
+        self,
+        payload: JsonObject,
+        *,
+        user: User,
+        container: SyncContainer,
+    ) -> JsonObject | None: ...
 
 
 @dataclass(frozen=True)
-class Operation(Generic[PayloadT, ResultT]):
+class Operation(Generic[PayloadT]):
     """Описание операции: payload-модель + бизнес-функция.
 
     `fn` обязана иметь сигнатуру:
         async def fn(payload: PayloadT, *, user: User, container: SyncContainer)
-            -> ResultT | None
+            -> BaseModel | JsonValue | None
     """
 
     canonical_type: str
     payload_model: type[PayloadT]
-    fn: OperationFn
-    result_model: type[ResultT] | None = None
+    fn: OperationFn[PayloadT]
+    result_model: type[BaseModel] | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.canonical_type, str) or not self.canonical_type:
+        if not self.canonical_type:
             raise ValueError("Operation.canonical_type must be non-empty string")
         if not self.canonical_type.endswith("_requested"):
             raise ValueError(
                 f"Operation.canonical_type {self.canonical_type!r} must end with '_requested'"
             )
-        if not isinstance(self.payload_model, type) or not issubclass(self.payload_model, BaseModel):
-            raise ValueError(
-                f"Operation.payload_model for {self.canonical_type!r} must be a Pydantic BaseModel subclass"
-            )
-        if not callable(self.fn):
-            raise ValueError(f"Operation.fn for {self.canonical_type!r} must be callable")
+
+    async def run(
+        self,
+        payload: JsonObject,
+        *,
+        user: User,
+        container: SyncContainer,
+    ) -> JsonObject | None:
+        validated = parse_payload(self.payload_model, payload)
+        operation_result = await self.fn(validated, user=user, container=container)
+        return dump_result(operation_result)
 
 
-def parse_payload(model: type[PayloadT], raw: Any) -> PayloadT:
+def parse_payload(model: type[PayloadT], raw: JsonObject) -> PayloadT:
     """Валидация входа через Pydantic. ValidationError → WsCommandError."""
     try:
-        return model.model_validate(raw if raw is not None else {})
+        return model.model_validate(raw)
     except ValidationError as exc:
         raise WsCommandError("ws_invalid_payload", str(exc)) from exc
 
 
-def dump_result(result: Any) -> dict[str, Any] | None:
+def dump_result(result: BaseModel | JsonValue | None) -> JsonObject | None:
     """Привести результат операции к JSON-словарю или None."""
     if result is None:
         return None
     if isinstance(result, BaseModel):
-        return result.model_dump(mode="json")
-    if isinstance(result, dict):
-        return result
-    raise WsCommandError(
-        "ws_invalid_result",
-        f"Operation result must be Pydantic model | dict | None, got {type(result).__name__}",
-    )
+        return parse_json_object(result.model_dump_json(), type(result).__name__)
+    return require_json_object(result, "Sync operation result")
 
 
 def _recording_status(value: str) -> RecordingStatus:
@@ -268,11 +299,9 @@ def _decode_message_cursor(cursor: str) -> tuple[datetime, str]:
     padded = cursor + ("=" * ((4 - len(cursor) % 4) % 4))
     try:
         raw = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
-        payload = json.loads(raw)
+        payload = parse_json_object(raw, "message cursor")
     except (ValueError, UnicodeDecodeError) as exc:
         raise WsCommandError("ws_invalid_cursor", "cursor must be base64url(JSON)") from exc
-    if not isinstance(payload, dict):
-        raise WsCommandError("ws_invalid_cursor", "cursor payload must be object")
     sent_at_raw = payload.get("sent_at")
     message_id = payload.get("message_id")
     if not isinstance(sent_at_raw, str) or not sent_at_raw:
@@ -404,7 +433,7 @@ async def op_channels_create(
     container: SyncContainer,
 ) -> ChannelRead:
     company_id = resolve_company_id(user)
-    channel, created_new = await _create_channel(
+    channel, created_new = await create_channel(
         payload,
         actor_user_id=user.user_id,
         company_id=company_id,
@@ -413,7 +442,7 @@ async def op_channels_create(
         user_repository=container.user_repository,
     )
     if created_new:
-        recipients = await _channel_recipient_user_ids(
+        recipients = await channel_recipient_user_ids(
             container.channel_repository, channel.channel_id, company_id
         )
         await publish_realtime_events(
@@ -433,7 +462,7 @@ async def op_channels_update(
     container: SyncContainer,
 ) -> ChannelRead:
     company_id = resolve_company_id(user)
-    return await _update_channel(
+    return await update_channel(
         payload.channel_id,
         payload.body,
         actor_user_id=user.user_id,
@@ -461,7 +490,7 @@ async def op_channels_mark_read(
     await container.channel_repository.set_member_last_read_at(
         payload.channel_id, user.user_id, read_at, company_id=company_id
     )
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.channel_id, company_id
     )
     await publish_realtime_events(
@@ -505,7 +534,7 @@ async def op_channels_typing(
     user_brief = UserBrief(
         user_id=user.user_id, display_name=user_obj.name, avatar_url=user_obj.avatar_url
     )
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.channel_id, company_id
     )
     await publish_realtime_events(
@@ -687,7 +716,7 @@ async def op_threads_create(
     container: SyncContainer,
 ) -> ThreadRead:
     company_id = resolve_company_id(user)
-    thread = await _create_thread(
+    thread = await create_thread(
         payload.body,
         actor_user_id=user.user_id,
         company_id=company_id,
@@ -695,7 +724,7 @@ async def op_threads_create(
         messages=container.message_repository,
         user_repository=container.user_repository,
     )
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, thread.channel_id, company_id
     )
     await publish_realtime_events(
@@ -881,7 +910,7 @@ async def op_messages_mark_read(
     container: SyncContainer,
 ) -> None:
     company_id = resolve_company_id(user)
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.channel_id, company_id
     )
     await publish_realtime_events(
@@ -926,10 +955,10 @@ async def op_messages_edit(
     m2 = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
     if m2 is None:
         raise WsCommandError("internal", "Сообщение пропало после редактирования.")
-    read = await _message_read_from_db(
+    read = await message_read_from_db(
         m2, container.message_repository, container.user_repository
     )
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.channel_id, company_id
     )
     await publish_realtime_events(
@@ -966,7 +995,7 @@ async def op_messages_delete(
     now = datetime.now(tz=UTC)
     await container.message_repository.soft_delete_message(payload.message_id, now)
     ch = await container.channel_repository.get(payload.channel_id)
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.channel_id, company_id
     )
     events: list[RealtimeEvent] = [
@@ -978,7 +1007,7 @@ async def op_messages_delete(
         ),
     ]
     if ch is not None:
-        pids = list(ch.pinned_message_ids) if isinstance(ch.pinned_message_ids, list) else []
+        pids = list(ch.pinned_message_ids)
         if payload.message_id in pids:
             new_pids = [x for x in pids if x != payload.message_id]
             await container.channel_repository.set_pinned_message_ids(
@@ -988,7 +1017,7 @@ async def op_messages_delete(
             if ch2 is not None:
                 events.append(
                     event_channel_pins_changed(
-                        _channel_read_entity(ch2),
+                        channel_read_entity(ch2),
                         company_id=company_id,
                         recipient_user_ids=recipients,
                     ),
@@ -1038,7 +1067,7 @@ async def op_messages_forward(
     fwd_label = (
         raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() != "" else None
     )
-    new_read = await _send_message(
+    new_read = await send_message(
         payload.to_channel_id,
         body,
         actor_user_id=user.user_id,
@@ -1048,7 +1077,7 @@ async def op_messages_forward(
         forwarded_from_channel_id=payload.from_channel_id,
         forwarded_from_channel_name=fwd_label,
     )
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.to_channel_id, company_id
     )
     await publish_realtime_events(
@@ -1062,20 +1091,20 @@ async def op_messages_forward(
 
 
 def _apply_reaction_json(
-    reactions_raw: object,
+    reactions_raw: list[JsonObject],
     actor_user_id: str,
     emoji: str | None,
     now: datetime,
-) -> list[dict[str, Any]]:
-    reactions: list[object] = reactions_raw if isinstance(reactions_raw, list) else []
-    filtered: list[dict[str, Any]] = []
-    for r in reactions:
-        if isinstance(r, dict) and r.get("user_id") != actor_user_id:
-            filtered.append(r)
+) -> list[ReactionEntry]:
+    filtered: list[ReactionEntry] = []
+    for reaction_payload in reactions_raw:
+        reaction = ReactionEntry.model_validate(reaction_payload)
+        if reaction.user_id != actor_user_id:
+            filtered.append(reaction)
     if emoji is None:
         return filtered
     filtered.append(
-        {"user_id": actor_user_id, "emoji": emoji, "created_at": now.isoformat()}
+        ReactionEntry(user_id=actor_user_id, emoji=emoji, created_at=now)
     )
     return filtered
 
@@ -1104,10 +1133,10 @@ async def op_messages_react(
     m2 = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
     if m2 is None:
         raise WsCommandError("internal", "Сообщение пропало после реакции.")
-    read = await _message_read_from_db(
+    read = await message_read_from_db(
         m2, container.message_repository, container.user_repository
     )
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.channel_id, company_id
     )
     await publish_realtime_events(
@@ -1151,7 +1180,7 @@ async def op_messages_pin(
     ch = await container.channel_repository.get(payload.channel_id)
     if ch is None:
         raise WsCommandError("not_found", "Канал не найден.")
-    pids = list(ch.pinned_message_ids) if isinstance(ch.pinned_message_ids, list) else []
+    pids = list(ch.pinned_message_ids)
     if payload.action == "add":
         if payload.message_id not in pids:
             pids.insert(0, payload.message_id)
@@ -1163,8 +1192,8 @@ async def op_messages_pin(
     ch2 = await container.channel_repository.get(payload.channel_id)
     if ch2 is None:
         raise WsCommandError("internal", "Канал пропал после обновления.")
-    cr = _channel_read_entity(ch2)
-    recipients = await _channel_recipient_user_ids(
+    cr = channel_read_entity(ch2)
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.channel_id, company_id
     )
     await publish_realtime_events(
@@ -1204,7 +1233,7 @@ async def op_messages_transcribe_audio(
         )
         for row in source_rows
     ]
-    processing_contents = _set_audio_transcription_state(
+    processing_contents = set_audio_transcription_state(
         source_contents,
         status=AudioTranscriptionStatus.PROCESSING,
         transcription_text=None,
@@ -1219,10 +1248,10 @@ async def op_messages_transcribe_audio(
     )
     if updated_entity is None:
         raise WsCommandError("internal", "Сообщение пропало после запуска расшифровки.")
-    updated_read = await _message_read_from_db(
+    updated_read = await message_read_from_db(
         updated_entity, container.message_repository, container.user_repository
     )
-    await kiq_task_name_with_context(
+    _ = await kiq_task_name_with_context(
         SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
         sync_worker_broker,
         channel_id=payload.channel_id,
@@ -1231,7 +1260,7 @@ async def op_messages_transcribe_audio(
         actor_user_id=user.user_id,
         background_kind="sync_transcribe",
     )
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.channel_id, company_id
     )
     await publish_realtime_events(
@@ -1271,7 +1300,7 @@ async def op_messages_transcribe_video(
         )
         for row in source_rows
     ]
-    processing_contents = _set_video_transcription_state(
+    processing_contents = set_video_transcription_state(
         source_contents,
         status=AudioTranscriptionStatus.PROCESSING,
         transcription_text=None,
@@ -1286,10 +1315,10 @@ async def op_messages_transcribe_video(
     )
     if updated_entity is None:
         raise WsCommandError("internal", "Сообщение пропало после запуска расшифровки.")
-    updated_read = await _message_read_from_db(
+    updated_read = await message_read_from_db(
         updated_entity, container.message_repository, container.user_repository
     )
-    await kiq_task_name_with_context(
+    _ = await kiq_task_name_with_context(
         SYNC_TRANSCRIBE_VIDEO_MESSAGE_TASK_NAME,
         sync_worker_broker,
         channel_id=payload.channel_id,
@@ -1298,7 +1327,7 @@ async def op_messages_transcribe_video(
         actor_user_id=user.user_id,
         background_kind="sync_transcribe",
     )
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, payload.channel_id, company_id
     )
     await publish_realtime_events(
@@ -1325,7 +1354,7 @@ async def op_messages_transcribe_call(
     call = await container.call_repository.get_call(payload.call_id, company_id)
     if call.channel_id != payload.channel_id:
         raise WsCommandError("forbidden", "call_id не относится к этому каналу.")
-    await kiq_task_name_with_context(
+    _ = await kiq_task_name_with_context(
         SYNC_AGGREGATE_CALL_TRANSCRIPT_TASK_NAME,
         sync_worker_broker,
         channel_id=payload.channel_id,
@@ -1357,7 +1386,7 @@ async def op_git_resources_upsert(
     container: SyncContainer,
 ) -> GitResourceRefRead:
     company_id = resolve_company_id(user)
-    ref = await _upsert_git_resource(
+    ref = await upsert_git_resource(
         payload.body, company_id=company_id, git_refs=container.git_resource_ref_repository
     )
     await publish_realtime_events([event_git_resource_upserted(ref, company_id=company_id)])
@@ -1390,31 +1419,6 @@ async def op_git_resources_get(
 # ===========================================================================
 
 
-# Минимальный shim для совместимости с handle_call_invite/accept/decline/hangup
-# (они принимают объект с полями actor_user_id / company_id / payload).
-@dataclass(frozen=True)
-class _CallCmdShim:
-    actor_user_id: str
-    company_id: str
-    payload: dict[str, Any]
-
-
-class CallsInvitePayload(BaseModel):
-    channel_id: str = Field(min_length=1)
-
-
-class CallsAcceptPayload(BaseModel):
-    call_id: str = Field(min_length=1)
-
-
-class CallsDeclinePayload(BaseModel):
-    call_id: str = Field(min_length=1)
-
-
-class CallsHangupPayload(BaseModel):
-    call_id: str = Field(min_length=1)
-
-
 class CallsRecordingStartPayload(BaseModel):
     call_id: str = Field(min_length=1)
 
@@ -1426,13 +1430,6 @@ class CallsRecordingStopPayload(BaseModel):
 class CallsAdminTransferPayload(BaseModel):
     call_id: str = Field(min_length=1)
     target_user_id: str = Field(min_length=1)
-
-
-class CallsSignalPayload(BaseModel):
-    call_id: str = Field(min_length=1)
-    target_user_id: str = Field(min_length=1)
-    signal_type: SignalType
-    data: dict[str, Any]
 
 
 async def _post_call_boundary_message_op(
@@ -1468,7 +1465,7 @@ async def _post_call_boundary_message_op(
         mentioned_user_ids=None,
         call_id=call_id,
     )
-    return await _send_message(
+    return await send_message(
         channel_id,
         body,
         actor_user_id=sender_user_id,
@@ -1485,13 +1482,10 @@ async def op_calls_invite(
     container: SyncContainer,
 ) -> CallRead:
     company_id = resolve_company_id(user)
-    cmd = _CallCmdShim(
+    out, evs = await handle_call_invite(
+        payload,
         actor_user_id=user.user_id,
         company_id=company_id,
-        payload=payload.model_dump(),
-    )
-    out, evs = await handle_call_invite(
-        cmd,
         calls=container.call_repository,
         channels=container.channel_repository,
         user_repository=container.user_repository,
@@ -1516,7 +1510,7 @@ async def op_calls_invite(
         now = datetime.now(UTC)
         await container.call_repository.update_call_status(out.call_id, "active", started_at=now)
         solo_call = await container.call_repository.get_call(out.call_id, company_id)
-        await _maybe_start_speech_to_chat_poll(
+        await maybe_start_speech_to_chat_poll(
             call_id=solo_call.call_id,
             company_id=company_id,
             channel_id=solo_call.channel_id,
@@ -1534,16 +1528,15 @@ async def op_calls_accept(
     container: SyncContainer,
 ) -> CallRead:
     company_id = resolve_company_id(user)
-    cmd = _CallCmdShim(
+    out, evs, became_active = await handle_call_accept(
+        payload,
         actor_user_id=user.user_id,
         company_id=company_id,
-        payload=payload.model_dump(),
-    )
-    out, evs, became_active = await handle_call_accept(
-        cmd, calls=container.call_repository, channels=container.channel_repository
+        calls=container.call_repository,
+        channels=container.channel_repository,
     )
     if became_active:
-        await _maybe_start_speech_to_chat_poll(
+        await maybe_start_speech_to_chat_poll(
             call_id=out.call_id,
             company_id=company_id,
             channel_id=out.channel_id,
@@ -1561,13 +1554,12 @@ async def op_calls_decline(
     container: SyncContainer,
 ) -> CallRead:
     company_id = resolve_company_id(user)
-    cmd = _CallCmdShim(
+    out, evs = await handle_call_decline(
+        payload,
         actor_user_id=user.user_id,
         company_id=company_id,
-        payload=payload.model_dump(),
-    )
-    out, evs = await handle_call_decline(
-        cmd, calls=container.call_repository, channels=container.channel_repository
+        calls=container.call_repository,
+        channels=container.channel_repository,
     )
     await publish_realtime_events(evs)
     return out
@@ -1580,11 +1572,6 @@ async def op_calls_hangup(
     container: SyncContainer,
 ) -> CallRead:
     company_id = resolve_company_id(user)
-    cmd = _CallCmdShim(
-        actor_user_id=user.user_id,
-        company_id=company_id,
-        payload=payload.model_dump(),
-    )
 
     auto_stopped_recording_event: RealtimeEvent | None = None
     call = await container.call_repository.get_call(payload.call_id, company_id)
@@ -1592,14 +1579,14 @@ async def op_calls_hangup(
         payload.call_id, company_id
     )
     if active_recording is not None and active_recording.started_by_user_id == user.user_id:
-        stopped_recording = await _stop_and_finalize_recording(
+        stopped_recording = await stop_and_finalize_recording(
             call=call,
             recording=active_recording,
             company_id=company_id,
             actor_user_id=user.user_id,
             call_recordings=container.call_recording_repository,
         )
-        rec_stop_recipients = await _channel_recipient_user_ids(
+        rec_stop_recipients = await channel_recipient_user_ids(
             container.channel_repository, call.channel_id, company_id
         )
         auto_stopped_recording_event = event_call_recording_stopped(
@@ -1607,7 +1594,11 @@ async def op_calls_hangup(
         )
 
     out, evs, fully_ended = await handle_call_hangup(
-        cmd, calls=container.call_repository, channels=container.channel_repository
+        payload,
+        actor_user_id=user.user_id,
+        company_id=company_id,
+        calls=container.call_repository,
+        channels=container.channel_repository,
     )
     if auto_stopped_recording_event is not None:
         evs.append(auto_stopped_recording_event)
@@ -1620,7 +1611,7 @@ async def op_calls_hangup(
             company_id=company_id,
             container=container,
         )
-        recipients = await _channel_recipient_user_ids(
+        recipients = await channel_recipient_user_ids(
             container.channel_repository, out.channel_id, company_id
         )
         evs.append(
@@ -1694,7 +1685,7 @@ async def op_calls_recording_start(
     egress_filepath = (
         f"sync-recordings/{company_id}/{call.call_id}/{recording_id}.mp4"
     )
-    livekit_client = _build_livekit_recording_client()
+    livekit_client = build_livekit_recording_client()
     await livekit_client.create_room(
         call.livekit_room_name, company_id=company_id, user_id=user.user_id
     )
@@ -1707,7 +1698,7 @@ async def op_calls_recording_start(
         s3_bucket=real_bucket_name,
         company_id=company_id,
         user_id=user.user_id,
-        s3_endpoint=_normalize_s3_egress_endpoint(bucket_config.endpoint_url),
+        s3_endpoint=normalize_s3_egress_endpoint(bucket_config.endpoint_url),
         audio_only=(call.call_type == "audio"),
     )
     provider_job_id = getattr(egress_info, "egress_id", None)
@@ -1732,9 +1723,9 @@ async def op_calls_recording_start(
         provider_job_id=provider_job_id,
         started_at=datetime.now(UTC),
     )
-    await container.call_recording_repository.create(recording)
+    _ = await container.call_recording_repository.create(recording)
     out = _call_recording_read_from_entity(recording)
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, call.channel_id, company_id
     )
     await publish_realtime_events(
@@ -1771,14 +1762,14 @@ async def op_calls_recording_stop(
             "forbidden",
             "Останавливать запись может только админ встречи или пользователь, который её запустил.",
         )
-    out = await _stop_and_finalize_recording(
+    out = await stop_and_finalize_recording(
         call=call,
         recording=active,
         company_id=company_id,
         actor_user_id=user.user_id,
         call_recordings=container.call_recording_repository,
     )
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, call.channel_id, company_id
     )
     await publish_realtime_events(
@@ -1826,8 +1817,8 @@ async def op_calls_admin_transfer(
     await container.call_repository.set_call_admin(call.call_id, payload.target_user_id)
     updated_call = await container.call_repository.get_call(call.call_id, company_id)
     updated_participants = await container.call_repository.list_participants(call.call_id)
-    out = _call_read_from_entities(updated_call, updated_participants)
-    recipients = await _channel_recipient_user_ids(
+    out = call_read_from_entities(updated_call, updated_participants)
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, out.channel_id, company_id
     )
     await publish_realtime_events(
@@ -1924,22 +1915,8 @@ class CallsJoinAcceptPayload(BaseModel):
     link_token: str = Field(min_length=1)
     body: GuestJoinRequest | None = Field(default=None)
 
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_flat_guest_name_into_body(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        if data.get("body") is not None:
-            return data
-        raw = data.get("guest_name")
-        if isinstance(raw, str) and raw.strip():
-            out = {k: v for k, v in data.items() if k != "guest_name"}
-            out["body"] = {"guest_name": raw.strip()}
-            return out
-        return data
 
-
-def _livekit_client(settings) -> LiveKitClient:
+def _livekit_client(settings: BaseSettings) -> LiveKitClient:
     return LiveKitClient(
         url=settings.calls.livekit_url,
         api_key=settings.calls.livekit_api_key,
@@ -1947,7 +1924,7 @@ def _livekit_client(settings) -> LiveKitClient:
     )
 
 
-def _livekit_public_url(settings) -> str:
+def _livekit_public_url(settings: BaseSettings) -> str:
     return settings.calls.livekit_public_url or settings.calls.livekit_url
 
 
@@ -2007,7 +1984,7 @@ async def _reconcile_calendar_meeting_channel_members(
     desired = {link_creator_user_id} | desired_guests
     for uid in current:
         if uid not in desired:
-            await channels.delete_member(channel_id, uid, company_id=company_id)
+            _ = await channels.delete_member(channel_id, uid, company_id=company_id)
 
 
 async def op_calls_get(
@@ -2022,7 +1999,7 @@ async def op_calls_get(
     except ValueError as exc:
         raise WsCommandError("not_found", str(exc)) from exc
     participants = await container.call_repository.list_participants(payload.call_id)
-    return _call_read_from_entities(call, participants)
+    return call_read_from_entities(call, participants)
 
 
 async def op_calls_recordings_list(
@@ -2162,10 +2139,13 @@ async def op_calls_links_create(
             or scheduled_end_at is None
             or calendar_member_user_ids is None
         ):
+            message = (
+                "calendar_event_id требует scheduled_title, scheduled_start_at, "
+                "scheduled_end_at и calendar_member_user_ids."
+            )
             raise WsCommandError(
                 "ws_invalid_payload",
-                "calendar_event_id требует scheduled_title, scheduled_start_at, "
-                "scheduled_end_at и calendar_member_user_ids.",
+                message,
             )
         dup = await container.call_repository.get_link_by_calendar_event(
             company_id, body.calendar_event_id
@@ -2186,7 +2166,7 @@ async def op_calls_links_create(
             created_by_user_id=actor_id,
             pinned_message_ids=[],
         )
-        await container.channel_repository.create(ch)
+        _ = await container.channel_repository.create(ch)
         await container.channel_repository.add_member_if_missing(
             channel_id, actor_id, "owner", company_id=company_id
         )
@@ -2269,7 +2249,7 @@ async def op_calls_links_create(
                     )
             else:
                 if existing_p is not None:
-                    await container.short_link_service.delete_sync_by_link_token(existing_p.link_token)
+                    _ = await container.short_link_service.delete_sync_by_link_token(existing_p.link_token)
                     deleted = await container.call_repository.delete_link(
                         existing_p.link_token, company_id
                     )
@@ -2292,7 +2272,7 @@ async def op_calls_links_create(
         calendar_event_id=cal_event_id,
         is_persistent_channel_link=is_persistent_channel_link,
     )
-    await container.call_repository.create_link(link)
+    _ = await container.call_repository.create_link(link)
 
     join_url = await _mint_join_short_url(container, link_token, expires_at, company_id)
     return CallLinkRead(
@@ -2355,7 +2335,7 @@ async def op_calls_links_update(
         if name == "":
             raise WsCommandError("ws_invalid_payload", "scheduled_title не может быть пустым.")
         ch.name = name
-        await container.channel_repository.update(ch)
+        _ = await container.channel_repository.update(ch)
     if body.calendar_member_user_ids is not None:
         await _reconcile_calendar_meeting_channel_members(
             container=container,
@@ -2400,10 +2380,10 @@ async def op_calls_links_remove(
     deleted = await container.call_repository.delete_link(payload.link_token, company_id)
     if not deleted:
         raise WsCommandError("not_found", "Ссылка не найдена.")
-    await container.short_link_service.delete_sync_by_link_token(payload.link_token)
+    _ = await container.short_link_service.delete_sync_by_link_token(payload.link_token)
     ch = await container.channel_repository.get(channel_id)
     if ch is not None and ch.company_id == company_id and ch.type == CHANNEL_TYPE_CALENDAR_MEETING:
-        await container.channel_repository.delete(channel_id)
+        _ = await container.channel_repository.delete(channel_id)
     return None
 
 
@@ -2492,7 +2472,7 @@ async def op_calls_join_accept(
                 started_at=datetime.now(UTC),
                 created_by_user_id=link.created_by_user_id,
             )
-            await container.call_repository.create_call(new_call)
+            _ = await container.call_repository.create_call(new_call)
             await container.call_repository.attach_call_to_link(
                 payload.link_token, new_call.call_id
             )
@@ -2515,7 +2495,7 @@ async def op_calls_join_accept(
             started_at=datetime.now(UTC),
             created_by_user_id=link.created_by_user_id,
         )
-        await container.call_repository.create_call(call)
+        _ = await container.call_repository.create_call(call)
         await container.call_repository.attach_call_to_link(payload.link_token, call.call_id)
 
     if not call.livekit_room_name:

@@ -7,19 +7,18 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from core.models.context_models import Context
 from core.models.i18n_models import Language
+from core.types import JsonObject
 
 
-def flow_variables_from_request_context(context: Context | None) -> dict[str, Any]:
+def flow_variables_from_request_context(context: Context | None) -> JsonObject:
     """
     Словарь скаляров для runtime_flow.variables / ExecutionState.variables.
 
     Без секретов: токен в промпт не передаётся.
     """
-    if context is None or context.user is None:
+    if context is None:
         return {}
 
     user = context.user
@@ -33,7 +32,7 @@ def flow_variables_from_request_context(context: Context | None) -> dict[str, An
         company_id = context.active_company.company_id
         company_name = context.active_company.name or ""
 
-    lang = context.language.value if context.language else "ru"
+    lang = context.language.value
     if context.language == Language.EN:
         interface_language_code = "en"
         interface_language_name = "английском"

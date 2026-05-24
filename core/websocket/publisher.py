@@ -17,12 +17,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
 
 from pydantic import BaseModel, Field
 
 from core.logging import get_logger
 from core.push.delivery import deliver_offline_push
+from core.types import JsonArray, JsonObject, parse_json_object
 from core.ui_events.contract import UIEvent, UIEventMeta, UIEventTarget, assert_ui_event_type
 from core.ui_events.dispatcher import publish_ui_event
 from core.websocket.manager import notification_manager
@@ -52,8 +52,8 @@ class NotificationAction(BaseModel):
     label: str = ""
     url: str
     label_i18n_key: str | None = None
-    label_i18n_vars: dict[str, Any] = Field(default_factory=dict)
-    data: dict[str, Any] = Field(default_factory=dict)
+    label_i18n_vars: JsonObject = Field(default_factory=dict)
+    data: JsonObject = Field(default_factory=dict)
 
 
 class Notification(BaseModel):
@@ -63,10 +63,10 @@ class Notification(BaseModel):
     title: str
     message: str
     title_i18n_key: str | None = None
-    title_i18n_vars: dict[str, Any] = Field(default_factory=dict)
+    title_i18n_vars: JsonObject = Field(default_factory=dict)
     message_i18n_key: str | None = None
-    message_i18n_vars: dict[str, Any] = Field(default_factory=dict)
-    data: dict[str, Any] = Field(default_factory=dict)
+    message_i18n_vars: JsonObject = Field(default_factory=dict)
+    data: JsonObject = Field(default_factory=dict)
     service: str
     priority: str = "normal"
     action_url: str | None = None
@@ -91,7 +91,11 @@ async def notify_user(user_id: str, notification: Notification) -> None:
        `deliver_offline_push`.
     """
     event_type = _event_type_for(notification)
-    payload = {
+    actions_payload: JsonArray = [
+        parse_json_object(action.model_dump_json(), "NotificationAction")
+        for action in notification.actions
+    ]
+    payload: JsonObject = {
         "title": notification.title,
         "message": notification.message,
         "title_i18n_key": notification.title_i18n_key,
@@ -103,7 +107,7 @@ async def notify_user(user_id: str, notification: Notification) -> None:
         "action_url": notification.action_url,
         "action_label": notification.action_label,
         "action_label_i18n_key": notification.action_label_i18n_key,
-        "actions": [action.model_dump() for action in notification.actions],
+        "actions": actions_payload,
         "created_at": notification.created_at.isoformat(),
         "service": notification.service,
         "kind": notification.type.value,
@@ -118,7 +122,7 @@ async def notify_user(user_id: str, notification: Notification) -> None:
     )
 
     if not notification_manager.is_user_connected(user_id):
-        await deliver_offline_push(
+        _ = await deliver_offline_push(
             user_id,
             title=notification.title,
             message=notification.message,

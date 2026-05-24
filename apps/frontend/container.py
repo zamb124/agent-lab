@@ -2,7 +2,6 @@
 Dependency Injection контейнер для Frontend
 """
 
-
 from apps.flows.src.db.flow_repository import FlowRepository
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
@@ -21,6 +20,8 @@ from core.logging import get_logger
 from core.payments import PaymentService
 
 logger = get_logger(__name__)
+
+
 class FrontendContainer(BaseContainer):
     """Контейнер зависимостей для Frontend"""
 
@@ -40,7 +41,8 @@ class FrontendContainer(BaseContainer):
         return AuthService(
             user_repository=self.user_repository,
             company_repository=self.company_repository,
-            auth_session_repository=AuthSessionRepository(storage=self.shared_storage)
+            auth_session_repository=AuthSessionRepository(storage=self.shared_storage),
+            storage=self.shared_storage,
         )
 
     @lazy
@@ -79,9 +81,11 @@ class FrontendContainer(BaseContainer):
     def redis_client(self):
         return RedisClient(get_settings().database.redis_url)
 
+
 # === Глобальный контейнер ===
 
 _frontend_container: FrontendContainer | None = None
+
 
 def get_frontend_container() -> FrontendContainer:
     """Получает контейнер (создает при первом вызове)"""
@@ -93,21 +97,23 @@ def get_frontend_container() -> FrontendContainer:
             raise ValueError("database.shared_url не задан")
 
         _frontend_container = FrontendContainer(
-            db_url=settings.database.shared_url,
-            shared_db_url=settings.database.shared_url
+            db_url=settings.database.shared_url, shared_db_url=settings.database.shared_url
         )
         logger.info("FrontendContainer инициализирован")
     return _frontend_container
+
 
 def set_frontend_container(container: FrontendContainer):
     """Устанавливает контейнер (для тестов)"""
     global _frontend_container
     _frontend_container = container
 
+
 def reset_frontend_container():
     """Сбрасывает контейнер (для тестов)"""
     global _frontend_container
     _frontend_container = None
+
 
 # Алиас для совместимости
 get_container = get_frontend_container

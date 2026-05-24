@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal, Protocol
 from uuid import uuid4
 
-from core.config.models import ProviderLitserveInfraConfig
+from core.config.models import (
+    ProviderLitserveInfraConfig,
+    ProviderLitserveSTTModelEntry,
+    ProviderLitserveTTSModelEntry,
+    ProviderLitserveVADModelEntry,
+)
 
 ModelKind = Literal["llm", "embedding", "rerank", "stt", "tts", "vad"]
 ModelStatus = Literal["pending", "downloading", "ready", "failed", "deleted"]
@@ -25,6 +31,11 @@ class RegistryModel:
     error: str | None
     created_at: str
     updated_at: str
+
+
+class AudioModelEntry(Protocol):
+    api_model_id: str
+    hf_model_id: str
 
 
 def _now_iso() -> str:
@@ -82,7 +93,7 @@ def build_rerank_api_pairs(cfg: ProviderLitserveInfraConfig) -> dict[str, str]:
 
 def _build_audio_api_pairs_from_entries(
     *,
-    entries: list[Any],
+    entries: Sequence[AudioModelEntry],
     default_api_model_id: str,
     kind_label: str,
 ) -> dict[str, str]:
@@ -96,8 +107,8 @@ def _build_audio_api_pairs_from_entries(
     out: dict[str, str] = {}
     seen_api_lower: set[str] = set()
     for entry in entries:
-        api_id = str(getattr(entry, "api_model_id", "")).strip()
-        hf_id = str(getattr(entry, "hf_model_id", "")).strip()
+        api_id = entry.api_model_id.strip()
+        hf_id = entry.hf_model_id.strip()
         if not api_id:
             raise ValueError(
                 f"provider_litserve {kind_label}_models: пустой api_model_id в записи"
@@ -151,27 +162,36 @@ def build_vad_api_pairs(cfg: ProviderLitserveInfraConfig) -> dict[str, str]:
     )
 
 
-def find_stt_entry(cfg: ProviderLitserveInfraConfig, api_model_id: str) -> Any:
+def find_stt_entry(
+    cfg: ProviderLitserveInfraConfig,
+    api_model_id: str,
+) -> ProviderLitserveSTTModelEntry | None:
     """Найти ``ProviderLitserveSTTModelEntry`` по api id (case-insensitive). ``None`` если нет."""
     needle = api_model_id.strip().lower()
     for entry in cfg.stt_models:
-        if str(getattr(entry, "api_model_id", "")).strip().lower() == needle:
+        if entry.api_model_id.strip().lower() == needle:
             return entry
     return None
 
 
-def find_tts_entry(cfg: ProviderLitserveInfraConfig, api_model_id: str) -> Any:
+def find_tts_entry(
+    cfg: ProviderLitserveInfraConfig,
+    api_model_id: str,
+) -> ProviderLitserveTTSModelEntry | None:
     needle = api_model_id.strip().lower()
     for entry in cfg.tts_models:
-        if str(getattr(entry, "api_model_id", "")).strip().lower() == needle:
+        if entry.api_model_id.strip().lower() == needle:
             return entry
     return None
 
 
-def find_vad_entry(cfg: ProviderLitserveInfraConfig, api_model_id: str) -> Any:
+def find_vad_entry(
+    cfg: ProviderLitserveInfraConfig,
+    api_model_id: str,
+) -> ProviderLitserveVADModelEntry | None:
     needle = api_model_id.strip().lower()
     for entry in cfg.vad_models:
-        if str(getattr(entry, "api_model_id", "")).strip().lower() == needle:
+        if entry.api_model_id.strip().lower() == needle:
             return entry
     return None
 

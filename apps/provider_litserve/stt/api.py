@@ -22,15 +22,22 @@ multiprocessing-queue уходит сырой ASGI-``Request`` (не pickle → 
 ``Can't get local object 'FastAPI.setup.<locals>.openapi'``).
 """
 
-from typing import Any
+from typing import Protocol
 
 import litserve as ls
 from fastapi import Request
 
 from apps.provider_litserve.shared import resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
+from core.types import JsonObject, JsonValue
 
-from .engines import LocalSTTEngine, parse_stt_body
+from .engines import LocalSTTEngine, STTTranscriptionInput, parse_stt_body
+
+
+class STTEngine(Protocol):
+    def setup(self, device: str | None) -> None: ...
+
+    def transcribe_batch(self, items: list[STTTranscriptionInput]) -> list[str]: ...
 
 
 class STTLitAPI(ls.LitAPI):
@@ -38,28 +45,35 @@ class STTLitAPI(ls.LitAPI):
 
     def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
         super().__init__(api_path="/v1/audio/transcriptions")
-        self._cfg = cfg
-        self._engine = LocalSTTEngine(cfg)
+        self._cfg: ProviderLitserveInfraConfig = cfg
+        self._engine: STTEngine = LocalSTTEngine(cfg)
 
     def setup(self, device: str | None) -> None:
         d = device if device is not None else resolve_torch_device(self._cfg)
         self._engine.setup(d)
 
-    def decode_request(self, request: Request, **kwargs: Any) -> dict[str, Any]:
+    def decode_request(self, request: Request, **kwargs: JsonValue) -> STTTranscriptionInput:
+        _ = kwargs
         return parse_stt_body(request, default_api_model_id=self._cfg.stt_default_api_model_id)
 
-    def batch(self, inputs: list[Any]) -> list[Any]:
+    def batch(self, inputs: list[STTTranscriptionInput]) -> list[STTTranscriptionInput]:
         return inputs
 
-    def predict(self, x: Any, **kwargs: Any) -> list[str]:
+    def predict(
+        self,
+        x: STTTranscriptionInput | list[STTTranscriptionInput],
+        **kwargs: JsonValue,
+    ) -> list[str]:
         """LitServe: в single-loop в ``predict`` приходит **один** decoded-dict; в batched-loop — ``list[dict]`` после ``batch()``."""
-        items: list[dict[str, Any]] = x if isinstance(x, list) else [x]
+        _ = kwargs
+        items = x if isinstance(x, list) else [x]
         return self._engine.transcribe_batch(items)
 
-    def unbatch(self, output: list[Any]) -> Any:
+    def unbatch(self, output: list[str]) -> list[str]:
         return output
 
-    def encode_response(self, output: Any, **kwargs: Any) -> dict[str, Any]:
+    def encode_response(self, output: str | list[str], **kwargs: JsonValue) -> JsonObject:
+        _ = kwargs
         if isinstance(output, list):
             text = output[0] if output else ""
         else:

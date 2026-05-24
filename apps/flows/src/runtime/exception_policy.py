@@ -5,24 +5,21 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
-from typing import Any
 
-from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
+from core.types import JsonObject, JsonValue, require_json_array
 
 
-def normalize_allow_types(raw: Any) -> list[str]:
+def normalize_allow_types(raw: JsonValue | None) -> list[str]:
     """Нормализует whitelist имён классов из конфига ноды (dict)."""
     if raw is None:
         return []
-    if not isinstance(raw, list):
-        raise TypeError("exception_allow_types: ожидается list[str]")
+    try:
+        items = require_json_array(raw, "exception_allow_types")
+    except ValueError as exc:
+        raise TypeError("exception_allow_types: ожидается list[str]") from exc
     out: list[str] = []
-    for item in raw:
-        if isinstance(item, ExceptionAbsorbAllowName):
-            out.append(item.value)
-            continue
+    for item in items:
         if not isinstance(item, str):
             raise TypeError(
                 f"exception_allow_types: элемент должен быть str, получено {type(item).__name__}"
@@ -33,9 +30,15 @@ def normalize_allow_types(raw: Any) -> list[str]:
     return out
 
 
-def node_exception_policy(config: Mapping[str, Any]) -> tuple[bool, list[str]]:
+def node_exception_policy(config: JsonObject) -> tuple[bool, list[str]]:
     """Читает флаги из сырого config ноды (как у BaseNode.config)."""
-    enabled = bool(config.get("exception_as_response", False))
+    raw_enabled = config.get("exception_as_response")
+    if raw_enabled is None:
+        enabled = False
+    elif isinstance(raw_enabled, bool):
+        enabled = raw_enabled
+    else:
+        raise TypeError("exception_as_response: ожидается bool")
     allow_types = normalize_allow_types(config.get("exception_allow_types"))
     return enabled, allow_types
 

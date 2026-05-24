@@ -3,19 +3,28 @@
 Работает на уровне компаний.
 """
 
+from __future__ import annotations
+
 import copy
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Optional, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
-import core.tracing.attributes as trace_attr
 from core.context import get_context
 from core.i18n import t
 from core.logging import get_logger
-from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan, UsageRecord, UsageType
+from core.models.billing_models import (
+    DEFAULT_TARIFF_PRICES,
+    BillingCostOrigin,
+    TariffPlan,
+    UsageRecord,
+    UsageType,
+)
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from core.tracing.models import BillingSettlementSpan
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 if TYPE_CHECKING:
     from core.db.repositories.company_repository import CompanyRepository
@@ -45,8 +54,8 @@ BALANCE_BLOCK_OPERATION_VISION = "vision"
 BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM = "livekit_room"
 BALANCE_BLOCK_OPERATION_LIVEKIT_EGRESS = "livekit_egress"
 
-COST_ORIGIN_PLATFORM = "platform"
-COST_ORIGIN_COMPANY = "company"
+COST_ORIGIN_PLATFORM: BillingCostOrigin = "platform"
+COST_ORIGIN_COMPANY: BillingCostOrigin = "company"
 
 _BALANCE_BLOCK_OPERATION_I18N_KEYS: dict[str, str] = {
     BALANCE_BLOCK_OPERATION_LLM: "billing.notifications.blocked_operation.llm",
@@ -64,6 +73,27 @@ def company_settlement_rules_storage_key(company_id: str) -> str:
 
 def _settlement_rules_document_to_storage_json(doc: SettlementRulesDocument) -> str:
     return json.dumps(doc.model_dump(mode="json"), ensure_ascii=False)
+
+
+def _merge_resource_base_price_override(
+    merged: dict[str, dict[str, float]],
+    raw_json: str,
+    storage_key: str,
+) -> None:
+    data = parse_json_object(raw_json, storage_key)
+    for category, resources_value in data.items():
+        resources = require_json_object(resources_value, f"{storage_key}.{category}")
+        bucket = merged.setdefault(category, {})
+        for resource_name, price_value in resources.items():
+            bucket[resource_name] = _json_price_to_float(price_value, f"{storage_key}.{category}.{resource_name}")
+
+
+def _json_price_to_float(value: JsonValue, field_name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} должен быть числом")
+    if isinstance(value, int | float | str):
+        return float(value)
+    raise ValueError(f"{field_name} должен быть числом")
 
 
 class UsageStatsBucket(TypedDict):
@@ -92,37 +122,30 @@ class BillingService:
         usage_repository: "UsageRepository",
         tariff_prices: dict[TariffPlan, dict[str, dict[str, float]]] | None = None,
         resource_base_prices: dict[str, dict[str, float]] | None = None,
-        shared_storage: Optional["Storage"] = None,
+        shared_storage: Storage | None = None,
         balance_enforcement_enabled: bool = True,
         balance_enforcement_exempt_company_ids: list[str] | None = None,
     ):
-        if not company_repository:
-            raise ValueError("company_repository обязателен для BillingService")
-        if not user_repository:
-            raise ValueError("user_repository обязателен для BillingService")
-        if not usage_repository:
-            raise ValueError("usage_repository обязателен для BillingService")
-
-        self._company_repository = company_repository
-        self._user_repository = user_repository
-        self._usage_repository = usage_repository
-        self._shared_storage = shared_storage
+        self._company_repository: CompanyRepository = company_repository
+        self._user_repository: UserRepository = user_repository
+        self._usage_repository: UsageRepository = usage_repository
+        self._shared_storage: Storage | None = shared_storage
 
         # Тарифные цены (множители к базовой цене)
-        self._tariff_prices = tariff_prices or DEFAULT_TARIFF_PRICES
+        self._tariff_prices: dict[TariffPlan, dict[str, dict[str, float]]] = tariff_prices or DEFAULT_TARIFF_PRICES
 
         if resource_base_prices is None:
             raise ValueError("resource_base_prices обязателен (передавайте из settings.billing.resource_base_prices)")
-        self._resource_base_prices_static = copy.deepcopy(resource_base_prices)
-        self._resource_base_prices_static.pop("tool", None)
+        self._resource_base_prices_static: dict[str, dict[str, float]] = copy.deepcopy(resource_base_prices)
+        _ = self._resource_base_prices_static.pop("tool", None)
 
-        self._balance_enforcement_enabled = balance_enforcement_enabled
+        self._balance_enforcement_enabled: bool = balance_enforcement_enabled
         exempt = (
             balance_enforcement_exempt_company_ids
             if balance_enforcement_exempt_company_ids is not None
             else [SYSTEM_COMPANY_ID]
         )
-        self._balance_enforcement_exempt_company_ids = frozenset(exempt)
+        self._balance_enforcement_exempt_company_ids: frozenset[str] = frozenset(exempt)
 
     async def require_balance_for_billable_operation(
         self,
@@ -152,7 +175,7 @@ class BillingService:
             raise ValueError("user_id обязателен для проверки баланса и уведомления")
         if operation_code not in _BALANCE_BLOCK_OPERATION_I18N_KEYS:
             raise ValueError(
-                f"Неизвестный operation_code для биллинга: {operation_code!r}. "
+                f"Неизвестный operation_code для биллинга: {operation_code!r}. " +
                 f"Допустимо: {sorted(_BALANCE_BLOCK_OPERATION_I18N_KEYS.keys())}"
             )
         svc = (notification_service or "").strip()
@@ -165,7 +188,7 @@ class BillingService:
             raise ValueError(f"Компания {cid} не найдена")
         if company.balance <= 0:
             ctx = get_context()
-            lang = ctx.language if ctx is not None and ctx.language is not None else Language.RU
+            lang = ctx.language if ctx is not None else Language.RU
             op_key = _BALANCE_BLOCK_OPERATION_I18N_KEYS[operation_code]
             operation_label = t(op_key, language=lang)
             title = t("billing.notifications.balance_blocked_title", language=lang)
@@ -228,7 +251,7 @@ class BillingService:
 
     async def can_use_resource(
         self,
-        user: User,
+        _user: User,
         company: Company,
         resource_name: str,
         quantity: int = 1,
@@ -270,18 +293,8 @@ class BillingService:
         raw = await self._shared_storage.get("billing:resource_base_prices_json", force_global=True)
         if not raw:
             return merged
-        data = json.loads(raw)
-        if not isinstance(data, dict):
-            raise ValueError("billing:resource_base_prices_json должен быть JSON-объектом категорий")
-        for cat, resources in data.items():
-            if not isinstance(cat, str):
-                raise ValueError(f"Неверный ключ категории в override: {cat!r}")
-            if not isinstance(resources, dict):
-                raise ValueError(f"Категория {cat!r} в override должна быть объектом resource->price")
-            bucket = merged.setdefault(cat, {})
-            for res_name, price in resources.items():
-                bucket[str(res_name)] = float(price)
-        merged.pop("tool", None)
+        _merge_resource_base_price_override(merged, raw, "billing:resource_base_prices_json")
+        _ = merged.pop("tool", None)
         return merged
 
     def get_static_resource_base_prices(self) -> dict[str, dict[str, float]]:
@@ -312,7 +325,7 @@ class BillingService:
                     multiplier = 1.0
                 out_bucket[resource] = float(base_cost) * float(multiplier)
             out[category] = out_bucket
-        out.pop("tool", None)
+        _ = out.pop("tool", None)
         return out
 
     async def get_effective_resource_base_prices_for_company(self, company_id: str) -> dict[str, dict[str, float]]:
@@ -322,20 +335,8 @@ class BillingService:
         raw = await self._shared_storage.get(company_resource_prices_storage_key(company_id), force_global=True)
         if not raw:
             return merged
-        data = json.loads(raw)
-        if not isinstance(data, dict):
-            raise ValueError(
-                f"{company_resource_prices_storage_key(company_id)} должен быть JSON-объектом категорий"
-            )
-        for cat, resources in data.items():
-            if not isinstance(cat, str):
-                raise ValueError(f"Неверный ключ категории в company override: {cat!r}")
-            if not isinstance(resources, dict):
-                raise ValueError(f"Категория {cat!r} в company override должна быть объектом resource->price")
-            bucket = merged.setdefault(cat, {})
-            for res_name, price in resources.items():
-                bucket[str(res_name)] = float(price)
-        merged.pop("tool", None)
+        _merge_resource_base_price_override(merged, raw, company_resource_prices_storage_key(company_id))
+        _ = merged.pop("tool", None)
         return merged
 
     async def load_settlement_rules_document(self) -> SettlementRulesDocument:
@@ -355,7 +356,7 @@ class BillingService:
         Глобальный billing:settlement_rules_json не подмешивается: он только для load_settlement_rules_document()
         (чтение без записи в компанию).
         """
-        if not company_id or not isinstance(company_id, str):
+        if not company_id:
             raise ValueError("company_id обязателен для правил settlement")
         if self._shared_storage is None:
             return default_settlement_rules_document()
@@ -368,7 +369,7 @@ class BillingService:
                 return existing
 
         fresh = default_settlement_rules_document()
-        await self._shared_storage.set(
+        _ = await self._shared_storage.set(
             key,
             _settlement_rules_document_to_storage_json(fresh),
             force_global=True,
@@ -384,7 +385,7 @@ class BillingService:
             return 0
         companies = await self._company_repository.list(limit=limit)
         for company in companies:
-            await self.load_settlement_rules_document_for_company(company.company_id)
+            _ = await self.load_settlement_rules_document_for_company(company.company_id)
         return len(companies)
 
     async def save_settlement_rules_document_for_company(
@@ -392,12 +393,12 @@ class BillingService:
         company_id: str,
         document: SettlementRulesDocument,
     ) -> None:
-        if not company_id or not isinstance(company_id, str):
+        if not company_id:
             raise ValueError("company_id обязателен")
         if self._shared_storage is None:
             raise RuntimeError("shared_storage не настроен: сохранение правил settlement невозможно")
         key = company_settlement_rules_storage_key(company_id)
-        await self._shared_storage.set(
+        _ = await self._shared_storage.set(
             key,
             _settlement_rules_document_to_storage_json(document),
             force_global=True,
@@ -411,8 +412,8 @@ class BillingService:
         cost: float,
         usage_type: UsageType = UsageType.TOOL_CALL,
         quantity: int = 1,
-        metadata: dict[str, Any] | None = None,
-        cost_origin: str = COST_ORIGIN_PLATFORM,
+        metadata: JsonObject | None = None,
+        cost_origin: BillingCostOrigin = COST_ORIGIN_PLATFORM,
     ) -> str:
         """Записывает использование ресурса. Возвращает usage_id.
 
@@ -434,7 +435,7 @@ class BillingService:
         is_company = cost_origin == COST_ORIGIN_COMPANY
         effective_cost = 0.0 if is_company else cost
 
-        record_metadata = dict(metadata or {})
+        record_metadata: JsonObject = dict(metadata) if metadata is not None else {}
         record_metadata["cost_origin"] = cost_origin
 
         usage_record = UsageRecord(
@@ -456,13 +457,7 @@ class BillingService:
             cost_origin,
         )
 
-        if not self._usage_repository:
-            raise RuntimeError(
-                "UsageRepository не настроен. Биллинг не может работать без репозитория. "
-                "Проверьте инициализацию BillingService."
-            )
-
-        await self._usage_repository.set(usage_record)
+        _ = await self._usage_repository.set(usage_record)
 
         if not is_company:
             old_balance = actual_company.balance
@@ -477,7 +472,7 @@ class BillingService:
                 old_spent,
                 actual_company.current_month_spent,
             )
-            await self._company_repository.set(actual_company)
+            _ = await self._company_repository.set(actual_company)
             company.balance = actual_company.balance
             company.current_month_spent = actual_company.current_month_spent
         else:
@@ -492,7 +487,7 @@ class BillingService:
     async def settle_span_charge(
         self,
         *,
-        span_dict: dict[str, Any],
+        span: BillingSettlementSpan,
         settlement: SpanBillingSettlement,
         fallback_user_id: str,
     ) -> str:
@@ -500,22 +495,19 @@ class BillingService:
         Legacy: списание по platform.billing.* на span.
         Идемпотентность: LEGACY_SPAN_ONLY_RULE_ID + старый ключ billing:settled_span:{span_id}.
         """
-        span_id = span_dict["span_id"]
+        span_id = span.span_id
         prev = await settlement.get_usage_id(span_id, LEGACY_SPAN_ONLY_RULE_ID)
         if prev is not None:
             return prev
 
-        attrs = span_dict.get("attributes") or {}
-        resource_name = attrs.get(trace_attr.ATTR_BILLING_RESOURCE_NAME)
-        if not resource_name or not isinstance(resource_name, str):
-            raise ValueError(f"span {span_id}: отсутствует {trace_attr.ATTR_BILLING_RESOURCE_NAME}")
+        resource_name = span.required_billing_resource_name()
 
-        company_id = span_dict.get("company_id")
-        if not company_id or not isinstance(company_id, str):
+        company_id = span.company_id
+        if not company_id:
             raise ValueError(f"span {span_id}: нет company_id в колонке span")
 
-        uid = span_dict.get("user_id")
-        if not uid or not isinstance(uid, str):
+        uid = span.user_id
+        if not uid:
             if not fallback_user_id:
                 raise ValueError(
                     f"span {span_id}: нет user_id; задайте billing.span_settlement.fallback_user_id в конфиге"
@@ -530,31 +522,19 @@ class BillingService:
         if company is None:
             raise ValueError(f"span {span_id}: компания {company_id} не найдена")
 
-        ut_raw = attrs.get(trace_attr.ATTR_BILLING_USAGE_TYPE)
-        if ut_raw is not None and ut_raw != "":
-            try:
-                usage_type = UsageType(str(ut_raw))
-            except ValueError as e:
-                raise ValueError(f"span {span_id}: неизвестный UsageType {ut_raw!r}") from e
-        else:
-            usage_type = UsageType.TOOL_CALL
-
-        qty_raw = attrs.get(trace_attr.ATTR_BILLING_QUANTITY, 1)
-        quantity = int(qty_raw) if qty_raw is not None else 1
-        if quantity < 1:
-            raise ValueError(f"span {span_id}: platform.billing.quantity должна быть >= 1")
+        usage_type = span.billing_usage_type_or_default()
+        quantity = span.billing_quantity_or_default()
 
         unit_cost = await self.get_resource_cost_for_company(company, resource_name)
         cost = unit_cost * quantity
 
-        cost_origin = attrs.get(trace_attr.ATTR_BILLING_COST_ORIGIN, COST_ORIGIN_PLATFORM)
-        meta: dict[str, Any] = {
+        meta: JsonObject = {
             "span_id": span_id,
-            "trace_id": span_dict.get("trace_id"),
+            "trace_id": span.trace_id,
             "settlement_source": "span_billing_job",
         }
-        custom_pid = attrs.get(trace_attr.ATTR_BILLING_CUSTOM_PROVIDER_ID)
-        if custom_pid:
+        custom_pid = span.billing_custom_provider_id()
+        if custom_pid is not None:
             meta["custom_provider_id"] = custom_pid
 
         usage_id = await self.record_usage(
@@ -565,7 +545,7 @@ class BillingService:
             usage_type=usage_type,
             quantity=quantity,
             metadata=meta,
-            cost_origin=cost_origin,
+            cost_origin=span.billing_cost_origin_or_default(),
         )
         await settlement.mark(span_id, LEGACY_SPAN_ONLY_RULE_ID, usage_id)
         return usage_id
@@ -573,23 +553,23 @@ class BillingService:
     async def settle_span_rule_charge(
         self,
         *,
-        span_dict: dict[str, Any],
+        span: BillingSettlementSpan,
         rule: SettlementRule,
         settlement: SpanBillingSettlement,
         fallback_user_id: str,
     ) -> str:
         """Списание по одному правилу; идемпотентность по (span_id, rule.rule_id)."""
-        span_id = span_dict["span_id"]
+        span_id = span.span_id
         prev = await settlement.get_usage_id(span_id, rule.rule_id)
         if prev is not None:
             return prev
 
-        company_id = span_dict.get("company_id")
-        if not company_id or not isinstance(company_id, str):
+        company_id = span.company_id
+        if not company_id:
             raise ValueError(f"span {span_id}: нет company_id в колонке span")
 
-        uid = span_dict.get("user_id")
-        if not uid or not isinstance(uid, str):
+        uid = span.user_id
+        if not uid:
             if not fallback_user_id:
                 raise ValueError(
                     f"span {span_id}: нет user_id; задайте billing.span_settlement.fallback_user_id в конфиге"
@@ -605,7 +585,7 @@ class BillingService:
             raise ValueError(f"span {span_id}: компания {company_id} не найдена")
 
         usage_type = UsageType(rule.usage_type)
-        quantity = quantity_from_span(rule.quantity_from, span_dict)
+        quantity = quantity_from_span(rule.quantity_from, span)
         resource_name = rule.resource_name
 
         if quantity == 0:
@@ -616,16 +596,14 @@ class BillingService:
         unit_cost = await self._unit_cost_for_company(company, resource_name)
         cost = unit_cost * quantity
 
-        attrs = span_dict.get("attributes") or {}
-        cost_origin = attrs.get(trace_attr.ATTR_BILLING_COST_ORIGIN, COST_ORIGIN_PLATFORM)
-        custom_pid = attrs.get(trace_attr.ATTR_BILLING_CUSTOM_PROVIDER_ID)
-        meta: dict[str, Any] = {
+        custom_pid = span.billing_custom_provider_id()
+        meta: JsonObject = {
             "span_id": span_id,
-            "trace_id": span_dict.get("trace_id"),
+            "trace_id": span.trace_id,
             "rule_id": rule.rule_id,
             "settlement_source": "span_billing_job",
         }
-        if custom_pid:
+        if custom_pid is not None:
             meta["custom_provider_id"] = custom_pid
 
         usage_id = await self.record_usage(
@@ -636,7 +614,7 @@ class BillingService:
             usage_type=usage_type,
             quantity=quantity,
             metadata=meta,
-            cost_origin=cost_origin,
+            cost_origin=span.billing_cost_origin_or_default(),
         )
         await settlement.mark(span_id, rule.rule_id, usage_id)
         return usage_id
@@ -644,7 +622,7 @@ class BillingService:
     async def settle_pending_span_in_job(
         self,
         *,
-        span_dict: dict[str, Any],
+        span: BillingSettlementSpan,
         settlement: SpanBillingSettlement,
         fallback_user_id: str,
         rules_doc: SettlementRulesDocument,
@@ -654,32 +632,32 @@ class BillingService:
         Возвращает число успешных вызовов record_usage (0 если уже всё списано или нет матча).
         """
         if not rules_doc.rules:
-            sid = span_dict["span_id"]
+            sid = span.span_id
             if await settlement.get_usage_id(sid, LEGACY_SPAN_ONLY_RULE_ID) is not None:
                 return 0
-            await self.settle_span_charge(
-                span_dict=span_dict,
+            _ = await self.settle_span_charge(
+                span=span,
                 settlement=settlement,
                 fallback_user_id=fallback_user_id,
             )
             return 1
 
-        matched = resolve_matched_rules(rules_doc, span_dict)
+        matched = resolve_matched_rules(rules_doc, span)
         if not matched:
             logger.warning(
                 "settlement: ни одно правило не матчит span_id=%s operation_name=%s",
-                span_dict.get("span_id"),
-                span_dict.get("operation_name"),
+                span.span_id,
+                span.operation_name,
             )
             return 0
 
         count = 0
         for rule in matched:
-            before = await settlement.get_usage_id(span_dict["span_id"], rule.rule_id)
+            before = await settlement.get_usage_id(span.span_id, rule.rule_id)
             if before is not None:
                 continue
-            await self.settle_span_rule_charge(
-                span_dict=span_dict,
+            _ = await self.settle_span_rule_charge(
+                span=span,
                 rule=rule,
                 settlement=settlement,
                 fallback_user_id=fallback_user_id,
@@ -780,5 +758,5 @@ class BillingService:
         company.current_month_spent = 0.0
         company.billing_period_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        await self._company_repository.set(company)
+        _ = await self._company_repository.set(company)
         logger.info(f"Сброшен месячный биллинг для компании {company_id}")

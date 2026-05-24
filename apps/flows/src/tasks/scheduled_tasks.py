@@ -18,6 +18,7 @@ from core.models.identity_models import Company, User
 from core.scheduler import get_schedule_source
 from core.scheduler.models import ScheduledTaskStatus
 from core.state import ExecutionState
+from core.types import JsonObject, require_json_object
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
@@ -167,7 +168,7 @@ async def _execute_message_task(
     user_id: str,
     content: str,
     context: Context,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Выполняет message task - отправляет сообщение агенту."""
     channel_instance = container.get_channel("a2a", flow_id)
 
@@ -189,8 +190,8 @@ async def _execute_message_task(
     result = await channel_instance.process_task(params)
 
     # Отправляем уведомление о завершении задачи (WebSocket + Web Push)
-    if result.get("task_state") == "completed":
-        final_response = result.get("response", "")
+    if result.task_state == "completed":
+        final_response = result.response
         preview = final_response[:100] + ("..." if len(final_response) > 100 else "")
 
         await notify_user(
@@ -209,7 +210,10 @@ async def _execute_message_task(
             )
         )
 
-    return result
+    return require_json_object(
+        result.model_dump(mode="json", exclude_none=False),
+        "scheduled.message_task.result",
+    )
 
 
 async def _execute_tool_call_task(

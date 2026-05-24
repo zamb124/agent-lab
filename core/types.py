@@ -13,11 +13,21 @@ if TYPE_CHECKING:
     JsonValue: TypeAlias = JsonScalar | Mapping[str, "JsonValue"] | Sequence["JsonValue"]
     JsonObject: TypeAlias = dict[str, JsonValue]
     JsonArray: TypeAlias = list[JsonValue]
+    OtelAttributeScalar: TypeAlias = str | bool | int | float
+    OtelAttributeValue: TypeAlias = (
+        OtelAttributeScalar | Sequence[str] | Sequence[bool] | Sequence[int] | Sequence[float]
+    )
+    OtelAttributes: TypeAlias = Mapping[str, OtelAttributeValue]
 else:
     JsonScalar: TypeAlias = str | int | float | bool | None
     JsonValue: TypeAlias = PydanticJsonValue
     JsonObject: TypeAlias = dict[str, PydanticJsonValue]
     JsonArray: TypeAlias = list[PydanticJsonValue]
+    OtelAttributeScalar: TypeAlias = str | bool | int | float
+    OtelAttributeValue: TypeAlias = (
+        OtelAttributeScalar | Sequence[str] | Sequence[bool] | Sequence[int] | Sequence[float]
+    )
+    OtelAttributes: TypeAlias = Mapping[str, OtelAttributeValue]
 
 _JSON_VALUE_ADAPTER: TypeAdapter[PydanticJsonValue] = TypeAdapter(PydanticJsonValue)
 _JSON_OBJECT_ADAPTER: TypeAdapter[dict[str, PydanticJsonValue]] = TypeAdapter(dict[str, PydanticJsonValue])
@@ -70,3 +80,20 @@ def parse_json_array(data: str | bytes, field_name: str = "value") -> JsonArray:
         return cast(JsonArray, _JSON_ARRAY_ADAPTER.validate_json(data))
     except ValidationError as exc:
         raise ValueError(f"{field_name} must be a JSON array") from exc
+
+
+def otel_attribute_value_to_json_value(value: OtelAttributeValue) -> JsonValue:
+    """Преобразовать OpenTelemetry AttributeValue в JSON-compatible значение."""
+    if isinstance(value, str | bool | int | float):
+        return value
+    return list(value)
+
+
+def otel_attributes_to_json_object(attributes: OtelAttributes | None) -> JsonObject:
+    """Преобразовать OpenTelemetry attributes в JSON object для хранения."""
+    if attributes is None:
+        return {}
+    return {
+        key: otel_attribute_value_to_json_value(value)
+        for key, value in attributes.items()
+    }

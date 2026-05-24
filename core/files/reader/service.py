@@ -16,7 +16,7 @@ from email import policy
 from email.parser import BytesParser
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Protocol, TypeIs, cast
+from typing import Protocol, TypeIs, cast
 
 import ebooklib
 import extract_msg
@@ -37,10 +37,11 @@ from unstructured.partition.auto import partition as raw_partition
 
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_VISION
-from core.clients.llm.factory import get_vision_llm
+from core.clients.llm.factory import create_vision_llm, resolve_vision_llm
+from core.company_ai import COST_ORIGIN_COMPANY
 from core.context import get_context
 from core.files.checksum import compute_content_checksum_sha256
-from core.files.file_ref import FileRef, file_id_from_download_url, normalize_file_ref
+from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url
 from core.files.media.transcriber import MediaTranscriber
 from core.files.models import FileRecord, FileResponse
 from core.files.processors import get_default_file_processor
@@ -66,6 +67,10 @@ SourceInput = Path | str | bytes
 
 class _BytesReader(Protocol):
     def read(self, size: int = -1, /) -> bytes: ...
+
+
+def _as_object(value: object) -> object:
+    return value
 
 
 class _OleFileObject(Protocol):
@@ -212,20 +217,17 @@ class _ExtractMsgModule(Protocol):
     def openMsg(self, path: str) -> _MsgFile: ...
 
 
-def _is_file_ref_source(source: SourceInput | FileRef) -> TypeIs[FileRef]:
-    if isinstance(source, (FileRecord, FileResponse)):
+def _is_file_ref_source(source: SourceInput | FileRefSource) -> TypeIs[FileRefSource]:
+    if isinstance(source, (FileRef, FileRecord, FileResponse)):
         return True
-    if isinstance(source, Mapping) and not isinstance(source, (str, bytes, bytearray)):
-        fid_v = source.get("file_id")
-        url_v = source.get("url")
-        if (
-            (isinstance(fid_v, str) and fid_v.strip())
-            or (isinstance(url_v, str) and url_v.strip())
+    if isinstance(source, Mapping):
+        file_id = source.get("file_id")
+        url = source.get("url")
+        if (isinstance(file_id, str) and file_id.strip()) or (
+            isinstance(url, str) and url.strip()
         ):
             return True
-        raise TypeError(
-            "Если source — словарь, укажите непустой file_id или url (запись вложения)."
-        )
+        raise TypeError("Если source — словарь, укажите непустой file_id или url")
     return False
 
 
@@ -342,14 +344,6 @@ def _text_or_none(value: object | None) -> str | None:
     return text if text else None
 
 
-def _mapping_text(mapping: Mapping[str, object], *keys: str) -> str | None:
-    for key in keys:
-        text = _text_or_none(mapping.get(key))
-        if text is not None:
-            return text
-    return None
-
-
 def _sniff_pdf(raw: bytes) -> bool:
     return len(raw) >= 5 and raw[:5] == b"%PDF-"
 
@@ -396,7 +390,7 @@ def _extract_text_from_ole_word_stream(raw: bytes) -> str | None:
     а вытаскивает читаемые ASCII/UTF-16 строки длиной >= 4 символов.
     Используется когда antiword не справляется (формат Word 95 / минимальные .doc).
     """
-    typed_olefile = cast(_OleFileModule, cast(Any, olefile))
+    typed_olefile = cast(_OleFileModule, _as_object(olefile))
 
     if not typed_olefile.isOleFile(BytesIO(raw)):
         return None
@@ -569,36 +563,29 @@ class FileReader:
             raise RuntimeError("инвариант FileReadResult: page_count должен совпадать с len(pages)")
         return result
 
-    async def _raw_from_file_ref(
+    async def raw_from_file_ref(
         self,
-        finfo: Mapping[str, object],
+        file_ref: FileRef,
         opts: ReadOptions,
     ) -> tuple[bytes, str]:
-        display_name = _mapping_text(finfo, "original_name")
-        if display_name is None:
-            raise ValueError("FileRef.original_name обязателен")
-
-        url_val = _mapping_text(finfo, "url")
-        if url_val is None and _mapping_text(finfo, "file_id") is None:
-            raise ValueError("FileRef должен содержать file_id или url")
-        if url_val is not None and url_val.startswith(("http://", "https://")):
-            return await self.resolve_source(url_val, display_name, opts)
+        if file_ref.url is not None and file_ref.url.startswith(("http://", "https://")):
+            return await self.resolve_source(file_ref.url, file_ref.original_name, opts)
 
         source: SourceInput = ""
-        if url_val is not None:
-            source = url_val
+        if file_ref.url is not None:
+            source = file_ref.url
 
-        return await self.resolve_source(source, display_name, opts)
+        return await self.resolve_source(source, file_ref.original_name, opts)
 
     async def read(
         self,
-        source: SourceInput | FileRef,
+        source: SourceInput | FileRefSource,
         *,
         file_name: str | None = None,
         include_asset_bytes: bool = False,
         source_file_id: str | None = None,
         source_checksum: str | None = None,
-        vision_model: str = "google/gemini-2.5-flash-preview",
+        vision_model: str | None = None,
         vision_prompt: str | None = None,
         transcription_company_id: str | None = None,
     ) -> FileReadResult:
@@ -611,9 +598,9 @@ class FileReader:
             transcription_company_id=transcription_company_id,
         )
         if _is_file_ref_source(source):
-            finfo = normalize_file_ref(source)
-            opts = merge_file_ref_read_options(finfo, opts)
-            raw, resolved_name = await self._raw_from_file_ref(finfo, opts)
+            file_ref = FileRef.model_validate(source)
+            opts = merge_file_ref_read_options(file_ref, opts)
+            raw, resolved_name = await self.raw_from_file_ref(file_ref, opts)
             name = (
                 file_name.strip() if isinstance(file_name, str) and file_name.strip() else None
             ) or resolved_name
@@ -652,7 +639,8 @@ async def _read_image_impl(
             ),
         ],
     )
-    llm = get_vision_llm(model_name=opts.vision_model)
+    resolved_llm = resolve_vision_llm(opts.vision_model)
+    llm = create_vision_llm(resolved_llm)
     actx = get_context()
     if actx is None or actx.active_company is None:
         raise ValueError("Контекст с active_company обязателен для vision-чтения изображения")
@@ -660,18 +648,19 @@ async def _read_image_impl(
         raise ValueError(
             "Контекст с user обязателен для vision-чтения изображения (биллинг и уведомления)"
         )
-    await get_billing_service().require_balance_for_billable_operation(
-        actx.active_company.company_id,
-        str(actx.user.user_id).strip(),
-        operation_code=BALANCE_BLOCK_OPERATION_VISION,
-        notification_service="frontend",
-    )
+    if resolved_llm.cost_origin != COST_ORIGIN_COMPANY:
+        await get_billing_service().require_balance_for_billable_operation(
+            actx.active_company.company_id,
+            str(actx.user.user_id).strip(),
+            operation_code=BALANCE_BLOCK_OPERATION_VISION,
+            notification_service="frontend",
+        )
     async with traced_operation(
         "core.files.reader.image",
         event_type="llm.vision",
         operation_category="llm",
         billing_usage_type=UsageType.LLM_REQUEST.value,
-        billing_resource_name=f"llm:{opts.vision_model}",
+        billing_resource_name=resolved_llm.billing_resource_name,
         billing_quantity=1,
         billing_pending_settlement=True,
     ):
@@ -863,7 +852,7 @@ def _read_pdf_sync(
     mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
-    fitz = cast(_FitzModule, cast(Any, pymupdf))
+    fitz = cast(_FitzModule, _as_object(pymupdf))
 
     warnings: list[str] = []
     doc = fitz.open(stream=raw, filetype="pdf")
@@ -1086,11 +1075,11 @@ def _read_odt_sync(
 ) -> FileReadResult:
     """OpenDocument Text .odt через odfpy (ZIP+XML)."""
     del opts
-    teletype = cast(_OdfTeletypeModule, cast(Any, odf_teletype))
-    odf_text_module = cast(_OdfTextModule, cast(Any, odf_text))
+    teletype = cast(_OdfTeletypeModule, _as_object(odf_teletype))
+    odf_text_module = cast(_OdfTextModule, _as_object(odf_text))
     opendocument = cast(
         _OdfOpenDocumentModule,
-        cast(Any, odf_opendocument),
+        _as_object(odf_opendocument),
     )
 
     try:
@@ -1127,8 +1116,8 @@ def _read_epub_sync(
 ) -> FileReadResult:
     """EPUB через EbookLib + BeautifulSoup; одна страница на главу."""
     del opts
-    typed_ebooklib = cast(_EbooklibModule, cast(Any, ebooklib))
-    typed_epub = cast(_EpubModule, cast(Any, epub))
+    typed_ebooklib = cast(_EbooklibModule, _as_object(ebooklib))
+    typed_epub = cast(_EpubModule, _as_object(epub))
 
     # ebooklib читает только с диска, поэтому пишем во временный файл
     with tempfile.NamedTemporaryFile(suffix=".epub", delete=False) as tmp:
@@ -1174,7 +1163,7 @@ def _read_msg_sync(
 ) -> FileReadResult:
     """Outlook .msg через extract-msg (чисто Python)."""
     del opts
-    typed_extract_msg = cast(_ExtractMsgModule, cast(Any, extract_msg))
+    typed_extract_msg = cast(_ExtractMsgModule, _as_object(extract_msg))
 
     with tempfile.NamedTemporaryFile(suffix=".msg", delete=False) as tmp:
         _ = tmp.write(raw)

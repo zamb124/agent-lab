@@ -24,20 +24,20 @@ class FlowInterrupt(Exception):
         tool_call: LLMToolCall | None = None,
         flow_id: str = "",
         correlation_id: UUID | None = None,
-    ):
+    ) -> None:
         if body is not None:
             if question is not None:
                 raise ValueError("FlowInterrupt: нельзя передавать одновременно body и question")
             self.body: InterruptBody = body
         elif question is not None:
-            if not isinstance(question, str) or not question.strip():
+            if not question.strip():
                 raise ValueError("FlowInterrupt: question должен быть непустой строкой")
             self.body = UserMessageInterrupt(question=question.strip())
         else:
             raise ValueError("FlowInterrupt: укажите question или body")
-        self.tool_call = tool_call
-        self.flow_id = flow_id
-        self.correlation_id = correlation_id
+        self.tool_call: LLMToolCall | None = tool_call
+        self.flow_id: str = flow_id
+        self.correlation_id: UUID | None = correlation_id
         super().__init__(interrupt_body_public_question(self.body))
 
     @property
@@ -59,20 +59,20 @@ class BreakpointInterrupt(Exception):
         node_type: str,
         state_snapshot: JsonObject,
         flow_id: str = "",
-    ):
-        self.node_id = node_id
-        self.node_type = node_type
-        self.state_snapshot = state_snapshot
-        self.flow_id = flow_id
+    ) -> None:
+        self.node_id: str = node_id
+        self.node_type: str = node_type
+        self.state_snapshot: JsonObject = state_snapshot
+        self.flow_id: str = flow_id
         super().__init__(f"Breakpoint hit at node '{node_id}'")
 
 
 class ToolExecutionError(Exception):
     """Ошибка выполнения tool."""
 
-    def __init__(self, message: str, error: Exception | None = None):
-        self.message = message
-        self.error = error
+    def __init__(self, message: str, error: Exception | None = None) -> None:
+        self.message: str = message
+        self.error: Exception | None = error
         super().__init__(message)
 
 
@@ -89,8 +89,8 @@ class EdgeConditionError(Exception):
         to_node: str,
         original: Exception,
     ) -> None:
-        self.edge_index = edge_index
-        self.from_node = from_node
-        self.to_node = to_node
-        self.original = original
+        self.edge_index: int = edge_index
+        self.from_node: str = from_node
+        self.to_node: str = to_node
+        self.original: Exception = original
         super().__init__(str(original))

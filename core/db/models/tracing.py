@@ -5,13 +5,14 @@ Shared БД не содержит таблиц трейсинга.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import override
 
 from sqlalchemy import DateTime, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models.base import Base
+from core.types import JsonArray, JsonObject
 
 
 class Spans(Base):
@@ -21,7 +22,7 @@ class Spans(Base):
     Колонки company_id, namespace, service_name — конверт тенанта для фильтров и отчётов.
     """
 
-    __tablename__ = "spans"
+    __tablename__: str = "spans"
 
     span_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     trace_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
@@ -43,7 +44,7 @@ class Spans(Base):
 
     user_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     user_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    user_groups: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    user_groups: Mapped[JsonArray | None] = mapped_column(JSONB, nullable=True)
 
     session_auth: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     session_agent: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
@@ -54,10 +55,10 @@ class Spans(Base):
     resource_type: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     resource_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
 
-    attributes: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    events: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    attributes: Mapped[JsonObject | None] = mapped_column(JSONB, nullable=True)
+    events: Mapped[JsonArray | None] = mapped_column(JSONB, nullable=True)
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index(
             "ix_spans_company_resource_time",
             "company_id",
@@ -67,6 +68,7 @@ class Spans(Base):
         ),
     )
 
+    @override
     def __repr__(self) -> str:
         return (
             f"<Spans(span_id={self.span_id!r}, trace_id={self.trace_id!r}, "

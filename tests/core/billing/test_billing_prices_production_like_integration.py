@@ -19,8 +19,29 @@ from core.billing.settlement_rules import (
 from core.config.models import default_billing_resource_base_prices
 from core.models.billing_models import DEFAULT_TARIFF_PRICES, TariffPlan, UsageType
 from core.models.identity_models import Company
+from core.tracing.models import BillingSettlementSpan
 
 pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
+
+
+def _settlement_span(
+    *,
+    span_id: str,
+    trace_id: str,
+    operation_name: str,
+    company_id: str,
+    user_id: str,
+    attributes: dict[str, str | int] | None = None,
+) -> BillingSettlementSpan:
+    return BillingSettlementSpan(
+        span_id=span_id,
+        trace_id=trace_id,
+        operation_name=operation_name,
+        service_name="flows",
+        company_id=company_id,
+        user_id=user_id,
+        attributes=attributes if attributes is not None else {},
+    )
 
 # Канон платформы (дублирует core.config.models.default_billing_resource_base_prices).
 PRODUCTION_LIKE_BASE: dict[str, dict[str, float]] = {
@@ -341,18 +362,16 @@ async def test_settle_span_rule_charge_cost_matches_unit_times_quantity_livekit(
         quantity_from=f"const:{qty}",
         match=SettlementRuleMatch(operation_name_prefix=f"prod.{unique_id}."),
     )
-    span_dict = {
-        "span_id": f"sp_cost_{unique_id}",
-        "trace_id": str(uuid.uuid4()),
-        "operation_name": f"prod.{unique_id}.invoke",
-        "service_name": "flows",
-        "company_id": cid,
-        "user_id": system_user_id,
-        "attributes": {},
-    }
+    span = _settlement_span(
+        span_id=f"sp_cost_{unique_id}",
+        trace_id=str(uuid.uuid4()),
+        operation_name=f"prod.{unique_id}.invoke",
+        company_id=cid,
+        user_id=system_user_id,
+    )
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     usage_id = await billing.settle_span_rule_charge(
-        span_dict=span_dict,
+        span=span,
         rule=rule,
         settlement=settlement,
         fallback_user_id="",
@@ -398,18 +417,17 @@ async def test_settle_span_rule_charge_llm_tokens_attr_production_base(
         quantity_from=f"attr:{tok_attr}",
         match=SettlementRuleMatch(operation_name_prefix=f"llmjob.{unique_id}."),
     )
-    span_dict = {
-        "span_id": f"sp_tok_{unique_id}",
-        "trace_id": str(uuid.uuid4()),
-        "operation_name": f"llmjob.{unique_id}.run",
-        "service_name": "flows",
-        "company_id": cid,
-        "user_id": system_user_id,
-        "attributes": {tok_attr: tokens},
-    }
+    span = _settlement_span(
+        span_id=f"sp_tok_{unique_id}",
+        trace_id=str(uuid.uuid4()),
+        operation_name=f"llmjob.{unique_id}.run",
+        company_id=cid,
+        user_id=system_user_id,
+        attributes={tok_attr: tokens},
+    )
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     usage_id = await billing.settle_span_rule_charge(
-        span_dict=span_dict,
+        span=span,
         rule=rule,
         settlement=settlement,
         fallback_user_id="",
@@ -465,18 +483,16 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
             ),
         ],
     )
-    span_dict = {
-        "span_id": f"sp_fw_{unique_id}",
-        "trace_id": str(uuid.uuid4()),
-        "operation_name": f"fw.{unique_id}.x",
-        "service_name": "flows",
-        "company_id": cid,
-        "user_id": system_user_id,
-        "attributes": {},
-    }
+    span = _settlement_span(
+        span_id=f"sp_fw_{unique_id}",
+        trace_id=str(uuid.uuid4()),
+        operation_name=f"fw.{unique_id}.x",
+        company_id=cid,
+        user_id=system_user_id,
+    )
     settlement = SpanBillingSettlement(frontend_container.shared_storage)
     n = await billing.settle_pending_span_in_job(
-        span_dict=span_dict,
+        span=span,
         settlement=settlement,
         fallback_user_id="",
         rules_doc=doc,
@@ -487,7 +503,7 @@ async def test_settle_pending_first_win_single_usage_high_priority_rule(
     assert unit_room != unit_star
 
     recs = await frontend_container.usage_repository.admin_search_usage_records(company_id=cid, limit=20)
-    span_recs = [r for r in recs if r.metadata.get("span_id") == span_dict["span_id"]]
+    span_recs = [r for r in recs if r.metadata.get("span_id") == span.span_id]
     assert len(span_recs) == 1
     assert span_recs[0].metadata.get("rule_id") == f"r_hi_{unique_id}"
     assert span_recs[0].resource_name == "livekit:room_minute"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from core.clients.llm.config import LLMCallConfig
@@ -9,6 +10,7 @@ from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER, LLM_ROUTING_P
 from core.config.base import BaseSettings
 from core.config.llm_openai_compat import yandex_llm_openai_root_from_provider_cfg
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
+from core.types import JsonObject
 from core.variables import VariableResolutionError, VarResolver
 
 if TYPE_CHECKING:
@@ -172,8 +174,6 @@ def _resolve_llm_call_config(
     source: str | None = None,
 ) -> LLMCallConfig:
     """Resolve one LLM config into a concrete runtime attempt."""
-    if not isinstance(config, LLMCallConfig):
-        config = LLMCallConfig.model_validate(config)
     if not config.model or not str(config.model).strip():
         raise ValueError("LLM model обязателен")
 
@@ -336,7 +336,7 @@ def _resolve_llm_call_config(
 
 def _resolved_llm_configs(
     primary_config: LLMCallConfig,
-    fallback_models: list[LLMCallConfig] | None,
+    fallback_models: Sequence[LLMCallConfig | JsonObject] | None,
     *,
     settings: BaseSettings,
     state: ExecutionState | None,
@@ -348,7 +348,12 @@ def _resolved_llm_configs(
         source=primary_config.source,
     )
     resolved_configs = [resolved_primary]
-    for fallback_config in fallback_models or []:
+    for raw_fallback_config in fallback_models or []:
+        fallback_config = (
+            raw_fallback_config
+            if isinstance(raw_fallback_config, LLMCallConfig)
+            else LLMCallConfig.model_validate(raw_fallback_config)
+        )
         resolved_configs.append(
             _resolve_llm_call_config(
                 fallback_config,

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 from core.clients.llm.config import LLMCallConfig
 from core.clients.llm.openrouter_free_models import (
@@ -16,7 +15,7 @@ from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.config.base import BaseSettings
 
-_openrouter_free_pool_redis: Any | None = None
+_openrouter_free_pool_redis: RedisClient | None = None
 
 
 def _candidate_from_openrouter_free_record(

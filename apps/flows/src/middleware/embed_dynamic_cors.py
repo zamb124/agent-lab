@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing import override
+
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.types import ASGIApp
 
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.services.embed_target_resolver import resolve_embed_target
@@ -13,13 +16,18 @@ from apps.flows.src.services.embed_target_resolver import resolve_embed_target
 class EmbedDynamicCorsMiddleware(BaseHTTPMiddleware):
     """Обрабатывает CORS только для /flows/api/v1/embed/{embed_id}."""
 
-    _EMBED_PREFIX = "/flows/api/v1/embed/"
+    _EMBED_PREFIX: str = "/flows/api/v1/embed/"
 
-    def __init__(self, app, *, container: FlowContainer):
+    def __init__(self, app: ASGIApp, *, container: FlowContainer) -> None:
         super().__init__(app)
-        self._container = container
+        self._container: FlowContainer = container
 
-    async def dispatch(self, request: Request, call_next):
+    @override
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
         embed_id = self._extract_embed_id(request.url.path)
         if embed_id is None:
             return await call_next(request)

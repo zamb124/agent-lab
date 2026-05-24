@@ -551,7 +551,7 @@ async def test_stream_does_not_fallback_after_first_chunk_is_emitted() -> None:
         first_event = await stream.__anext__()
         assert isinstance(first_event, TaskArtifactUpdateEvent)
 
-        with pytest.raises(json.JSONDecodeError):
+        with pytest.raises(ValueError, match="llm.stream.chunk"):
             await stream.__anext__()
 
         assert [request.model for request in server.requests] == ["primary-breaks-after-first"]
@@ -941,3 +941,62 @@ def test_humanitec_llm_provider_uses_dynamic_pool_independent_of_default_strateg
     assert client.platform_paid_fallback_enabled is False
     assert client._candidate_resolver is not None
     assert client._static_candidates == []
+
+
+def test_get_llm_uses_humanitec_default_provider_as_platform_route() -> None:
+    old_settings = get_settings()
+    settings = BaseSettings(
+        testing=False,
+        llm=LLMConfig(
+            provider=HUMANITEC_LLM_PROVIDER,
+            default_strategy="configured",
+            default_model=HUMANITEC_LLM_AUTO_MODEL,
+            temperature=0.2,
+            timeout=10.0,
+            openrouter=OpenRouterProviderConfig(
+                api_key="sk-openrouter",
+                base_url="https://openrouter.ai/api/v1",
+                site_url="https://platform.example",
+                site_name="Platform Test",
+            ),
+            openrouter_free_pool=OpenRouterFreePoolConfig(
+                enabled=True,
+                fallback_model="qwen/qwen-2.5-7b-instruct",
+            ),
+        ),
+    )
+    try:
+        set_settings(settings)
+        with _production_llm_env():
+            client = get_llm(allow_platform_paid_fallback=False)
+    finally:
+        set_settings(old_settings)
+
+    assert isinstance(client, LLMClient)
+    assert client.platform_default_free_pool is True
+    assert client.platform_paid_fallback_enabled is False
+    assert client._candidate_resolver is not None
+    assert client._static_candidates == []
+
+
+def test_humanitec_llm_rejects_concrete_model() -> None:
+    old_settings = get_settings()
+    settings = BaseSettings(
+        testing=False,
+        llm=LLMConfig(
+            provider="openrouter",
+            default_strategy="configured",
+            default_model="configured/default",
+            openrouter=OpenRouterProviderConfig(
+                api_key="sk-openrouter",
+                base_url="https://openrouter.ai/api/v1",
+            ),
+            openrouter_free_pool=OpenRouterFreePoolConfig(enabled=True),
+        ),
+    )
+    try:
+        set_settings(settings)
+        with _production_llm_env(), pytest.raises(ValueError, match="model='auto'"):
+            get_llm(provider=HUMANITEC_LLM_PROVIDER, model_name="openai/gpt-4o-mini")
+    finally:
+        set_settings(old_settings)

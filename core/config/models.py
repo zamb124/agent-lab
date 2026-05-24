@@ -21,6 +21,9 @@ from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.rag_indexing_schema import IndexProfileConfig
 from core.utils.tts_input_steps import TTS_INPUT_STEP_IDS
 
+HUMANITEC_LLM_PROVIDER = "humanitec_llm"
+HUMANITEC_LLM_AUTO_MODEL = "auto"
+
 
 class DemoAuthConfig(BaseModel):
     """
@@ -681,10 +684,10 @@ class WhatsAppConfig(BaseModel):
 
 
 class NanoBananaConfig(BaseModel):
-    """Конфигурация Nano Banana (Gemini Image Generation через OpenRouter)"""
+    """Конфигурация image generation."""
 
     enabled: bool = False
-    model_name: str = "google/gemini-2.5-flash-preview-image"
+    model_name: str = HUMANITEC_LLM_AUTO_MODEL
     timeout: int = 60
 
 
@@ -1598,12 +1601,16 @@ class LLMConfig(BaseModel):
     """Конфигурация LLM с поддержкой нескольких провайдеров"""
 
     provider: str = Field(
-        default="openai",
-        description="Провайдер: openai, openrouter, bothub, provider_litserve, yandex",
+        default=HUMANITEC_LLM_PROVIDER,
+        description=(
+            "Провайдер: humanitec_llm, openai, openrouter, bothub, "
+            "provider_litserve, yandex"
+        ),
     )
-    default_model: str = Field(default="gpt-4o")
+    default_model: str = Field(default=HUMANITEC_LLM_AUTO_MODEL)
     vision_model: str = Field(
-        default="gemini-2.5-pro-preview", description="Модель для multimodal/vision запросов"
+        default=HUMANITEC_LLM_AUTO_MODEL,
+        description="Модель для multimodal/vision запросов",
     )
     temperature: float = Field(default=0.2)
     max_tokens: int | None = Field(default=None)
@@ -1616,7 +1623,7 @@ class LLMConfig(BaseModel):
     default_strategy: Literal["configured", "openrouter_free_pool"] = Field(
         default="openrouter_free_pool",
         description=(
-            "Как выбирать модель при get_llm() без model/provider: configured — старый "
+            "Как выбирать модель при get_llm() без model/provider: configured — "
             "settings.llm.default_model; openrouter_free_pool — Redis-кэш бесплатных "
             "OpenRouter моделей + fallback_model."
         ),

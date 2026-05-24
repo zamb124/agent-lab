@@ -5,17 +5,30 @@ SpanRepository — персистенция spans в platform_tracing.
 (и дубли в attributes). Специфика flows остаётся в attributes (platform.flow_id и т.д.).
 """
 
+from __future__ import annotations
+
 import base64
 import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+from typing import cast as type_cast
 
 from sqlalchemy import Boolean, and_, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm.attributes import InstrumentedAttribute
+from sqlalchemy.sql.elements import ColumnElement
 
 import core.tracing.attributes as trace_attr
 from core.db.models import Spans
 from core.logging import get_logger
+from core.tracing.models import (
+    BillingSettlementSpan,
+    TraceSearchResult,
+    TraceSpanEvent,
+    TraceSpanRecord,
+    TraceSpanWrite,
+)
+from core.types import JsonArray, JsonObject, parse_json_object, require_json_object
 
 if TYPE_CHECKING:
     from core.db import Storage
@@ -23,9 +36,13 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _json_text_eq(json_col, key: str, value: str):
+def _span_attribute_text(key: str) -> ColumnElement[str | None]:
+    return type_cast(ColumnElement[str | None], Spans.attributes.op("->>")(key))
+
+
+def _json_text_eq(key: str, value: str) -> ColumnElement[bool]:
     """attributes->>key = value (ключ целиком, например platform.flow_id)."""
-    return json_col[key].astext == value
+    return _span_attribute_text(key) == value
 
 
 def _encode_service_list_cursor(start_time: datetime, span_id: str) -> str:
@@ -39,11 +56,17 @@ def _encode_service_list_cursor(start_time: datetime, span_id: str) -> str:
 def _decode_service_list_cursor(cursor: str) -> tuple[datetime, str]:
     pad = "=" * (-len(cursor) % 4)
     raw = base64.urlsafe_b64decode(cursor + pad)
-    payload = json.loads(raw.decode())
-    t = datetime.fromisoformat(payload["t"])
+    payload = parse_json_object(raw.decode(), "cursor")
+    raw_time = payload.get("t")
+    if not isinstance(raw_time, str):
+        raise ValueError("cursor.t должен быть строкой")
+    raw_span_id = payload.get("s")
+    if not isinstance(raw_span_id, str):
+        raise ValueError("cursor.s должен быть строкой")
+    t = datetime.fromisoformat(raw_time)
     if t.tzinfo is None:
         t = t.replace(tzinfo=timezone.utc)
-    return t, payload["s"]
+    return t, raw_span_id
 
 
 MIN_ADMIN_ILIKE_LEN = 2
@@ -55,8 +78,11 @@ def _escape_like_fragment(fragment: str) -> str:
     return fragment.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _admin_ilike(column, fragment: str):
-    return column.ilike(f"%{_escape_like_fragment(fragment)}%", escape="\\")
+def _admin_ilike(
+    column: InstrumentedAttribute[str] | InstrumentedAttribute[str | None],
+    fragment: str,
+) -> ColumnElement[bool]:
+    return type_cast(ColumnElement[bool], column.ilike(f"%{_escape_like_fragment(fragment)}%", escape="\\"))
 
 
 def _admin_optional_ilike_param(param_name: str, value: str | None) -> str | None:
@@ -66,10 +92,11 @@ def _admin_optional_ilike_param(param_name: str, value: str | None) -> str | Non
     if stripped == "":
         return None
     if len(stripped) < MIN_ADMIN_ILIKE_LEN:
-        raise ValueError(
-            f"{param_name}: для поиска подстроки нужно минимум {MIN_ADMIN_ILIKE_LEN} символа, "
-            f"получено {len(stripped)}"
+        message = (
+            f"{param_name}: для поиска подстроки нужно минимум {MIN_ADMIN_ILIKE_LEN} "
+            f"символа, получено {len(stripped)}"
         )
+        raise ValueError(message)
     return stripped
 
 
@@ -98,78 +125,120 @@ def _admin_facet_scope_namespace(namespace: str | None) -> str | None:
     return stripped if stripped else None
 
 
+def _optional_string_attribute(attributes: JsonObject, key: str, span_id: str) -> str | None:
+    value = attributes.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"span {span_id}: {key} должен быть строкой")
+    return value
+
+
+def _optional_bool_attribute(attributes: JsonObject, key: str, span_id: str) -> bool | None:
+    value = attributes.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise ValueError(f"span {span_id}: {key} должен быть boolean")
+    return value
+
+
+def _span_user_groups(value: JsonArray | None, span_id: str) -> list[str] | None:
+    if value is None:
+        return None
+    groups: list[str] = []
+    for index, group in enumerate(value):
+        if not isinstance(group, str):
+            raise ValueError(f"span {span_id}: user_groups[{index}] должен быть строкой")
+        groups.append(group)
+    return groups
+
+
+def _span_event_attributes(event_payload: JsonObject, span_id: str, index: int) -> JsonObject:
+    raw_attributes = event_payload.get("attributes")
+    if raw_attributes is None:
+        return {}
+    if not isinstance(raw_attributes, dict):
+        raise ValueError(f"span {span_id}: events[{index}].attributes должен быть JSON object")
+    return require_json_object(raw_attributes, f"spans[{span_id}].events[{index}].attributes")
+
+
+def _span_events(value: JsonArray | None, span_id: str) -> list[TraceSpanEvent]:
+    if value is None:
+        return []
+    events: list[TraceSpanEvent] = []
+    for index, event in enumerate(value):
+        if not isinstance(event, dict):
+            raise ValueError(f"span {span_id}: events[{index}] должен быть JSON object")
+        event_payload = require_json_object(event, f"spans[{span_id}].events[{index}]")
+        raw_name = event_payload.get("name")
+        if not isinstance(raw_name, str):
+            raise ValueError(f"span {span_id}: events[{index}].name должен быть строкой")
+        raw_timestamp = event_payload.get("timestamp")
+        if raw_timestamp is not None and not isinstance(raw_timestamp, str):
+            raise ValueError(f"span {span_id}: events[{index}].timestamp должен быть строкой или null")
+        events.append(
+            TraceSpanEvent(
+                name=raw_name,
+                timestamp=raw_timestamp,
+                attributes=_span_event_attributes(event_payload, span_id, index),
+            )
+        )
+    return events
+
+
 class SpanRepository:
     def __init__(self, storage: "Storage"):
-        self._storage = storage
+        self._storage: Storage = storage
 
-    async def save_span(self, span_data: dict[str, Any]) -> None:
-        attrs: dict[str, Any] = dict(span_data.get("attributes") or {})
+    async def save_span(self, span: TraceSpanWrite) -> None:
+        attrs: JsonObject = dict(span.attributes)
 
-        domain_pairs = [
-            ("flow_id", trace_attr.ATTR_FLOW_ID),
-            ("task_id", trace_attr.ATTR_TASK_ID),
-            ("context_id", trace_attr.ATTR_CONTEXT_ID),
-            ("branch_id", trace_attr.ATTR_BRANCH_ID),
-            ("node_id", trace_attr.ATTR_NODE_ID),
-            ("agent_name", trace_attr.ATTR_AGENT_NAME),
-            ("is_resume", trace_attr.ATTR_IS_RESUME),
-        ]
-        for legacy_key, attr_key in domain_pairs:
-            val = span_data.get(legacy_key)
-            if val is not None and attr_key not in attrs:
-                attrs[attr_key] = val
+        if span.event_type is not None and trace_attr.ATTR_EVENT_TYPE not in attrs:
+            attrs[trace_attr.ATTR_EVENT_TYPE] = span.event_type
+        if span.resource_type is not None and trace_attr.ATTR_RESOURCE_TYPE not in attrs:
+            attrs[trace_attr.ATTR_RESOURCE_TYPE] = span.resource_type
+        if span.resource_id is not None and trace_attr.ATTR_RESOURCE_ID not in attrs:
+            attrs[trace_attr.ATTR_RESOURCE_ID] = span.resource_id
 
-        for col in ("event_type", "resource_type", "resource_id"):
-            v = span_data.get(col)
-            if v is not None:
-                attr_map = {
-                    "event_type": trace_attr.ATTR_EVENT_TYPE,
-                    "resource_type": trace_attr.ATTR_RESOURCE_TYPE,
-                    "resource_id": trace_attr.ATTR_RESOURCE_ID,
-                }
-                ak = attr_map[col]
-                if ak not in attrs:
-                    attrs[ak] = v
-
-        service_name = span_data.get("service_name")
-        if not service_name:
+        if not span.service_name:
             raise ValueError("span_data['service_name'] обязателен для сохранения span")
 
         async with self._storage.get_session() as session:
             stmt = (
                 insert(Spans)
                 .values(
-                    span_id=span_data["span_id"],
-                    trace_id=span_data["trace_id"],
-                    parent_span_id=span_data.get("parent_span_id"),
-                    operation_name=span_data["operation_name"],
-                    kind=span_data.get("kind"),
-                    start_time=span_data["start_time"],
-                    end_time=span_data.get("end_time"),
-                    duration_ms=span_data.get("duration_ms"),
-                    status=span_data.get("status"),
-                    status_message=span_data.get("status_message"),
-                    service_name=service_name,
-                    company_id=span_data.get("company_id"),
-                    namespace=span_data.get("namespace"),
-                    user_id=span_data.get("user_id"),
-                    user_name=span_data.get("user_name"),
-                    user_groups=span_data.get("user_groups"),
-                    session_auth=span_data.get("session_auth"),
-                    session_agent=span_data.get("session_agent"),
-                    channel=span_data.get("channel"),
-                    event_type=span_data.get("event_type"),
-                    resource_type=span_data.get("resource_type"),
-                    resource_id=span_data.get("resource_id"),
+                    span_id=span.span_id,
+                    trace_id=span.trace_id,
+                    parent_span_id=span.parent_span_id,
+                    operation_name=span.operation_name,
+                    kind=span.kind,
+                    start_time=span.start_time,
+                    end_time=span.end_time,
+                    duration_ms=span.duration_ms,
+                    status=span.status,
+                    status_message=span.status_message,
+                    service_name=span.service_name,
+                    company_id=span.company_id,
+                    namespace=span.namespace,
+                    user_id=span.user_id,
+                    user_name=span.user_name,
+                    user_groups=span.user_groups,
+                    session_auth=span.session_auth,
+                    session_agent=span.session_agent,
+                    channel=span.channel,
+                    event_type=span.event_type,
+                    resource_type=span.resource_type,
+                    resource_id=span.resource_id,
                     attributes=attrs,
-                    events=span_data.get("events") or [],
+                    events=span.events_json_array(),
                 )
                 .on_conflict_do_nothing(index_elements=["span_id"])
             )
-            await session.execute(stmt)
+            _ = await session.execute(stmt)
             await session.commit()
 
-    async def get_span_by_id(self, span_id: str) -> dict[str, Any] | None:
+    async def get_span_by_id(self, span_id: str) -> TraceSpanRecord | None:
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.span_id == span_id)
             result = await session.execute(stmt)
@@ -188,7 +257,7 @@ class SpanRepository:
         event_type: str | None = None,
         limit: int = 50,
         cursor: str | None = None,
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    ) -> tuple[list[TraceSpanRecord], str | None]:
         """
         Список spans сервиса (фильтры по компании, операции, типу события).
         Сортировка: start_time DESC, span_id DESC. Курсор — непрозрачная строка из ответа.
@@ -238,7 +307,7 @@ class SpanRepository:
         resource_id: str,
         event_type: str | None = None,
         limit: int = 100,
-    ) -> list[dict[str, Any]]:
+    ) -> list[TraceSpanRecord]:
         """Хронология событий по сущности (чат, заметка, документ и т.д.)."""
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(
@@ -253,18 +322,18 @@ class SpanRepository:
             rows = result.scalars().all()
             return [self._serialize_span(row) for row in rows]
 
-    async def get_trace(self, trace_id: str) -> list[dict[str, Any]]:
+    async def get_trace(self, trace_id: str) -> list[TraceSpanRecord]:
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.trace_id == trace_id).order_by(Spans.start_time.asc())
             result = await session.execute(stmt)
             rows = result.scalars().all()
             return [self._serialize_span(row) for row in rows]
 
-    async def get_spans_by_task(self, task_id: str) -> list[dict[str, Any]]:
+    async def get_spans_by_task(self, task_id: str) -> list[TraceSpanRecord]:
         async with self._storage.get_session() as session:
             stmt = (
                 select(Spans)
-                .where(_json_text_eq(Spans.attributes, trace_attr.ATTR_TASK_ID, task_id))
+                .where(_json_text_eq(trace_attr.ATTR_TASK_ID, task_id))
                 .order_by(Spans.start_time.asc())
             )
             result = await session.execute(stmt)
@@ -275,7 +344,7 @@ class SpanRepository:
         self,
         session_agent: str,
         limit: int = 100,
-    ) -> list[dict[str, Any]]:
+    ) -> list[TraceSpanRecord]:
         async with self._storage.get_session() as session:
             stmt = (
                 select(Spans)
@@ -293,7 +362,7 @@ class SpanRepository:
         from_time: datetime | None = None,
         to_time: datetime | None = None,
         limit: int = 100,
-    ) -> list[dict[str, Any]]:
+    ) -> list[TraceSpanRecord]:
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(Spans.user_id == user_id)
             if from_time:
@@ -311,10 +380,10 @@ class SpanRepository:
         from_time: datetime | None = None,
         to_time: datetime | None = None,
         limit: int = 100,
-    ) -> list[dict[str, Any]]:
+    ) -> list[TraceSpanRecord]:
         async with self._storage.get_session() as session:
             stmt = select(Spans).where(
-                _json_text_eq(Spans.attributes, trace_attr.ATTR_FLOW_ID, flow_id)
+                _json_text_eq(trace_attr.ATTR_FLOW_ID, flow_id)
             )
             if from_time:
                 stmt = stmt.where(Spans.start_time >= from_time)
@@ -331,7 +400,7 @@ class SpanRepository:
         from_time: datetime | None = None,
         to_time: datetime | None = None,
         limit: int = 100,
-    ) -> list[dict[str, Any]]:
+    ) -> list[TraceSpanRecord]:
         return await self.get_spans_by_agent(flow_id, from_time, to_time, limit)
 
     async def search_traces(
@@ -344,7 +413,7 @@ class SpanRepository:
         to_time: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[list[TraceSearchResult], int]:
         async with self._storage.get_session() as session:
             stmt = select(Spans)
             count_stmt = select(func.count()).select_from(Spans)
@@ -356,11 +425,11 @@ class SpanRepository:
                 stmt = stmt.where(Spans.session_agent == session_id)
                 count_stmt = count_stmt.where(Spans.session_agent == session_id)
             if flow_id:
-                cond = _json_text_eq(Spans.attributes, trace_attr.ATTR_FLOW_ID, flow_id)
+                cond = _json_text_eq(trace_attr.ATTR_FLOW_ID, flow_id)
                 stmt = stmt.where(cond)
                 count_stmt = count_stmt.where(cond)
             if task_id:
-                cond = _json_text_eq(Spans.attributes, trace_attr.ATTR_TASK_ID, task_id)
+                cond = _json_text_eq(trace_attr.ATTR_TASK_ID, task_id)
                 stmt = stmt.where(cond)
                 count_stmt = count_stmt.where(cond)
             if from_time:
@@ -378,14 +447,16 @@ class SpanRepository:
             rows = result.scalars().all()
             spans = [self._serialize_span(row) for row in rows]
 
-            traces_dict: dict[str, dict[str, Any]] = {}
+            traces_dict: dict[str, list[TraceSpanRecord]] = {}
             for span in spans:
-                tid = span["trace_id"]
-                if tid not in traces_dict:
-                    traces_dict[tid] = {"trace_id": tid, "spans": []}
-                traces_dict[tid]["spans"].append(span)
+                if span.trace_id not in traces_dict:
+                    traces_dict[span.trace_id] = []
+                traces_dict[span.trace_id].append(span)
 
-            return list(traces_dict.values()), total_count or 0
+            return [
+                TraceSearchResult(trace_id=trace_id, spans=trace_spans)
+                for trace_id, trace_spans in traces_dict.items()
+            ], total_count or 0
 
     async def admin_search_spans(
         self,
@@ -404,7 +475,7 @@ class SpanRepository:
         service_name_query: str | None = None,
         limit: int = 50,
         cursor: str | None = None,
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    ) -> tuple[list[TraceSpanRecord], str | None]:
         if limit < 1:
             raise ValueError("limit должен быть >= 1")
         if limit > ADMIN_SPANS_MAX_LIMIT:
@@ -477,7 +548,7 @@ class SpanRepository:
         from_time: datetime,
         to_time: datetime,
         limit: int,
-    ) -> list[dict[str, Any]]:
+    ) -> list[BillingSettlementSpan]:
         """
         Spans с platform.billing.resource_name и platform.billing.pending_settlement=true
         за полуинтервал [from_time, to_time), по возрастанию start_time (для джобы списания).
@@ -487,8 +558,8 @@ class SpanRepository:
         if from_time.tzinfo is None or to_time.tzinfo is None:
             raise ValueError("from_time и to_time обязаны иметь timezone")
 
-        res_txt = Spans.attributes[trace_attr.ATTR_BILLING_RESOURCE_NAME].astext
-        pend_txt = Spans.attributes[trace_attr.ATTR_BILLING_PENDING_SETTLEMENT].astext
+        res_txt = _span_attribute_text(trace_attr.ATTR_BILLING_RESOURCE_NAME)
+        pend_txt = _span_attribute_text(trace_attr.ATTR_BILLING_PENDING_SETTLEMENT)
 
         async with self._storage.get_session() as session:
             stmt = (
@@ -508,7 +579,7 @@ class SpanRepository:
             )
             result = await session.execute(stmt)
             rows = result.scalars().all()
-            return [self._serialize_span(row) for row in rows]
+            return [self._billing_settlement_span(row) for row in rows]
 
     async def admin_facet_distinct_company_ids(
         self, *, q: str | None = None, limit: int = ADMIN_FACETS_MAX_LIMIT
@@ -688,38 +759,51 @@ class SpanRepository:
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0] is not None]
 
-    def _serialize_span(self, row: Any) -> dict[str, Any]:
-        raw_attrs = row.attributes or {}
-        return {
-            "span_id": row.span_id,
-            "trace_id": row.trace_id,
-            "parent_span_id": row.parent_span_id,
-            "operation_name": row.operation_name,
-            "kind": row.kind,
-            "start_time": row.start_time.isoformat() if row.start_time else None,
-            "end_time": row.end_time.isoformat() if row.end_time else None,
-            "duration_ms": row.duration_ms,
-            "status": row.status,
-            "status_message": row.status_message,
-            "service_name": row.service_name,
-            "company_id": row.company_id,
-            "namespace": row.namespace,
-            "user_id": row.user_id,
-            "user_name": row.user_name,
-            "user_groups": row.user_groups,
-            "session_auth": row.session_auth,
-            "session_agent": row.session_agent,
-            "channel": row.channel,
-            "event_type": row.event_type,
-            "resource_type": row.resource_type,
-            "resource_id": row.resource_id,
-            "flow_id": raw_attrs.get(trace_attr.ATTR_FLOW_ID),
-            "task_id": raw_attrs.get(trace_attr.ATTR_TASK_ID),
-            "context_id": raw_attrs.get(trace_attr.ATTR_CONTEXT_ID),
-            "branch_id": raw_attrs.get(trace_attr.ATTR_BRANCH_ID),
-            "node_id": raw_attrs.get(trace_attr.ATTR_NODE_ID),
-            "agent_name": raw_attrs.get(trace_attr.ATTR_AGENT_NAME),
-            "is_resume": raw_attrs.get(trace_attr.ATTR_IS_RESUME),
-            "attributes": raw_attrs,
-            "events": row.events or [],
-        }
+    def _serialize_span(self, row: Spans) -> TraceSpanRecord:
+        raw_attrs: JsonObject = dict(row.attributes) if row.attributes is not None else {}
+        return TraceSpanRecord(
+            span_id=row.span_id,
+            trace_id=row.trace_id,
+            parent_span_id=row.parent_span_id,
+            operation_name=row.operation_name,
+            kind=row.kind,
+            start_time=row.start_time,
+            end_time=row.end_time,
+            duration_ms=row.duration_ms,
+            status=row.status,
+            status_message=row.status_message,
+            service_name=row.service_name,
+            company_id=row.company_id,
+            namespace=row.namespace,
+            user_id=row.user_id,
+            user_name=row.user_name,
+            user_groups=_span_user_groups(row.user_groups, row.span_id),
+            session_auth=row.session_auth,
+            session_agent=row.session_agent,
+            channel=row.channel,
+            event_type=row.event_type,
+            resource_type=row.resource_type,
+            resource_id=row.resource_id,
+            flow_id=_optional_string_attribute(raw_attrs, trace_attr.ATTR_FLOW_ID, row.span_id),
+            task_id=_optional_string_attribute(raw_attrs, trace_attr.ATTR_TASK_ID, row.span_id),
+            context_id=_optional_string_attribute(raw_attrs, trace_attr.ATTR_CONTEXT_ID, row.span_id),
+            branch_id=_optional_string_attribute(raw_attrs, trace_attr.ATTR_BRANCH_ID, row.span_id),
+            node_id=_optional_string_attribute(raw_attrs, trace_attr.ATTR_NODE_ID, row.span_id),
+            agent_name=_optional_string_attribute(raw_attrs, trace_attr.ATTR_AGENT_NAME, row.span_id),
+            is_resume=_optional_bool_attribute(raw_attrs, trace_attr.ATTR_IS_RESUME, row.span_id),
+            attributes=raw_attrs,
+            events=_span_events(row.events, row.span_id),
+        )
+
+    def _billing_settlement_span(self, row: Spans) -> BillingSettlementSpan:
+        attributes: JsonObject = dict(row.attributes) if row.attributes is not None else {}
+        return BillingSettlementSpan(
+            span_id=row.span_id,
+            trace_id=row.trace_id,
+            operation_name=row.operation_name,
+            service_name=row.service_name,
+            company_id=row.company_id,
+            user_id=row.user_id,
+            event_type=row.event_type,
+            attributes=attributes,
+        )

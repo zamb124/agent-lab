@@ -1,7 +1,6 @@
-"""
-Роутер авторизации для Frontend сервиса
-"""
+"""Роутер авторизации для Frontend сервиса."""
 
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -17,56 +16,34 @@ from core.utils.tokens import TokenService
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+
 @router.get("/callback")
 async def auth_callback(
     request: Request,
     container: ContainerDep,
-    code: str = Query(...),
-    state: str = Query(...),
-    provider: str | None = Query(default=None),
-    apple_oauth_user_json: str | None = Query(None, alias="user"),
-):
+    code: Annotated[str, Query()],
+    state: Annotated[str, Query()],
+    provider: Annotated[str | None, Query()] = None,
+    apple_oauth_user_json: Annotated[str | None, Query(alias="user")] = None,
+) -> RedirectResponse:
     """Callback после OAuth авторизации"""
     auth_service: AuthService = container.auth_service
 
-    auth_state = await auth_service._get_auth_state(state)
+    auth_state = await auth_service.get_auth_state(state)
     if not auth_state:
         raise HTTPException(status_code=400, detail="Недействительный state")
 
     if provider is None:
-        provider_raw = auth_state.get("provider")
-        if not isinstance(provider_raw, str) or not provider_raw:
-            raise HTTPException(status_code=400, detail="Провайдер отсутствует в state")
-        provider = provider_raw
+        provider_enum = auth_state.provider
+    else:
+        try:
+            provider_enum = AuthProvider(provider.lower())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Неизвестный провайдер: {provider}")
 
-    try:
-        provider_enum = AuthProvider(provider.lower())
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Неизвестный провайдер: {provider}")
-
-    # Получаем оригинальный хост из state (субдомен откуда пользователь пришел)
-    original_host_raw = auth_state.get("original_host")
-    original_host = (
-        original_host_raw
-        if isinstance(original_host_raw, str) and original_host_raw
-        else None
-    )
-
-    # Опциональный путь для возврата после авторизации (напр. /join?token=...)
-    return_path_raw = auth_state.get("return_path")
-    return_path = (
-        return_path_raw
-        if isinstance(return_path_raw, str) and return_path_raw
-        else None
-    )
-
-    # redirect_uri должен совпадать с тем что был при start_auth (на базовом домене)
-    redirect_uri_raw = auth_state.get("redirect_uri")
-    redirect_uri = (
-        redirect_uri_raw
-        if isinstance(redirect_uri_raw, str) and redirect_uri_raw
-        else None
-    )
+    original_host = auth_state.original_host
+    return_path = auth_state.return_path
+    redirect_uri = auth_state.redirect_uri
 
     auth_request = AuthRequest(
         provider=provider_enum,

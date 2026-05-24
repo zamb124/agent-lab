@@ -4,42 +4,43 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from core.fields import Field
+from core.types import JsonObject
+
+BillingCostOrigin = Literal["platform", "company"]
 
 
 class TariffPlan(str, Enum):
     """Тарифные планы"""
-    FREE = "free"           # Бесплатный
-    BASIC = "basic"         # Базовый
-    PREMIUM = "premium"     # Премиум
-    ENTERPRISE = "enterprise" # Корпоративный
+
+    FREE = "free"  # Бесплатный
+    BASIC = "basic"  # Базовый
+    PREMIUM = "premium"  # Премиум
+    ENTERPRISE = "enterprise"  # Корпоративный
 
 
 class UsageType(str, Enum):
     """Типы использования ресурсов"""
-    TOOL_CALL = "tool_call"         # Вызов инструмента
-    LLM_REQUEST = "llm_request"     # Запрос к LLM
+
+    TOOL_CALL = "tool_call"  # Вызов инструмента
+    LLM_REQUEST = "llm_request"  # Запрос к LLM
     EMBEDDING_REQUEST = "embedding_request"  # Запрос к Embedding API
     RERANK_REQUEST = "rerank_request"  # Запрос к rerank API
     AGENT_EXECUTION = "agent_execution"  # Выполнение агента
-    FLOW_EXECUTION = "flow_execution"    # Выполнение флоу
-    FILE_UPLOAD = "file_upload"     # Загрузка файла
-    STORAGE_USAGE = "storage_usage" # Использование хранилища
+    FLOW_EXECUTION = "flow_execution"  # Выполнение флоу
+    FILE_UPLOAD = "file_upload"  # Загрузка файла
+    STORAGE_USAGE = "storage_usage"  # Использование хранилища
 
 
 class UsageRecord(BaseModel):
     """Запись об использовании ресурсов"""
 
-    model_config = ConfigDict(json_schema_extra={"storage_prefix": "usage"})
+    model_config: ClassVar[ConfigDict] = ConfigDict(json_schema_extra={"storage_prefix": "usage"})
 
-    usage_id: str = Field(
-        title="ID записи",
-        json_schema_extra={"readOnly": True}
-    )
+    usage_id: str = Field(title="ID записи", json_schema_extra={"readOnly": True})
     user_id: str = Field(title="ID пользователя")
     company_id: str = Field(title="ID компании")
     session_id: str | None = Field(default=None, title="ID сессии")
@@ -53,14 +54,14 @@ class UsageRecord(BaseModel):
     quantity: int = Field(default=1, title="Количество")  # токены, вызовы, байты
 
     # Метаданные
-    metadata: dict[str, Any] = Field(default_factory=dict, title="Дополнительные данные")
+    metadata: JsonObject = Field(default_factory=dict, title="Дополнительные данные")
 
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # Тарифные цены: множители к базовой цене
 # Может быть переопределено в конфигурации сервиса
-DEFAULT_TARIFF_PRICES = {
+DEFAULT_TARIFF_PRICES: dict[TariffPlan, dict[str, dict[str, float]]] = {
     TariffPlan.FREE: {
         "llm": {"*": 1.5},
         "embedding": {"*": 1.5},
@@ -86,7 +87,3 @@ DEFAULT_TARIFF_PRICES = {
         "billing": {"*": 1.0},
     },
 }
-
-# Для обратной совместимости
-TARIFF_PRICES = DEFAULT_TARIFF_PRICES
-TARIFF_LIMITS = {}

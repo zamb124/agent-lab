@@ -6,11 +6,12 @@ import asyncio
 import json
 import os
 import uuid
-from collections.abc import AsyncGenerator
-from typing import Any, TypeVar, overload
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from typing import TypeAlias, TypeVar, overload
 
 from a2a.types import (
     Artifact,
+    FilePart,
     Message,
     Part,
     Role,
@@ -38,11 +39,19 @@ from core.clients.llm.messages import (
 from core.clients.redis_client import RedisClient
 from core.llm_context import LLMContextBlock, LLMContextSourceRegistry
 from core.logging import get_logger
-from core.types import JsonValue, parse_json_value
+from core.types import (
+    JsonArray,
+    JsonObject,
+    parse_json_object,
+    parse_json_value,
+    require_json_array,
+    require_json_object,
+)
 
 logger = get_logger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+MockLLMQueuedResponse: TypeAlias = str | JsonObject
 
 
 def _mock_redis_key() -> str:
@@ -115,11 +124,11 @@ class MockLLM:
     def __init__(self, model_name: str = "mock-gpt-4"):
         if not model_name.strip():
             raise ValueError("MockLLM model is required")
-        self.model = model_name
-        self.llm_provider = "mock"
-        self._response_queue: list[Any] = []
+        self.model: str = model_name
+        self.llm_provider: str = "mock"
+        self._response_queue: list[MockLLMQueuedResponse] = []
         self._responses: dict[str, str] = {}
-        self._tool_responses: dict[str, dict[str, Any]] = {}
+        self._tool_responses: dict[str, JsonObject] = {}
         self._default_response: str = "Mock LLM ответ"
         self._redis_client: RedisClient | None = None
 
@@ -130,8 +139,8 @@ class MockLLM:
 
     def configure(
         self,
-        response_queue: list[Any] | None = None,
-        tool_responses: dict[str, dict[str, Any]] | None = None,
+        response_queue: list[MockLLMQueuedResponse] | None = None,
+        tool_responses: dict[str, JsonObject] | None = None,
         responses: dict[str, str] | None = None,
         default_response: str | None = None,
     ) -> "MockLLM":
@@ -158,7 +167,7 @@ class MockLLM:
         self._tool_responses = {}
         self._default_response = "Mock LLM ответ"
 
-    async def _get_redis_response(self) -> JsonValue | None:
+    async def _get_redis_response(self) -> MockLLMQueuedResponse | None:
         """Получает ответ из Redis (межпроцессная очередь)."""
         if not self._redis_client:
             return None
@@ -173,8 +182,13 @@ class MockLLM:
             if not isinstance(redis_response_payload, str):
                 raise ValueError("mock_llm redis response must be a JSON string")
             redis_response = parse_json_value(redis_response_payload, "mock_llm.redis_response")
-            logger.info("mock_llm.redis_response_popped")
-            return redis_response
+            if isinstance(redis_response, str):
+                logger.info("mock_llm.redis_response_popped")
+                return redis_response
+            if isinstance(redis_response, dict):
+                logger.info("mock_llm.redis_response_popped")
+                return require_json_object(redis_response, "mock_llm.redis_response")
+            raise ValueError("mock_llm redis response must be a string or JSON object")
         except Exception as exc:
             logger.warning(
                 "mock_llm.redis_response_read_failed",
@@ -186,8 +200,8 @@ class MockLLM:
     async def _capture_call_to_redis(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None,
-        response_format: dict[str, Any] | None,
+        tools: list[JsonObject] | None,
+        response_format: JsonObject | None,
         model: str | None = None,
     ) -> None:
         """
@@ -221,14 +235,14 @@ class MockLLM:
         normalized_messages = [
             _normalize_message_for_capture(message) for message in messages
         ]
-        record = {
+        record: JsonObject = {
             "model": model or self.model,
             "messages": normalized_messages,
             "tools": tools or [],
             "response_format": response_format,
         }
         try:
-            await self._redis_client.rpush(
+            _ = await self._redis_client.rpush(
                 _mock_capture_key(scope), json.dumps(record, ensure_ascii=False)
             )
         except Exception as exc:
@@ -239,7 +253,7 @@ class MockLLM:
             )
             raise
 
-    def _get_response(self, messages: list[Message]) -> dict[str, Any]:
+    def _get_response(self, messages: list[Message]) -> JsonObject:
         """Внутренний метод получения ответа."""
         # Сначала локальная очередь
         if self._response_queue:
@@ -249,7 +263,7 @@ class MockLLM:
 
         return self._generate_from_patterns(messages)
 
-    async def _get_response_async(self, messages: list[Message]) -> dict[str, Any]:
+    async def _get_response_async(self, messages: list[Message]) -> JsonObject:
         """Асинхронный метод получения ответа с Redis поддержкой."""
         # Локальная очередь приоритетнее Redis: в одном тесте uvicorn ест очередь
         # из configure_mock_llm, а worker — из ключа mock_llm:responses без пересечения.
@@ -264,14 +278,26 @@ class MockLLM:
 
         return self._generate_from_patterns(messages)
 
-    def _process_response(self, mock_response: Any, messages: list[Message]) -> dict[str, Any]:
+    def _process_response(
+        self,
+        mock_response: MockLLMQueuedResponse,
+        messages: list[Message],
+    ) -> JsonObject:
         """Обрабатывает ответ из очереди"""
         if isinstance(mock_response, dict):
             if mock_response.get("type") == "tool_call":
-                arguments = mock_response.get("args", {})
+                tool_name = mock_response.get("tool")
+                if not isinstance(tool_name, str) or not tool_name:
+                    raise ValueError("mock_llm tool_call.tool must be a non-empty string")
+                arguments = require_json_object(
+                    mock_response.get("args", {}),
+                    "mock_llm.response.args",
+                )
+                raw_tool_call_id = mock_response.get("id")
                 tool_call_id = (
-                    mock_response.get("id")
-                    or f"call_mock_{mock_response['tool']}_{len(messages)}"
+                    raw_tool_call_id
+                    if isinstance(raw_tool_call_id, str) and raw_tool_call_id
+                    else f"call_mock_{tool_name}_{len(messages)}"
                 )
                 return {
                     "content": "",
@@ -281,24 +307,32 @@ class MockLLM:
                             "id": tool_call_id,
                             "type": "function",
                             "function": {
-                                "name": mock_response["tool"],
+                                "name": tool_name,
                                 "arguments": json.dumps(arguments),
                             },
-                            "name": mock_response["tool"],
+                            "name": tool_name,
                             "arguments": arguments,
                         }
                     ],
                 }
             elif mock_response.get("type") == "tool_calls":
                 # Множественные tool_calls - ПАРАЛЛЕЛЬНОЕ выполнение
-                calls = mock_response.get("calls", [])
-                tool_calls = []
-                for call_index, call in enumerate(calls):
-                    arguments = call.get("args", {})
+                calls = require_json_array(mock_response.get("calls", []), "mock_llm.response.calls")
+                tool_calls: JsonArray = []
+                for call_index, raw_call in enumerate(calls):
+                    call = require_json_object(raw_call, "mock_llm.response.calls[]")
+                    arguments = require_json_object(
+                        call.get("args", {}),
+                        "mock_llm.response.calls[].args",
+                    )
                     tool_name = call.get("tool")
+                    if not isinstance(tool_name, str) or not tool_name:
+                        raise ValueError("mock_llm tool_calls[].tool must be a non-empty string")
+                    raw_tool_call_id = call.get("id")
                     tool_call_id = (
-                        call.get("id")
-                        or f"call_mock_{tool_name}_{len(messages)}_{call_index}"
+                        raw_tool_call_id
+                        if isinstance(raw_tool_call_id, str) and raw_tool_call_id
+                        else f"call_mock_{tool_name}_{len(messages)}_{call_index}"
                     )
                     tool_calls.append({
                         "id": tool_call_id,
@@ -313,9 +347,11 @@ class MockLLM:
                     "tool_calls": tool_calls,
                 }
             elif mock_response.get("type") == "text":
+                content = mock_response.get("content", self._default_response)
+                reasoning = mock_response.get("reasoning")
                 return {
-                    "content": mock_response.get("content", self._default_response),
-                    "reasoning": mock_response.get("reasoning"),
+                    "content": content if isinstance(content, str) else self._default_response,
+                    "reasoning": reasoning if isinstance(reasoning, str) else None,
                     "tool_calls": None,
                 }
             elif mock_response.get("type") == "structured_output":
@@ -326,26 +362,28 @@ class MockLLM:
                     if isinstance(structured_payload, dict)
                     else str(structured_payload)
                 )
+                reasoning = mock_response.get("reasoning")
                 return {
                     "content": content,
-                    "reasoning": mock_response.get("reasoning"),
+                    "reasoning": reasoning if isinstance(reasoning, str) else None,
                     "tool_calls": None,
                 }
             else:
                 return {"content": str(mock_response), "reasoning": None, "tool_calls": None}
-        elif isinstance(mock_response, str):
-            return {"content": mock_response, "reasoning": None, "tool_calls": None}
-        else:
-            return {"content": str(mock_response), "reasoning": None, "tool_calls": None}
+        return {"content": mock_response, "reasoning": None, "tool_calls": None}
 
-    def _generate_from_patterns(self, messages: list[Message]) -> dict[str, Any]:
+    def _generate_from_patterns(self, messages: list[Message]) -> JsonObject:
         """Генерирует ответ на основе паттернов"""
         if not messages:
             return {"content": self._default_response, "reasoning": None, "tool_calls": None}
 
         last_message = messages[-1]
         content_str = get_message_text(last_message)
-        metadata = last_message.metadata or {}
+        metadata = (
+            require_json_object(last_message.metadata, "message.metadata")
+            if last_message.metadata
+            else {}
+        )
         if metadata and metadata.get("tool_call_id"):
             for key, mock_response_text in self._responses.items():
                 if key.lower() in content_str.lower():
@@ -354,19 +392,25 @@ class MockLLM:
 
         for key, tool_config in self._tool_responses.items():
             if key.lower() in content_str.lower():
-                arguments = tool_config.get("args", {})
+                arguments = require_json_object(
+                    tool_config.get("args", {}),
+                    "mock_llm.tool_responses.args",
+                )
+                tool_name = tool_config.get("tool")
+                if not isinstance(tool_name, str) or not tool_name:
+                    raise ValueError("mock_llm tool_responses[].tool must be a non-empty string")
                 return {
                     "content": "",
                     "reasoning": None,
                     "tool_calls": [
                         {
-                            "id": f"call_mock_{tool_config['tool']}_{len(messages)}",
+                            "id": f"call_mock_{tool_name}_{len(messages)}",
                             "type": "function",
                             "function": {
-                                "name": tool_config["tool"],
+                                "name": tool_name,
                                 "arguments": json.dumps(arguments),
                             },
-                            "name": tool_config["tool"],
+                            "name": tool_name,
                             "arguments": arguments,
                         }
                     ],
@@ -381,15 +425,25 @@ class MockLLM:
     async def stream(
         self,
         messages: MessageInput,
-        tools: list[dict[str, Any]] | None = None,
-        response_format: dict[str, Any] | None = None,
+        tools: list[JsonObject] | None = None,
+        response_format: JsonObject | None = None,
         model: str | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        reasoning_effort: str | None = None,
+        extra_body: JsonObject | None = None,
+        extra_headers: dict[str, str] | None = None,
         llm_context: LLMContextInput | None = None,
         llm_context_blocks: list[LLMContextBlock] | None = None,
         llm_context_source_registry: LLMContextSourceRegistry | None = None,
-        **_: Any,
+        stream_cancel_poll: Callable[[], Awaitable[bool]] | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Stream метод - 100% реалистичная симуляция OpenAI streaming.
@@ -400,6 +454,19 @@ class MockLLM:
         Поддерживает Redis для межпроцессного обмена mock ответами.
         Поддерживает response_format для structured output.
         """
+        del (
+            temperature,
+            top_p,
+            top_k,
+            max_tokens,
+            frequency_penalty,
+            presence_penalty,
+            seed,
+            reasoning_effort,
+            extra_body,
+            extra_headers,
+            stream_cancel_poll,
+        )
 
         task_id = task_id or str(uuid.uuid4())
         context_id = context_id or task_id
@@ -425,9 +492,16 @@ class MockLLM:
 
         # Используем async метод для поддержки Redis
         mock_response = await self._get_response_async(normalized_messages)
-        content = mock_response.get("content", "")
-        reasoning = mock_response.get("reasoning", "")
-        tool_calls = mock_response.get("tool_calls")
+        content_raw = mock_response.get("content", "")
+        content = content_raw if isinstance(content_raw, str) else ""
+        reasoning_raw = mock_response.get("reasoning", "")
+        reasoning = reasoning_raw if isinstance(reasoning_raw, str) else ""
+        tool_calls_raw = mock_response.get("tool_calls")
+        tool_calls = (
+            require_json_array(tool_calls_raw, "mock_llm.response.tool_calls")
+            if tool_calls_raw is not None
+            else []
+        )
 
         # Стримим reasoning по токенам (2-5 символов) как реальная LLM
         reasoning_artifact_id = str(uuid.uuid4())
@@ -480,7 +554,7 @@ class MockLLM:
         # Tool calls: как в LLMClient.stream — сначала статус с tool_calls+usage, затем
         # второй статус (часто только usage), иначе LlmNodeRunner затирал бы tool_calls.
         if tool_calls:
-            usage_data = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+            usage_data: JsonObject = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
             message = Message(
                 message_id=str(uuid.uuid4()),
                 role=Role.agent,
@@ -534,12 +608,12 @@ class MockLLM:
         messages: list[Message],
         json_output: bool = False,
         max_tokens: int | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
         llm_context: LLMContextInput | None = None,
         llm_context_blocks: list[LLMContextBlock] | None = None,
         llm_context_source_registry: LLMContextSourceRegistry | None = None,
-    ) -> str | dict[str, Any]:
+    ) -> str | JsonObject:
         """Non-streaming вызов (vision/OCR и др.), совместим с ``LLMClient.invoke``."""
         del max_tokens, extra_body, extra_headers
         normalized_messages = _normalize_messages(messages)
@@ -551,7 +625,7 @@ class MockLLM:
             llm_context_source_registry=llm_context_source_registry,
         )
         normalized_messages = prepared_context.messages
-        response_format: dict[str, Any] | None = None
+        response_format: JsonObject | None = None
         if json_output:
             response_format = {"type": "json_object"}
         await self._capture_call_to_redis(
@@ -560,12 +634,13 @@ class MockLLM:
             response_format=response_format,
         )
         mock_response = await self._get_response_async(normalized_messages)
-        content = mock_response.get("content", "")
+        content_raw = mock_response.get("content", "")
+        content = content_raw if isinstance(content_raw, str) else ""
         if json_output:
             stripped = content.strip()
             if not stripped:
                 raise ValueError("MockLLM json_output requested but response content is empty")
-            return json.loads(stripped)
+            return parse_json_object(stripped, "mock_llm.invoke.response")
         return content
 
     @overload
@@ -574,7 +649,7 @@ class MockLLM:
         messages: MessageInput,
         *,
         response_model: type[T],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[JsonObject] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
@@ -584,7 +659,7 @@ class MockLLM:
         presence_penalty: float | None = None,
         seed: int | None = None,
         reasoning_effort: str | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
         llm_context: LLMContextInput | None = None,
         llm_context_blocks: list[LLMContextBlock] | None = None,
@@ -597,7 +672,7 @@ class MockLLM:
         messages: MessageInput,
         *,
         response_model: None = None,
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[JsonObject] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
@@ -607,7 +682,7 @@ class MockLLM:
         presence_penalty: float | None = None,
         seed: int | None = None,
         reasoning_effort: str | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
         llm_context: LLMContextInput | None = None,
         llm_context_blocks: list[LLMContextBlock] | None = None,
@@ -619,7 +694,7 @@ class MockLLM:
         messages: MessageInput,
         *,
         response_model: type[T] | None = None,
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[JsonObject] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
@@ -629,7 +704,7 @@ class MockLLM:
         presence_penalty: float | None = None,
         seed: int | None = None,
         reasoning_effort: str | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
         llm_context: LLMContextInput | None = None,
         llm_context_blocks: list[LLMContextBlock] | None = None,
@@ -638,12 +713,26 @@ class MockLLM:
         """
         Единый метод вызова MockLLM (совместим с LLMClient.chat).
         """
-        del seed, reasoning_effort, extra_body, extra_headers
+        del (
+            temperature,
+            top_p,
+            top_k,
+            max_tokens,
+            frequency_penalty,
+            presence_penalty,
+            seed,
+            reasoning_effort,
+            extra_body,
+            extra_headers,
+        )
         normalized_messages = _normalize_messages(messages)
 
-        response_format = None
+        response_format: JsonObject | None = None
         if response_model:
-            json_schema = response_model.model_json_schema()
+            json_schema = require_json_object(
+                response_model.model_json_schema(),
+                "mock_llm.response_model.schema",
+            )
             response_format = {
                 "type": "json_schema",
                 "json_schema": {
@@ -654,7 +743,7 @@ class MockLLM:
             }
 
         content_parts: list[str] = []
-        tool_calls: list[dict[str, Any]] = []
+        tool_calls: JsonArray = []
         last_status_text = ""
 
         async for event in self.stream(
@@ -682,19 +771,26 @@ class MockLLM:
                     if status_text:
                         last_status_text = status_text
                 if event.status.message and event.status.message.metadata:
-                    metadata_tool_calls = event.status.message.metadata.get("tool_calls")
+                    metadata = require_json_object(
+                        event.status.message.metadata,
+                        "mock_llm.status.message.metadata",
+                    )
+                    metadata_tool_calls = metadata.get("tool_calls")
                     if metadata_tool_calls:
-                        tool_calls = metadata_tool_calls
+                        tool_calls = require_json_array(
+                            metadata_tool_calls,
+                            "mock_llm.status.message.metadata.tool_calls",
+                        )
 
         content = "".join(content_parts)
         if response_model:
             text_for_json = content if content.strip() else last_status_text
             if not text_for_json.strip():
                 raise ValueError(
-                    "LLM structured output: пустой ответ (нет текста вне reasoning-артефакта "
-                    "и нет текста в финальном статусе задачи)"
+                    "LLM structured output: пустой ответ (нет текста вне reasoning-артефакта и "
+                    + "нет текста в финальном статусе задачи)"
                 )
-            structured_payload = json.loads(text_for_json)
+            structured_payload = parse_json_value(text_for_json, "mock_llm.structured_output")
             return response_model.model_validate(structured_payload)
 
         return Message(
@@ -705,60 +801,38 @@ class MockLLM:
         )
 
 
-def _normalize_message_for_capture(message: Any) -> dict[str, Any]:
+def _normalize_message_for_capture(message: Message) -> JsonObject:
     """
-    Превращает A2A `Message` (или dict) в JSON-сериализуемое представление
-    для журнала MockLLM. Текст склеивается из всех TextPart-ов; FilePart
-    представляется заглушкой `{file: True, mime_type: ...}` без bytes.
+    Превращает A2A `Message` в JSON-сериализуемое представление для журнала
+    MockLLM. Текст склеивается из всех TextPart-ов; FilePart представляется
+    заглушкой `{file: True, mime_type: ...}` без bytes.
     """
-    if isinstance(message, Message):
-        role = message.role
-        metadata = message.metadata or {}
-        parts = message.parts or []
-    elif isinstance(message, dict):
-        role = message.get("role", "user")
-        metadata = message.get("metadata") or {}
-        parts = message.get("parts") or []
-    else:
-        return {"role": "user", "text": str(message), "parts": [], "metadata": {}}
+    metadata = (
+        require_json_object(message.metadata, "message.metadata")
+        if message.metadata
+        else {}
+    )
+    parts = message.parts or []
 
     text_parts: list[str] = []
-    serialized_parts: list[dict[str, Any]] = []
+    serialized_parts: JsonArray = []
     for part in parts:
-        root = getattr(part, "root", None)
-        if root is None and isinstance(part, dict):
-            root = part.get("root", part)
-        if root is None:
+        root = part.root
+        if isinstance(root, TextPart):
+            text_parts.append(root.text)
+            serialized_parts.append({"type": "text", "text": root.text})
             continue
-        text = None
-        if hasattr(root, "text"):
-            text = getattr(root, "text", None)
-        elif isinstance(root, dict) and "text" in root:
-            text = root["text"]
-        if isinstance(text, str):
-            text_parts.append(text)
-            serialized_parts.append({"type": "text", "text": text})
-            continue
-        file_obj = None
-        if hasattr(root, "file"):
-            file_obj = getattr(root, "file")
-        elif isinstance(root, dict) and "file" in root:
-            file_obj = root["file"]
-        if file_obj is not None:
-            mime_type = None
-            if hasattr(file_obj, "mime_type"):
-                mime_type = getattr(file_obj, "mime_type")
-            elif isinstance(file_obj, dict):
-                mime_type = file_obj.get("mimeType") or file_obj.get("mime_type")
-            serialized_parts.append({"type": "file", "mime_type": mime_type or "application/octet-stream"})
+        if isinstance(root, FilePart):
+            file_obj = root.file
+            mime_type = file_obj.mime_type or "application/octet-stream"
+            serialized_parts.append({"type": "file", "mime_type": mime_type})
 
-    role_str = role.value if hasattr(role, "value") else str(role)
-    safe_metadata: dict[str, Any] = {}
+    safe_metadata: JsonObject = {}
     for key in ("system", "tool_call_id", "tool_calls"):
         if key in metadata:
             safe_metadata[key] = metadata[key]
     return {
-        "role": role_str,
+        "role": message.role.value,
         "text": "".join(text_parts),
         "parts": serialized_parts,
         "metadata": safe_metadata,
@@ -770,20 +844,29 @@ def get_global_mock_llm(model: str = "mock-gpt-4") -> MockLLM | None:
     return _global_mock_registry.get(model)
 
 
+def get_or_create_global_mock_llm(model: str = "mock-gpt-4") -> MockLLM:
+    """Получает или регистрирует process-local MockLLM."""
+    mock_llm = _global_mock_registry.get(model)
+    if mock_llm is None:
+        mock_llm = MockLLM(model_name=model)
+        _global_mock_registry[model] = mock_llm
+    return mock_llm
+
+
 def configure_mock_llm_redis(
     redis_client: RedisClient, model: str = "mock-gpt-4"
 ) -> MockLLM | None:
     """Настраивает MockLLM для чтения из Redis."""
     mock_llm = get_global_mock_llm(model)
     if mock_llm:
-        mock_llm.set_redis_client(redis_client)
+        _ = mock_llm.set_redis_client(redis_client)
         logger.info("mock_llm.redis_configured")
     return mock_llm
 
 
 async def setup_mock_responses_redis(
-    redis_client,
-    response_queue: list[Any],
+    redis_client: RedisClient,
+    response_queue: list[MockLLMQueuedResponse],
     *,
     key_override: str | None = None,
 ) -> None:
@@ -800,21 +883,21 @@ async def setup_mock_responses_redis(
     на тот же ключ (PYTEST_XDIST_WORKER снят у subprocess).
     """
     key = key_override or _mock_redis_key()
-    await redis_client.set(key, json.dumps(response_queue))
+    _ = await redis_client.set(key, json.dumps(response_queue))
     logger.info("mock_llm.redis_responses_written", count=len(response_queue), key=key)
 
 
 async def clear_mock_responses_redis(
-    redis_client,
+    redis_client: RedisClient,
     *,
     key_override: str | None = None,
 ) -> None:
     """Очищает mock ответы из Redis."""
     key = key_override or _mock_redis_key()
-    await redis_client.delete(key)
+    _ = await redis_client.delete(key)
 
 
-async def start_mock_llm_capture(redis_client, scope: str) -> str:
+async def start_mock_llm_capture(redis_client: RedisClient, scope: str) -> str:
     """
     Включает запись каждого вызова MockLLM (`messages`, `tools`,
     `response_format`, `model`) в Redis-список `mock_llm:capture:<scope>`.
@@ -826,23 +909,21 @@ async def start_mock_llm_capture(redis_client, scope: str) -> str:
     if not scope:
         raise ValueError("start_mock_llm_capture: scope не должен быть пустым")
     list_key = _mock_capture_key(scope)
-    await redis_client.delete(list_key)
-    await redis_client.set(_MOCK_CAPTURE_SCOPE_KEY, scope)
+    _ = await redis_client.delete(list_key)
+    _ = await redis_client.set(_MOCK_CAPTURE_SCOPE_KEY, scope)
     return list_key
 
 
-async def stop_mock_llm_capture(redis_client, scope: str) -> None:
+async def stop_mock_llm_capture(redis_client: RedisClient, scope: str) -> None:
     """Снимает активный capture-scope и удаляет его список."""
-    await redis_client.delete(_MOCK_CAPTURE_SCOPE_KEY)
-    await redis_client.delete(_mock_capture_key(scope))
+    _ = await redis_client.delete(_MOCK_CAPTURE_SCOPE_KEY)
+    _ = await redis_client.delete(_mock_capture_key(scope))
 
 
-async def read_mock_llm_capture(redis_client, scope: str) -> list[dict[str, Any]]:
+async def read_mock_llm_capture(redis_client: RedisClient, scope: str) -> list[JsonObject]:
     """Возвращает все записанные за scope вызовы MockLLM в порядке прихода."""
     capture_payloads = await redis_client.lrange(_mock_capture_key(scope), 0, -1)
-    captured_calls: list[dict[str, Any]] = []
+    captured_calls: list[JsonObject] = []
     for capture_item in capture_payloads or []:
-        if isinstance(capture_item, bytes):
-            capture_item = capture_item.decode("utf-8")
-        captured_calls.append(json.loads(capture_item))
+        captured_calls.append(parse_json_object(capture_item, "mock_llm.capture[]"))
     return captured_calls

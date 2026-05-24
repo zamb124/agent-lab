@@ -8,12 +8,11 @@
   (например `@state:triggers.my_id.context.flag`), справа — литерал (строка в кавычках, true/false, число).
 """
 
-from typing import Any
-
 from apps.flows.src.mapping import MappingResolver
+from core.types import JsonObject, JsonValue, require_json_value
 
 
-def parse_output_condition_literal(value: str) -> Any:
+def parse_output_condition_literal(value: str) -> JsonValue:
     """Парсит правую часть сравнения: bool, null, кавычки, int, float, иначе строка."""
     value = value.strip()
 
@@ -40,7 +39,7 @@ def parse_output_condition_literal(value: str) -> Any:
     return value
 
 
-def evaluate_output_action_condition(condition: str, state: dict[str, Any]) -> bool:
+def evaluate_output_action_condition(condition: str, state: JsonObject) -> bool:
     """
     Проверяет условие из `OutputAction.condition` относительно `state` (и резолвера @state: / @var:).
     """
@@ -48,7 +47,10 @@ def evaluate_output_action_condition(condition: str, state: dict[str, Any]) -> b
         return True
 
     if "==" not in condition and "!=" not in condition:
-        value = MappingResolver.resolve_value(condition, state)
+        value = require_json_value(
+            MappingResolver.resolve_value(condition, state),
+            "output_action.condition",
+        )
         return bool(value)
 
     for op in ("==", "!="):
@@ -57,7 +59,10 @@ def evaluate_output_action_condition(condition: str, state: dict[str, Any]) -> b
             if len(parts) != 2:
                 return True
 
-            left = MappingResolver.resolve_value(parts[0].strip(), state)
+            left = require_json_value(
+                MappingResolver.resolve_value(parts[0].strip(), state),
+                "output_action.condition.left",
+            )
             right = parse_output_condition_literal(parts[1].strip())
 
             if op == "==":

@@ -2,23 +2,27 @@
 
 from __future__ import annotations
 
-from typing import Any
+from core.types import JsonObject, require_json_object
 
 
-def deep_merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+def deep_merge_dict(base: JsonObject, override: JsonObject) -> JsonObject:
     """Recursively merge JSON-like dictionaries; override wins."""
-    out = dict(base)
+    out: JsonObject = dict(base)
     for key, value in override.items():
-        if key in out and isinstance(out[key], dict) and isinstance(value, dict):
-            out[key] = deep_merge_dict(out[key], value)
+        existing = out.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            out[key] = deep_merge_dict(
+                require_json_object(existing, f"{key}.base"),
+                require_json_object(value, f"{key}.override"),
+            )
         else:
             out[key] = value
     return out
 
 
-def merge_dict_layers(*layers: dict[str, Any] | None) -> dict[str, Any]:
+def merge_dict_layers(*layers: JsonObject | None) -> JsonObject:
     """Merge optional dict layers in order."""
-    merged: dict[str, Any] = {}
+    merged: JsonObject = {}
     for layer in layers:
         if layer is None:
             continue

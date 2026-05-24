@@ -51,7 +51,7 @@ from core.models.context_models import Context
 from core.models.identity_models import Company
 from core.text_transforms import TextTransformService
 from core.tracing.operation_span import traced_operation
-from core.types import require_json_object, require_json_value
+from core.types import OtelAttributeValue, require_json_object, require_json_value
 
 CapabilityHandler = Callable[[CapabilityCallRequest], Awaitable[JsonValue]]
 TOOL_RUNTIME_MANIFEST_PATH = "/flows/api/v1/tool-runtime/manifest"
@@ -89,6 +89,28 @@ def _integer_schema(description: str) -> JsonObject:
 
 def _boolean_schema(description: str) -> JsonObject:
     return {"type": "boolean", "description": description}
+
+
+def _trace_event_attribute_value(key: str, value: JsonValue) -> OtelAttributeValue:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (str, float)):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, list):
+        if not value:
+            empty_values: list[str] = []
+            return empty_values
+        if all(isinstance(item, bool) for item in value):
+            return [item for item in value if isinstance(item, bool)]
+        if all(isinstance(item, str) for item in value):
+            return [item for item in value if isinstance(item, str)]
+        if all(isinstance(item, int) and not isinstance(item, bool) for item in value):
+            return [item for item in value if isinstance(item, int) and not isinstance(item, bool)]
+        if all(isinstance(item, float) for item in value):
+            return [item for item in value if isinstance(item, float)]
+    raise ValueError(f"trace.event attributes.{key} должен быть OTel AttributeValue")
 
 
 def _object_schema(description: str) -> JsonObject:
@@ -1612,7 +1634,7 @@ class CapabilityRegistry:
                     include_asset_bytes=include_asset_bytes,
                     source_file_id=file_id,
                     vision_prompt=vision_prompt,
-                    vision_model=vision_model or "google/gemini-2.5-flash-preview",
+                    vision_model=vision_model,
                 )
             except FileReadError as exc:
                 raise ValueError(str(exc)) from exc
@@ -1717,16 +1739,18 @@ class CapabilityRegistry:
         self._reject_positional_args(request)
         event_type = _required_string(request.kwargs.get("event_type"), "event_type")
         attributes = _optional_object(request.kwargs.get("attributes"), "attributes") or {}
+        trace_attributes: dict[str, OtelAttributeValue] = {
+            "platform.capability.trace.event_type": event_type,
+        }
+        for key, value in attributes.items():
+            trace_attributes[f"platform.capability.attr.{key}"] = _trace_event_attribute_value(key, value)
         async with traced_operation(
             "capability_gateway.trace.event",
             event_type=event_type,
             operation_category="developer",
             resource_type="flow",
             resource_id=request.context.flow_id,
-            extra_attributes={
-                "platform.capability.trace.event_type": event_type,
-                **{f"platform.capability.attr.{key}": value for key, value in attributes.items()},
-            },
+            extra_attributes=trace_attributes,
         ):
             return {"recorded": True}
 

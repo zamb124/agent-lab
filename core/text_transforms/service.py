@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from a2a.types import Message, Part, Role, TextPart
 from a2a.utils.message import get_message_text
@@ -14,7 +13,7 @@ from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm.config import LLMCallConfig
 from core.clients.llm.factory import get_llm, should_use_platform_default_free_pool
 from core.clients.llm.model_routing import split_provider_prefixed_model
-from core.clients.service_client import ServiceClient, ServiceClientError
+from core.clients.service_client import ServiceClient
 from core.company_ai import (
     COST_ORIGIN_PLATFORM,
     CUSTOM_PROVIDER_REF_PREFIX,
@@ -30,6 +29,7 @@ from core.text_transforms.chunking import split_text_into_markdown_chunks
 from core.text_transforms.format_markdown_response import validate_format_markdown_response
 from core.text_transforms.routing import should_use_litserve_format_markdown_http
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject, require_json_object
 
 _MARKDOWN_TO_MD_SYSTEM = (
     "You convert plain text into clean, structured Markdown. "
@@ -41,7 +41,7 @@ _DEFAULT_SUMMARY_INSTRUCTION = (
     "Summarize the following text clearly and concisely. Preserve the original language. "
     "Output only the summary, no preamble."
 )
-_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT = {"profile": "off", "budget": "max"}
+_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT: JsonObject = {"profile": "off", "budget": "max"}
 
 
 class TextTransformService:
@@ -109,8 +109,6 @@ class TextTransformService:
             ),
         ]
         out = await llm.chat(messages, llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT)
-        if not isinstance(out, Message):
-            raise TypeError("summarize: ожидан Message от LLM")
         summary = get_message_text(out).strip()
         if not summary:
             raise ValueError("summarize: пустой ответ модели")
@@ -192,8 +190,6 @@ class TextTransformService:
                 ],
             )
             out = await llm.chat([msg], llm_context=_INTERNAL_TEXT_TRANSFORM_LLM_CONTEXT)
-            if not isinstance(out, Message):
-                raise TypeError("format_markdown: ожидан Message от LLM")
             piece = get_message_text(out).strip()
             formatted_parts.append(piece)
 
@@ -214,7 +210,7 @@ class TextTransformService:
         str | None,
         str | None,
         dict[str, str] | None,
-        dict[str, Any] | None,
+        JsonObject | None,
         list[LLMCallConfig] | None,
         str,
     ]:
@@ -247,10 +243,27 @@ class TextTransformService:
                 list(resolved.fallback_models or ()) or None,
                 resolved.cost_origin,
             )
+        if rp is None and rm is None:
+            resolved = resolve_llm_for_capability(capability, include_platform_default=True)
+            if resolved is None:
+                raise ValueError(
+                    f"TextTransformService: platform default для capability={capability.value} "
+                    + "не настроен"
+                )
+            return (
+                resolved.provider,
+                resolved.model,
+                resolved.api_key,
+                resolved.base_url,
+                resolved.extra_request_headers,
+                resolved.extra_request_body,
+                list(resolved.fallback_models or ()) or None,
+                resolved.cost_origin,
+            )
         if rp is None or rm is None:
             raise ValueError(
-                f"TextTransformService: для capability={capability.value} нет company override; "
-                "явные provider и model обязательны. Скрытый fallback на settings.llm запрещён."
+                f"TextTransformService: для capability={capability.value} provider и model "
+                + "должны быть заданы вместе"
             )
         return rp, rm, None, None, None, None, None, COST_ORIGIN_PLATFORM
 
@@ -284,7 +297,7 @@ class TextTransformService:
         actx = get_context()
         if actx is None or actx.active_company is None:
             raise ValueError("TextTransformService: нужен Context с active_company (биллинг)")
-        if actx.user is None or not str(actx.user.user_id).strip():
+        if not str(actx.user.user_id).strip():
             raise ValueError("TextTransformService: нужен Context с user (биллинг)")
         await get_billing_service().require_balance_for_billable_operation(
             actx.active_company.company_id,
@@ -305,7 +318,7 @@ class TextTransformService:
         settings = get_settings()
         timeout = float(settings.provider_litserve.infra.request_timeout_seconds)
         client = ServiceClient()
-        payload: dict[str, Any] = {
+        payload: JsonObject = {
             "text": text,
             "model": model_id,
             "max_chunk_chars": max_chunk_chars,
@@ -325,9 +338,9 @@ class TextTransformService:
                 timeout=timeout,
                 headers={"Authorization": f"Bearer {PROVIDER_LITSERVE_PLACEHOLDER_BEARER}"},
             )
-            if not isinstance(raw, dict):
-                raise ServiceClientError("provider_litserve format_markdown: ответ не JSON-object")
-            validated = validate_format_markdown_response(raw)
+            validated = validate_format_markdown_response(
+                require_json_object(raw, "provider_litserve.format_markdown.response")
+            )
             usage = validated.usage
             span.set_attribute(trace_attributes.ATTR_LLM_PROVIDER, "provider_litserve")
             span.set_attribute(trace_attributes.ATTR_LLM_MODEL, validated.model)

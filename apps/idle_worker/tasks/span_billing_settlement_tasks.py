@@ -52,13 +52,13 @@ async def span_billing_settlement_tick(
     settled = 0
     errors = 0
     prev_company_id: str | None = None
-    for span_dict in spans:
-        company_id = span_dict.get("company_id")
-        if not company_id or not isinstance(company_id, str):
+    for span in spans:
+        company_id = span.company_id
+        if not company_id:
             errors += 1
             logger.error(
                 "span_billing_settlement_tick: span без company_id span_id=%s",
-                span_dict.get("span_id"),
+                span.span_id,
             )
             continue
 
@@ -77,7 +77,7 @@ async def span_billing_settlement_tick(
             rules_by_company[company_id] = rules_doc
         try:
             n = await billing.settle_pending_span_in_job(
-                span_dict=span_dict,
+                span=span,
                 settlement=settlement,
                 fallback_user_id=cfg.fallback_user_id,
                 rules_doc=rules_doc,
@@ -87,7 +87,7 @@ async def span_billing_settlement_tick(
             errors += 1
             logger.error(
                 "span_billing_settlement_tick: span_id=%s error=%s",
-                span_dict.get("span_id"),
+                span.span_id,
                 exc,
                 exc_info=(type(exc), exc, exc.__traceback__),
             )

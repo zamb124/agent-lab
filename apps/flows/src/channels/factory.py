@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
@@ -34,7 +35,10 @@ _CHANNEL_REGISTRY: dict[str, str] = {
 def _load_channel_class(path: str) -> ChannelClass:
     module_path, class_name = path.split(":", 1)
     module = importlib.import_module(module_path)
-    cls = getattr(module, class_name)
+    module_attrs = cast(Mapping[str, object], vars(module))
+    cls = module_attrs.get(class_name)
+    if cls is None:
+        raise ValueError(f"Channel class not found: {path}")
     return cast(ChannelClass, cls)
 
 

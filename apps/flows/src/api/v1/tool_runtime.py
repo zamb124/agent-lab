@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
-
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
+    CapabilityCallResponse,
     CapabilityDefinition,
     CapabilityExecutionContext,
     CapabilityInterruptEnvelope,
@@ -18,27 +17,22 @@ from core.capabilities import (
     verify_execution_context,
 )
 from core.context import clear_context, get_context, set_context
+from core.models import StrictBaseModel
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.state import ExecutionState
+from core.types import JsonObject, require_json_object
 
 router = APIRouter(tags=["tool-runtime"])
 _RESERVED_SDK_METHODS = frozenset({"call", "then"})
 
 
-class ToolRuntimeCallRequest(BaseModel):
+class ToolRuntimeCallRequest(StrictBaseModel):
     context: CapabilityExecutionContext
     tool_id: str = Field(..., min_length=1)
-    arguments: dict[str, Any] = Field(default_factory=dict)
-    state: dict[str, Any] = Field(default_factory=dict)
-
-
-class ToolRuntimeCallResponse(BaseModel):
-    status: Literal["ok", "interrupt"]
-    result: Any = None
-    state: dict[str, Any] = Field(default_factory=dict)
-    interrupt: CapabilityInterruptEnvelope | None = None
+    arguments: JsonObject = Field(default_factory=dict)
+    state: JsonObject = Field(default_factory=dict)
 
 
 def _sdk_method_name(raw: str) -> str:
@@ -57,7 +51,7 @@ def _tool_capability_definition(
     tool_id: str,
     title: str | None,
     description: str | None,
-    input_schema: dict[str, Any],
+    input_schema: JsonObject,
     tags: list[str],
 ) -> CapabilityDefinition:
     return CapabilityDefinition(
@@ -73,7 +67,7 @@ def _tool_capability_definition(
     )
 
 
-async def _with_system_context_if_missing(container: Any):
+async def _with_system_context_if_missing(container: ContainerDep) -> tuple[Context | None, bool]:
     previous_context = get_context()
     if previous_context is not None and previous_context.active_company is not None:
         return previous_context, False
@@ -115,12 +109,12 @@ async def get_tool_runtime_manifest(container: ContainerDep) -> CapabilityManife
         capabilities: dict[str, CapabilityDefinition] = {}
 
         for tool_id, tool in registry.list_all().items():
-            if not getattr(tool, "listed_in_platform_tool_docs", True):
+            if not tool.listed_in_platform_tool_docs:
                 continue
             capabilities[f"tools.{tool_id}"] = _tool_capability_definition(
                 tool_id=tool_id,
-                title=getattr(tool, "title", None),
-                description=getattr(tool, "description", None),
+                title=None,
+                description=tool.description,
                 input_schema=tool.parameters,
                 tags=tool.get_tags(),
             )
@@ -148,11 +142,11 @@ async def get_tool_runtime_manifest(container: ContainerDep) -> CapabilityManife
             set_context(previous_context)
 
 
-@router.post("/call", response_model=ToolRuntimeCallResponse)
+@router.post("/call", response_model=CapabilityCallResponse)
 async def call_tool_runtime(
     container: ContainerDep,
     request: ToolRuntimeCallRequest,
-) -> ToolRuntimeCallResponse:
+) -> CapabilityCallResponse:
     """Execute any registered platform tool by id using signed capability context."""
     verify_execution_context(request.context)
     runtime_context = await _build_context(container, request.context)
@@ -162,21 +156,30 @@ async def call_tool_runtime(
         state = ExecutionState.model_validate(request.state)
         tool = await container.tool_registry.materialize({"tool_id": request.tool_id})
         try:
-            result = await tool.run(dict(request.arguments), state)
+            result = await tool.run(request.arguments, state)
         except FlowInterrupt as exc:
-            body = exc.body.model_dump(mode="json")
-            return ToolRuntimeCallResponse(
+            body = require_json_object(exc.body.model_dump(mode="json"), "FlowInterrupt.body")
+            raw_kind = body.get("kind")
+            if not isinstance(raw_kind, str):
+                raise ValueError("FlowInterrupt.body.kind must be a string")
+            return CapabilityCallResponse(
                 status="interrupt",
-                state=state.model_dump(mode="json", exclude_none=False),
+                state=require_json_object(
+                    state.model_dump(mode="json", exclude_none=False),
+                    "ExecutionState",
+                ),
                 interrupt=CapabilityInterruptEnvelope(
-                    kind=str(body.get("kind", "interrupt")),
+                    kind=raw_kind,
                     body=body,
                 ),
             )
-        return ToolRuntimeCallResponse(
+        return CapabilityCallResponse(
             status="ok",
             result=result,
-            state=state.model_dump(mode="json", exclude_none=False),
+            state=require_json_object(
+                state.model_dump(mode="json", exclude_none=False),
+                "ExecutionState",
+            ),
         )
     finally:
         if previous_context is None:
@@ -185,11 +188,11 @@ async def call_tool_runtime(
             set_context(previous_context)
 
 
-@router.post("/call-builtin", response_model=ToolRuntimeCallResponse)
+@router.post("/call-builtin", response_model=CapabilityCallResponse)
 async def call_builtin_tool_runtime(
     container: ContainerDep,
     request: ToolRuntimeCallRequest,
-) -> ToolRuntimeCallResponse:
+) -> CapabilityCallResponse:
     """Execute the trusted builtin implementation, bypassing editable DB templates."""
     verify_execution_context(request.context)
     runtime_context = await _build_context(container, request.context)
@@ -202,21 +205,30 @@ async def call_builtin_tool_runtime(
         if tool is None:
             raise HTTPException(status_code=404, detail=f"Builtin tool not found: {request.tool_id}")
         try:
-            result = await tool.run(dict(request.arguments), state)
+            result = await tool.run(request.arguments, state)
         except FlowInterrupt as exc:
-            body = exc.body.model_dump(mode="json")
-            return ToolRuntimeCallResponse(
+            body = require_json_object(exc.body.model_dump(mode="json"), "FlowInterrupt.body")
+            raw_kind = body.get("kind")
+            if not isinstance(raw_kind, str):
+                raise ValueError("FlowInterrupt.body.kind must be a string")
+            return CapabilityCallResponse(
                 status="interrupt",
-                state=state.model_dump(mode="json", exclude_none=False),
+                state=require_json_object(
+                    state.model_dump(mode="json", exclude_none=False),
+                    "ExecutionState",
+                ),
                 interrupt=CapabilityInterruptEnvelope(
-                    kind=str(body.get("kind", "interrupt")),
+                    kind=raw_kind,
                     body=body,
                 ),
             )
-        return ToolRuntimeCallResponse(
+        return CapabilityCallResponse(
             status="ok",
             result=result,
-            state=state.model_dump(mode="json", exclude_none=False),
+            state=require_json_object(
+                state.model_dump(mode="json", exclude_none=False),
+                "ExecutionState",
+            ),
         )
     finally:
         if previous_context is None:
@@ -225,7 +237,7 @@ async def call_builtin_tool_runtime(
             set_context(previous_context)
 
 
-async def _build_context(container: Any, execution_context: CapabilityExecutionContext) -> Context:
+async def _build_context(container: ContainerDep, execution_context: CapabilityExecutionContext) -> Context:
     if execution_context.user_id is None:
         raise HTTPException(status_code=401, detail="Capability context requires user_id")
     user = await container.user_repository.get(execution_context.user_id)

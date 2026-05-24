@@ -27,7 +27,10 @@ from apps.provider_litserve.config import (
 )
 from apps.provider_litserve.container import get_provider_litserve_container
 from apps.provider_litserve.embedding.api import EmbeddingLitAPI
-from apps.provider_litserve.llm.local_causal_lm import ensure_local_causal_lm
+from apps.provider_litserve.llm.local_causal_lm import (
+    ensure_local_causal_lm,
+    require_causal_lm_generated_tensor,
+)
 from apps.provider_litserve.markdown_format.api import MarkdownFormatLitAPI
 from apps.provider_litserve.model_registry import (
     create_or_replace_model,
@@ -216,11 +219,15 @@ class ChatCompletionsLitAPI(ls.LitAPI):
         model_inputs = tokenizer(prompt, return_tensors="pt").to(self._device)
         input_tokens = int(model_inputs["input_ids"].shape[1])
         with torch.no_grad():
-            generated = model.generate(
-                **model_inputs,
-                max_new_tokens=self._max_new_tokens,
-                do_sample=False,
-                pad_token_id=tokenizer.eos_token_id,
+            generated = require_causal_lm_generated_tensor(
+                model.generate(
+                    inputs=model_inputs["input_ids"],
+                    attention_mask=model_inputs.get("attention_mask"),
+                    token_type_ids=model_inputs.get("token_type_ids"),
+                    max_new_tokens=self._max_new_tokens,
+                    do_sample=False,
+                    pad_token_id=tokenizer.eos_token_id,
+                )
             )
         output_ids = generated[0][input_tokens:]
         content = tokenizer.decode(output_ids, skip_special_tokens=True).strip()

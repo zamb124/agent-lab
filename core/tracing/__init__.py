@@ -12,6 +12,13 @@ OpenTelemetry трейсинг для Platform.
 from .config import TracingConfig
 from .context import TraceContext, get_current_trace_context, set_current_trace_context
 from .middleware import TracingMiddleware
+from .models import (
+    BillingSettlementSpan,
+    TraceSearchResult,
+    TraceSpanEvent,
+    TraceSpanRecord,
+    TraceSpanWrite,
+)
 from .operation_span import traced_operation
 from .provider import is_tracing_enabled, set_tracing_enabled, setup_tracing, shutdown_tracing
 from .repository import SpanRepository
@@ -36,6 +43,11 @@ __all__ = [
     "set_span_repository",
     "set_tracing_service_name",
     "TracingMiddleware",
+    "BillingSettlementSpan",
+    "TraceSearchResult",
+    "TraceSpanEvent",
+    "TraceSpanRecord",
+    "TraceSpanWrite",
     "SpanRepository",
     "traced_operation",
 ]

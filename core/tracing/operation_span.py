@@ -6,11 +6,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from opentelemetry.trace import Span
 
 import core.tracing.attributes as attr
+from core.types import OtelAttributes, OtelAttributeValue
 
 from .context import TraceContext
 from .tracer import get_tracer
@@ -31,7 +31,7 @@ async def traced_operation(
     resource_type: str | None = None,
     resource_id: str | None = None,
     trace_ctx: TraceContext | None = None,
-    extra_attributes: dict[str, Any] | None = None,
+    extra_attributes: OtelAttributes | None = None,
 ) -> AsyncGenerator[Span, None]:
     """
     operation_name: стабильная строка вида service.area.action.
@@ -41,7 +41,7 @@ async def traced_operation(
         UsageRecord с ``cost=0`` (баланс не трогается, см. core/billing/service.py).
     billing_custom_provider_id: id custom OpenAI-compatible провайдера компании (опц., для аналитики).
     """
-    merged: dict[str, Any] = dict(extra_attributes or {})
+    merged: dict[str, OtelAttributeValue] = dict(extra_attributes) if extra_attributes is not None else {}
     if operation_category:
         merged[attr.ATTR_OPERATION_CATEGORY] = operation_category
     if billing_usage_type:

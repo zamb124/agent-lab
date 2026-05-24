@@ -2,11 +2,11 @@
 
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
 from core.models import FlexibleBaseModel
+from core.types import JsonObject
 
 
 class ScheduleType(str, Enum):
@@ -50,7 +50,7 @@ class ScheduledTaskInfo(FlexibleBaseModel):
 
     # Контент
     content: str = Field(..., description="Сообщение или имя tool")
-    tool_args: dict[str, Any] | None = Field(default=None, description="Аргументы для tool_call")
+    tool_args: JsonObject | None = Field(default=None, description="Аргументы для tool_call")
     description: str | None = Field(default=None, description="Описание задачи")
 
     status: ScheduledTaskStatus = Field(default=ScheduledTaskStatus.PENDING)
@@ -79,7 +79,7 @@ class PlatformScheduleCreateRequest(FlexibleBaseModel):
     interval_seconds: int | None = Field(default=None, ge=1, description="Интервал в секундах")
     run_at: datetime | None = Field(default=None, description="Время запуска для one-time")
     timezone: str = Field(default="UTC", min_length=1)
-    payload: dict[str, Any] = Field(default_factory=dict, description="kwargs для задачи")
+    payload: JsonObject = Field(default_factory=dict, description="kwargs для задачи")
 
     @model_validator(mode="after")
     def validate_schedule_fields(self) -> "PlatformScheduleCreateRequest":
@@ -135,7 +135,7 @@ class PlatformScheduledTask(FlexibleBaseModel):
     interval_seconds: int | None = None
     run_at: datetime | None = None
     timezone: str = "UTC"
-    payload: dict[str, Any] = Field(default_factory=dict)
+    payload: JsonObject = Field(default_factory=dict)
     status: ScheduledTaskStatus = ScheduledTaskStatus.PENDING
     created_by_user_id: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -163,8 +163,8 @@ class PlatformRedisScheduleSnapshot(FlexibleBaseModel):
     interval_seconds: int | None = None
     run_at: datetime | None = None
     taskiq_task_id: str | None = None
-    kwargs: dict[str, Any] = Field(default_factory=dict)
-    labels: dict[str, Any] = Field(default_factory=dict)
+    kwargs: JsonObject = Field(default_factory=dict)
+    labels: JsonObject = Field(default_factory=dict)
     missing_reason: str | None = None
 
 

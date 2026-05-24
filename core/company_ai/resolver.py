@@ -2,7 +2,7 @@
 Резолвер per-company AI настроек: capability → конкретный provider/model/api_key/base_url/cost_origin.
 
 Источник правды — ``Company.metadata['ai_providers']`` (см. ``schema.py``). Если override
-отсутствует — используется платформенный дефолт (``platform_defaults`` + конфиг RAG/voice).
+отсутствует, вызывающий код может запросить platform default через ``platform_defaults``.
 
 cost_origin:
 
@@ -14,12 +14,15 @@ cost_origin:
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from core.clients.llm.config import LLMCallConfig
 from core.company_ai.crypto import decrypt_secret
 from core.company_ai.platform_defaults import (
     platform_default_model,
+    platform_default_provider_for_capability,
 )
 from core.company_ai.schema import (
     CUSTOM_PROVIDER_REF_PREFIX,
@@ -35,17 +38,19 @@ from core.company_ai.schema import (
 )
 from core.context import get_context
 from core.logging import get_logger
+from core.models.billing_models import BillingCostOrigin
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 
 
-CostOrigin = str  # "platform" | "company"
+CostOrigin = BillingCostOrigin
 COST_ORIGIN_PLATFORM: CostOrigin = "platform"
 COST_ORIGIN_COMPANY: CostOrigin = "company"
 
 
 class _FrozenModel(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, extra="forbid")
 
 
 class ResolvedLLM(_FrozenModel):
@@ -57,7 +62,7 @@ class ResolvedLLM(_FrozenModel):
     base_url: str | None = None
     folder_id: str | None = None
     extra_request_headers: dict[str, str] | None = None
-    extra_request_body: dict[str, object] | None = None
+    extra_request_body: JsonObject | None = None
     fallback_models: tuple[LLMCallConfig, ...] | None = None
     cost_origin: CostOrigin = COST_ORIGIN_PLATFORM
     custom_provider_id: str | None = None
@@ -131,7 +136,7 @@ def load_company_ai_providers() -> CompanyAIProviders:
     ctx = get_context()
     if ctx is None or ctx.active_company is None:
         return CompanyAIProviders()
-    metadata = getattr(ctx.active_company, "metadata", None) or {}
+    metadata = require_json_object(ctx.active_company.metadata, "company.metadata")
     return CompanyAIProviders.from_metadata(metadata)
 
 
@@ -183,24 +188,24 @@ def _resolve_llm_fallback_models(
         ):
             raise ValueError(
                 f"capability {capability.value}: fallback_models[{idx}] задаёт платформенный "
-                f"provider={fallback.provider!r} после BYOK/custom primary. Это смешивает "
-                "company-cost и platform-cost в одном failover; используйте custom:<id> "
-                "или оставьте provider пустым для наследования primary transport."
+                + f"provider={fallback.provider!r} после BYOK/custom primary. Это смешивает "
+                + "company-cost и platform-cost в одном failover; используйте custom:<id> "
+                + "или оставьте provider пустым для наследования primary transport."
             )
         if fallback.provider and fallback.provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
             custom = _resolve_custom_provider(aip, fallback.provider)
             if capability.value not in custom.capabilities:
                 raise ValueError(
                     f"capability={capability.value}: custom_provider {custom.id!r} "
-                    f"не поддерживает её (capabilities={custom.capabilities})"
+                    + f"не поддерживает её (capabilities={custom.capabilities})"
                 )
             resolved_model = fallback.model or custom.model_by_capability.get(capability.value)
             if not resolved_model or not str(resolved_model).strip():
                 raise ValueError(
                     f"capability {capability.value}: для custom_provider {custom.id!r} "
-                    "не задана fallback model"
+                    + "не задана fallback model"
                 )
-            fallback_body = dict(custom.extra_request_body or {})
+            fallback_body: JsonObject = dict(custom.extra_request_body or {})
             fallback_body.update(fallback.extra_request_body or {})
             resolved_items.append(
                 fallback.model_copy(
@@ -243,13 +248,10 @@ def resolve_llm_for_capability(
     *,
     fallback_provider: str | None = None,
     fallback_model: str | None = None,
+    include_platform_default: bool = False,
 ) -> ResolvedLLM | None:
     """
-    Резолв LLM-капасити: возвращает ResolvedLLM или None если у компании нет override
-    и платформа сама задаёт provider/model на месте вызова (например LLM_CHAT в bundle).
-
-    Контракт: при наличии company override capability возвращается всегда; при отсутствии —
-    None (вызывающий код использует свои дефолты).
+    Резолв LLM-капасити: company override, затем опциональный platform default.
     """
     if capability not in {
         AICapability.LLM_CHAT,
@@ -270,6 +272,20 @@ def resolve_llm_for_capability(
                 model=fallback_model,
                 cost_origin=COST_ORIGIN_PLATFORM,
             )
+        if include_platform_default:
+            default_provider = platform_default_provider_for_capability(capability)
+            default_model = platform_default_model(capability, default_provider)
+            if default_model is None or not str(default_model).strip():
+                raise ValueError(
+                    f"capability {capability.value}: platform default model не настроен "
+                    + f"для provider {default_provider!r}"
+                )
+            return ResolvedLLM(
+                provider=default_provider,
+                model=str(default_model).strip(),
+                cost_origin=COST_ORIGIN_PLATFORM,
+                custom_provider_id=None,
+            )
         return None
 
     if not isinstance(override, CompanyLLMOverride):
@@ -278,16 +294,6 @@ def resolve_llm_for_capability(
         )
 
     if override.provider == HUMANITEC_LLM_PROVIDER:
-        if capability not in {
-            AICapability.LLM_CHAT,
-            AICapability.LLM_SUMMARIZE,
-            AICapability.LLM_FORMAT_MARKDOWN,
-            AICapability.LLM_CODEGEN,
-        }:
-            raise ValueError(
-                f"capability {capability.value}: provider=humanitec_llm поддерживает "
-                "только текстовые LLM capability"
-            )
         model = (
             override.model
             or platform_default_model(capability, override.provider)
@@ -316,7 +322,7 @@ def resolve_llm_for_capability(
         if not model or not str(model).strip():
             raise ValueError(
                 f"capability {capability.value}: для custom_provider {custom.id!r} не задана "
-                f"модель (model_by_capability[{capability.value}] или override.model)"
+                + f"модель (model_by_capability[{capability.value}] или override.model)"
             )
         resolved = ResolvedLLM(
             provider=CUSTOM_PROVIDER_SLUG,
@@ -343,7 +349,7 @@ def resolve_llm_for_capability(
     if not model or not str(model).strip():
         raise ValueError(
             f"capability {capability.value}: не удалось определить model "
-            f"для provider {override.provider!r} (нет в platform_defaults и override.model пуст)"
+            + f"для provider {override.provider!r} (нет в platform_defaults и override.model пуст)"
         )
 
     resolved = ResolvedLLM(
@@ -392,13 +398,13 @@ def resolve_custom_llm_provider_ref(
     if capability.value not in custom.capabilities:
         raise ValueError(
             f"capability={capability.value}: custom_provider {custom.id!r} не поддерживает её "
-            f"(capabilities={custom.capabilities})"
+            + f"(capabilities={custom.capabilities})"
         )
     resolved_model = model or custom.model_by_capability.get(capability.value)
     if not resolved_model or not str(resolved_model).strip():
         raise ValueError(
             f"capability {capability.value}: для custom_provider {custom.id!r} не задана "
-            f"модель (model_by_capability[{capability.value}] или явный model)"
+            + f"модель (model_by_capability[{capability.value}] или явный model)"
         )
     return ResolvedLLM(
         provider=CUSTOM_PROVIDER_SLUG,

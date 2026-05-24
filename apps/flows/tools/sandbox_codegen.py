@@ -154,7 +154,10 @@ def _execution_state_for_codegen(
 
 
 def _resolve_codegen_llm_kwargs(model: str) -> tuple[dict[str, Any], str]:
-    resolved = resolve_llm_for_capability(AICapability.LLM_CODEGEN)
+    resolved = resolve_llm_for_capability(
+        AICapability.LLM_CODEGEN,
+        include_platform_default=True,
+    )
     if resolved is not None:
         return (
             {
@@ -172,8 +175,7 @@ def _resolve_codegen_llm_kwargs(model: str) -> tuple[dict[str, Any], str]:
     selected_model = model.strip() if model and model.strip() else ""
     if not selected_model:
         raise ValueError(
-            "sandbox_codegen: нет company override для capability=llm_codegen; "
-            "явный model обязателен. Скрытый fallback на settings.llm.default_model запрещён."
+            "sandbox_codegen: platform default для capability=llm_codegen не настроен."
         )
     return {"model_name": selected_model}, selected_model
 

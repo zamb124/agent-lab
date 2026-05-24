@@ -305,7 +305,9 @@ class TelegramDevPolling:
             flow_config, _ = unscoped
             trig = flow_config.triggers.get(trigger_id)
             if trig is not None:
-                secret = trig.config.get("_secret_token")
+                raw_secret = trig.config.get("_secret_token")
+                if isinstance(raw_secret, str):
+                    secret = raw_secret
 
         headers: dict[str, str] = {}
         if secret:

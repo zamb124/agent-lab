@@ -1,70 +1,114 @@
 """
-Единая ссылка на файл для core.files: запись из state.files, FileRecord / FileResponse из БД или API.
+Каноническая ссылка на файл в runtime state.
 
-Все сервисы передают канонический dict state.files (`original_name`, `url` и/или `file_id`)
-либо модель записи.
+`FileRef` — единственная форма элемента `ExecutionState.files`: файл либо уже лежит
+в платформенном хранилище (`file_id`), либо доступен по внешнему/локальному `url`.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
-from typing import Any, TypeAlias
+from typing import Literal, TypeAlias
+
+from pydantic import Field, model_validator
 
 from core.files.models import FileRecord, FileResponse
+from core.models import StrictBaseModel
+from core.types import JsonObject, require_json_object
 
 DOWNLOAD_FILE_ID_RE = re.compile(r"/files/download/([^/?#]+)")
 
 
 def file_id_from_download_url(url: str) -> str | None:
-    m = DOWNLOAD_FILE_ID_RE.search(url.strip())
-    return m.group(1) if m else None
+    match = DOWNLOAD_FILE_ID_RE.search(url.strip())
+    return match.group(1) if match else None
 
 
-FileRef: TypeAlias = FileRecord | FileResponse | Mapping[str, Any]
+class FileDocumentCapability(StrictBaseModel):
+    """OnlyOffice document binding attached to a FileRef."""
+
+    kind: Literal["onlyoffice"] = "onlyoffice"
+    binding_id: str = Field(min_length=1)
+    file_id: str = Field(min_length=1)
+    catalog_id: str = Field(min_length=1)
+    document_type: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    namespace: str = Field(min_length=1)
+    editor_url: str = Field(min_length=1)
+    editable: bool = True
 
 
-def normalize_file_ref(ref: FileRef) -> dict[str, Any]:
-    if isinstance(ref, FileRecord):
-        return {
-            "file_id": ref.file_id,
-            "original_name": ref.original_name,
-            "content_type": ref.content_type,
-            "file_size": ref.file_size,
-            "url": ref.url,
-        }
-    if isinstance(ref, FileResponse):
-        return {
-            "file_id": ref.file_id,
-            "original_name": ref.original_name,
-            "content_type": ref.content_type,
-            "file_size": ref.file_size,
-            "url": ref.url,
-        }
-    if not isinstance(ref, Mapping):
-        raise TypeError(
-            f"Ожидался FileRecord, FileResponse или mapping, получено: {type(ref).__name__}"
+class FileCapabilities(StrictBaseModel):
+    """Typed capabilities attached to a FileRef."""
+
+    document: FileDocumentCapability | None = None
+
+
+class FileRef(StrictBaseModel):
+    """Канонический элемент `ExecutionState.files`."""
+
+    file_id: str | None = Field(default=None, min_length=1)
+    original_name: str = Field(min_length=1)
+    url: str | None = Field(default=None, min_length=1)
+    content_type: str = Field(min_length=1)
+    file_size: int = Field(ge=0)
+    checksum: str | None = Field(default=None, min_length=1)
+    is_public: bool | None = None
+    capabilities: FileCapabilities = Field(default_factory=FileCapabilities)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_file_storage_models(cls, value: object) -> object:
+        if isinstance(value, FileRecord):
+            return {
+                "file_id": value.file_id,
+                "original_name": value.original_name,
+                "url": value.url,
+                "content_type": value.content_type,
+                "file_size": value.file_size,
+                "checksum": value.checksum,
+                "is_public": value.is_public,
+            }
+        if isinstance(value, FileResponse):
+            return {
+                "file_id": value.file_id,
+                "original_name": value.original_name,
+                "url": value.url,
+                "content_type": value.content_type,
+                "file_size": value.file_size,
+                "checksum": value.checksum,
+                "is_public": value.is_public,
+            }
+        return value
+
+    @model_validator(mode="after")
+    def require_resolvable_source(self) -> "FileRef":
+        if self.file_id is None and self.url is None:
+            raise ValueError("FileRef должен содержать file_id или url")
+        return self
+
+    @classmethod
+    def from_record(cls, record: FileRecord) -> "FileRef":
+        return cls.model_validate(record)
+
+    @classmethod
+    def from_response(cls, response: FileResponse) -> "FileRef":
+        return cls.model_validate(response)
+
+    def to_json_object(self) -> JsonObject:
+        return require_json_object(
+            self.model_dump(mode="json", exclude_none=True),
+            "FileRef",
         )
-    out = dict(ref)
-    legacy_keys = {"name", "path", "mime_type", "size", "type"} & set(out)
-    if legacy_keys:
-        keys = ", ".join(sorted(legacy_keys))
-        raise ValueError(f"FileRef содержит legacy-поля: {keys}")
-    original_name = out.get("original_name")
-    if not isinstance(original_name, str) or not original_name.strip():
-        raise ValueError("FileRef.original_name обязателен")
-    file_id = out.get("file_id")
-    url = out.get("url")
-    has_file_id = isinstance(file_id, str) and file_id.strip()
-    has_url = isinstance(url, str) and url.strip()
-    if not has_file_id and not has_url:
-        raise ValueError("FileRef должен содержать file_id или url")
-    return out
 
+
+FileRefSource: TypeAlias = FileRef | FileRecord | FileResponse | JsonObject
 
 __all__ = [
     "DOWNLOAD_FILE_ID_RE",
+    "FileCapabilities",
+    "FileDocumentCapability",
     "FileRef",
+    "FileRefSource",
     "file_id_from_download_url",
-    "normalize_file_ref",
 ]

@@ -11,6 +11,7 @@ import json
 
 import pytest
 
+from core.ui_events.contract import UIEventEnvelope
 from core.websocket.manager import NotificationManager
 
 
@@ -28,7 +29,14 @@ class MockWebSocket:
         self.closed = True
 
 
-def _envelope(user_id: str | None, event_type: str, payload: dict | None = None, *, company_id: str | None = None, broadcast: bool = False) -> dict:
+def _envelope(
+    user_id: str | None,
+    event_type: str,
+    payload: dict | None = None,
+    *,
+    company_id: str | None = None,
+    broadcast: bool = False,
+) -> UIEventEnvelope:
     target: dict[str, object] = {}
     if user_id is not None:
         target["user_id"] = user_id
@@ -36,10 +44,20 @@ def _envelope(user_id: str | None, event_type: str, payload: dict | None = None,
         target["company_id"] = company_id
     if broadcast:
         target["broadcast"] = True
-    return {
-        "target": target,
-        "event": {"type": event_type, "payload": payload or {}, "meta": {"source": "system"}},
-    }
+    return UIEventEnvelope.model_validate(
+        {
+            "target": target,
+            "event": {
+                "type": event_type,
+                "payload": payload or {},
+                "meta": {"source": "system"},
+            },
+        }
+    )
+
+
+def _event_json(envelope: UIEventEnvelope) -> dict:
+    return envelope.event.model_dump(mode="json")
 
 
 @pytest.mark.asyncio
@@ -73,7 +91,7 @@ async def test_multiple_connections_same_user():
     envelope = _envelope("user_123", "notify/test/system_received", {"kind": "system", "title": "Hello"})
     await manager._deliver_envelope(envelope)
 
-    expected_event = envelope["event"]
+    expected_event = _event_json(envelope)
     assert ws1.sent_messages == [expected_event]
     assert ws2.sent_messages == [expected_event]
     assert ws3.sent_messages == [expected_event]
@@ -161,9 +179,9 @@ async def test_multiple_users():
     await manager._deliver_envelope(env_1)
     await manager._deliver_envelope(env_2)
 
-    assert ws1.sent_messages == [env_1["event"]]
-    assert ws2.sent_messages == [env_1["event"]]
-    assert ws3.sent_messages == [env_2["event"]]
+    assert ws1.sent_messages == [_event_json(env_1)]
+    assert ws2.sent_messages == [_event_json(env_1)]
+    assert ws3.sent_messages == [_event_json(env_2)]
 
 
 @pytest.mark.asyncio
@@ -179,7 +197,7 @@ async def test_company_target_delivers_to_company_sockets_only():
     env = _envelope(None, "crm/note/created", {"id": "n1"}, company_id="c1")
     await manager._deliver_envelope(env)
 
-    assert ws_company.sent_messages == [env["event"]]
+    assert ws_company.sent_messages == [_event_json(env)]
     assert ws_other.sent_messages == []
 
 

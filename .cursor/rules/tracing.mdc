@@ -82,7 +82,7 @@ alwaysApply: false
 | `request_span` | HTTP-запрос (если используется) |
 | `platform_operation_span` | Любая значимая операция сервиса с произвольными `attributes` |
 
-`traced_operation` — то же + автоматически `platform.billing.*` / `platform.operation.category` при передаче параметров.
+`traced_operation` — то же + автоматически `platform.billing.*` / `platform.operation.category` при передаче параметров. `extra_attributes` принимает только `core.types.OtelAttributes`: OTel scalar/sequence values, не `JsonObject` и не `dict[str, Any]`. Если внешний capability/runtime payload приходит как JSON, на границе нужно валидировать, что каждое поле является допустимым OTel `AttributeValue`, иначе `raise`.
 
 Вспомогательно: `record_llm_request`/`record_llm_response`, `record_tool_result`, `record_prompt_result`, `record_state_snapshot`, `set_error`.
 
@@ -107,7 +107,7 @@ alwaysApply: false
 | `admin_list_distinct_user_ids_in_spans` | `user_id`, по которым есть spans (для пересечения с поиском в shared-каталоге) |
 | `list_spans_pending_billing_settlement` | Окно `[from_time, to_time)` по `start_time`: есть `platform.billing.resource_name` и `pending_settlement`; лимит пачки |
 
-Сериализация репозитория — плоский dict с полями модели + `flow_id`/`task_id`/… из `attributes` (`_serialize_span`).
+Контракт записи и чтения репозитория — только канонические модели `core.tracing.models`: `TraceSpanWrite` для `save_span`, `TraceSpanRecord` для read-методов, `TraceSearchResult` для `search_traces`. `TraceSpanRecord` содержит колонки span и индексируемые доменные атрибуты (`flow_id`/`task_id`/…) из `attributes`; API-слой сериализует модель на своей HTTP-границе. Billing-settlement использует отдельный строгий контракт: `list_spans_pending_billing_settlement` возвращает каноническую Pydantic-модель `core.tracing.models.BillingSettlementSpan`; billing service/rules/job не принимают `span_dict`.
 
 ## Админ UI (frontend)
 

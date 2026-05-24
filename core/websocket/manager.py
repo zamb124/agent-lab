@@ -19,22 +19,106 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Protocol, Self, TypedDict, cast
 
-import redis.asyncio as aioredis
 from fastapi import WebSocket
+from pydantic import ValidationError
+from redis.asyncio.client import PubSub, Redis
 
 from core.config import get_settings
 from core.logging import enter_request_scope, exit_request_scope, get_logger
-from core.ui_events.contract import UI_EVENTS_REDIS_CHANNEL
+from core.ui_events.contract import UI_EVENTS_REDIS_CHANNEL, UIEventEnvelope
 
 logger = get_logger(__name__)
 
 ConnectionHook = Callable[[str, str | None, bool], Awaitable[None]]
-JsonObject = dict[str, Any]
+
+
+class _RedisPubSubMessage(TypedDict):
+    type: str
+    data: str | bytes | bytearray | None
+
+
+class _RedisFromUrlCommand(Protocol):
+    def __call__(self, url: str) -> Redis: ...
+
+
+class _RedisPublishCommand(Protocol):
+    def __call__(self, channel: str, message: str) -> Awaitable[int]: ...
+
+
+class _RedisPubSubFactory(Protocol):
+    def __call__(self) -> PubSub: ...
+
+
+class _RedisDisconnectCommand(Protocol):
+    def __call__(self, *, inuse_connections: bool) -> Awaitable[None]: ...
+
+
+class _RedisCloseCommand(Protocol):
+    def __call__(self) -> Awaitable[None]: ...
+
+
+class _RedisSubscribeCommand(Protocol):
+    def __call__(self, channel: str) -> Awaitable[None]: ...
+
+
+class _RedisGetMessageCommand(Protocol):
+    def __call__(
+        self,
+        *,
+        ignore_subscribe_messages: bool,
+        timeout: float,
+    ) -> Awaitable[_RedisPubSubMessage | None]: ...
+
+
+class _RedisPubSub:
+    def __init__(self, pubsub: PubSub) -> None:
+        self._pubsub: PubSub = pubsub
+
+    async def subscribe(self, channel: str) -> None:
+        subscribe = cast(_RedisSubscribeCommand, self._pubsub.subscribe)
+        await subscribe(channel)
+
+    async def get_message(
+        self,
+        *,
+        ignore_subscribe_messages: bool,
+        timeout: float,
+    ) -> _RedisPubSubMessage | None:
+        get_message = cast(_RedisGetMessageCommand, self._pubsub.get_message)
+        return await get_message(
+            ignore_subscribe_messages=ignore_subscribe_messages,
+            timeout=timeout,
+        )
+
+
+class _RedisConnection:
+    def __init__(self, client: Redis) -> None:
+        self._client: Redis = client
+
+    @classmethod
+    def from_url(cls, redis_url: str) -> Self:
+        from_url = cast(_RedisFromUrlCommand, Redis.from_url)
+        return cls(from_url(redis_url))
+
+    async def publish(self, channel: str, message: str) -> int:
+        publish = cast(_RedisPublishCommand, self._client.publish)
+        return await publish(channel, message)
+
+    def pubsub(self) -> _RedisPubSub:
+        pubsub = cast(_RedisPubSubFactory, self._client.pubsub)
+        return _RedisPubSub(pubsub())
+
+    async def disconnect_pool(self) -> None:
+        disconnect = cast(_RedisDisconnectCommand, self._client.connection_pool.disconnect)
+        await disconnect(inuse_connections=True)
+
+    async def close(self) -> None:
+        close = cast(_RedisCloseCommand, self._client.aclose)
+        await close()
 
 
 class NotificationManager:
@@ -49,25 +133,21 @@ class NotificationManager:
     def __init__(self) -> None:
         self._connections: dict[str, set[WebSocket]] = {}
         self._socket_meta: dict[WebSocket, tuple[str, str | None]] = {}
-        self._connection_lock = asyncio.Lock()
+        self._connection_lock: asyncio.Lock = asyncio.Lock()
         self._redis_task: asyncio.Task[None] | None = None
-        self._redis_client: aioredis.Redis | None = None
-        self._redis_pubsub: Any | None = None
+        self._redis_client: _RedisConnection | None = None
+        self._redis_pubsub: _RedisPubSub | None = None
         self._connect_hooks: list[ConnectionHook] = []
         self._disconnect_hooks: list[ConnectionHook] = []
 
     def register_connect_hook(self, hook: ConnectionHook) -> None:
         """Hook вида `async def hook(user_id: str, company_id: str | None,
         was_first_connection: bool) -> None`."""
-        if not callable(hook):
-            raise TypeError("connect hook must be callable")
         self._connect_hooks.append(hook)
 
     def register_disconnect_hook(self, hook: ConnectionHook) -> None:
         """Hook вида `async def hook(user_id: str, company_id: str | None,
         was_last_connection: bool) -> None`."""
-        if not callable(hook):
-            raise TypeError("disconnect hook must be callable")
         self._disconnect_hooks.append(hook)
 
     async def connect(
@@ -104,7 +184,7 @@ class NotificationManager:
             if sockets is not None:
                 sockets.discard(websocket)
                 if not sockets:
-                    self._connections.pop(user_id, None)
+                    _ = self._connections.pop(user_id, None)
                     was_last_connection = True
             logger.info("WS disconnected: user=%s last=%s", user_id, was_last_connection)
         for hook in self._disconnect_hooks:
@@ -129,16 +209,16 @@ class NotificationManager:
         if client is None:
             logger.warning("Redis client not available; UI event dropped")
             return
-        await client.publish(UI_EVENTS_REDIS_CHANNEL, envelope_json)
+        _ = await client.publish(UI_EVENTS_REDIS_CHANNEL, envelope_json)
 
-    async def _ensure_publisher_client(self) -> aioredis.Redis | None:
+    async def _ensure_publisher_client(self) -> _RedisConnection | None:
         if self._redis_client is not None:
             return self._redis_client
         settings = get_settings()
-        redis_url = getattr(settings.database, "redis_url", None)
+        redis_url = settings.database.redis_url
         if not redis_url:
             return None
-        self._redis_client = aioredis.from_url(redis_url)
+        self._redis_client = _RedisConnection.from_url(redis_url)
         logger.info("Redis publisher client lazy-initialized for UI events")
         return self._redis_client
 
@@ -165,18 +245,13 @@ class NotificationManager:
                         if bucket is not None:
                             bucket.discard(ws)
                             if not bucket:
-                                self._connections.pop(uid, None)
+                                _ = self._connections.pop(uid, None)
 
-    async def _deliver_envelope(self, envelope: JsonObject) -> None:
-        target = envelope.get("target") or {}
-        event = envelope.get("event")
-        if not isinstance(event, dict) or "type" not in event:
-            logger.warning("ui_event.envelope_invalid")
-            return
-
-        meta = event.get("meta") if isinstance(event.get("meta"), dict) else {}
-        request_id = meta.get("request_id") if isinstance(meta, dict) else None
-        trace_id = meta.get("trace_id") if isinstance(meta, dict) else None
+    async def _deliver_envelope(self, envelope: UIEventEnvelope) -> None:
+        target = envelope.target
+        event = envelope.event
+        request_id = event.meta.request_id
+        trace_id = event.meta.trace_id
 
         if not isinstance(request_id, str) or not request_id.strip():
             request_id = f"ui-deliver:{uuid.uuid4().hex}"
@@ -188,26 +263,26 @@ class NotificationManager:
             request_id=request_id,
             trace_id=trace_id,
             service_name=settings.server.name,
-            ui_event_type=event.get("type"),
-            ui_event_id=event.get("id"),
+            ui_event_type=event.type,
+            ui_event_id=event.id,
         )
 
-        event_text = json.dumps(event, ensure_ascii=False)
-        user_id = target.get("user_id")
-        company_id = target.get("company_id")
-        broadcast = bool(target.get("broadcast"))
+        event_text = event.model_dump_json()
+        user_id = target.user_id
+        company_id = target.company_id
+        broadcast = target.broadcast
 
         try:
-            if user_id:
+            if user_id is not None:
                 sockets = self._connections.get(user_id)
                 if not sockets:
                     return
                 await self._send_event_to_sockets(sockets, event_text, f"user={user_id}")
                 return
 
-            if company_id:
+            if company_id is not None:
                 matched: set[WebSocket] = set()
-                for ws, (uid, cid) in self._socket_meta.items():
+                for ws, (_uid, cid) in self._socket_meta.items():
                     if cid == company_id:
                         matched.add(ws)
                 await self._send_event_to_sockets(matched, event_text, f"company={company_id}")
@@ -226,7 +301,7 @@ class NotificationManager:
         if self._redis_task is not None:
             logger.warning("Redis UI events listener already running")
             return
-        self._redis_client = aioredis.from_url(redis_url)
+        self._redis_client = _RedisConnection.from_url(redis_url)
         self._redis_task = asyncio.create_task(self._redis_loop())
         logger.info("Redis UI events listener started on channel %s", UI_EVENTS_REDIS_CHANNEL)
 
@@ -248,7 +323,7 @@ class NotificationManager:
         self._redis_pubsub = None
 
         if task is not None and not task.done():
-            task.cancel()
+            _ = task.cancel()
         if task is not None:
             try:
                 await asyncio.wait_for(task, timeout=8.0)
@@ -262,7 +337,7 @@ class NotificationManager:
         if task is not None and not task.done() and client is not None:
             try:
                 await asyncio.wait_for(
-                    client.connection_pool.disconnect(inuse_connections=True),
+                    client.disconnect_pool(),
                     timeout=5.0,
                 )
             except (asyncio.TimeoutError, Exception) as exc:
@@ -283,13 +358,13 @@ class NotificationManager:
         if client is not None:
             try:
                 await asyncio.wait_for(
-                    client.connection_pool.disconnect(inuse_connections=True),
+                    client.disconnect_pool(),
                     timeout=5.0,
                 )
             except (asyncio.TimeoutError, Exception) as exc:
                 logger.warning("notification_manager.pool_disconnect_final_failed: %s", exc)
             try:
-                await asyncio.wait_for(client.aclose(), timeout=5.0)
+                await asyncio.wait_for(client.close(), timeout=5.0)
             except (asyncio.TimeoutError, Exception) as exc:
                 logger.warning("notification_manager.redis_client_aclose_failed: %s", exc)
 
@@ -308,19 +383,16 @@ class NotificationManager:
                 )
                 if message is None:
                     continue
-                if message.get("type") != "message":
+                if message["type"] != "message":
                     continue
-                data = message.get("data")
+                data = message["data"]
                 if not isinstance(data, (str, bytes, bytearray)):
                     logger.warning("ui_event.redis_message_data_invalid")
                     continue
                 try:
-                    envelope = json.loads(data)
-                except json.JSONDecodeError as exc:
+                    envelope = UIEventEnvelope.model_validate_json(data)
+                except ValidationError as exc:
                     logger.error("Failed to parse UI envelope: %s", exc)
-                    continue
-                if not isinstance(envelope, dict):
-                    logger.warning("ui_event.redis_message_envelope_invalid")
                     continue
                 try:
                     await self._deliver_envelope(envelope)

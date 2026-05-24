@@ -4,10 +4,11 @@
 Используется и как нода агента, и как tool для react агентов.
 """
 
-import json
 from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
+
+from core.types import parse_json_object
 
 
 class HTTPMethod(str, Enum):
@@ -88,13 +89,8 @@ class ExternalAPIConfig(BaseModel):
 
     @model_validator(mode="after")
     def _body_template_is_json_object(self) -> "ExternalAPIConfig":
-        raw = self.body_template.strip() if isinstance(self.body_template, str) else ""
+        raw = self.body_template.strip()
         if not raw:
             return self
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError as e:
-            raise ValueError("body_template must be valid JSON") from e
-        if not isinstance(parsed, dict):
-            raise ValueError("body_template JSON must be an object at the root")
+        _ = parse_json_object(raw, "body_template")
         return self

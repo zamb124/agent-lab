@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from enum import StrEnum
-from typing import Any
 
 from pydantic import BaseModel, Field
 
-from core.files.file_ref import file_id_from_download_url
+from core.files.file_ref import FileRef, file_id_from_download_url
 
 
 class FileReadKind(StrEnum):
@@ -67,7 +65,7 @@ class ReadOptions(BaseModel):
     include_asset_bytes: bool = False
     source_file_id: str | None = None
     source_checksum: str | None = None
-    vision_model: str = "google/gemini-2.5-flash-preview"
+    vision_model: str | None = None
     vision_prompt: str | None = Field(
         default=None,
         description="Текст инструкции для vision-модели при разборе изображений; иначе встроенный промпт извлечения текста.",
@@ -82,17 +80,15 @@ class ReadOptions(BaseModel):
 
 
 def merge_file_ref_read_options(
-    finfo: Mapping[str, Any],
+    file_ref: FileRef,
     opts: ReadOptions,
 ) -> ReadOptions:
     if isinstance(opts.source_file_id, str) and opts.source_file_id.strip():
         return opts
-    fid = finfo.get("file_id")
-    if isinstance(fid, str) and fid.strip():
-        return opts.model_copy(update={"source_file_id": fid.strip()})
-    url_val = finfo.get("url")
-    if isinstance(url_val, str) and url_val.strip():
-        parsed = file_id_from_download_url(url_val)
+    if file_ref.file_id is not None:
+        return opts.model_copy(update={"source_file_id": file_ref.file_id})
+    if file_ref.url is not None:
+        parsed = file_id_from_download_url(file_ref.url)
         if parsed:
             return opts.model_copy(update={"source_file_id": parsed})
     return opts

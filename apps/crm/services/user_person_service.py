@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import cast
 
 from apps.crm.constants_graph import (
     BELONGS_TO_RELATIONSHIP_TYPE,
@@ -23,6 +22,7 @@ from apps.crm.db.repositories.relationship_repository import RelationshipReposit
 from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
 from core.models.identity_models import User
+from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
 
@@ -45,23 +45,20 @@ class UserPersonService:
         self._relationship_repo: RelationshipRepository = relationship_repo
 
     @staticmethod
-    def _crm_attrs(user: User) -> dict[str, object]:
-        raw = cast(object, user.attrs.get("crm"))
+    def _crm_attrs(user: User) -> JsonObject:
+        raw = user.attrs.get("crm")
         if raw is None:
             return {}
-        if not isinstance(raw, dict):
-            raise ValueError("user.attrs['crm'] must be an object")
-        return dict(cast(dict[str, object], raw))
+        return require_json_object(raw, "user.attrs['crm']")
 
     @staticmethod
-    def _string_map(raw: object, field_name: str) -> dict[str, str]:
+    def _string_map(raw: JsonValue, field_name: str) -> dict[str, str]:
         if raw is None:
             return {}
-        if not isinstance(raw, dict):
-            raise ValueError(f"user.attrs['crm'][{field_name!r}] must be an object")
+        raw_object = require_json_object(raw, f"user.attrs['crm'][{field_name!r}]")
         out: dict[str, str] = {}
-        for key, value in cast(dict[object, object], raw).items():
-            if not isinstance(key, str) or not isinstance(value, str):
+        for key, value in raw_object.items():
+            if not isinstance(value, str):
                 raise ValueError(f"user.attrs['crm'][{field_name!r}] must be dict[str, str]")
             out[key] = value
         return out
@@ -99,7 +96,7 @@ class UserPersonService:
             raise ValueError("Тип сущности member не найден для компании (инициализация CRM?)")
 
         display = self._display_name_from_user(user)
-        attributes: dict[str, object] = {
+        attributes: JsonObject = {
             PLATFORM_USER_ID_ATTR: user_id,
         }
         if user.first_name:

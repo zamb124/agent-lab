@@ -77,7 +77,11 @@ def _apply_resolved_company_llm(
             "folder_id": resolved.folder_id,
             "extra_request_headers": dict(resolved.extra_request_headers or {}) or None,
             "extra_request_body": dict(resolved.extra_request_body or {}) or None,
-            "fallback_models": list(resolved.fallback_models or ()) or None,
+            "fallback_models": [
+                fallback.model_dump(mode="json", exclude_none=True)
+                for fallback in resolved.fallback_models or ()
+            ]
+            or None,
         }
     )
     return NodeLLMConfig.model_validate(data)
@@ -109,10 +113,11 @@ def _reject_node_fallbacks(
     if not base.fallback_models:
         return
     node_id = node_config.node_id if node_config is not None else "<unknown>"
-    raise ValueError(
+    message = (
         f"LlmNode {node_id}: llm.fallback_models в flow/node/resource config запрещены "
-        "для runtime. Настройте fallback policy в /settings -> AI providers для нужной capability."
+        + "для runtime. Настройте fallback policy в /settings -> AI providers для нужной capability."
     )
+    raise ValueError(message)
 
 
 def _validate_explicit_primary(
@@ -128,11 +133,12 @@ def _validate_explicit_primary(
         return
     if base.provider is None or base.model is None:
         node_id = node_config.node_id if node_config is not None else "<unknown>"
-        raise ValueError(
+        message = (
             f"LlmNode {node_id}: нет company override для capability={capability.value}, "
-            "поэтому llm.provider и llm.model должны быть заданы явно. "
-            "Скрытый fallback на settings.llm.default_model запрещён."
+            + "поэтому llm.provider и llm.model должны быть заданы явно. "
+            + "Скрытый fallback на settings.llm.default_model запрещён."
         )
+        raise ValueError(message)
 
 
 def _fallback_models_billing_resource(

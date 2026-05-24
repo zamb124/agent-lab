@@ -4,12 +4,12 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Literal
+from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from core.fields import Field
 from core.models.billing_models import TariffPlan
+from core.types import JsonObject
 
 
 class UserStatus(str, Enum):
@@ -36,18 +36,18 @@ class User(BaseModel):
     Содержит только общие данные, без привязки к провайдерам.
     """
 
-    model_config = ConfigDict(json_schema_extra={"storage_prefix": "user"})
+    model_config: ClassVar[ConfigDict] = ConfigDict(json_schema_extra={"storage_prefix": "user"})
 
     user_id: str = Field(
         title="ID пользователя",
         description="Уникальный ID пользователя в системе",
-        readonly=True,
+        json_schema_extra={"readonly": True},
     )
     name: str = Field(
         title="Имя",
         description="Отображаемое имя; при сохранении ФИО может выставляться из имени и фамилии",
-        placeholder="Иван Иванов",
         max_length=200,
+        json_schema_extra={"placeholder": "Иван Иванов"},
     )
     first_name: str | None = Field(
         default=None,
@@ -65,25 +65,27 @@ class User(BaseModel):
         default=UserStatus.ACTIVE,
         title="Статус",
         description="Статус пользователя",
-        groups={"admin": {"editable_in_table": True}, "user": {"readonly": True}},
+        json_schema_extra={
+            "groups": {"admin": {"editable_in_table": True}, "user": {"readonly": True}}
+        },
     )
     groups: list[str] = Field(
-        default=["user"],
+        default_factory=lambda: ["user"],
         title="Группы",
         description="Группы пользователя (admin, user, bot_editor, guest)",
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     companies: dict[str, list[str]] = Field(
         default_factory=dict,
         title="Компании и роли",
         description="company_id -> [role1, role2]",
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     active_company_id: str = Field(
         default="",
         title="Активная компания",
         description="ID текущей активной компании",
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     emails: list[str] = Field(
         default_factory=list, title="Email адреса", description="Список email адресов пользователя"
@@ -113,29 +115,29 @@ class User(BaseModel):
         description="Биография пользователя для ИИ и интерфейса",
         max_length=4000,
     )
-    ui_preferences: dict[str, Any] = Field(
+    ui_preferences: JsonObject = Field(
         default_factory=dict, title="UI настройки", description="Настройки интерфейса пользователя"
     )
-    attrs: dict[str, Any] = Field(
+    attrs: JsonObject = Field(
         default_factory=dict, title="Атрибуты", description="Дополнительные service-specific данные"
     )
     password_hash: str | None = Field(
         default=None,
         title="Хеш пароля",
         description="Bcrypt-хеш; используется только для демо-учётки (auth.demo), не для OAuth",
-        groups={"admin": {"hidden": True}, "user": {"hidden": True}},
+        json_schema_extra={"groups": {"admin": {"hidden": True}, "user": {"hidden": True}}},
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Создан",
         description="Время создания пользователя",
-        readonly=True,
+        json_schema_extra={"readonly": True},
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Обновлен",
         description="Время последнего обновления",
-        readonly=True,
+        json_schema_extra={"readonly": True},
     )
 
 
@@ -145,73 +147,75 @@ class Company(BaseModel):
     Компания содержит свою собственную изолированную конфигурацию.
     """
 
-    model_config = ConfigDict(json_schema_extra={"storage_prefix": "company"})
+    model_config: ClassVar[ConfigDict] = ConfigDict(json_schema_extra={"storage_prefix": "company"})
 
     company_id: str = Field(
         title="ID компании",
         description="Уникальный ID компании",
-        readonly=True,
+        json_schema_extra={"readonly": True},
     )
     name: str = Field(
         title="Название",
         description="Название компании",
-        placeholder="Моя компания",
+        json_schema_extra={"placeholder": "Моя компания"},
     )
     subdomain: str | None = Field(
         default=None,
         title="Поддомен",
         description="Поддомен компании (company.humanitec.ru)",
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     owner_user_id: str | None = Field(
         default=None,
         title="Владелец",
         description="ID пользователя-владельца компании",
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     members: dict[str, list[str]] = Field(
         default_factory=dict,
         title="Участники",
         description="user_id -> [role1, role2]",
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     status: str = Field(
         default="active",
         title="Статус",
         description="Статус компании (active, suspended)",
-        groups={"admin": {"editable_in_table": True}, "user": {"readonly": True}},
+        json_schema_extra={
+            "groups": {"admin": {"editable_in_table": True}, "user": {"readonly": True}}
+        },
     )
-    metadata: dict[str, Any] = Field(
+    metadata: JsonObject = Field(
         default_factory=dict,
         title="Метаданные",
         description="Дополнительные данные компании",
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     tariff_plan: TariffPlan = Field(
         default=TariffPlan.FREE,
         title="Тарифный план",
         description="Тарифный план компании (free, basic, premium, enterprise)",
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     balance: float = Field(
         default=50.0,
         title="Баланс",
         description="Баланс компании в RUB; отрицательное значение — задолженность после списаний",
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     monthly_budget: float = Field(
         default=0.0,
         title="Месячный лимит",
         description="Месячное самоограничение в RUB (0 = без самоограничения)",
         ge=0.0,
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
     current_month_spent: float = Field(
         default=0.0,
         title="Потрачено в месяце",
         description="Потрачено компанией в текущем месяце в RUB",
-        readonly=True,
         ge=0.0,
+        json_schema_extra={"readonly": True},
     )
     billing_period_start: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc).replace(
@@ -219,19 +223,19 @@ class Company(BaseModel):
         ),
         title="Начало расчетного периода",
         description="Начало текущего расчетного периода",
-        readonly=True,
+        json_schema_extra={"readonly": True},
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Создана",
         description="Время создания компании",
-        readonly=True,
+        json_schema_extra={"readonly": True},
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Обновлена",
         description="Время последнего обновления",
-        readonly=True,
+        json_schema_extra={"readonly": True},
     )
 
 
@@ -239,49 +243,53 @@ class AuthSession(BaseModel):
     """Модель сессии авторизации"""
 
     session_id: str = Field(
-        title="ID сессии", description="Уникальный ID сессии авторизации", readonly=True
+        title="ID сессии",
+        description="Уникальный ID сессии авторизации",
+        json_schema_extra={"readonly": True},
     )
     user_id: str = Field(
-        title="ID пользователя", description="Ссылка на пользователя", readonly=True
+        title="ID пользователя",
+        description="Ссылка на пользователя",
+        json_schema_extra={"readonly": True},
     )
     provider: AuthProvider = Field(
-        title="Провайдер", description="Провайдер авторизации", readonly=True
+        title="Провайдер", description="Провайдер авторизации", json_schema_extra={"readonly": True}
     )
     access_token: str | None = Field(
         default=None,
         title="Токен доступа",
         description="Токен доступа от провайдера",
-        groups={"admin": {"hidden": False}, "user": {"hidden": True}},
+        json_schema_extra={"groups": {"admin": {"hidden": False}, "user": {"hidden": True}}},
     )
     refresh_token: str | None = Field(
         default=None,
         title="Refresh токен",
         description="Refresh токен от провайдера",
-        groups={"admin": {"hidden": False}, "user": {"hidden": True}},
+        json_schema_extra={"groups": {"admin": {"hidden": False}, "user": {"hidden": True}}},
     )
     expires_at: str | None = Field(
         default=None,
         title="Истекает",
         description="Время истечения сессии (ISO строка)",
-        readonly=True,
+        json_schema_extra={"readonly": True},
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Создана",
         description="Время создания сессии",
-        readonly=True,
+        json_schema_extra={"readonly": True},
     )
     last_activity: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Последняя активность",
         description="Время последней активности",
-        readonly=True,
+        json_schema_extra={"readonly": True},
     )
-    metadata: dict[str, Any] = Field(
+    metadata: JsonObject = Field(
         default_factory=dict,
         title="Метаданные",
         description="Дополнительные данные сессии",
-        groups={"admin": {"readonly": False}, "user": {"readonly": True}},
+        json_schema_extra={"groups": {"admin": {"readonly": False}, "user": {"readonly": True}}},
     )
 
 
@@ -292,7 +300,16 @@ class ProviderUserInfo(BaseModel):
     email: str = Field(description="Email пользователя")
     name: str = Field(description="Имя пользователя")
     avatar_url: str | None = Field(default=None, description="URL аватара")
-    raw_data: dict[str, Any] = Field(default_factory=dict, description="Сырые данные от провайдера")
+    raw_data: JsonObject = Field(default_factory=dict, description="Сырые данные от провайдера")
+
+
+class UserProviderRecord(BaseModel):
+    """Сохраненная связь пользователя с внешним OAuth-провайдером."""
+
+    provider_name: AuthProvider = Field(description="Провайдер авторизации")
+    email: str = Field(description="Email пользователя у провайдера")
+    avatar_url: str | None = Field(default=None, description="URL аватара у провайдера")
+    metadata: JsonObject = Field(default_factory=dict, description="Данные профиля провайдера")
 
 
 class AuthRequest(BaseModel):
@@ -308,10 +325,31 @@ class AuthRequest(BaseModel):
     )
 
 
+class AuthState(BaseModel):
+    """Временное OAuth state, сохраненное между start_auth и callback."""
+
+    provider: AuthProvider = Field(description="Провайдер авторизации")
+    redirect_uri: str = Field(description="OAuth redirect_uri, использованный при старте")
+    original_host: str | None = Field(default=None, description="Хост, с которого начат вход")
+    return_path: str | None = Field(default=None, description="Путь возврата после входа")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Время создания state",
+    )
+
+
+class AuthCodeCache(BaseModel):
+    """Кеш результата OAuth callback для одноразового provider code."""
+
+    user_id: str = Field(description="ID авторизованного пользователя")
+    session_id: str = Field(description="ID созданной auth-сессии")
+    token: str = Field(description="JWT, выпущенный для callback")
+
+
 class BoardStage(BaseModel):
     """Стадия канбана задач: id хранится в attributes.status у CRMEntity с entity_type=task."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     id: str = Field(
         min_length=1,
@@ -325,7 +363,7 @@ class BoardStage(BaseModel):
 class TaskBoardPreset(BaseModel):
     """Набор колонок доски задач для одного ключа доски (см. task_board_key в CRM)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     stages: list[BoardStage] = Field(min_length=1, description="Упорядоченные стадии слева направо")
 
@@ -340,7 +378,7 @@ class TaskBoardPreset(BaseModel):
 class SidebarNavEntry(BaseModel):
     """Элемент дерева бокового меню пространства (NetWorkle). Лист: задан route_key. Группа: непустой children."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     id: str = Field(min_length=1, description="Стабильный id для active state и редактора")
     label: str = Field(description="Подпись пункта")
@@ -371,7 +409,7 @@ class SidebarNavEntry(BaseModel):
 class NamespaceAutomationRule(BaseModel):
     """Правило автоматизации пространства (контракт хранения; исполнитель — flows/scheduler)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     rule_id: str = Field(min_length=1)
     entity_type: str = Field(min_length=1)
@@ -402,7 +440,7 @@ class NamespaceCRMSettings(BaseModel):
         default=None,
         title="Якорь контекста по умолчанию",
     )
-    integrations: dict[str, dict[str, Any]] = Field(
+    integrations: dict[str, JsonObject] = Field(
         default_factory=dict,
         title="Метаданные интеграций по ключу провайдера",
         description=(
@@ -431,47 +469,6 @@ class NamespaceCRMSettings(BaseModel):
         title="Настройки саджестов",
     )
 
-    @field_validator("pipeline_stage_presets", mode="before")
-    @classmethod
-    def _coerce_pipeline_stage_presets(cls, value: Any) -> dict[str, Any]:
-        if value is None:
-            return {}
-        if not isinstance(value, dict):
-            return {}
-        out: dict[str, Any] = {}
-        for raw_key, raw_val in value.items():
-            if not isinstance(raw_key, str):
-                continue
-            key = raw_key.strip()
-            if not key:
-                continue
-            if isinstance(raw_val, TaskBoardPreset):
-                out[key] = raw_val
-                continue
-            if isinstance(raw_val, dict):
-                try:
-                    out[key] = TaskBoardPreset.model_validate(raw_val)
-                except Exception:
-                    continue
-        return out
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_amocrm_subdomain_into_integrations(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        migrated = dict(data)
-        legacy = migrated.pop("amocrm_subdomain", None)
-        integ = dict(migrated.get("integrations") or {})
-        if legacy is not None and isinstance(legacy, str) and legacy.strip():
-            amo = dict(integ.get("amocrm") or {})
-            cur = amo.get("subdomain")
-            if not (isinstance(cur, str) and cur.strip()):
-                amo["subdomain"] = legacy.strip()
-            integ["amocrm"] = amo
-        migrated["integrations"] = integ
-        return migrated
-
 
 class NamespaceSyncSettings(BaseModel):
     """Настройки Sync для namespace (поведение каналов и звонков пространства)."""
@@ -494,7 +491,9 @@ class Namespace(BaseModel):
     Используется всеми сервисами для организации данных внутри компании.
     """
 
-    model_config = ConfigDict(json_schema_extra={"storage_prefix": "namespace"})
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        json_schema_extra={"storage_prefix": "namespace"}
+    )
 
     name: str = Field(title="Название", description="Имя namespace (например 'default', 'sales')")
     company_id: str = Field(title="ID компании", description="ID компании-владельца")
@@ -539,4 +538,4 @@ class AuthResult(BaseModel):
     redirect_url: str | None = Field(default=None, description="URL для редиректа")
 
 
-SidebarNavEntry.model_rebuild()
+_ = SidebarNavEntry.model_rebuild()

@@ -4,23 +4,53 @@ from __future__ import annotations
 
 import gc
 import time
-from typing import Any
+from collections.abc import Sequence
+from typing import TypedDict
 
 import torch
 from fastapi import HTTPException
 from transformers import GenerationConfig
 
-from apps.provider_litserve.llm.local_causal_lm import ensure_local_causal_lm
+from apps.provider_litserve.llm.local_causal_lm import (
+    ensure_local_causal_lm,
+    require_causal_lm_generated_tensor,
+)
 from apps.provider_litserve.markdown_format.chunking import split_text_into_markdown_chunks
 from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
 from apps.provider_litserve.shared import resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
 
-def normalize_litserve_eos_token_id(raw: Any) -> int | list[int] | None:
+class MarkdownFormatParams(TypedDict):
+    text: str
+    model_id: str
+    max_chunk_chars: int
+    max_microbatch: int
+    max_new_tokens: int
+    chunk_join: str
+
+
+class MarkdownUsage(TypedDict):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class MarkdownFormatResult(TypedDict):
+    markdown: str
+    chunks_total: int
+    chunks_processed: int
+    model: str
+    usage: MarkdownUsage
+
+
+def normalize_litserve_eos_token_id(
+    raw: int | Sequence[int] | torch.Tensor | None,
+) -> int | list[int] | None:
     if raw is None:
         return None
     if isinstance(raw, bool):
@@ -28,18 +58,17 @@ def normalize_litserve_eos_token_id(raw: Any) -> int | list[int] | None:
     if isinstance(raw, int):
         return raw
     if isinstance(raw, torch.Tensor):
-        flat = raw.detach().cpu().flatten().tolist()
-        if len(flat) == 0:
+        flat = raw.detach().cpu().flatten().long()
+        count = int(flat.numel())
+        if count == 0:
             return None
-        if len(flat) == 1:
-            return int(flat[0])
-        return [int(x) for x in flat]
-    if isinstance(raw, (list, tuple)):
-        if len(raw) == 0:
-            return None
-        ints = [int(x) for x in raw]
-        return ints[0] if len(ints) == 1 else ints
-    return None
+        if count == 1:
+            return int(flat[0].item())
+        return [int(flat[index].item()) for index in range(count)]
+    if len(raw) == 0:
+        return None
+    ints = [int(item) for item in raw]
+    return ints[0] if len(ints) == 1 else ints
 
 _MARKDOWN_SYSTEM = (
     "You convert plain text into clean, structured Markdown. "
@@ -49,12 +78,10 @@ _MARKDOWN_SYSTEM = (
 
 
 def parse_format_markdown_body(
-    body: dict[str, Any],
+    body: JsonObject,
     *,
     cfg: ProviderLitserveInfraConfig,
-) -> dict[str, Any]:
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=422, detail={"reason": "body_must_be_object"})
+) -> MarkdownFormatParams:
     text_raw = body.get("text")
     if not isinstance(text_raw, str):
         raise HTTPException(status_code=422, detail={"reason": "text_required"})
@@ -106,7 +133,7 @@ def parse_format_markdown_body(
             raise HTTPException(status_code=422, detail={"reason": "chunk_join_invalid"})
         joiner = chunk_join
 
-    out = {
+    out: MarkdownFormatParams = {
         "text": text,
         "model_id": model_id,
         "max_chunk_chars": chunk_chars,
@@ -138,21 +165,21 @@ def markdown_trim_generated_token_ids(
     return row
 
 
-def validate_markdown_format_params(parsed: dict[str, Any]) -> None:
-    cc = int(parsed["max_chunk_chars"])
+def validate_markdown_format_params(parsed: MarkdownFormatParams) -> None:
+    cc = parsed["max_chunk_chars"]
     if cc < 512 or cc > 100_000:
         raise HTTPException(status_code=422, detail={"reason": "max_chunk_chars_out_of_range"})
-    mb = int(parsed["max_microbatch"])
+    mb = parsed["max_microbatch"]
     if mb < 1 or mb > 16:
         raise HTTPException(status_code=422, detail={"reason": "max_microbatch_out_of_range"})
-    mnt = int(parsed["max_new_tokens"])
+    mnt = parsed["max_new_tokens"]
     if mnt < 64 or mnt > 8192:
         raise HTTPException(status_code=422, detail={"reason": "max_new_tokens_out_of_range"})
 
 
 class MarkdownFormatEngine:
     def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
-        self._cfg = cfg
+        self._cfg: ProviderLitserveInfraConfig = cfg
         self._device: str = "cpu"
         self._hf_token: str | None = None
 
@@ -160,7 +187,7 @@ class MarkdownFormatEngine:
         self._device = str(device) if device else resolve_torch_device(self._cfg)
         self._hf_token = self._cfg.hf_token
 
-    def format_text(self, parsed: dict[str, Any]) -> dict[str, Any]:
+    def format_text(self, parsed: MarkdownFormatParams) -> MarkdownFormatResult:
         allowed_ids = allowed_api_model_ids("llm", self._cfg)
         req_model = parsed["model_id"]
         req_lower = req_model.lower()
@@ -243,8 +270,6 @@ class MarkdownFormatEngine:
 
                 unpadded = tokenizer(prompts, add_special_tokens=True, truncation=False)
                 batch_ids = unpadded["input_ids"]
-                if not isinstance(batch_ids, list):
-                    raise ValueError("markdown_format: ожидался batch input_ids")
                 for local_i, ids in enumerate(batch_ids):
                     ln = len(ids)
                     if ln > tokenizer_max_length:
@@ -315,9 +340,6 @@ class MarkdownFormatEngine:
                 )
                 if eos_gen is not None:
                     gen_cfg.eos_token_id = eos_gen
-                gen_in: dict[str, Any] = {
-                    k: encoded[k] for k in ("input_ids", "attention_mask", "token_type_ids") if k in encoded
-                }
                 logger.info(
                     "markdown_format_generate_begin",
                     batch_chunks=len(batch_chunks),
@@ -328,7 +350,14 @@ class MarkdownFormatEngine:
                 )
                 gen_t0 = time.monotonic()
                 with torch.no_grad():
-                    generated = model.generate(**gen_in, generation_config=gen_cfg)
+                    generated = require_causal_lm_generated_tensor(
+                        model.generate(
+                            inputs=encoded["input_ids"],
+                            attention_mask=encoded.get("attention_mask"),
+                            token_type_ids=encoded.get("token_type_ids"),
+                            generation_config=gen_cfg,
+                        )
+                    )
                 gen_ms = (time.monotonic() - gen_t0) * 1000.0
                 logger.info(
                     "markdown_format_generate_done",
@@ -354,8 +383,8 @@ class MarkdownFormatEngine:
                     batch_chunks=len(batch_chunks),
                     hf_model_id=hf_model_id,
                 )
-                del generated, encoded, gen_in, gen_cfg
-                gc.collect()
+                del generated, encoded, gen_cfg
+                _ = gc.collect()
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                 elif torch.backends.mps.is_available():
@@ -365,14 +394,15 @@ class MarkdownFormatEngine:
 
         markdown = joiner.join(formatted_parts).strip()
         total_tok = prompt_tokens_acc + completion_tokens_acc
+        usage: MarkdownUsage = {
+            "prompt_tokens": prompt_tokens_acc,
+            "completion_tokens": completion_tokens_acc,
+            "total_tokens": total_tok,
+        }
         return {
             "markdown": markdown,
             "chunks_total": total,
             "chunks_processed": len(formatted_parts),
             "model": req_model,
-            "usage": {
-                "prompt_tokens": prompt_tokens_acc,
-                "completion_tokens": completion_tokens_acc,
-                "total_tokens": total_tok,
-            },
+            "usage": usage,
         }

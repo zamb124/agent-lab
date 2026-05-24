@@ -10,6 +10,8 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from core.tracing.models import TraceSpanWrite
+
 
 @pytest_asyncio.fixture
 async def frontend_client_system(frontend_app, auth_token_system):
@@ -30,32 +32,32 @@ def _span_payload(
     operation_name: str,
     start_time: datetime,
     company_id: str = "system",
-) -> dict:
-    return {
-        "span_id": span_id,
-        "trace_id": trace_id,
-        "parent_span_id": None,
-        "operation_name": operation_name,
-        "kind": "INTERNAL",
-        "start_time": start_time,
-        "end_time": start_time,
-        "duration_ms": 0,
-        "status": "OK",
-        "service_name": service_name,
-        "company_id": company_id,
-        "namespace": "default",
-        "user_id": None,
-        "user_name": None,
-        "user_groups": None,
-        "session_auth": None,
-        "session_agent": None,
-        "channel": None,
-        "event_type": None,
-        "resource_type": None,
-        "resource_id": None,
-        "attributes": {},
-        "events": [],
-    }
+) -> TraceSpanWrite:
+    return TraceSpanWrite(
+        span_id=span_id,
+        trace_id=trace_id,
+        parent_span_id=None,
+        operation_name=operation_name,
+        kind="INTERNAL",
+        start_time=start_time,
+        end_time=start_time,
+        duration_ms=0,
+        status="OK",
+        service_name=service_name,
+        company_id=company_id,
+        namespace="default",
+        user_id=None,
+        user_name=None,
+        user_groups=None,
+        session_auth=None,
+        session_agent=None,
+        channel=None,
+        event_type=None,
+        resource_type=None,
+        resource_id=None,
+        attributes={},
+        events=[],
+    )
 
 
 @pytest.mark.asyncio
@@ -163,16 +165,13 @@ async def test_platform_tracing_trace_tree(
         )
     )
     await repo.save_span(
-        {
-            **_span_payload(
-                span_id=f"{unique_id}_child",
-                trace_id=tid,
-                service_name=f"svc_{unique_id}",
-                operation_name="child",
-                start_time=t0 + timedelta(microseconds=1),
-            ),
-            "parent_span_id": f"{unique_id}_root",
-        }
+        _span_payload(
+            span_id=f"{unique_id}_child",
+            trace_id=tid,
+            service_name=f"svc_{unique_id}",
+            operation_name="child",
+            start_time=t0 + timedelta(microseconds=1),
+        ).model_copy(update={"parent_span_id": f"{unique_id}_root"})
     )
 
     response = await frontend_client_system.get(
@@ -207,8 +206,7 @@ async def test_platform_tracing_facet_users_scoped_by_company(
             operation_name="fx",
             start_time=base,
             company_id=co_x,
-        )
-        | {"user_id": uid_x},
+        ).model_copy(update={"user_id": uid_x}),
     )
     await repo.save_span(
         _span_payload(
@@ -218,8 +216,7 @@ async def test_platform_tracing_facet_users_scoped_by_company(
             operation_name="fy",
             start_time=base,
             company_id="system",
-        )
-        | {"user_id": uid_x},
+        ).model_copy(update={"user_id": uid_x}),
     )
     r = await frontend_client_system.get(
         "/frontend/api/platform-tracing/facets/users",
@@ -264,7 +261,7 @@ async def test_platform_tracing_facet_users_finds_by_email_and_label(
             service_name=f"svc_{unique_id}",
             operation_name="em",
             start_time=base,
-        ) | {"user_id": uid},
+        ).model_copy(update={"user_id": uid}),
     )
     r = await frontend_client_system.get(
         "/frontend/api/platform-tracing/facets/users",
@@ -304,7 +301,7 @@ async def test_platform_tracing_spans_resolve_user_id_query_email(
             service_name="svc3",
             operation_name="op3",
             start_time=base,
-        ) | {"user_id": uid},
+        ).model_copy(update={"user_id": uid}),
     )
     r = await frontend_client_system.get(
         "/frontend/api/platform-tracing/spans",
@@ -326,16 +323,13 @@ async def test_platform_tracing_spans_namespace_and_service_query(
     ns = f"api_ns_{unique_id}"
     svc = f"api_svc_{unique_id}_z"
     await repo.save_span(
-        {
-            **_span_payload(
-                span_id=f"{unique_id}_nq",
-                trace_id=f"{unique_id}_tnq",
-                service_name=svc,
-                operation_name="nq",
-                start_time=base,
-            ),
-            "namespace": ns,
-        }
+        _span_payload(
+            span_id=f"{unique_id}_nq",
+            trace_id=f"{unique_id}_tnq",
+            service_name=svc,
+            operation_name="nq",
+            start_time=base,
+        ).model_copy(update={"namespace": ns})
     )
     r = await frontend_client_system.get(
         "/frontend/api/platform-tracing/spans",

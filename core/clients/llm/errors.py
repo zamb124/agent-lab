@@ -11,11 +11,11 @@ class LLMStreamIdleTimeoutError(Exception):
     """SSE stream produced no chunks for longer than the configured idle limit."""
 
     def __init__(self, idle_seconds: float, chunks_received: int):
-        self.idle_seconds = idle_seconds
-        self.chunks_received = chunks_received
+        self.idle_seconds: float = idle_seconds
+        self.chunks_received: int = chunks_received
         super().__init__(
             f"LLM stream idle timeout: no data for {idle_seconds:.1f}s "
-            f"after {chunks_received} chunks received"
+            + f"after {chunks_received} chunks received"
         )
 
 

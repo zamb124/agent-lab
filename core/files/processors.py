@@ -20,6 +20,7 @@ from core.files.audio_transcode import (
     resolve_ios_transcode_source,
     transcode_audio_bytes_to_m4a_aac,
 )
+from core.files.file_ref import FileRef
 from core.files.media.transcriber import MediaTranscriber
 from core.files.models import (
     AudioMetadata,
@@ -225,7 +226,7 @@ class FileProcessor:
         _ = await self.file_repository.set(file_record)
         return file_record
 
-    async def persist_uploaded_file_as_state_files_item(
+    async def persist_uploaded_file_as_file_ref(
         self,
         *,
         data: bytes,
@@ -238,13 +239,13 @@ class FileProcessor:
         content_sha256_hex: str | None = None,
         metadata: JsonObject | None = None,
         tags: list[str] | None = None,
-    ) -> JsonObject:
+    ) -> FileRef:
         """
-        Байты с клиента → S3 + FileRecord + download_url; один элемент формата state.files.
+        Байты с клиента → S3 + FileRecord + канонический FileRef для runtime state.
         """
         effective_type = content_type.strip()
         if not effective_type:
-            raise ValueError("content_type обязателен для state.files item")
+            raise ValueError("content_type обязателен для FileRef")
         record = await self.persist_uploaded_file(
             data=data,
             original_name=original_name,
@@ -259,13 +260,15 @@ class FileProcessor:
         )
         prefix = download_url_prefix.rstrip("/")
         url = record.download_url if record.download_url else f"{prefix}/{record.file_id}"
-        return {
-            "file_id": record.file_id,
-            "original_name": record.original_name,
-            "url": url,
-            "content_type": record.content_type,
-            "file_size": record.file_size,
-        }
+        return FileRef(
+            file_id=record.file_id,
+            original_name=record.original_name,
+            url=url,
+            content_type=record.content_type,
+            file_size=record.file_size,
+            checksum=record.checksum,
+            is_public=record.is_public,
+        )
 
     async def get_file_record(self, file_id: str) -> FileMetadata | None:
         """

@@ -3,12 +3,12 @@
 """
 
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from apps.flows.src.db.models import ScheduledTasks
+from core.db.storage import Storage
 from core.db.utils import get_rowcount
 from core.logging import get_logger
 from core.scheduler.models import (
@@ -24,8 +24,8 @@ logger = get_logger(__name__)
 class ScheduledTaskRepository:
     """Репозиторий для работы с scheduled tasks в PostgreSQL."""
 
-    def __init__(self, storage):
-        self._storage = storage
+    def __init__(self, storage: Storage) -> None:
+        self._storage: Storage = storage
 
     async def save(self, task: ScheduledTaskInfo) -> str:
         """
@@ -43,19 +43,15 @@ class ScheduledTaskRepository:
                     flow_id=task.flow_id,
                     session_id=task.session_id,
                     user_id=task.user_id,
-                    schedule_type=task.schedule_type.value
-                    if hasattr(task.schedule_type, "value")
-                    else task.schedule_type,
-                    content_type=task.content_type.value
-                    if hasattr(task.content_type, "value")
-                    else task.content_type,
+                    schedule_type=task.schedule_type.value,
+                    content_type=task.content_type.value,
                     cron=task.cron,
                     interval_minutes=task.interval_minutes,
                     run_at=task.run_at,
                     content=task.content,
                     tool_args=task.tool_args,
                     description=task.description,
-                    status=task.status.value if hasattr(task.status, "value") else task.status,
+                    status=task.status.value,
                     created_at=task.created_at,
                     executed_at=task.executed_at,
                     next_run=task.next_run,
@@ -64,15 +60,13 @@ class ScheduledTaskRepository:
                     index_elements=[ScheduledTasks.schedule_task_id],
                     set_={
                         "schedule_id": task.schedule_id,
-                        "status": task.status.value
-                        if hasattr(task.status, "value")
-                        else task.status,
+                        "status": task.status.value,
                         "executed_at": task.executed_at,
                         "next_run": task.next_run,
                     },
                 )
             )
-            await session.execute(stmt)
+            _ = await session.execute(stmt)
             await session.commit()
             return task.schedule_task_id
 
@@ -130,20 +124,18 @@ class ScheduledTaskRepository:
     ) -> bool:
         """Обновляет статус задачи."""
         async with self._storage.get_session() as session:
-            values: dict[str, Any] = {"status": status.value}
-
-            if executed_at:
-                values["executed_at"] = executed_at
-            if next_run is not None:
-                values["next_run"] = next_run
-            if error_message:
-                values["error_message"] = error_message
-
             stmt = (
                 update(ScheduledTasks)
                 .where(ScheduledTasks.schedule_task_id == schedule_task_id)
-                .values(**values)
+                .values(status=status.value)
             )
+
+            if executed_at is not None:
+                stmt = stmt.values(executed_at=executed_at)
+            if next_run is not None:
+                stmt = stmt.values(next_run=next_run)
+            if error_message is not None:
+                stmt = stmt.values(error_message=error_message)
 
             result = await session.execute(stmt)
             await session.commit()

@@ -129,16 +129,8 @@ def _resolve_runtime_templates(
     return require_json_object(resolved, "rag_resource.config")
 
 
-def _state_variables(state: object) -> JsonObject:
-    if isinstance(state, Mapping):
-        raw_variables = state.get("variables", {})
-    else:
-        raw_variables = getattr(state, "variables", {})
-    if raw_variables is None:
-        return {}
-    if not isinstance(raw_variables, Mapping):
-        raise TypeError("state.variables must be a JSON object")
-    return require_json_object(dict(raw_variables), "state.variables")
+def _state_variables(state: ExecutionState) -> JsonObject:
+    return state.variables
 
 
 def _source_name_from_resource_key(key: str) -> str:

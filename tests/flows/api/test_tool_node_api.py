@@ -324,8 +324,8 @@ class TestUpdateFlowWithCodeNode:
 
 
     @pytest.mark.asyncio
-    async def test_update_flow_does_not_wipe_node_on_pos_only(self, client, app, unique_id, auth_headers_system):
-        """PUT с { pos_x, pos_y } на ноде не должен удалять type/code (регресс save из канваса)."""
+    async def test_update_flow_rejects_pos_only_node(self, client, app, unique_id, auth_headers_system):
+        """PUT принимает полный GraphNodeConfig; layout-only patch не является контрактом flow."""
         flow_id = f"test_pos_only_{unique_id}"
         code = "async def run(args, state):\n    state['k'] = 1\n    return state"
         await client.post(
@@ -361,12 +361,7 @@ class TestUpdateFlowWithCodeNode:
                 "edges": [{"from": "formatter", "to": None}],
             },
         )
-        assert response.status_code == 200, response.text
-        n = response.json()["nodes"]["formatter"]
-        assert n["type"] == "code"
-        assert n["code"] == code
-        assert n["pos_x"] == 400
-        assert n["pos_y"] == 200
+        assert response.status_code == 422, response.text
 
         await client.delete(f"/flows/api/v1/{flow_id}", headers=auth_headers_system)
 
@@ -409,7 +404,14 @@ class TestUpdateFlowWithCodeNode:
                         "description": "",
                         "tags": [],
                         "entry": "a",
-                        "nodes": {"a": {"pos_x": 10, "pos_y": 20}},
+                        "nodes": {
+                            "a": {
+                                "type": "code",
+                                "code": "async def run(s):\n    return s",
+                                "pos_x": 10,
+                                "pos_y": 20,
+                            }
+                        },
                         "nodes_mode": "merge",
                         "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": None}],
                         "edges_mode": "merge",
@@ -426,4 +428,3 @@ class TestUpdateFlowWithCodeNode:
         assert body["branches"]["sk1"]["variables_mode"] == "merge"
 
         await client.delete(f"/flows/api/v1/{flow_id}", headers=auth_headers_system)
-

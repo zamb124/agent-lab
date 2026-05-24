@@ -20,15 +20,28 @@ from __future__ import annotations
 
 import io
 import os
-import struct
 import tempfile
 import time
 import wave
-from typing import Any
+from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import (
+    ClassVar,
+    Generic,
+    Literal,
+    Protocol,
+    TypeAlias,
+    TypedDict,
+    TypeVar,
+    cast,
+    override,
+)
 
 import soundfile as sf
-import torch  # pyright: ignore[reportMissingImports]
-from fastapi import HTTPException  # pyright: ignore[reportMissingImports]
+import torch
+from fastapi import HTTPException, Request
+from pydantic import BaseModel, ConfigDict
 from transformers import (
     AutoModel,
     AutoModelForCTC,
@@ -47,36 +60,230 @@ from core.config.models import (
     ProviderLitserveSTTModelEntry,
 )
 from core.logging import get_logger
+from core.types import JsonValue
 
 logger = get_logger(__name__)
+
+STTRawValue: TypeAlias = JsonValue | bytes | bytearray | memoryview
+STTRawBody: TypeAlias = Mapping[str, STTRawValue]
+STTBackend: TypeAlias = Literal["gigaam", "huggingface_ctc", "whisper"]
+STTModelCacheKey: TypeAlias = tuple[str, str]
+STTModelDTypeName: TypeAlias = Literal["float16", "float32"]
+ModelT = TypeVar("ModelT")
+
+
+class GigaAMModel(Protocol):
+    def to(self, device: str) -> "GigaAMModel": ...
+
+    def transcribe(self, wav_path: str) -> str: ...
+
+
+class CTCProcessorBatch(Protocol):
+    input_values: torch.Tensor
+
+    def get(self, key: Literal["attention_mask"]) -> torch.Tensor | None: ...
+
+
+class CTCProcessor(Protocol):
+    def __call__(
+        self,
+        audio: Sequence[float],
+        *,
+        sampling_rate: int,
+        return_tensors: Literal["pt"],
+        padding: Literal[True],
+    ) -> CTCProcessorBatch: ...
+
+    def batch_decode(self, token_ids: torch.Tensor) -> Sequence[str]: ...
+
+
+class CTCModelOutput(Protocol):
+    logits: torch.Tensor
+
+
+class CTCModel(Protocol):
+    def to(self, device: str) -> "CTCModel": ...
+
+    def eval(self) -> "CTCModel": ...
+
+    def __call__(
+        self,
+        *,
+        input_values: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+    ) -> CTCModelOutput: ...
+
+
+@dataclass(frozen=True, slots=True)
+class CTCBundle:
+    processor: CTCProcessor
+    model: CTCModel
+
+
+class WhisperTokenizer(Protocol): ...
+
+
+class WhisperFeatureExtractor(Protocol): ...
+
+
+class WhisperProcessor(Protocol):
+    tokenizer: WhisperTokenizer
+    feature_extractor: WhisperFeatureExtractor
+
+
+class WhisperModel(Protocol):
+    def to(self, device: str) -> "WhisperModel": ...
+
+
+class WhisperPipelineInput(TypedDict):
+    raw: list[float]
+    sampling_rate: int
+
+
+class WhisperGenerateKwargs(TypedDict):
+    language: str
+
+
+class WhisperPipelineResult(TypedDict):
+    text: str
+
+
+class WhisperASRPipeline(Protocol):
+    def __call__(
+        self,
+        audio: WhisperPipelineInput,
+        *,
+        generate_kwargs: WhisperGenerateKwargs | None = None,
+    ) -> WhisperPipelineResult: ...
+
+
+class GigaAMModelFactory(Protocol):
+    def from_pretrained(
+        self,
+        hf_model_id: str,
+        *,
+        revision: str | None,
+        trust_remote_code: bool,
+        token: str | None,
+    ) -> GigaAMModel: ...
+
+
+class CTCProcessorFactory(Protocol):
+    def from_pretrained(self, hf_model_id: str, *, revision: str | None, token: str | None) -> CTCProcessor: ...
+
+
+class CTCModelFactory(Protocol):
+    def from_pretrained(
+        self,
+        hf_model_id: str,
+        *,
+        revision: str | None,
+        token: str | None,
+        dtype: STTModelDTypeName,
+    ) -> CTCModel: ...
+
+
+class WhisperProcessorFactory(Protocol):
+    def from_pretrained(self, hf_model_id: str, *, revision: str | None, token: str | None) -> WhisperProcessor: ...
+
+
+class WhisperModelFactory(Protocol):
+    def from_pretrained(
+        self,
+        hf_model_id: str,
+        *,
+        revision: str | None,
+        token: str | None,
+        dtype: STTModelDTypeName,
+    ) -> WhisperModel: ...
+
+
+class ASRPipelineFactory(Protocol):
+    def __call__(
+        self,
+        task: Literal["automatic-speech-recognition"],
+        *,
+        model: WhisperModel,
+        tokenizer: WhisperTokenizer,
+        feature_extractor: WhisperFeatureExtractor,
+        device: str,
+    ) -> WhisperASRPipeline: ...
+
+
+class STTTranscriptionInput(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    audio_bytes: bytes
+    model: str
+    language: str | None = None
 
 
 def _require_cuda_when_selected(device: str) -> None:
     if not device.startswith("cuda"):
         return
     if not torch.cuda.is_available():
-        raise RuntimeError(
+        message = (
             "provider_litserve STT: CUDA недоступен (torch.cuda.is_available() == False); "
             "нужны драйвер NVIDIA на хосте, NVIDIA Container Toolkit и "
             "resources.limits.nvidia.com/gpu."
         )
+        raise RuntimeError(message)
 
 
-def parse_stt_body(raw: Any, *, default_api_model_id: str) -> dict[str, Any]:
+def _stt_model_dtype_name(device: str) -> STTModelDTypeName:
+    if device.strip().lower().startswith("cuda"):
+        return "float16"
+    return "float32"
+
+
+def _coerce_audio_bytes(raw: STTRawValue | None) -> bytes:
+    if raw is None:
+        raise HTTPException(status_code=422, detail="STT: поле file обязательно")
+    if isinstance(raw, bytes):
+        audio_bytes = raw
+    elif isinstance(raw, bytearray | memoryview):
+        audio_bytes = bytes(raw)
+    elif isinstance(raw, list):
+        byte_values: list[int] = []
+        for item in raw:
+            if not isinstance(item, int) or isinstance(item, bool):
+                raise HTTPException(status_code=422, detail="STT: file должен быть bytes или list[int]")
+            byte_values.append(item)
+        try:
+            audio_bytes = bytes(byte_values)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="STT: file содержит байт вне диапазона 0..255") from exc
+    else:
+        raise HTTPException(status_code=422, detail="STT: file должен быть bytes или list[int]")
+    if len(audio_bytes) == 0:
+        raise HTTPException(status_code=422, detail="STT: поле file обязательно")
+    return audio_bytes
+
+
+def parse_stt_body(
+    raw: STTRawBody | Request,
+    *,
+    default_api_model_id: str,
+) -> STTTranscriptionInput:
     """Разобрать тело STT-запроса.
 
     Поля: ``file`` (или ``audio``) — байты аудио, ``model`` (опционально) —
     api id из ``cfg.stt_models``, ``language`` (опционально, для Whisper).
     """
-    if not isinstance(raw, dict):
-        raise HTTPException(status_code=422, detail="STT: тело запроса должно быть объектом")
-    audio_bytes = raw.get("file") or raw.get("audio")
-    if not audio_bytes:
-        raise HTTPException(status_code=422, detail="STT: поле file обязательно")
-    if not isinstance(audio_bytes, bytes):
-        audio_bytes = bytes(audio_bytes)
+    if isinstance(raw, Request):
+        raise HTTPException(status_code=422, detail="STT: LitServe должен передать подготовленное тело запроса")
+    audio_raw = raw.get("file")
+    if audio_raw is None:
+        audio_raw = raw.get("audio")
+    audio_bytes = _coerce_audio_bytes(audio_raw)
 
-    requested_model = str(raw.get("model") or "").strip()
+    model_raw = raw.get("model")
+    if model_raw is None:
+        requested_model = ""
+    elif isinstance(model_raw, str):
+        requested_model = model_raw.strip()
+    else:
+        raise HTTPException(status_code=422, detail="STT: model должен быть строкой")
     if requested_model == "":
         requested_model = default_api_model_id.strip()
     if requested_model == "":
@@ -85,8 +292,14 @@ def parse_stt_body(raw: Any, *, default_api_model_id: str) -> dict[str, Any]:
             detail="STT: model обязателен (либо явно в payload, либо stt_default_api_model_id в конфиге)",
         )
 
-    language = str(raw.get("language") or "").strip() or None
-    return {"audio_bytes": audio_bytes, "model": requested_model, "language": language}
+    language_raw = raw.get("language")
+    if language_raw is None:
+        language = None
+    elif isinstance(language_raw, str):
+        language = language_raw.strip() or None
+    else:
+        raise HTTPException(status_code=422, detail="STT: language должен быть строкой")
+    return STTTranscriptionInput(audio_bytes=audio_bytes, model=requested_model, language=language)
 
 
 def _decode_audio_to_floats(audio_bytes: bytes) -> tuple[list[float], int]:
@@ -100,15 +313,18 @@ def _decode_audio_to_floats(audio_bytes: bytes) -> tuple[list[float], int]:
         data, sr = sf.read(buf, dtype="float32", always_2d=False)
         if data.ndim == 2:
             data = data.mean(axis=1)
-        return data.tolist(), int(sr)
+        return [float(sample) for sample in data], int(sr)
     except (RuntimeError, ValueError):
         pass
 
     n_samples = len(audio_bytes) // 2
     if n_samples == 0:
         raise ValueError("STT: пустые аудио-данные")
-    samples = struct.unpack(f"<{n_samples}h", audio_bytes[: n_samples * 2])
-    return [s / 32768.0 for s in samples], 16000
+    floats = [
+        int.from_bytes(audio_bytes[offset : offset + 2], "little", signed=True) / 32768.0
+        for offset in range(0, n_samples * 2, 2)
+    ]
+    return floats, 16000
 
 
 def _write_temp_wav(floats: list[float], sample_rate: int) -> str:
@@ -127,41 +343,47 @@ def _write_temp_wav(floats: list[float], sample_rate: int) -> str:
     return path
 
 
-class _BaseSTTAdapter:
-    backend: str = ""
+class _BaseSTTAdapter(Generic[ModelT], ABC):
+    backend: ClassVar[STTBackend]
 
     def __init__(self, cfg: ProviderLitserveInfraConfig, device: str) -> None:
-        self._cfg = cfg
-        self._device = device
+        self._cfg: ProviderLitserveInfraConfig = cfg
+        self._device: str = device
 
-    def load(self, hf_model_id: str, revision: str | None) -> Any:
+    @abstractmethod
+    def load(self, hf_model_id: str, revision: str | None) -> ModelT:
         raise NotImplementedError
 
-    def transcribe(self, model_obj: Any, audio_bytes: bytes, language: str | None) -> str:
+    @abstractmethod
+    def transcribe(self, model_obj: ModelT, audio_bytes: bytes, language: str | None) -> str:
         raise NotImplementedError
 
 
-class _GigaAMAdapter(_BaseSTTAdapter):
-    backend = "gigaam"
+class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
+    backend: ClassVar[STTBackend] = "gigaam"
 
-    def load(self, hf_model_id: str, revision: str | None) -> Any:
+    @override
+    def load(self, hf_model_id: str, revision: str | None) -> GigaAMModel:
         _require_cuda_when_selected(self._device)
         logger.info("STT gigaam: загрузка hf=%s revision=%s device=%s", hf_model_id, revision, self._device)
         started = time.monotonic()
-        model = AutoModel.from_pretrained(
+        model_factory = cast(GigaAMModelFactory, AutoModel)
+        model = model_factory.from_pretrained(
             hf_model_id,
             revision=revision,
             trust_remote_code=True,
             token=self._cfg.hf_token,
         )
         try:
-            model.to(self._device)
+            _ = model.to(self._device)
         except Exception:  # noqa: BLE001 - GigaAM сам управляет device через .transcribe
             pass
         logger.info("STT gigaam: %s загружен за %.2fs", hf_model_id, time.monotonic() - started)
         return model
 
-    def transcribe(self, model_obj: Any, audio_bytes: bytes, language: str | None) -> str:
+    @override
+    def transcribe(self, model_obj: GigaAMModel, audio_bytes: bytes, language: str | None) -> str:
+        _ = language
         floats, sr = _decode_audio_to_floats(audio_bytes)
         wav_path = _write_temp_wav(floats, sr if sr in (8000, 16000) else 16000)
         try:
@@ -174,30 +396,36 @@ class _GigaAMAdapter(_BaseSTTAdapter):
         return str(text).strip()
 
 
-class _HuggingfaceCTCAdapter(_BaseSTTAdapter):
-    backend = "huggingface_ctc"
+class _HuggingfaceCTCAdapter(_BaseSTTAdapter[CTCBundle]):
+    backend: ClassVar[STTBackend] = "huggingface_ctc"
 
-    def load(self, hf_model_id: str, revision: str | None) -> tuple[Any, Any]:
+    @override
+    def load(self, hf_model_id: str, revision: str | None) -> CTCBundle:
         _require_cuda_when_selected(self._device)
         logger.info(
             "STT huggingface_ctc: загрузка hf=%s revision=%s device=%s",
             hf_model_id, revision, self._device,
         )
         started = time.monotonic()
-        processor = AutoProcessor.from_pretrained(hf_model_id, revision=revision, token=self._cfg.hf_token)
-        model = AutoModelForCTC.from_pretrained(
+        processor_factory = cast(CTCProcessorFactory, AutoProcessor)
+        model_factory = cast(CTCModelFactory, AutoModelForCTC)
+        processor = processor_factory.from_pretrained(hf_model_id, revision=revision, token=self._cfg.hf_token)
+        model = model_factory.from_pretrained(
             hf_model_id,
             revision=revision,
             token=self._cfg.hf_token,
-            torch_dtype=torch.float16 if self._device.startswith("cuda") else torch.float32,
+            dtype=_stt_model_dtype_name(self._device),
         )
-        model.to(self._device)
-        model.eval()
+        _ = model.to(self._device)
+        _ = model.eval()
         logger.info("STT huggingface_ctc: %s загружен за %.2fs", hf_model_id, time.monotonic() - started)
-        return processor, model
+        return CTCBundle(processor=processor, model=model)
 
-    def transcribe(self, model_obj: tuple[Any, Any], audio_bytes: bytes, language: str | None) -> str:
-        processor, model = model_obj
+    @override
+    def transcribe(self, model_obj: CTCBundle, audio_bytes: bytes, language: str | None) -> str:
+        _ = language
+        processor = model_obj.processor
+        model = model_obj.model
         floats, sr = _decode_audio_to_floats(audio_bytes)
         inputs = processor(floats, sampling_rate=sr, return_tensors="pt", padding=True)
         input_values = inputs.input_values.to(self._device)
@@ -206,26 +434,33 @@ class _HuggingfaceCTCAdapter(_BaseSTTAdapter):
             attn = attn.to(self._device)
         with torch.no_grad():
             logits = model(input_values=input_values, attention_mask=attn).logits
-        ids = torch.argmax(logits, dim=-1)
-        return processor.batch_decode(ids)[0].strip()
+        ids = logits.argmax(dim=-1)
+        decoded = processor.batch_decode(ids)
+        if not decoded:
+            return ""
+        return decoded[0].strip()
 
 
-class _WhisperAdapter(_BaseSTTAdapter):
-    backend = "whisper"
+class _WhisperAdapter(_BaseSTTAdapter[WhisperASRPipeline]):
+    backend: ClassVar[STTBackend] = "whisper"
 
-    def load(self, hf_model_id: str, revision: str | None) -> Any:
+    @override
+    def load(self, hf_model_id: str, revision: str | None) -> WhisperASRPipeline:
         _require_cuda_when_selected(self._device)
         logger.info("STT whisper: загрузка hf=%s revision=%s device=%s", hf_model_id, revision, self._device)
         started = time.monotonic()
-        processor = AutoProcessor.from_pretrained(hf_model_id, revision=revision, token=self._cfg.hf_token)
-        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+        processor_factory = cast(WhisperProcessorFactory, AutoProcessor)
+        model_factory = cast(WhisperModelFactory, AutoModelForSpeechSeq2Seq)
+        pipeline_factory = cast(ASRPipelineFactory, pipeline)
+        processor = processor_factory.from_pretrained(hf_model_id, revision=revision, token=self._cfg.hf_token)
+        model = model_factory.from_pretrained(
             hf_model_id,
             revision=revision,
             token=self._cfg.hf_token,
-            torch_dtype=torch.float16 if self._device.startswith("cuda") else torch.float32,
+            dtype=_stt_model_dtype_name(self._device),
         )
-        model.to(self._device)
-        pipe = pipeline(
+        _ = model.to(self._device)
+        pipe = pipeline_factory(
             "automatic-speech-recognition",
             model=model,
             tokenizer=processor.tokenizer,
@@ -235,29 +470,26 @@ class _WhisperAdapter(_BaseSTTAdapter):
         logger.info("STT whisper: %s загружен за %.2fs", hf_model_id, time.monotonic() - started)
         return pipe
 
-    def transcribe(self, model_obj: Any, audio_bytes: bytes, language: str | None) -> str:
+    @override
+    def transcribe(self, model_obj: WhisperASRPipeline, audio_bytes: bytes, language: str | None) -> str:
         floats, sr = _decode_audio_to_floats(audio_bytes)
-        kwargs: dict[str, Any] = {"sampling_rate": sr}
-        if language:
-            kwargs["generate_kwargs"] = {"language": language}
-        result = model_obj({"raw": floats, "sampling_rate": sr}, **{k: v for k, v in kwargs.items() if k != "sampling_rate"})
-        return str(result.get("text", "")).strip()
-
-
-_ADAPTERS: dict[str, type[_BaseSTTAdapter]] = {
-    "gigaam": _GigaAMAdapter,
-    "huggingface_ctc": _HuggingfaceCTCAdapter,
-    "whisper": _WhisperAdapter,
-}
+        audio: WhisperPipelineInput = {"raw": floats, "sampling_rate": sr}
+        generate_kwargs: WhisperGenerateKwargs | None = None
+        if language is not None:
+            generate_kwargs = {"language": language}
+        result = model_obj(audio, generate_kwargs=generate_kwargs)
+        return result["text"].strip()
 
 
 class LocalSTTEngine:
     """Multi-backend STT-движок: загружает требуемую модель из ``cfg.stt_models``."""
 
     def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
-        self._cfg = cfg
-        self._device = "cpu"
-        self._loaded: dict[tuple[str, str, str], Any] = {}  # (backend, hf_id, revision) -> model_obj
+        self._cfg: ProviderLitserveInfraConfig = cfg
+        self._device: str = "cpu"
+        self._gigaam_models: dict[STTModelCacheKey, GigaAMModel] = {}
+        self._ctc_models: dict[STTModelCacheKey, CTCBundle] = {}
+        self._whisper_pipelines: dict[STTModelCacheKey, WhisperASRPipeline] = {}
 
     def setup(self, device: str | None) -> None:
         self._device = device or "cpu"
@@ -282,32 +514,47 @@ class LocalSTTEngine:
             )
         return entry
 
-    def _ensure_loaded(self, entry: ProviderLitserveSTTModelEntry) -> tuple[_BaseSTTAdapter, Any]:
-        adapter_cls = _ADAPTERS.get(entry.backend)
-        if adapter_cls is None:
-            raise HTTPException(
-                status_code=422,
-                detail=f"STT: неизвестный backend={entry.backend!r} (доступно: {sorted(_ADAPTERS)})",
-            )
-        adapter = adapter_cls(self._cfg, self._device)
-        cache_key = (entry.backend, entry.hf_model_id, entry.revision or "")
-        if cache_key in self._loaded:
-            return adapter, self._loaded[cache_key]
-        model_obj = adapter.load(entry.hf_model_id, entry.revision)
-        self._loaded[cache_key] = model_obj
-        return adapter, model_obj
+    def _cache_key(self, entry: ProviderLitserveSTTModelEntry) -> STTModelCacheKey:
+        return entry.hf_model_id, entry.revision or ""
 
-    def transcribe_batch(self, items: list[dict[str, Any]]) -> list[str]:
+    def _transcribe_entry(
+        self,
+        entry: ProviderLitserveSTTModelEntry,
+        audio_bytes: bytes,
+        language: str | None,
+    ) -> str:
+        cache_key = self._cache_key(entry)
+        if entry.backend == "gigaam":
+            adapter = _GigaAMAdapter(self._cfg, self._device)
+            model = self._gigaam_models.get(cache_key)
+            if model is None:
+                model = adapter.load(entry.hf_model_id, entry.revision)
+                self._gigaam_models[cache_key] = model
+            return adapter.transcribe(model, audio_bytes, language)
+        if entry.backend == "huggingface_ctc":
+            adapter = _HuggingfaceCTCAdapter(self._cfg, self._device)
+            model = self._ctc_models.get(cache_key)
+            if model is None:
+                model = adapter.load(entry.hf_model_id, entry.revision)
+                self._ctc_models[cache_key] = model
+            return adapter.transcribe(model, audio_bytes, language)
+        adapter = _WhisperAdapter(self._cfg, self._device)
+        model = self._whisper_pipelines.get(cache_key)
+        if model is None:
+            model = adapter.load(entry.hf_model_id, entry.revision)
+            self._whisper_pipelines[cache_key] = model
+        return adapter.transcribe(model, audio_bytes, language)
+
+    def transcribe_batch(self, items: list[STTTranscriptionInput]) -> list[str]:
         results: list[str] = []
         for item in items:
-            audio_bytes: bytes = item["audio_bytes"]
-            requested_model: str = item["model"]
-            language: str | None = item.get("language")
+            audio_bytes = item.audio_bytes
+            requested_model = item.model
+            language = item.language
             started = time.monotonic()
 
             entry = self._resolve_entry(requested_model)
-            adapter, model_obj = self._ensure_loaded(entry)
-            text = adapter.transcribe(model_obj, audio_bytes, language)
+            text = self._transcribe_entry(entry, audio_bytes, language)
             results.append(text)
             logger.info(
                 "STT транскрипция: model=%s backend=%s chars=%d duration=%.2fs",

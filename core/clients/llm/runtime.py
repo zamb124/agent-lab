@@ -7,7 +7,8 @@ Stream-first architecture: all runtime LLM calls go through ``get_llm`` and
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from core.clients.llm.client import LLMClient
 from core.clients.llm.config import LLMCallConfig, ReasoningEffort
@@ -22,8 +23,17 @@ from core.clients.llm.messages import (
 from core.clients.llm.messages import (
     messages_to_openai as _messages_to_openai,
 )
-from core.clients.llm.mock import MockLLM, _global_mock_registry, get_global_mock_llm
-from core.clients.llm.model_routing import split_provider_prefixed_model
+from core.clients.llm.mock import (
+    MockLLM,
+    MockLLMQueuedResponse,
+    get_global_mock_llm,
+    get_or_create_global_mock_llm,
+)
+from core.clients.llm.model_routing import (
+    HUMANITEC_LLM_AUTO_MODEL,
+    HUMANITEC_LLM_PROVIDER,
+    split_provider_prefixed_model,
+)
 from core.clients.llm.openai_compat import (
     masked_headers as _masked_headers,
 )
@@ -46,6 +56,7 @@ from core.config import get_settings
 from core.config.base import BaseSettings
 from core.config.testing import is_testing as _is_testing
 from core.logging import get_logger
+from core.types import JsonObject, require_json_array, require_json_object
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -82,7 +93,7 @@ def get_llm(
     folder_id: str | None = None,
     max_tokens: int | None = None,
     state: ExecutionState | None = None,
-    fallback_models: list[LLMCallConfig] | None = None,
+    fallback_models: Sequence[LLMCallConfig | JsonObject] | None = None,
     allow_platform_paid_fallback: bool = True,
     top_p: float | None = None,
     top_k: int | None = None,
@@ -90,7 +101,7 @@ def get_llm(
     presence_penalty: float | None = None,
     seed: int | None = None,
     reasoning_effort: ReasoningEffort | None = None,
-    extra_request_body: dict[str, Any] | None = None,
+    extra_request_body: JsonObject | None = None,
     extra_request_headers: dict[str, str] | None = None,
 ) -> LLMClient | MockLLM:
     """
@@ -118,6 +129,14 @@ def get_llm(
     if split_provider is not None:
         provider = split_provider
     model = split_model if split_model is not None else model_name
+    if provider is None and model is None and _is_humanitec_llm_provider(settings.llm.provider):
+        provider = HUMANITEC_LLM_PROVIDER
+        model = settings.llm.default_model or HUMANITEC_LLM_AUTO_MODEL
+    if _is_humanitec_llm_provider(provider):
+        humanitec_model = model or settings.llm.default_model or HUMANITEC_LLM_AUTO_MODEL
+        if str(humanitec_model).strip() != HUMANITEC_LLM_AUTO_MODEL:
+            raise ValueError("humanitec_llm поддерживает только model='auto'")
+        model = HUMANITEC_LLM_AUTO_MODEL
 
     if _should_use_platform_default_pool(
         model=model,
@@ -190,12 +209,12 @@ def get_llm(
         ):
             raise ValueError(
                 "humanitec_llm: api_key/base_url/folder_id не задаются — это виртуальный "
-                "провайдер платформы"
+                + "провайдер платформы"
             )
         if not _platform_default_pool_is_configured(settings):
             raise ValueError(
                 "humanitec_llm недоступен: включите llm.openrouter_free_pool и настройте "
-                "llm.openrouter.api_key"
+                + "llm.openrouter.api_key"
             )
 
     model = model or settings.llm.default_model
@@ -204,9 +223,7 @@ def get_llm(
         model = "mock-gpt-4"
 
     if model.startswith("mock-"):
-        if model not in _global_mock_registry:
-            _global_mock_registry[model] = MockLLM(model_name=model)
-        return _global_mock_registry[model]
+        return get_or_create_global_mock_llm(model)
 
     model_config = settings.llm.models.get(model)
     resolved_temperature = (
@@ -288,7 +305,7 @@ def get_llm_for_state(
     base_url: str | None = None,
     folder_id: str | None = None,
     max_tokens: int | None = None,
-    fallback_models: list[LLMCallConfig] | None = None,
+    fallback_models: Sequence[LLMCallConfig | JsonObject] | None = None,
     allow_platform_paid_fallback: bool = True,
     top_p: float | None = None,
     top_k: int | None = None,
@@ -296,21 +313,28 @@ def get_llm_for_state(
     presence_penalty: float | None = None,
     seed: int | None = None,
     reasoning_effort: ReasoningEffort | None = None,
-    extra_request_body: dict[str, Any] | None = None,
+    extra_request_body: JsonObject | None = None,
     extra_request_headers: dict[str, str] | None = None,
 ) -> LLMClient | MockLLM:
     """Создает LLM клиент с учётом mock конфига из state."""
     if state:
-        mock_config = getattr(state, "mock", None)
-        mock_responses = None
-        if isinstance(mock_config, dict) and mock_config.get("enabled"):
-            llm_responses = mock_config.get("llm")
-            if llm_responses:
-                mock_responses = llm_responses
+        mock_config = state.mock
+        mock_responses: list[MockLLMQueuedResponse] | None = None
+        if mock_config and mock_config.get("enabled"):
+            raw_llm_responses = mock_config.get("llm")
+            if raw_llm_responses is not None:
+                mock_responses = []
+                for response in require_json_array(raw_llm_responses, "state.mock.llm"):
+                    if isinstance(response, str):
+                        mock_responses.append(response)
+                    elif isinstance(response, dict):
+                        mock_responses.append(require_json_object(response, "state.mock.llm[]"))
+                    else:
+                        raise ValueError("state.mock.llm[] must be a string or JSON object")
         if mock_responses:
             mock_model = model_name if model_name is not None else "mock-gpt-4"
             mock = MockLLM(model_name=mock_model)
-            mock.configure(response_queue=mock_responses)
+            _ = mock.configure(response_queue=mock_responses)
             return mock
 
     return get_llm(
@@ -337,9 +361,9 @@ def get_llm_for_state(
 
 def setup_mock_responses(
     responses: dict[str, str] | None = None,
-    tool_responses: dict[str, dict[str, Any]] | None = None,
+    tool_responses: dict[str, JsonObject] | None = None,
     default_response: str | None = None,
-    response_queue: list[Any] | None = None,
+    response_queue: list[MockLLMQueuedResponse] | None = None,
     model_name: str = "mock-gpt-4",
 ) -> MockLLM:
     """Настройка mock ответов для тестов (локальная очередь)."""
@@ -349,7 +373,7 @@ def setup_mock_responses(
         raise RuntimeError(f"Mock LLM не зарегистрирован: {model_name}")
 
     mock_llm.reset()
-    mock_llm.configure(
+    _ = mock_llm.configure(
         response_queue=response_queue,
         tool_responses=tool_responses,
         responses=responses,

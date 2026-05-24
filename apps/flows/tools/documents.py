@@ -3,23 +3,27 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from collections.abc import Sequence
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from apps.flows.src.files.state_file_refs import upsert_state_file, with_document_capability
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
 from apps.flows.src.runtime_helpers.state_utils import find_file, push_ui_event
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.service_client import NAMESPACE_HEADER, ServiceClient, ServiceClientError
 from core.context import get_context
+from core.files.file_ref import FileRef
 from core.state import ExecutionState
+from core.types import JsonObject, require_json_object
 
-JsonDict = dict[str, Any]
+JsonDict = JsonObject
 
 
 class DocumentsOpenFileArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     file_id: str | None = Field(
         None,
@@ -39,7 +43,7 @@ class DocumentsOpenFileArgs(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _require_file_ref(self):  # noqa: ANN201
+    def _require_file_ref(self) -> "DocumentsOpenFileArgs":
         if not self.file_id and not self.file_name:
             raise ValueError("file_id or file_name is required")
         return self
@@ -72,57 +76,18 @@ def _context_namespace() -> str:
     return ns or "default"
 
 
-def _pick_state_file(files: list[JsonDict], *, file_id: str | None, file_name: str | None) -> JsonDict | None:
+def _pick_state_file(
+    files: Sequence[FileRef],
+    *,
+    file_id: str | None,
+    file_name: str | None,
+) -> FileRef | None:
     fid = (file_id or "").strip()
     if fid:
         for item in files:
-            if str(item.get("file_id") or "") == fid:
+            if item.file_id == fid:
                 return item
     return find_file(files, file_name)
-
-
-def _document_capability(raw: JsonDict, namespace: str) -> JsonDict:
-    return {
-        "kind": "onlyoffice",
-        "binding_id": raw["binding_id"],
-        "file_id": raw["file_id"],
-        "catalog_id": raw["catalog_id"],
-        "document_type": raw.get("document_type") or "",
-        "title": raw.get("title") or "",
-        "namespace": namespace,
-        "editor_url": raw.get("editor_url") or "",
-        "editable": True,
-    }
-
-
-def _with_document_capability(item: JsonDict, raw: JsonDict, namespace: str) -> JsonDict:
-    original_name = item.get("original_name")
-    if not isinstance(original_name, str) or not original_name.strip():
-        raise ValueError("state.files[].original_name обязателен для documents")
-    capabilities = item.get("capabilities")
-    if not isinstance(capabilities, dict):
-        capabilities = {}
-    doc = _document_capability(raw, namespace)
-    return {
-        **item,
-        "file_id": raw["file_id"],
-        "original_name": original_name,
-        "capabilities": {**capabilities, "document": doc},
-        "document": doc,
-    }
-
-
-def _upsert_state_file(state: ExecutionState, item: JsonDict) -> None:
-    fid = str(item.get("file_id") or "").strip()
-    files = list(state.files or [])
-    if fid:
-        for idx, existing in enumerate(files):
-            if str(existing.get("file_id") or "") == fid:
-                files[idx] = {**existing, **item}
-                state.files = files
-                return
-    files.append(item)
-    state.files = files
 
 
 async def _bind_or_get_document(
@@ -132,17 +97,16 @@ async def _bind_or_get_document(
     file_name: str | None,
     title: str | None,
     catalog_id: str | None,
-) -> tuple[JsonDict | None, JsonDict | None, str, str | None]:
-    files = list(state.files or [])
+) -> tuple[FileRef | None, JsonDict | None, str, str | None]:
+    files = list(state.files)
     item = _pick_state_file(files, file_id=file_id, file_name=file_name)
     if item is None:
-        return None, None, _context_namespace(), f"Файл не найден. Доступные: {[f.get('original_name') for f in files]}"
-    fid = str(item.get("file_id") or "").strip()
-    if not fid:
+        return None, None, _context_namespace(), f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in files]}"
+    if item.file_id is None:
         return item, None, _context_namespace(), "У файла нет file_id; интерактивное редактирование недоступно."
 
     namespace = _context_namespace()
-    payload: JsonDict = {"file_id": fid}
+    payload: JsonDict = {"file_id": item.file_id}
     if title and title.strip():
         payload["title"] = title.strip()
     if catalog_id and catalog_id.strip():
@@ -156,9 +120,11 @@ async def _bind_or_get_document(
         )
     except ServiceClientError as exc:
         return item, None, namespace, str(exc)
-    if not isinstance(raw, dict) or not isinstance(raw.get("binding_id"), str):
-        return item, None, namespace, "documents: invalid office response"
-    return item, raw, namespace, None
+    try:
+        office_document = require_json_object(raw, "documents.from_file")
+    except ValueError as exc:
+        return item, None, namespace, str(exc)
+    return item, office_document, namespace, None
 
 
 def _tool_call_id() -> str | None:
@@ -185,7 +151,10 @@ async def _apply_document_mutation(
     )
     if error or item is None or raw is None:
         return json.dumps({"success": False, "error": error or "Файл недоступен"}, ensure_ascii=False)
-    binding_id = str(raw["binding_id"])
+    binding_id_value = raw["binding_id"]
+    if not isinstance(binding_id_value, str) or not binding_id_value.strip():
+        raise ValueError("documents.from_file.binding_id must be a non-empty string")
+    binding_id = binding_id_value
     payload = {
         **mutation_payload,
         "tool_call_id": _tool_call_id(),
@@ -200,29 +169,44 @@ async def _apply_document_mutation(
         )
     except ServiceClientError as exc:
         return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
-    if not isinstance(result, dict) or not isinstance(result.get("file_id"), str):
-        return json.dumps({"success": False, "error": "documents mutation: invalid office response"}, ensure_ascii=False)
+    try:
+        mutation_result = require_json_object(result, "documents.mutation")
+    except ValueError as exc:
+        return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
     merged = {
         **raw,
-        "editor_url": result.get("editor_url") or raw.get("editor_url") or "",
+        "editor_url": mutation_result["editor_url"],
     }
-    enriched = _with_document_capability(item, merged, namespace)
-    if isinstance(result.get("file_size"), int):
-        enriched["file_size"] = result["file_size"]
-    _upsert_state_file(state, enriched)
-    push_ui_event(
+    enriched = with_document_capability(item, merged, namespace)
+    mutation_file_size = mutation_result["file_size"]
+    if not isinstance(mutation_file_size, int):
+        raise ValueError("documents.mutation.file_size must be an integer")
+    mutation_checksum = mutation_result.get("checksum")
+    if mutation_checksum is not None and not isinstance(mutation_checksum, str):
+        raise ValueError("documents.mutation.checksum must be a string")
+    enriched = enriched.model_copy(
+        update={"file_size": mutation_file_size, "checksum": mutation_checksum}
+    )
+    upsert_state_file(state, enriched)
+    _ = push_ui_event(
         state,
         event_type="files.updated",
-        payload={"files": [enriched]},
+        payload={"files": [enriched.to_json_object()]},
         source="documents",
         correlation_id=binding_id,
     )
+    document = enriched.capabilities.document
+    if document is None:
+        raise ValueError("FileRef.capabilities.document is required after documents mutation")
     return json.dumps(
         {
             "success": True,
-            "file": enriched,
-            "document": enriched["capabilities"]["document"],
-            "mutation": result,
+            "file": enriched.to_json_object(),
+            "document": require_json_object(
+                document.model_dump(mode="json"),
+                "FileRef.capabilities.document",
+            ),
+            "mutation": mutation_result,
         },
         ensure_ascii=False,
     )
@@ -248,25 +232,24 @@ async def documents_open_file(
     *,
     state: ExecutionState,
 ) -> str:
-    files = list(state.files or [])
+    files = list(state.files)
     item = _pick_state_file(files, file_id=file_id, file_name=file_name)
     if item is None:
         return json.dumps(
             {
                 "success": False,
-                "error": f"Файл не найден. Доступные: {[f.get('original_name') for f in files]}",
+                "error": f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in files]}",
             },
             ensure_ascii=False,
         )
-    fid = str(item.get("file_id") or "").strip()
-    if not fid:
+    if item.file_id is None:
         return json.dumps(
             {"success": False, "error": "У файла нет file_id; интерактивное редактирование недоступно."},
             ensure_ascii=False,
         )
 
     namespace = _context_namespace()
-    payload: JsonDict = {"file_id": fid}
+    payload: JsonDict = {"file_id": item.file_id}
     if title and title.strip():
         payload["title"] = title.strip()
     if catalog_id and catalog_id.strip():
@@ -281,23 +264,34 @@ async def documents_open_file(
         )
     except ServiceClientError as exc:
         return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
-    if not isinstance(raw, dict) or not isinstance(raw.get("binding_id"), str):
-        return json.dumps({"success": False, "error": "documents_open_file: invalid office response"}, ensure_ascii=False)
+    try:
+        office_document = require_json_object(raw, "documents.open_file")
+    except ValueError as exc:
+        return json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False)
 
-    enriched = _with_document_capability(item, raw, namespace)
-    _upsert_state_file(state, enriched)
-    push_ui_event(
+    enriched = with_document_capability(item, office_document, namespace)
+    upsert_state_file(state, enriched)
+    binding_id_value = office_document["binding_id"]
+    if not isinstance(binding_id_value, str) or not binding_id_value.strip():
+        raise ValueError("documents.open_file.binding_id must be a non-empty string")
+    _ = push_ui_event(
         state,
         event_type="files.updated",
-        payload={"files": [enriched]},
+        payload={"files": [enriched.to_json_object()]},
         source="documents",
-        correlation_id=str(raw["binding_id"]),
+        correlation_id=binding_id_value,
     )
+    document = enriched.capabilities.document
+    if document is None:
+        raise ValueError("FileRef.capabilities.document is required after documents_open_file")
     return json.dumps(
         {
             "success": True,
-            "file": enriched,
-            "document": enriched["capabilities"]["document"],
+            "file": enriched.to_json_object(),
+            "document": require_json_object(
+                document.model_dump(mode="json"),
+                "FileRef.capabilities.document",
+            ),
         },
         ensure_ascii=False,
     )

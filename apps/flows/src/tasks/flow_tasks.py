@@ -5,6 +5,7 @@ from apps.flows.src.container import get_container
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows_worker.broker import broker
 from core.context import Context, set_context
+from core.files.file_ref import FileRef
 from core.logging import get_logger
 from core.tracing.context import set_current_trace_context
 from core.types import JsonObject, require_json_object
@@ -62,6 +63,7 @@ async def process_flow_task(
     set_context(context)
 
     channel_instance = get_container().get_channel(channel, flow_id)
+    file_refs = [FileRef.model_validate(item) for item in files] if files is not None else []
 
     params = PreparedTaskParams(
         task_id=task_id or "",
@@ -70,13 +72,14 @@ async def process_flow_task(
         content=content,
         branch_id=branch_id,
         is_resume=is_resume,
-        files_data=files or [],
+        files_data=file_refs,
         message=None,
         metadata=metadata,
         user_id=user_id,
     )
 
+    result = await channel_instance.process_task(params)
     return require_json_object(
-        await channel_instance.process_task(params),
+        result.model_dump(mode="json", exclude_none=False),
         "process_flow_task.result",
     )

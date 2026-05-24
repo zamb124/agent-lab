@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -15,19 +15,20 @@ from apps.sync.models.calls import (
     CallLinkPatch,
     CallLinkRead,
     CallRead,
+    CallsAcceptPayload,
     CallScheduledLinkRead,
+    CallsDeclinePayload,
+    CallsHangupPayload,
+    CallsInvitePayload,
+    CallsSignalPayload,
     GuestJoinRequest,
     JoinResponse,
 )
 from apps.sync.models.meetings import CallRecordingRead
 from apps.sync.realtime.context import require_current_user
 from apps.sync.realtime.operations import (
-    CallsAcceptPayload,
     CallsAdminTransferPayload,
-    CallsDeclinePayload,
     CallsGetPayload,
-    CallsHangupPayload,
-    CallsInvitePayload,
     CallsJoinAcceptPayload,
     CallsJoinInfoPayload,
     CallsLinksListPayload,
@@ -36,7 +37,6 @@ from apps.sync.realtime.operations import (
     CallsRecordingsListPayload,
     CallsRecordingStartPayload,
     CallsRecordingStopPayload,
-    CallsSignalPayload,
     CallsTokenPayload,
     CallsTurnCredentialsPayload,
     op_calls_accept,
@@ -60,7 +60,7 @@ from apps.sync.realtime.operations import (
 )
 from core.calls.models import SignalType, TurnCredentials
 from core.pagination import OffsetPage
-from core.websocket import WsCommandError
+from core.types import JsonObject
 
 router = APIRouter()
 
@@ -72,7 +72,7 @@ class _CallTransferAdminBody(BaseModel):
 class _CallSignalBody(BaseModel):
     target_user_id: str
     signal_type: SignalType
-    data: dict[str, Any]
+    data: JsonObject
 
 
 @router.get("/turn-credentials", response_model=TurnCredentials)
@@ -95,8 +95,8 @@ async def list_scheduled_call_links(
     end_at: datetime,
     container: ContainerDep,
     channel_id: str | None = None,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[CallScheduledLinkRead]:
     user = require_current_user()
     result = await op_calls_links_list(
@@ -194,15 +194,10 @@ async def join_via_link(
 
 
 @router.post("/{call_id}/invite", response_model=CallRead)
-async def invite_call(container: ContainerDep, call_id: str, body: dict[str, Any]) -> CallRead:
+async def invite_call(container: ContainerDep, call_id: str, body: CallsInvitePayload) -> CallRead:
     _ = call_id
-    channel_id = body.get("channel_id")
-    if not isinstance(channel_id, str) or channel_id == "":
-        raise WsCommandError("ws_invalid_payload", "channel_id required (non-empty string)")
     user = require_current_user()
-    return await op_calls_invite(
-        CallsInvitePayload(channel_id=channel_id), user=user, container=container
-    )
+    return await op_calls_invite(body, user=user, container=container)
 
 
 @router.post("/{call_id}/accept", response_model=CallRead)
@@ -216,7 +211,7 @@ async def accept_call(container: ContainerDep, call_id: str) -> CallRead:
 @router.post("/{call_id}/decline", status_code=204)
 async def decline_call(container: ContainerDep, call_id: str) -> None:
     user = require_current_user()
-    await op_calls_decline(
+    _ = await op_calls_decline(
         CallsDeclinePayload(call_id=call_id), user=user, container=container
     )
 

@@ -1,13 +1,4 @@
-"""
-Платформенные дефолтные модели по capability и (provider, capability).
-
-Используется резолвером, когда у компании задан только провайдер и нужно подставить модель,
-для capability с фиксированной платформенной моделью (LLM_SUMMARIZE, LLM_FORMAT_MARKDOWN,
-LLM_CODEGEN, LLM_VISION, IMAGE_GEN). Для LLM_CHAT модель берётся из bundle/нodes flows
-(резолвер не подменяет).
-
-Модели задаются на уровне платформы — компания их не редактирует.
-"""
+"""Платформенный default-route для AI capabilities."""
 
 from __future__ import annotations
 
@@ -15,92 +6,30 @@ from core.clients.llm.model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_L
 from core.company_ai.schema import AICapability
 from core.config import get_settings
 
-# Дефолтная модель на capability при отсутствии provider-специфической записи.
-# Если ключа capability нет — резолвер возьмёт settings.llm.default_model (LLM_CHAT/CODEGEN)
-# либо упадёт ValueError для строгих capability (LLM_VISION, IMAGE_GEN, LLM_FORMAT_MARKDOWN).
-_PLATFORM_FALLBACK_MODEL_BY_CAPABILITY: dict[AICapability, str | None] = {
-    AICapability.LLM_CHAT: None,  # из settings.llm.default_model
-    AICapability.LLM_SUMMARIZE: "qwen/qwen3.5-397b-a17b",
-    AICapability.LLM_FORMAT_MARKDOWN: None,  # маршрут по умолчанию через get_llm(); explicit provider_litserve — LitServe HTTP
-    AICapability.LLM_CODEGEN: None,  # из settings.llm.default_model
-    AICapability.LLM_VISION: "google/gemini-2.5-flash-preview",
-    AICapability.IMAGE_GEN: "google/nano-banana",
-}
-
-
-# Per-(provider, capability) модель — когда платформа умеет жёстко смаппить
-# provider компании в конкретную модель.
-_PROVIDER_MODEL_BY_CAPABILITY: dict[AICapability, dict[str, str]] = {
-    AICapability.LLM_SUMMARIZE: {
-        "openrouter": "qwen/qwen3.5-397b-a17b",
-        "provider_litserve": "Qwen/Qwen2.5-1.5B-Instruct",
-        "bothub": "openai/gpt-4o-mini",
-        "yandex": "yandexgpt/latest",
-    },
-    AICapability.LLM_FORMAT_MARKDOWN: {
-        "provider_litserve": "Qwen/Qwen2.5-1.5B-Instruct",
-    },
-    AICapability.LLM_VISION: {
-        "openrouter": "google/gemini-2.5-flash-preview",
-        "openai": "gpt-4o",
-        "yandex": "yandexgpt/latest",
-    },
-    AICapability.IMAGE_GEN: {
-        "openrouter": "google/nano-banana",
-    },
-}
+_LLM_CAPABILITIES: frozenset[AICapability] = frozenset(
+    {
+        AICapability.LLM_CHAT,
+        AICapability.LLM_SUMMARIZE,
+        AICapability.LLM_FORMAT_MARKDOWN,
+        AICapability.LLM_CODEGEN,
+        AICapability.LLM_VISION,
+        AICapability.IMAGE_GEN,
+    }
+)
 
 
 def platform_default_model(capability: AICapability, provider: str | None = None) -> str | None:
-    """Платформенная модель для capability и (опц.) провайдера.
-
-    Возвращает None, если для capability нет жёсткого дефолта (например LLM_CHAT — берётся
-    из settings.llm.default_model, или из bundle-нод flows runtime overlay-ом).
-    """
-    if provider == HUMANITEC_LLM_PROVIDER:
-        if capability in (
-            AICapability.LLM_CHAT,
-            AICapability.LLM_SUMMARIZE,
-            AICapability.LLM_FORMAT_MARKDOWN,
-            AICapability.LLM_CODEGEN,
-        ):
-            return HUMANITEC_LLM_AUTO_MODEL
-        return None
-    if provider:
-        per_provider = _PROVIDER_MODEL_BY_CAPABILITY.get(capability) or {}
-        if provider in per_provider and str(per_provider[provider]).strip():
-            return str(per_provider[provider]).strip()
-    fallback = _PLATFORM_FALLBACK_MODEL_BY_CAPABILITY.get(capability)
-    if fallback is not None and str(fallback).strip():
-        return str(fallback).strip()
-
-    if capability in (AICapability.LLM_CHAT, AICapability.LLM_CODEGEN):
-        s = get_settings()
-        m = s.llm.default_model
-        return str(m).strip() if m else None
-    if capability == AICapability.LLM_FORMAT_MARKDOWN:
-        s = get_settings()
-        if provider == "openrouter":
-            pool_fallback = (s.llm.openrouter_free_pool.fallback_model or "").strip()
-            if pool_fallback:
-                return pool_fallback
-            return (s.llm.default_model or "").strip() or None
-        infra_model = (s.provider_litserve.infra.markdown_default_api_model_id or "").strip()
-        if infra_model:
-            return infra_model
-        return (s.provider_litserve.infra.llm_model_id or "").strip() or None
+    """Платформенная модель по умолчанию без provider-specific hardcode."""
+    if capability in _LLM_CAPABILITIES and provider in (None, HUMANITEC_LLM_PROVIDER):
+        return HUMANITEC_LLM_AUTO_MODEL
     return None
 
 
 def platform_default_provider_for_capability(capability: AICapability) -> str:
-    """Платформенный провайдер по умолчанию для capability (без company override).
-
-    Внимание: некоторые capability имеют собственный платформенный путь,
-    отличный от ``settings.llm.provider``. ``LLM_FORMAT_MARKDOWN`` теперь по
-    умолчанию идёт через общий ``get_llm()`` default-route; LitServe выбирается
-    только явным ``provider_litserve``.
-    """
+    """Платформенный провайдер по умолчанию для capability без company override."""
     s = get_settings()
+    if capability in _LLM_CAPABILITIES:
+        return HUMANITEC_LLM_PROVIDER
     if capability == AICapability.EMBEDDING:
         return s.rag.embedding.provider
     if capability == AICapability.RERANK:

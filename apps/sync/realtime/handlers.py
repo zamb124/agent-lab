@@ -1,6 +1,6 @@
 """Внутренние helpers Sync.
 
-Это библиотека приватных функций (`_create_channel`, `_send_message`, …),
+Это внутренняя библиотека функций (`create_channel`, `send_message`, …),
 которыми пользуются `op_*` из `apps/sync/realtime/operations.py`. Никаких
 веток `if cmd.type == ...` и никаких `CommandEnvelope` / `execute_command`
 здесь нет — единый pipeline команд живёт в `operations.py`.
@@ -18,6 +18,7 @@ from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 from apps.sync.channel_lane_preview import lane_preview_from_content_row
 from apps.sync.channel_read_helpers import channel_read_entity_minimal, channel_read_from_entity
 from apps.sync.db.models import (
+    SyncCall,
     SyncCallRecording,
     SyncChannel,
     SyncGitResourceRef,
@@ -31,9 +32,9 @@ from apps.sync.db.repositories.meeting_repository import CallRecordingRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
 from apps.sync.db.repositories.thread_repository import ThreadRepository
 from apps.sync.message_read_helpers import message_read_from_entity
-from apps.sync.models.channels import ChannelRead, ChannelType, ChannelUpdate
+from apps.sync.models.channels import ChannelCreate, ChannelRead, ChannelType, ChannelUpdate
 from apps.sync.models.common import UserBrief
-from apps.sync.models.git import GitResourceRefRead
+from apps.sync.models.git import GitResourceRefCreate, GitResourceRefRead
 from apps.sync.models.meetings import CallRecordingRead, RecordingStatus
 from apps.sync.models.messages import (
     MessageContentModel,
@@ -43,7 +44,7 @@ from apps.sync.models.messages import (
     MessageStatus,
     TextPlainContent,
 )
-from apps.sync.models.threads import ThreadRead
+from apps.sync.models.threads import ThreadCreate, ThreadRead
 from apps.sync.realtime.broker import broker as sync_worker_broker
 from apps.sync.realtime.context import resolve_company_id
 from apps.sync.realtime.events import (
@@ -97,7 +98,7 @@ if TYPE_CHECKING:
     from core.models.identity_models import User
 
 
-async def _channel_recipient_user_ids(
+async def channel_recipient_user_ids(
     channels: ChannelRepository,
     channel_id: str,
     company_id: str,
@@ -105,7 +106,7 @@ async def _channel_recipient_user_ids(
     return await channels.list_member_user_ids(channel_id, company_id=company_id)
 
 
-async def _maybe_start_speech_to_chat_poll(
+async def maybe_start_speech_to_chat_poll(
     *,
     call_id: str,
     company_id: str,
@@ -120,7 +121,7 @@ async def _maybe_start_speech_to_chat_poll(
         raise ValueError(f"Канал {channel_id} не найден.")
     if not ch.speech_to_chat_enabled:
         return
-    await kiq_task_name_with_context(
+    _ = await kiq_task_name_with_context(
         SYNC_SPEECH_TO_CHAT_POLL_TASK_NAME,
         sync_worker_broker,
         call_id=call_id,
@@ -129,7 +130,7 @@ async def _maybe_start_speech_to_chat_poll(
     )
 
 
-def _normalize_s3_egress_endpoint(endpoint_url: str | None) -> str | None:
+def normalize_s3_egress_endpoint(endpoint_url: str | None) -> str | None:
     if endpoint_url is None:
         return None
     trimmed = endpoint_url.strip()
@@ -152,7 +153,7 @@ def _normalize_s3_egress_endpoint(endpoint_url: str | None) -> str | None:
     return f"{parsed.scheme}://{netloc}"
 
 
-def _build_livekit_recording_client() -> LiveKitClient:
+def build_livekit_recording_client() -> LiveKitClient:
     settings = get_settings()
     return LiveKitClient(
         url=settings.calls.livekit_url,
@@ -178,9 +179,9 @@ def _recording_read_from_entity(recording: SyncCallRecording) -> CallRecordingRe
     )
 
 
-async def _stop_and_finalize_recording(
+async def stop_and_finalize_recording(
     *,
-    call,
+    call: SyncCall,
     recording: SyncCallRecording,
     company_id: str,
     actor_user_id: str,
@@ -203,7 +204,7 @@ async def _stop_and_finalize_recording(
             max_end_at.isoformat(),
             datetime.now(UTC).isoformat(),
         )
-    livekit_client = _build_livekit_recording_client()
+    livekit_client = build_livekit_recording_client()
     logger.info(
         "call.recording.stop egress stop: call_id=%s recording_id=%s egress_id=%s",
         call.call_id,
@@ -211,7 +212,7 @@ async def _stop_and_finalize_recording(
         recording.provider_job_id,
     )
     try:
-        await livekit_client.stop_egress(
+        _ = await livekit_client.stop_egress(
             egress_id=recording.provider_job_id,
             company_id=company_id,
             user_id=actor_user_id,
@@ -249,7 +250,7 @@ async def _stop_and_finalize_recording(
             started_at=recording.started_at,
             ended_at=updated_recording.ended_at,
         )
-    await kiq_task_name_with_context(
+    _ = await kiq_task_name_with_context(
         SYNC_FINALIZE_RECORDING_TASK_NAME,
         sync_worker_broker,
         recording_id=updated_recording.recording_id,
@@ -296,7 +297,7 @@ async def _enqueue_channel_message_notifications(
         if uid == actor_user_id:
             continue
         if uid in mentioned:
-            await deliver_sync_mention_notification.kiq(
+            _ = await deliver_sync_mention_notification.kiq(
                 recipient_user_id=uid,
                 channel_id=channel_id,
                 company_id=company_id,
@@ -306,7 +307,7 @@ async def _enqueue_channel_message_notifications(
                 body_preview=preview,
             )
         elif is_root_lane:
-            await deliver_channel_message_notification.kiq(
+            _ = await deliver_channel_message_notification.kiq(
                 recipient_user_id=uid,
                 channel_id=channel_id,
                 company_id=company_id,
@@ -438,7 +439,7 @@ def _find_first_audio_content_index(contents: list[MessageContentModel]) -> int 
     return None
 
 
-def _set_audio_transcription_state(
+def set_audio_transcription_state(
     contents: list[MessageContentModel],
     *,
     status: AudioTranscriptionStatus,
@@ -481,7 +482,7 @@ def _find_first_video_content_index(contents: list[MessageContentModel]) -> int 
     return None
 
 
-def _set_video_transcription_state(
+def set_video_transcription_state(
     contents: list[MessageContentModel],
     *,
     status: AudioTranscriptionStatus,
@@ -561,7 +562,7 @@ async def _user_brief(user_repository: UserRepository | None, user_id: str) -> U
     return UserBrief(user_id=user_id, display_name=display_name, avatar_url=avatar_url)
 
 
-async def _message_read_from_db(
+async def message_read_from_db(
     m: SyncMessage,
     messages: MessageRepository,
     user_repository: UserRepository | None,
@@ -578,7 +579,7 @@ async def _message_read_from_db(
     return message_read_from_entity(m=m, contents=contents, sender=sender)
 
 
-def _channel_read_entity(entity: SyncChannel) -> ChannelRead:
+def channel_read_entity(entity: SyncChannel) -> ChannelRead:
     return channel_read_entity_minimal(entity)
 
 
@@ -601,7 +602,7 @@ async def _channel_read_for_viewer(
     )
 
 
-async def _update_channel(
+async def update_channel(
     channel_id: str,
     body: ChannelUpdate,
     *,
@@ -632,8 +633,8 @@ async def _update_channel(
         entity.transcribe_voice_messages = data["transcribe_voice_messages"]
     if "speech_to_chat_enabled" in data:
         entity.speech_to_chat_enabled = data["speech_to_chat_enabled"]
-    await channels.update(entity)
-    return _channel_read_entity(entity)
+    _ = await channels.update(entity)
+    return channel_read_entity(entity)
 
 
 async def _find_existing_direct_for_pair(
@@ -659,8 +660,8 @@ async def _find_existing_direct_for_pair(
     return None
 
 
-async def _create_channel(
-    body,
+async def create_channel(
+    body: ChannelCreate,
     *,
     actor_user_id: str,
     company_id: str,
@@ -703,7 +704,7 @@ async def _create_channel(
             description="Основное пространство",
             is_default=True,
         )
-        await namespaces.set(ns_entity)
+        _ = await namespaces.set(ns_entity)
     if ns_entity is None:
         raise ValueError(f"Namespace '{namespace}' не найден в платформенном реестре.")
     if ns_entity.company_id != company_id:
@@ -717,7 +718,10 @@ async def _create_channel(
         speech_to_chat = body.speech_to_chat_enabled
 
     if body.type == ChannelType.DIRECT:
-        peer_id = body.member_ids[0]
+        direct_member_ids = body.member_ids
+        if direct_member_ids is None:
+            raise ValueError("Для direct в member_ids должен быть ровно один собеседник.")
+        peer_id = direct_member_ids[0]
         existing = await _find_existing_direct_for_pair(
             user_a=actor_user_id,
             user_b=peer_id,
@@ -749,7 +753,7 @@ async def _create_channel(
         transcribe_voice_messages=transcribe_voice,
         speech_to_chat_enabled=speech_to_chat,
     )
-    await channels.create(entity)
+    _ = await channels.create(entity)
     await channels.add_member_if_missing(channel_id, actor_user_id, "owner", company_id)
 
     if body.member_ids is not None:
@@ -766,9 +770,9 @@ async def _create_channel(
     return read, True
 
 
-async def _send_message(
+async def send_message(
     channel_id: str,
-    body,
+    body: MessageCreate,
     *,
     actor_user_id: str,
     company_id: str,
@@ -793,7 +797,7 @@ async def _send_message(
         forwarded_from_channel_id=forwarded_from_channel_id,
         forwarded_from_channel_name=forwarded_from_channel_name,
     )
-    return await _message_read_from_db(row, messages, user_repository)
+    return await message_read_from_db(row, messages, user_repository)
 
 
 async def send_message_with_side_effects(
@@ -819,7 +823,7 @@ async def send_message_with_side_effects(
         actor_user_id=user.user_id,
         channels=container.channel_repository,
     )
-    message = await _send_message(
+    message = await send_message(
         channel_id,
         normalized_body,
         actor_user_id=user.user_id,
@@ -835,7 +839,7 @@ async def send_message_with_side_effects(
         actor_user_id=user.user_id,
         channels=container.channel_repository,
     )
-    recipients = await _channel_recipient_user_ids(
+    recipients = await channel_recipient_user_ids(
         container.channel_repository, channel_id, company_id
     )
     created_event = event_message_created(
@@ -857,7 +861,7 @@ async def send_message_with_side_effects(
                     block.data.transcription_status == AudioTranscriptionStatus.IDLE
                     and not block.data.source_speech_to_chat
                 ):
-                    processing_contents = _set_audio_transcription_state(
+                    processing_contents = set_audio_transcription_state(
                         list(message.contents),
                         status=AudioTranscriptionStatus.PROCESSING,
                         transcription_text=None,
@@ -874,7 +878,7 @@ async def send_message_with_side_effects(
                         raise WsCommandError(
                             "internal", "Сообщение пропало после запуска авто-транскрипции."
                         )
-                    message = await _message_read_from_db(
+                    message = await message_read_from_db(
                         proc_entity, container.message_repository, container.user_repository
                     )
                     events.append(
@@ -884,7 +888,7 @@ async def send_message_with_side_effects(
                             recipient_user_ids=recipients,
                         ),
                     )
-                    await kiq_task_name_with_context(
+                    _ = await kiq_task_name_with_context(
                         SYNC_TRANSCRIBE_AUDIO_MESSAGE_TASK_NAME,
                         sync_worker_broker,
                         channel_id=channel_id,
@@ -897,8 +901,8 @@ async def send_message_with_side_effects(
     return message
 
 
-async def _create_thread(
-    body,
+async def create_thread(
+    body: ThreadCreate,
     *,
     actor_user_id: str,
     company_id: str,
@@ -920,7 +924,7 @@ async def _create_thread(
         created_at=datetime.now(tz=UTC),
         created_by_user_id=actor_user_id,
     )
-    await threads.create(entity)
+    _ = await threads.create(entity)
     created_by = await _user_brief(user_repository, actor_user_id)
     return ThreadRead(
         thread_id=thread_id,
@@ -932,8 +936,8 @@ async def _create_thread(
     )
 
 
-async def _upsert_git_resource(
-    body, *, company_id: str, git_refs: GitResourceRefRepository
+async def upsert_git_resource(
+    body: GitResourceRefCreate, *, company_id: str, git_refs: GitResourceRefRepository
 ) -> GitResourceRefRead:
     ref_id = f"{body.provider.value}:{body.kind.value}:{body.project_key}:{body.external_id}"
     entity = SyncGitResourceRef(
@@ -946,7 +950,7 @@ async def _upsert_git_resource(
         url=body.url,
         extra=body.extra or {},
     )
-    await git_refs.update(entity)
+    _ = await git_refs.update(entity)
     return GitResourceRefRead(
         git_ref_id=ref_id,
         provider=body.provider,

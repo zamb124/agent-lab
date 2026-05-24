@@ -32,9 +32,9 @@ from apps.flows.src.services.flow_speech_resolve import (
 from core.clients.speech_override import SpeechOverride
 from core.clients.voice_resolver import get_stt_client
 from core.context import get_context
+from core.files.file_ref import FileRef
 from core.files.types import FileCategory, ext_to_category, mime_to_category
 from core.logging import get_logger
-from core.types import JsonObject
 
 if TYPE_CHECKING:
     from apps.flows.src.container_contracts import FlowRuntimeContainer
@@ -42,18 +42,15 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _is_audio_item(item: JsonObject) -> bool:
+def _is_audio_item(item: FileRef) -> bool:
     """Определяет категорию AUDIO по content_type, иначе по расширению `original_name`."""
-    content_type = item.get("content_type")
-    if isinstance(content_type, str) and content_type.strip():
-        cat = mime_to_category(content_type.strip().split(";", 1)[0].strip())
-        if cat is FileCategory.AUDIO:
-            return True
-    original_name = item.get("original_name")
-    if isinstance(original_name, str) and original_name.strip():
-        ext = Path(original_name).suffix.lower()
-        if ext and ext_to_category(ext) is FileCategory.AUDIO:
-            return True
+    content_type = item.content_type.strip()
+    cat = mime_to_category(content_type.split(";", 1)[0].strip())
+    if cat is FileCategory.AUDIO:
+        return True
+    ext = Path(item.original_name).suffix.lower()
+    if ext and ext_to_category(ext) is FileCategory.AUDIO:
+        return True
     return False
 
 
@@ -80,7 +77,7 @@ async def _read_persisted_audio_bytes(
 async def transcribe_incoming_audio_files(
     *,
     container: "FlowRuntimeContainer",
-    files_data: list[JsonObject],
+    files_data: list[FileRef],
     company_id: str,
     language: str | None = None,
 ) -> str:
@@ -94,7 +91,7 @@ async def transcribe_incoming_audio_files(
     if company_id == "":
         raise ValueError("transcribe_incoming_audio_files: company_id обязателен.")
 
-    audio_items: list[JsonObject] = [
+    audio_items: list[FileRef] = [
         item for item in files_data if _is_audio_item(item)
     ]
     if not audio_items:
@@ -113,17 +110,16 @@ async def transcribe_incoming_audio_files(
 
     parts: list[str] = []
     for item in audio_items:
-        file_id = item.get("file_id")
-        if not isinstance(file_id, str) or not file_id.strip():
+        if item.file_id is None:
             logger.info(
                 "audio_input.skip_uri_only",
-                original_name=item.get("original_name"),
-                content_type=item.get("content_type"),
+                original_name=item.original_name,
+                content_type=item.content_type,
             )
             continue
         audio_bytes, original_name, content_type = await _read_persisted_audio_bytes(
             container=container,
-            file_id=file_id,
+            file_id=item.file_id,
         )
         result = await stt.transcribe_audio(
             audio_bytes=audio_bytes,
@@ -135,7 +131,7 @@ async def transcribe_incoming_audio_files(
         if text == "":
             logger.info(
                 "audio_input.empty_transcript",
-                file_id=file_id,
+                file_id=item.file_id,
                 provider=result.provider,
                 status=result.status,
             )

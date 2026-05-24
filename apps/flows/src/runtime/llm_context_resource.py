@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from apps.flows.src.models import ResourceType
-from apps.flows.src.models.resource import ResourceReference
+from apps.flows.src.models.resource import ResourceReference, ResourceReferenceInput
 from apps.flows.src.resources.merge import (
     merge_flow_skill_node_resource_maps,
     merge_shared_definition_config_with_patch,
@@ -19,14 +20,18 @@ from core.llm_context.resolver import (
     resolve_company_llm_context_patch,
     resolve_llm_context_policy,
 )
+from core.types import JsonObject
+
+if TYPE_CHECKING:
+    from apps.flows.src.db import ResourceRepository
 
 
 async def infer_unique_llm_context_resource_key_from_merged_maps(
     *,
-    flow_resources: dict[str, Any],
-    skill_resources: dict[str, Any] | None,
-    node_resources_raw: dict[str, Any],
-    repository: Any,
+    flow_resources: Mapping[str, ResourceReferenceInput],
+    skill_resources: Mapping[str, ResourceReferenceInput] | None,
+    node_resources_raw: Mapping[str, ResourceReferenceInput],
+    repository: ResourceRepository | None,
 ) -> str | None:
     """
     Infer a context resource only when the merged flow/skill/node map has exactly one.
@@ -44,7 +49,12 @@ async def infer_unique_llm_context_resource_key_from_merged_maps(
             if ref.type == ResourceType.LLM_CONTEXT:
                 context_keys.append(key)
             continue
-        definition = await repository.get(ref.resource_id)
+        if repository is None:
+            raise ValueError("resource_repository обязателен для shared LLM context resources")
+        resource_id = ref.resource_id
+        if resource_id is None:
+            raise ValueError(f"Ресурс '{key}': shared reference без resource_id")
+        definition = await repository.get(resource_id)
         if definition is not None and definition.type == ResourceType.LLM_CONTEXT:
             context_keys.append(key)
     if len(context_keys) != 1:
@@ -55,10 +65,10 @@ async def infer_unique_llm_context_resource_key_from_merged_maps(
 async def resolve_llm_context_resource_patch(
     *,
     llm_context_resource_key: str | None,
-    flow_resources: dict[str, Any],
-    skill_resources: dict[str, Any] | None,
-    node_resources_raw: dict[str, Any],
-    repository: Any,
+    flow_resources: Mapping[str, ResourceReferenceInput],
+    skill_resources: Mapping[str, ResourceReferenceInput] | None,
+    node_resources_raw: Mapping[str, ResourceReferenceInput],
+    repository: ResourceRepository | None,
 ) -> LLMContextPatch | None:
     """Resolve the resource layer patch for the platform context hierarchy."""
     key = str(llm_context_resource_key or "").strip()
@@ -89,12 +99,17 @@ async def resolve_llm_context_resource_patch(
             raise ValueError(f"Ресурс '{key}': inline LLM context без config")
         return LLMContextPatch.model_validate(ref.config)
 
-    definition = await repository.get(ref.resource_id)
+    if repository is None:
+        raise ValueError("resource_repository обязателен для shared LLM context resources")
+    resource_id = ref.resource_id
+    if resource_id is None:
+        raise ValueError(f"Ресурс '{key}': shared reference без resource_id")
+    definition = await repository.get(resource_id)
     if definition is None:
-        raise ValueError(f"Shared resource '{ref.resource_id}' не найден в БД")
+        raise ValueError(f"Shared resource '{resource_id}' не найден в БД")
     if definition.type != ResourceType.LLM_CONTEXT:
         raise ValueError(
-            f"Ресурс '{key}': shared '{ref.resource_id}' не LLM context, а {definition.type!r}"
+            f"Ресурс '{key}': shared '{resource_id}' не LLM context, а {definition.type!r}"
         )
     merged_config = definition.config
     if ref.config:
@@ -109,13 +124,13 @@ async def resolve_llm_context_resource_patch(
 async def resolve_llm_context_policy_for_runtime(
     *,
     llm_context_resource_key: str | None,
-    flow_resources: dict[str, Any],
-    skill_resources: dict[str, Any] | None,
-    node_resources_raw: dict[str, Any],
-    repository: Any,
-    node: LLMContextPatch | dict[str, Any] | None = None,
-    call: LLMContextPatch | dict[str, Any] | None = None,
-    company: LLMContextPatch | dict[str, Any] | None = None,
+    flow_resources: Mapping[str, ResourceReferenceInput],
+    skill_resources: Mapping[str, ResourceReferenceInput] | None,
+    node_resources_raw: Mapping[str, ResourceReferenceInput],
+    repository: ResourceRepository | None,
+    node: LLMContextPatch | JsonObject | None = None,
+    call: LLMContextPatch | JsonObject | None = None,
+    company: LLMContextPatch | JsonObject | None = None,
     config: LLMContextConfig | None = None,
 ) -> LLMContextProfile:
     """Resolve platform -> company -> resource -> node -> inline call for flow runtime."""

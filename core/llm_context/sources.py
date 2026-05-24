@@ -5,21 +5,22 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 from pydantic import Field
 
 from core.llm_context.models import LLMContextBlock, LLMContextProfile
 from core.models import StrictBaseModel
+from core.types import JsonObject
 
 
 class LLMContextSourceRequest(StrictBaseModel):
     """Input passed to each context source for one LLM call."""
 
-    messages: list[dict[str, Any]] = Field(default_factory=list)
+    messages: list[JsonObject] = Field(default_factory=list)
     policy: LLMContextProfile = Field(default_factory=LLMContextProfile)
     query: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
 
 
 class LLMContextSource(Protocol):
@@ -41,7 +42,7 @@ class StaticLLMContextSource:
     def __init__(
         self,
         name: str,
-        blocks: Iterable[LLMContextBlock | dict[str, Any]],
+        blocks: Iterable[LLMContextBlock | JsonObject],
     ) -> None:
         object.__setattr__(self, "name", _validate_source_name(name))
         object.__setattr__(
@@ -81,12 +82,12 @@ class LLMContextSourceRegistry:
             for raw_block in group:
                 block = _coerce_block(raw_block)
                 provenance = dict(block.provenance)
-                provenance.setdefault("source", source.name)
+                _ = provenance.setdefault("source", source.name)
                 blocks.append(block.model_copy(update={"provenance": provenance}))
         return blocks
 
 
-def _coerce_block(block: LLMContextBlock | dict[str, Any]) -> LLMContextBlock:
+def _coerce_block(block: LLMContextBlock | JsonObject) -> LLMContextBlock:
     if isinstance(block, LLMContextBlock):
         return block
     return LLMContextBlock.model_validate(block)

@@ -16,6 +16,5 @@ class WebSocketChannel(A2AChannel):
     и Redis streaming.
     """
 
-    name = "websocket"
-
+    name: str = "websocket"
 

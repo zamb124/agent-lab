@@ -11,9 +11,9 @@ import asyncio
 import json
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
-from typing import Any
+from typing import TypeAlias, cast
 from uuid import UUID
 
 from a2a.types import (
@@ -38,14 +38,13 @@ from a2a.utils.message import new_agent_text_message
 
 from apps.flows.config import get_settings
 from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
-from apps.flows.src.channels.types import ChannelRequestContext, PreparedTaskParams
+from apps.flows.src.channels.types import ChannelRequestContext, FlowTaskResult, PreparedTaskParams
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.mock.resolver import check_mock_permission, resolve_mock_config
-from apps.flows.src.models.enums import MergeMode, NodeType
+from apps.flows.src.models.enums import ChannelType, MergeMode, NodeType
 from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
 from apps.flows.src.models.operator_schemas import OperatorTaskStatus
-from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
 from apps.flows.src.services.flow_speech_resolve import attach_flow_speech_layers_to_context
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state import collect_flow_node_files, create_initial_state
@@ -68,10 +67,11 @@ from core.auth import permission_checker
 from core.auth.errors import PermissionDeniedA2AError
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.context import Context, clear_context, get_context, set_context
+from core.files.file_ref import FileRef
 from core.logging import bind_log_context, get_logger
 from core.logging.attributes import LOG_SESSION_AGENT
 from core.state import ExecutionState, ExecutionTaskState
-from core.state.interrupt import HandoffMode, OperatorTaskInterrupt, interrupt_to_response_dict
+from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
 from core.tasks.kicker import kiq_task_name_with_context
 from core.tracing import get_tracer
@@ -80,6 +80,7 @@ from core.types import JsonObject, JsonValue, require_json_array, require_json_o
 from core.utils.background import run_with_log_context
 
 logger = get_logger(__name__)
+ChannelActionMethod: TypeAlias = Callable[..., Awaitable[JsonObject]]
 
 _BRANCH_BODY_FIELDS = {
     "entry",
@@ -233,7 +234,7 @@ class BaseChannel(ABC):
                 )
         elif isinstance(context, Context):
             raw_groups = context.metadata.get("grps") or context.metadata.get("user_groups")
-        elif isinstance(context, dict):
+        else:
             raw_groups = context.get("user_groups") or context.get("grps")
 
         if raw_groups is None:
@@ -327,7 +328,7 @@ class BaseChannel(ABC):
     async def _save_state(self, session_id: str, state: ExecutionState) -> None:
         """Сохраняет промежуточный state в Redis через StateManager."""
         container = self.container
-        await container.state_manager.save_state(session_id, state)
+        _ = await container.state_manager.save_state(session_id, state)
 
     async def _save_terminal_state(
         self,
@@ -339,7 +340,7 @@ class BaseChannel(ABC):
     ) -> None:
         """Сохраняет terminal snapshot в БД через StateManager."""
         container = self.container
-        await container.state_manager.save_terminal_state(
+        _ = await container.state_manager.save_terminal_state(
             session_id,
             state,
             terminal_task_state,
@@ -391,7 +392,7 @@ class BaseChannel(ABC):
         task_id: str | None = None,
         message: Message | None = None,
         metadata: JsonObject | None = None,
-        files_data: list[JsonObject] | None = None,
+        files_data: list[FileRef] | None = None,
         user_id: str | None = None,
     ) -> PreparedTaskParams:
         """
@@ -501,7 +502,7 @@ class BaseChannel(ABC):
         broker_url = get_settings().tasks.broker_url
         logger.info("flow.create_task.broker", broker_url=broker_url)
         logger.debug(f"[create_task] Kicking task_id={params.task_id} for flow_id={self.flow_id}")
-        await kiq_task_name_with_context(
+        _ = await kiq_task_name_with_context(
             TASK_PROCESS_FLOW,
             flows_broker,
             flow_id=self.flow_id,
@@ -514,7 +515,7 @@ class BaseChannel(ABC):
             context_id=params.context_id,
             metadata=params.metadata or {},
             is_resume=params.is_resume,
-            files=params.files_data,
+            files=[file_ref.to_json_object() for file_ref in params.files_data],
             context_data=context_data,
             trace_context=trace_context_data,
             background_kind="flow_task",
@@ -556,16 +557,16 @@ class BaseChannel(ABC):
                 else:
                     msg = "metadata.triggers[trigger_id] must contain 'payload' as dict"
                     raise ValueError(msg)
-        state_dict = state.model_dump(mode="json")
+        state_dict = require_json_object(state.model_dump(mode="json"), "execution_state")
         executor = OutputActionExecutor(container=self.container)
-        await executor.execute(
+        _ = await executor.execute(
             output_actions=actions,
             state=state_dict,
             trigger_config=trigger.config,
             original_payload=original_payload,
         )
 
-    async def process_task(self, params: PreparedTaskParams) -> JsonObject:
+    async def process_task(self, params: PreparedTaskParams) -> FlowTaskResult:
         """
         Обрабатывает запрос через агента.
 
@@ -654,10 +655,13 @@ class BaseChannel(ABC):
         else:
             messages_count = len(state.messages)
             logger.info(
-                f"[state] Loaded state for session {params.session_id}: "
-                f"messages={messages_count}, current_nodes={state.current_nodes}, "
-                f"interrupt={bool(state.interrupt)}, breakpoint_hit={state.breakpoint_hit}, "
-                f"terminal_task_state={state.terminal_task_state}"
+                "[state] Loaded state for session %s: messages=%s, current_nodes=%s, interrupt=%s, breakpoint_hit=%s, terminal_task_state=%s",
+                params.session_id,
+                messages_count,
+                state.current_nodes,
+                bool(state.interrupt),
+                state.breakpoint_hit,
+                state.terminal_task_state,
             )
             # При breakpoint resume НЕ перезаписываем content - используем оригинальный
             if not state.breakpoint_hit:
@@ -824,7 +828,7 @@ class BaseChannel(ABC):
                 setattr(state, "_cancelled", True)
                 await self._save_terminal_state(params.session_id, state, "canceled")
                 await emitter.emit_cancelled()
-                return {"response": "", "task_state": "canceled"}
+                return FlowTaskResult(response="", task_state="canceled")
             finally:
                 await cancellation_token.cleanup()
                 set_cancellation_token(None)
@@ -840,12 +844,12 @@ class BaseChannel(ABC):
                 node_type = raw_node_type if isinstance(raw_node_type, str) else "unknown"
                 await self._save_terminal_state(params.session_id, state, "input-required")
                 await emitter.emit_breakpoint(node_id, node_type, state.breakpoint_state or {})
-                return {
-                    "response": "",
-                    "breakpoint_hit": node_id,
-                    "breakpoint_state": state.breakpoint_state,
-                    "task_state": "input-required",
-                }
+                return FlowTaskResult(
+                    response="",
+                    breakpoint_hit=node_id,
+                    breakpoint_state=state.breakpoint_state,
+                    task_state="input-required",
+                )
             if state.interrupt:
                 InterruptManager.enrich_system_from_channel(
                     state,
@@ -875,25 +879,21 @@ class BaseChannel(ABC):
             messages_count = len(state.messages)
 
             logger.info(
-                f"[state] Terminal state saved for session {params.session_id}: "
-                f"messages={messages_count}, current_nodes={state.current_nodes}, "
-                f"interrupt={bool(state.interrupt)}"
+                "[state] Terminal state saved for session %s: messages=%s, current_nodes=%s, interrupt=%s",
+                params.session_id,
+                messages_count,
+                state.current_nodes,
+                bool(state.interrupt),
             )
             task_state: ExecutionTaskState = (
                 "input-required" if state.interrupt else "completed"
             )
 
-            # Сериализация interrupt
-            if state.interrupt:
-                interrupt_dict = interrupt_to_response_dict(state.interrupt)
-            else:
-                interrupt_dict = None
-
-            return {
-                "response": final_response,
-                "interrupt": interrupt_dict,
-                "task_state": task_state,
-            }
+            return FlowTaskResult(
+                response=final_response,
+                interrupt=state.interrupt,
+                task_state=task_state,
+            )
 
         except BillingBalanceBlockedError as e:
             logger.error(f"Billing balance blocked: {e}")
@@ -919,7 +919,7 @@ class BaseChannel(ABC):
             await self._send_push_notification(params.task_id, params.context_id, "failed", str(e))
             raise
         finally:
-            heartbeat_task.cancel()
+            _ = heartbeat_task.cancel()
             with suppress(asyncio.CancelledError):
                 await heartbeat_task
             clear_context()
@@ -959,7 +959,7 @@ class BaseChannel(ABC):
         message: str,
     ) -> None:
         """Отправляет push notification через TaskIQ."""
-        await kiq_task_name_with_context(
+        _ = await kiq_task_name_with_context(
             TASK_SEND_TASK_UPDATE,
             idle_broker,
             task_id,
@@ -1098,6 +1098,7 @@ class BaseChannel(ABC):
         self, params: TaskPushNotificationConfig, context: ChannelRequestContext = None
     ) -> TaskPushNotificationConfig:
         """Установка конфигурации push notification."""
+        _ = params, context
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
 
     async def on_get_task_push_notification_config(
@@ -1106,6 +1107,7 @@ class BaseChannel(ABC):
         context: ChannelRequestContext = None,
     ) -> TaskPushNotificationConfig | None:
         """Получение конфигурации push notification."""
+        _ = params, context
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
 
     async def on_list_task_push_notification_config(
@@ -1114,6 +1116,7 @@ class BaseChannel(ABC):
         context: ChannelRequestContext = None,
     ) -> list[TaskPushNotificationConfig]:
         """Список конфигураций push notification."""
+        _ = params, context
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
 
     async def on_delete_task_push_notification_config(
@@ -1122,6 +1125,7 @@ class BaseChannel(ABC):
         context: ChannelRequestContext = None,
     ) -> None:
         """Удаление конфигурации push notification."""
+        _ = params, context
         raise NotImplementedError(f"Channel '{self.name}' does not support push notifications")
 
     # === Опциональные методы (A2A agent-card) ===
@@ -1132,6 +1136,7 @@ class BaseChannel(ABC):
         context: ChannelRequestContext = None,
     ) -> AgentCard | None:
         """Получение расширенной карточки агента."""
+        _ = params, context
         raise NotImplementedError(f"Channel '{self.name}' does not support extended card")
 
     # === Branches CRUD ===
@@ -1216,8 +1221,7 @@ class BaseChannel(ABC):
         unknown_fields = set(branch_body.keys()) - allowed_branch_body_fields
         if unknown_fields:
             raise ValueError(
-                f"Unknown fields in branch_body: {sorted(unknown_fields)}. "
-                f"Allowed fields: {sorted(allowed_branch_body_fields)}"
+                f"Unknown fields in branch_body: {sorted(unknown_fields)}. Allowed fields: {sorted(allowed_branch_body_fields)}"
             )
 
         edges: list[Edge] | None = None
@@ -1249,9 +1253,6 @@ class BaseChannel(ABC):
             branch_payload["variables_mode"] = branch_body["variables_mode"]
 
         new_branch_cfg = BranchConfig.model_validate(branch_payload)
-
-        if config.branches is None:
-            config.branches = {}
 
         config.branches[branch_id] = new_branch_cfg
 
@@ -1289,7 +1290,7 @@ class BaseChannel(ABC):
             ]
             raise ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}")
 
-        await container.flow_repository.set(config)
+        _ = await container.flow_repository.set(config)
 
         logger.info(f"Создана ветка: {branch_id}")
 
@@ -1316,8 +1317,7 @@ class BaseChannel(ABC):
         unknown_fields = set(branch_body.keys()) - allowed_branch_body_fields
         if unknown_fields:
             raise ValueError(
-                f"Unknown fields in branch_body: {sorted(unknown_fields)}. "
-                f"Allowed fields: {sorted(allowed_branch_body_fields)}"
+                f"Unknown fields in branch_body: {sorted(unknown_fields)}. Allowed fields: {sorted(allowed_branch_body_fields)}"
             )
 
         edges: list[Edge] | None = None
@@ -1346,20 +1346,18 @@ class BaseChannel(ABC):
         )
 
         raw_branch_nodes = branch_body.get("nodes")
-        if raw_branch_nodes is not None and isinstance(raw_branch_nodes, dict):
-            prev_branch_nodes = (existing_branch.nodes or {}) if existing_branch else {}
-            merged_branch_nodes = merge_incoming_node_dict_for_persist(
-                require_json_object(raw_branch_nodes, "branch_body.nodes"), prev_branch_nodes
-            )
-        else:
-            merged_branch_nodes = raw_branch_nodes
+        branch_nodes = (
+            require_json_object(raw_branch_nodes, "branch_body.nodes")
+            if raw_branch_nodes is not None
+            else None
+        )
 
         branch_payload: JsonObject = {
             "name": data.get("name", branch_id),
             "description": data.get("description", ""),
             "tags": data.get("tags", []),
             "entry": branch_body.get("entry"),
-            "nodes": merged_branch_nodes,
+            "nodes": branch_nodes,
             "nodes_mode": nodes_mode.value,
             "edges_mode": edges_mode.value,
             "variables": branch_body.get("variables", {}),
@@ -1372,9 +1370,6 @@ class BaseChannel(ABC):
             ]
 
         updated_branch_cfg = BranchConfig.model_validate(branch_payload)
-
-        if config.branches is None:
-            config.branches = {}
 
         config.branches[branch_id] = updated_branch_cfg
 
@@ -1412,7 +1407,7 @@ class BaseChannel(ABC):
             ]
             raise ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}")
 
-        await container.flow_repository.set(config)
+        _ = await container.flow_repository.set(config)
 
         logger.info(f"Обновлена ветка: {branch_id}")
 
@@ -1433,7 +1428,7 @@ class BaseChannel(ABC):
             raise ValueError(f"Ветка '{branch_id}' не найдена")
 
         del config.branches[branch_id]
-        await container.flow_repository.set(config)
+        _ = await container.flow_repository.set(config)
         logger.info(f"Удалена ветка: {branch_id}")
         return {
             "status": "success",
@@ -1443,7 +1438,7 @@ class BaseChannel(ABC):
 
     # === Tools ===
 
-    async def get_branch_tools(self, branch_id: str) -> list[dict[str, Any]]:
+    async def get_branch_tools(self, branch_id: str) -> list[JsonObject]:
         """Получить список tools для ветки."""
         container = self.container
         config = await container.flow_repository.get(self.flow_id)
@@ -1486,13 +1481,18 @@ class BaseChannel(ABC):
             elif node_type == NodeType.LLM_NODE.value:
                 tools_list = require_json_array(node_config.get("tools", []), f"nodes.{node_id}.tools")
                 for tool_ref in tools_list:
-                    if isinstance(tool_ref, dict) and tool_ref.get("code"):
-                        raw_tool_id = tool_ref.get("tool_id")
-                        tool_id = raw_tool_id if isinstance(raw_tool_id, str) and raw_tool_id else f"inline_{node_id}"
-                        inline_tools[tool_id] = tool_ref
+                    if isinstance(tool_ref, dict):
+                        tool_ref_obj = require_json_object(tool_ref, f"nodes.{node_id}.tools[]")
                     else:
-                        if isinstance(tool_ref, dict):
-                            raw_tool_id = tool_ref.get("tool_id")
+                        tool_ref_obj = None
+
+                    if tool_ref_obj is not None and tool_ref_obj.get("code"):
+                        raw_tool_id = tool_ref_obj.get("tool_id")
+                        tool_id = raw_tool_id if isinstance(raw_tool_id, str) and raw_tool_id else f"inline_{node_id}"
+                        inline_tools[tool_id] = tool_ref_obj
+                    else:
+                        if tool_ref_obj is not None:
+                            raw_tool_id = tool_ref_obj.get("tool_id")
                             if not isinstance(raw_tool_id, str) or not raw_tool_id:
                                 continue
                             tool_id = raw_tool_id
@@ -1507,21 +1507,19 @@ class BaseChannel(ABC):
                     node_db_config = await container.node_repository.get(node_db_id)
                     if node_db_config and node_db_config.tools:
                         for tool_ref in node_db_config.tools:
-                            if isinstance(tool_ref, dict) and tool_ref.get("code"):
-                                tool_id = tool_ref.get("tool_id", f"inline_{node_id}")
-                                inline_tools[tool_id] = tool_ref
+                            if tool_ref.code:
+                                inline_tools[tool_ref.tool_id] = require_json_object(
+                                    tool_ref.model_dump(mode="json", exclude_none=True),
+                                    "node.tools[]",
+                                )
                             else:
-                                if isinstance(tool_ref, dict):
-                                    tool_id = str(tool_ref.get("tool_id", tool_ref))
-                                else:
-                                    tool_id = str(getattr(tool_ref, "tool_id", tool_ref))
-                                tools_set.add(tool_id)
+                                tools_set.add(tool_ref.tool_id)
 
-        tools_info = []
+        tools_info: list[JsonObject] = []
 
         # Добавляем inline tools
         for tool_id, tool_config in inline_tools.items():
-            inline_attrs: dict[str, Any] = {
+            inline_attrs: JsonObject = {
                 "description": tool_config.get("description", ""),
                 "code": tool_config.get("code", ""),
                 "args_schema": tool_config.get("args_schema", {}),
@@ -1544,7 +1542,7 @@ class BaseChannel(ABC):
             if tool_ref:
                 info = tool_ref.to_registry_format()
                 ref_attrs = require_json_object(info.get("attributes", {}), "tool.attributes")
-                ref_payload: dict[str, Any] = {
+                ref_payload: JsonObject = {
                     "description": ref_attrs.get("description", ""),
                     "source": "reference",
                     "args_schema": ref_attrs.get("args_schema", {}),
@@ -1646,7 +1644,7 @@ class BaseChannel(ABC):
 
     # === Schema ===
 
-    async def get_branch_schema(self) -> dict[str, Any]:
+    async def get_branch_schema(self) -> JsonObject:
         """Получить JSON Schema для создания ветки."""
         container = self.container
         config = await container.flow_repository.get(self.flow_id)
@@ -1664,7 +1662,7 @@ class BaseChannel(ABC):
 
     # === A2A AgentCard (спека) ===
 
-    async def get_agent_card(self, base_url: str) -> dict[str, Any]:
+    async def get_agent_card(self, base_url: str) -> JsonObject:
         """Собрать AgentCard (A2A) для этого flow_id."""
         container = self.container
         config = self._flow_config or await container.flow_repository.get(self.flow_id)
@@ -1673,7 +1671,7 @@ class BaseChannel(ABC):
 
         branches_map = await container.flow_factory.get_branches(self.flow_id)
 
-        card_branch_entries = []
+        card_branch_entries: list[AgentSkill] = []
         for branch_id, branch_cfg in branches_map.items():
             card_branch_entries.append(
                 AgentSkill(
@@ -1715,19 +1713,22 @@ class BaseChannel(ABC):
             supports_authenticated_extended_card=False,
         )
 
-        card_dict = card.model_dump(by_alias=True, exclude_none=True)
+        card_dict = require_json_object(
+            card.model_dump(by_alias=True, exclude_none=True),
+            "agent.card",
+        )
         skills_payload = card_dict.pop("skills", None)
         if skills_payload is not None:
             card_dict["branches"] = skills_payload
 
         # Добавляем публичные variables как дополнительное поле (не входит в стандарт A2A)
-        public_vars = {}
+        public_vars: JsonObject = {}
         flow_variables = config.variables or {}
         for var_name, var_config in flow_variables.items():
             # FlowVariableConfig объект
             if var_config.public:
                 var_value = var_config.value
-                var_info = {}
+                var_info: JsonObject = {}
 
                 # Добавляем метаданные если есть
                 if var_config.title:
@@ -1767,8 +1768,6 @@ class BaseChannelHandler(ABC):
     Метод execute_action - универсальный диспетчер действий.
     """
 
-    from apps.flows.src.models.enums import ChannelType
-
     channel_type: ChannelType
 
     @abstractmethod
@@ -1776,10 +1775,10 @@ class BaseChannelHandler(ABC):
         self,
         recipient: str,
         text: str,
-        config: dict[str, Any],
-        variables: dict[str, Any],
-        **kwargs,
-    ) -> dict[str, Any]:
+        config: JsonObject,
+        variables: JsonObject,
+        **kwargs: JsonValue,
+    ) -> JsonObject:
         """
         Отправляет текстовое сообщение.
 
@@ -1800,11 +1799,11 @@ class BaseChannelHandler(ABC):
         self,
         recipient: str,
         photo: str | bytes,
-        config: dict[str, Any],
-        variables: dict[str, Any],
+        config: JsonObject,
+        variables: JsonObject,
         caption: str | None = None,
-        **kwargs,
-    ) -> dict[str, Any]:
+        **kwargs: JsonValue,
+    ) -> JsonObject:
         """
         Отправляет фото.
 
@@ -1822,12 +1821,12 @@ class BaseChannelHandler(ABC):
         self,
         recipient: str,
         document: str | bytes,
-        config: dict[str, Any],
-        variables: dict[str, Any],
+        config: JsonObject,
+        variables: JsonObject,
         caption: str | None = None,
         filename: str | None = None,
-        **kwargs,
-    ) -> dict[str, Any]:
+        **kwargs: JsonValue,
+    ) -> JsonObject:
         """
         Отправляет документ/файл.
 
@@ -1844,10 +1843,10 @@ class BaseChannelHandler(ABC):
     async def execute_action(
         self,
         action: str,
-        params: dict[str, Any],
-        config: dict[str, Any],
-        variables: dict[str, Any],
-    ) -> dict[str, Any]:
+        params: JsonObject,
+        config: JsonObject,
+        variables: JsonObject,
+    ) -> JsonObject:
         """
         Универсальный диспетчер действий.
 
@@ -1862,22 +1861,21 @@ class BaseChannelHandler(ABC):
         Returns:
             Результат выполнения действия
         """
-        method = getattr(self, action, None)
+        method_raw: object = getattr(self, action, None)
 
-        if method is None:
+        if not callable(method_raw):
             raise ValueError(
-                f"Unknown action '{action}' for channel {self.channel_type.value}. "
-                f"Available: send_message, send_photo, send_document"
+                f"Unknown action '{action}' for channel {self.channel_type.value}. Available: send_message, send_photo, send_document"
             )
+        method = cast(ChannelActionMethod, method_raw)
 
         logger.info(
-            f"Channel {self.channel_type.value}: executing {action} "
-            f"to {params.get('recipient', 'unknown')}"
+            f"Channel {self.channel_type.value}: executing {action} to {params.get('recipient', 'unknown')}"
         )
 
         return await method(config=config, variables=variables, **params)
 
-    def _resolve_value(self, value: Any, variables: dict[str, Any]) -> Any:
+    def _resolve_value(self, value: JsonValue, variables: JsonObject) -> JsonValue:
         """Резолвит @var: значения."""
         if not isinstance(value, str):
             return value

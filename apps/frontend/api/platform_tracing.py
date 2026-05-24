@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -17,14 +17,17 @@ from apps.frontend.models import (
     PlatformTracingFacetItem,
     PlatformTracingFacetItemsResponse,
     PlatformTracingFacetsResponse,
+    PlatformTracingSpanItem,
 )
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.models.identity_models import Company, User
 from core.pagination import CursorPage
+from core.tracing.models import TraceSpanRecord
 from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, ADMIN_SPANS_MAX_LIMIT
 from core.tracing.span_tree import build_span_tree
+from core.types import JsonObject
 
 if TYPE_CHECKING:
     from apps.frontend.container import FrontendContainer
@@ -157,31 +160,28 @@ async def _resolve_user_id_query_to_exact_match(
 
 
 async def _enrich_span_items(
-    items: list[dict[str, Any]],
+    items: list[TraceSpanRecord],
     company_repository: CompanyRepository,
     user_repository: UserRepository,
-) -> None:
-    company_ids = {
-        company_id
-        for s in items
-        if isinstance((company_id := s.get("company_id")), str) and company_id
-    }
-    user_ids = {
-        user_id
-        for s in items
-        if isinstance((user_id := s.get("user_id")), str) and user_id
-    }
+) -> list[PlatformTracingSpanItem]:
+    company_ids = {span.company_id for span in items if span.company_id is not None}
+    user_ids = {span.user_id for span in items if span.user_id is not None}
     companies = (
         await company_repository.get_many(list(company_ids)) if company_ids else {}
     )
     users = await user_repository.get_many(list(user_ids)) if user_ids else {}
-    for item in items:
-        item_company_id = item.get("company_id")
-        co = companies.get(item_company_id) if isinstance(item_company_id, str) else None
-        item["company_name"] = co.name if co else None
-        item_user_id = item.get("user_id")
-        u = users.get(item_user_id) if isinstance(item_user_id, str) else None
-        item["user_display_name"] = u.name if u else item.get("user_name")
+    enriched: list[PlatformTracingSpanItem] = []
+    for span in items:
+        company = companies.get(span.company_id) if span.company_id is not None else None
+        user = users.get(span.user_id) if span.user_id is not None else None
+        enriched.append(
+            PlatformTracingSpanItem.from_trace_span(
+                span,
+                company_name=company.name if company is not None else None,
+                user_display_name=user.name if user is not None else span.user_name,
+            )
+        )
+    return enriched
 
 
 @router.get("/facets/companies", response_model=PlatformTracingFacetItemsResponse)
@@ -389,7 +389,7 @@ async def facet_operations(
     return PlatformTracingFacetsResponse(items=items)
 
 
-@router.get("/spans", response_model=CursorPage[dict[str, Any]])
+@router.get("/spans", response_model=CursorPage[PlatformTracingSpanItem])
 async def list_spans(
     request: Request,
     container: ContainerDep,
@@ -407,7 +407,7 @@ async def list_spans(
     service_name_query: str | None = Query(default=None),
     cursor: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=ADMIN_SPANS_MAX_LIMIT),
-) -> CursorPage[dict[str, Any]]:
+) -> CursorPage[PlatformTracingSpanItem]:
     _require_system(request)
     _require_tracing_db()
     company_id_for_search = company_id
@@ -443,9 +443,9 @@ async def list_spans(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-    await _enrich_span_items(items, container.company_repository, container.user_repository)
-    return CursorPage[dict[str, Any]](
-        items=items,
+    enriched_items = await _enrich_span_items(items, container.company_repository, container.user_repository)
+    return CursorPage[PlatformTracingSpanItem](
+        items=enriched_items,
         next_cursor=next_cursor,
         has_more=next_cursor is not None,
     )
@@ -456,12 +456,12 @@ async def get_trace_tree(
     trace_id: str,
     request: Request,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> JsonObject:
     _require_system(request)
     _require_tracing_db()
     spans = await container.span_repository.get_trace(trace_id)
-    await _enrich_span_items(spans, container.company_repository, container.user_repository)
-    tree = build_span_tree(spans)
+    enriched_spans = await _enrich_span_items(spans, container.company_repository, container.user_repository)
+    tree = build_span_tree(enriched_spans)
     return {
         "trace_id": trace_id,
         "spans_count": len(spans),

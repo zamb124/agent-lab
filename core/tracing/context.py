@@ -2,23 +2,26 @@
 TraceContext для propagation между процессами (API → TaskIQ Worker).
 """
 
+from __future__ import annotations
+
 from contextvars import ContextVar
-from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from core.types import JsonObject
+
 # ContextVar для хранения trace context в worker
-_trace_context_var: ContextVar[dict[str, Any] | None] = ContextVar("trace_context", default=None)
+_trace_context_var: ContextVar[JsonObject | None] = ContextVar("trace_context", default=None)
 
 
-def get_current_trace_context() -> dict[str, Any] | None:
+def get_current_trace_context() -> JsonObject | None:
     """Получает текущий trace context из ContextVar."""
     return _trace_context_var.get()
 
 
-def set_current_trace_context(trace_context: dict[str, Any] | None) -> None:
+def set_current_trace_context(trace_context: JsonObject | None) -> None:
     """Устанавливает trace context в ContextVar."""
-    _trace_context_var.set(trace_context)
+    _ = _trace_context_var.set(trace_context)
 
 
 class TraceContext(BaseModel):
@@ -49,12 +52,27 @@ class TraceContext(BaseModel):
     channel: str | None = None
     is_resume: bool = False
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> JsonObject:
         """Сериализует контекст для передачи через TaskIQ."""
-        return self.model_dump()
+        return {
+            "trace_id": self.trace_id,
+            "span_id": self.span_id,
+            "parent_span_id": self.parent_span_id,
+            "user_id": self.user_id,
+            "user_name": self.user_name,
+            "user_groups": self.user_groups,
+            "session_auth": self.session_auth,
+            "session_agent": self.session_agent,
+            "task_id": self.task_id,
+            "context_id": self.context_id,
+            "flow_id": self.flow_id,
+            "branch_id": self.branch_id,
+            "channel": self.channel,
+            "is_resume": self.is_resume,
+        }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TraceContext":
+    def from_dict(cls, data: JsonObject) -> "TraceContext":
         """Восстанавливает контекст из dict."""
         return cls.model_validate(data)
 
@@ -67,10 +85,9 @@ class TraceContext(BaseModel):
         return f"00-{self.trace_id}-{self.span_id}-01"
 
     @classmethod
-    def from_traceparent(cls, traceparent: str) -> Optional["TraceContext"]:
+    def from_traceparent(cls, traceparent: str) -> TraceContext | None:
         """Парсит W3C Trace Context."""
         parts = traceparent.split("-")
         if len(parts) != 4:
             return None
         return cls(trace_id=parts[1], span_id=parts[2])
-

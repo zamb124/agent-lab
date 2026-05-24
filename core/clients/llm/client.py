@@ -9,7 +9,6 @@ import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import suppress
 from typing import (
-    Any,
     TypeVar,
     overload,
 )
@@ -62,11 +61,20 @@ from core.clients.llm.transport import (
 from core.clients.llm.transport import (
     stream_once as _transport_stream_once,
 )
-from core.llm_context import LLMContextBlock, LLMContextSourceRegistry
+from core.llm_context import CompiledLLMContext, LLMContextBlock, LLMContextSourceRegistry
 from core.logging import get_logger
+from core.types import (
+    JsonArray,
+    JsonObject,
+    JsonValue,
+    parse_json_value,
+    require_json_array,
+    require_json_object,
+)
 
 logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
+V = TypeVar("V")
 _CANDIDATE_COOLDOWN_UNTIL: dict[str, float] = {}
 
 
@@ -99,30 +107,32 @@ class LLMClient:
         presence_penalty: float | None = None,
         seed: int | None = None,
         reasoning_effort: ReasoningEffort | None = None,
-        extra_request_body: dict[str, Any] | None = None,
+        extra_request_body: JsonObject | None = None,
         extra_request_headers: dict[str, str] | None = None,
         context_length: int | None = None,
     ):
-        self.model = model
-        self.api_key = api_key
-        self.base_url = base_url or "https://api.openai.com/v1"
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.top_p = top_p
-        self.top_k = top_k
-        self.frequency_penalty = frequency_penalty
-        self.presence_penalty = presence_penalty
-        self.seed = seed
+        self.model: str = model
+        self.api_key: str = api_key
+        self.base_url: str = base_url or "https://api.openai.com/v1"
+        self.temperature: float = temperature
+        self.max_tokens: int | None = max_tokens
+        self.top_p: float | None = top_p
+        self.top_k: int | None = top_k
+        self.frequency_penalty: float | None = frequency_penalty
+        self.presence_penalty: float | None = presence_penalty
+        self.seed: int | None = seed
         self.reasoning_effort: ReasoningEffort | None = reasoning_effort
-        self.extra_request_body = dict(extra_request_body) if extra_request_body else None
-        self.extra_request_headers = dict(extra_request_headers) if extra_request_headers else None
-        self.context_length = context_length
-        self.default_headers = default_headers or {}
-        self.timeout = timeout
-        self.llm_provider = (
-            llm_provider if llm_provider is not None else _detect_provider(self.base_url)
+        self.extra_request_body: JsonObject | None = (
+            dict(extra_request_body) if extra_request_body else None
         )
-        self.llm_source = llm_source or "explicit"
+        self.extra_request_headers: dict[str, str] | None = (
+            dict(extra_request_headers) if extra_request_headers else None
+        )
+        self.context_length: int | None = context_length
+        self.default_headers: dict[str, str] = default_headers or {}
+        self.timeout: float = timeout
+        self.llm_provider: str = llm_provider or _detect_provider(self.base_url) or "unknown"
+        self.llm_source: str = llm_source or "explicit"
         base_candidate = LLMCallConfig(
             provider=self.llm_provider or "unknown",
             model=self.model,
@@ -142,12 +152,16 @@ class LLMClient:
             default_headers=dict(self.default_headers),
             source=self.llm_source,
         )
-        self._static_candidates = list(candidates) if candidates is not None else [base_candidate]
-        self._candidate_resolver = candidate_resolver
-        self.first_token_timeout = first_token_timeout or 20.0
-        self.candidate_cooldown_seconds = candidate_cooldown_seconds
-        self.platform_default_free_pool = platform_default_free_pool
-        self.platform_paid_fallback_enabled = platform_paid_fallback_enabled
+        self._static_candidates: list[LLMCallConfig] = (
+            list(candidates) if candidates is not None else [base_candidate]
+        )
+        self._candidate_resolver: Callable[[], Awaitable[list[LLMCallConfig]]] | None = (
+            candidate_resolver
+        )
+        self.first_token_timeout: float = first_token_timeout or 20.0
+        self.candidate_cooldown_seconds: float = candidate_cooldown_seconds
+        self.platform_default_free_pool: bool = platform_default_free_pool
+        self.platform_paid_fallback_enabled: bool = platform_paid_fallback_enabled
 
     def _client_for_candidate(self, candidate: LLMCallConfig) -> "LLMClient":
         if not candidate.model or not candidate.api_key:
@@ -230,9 +244,9 @@ class LLMClient:
     async def _resolve_candidates(
         self,
         *,
-        openai_messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None,
-        response_format: dict[str, Any] | None,
+        openai_messages: list[JsonObject],
+        tools: list[JsonObject] | None,
+        response_format: JsonObject | None,
         model_override: str | None = None,
     ) -> list[LLMCallConfig]:
         if model_override is not None:
@@ -314,9 +328,9 @@ class LLMClient:
             return filtered_candidates
         if self.platform_default_free_pool and candidates:
             raise RuntimeError(
-                "LLM default free-pool: нет доступных моделей, совместимых с параметрами "
-                "запроса (tools/response_format/files) и не находящихся в cooldown; "
-                "платный fallback недоступен или тоже несовместим"
+                "LLM default free-pool: нет доступных моделей, совместимых с параметрами запроса "
+                + "(tools/response_format/files) и не находящихся в cooldown; платный fallback "
+                + "недоступен или тоже несовместим"
             )
         if (
             not candidates
@@ -324,8 +338,8 @@ class LLMClient:
             and not self.platform_paid_fallback_enabled
         ):
             raise RuntimeError(
-                "LLM default free-pool: нет доступных бесплатных моделей в Redis; "
-                "платный fallback отключён из-за неположительного баланса компании"
+                "LLM default free-pool: нет доступных бесплатных моделей в Redis; платный "
+                + "fallback отключён из-за неположительного баланса компании"
             )
         return candidates[:1]
 
@@ -338,12 +352,12 @@ class LLMClient:
 
     @staticmethod
     def _merge_optional_dicts(
-        base: dict[str, Any] | None,
-        overlay: dict[str, Any] | None,
-    ) -> dict[str, Any] | None:
+        base: dict[str, V] | None,
+        overlay: dict[str, V] | None,
+    ) -> dict[str, V] | None:
         if not base and not overlay:
             return None
-        merged: dict[str, Any] = {}
+        merged: dict[str, V] = {}
         if base:
             merged.update(base)
         if overlay:
@@ -353,8 +367,8 @@ class LLMClient:
     async def stream(
         self,
         messages: MessageInput,
-        tools: list[dict[str, Any]] | None = None,
-        response_format: dict[str, Any] | None = None,
+        tools: list[JsonObject] | None = None,
+        response_format: JsonObject | None = None,
         model: str | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
@@ -366,7 +380,7 @@ class LLMClient:
         presence_penalty: float | None = None,
         seed: int | None = None,
         reasoning_effort: ReasoningEffort | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
         llm_context: LLMContextInput | None = None,
         llm_context_blocks: list[LLMContextBlock] | None = None,
@@ -496,7 +510,13 @@ class LLMClient:
                     remaining=len(candidates) - candidate_index - 1,
                 )
                 continue
-            except (LLMStreamIdleTimeoutError, httpx.HTTPError, OSError, json.JSONDecodeError) as exc:
+            except (
+                LLMStreamIdleTimeoutError,
+                httpx.HTTPError,
+                OSError,
+                json.JSONDecodeError,
+                ValueError,
+            ) as exc:
                 last_error = exc
                 if yielded_any:
                     raise
@@ -522,8 +542,8 @@ class LLMClient:
     async def _stream_once(
         self,
         messages: list[Message],
-        tools: list[dict[str, Any]] | None = None,
-        response_format: dict[str, Any] | None = None,
+        tools: list[JsonObject] | None = None,
+        response_format: JsonObject | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         temperature: float | None = None,
@@ -534,7 +554,7 @@ class LLMClient:
         presence_penalty: float | None = None,
         seed: int | None = None,
         reasoning_effort: ReasoningEffort | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
         stream_cancel_poll: Callable[[], Awaitable[bool]] | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
@@ -564,12 +584,12 @@ class LLMClient:
         messages: list[Message],
         json_output: bool = False,
         max_tokens: int | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
         llm_context: LLMContextInput | None = None,
         llm_context_blocks: list[LLMContextBlock] | None = None,
         llm_context_source_registry: LLMContextSourceRegistry | None = None,
-    ) -> str | dict[str, Any]:
+    ) -> str | JsonObject:
         base_openai_messages = _messages_to_openai(messages)
         candidates = await self._resolve_candidates(
             openai_messages=base_openai_messages,
@@ -615,7 +635,7 @@ class LLMClient:
                     extra_body=merged_extra_body,
                     extra_headers=merged_extra_headers,
                 )
-            except (httpx.HTTPError, OSError, json.JSONDecodeError) as exc:
+            except (httpx.HTTPError, OSError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
                 self._cooldown_candidate(candidate)
                 logger.warning(
@@ -638,9 +658,9 @@ class LLMClient:
         messages: list[Message],
         json_output: bool = False,
         max_tokens: int | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
-    ) -> str | dict[str, Any]:
+    ) -> str | JsonObject:
         return await _transport_invoke_once(
             self,
             messages=messages,
@@ -656,7 +676,7 @@ class LLMClient:
         messages: MessageInput,
         *,
         response_model: type[T],
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[JsonObject] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
@@ -666,7 +686,7 @@ class LLMClient:
         presence_penalty: float | None = None,
         seed: int | None = None,
         reasoning_effort: ReasoningEffort | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
         llm_context: LLMContextInput | None = None,
         llm_context_blocks: list[LLMContextBlock] | None = None,
@@ -679,7 +699,7 @@ class LLMClient:
         messages: MessageInput,
         *,
         response_model: None = None,
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[JsonObject] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
@@ -689,7 +709,7 @@ class LLMClient:
         presence_penalty: float | None = None,
         seed: int | None = None,
         reasoning_effort: ReasoningEffort | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
         llm_context: LLMContextInput | None = None,
         llm_context_blocks: list[LLMContextBlock] | None = None,
@@ -701,7 +721,7 @@ class LLMClient:
         messages: MessageInput,
         *,
         response_model: type[T] | None = None,
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[JsonObject] | None = None,
         model: str | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
@@ -711,7 +731,7 @@ class LLMClient:
         presence_penalty: float | None = None,
         seed: int | None = None,
         reasoning_effort: ReasoningEffort | None = None,
-        extra_body: dict[str, Any] | None = None,
+        extra_body: JsonObject | None = None,
         extra_headers: dict[str, str] | None = None,
         llm_context: LLMContextInput | None = None,
         llm_context_blocks: list[LLMContextBlock] | None = None,
@@ -769,9 +789,12 @@ class LLMClient:
         """
         normalized_messages = _normalize_messages(messages)
 
-        response_format = None
+        response_format: JsonObject | None = None
         if response_model:
-            json_schema = response_model.model_json_schema()
+            json_schema = require_json_object(
+                response_model.model_json_schema(),
+                "llm.response_model.schema",
+            )
             response_format = {
                 "type": "json_schema",
                 "json_schema": {
@@ -782,7 +805,7 @@ class LLMClient:
             }
 
         content_parts: list[str] = []
-        tool_calls: list[dict[str, Any]] = []
+        tool_calls: JsonArray = []
         last_status_text = ""
 
         async for event in self.stream(
@@ -816,19 +839,29 @@ class LLMClient:
                     if status_text:
                         last_status_text = status_text
                 if event.status.message and event.status.message.metadata:
-                    metadata_tool_calls = event.status.message.metadata.get("tool_calls")
+                    metadata = require_json_object(
+                        event.status.message.metadata,
+                        "llm.status.message.metadata",
+                    )
+                    metadata_tool_calls = metadata.get("tool_calls")
                     if metadata_tool_calls:
-                        tool_calls = metadata_tool_calls
+                        tool_calls = require_json_array(
+                            metadata_tool_calls,
+                            "llm.status.message.metadata.tool_calls",
+                        )
 
         content = "".join(content_parts)
         if response_model:
             text_for_json = content if content.strip() else last_status_text
             if not text_for_json.strip():
                 raise ValueError(
-                    "LLM structured output: пустой ответ (нет текста вне reasoning-артефакта "
-                    "и нет текста в финальном статусе задачи)"
+                    "LLM structured output: пустой ответ (нет текста вне reasoning-артефакта и нет "
+                    + "текста в финальном статусе задачи)"
                 )
-            structured_payload = json.loads(text_for_json)
+            structured_payload: JsonValue = parse_json_value(
+                text_for_json,
+                "llm.structured_output",
+            )
             return response_model.model_validate(structured_payload)
 
         return Message(
@@ -863,12 +896,12 @@ def _max_output_token_reserve(
 
 def _attach_llm_context_metadata(
     event: StreamEvent,
-    compiled_context: Any,
+    compiled_context: CompiledLLMContext | None,
 ) -> StreamEvent:
     metadata = llm_context_trace_metadata(compiled_context)
     if not metadata or not isinstance(event, TaskStatusUpdateEvent):
         return event
-    if event.status is None or event.status.message is None:
+    if event.status.message is None:
         return event
     event_metadata = dict(event.status.message.metadata or {})
     event_metadata.setdefault("llm_context", metadata)

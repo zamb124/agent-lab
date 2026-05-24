@@ -9,16 +9,23 @@ FlowValidator - валидация структуры и ссылок во flow.
 5. Попытка сборки Flow
 """
 
+from __future__ import annotations
+
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING
 
 from apps.flows.src.state.node_files import validate_node_files_list
 from core.logging import get_logger
-from core.types import JsonObject
+from core.types import JsonObject, JsonValue
 from core.urn import extract_resource_id
+
+if TYPE_CHECKING:
+    from apps.flows.src.container_contracts import RuntimeFlowProtocol
+    from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
+    from apps.flows.src.runtime.flow import Flow
 
 logger = get_logger(__name__)
 
@@ -71,7 +78,7 @@ class FlowValidationResult:
         severity: ValidationSeverity = ValidationSeverity.ERROR,
         node_id: str | None = None,
         details: JsonObject | None = None,
-    ):
+    ) -> None:
         self.errors.append(FlowValidationError(
             code=code,
             message=message,
@@ -88,15 +95,15 @@ class FlowValidator:
 
     def __init__(
         self,
-        flow_repository=None,
-        tool_repository=None,
-        node_repository=None,
-        flow_builder: Callable[[dict[str, Any]], Awaitable[Any]] | None = None,
-    ):
-        self.flow_repository = flow_repository
-        self.tool_repository = tool_repository
-        self.node_repository = node_repository
-        self.flow_builder = flow_builder
+        flow_repository: "FlowRepository | None" = None,
+        tool_repository: "ToolRepository | None" = None,
+        node_repository: "NodeRepository | None" = None,
+        flow_builder: Callable[[JsonObject], Awaitable["Flow | RuntimeFlowProtocol"]] | None = None,
+    ) -> None:
+        self.flow_repository: FlowRepository | None = flow_repository
+        self.tool_repository: ToolRepository | None = tool_repository
+        self.node_repository: NodeRepository | None = node_repository
+        self.flow_builder: Callable[[JsonObject], Awaitable[Flow | RuntimeFlowProtocol]] | None = flow_builder
 
     async def validate(
         self,
@@ -149,11 +156,11 @@ class FlowValidator:
 
     def _validate_structure(
         self,
-        nodes: dict[str, dict[str, Any]],
-        edges: list[dict[str, Any]],
+        nodes: dict[str, JsonObject],
+        edges: list[JsonObject],
         entry: str,
         result: FlowValidationResult,
-    ):
+    ) -> None:
         """Валидация структуры графа."""
         node_ids = set(nodes.keys())
 
@@ -191,8 +198,6 @@ class FlowValidator:
                 )
 
         for edge in edges:
-            if not isinstance(edge, dict):
-                continue
             e_from, e_to = _edge_endpoint_ids(edge)
             for label, nid in (("from", e_from), ("to", e_to)):
                 if not nid:
@@ -229,14 +234,12 @@ class FlowValidator:
         }
         nodes_with_outgoing: set[str] = set()
         for e in edges:
-            if not isinstance(e, dict):
-                continue
             ef, _et = _edge_endpoint_ids(e)
             if ef:
                 nodes_with_outgoing.add(ef)
         terminal_nodes = execution_node_ids - nodes_with_outgoing
         edges_to_null = [
-            e for e in edges if isinstance(e, dict) and _edge_endpoint_ids(e)[1] is None
+            e for e in edges if _edge_endpoint_ids(e)[1] is None
         ]
 
         if not terminal_nodes and not edges_to_null:
@@ -252,8 +255,8 @@ class FlowValidator:
 
     def _warn_fan_in_without_incoming_policy(
         self,
-        nodes: dict[str, dict[str, Any]],
-        edges: list[dict[str, Any]],
+        nodes: dict[str, JsonObject],
+        edges: list[JsonObject],
         result: FlowValidationResult,
     ) -> None:
         incoming_edge_count: dict[str, int] = {}
@@ -282,14 +285,13 @@ class FlowValidator:
     def _warn_cycles_reachable_from_entry(
         self,
         entry: str,
-        edges: list[dict[str, Any]],
+        edges: list[JsonObject],
         node_ids: set[str],
         result: FlowValidationResult,
     ) -> None:
         adj: dict[str, list[str]] = {n: [] for n in node_ids}
         for edge in edges:
-            f = edge.get("from")
-            t = edge.get("to")
+            f, t = _edge_endpoint_ids(edge)
             if f in node_ids and t in node_ids:
                 adj[f].append(t)
 
@@ -312,7 +314,7 @@ class FlowValidator:
             return False
 
         if entry in color:
-            dfs(entry)
+            _ = dfs(entry)
         if cycle_found:
             result.add_error(
                 code="graph_cycle_reachable",
@@ -326,17 +328,18 @@ class FlowValidator:
     def _validate_react_role_uniqueness(
         self,
         node_id: str,
-        tools: list[Any],
+        tools: list[JsonValue],
         result: FlowValidationResult,
-    ):
+    ) -> None:
         """Валидация что в llm_node только 1 reasoning и только 1 exit tool."""
-        reason_tools = []
-        exit_tools = []
+        reason_tools: list[str] = []
+        exit_tools: list[str] = []
 
         for tool in tools:
             if isinstance(tool, dict):
                 react_role = tool.get("react_role")
-                tool_name = tool.get("tool_id") or tool.get("name", "unknown")
+                tool_name_value = tool.get("tool_id") or tool.get("name")
+                tool_name = tool_name_value if isinstance(tool_name_value, str) else "unknown"
 
                 if react_role == "reason":
                     reason_tools.append(tool_name)
@@ -360,21 +363,18 @@ class FlowValidator:
     def _find_reachable_nodes(
         self,
         entry: str,
-        edges: list[dict[str, Any]],
+        edges: list[JsonObject],
         all_nodes: set[str],
     ) -> set[str]:
         """BFS для поиска достижимых нод от entry."""
-        outgoing = {}
-        for node_id in all_nodes:
-            outgoing[node_id] = []
+        outgoing: dict[str, list[str]] = {node_id: [] for node_id in all_nodes}
 
         for edge in edges:
-            from_node = edge.get("from")
-            to_node = edge.get("to")
+            from_node, to_node = _edge_endpoint_ids(edge)
             if from_node and to_node and from_node in outgoing:
                 outgoing[from_node].append(to_node)
 
-        reachable = set()
+        reachable: set[str] = set()
         queue = [entry]
 
         while queue:
@@ -391,9 +391,9 @@ class FlowValidator:
 
     async def _validate_references(
         self,
-        nodes: dict[str, dict[str, Any]],
+        nodes: dict[str, JsonObject],
         result: FlowValidationResult,
-    ):
+    ) -> None:
         """Валидация ссылок на flows, tools, ноды."""
         for node_id, config in nodes.items():
             node_type = config.get("type")
@@ -408,7 +408,7 @@ class FlowValidator:
             # node_id для llm_node
             if node_type == "llm_node" and "node_id" in config:
                 ref_node_id = config["node_id"]
-                if self.node_repository:
+                if isinstance(ref_node_id, str) and self.node_repository:
                     node = await self.node_repository.get(ref_node_id)
                     if node is None:
                         result.add_error(
@@ -418,7 +418,8 @@ class FlowValidator:
                         )
 
             # tools в llm_node
-            tools = config.get("tools", [])
+            raw_tools = config.get("tools", [])
+            tools = raw_tools if isinstance(raw_tools, list) else []
 
             # Валидация уникальности reason/exit tools
             if node_type == "llm_node":
@@ -426,6 +427,13 @@ class FlowValidator:
             for tool_ref in tools:
                 if isinstance(tool_ref, dict):
                     # Inline tool - пропускаем
+                    continue
+                if not isinstance(tool_ref, str) or not tool_ref:
+                    result.add_error(
+                        code="invalid_tool_ref",
+                        message="Tool reference должен быть строкой tool_id или inline объектом tool",
+                        node_id=node_id,
+                    )
                     continue
 
                 # Проверяем как tool, node или flow (flow может быть tool по ID)
@@ -457,7 +465,7 @@ class FlowValidator:
                 tool_id = config.get("tool_id")
                 has_code = "code" in config
 
-                if tool_id and not has_code:
+                if isinstance(tool_id, str) and tool_id and not has_code:
                     if self.tool_repository:
                         tool = await self.tool_repository.get(tool_id)
                         if tool is None:
@@ -470,7 +478,7 @@ class FlowValidator:
             # flow_id для ноды type: flow (вложенный flow)
             if node_type == "flow":
                 ref_flow_id = config.get("flow_id")
-                if ref_flow_id and self.flow_repository:
+                if isinstance(ref_flow_id, str) and ref_flow_id and self.flow_repository:
                     callee = await self.flow_repository.get(ref_flow_id)
                     if callee is None:
                         result.add_error(
@@ -483,8 +491,10 @@ class FlowValidator:
             if node_type == "remote_flow":
                 flow_id = config.get("flow_id")
                 url = config.get("url")
+                has_flow_id = isinstance(flow_id, str) and bool(flow_id.strip())
+                has_url = isinstance(url, str) and bool(url.strip())
 
-                if not flow_id and not url:
+                if not has_flow_id and not has_url:
                     result.add_error(
                         code="remote_flow_no_target",
                         message="Remote flow должен иметь flow_id или url",
@@ -493,25 +503,25 @@ class FlowValidator:
 
     def _validate_variables(
         self,
-        nodes: dict[str, dict[str, Any]],
-        variables: dict[str, Any],
+        nodes: dict[str, JsonObject],
+        variables: JsonObject,
         result: FlowValidationResult,
-    ):
+    ) -> None:
         """Валидация использования @var: переменных."""
         var_pattern = re.compile(r"@var:([a-zA-Z_][a-zA-Z0-9_.]*)")
 
         # Извлекаем имена переменных (без value обёртки)
-        available_vars = set()
-        for key, value in variables.items():
+        available_vars: set[str] = set()
+        for key in variables:
             available_vars.add(key)
 
         def check_var_refs(
-            value: Any,
+            value: JsonValue,
             node_id: str,
             context: str,
             *,
             require_flow_variable: bool = True,
-        ):
+        ) -> None:
             """Рекурсивно проверяет @var: ссылки в значении."""
             if isinstance(value, str):
                 for match in var_pattern.finditer(value):
@@ -585,7 +595,7 @@ class FlowValidator:
 
     def _validate_messages_filters(
         self,
-        nodes: dict[str, dict[str, Any]],
+        nodes: dict[str, JsonObject],
         result: FlowValidationResult,
     ) -> None:
         """Список messages_filter у llm_node должен ссылаться только на node_id из этого графа."""
@@ -597,7 +607,15 @@ class FlowValidator:
             if not isinstance(mf, list):
                 continue
             for ref in mf:
-                referenced_node_id = extract_resource_id(ref) if isinstance(ref, str) else str(ref)
+                if not isinstance(ref, str):
+                    result.add_error(
+                        code="messages_filter_invalid_node",
+                        message=f"Нода '{nid}': messages_filter должен содержать только строки node_id",
+                        node_id=nid,
+                        details={"messages_filter": mf},
+                    )
+                    continue
+                referenced_node_id = extract_resource_id(ref)
                 if referenced_node_id not in node_ids:
                     result.add_error(
                         code="messages_filter_unknown_node",
@@ -610,13 +628,11 @@ class FlowValidator:
 
     def _validate_node_files(
         self,
-        nodes: dict[str, dict[str, Any]],
+        nodes: dict[str, JsonObject],
         result: FlowValidationResult,
     ) -> None:
         """Поле files: список объектов с непустыми строками original_name и url."""
         for node_id, cfg in nodes.items():
-            if not isinstance(cfg, dict):
-                continue
             if "files" not in cfg:
                 continue
             raw = cfg.get("files")
@@ -633,13 +649,11 @@ class FlowValidator:
 
     def _validate_hitl_nodes(
         self,
-        nodes: dict[str, dict[str, Any]],
+        nodes: dict[str, JsonObject],
         result: FlowValidationResult,
     ) -> None:
         """hitl_node: ровно один источник очереди (slug или id)."""
         for nid, cfg in nodes.items():
-            if not isinstance(cfg, dict):
-                continue
             if cfg.get("type") != "hitl_node":
                 continue
             slug = cfg.get("operator_queue_slug")
@@ -647,11 +661,11 @@ class FlowValidator:
             has_slug = isinstance(slug, str) and bool(slug.strip())
             has_qid = isinstance(qid, str) and bool(qid.strip())
             im = cfg.get("input_mapping")
+            assignee_queue = im.get("assignee_queue") if isinstance(im, dict) else None
             has_im_queue = (
                 isinstance(im, dict)
-                and "assignee_queue" in im
-                and isinstance(im.get("assignee_queue"), str)
-                and bool(str(im["assignee_queue"]).strip())
+                and isinstance(assignee_queue, str)
+                and bool(assignee_queue.strip())
             )
             if has_slug and has_qid:
                 result.add_error(
@@ -675,9 +689,9 @@ class FlowValidator:
 
     def _parse_inline_code(
         self,
-        nodes: dict[str, dict[str, Any]],
+        nodes: dict[str, JsonObject],
         result: FlowValidationResult,
-    ):
+    ) -> None:
         """Парсит inline code и извлекает обращения к state."""
         # Паттерны для обращений к state
         patterns = [
@@ -687,10 +701,10 @@ class FlowValidator:
 
         for node_id, config in nodes.items():
             code = config.get("code")
-            if not code:
+            if not isinstance(code, str) or not code:
                 continue
 
-            state_keys = set()
+            state_keys: set[str] = set()
 
             for pattern in patterns:
                 for match in pattern.finditer(code):
@@ -709,17 +723,17 @@ class FlowValidator:
 
     async def _try_build(
         self,
-        nodes: dict[str, dict[str, Any]],
-        edges: list[dict[str, Any]],
+        nodes: dict[str, JsonObject],
+        edges: list[JsonObject],
         entry: str,
         flow_id: str | None,
         result: FlowValidationResult,
-    ):
+    ) -> None:
         """Попытка собрать Flow из конфигурации."""
         if self.flow_builder is None:
             return
         try:
-            config = {
+            config: JsonObject = {
                 "id": flow_id or "validation_test",
                 "name": "Validation Test",
                 "entry": entry,
@@ -727,7 +741,7 @@ class FlowValidator:
                 "edges": edges,
             }
 
-            await self.flow_builder(config)
+            _ = await self.flow_builder(config)
 
         except Exception as e:
             result.add_error(

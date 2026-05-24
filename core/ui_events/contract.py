@@ -25,9 +25,11 @@ import re
 import time
 import uuid
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from core.types import JsonValue
 
 _EVENT_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\/[a-z][a-z0-9_]*){2,}$")
 UI_EVENTS_REDIS_CHANNEL = "platform:ui_events"
@@ -35,13 +37,14 @@ UI_EVENTS_REDIS_CHANNEL = "platform:ui_events"
 
 def assert_ui_event_type(event_type: str) -> str:
     """Валидировать имя события. Бросает ValueError при нарушении контракта."""
-    if not isinstance(event_type, str) or not event_type:
+    if not event_type:
         raise ValueError(f"UI event type must be non-empty string, got: {type(event_type).__name__}")
     if not _EVENT_TYPE_PATTERN.match(event_type):
-        raise ValueError(
+        message = (
             f'UI event type "{event_type}" violates contract. '
-            "Expected scope/entity/verb (lowercase, snake_case, >= 3 segments)."
+            + "Expected scope/entity/verb (lowercase, snake_case, >= 3 segments)."
         )
+        raise ValueError(message)
     return event_type
 
 
@@ -64,7 +67,7 @@ class UIEvent(BaseModel):
 
     id: str = Field(default_factory=lambda: f"e_{uuid.uuid4().hex}")
     type: str = Field(description="scope/entity/verb")
-    payload: Any = Field(default=None)
+    payload: JsonValue = Field(default=None)
     meta: UIEventMeta = Field(default_factory=UIEventMeta)
 
     @field_validator("type")
@@ -86,6 +89,11 @@ class UIEventTarget(BaseModel):
     company_id: str | None = None
     broadcast: bool = False
 
+    @model_validator(mode="after")
+    def _target_is_explicit(self) -> Self:
+        self.assert_valid()
+        return self
+
     def assert_valid(self) -> None:
         flags = [
             self.user_id is not None,
@@ -96,6 +104,13 @@ class UIEventTarget(BaseModel):
             raise ValueError(
                 "UIEventTarget: exactly one of {user_id, company_id, broadcast} must be set"
             )
+
+
+class UIEventEnvelope(BaseModel):
+    """Redis-конверт доставки UI-события."""
+
+    target: UIEventTarget
+    event: UIEvent
 
 
 class CoreUIEventTypes(StrEnum):

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -29,8 +28,9 @@ from core.llm_context.resolver import (
     resolve_company_llm_context_patch,
     resolve_llm_context_policy,
 )
+from core.types import JsonObject, JsonValue, require_json_object
 
-LLMContextInput = LLMContextPatch | LLMContextProfile | dict[str, Any]
+LLMContextInput = LLMContextPatch | LLMContextProfile | JsonObject
 _OPENAI_PROVIDER = "openai"
 _OPENAI_PROMPT_CACHE_KEY_FIELD = "prompt_cache_key"
 _ANTHROPIC_CACHE_CONTROL_FIELD = "cache_control"
@@ -41,20 +41,20 @@ class PreparedLLMContextMessages:
     """Messages prepared for one LLM transport call."""
 
     messages: list[Message]
-    openai_messages: list[dict[str, Any]]
+    openai_messages: list[JsonObject]
     compiled_context: CompiledLLMContext | None = None
 
 
 async def prepare_messages_for_context_layer(
     messages: list[Message],
     *,
-    tools: list[dict[str, Any]] | None = None,
+    tools: list[JsonObject] | None = None,
     llm_context: LLMContextInput | None = None,
     llm_context_blocks: list[LLMContextBlock] | None = None,
     llm_context_source_registry: LLMContextSourceRegistry | None = None,
     model_context_length: int | None = None,
     output_token_reserve: int | None = None,
-    metadata: dict[str, Any] | None = None,
+    metadata: JsonObject | None = None,
     compiler: LLMContextCompiler | None = None,
 ) -> PreparedLLMContextMessages:
     """
@@ -118,23 +118,23 @@ async def prepare_messages_for_context_layer(
 def merge_provider_cache_hints(
     *,
     provider: str | None,
-    extra_body: dict[str, Any] | None,
-    provider_hints: dict[str, Any] | None,
+    extra_body: JsonObject | None,
+    provider_hints: JsonObject | None,
     model: str | None = None,
-) -> dict[str, Any] | None:
+) -> JsonObject | None:
     """Merge safe provider-native cache controls into an OpenAI-compatible body."""
     stable_prefix_hash = str((provider_hints or {}).get("stable_prefix_hash") or "").strip()
     if not stable_prefix_hash:
         return dict(extra_body) if extra_body else None
 
-    merged_body = dict(extra_body) if extra_body else {}
+    merged_body: JsonObject = dict(extra_body) if extra_body else {}
     provider_slug = str(provider or "").strip().lower()
     if provider_slug == _OPENAI_PROVIDER:
-        merged_body.setdefault(_OPENAI_PROMPT_CACHE_KEY_FIELD, stable_prefix_hash)
+        _ = merged_body.setdefault(_OPENAI_PROMPT_CACHE_KEY_FIELD, stable_prefix_hash)
     elif provider_slug == "openrouter" and _is_openrouter_anthropic_model(model):
-        merged_body.setdefault(_ANTHROPIC_CACHE_CONTROL_FIELD, {"type": "ephemeral"})
+        _ = merged_body.setdefault(_ANTHROPIC_CACHE_CONTROL_FIELD, {"type": "ephemeral"})
     elif provider_slug == "anthropic":
-        merged_body.setdefault(_ANTHROPIC_CACHE_CONTROL_FIELD, {"type": "ephemeral"})
+        _ = merged_body.setdefault(_ANTHROPIC_CACHE_CONTROL_FIELD, {"type": "ephemeral"})
     return merged_body or None
 
 
@@ -145,12 +145,15 @@ def _is_openrouter_anthropic_model(model: str | None) -> bool:
 
 def llm_context_trace_metadata(
     compiled_context: CompiledLLMContext | None,
-) -> dict[str, Any] | None:
+) -> JsonObject | None:
     """Compact, content-free context-layer metadata for traces and LLM status events."""
     if compiled_context is None:
         return None
     return {
-        "usage": compiled_context.usage.model_dump(mode="json", exclude_none=True),
+        "usage": require_json_object(
+            compiled_context.usage.model_dump(mode="json", exclude_none=True),
+            "llm_context.usage",
+        ),
         "selected_blocks": [
             _block_trace_metadata(block) for block in compiled_context.selected_blocks
         ],
@@ -165,12 +168,12 @@ def llm_context_trace_metadata(
     }
 
 
-def openai_messages_to_a2a_messages(messages: list[dict[str, Any]]) -> list[Message]:
+def openai_messages_to_a2a_messages(messages: list[JsonObject]) -> list[Message]:
     """Convert compiled OpenAI-compatible messages back to A2A messages for transport."""
     converted: list[Message] = []
     for message in messages:
         role_raw = str(message.get("role", "user"))
-        metadata: dict[str, Any] = {}
+        metadata: JsonObject = {}
         if role_raw == "system":
             role = Role.user
             metadata["system"] = True
@@ -179,7 +182,7 @@ def openai_messages_to_a2a_messages(messages: list[dict[str, Any]]) -> list[Mess
         elif role_raw == "tool":
             role = Role.agent
             tool_call_id = message.get("tool_call_id")
-            if tool_call_id:
+            if isinstance(tool_call_id, str) and tool_call_id:
                 metadata["tool_call_id"] = tool_call_id
         else:
             role = Role.user
@@ -199,7 +202,7 @@ def openai_messages_to_a2a_messages(messages: list[dict[str, Any]]) -> list[Mess
     return converted
 
 
-def _block_trace_metadata(block: LLMContextBlock) -> dict[str, Any]:
+def _block_trace_metadata(block: LLMContextBlock) -> JsonObject:
     return {
         "kind": block.kind,
         "budget_scope": block.budget_scope,
@@ -225,14 +228,14 @@ def _resolve_context_policy(
     )
 
 
-def _estimate_tools_schema_tokens(tools: list[dict[str, Any]] | None) -> int:
+def _estimate_tools_schema_tokens(tools: list[JsonObject] | None) -> int:
     if not tools:
         return 0
     encoded = json.dumps(tools, ensure_ascii=False, sort_keys=True, default=str)
     return SimpleTokenCounter().count_text(encoded)
 
 
-def _content_to_text(content: Any) -> str:
+def _content_to_text(content: JsonValue | None) -> str:
     if isinstance(content, str):
         return content
     if content is None:
@@ -248,7 +251,7 @@ def _content_to_text(content: Any) -> str:
     return json.dumps(content, ensure_ascii=False, sort_keys=True, default=str)
 
 
-def _latest_user_text(messages: list[dict[str, Any]]) -> str | None:
+def _latest_user_text(messages: list[JsonObject]) -> str | None:
     for message in reversed(messages):
         if message.get("role") != "user":
             continue
@@ -258,7 +261,7 @@ def _latest_user_text(messages: list[dict[str, Any]]) -> str | None:
     return None
 
 
-def _json_safe(value: Any) -> Any:
+def _json_safe(value: JsonValue) -> JsonValue:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     if isinstance(value, dict):

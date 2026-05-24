@@ -7,7 +7,7 @@ Traces API — OTEL-трейсы flows.
 Ответ совместим с platform-trace-viewer: { spans: [...] } где spans — дерево.
 """
 
-from typing import Any
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -15,6 +15,7 @@ from apps.flows.src.dependencies import ContainerDep
 from core.clients.tempo_client import TempoClientError
 from core.logging import get_logger
 from core.tracing.span_tree import build_span_tree
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -27,11 +28,11 @@ _ATTR_TASK_ID = "platform.task_id"
 @router.get("/search")
 async def search_traces(
     container: ContainerDep,
-    flow_id: str | None = Query(default=None),
-    task_id: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-) -> dict[str, Any]:
+    flow_id: Annotated[str | None, Query()] = None,
+    task_id: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> JsonObject:
     """Поиск трейсов в platform_tracing по ``flow_id`` и/или ``task_id`` (атрибут platform.task_id)."""
     traces, total = await container.span_repository.search_traces(
         flow_id=flow_id,
@@ -39,15 +40,15 @@ async def search_traces(
         limit=limit,
         offset=offset,
     )
-    return {"traces_count": total, "traces": traces}
+    return {"traces_count": total, "traces": [trace.to_json_object() for trace in traces]}
 
 
 @router.get("/session/{session_id}")
 async def get_traces_by_session(
     session_id: str,
     container: ContainerDep,
-    limit: int = Query(default=20, ge=1, le=100),
-) -> dict[str, Any]:
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> JsonObject:
     """
     Возвращает дерево spans для сессии выполнения flow из Tempo.
 
@@ -80,8 +81,8 @@ async def get_traces_by_session(
 async def get_traces_by_task(
     task_id: str,
     container: ContainerDep,
-    limit: int = Query(default=10, ge=1, le=50),
-) -> dict[str, Any]:
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> JsonObject:
     """
     Возвращает дерево spans для A2A task_id из Tempo.
     """
@@ -111,7 +112,7 @@ async def get_traces_by_task(
 async def get_trace(
     trace_id: str,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Возвращает дерево spans для конкретного trace_id из Tempo.
     """
@@ -137,9 +138,9 @@ async def get_trace(
 async def _collect_spans_for_trace_ids(
     container: ContainerDep,
     trace_ids: list[str],
-) -> list[dict[str, Any]]:
+) -> list[JsonObject]:
     """Загружает spans для каждого trace_id из Tempo и объединяет в один список."""
-    all_spans: list[dict[str, Any]] = []
+    all_spans: list[JsonObject] = []
     seen_span_ids: set[str] = set()
     for tid in trace_ids:
         try:
@@ -153,7 +154,7 @@ async def _collect_spans_for_trace_ids(
             continue
         for span in spans:
             sid = span.get("span_id", "")
-            if sid and sid not in seen_span_ids:
+            if isinstance(sid, str) and sid and sid not in seen_span_ids:
                 seen_span_ids.add(sid)
                 all_spans.append(span)
     return all_spans

@@ -62,9 +62,9 @@ def test_calls_recording_start_payload_missing_call_id_raises() -> None:
         CallsRecordingStartPayload.model_validate({})
 
 
-def test_calls_join_accept_payload_flat_guest_name_coerced_to_body() -> None:
+def test_calls_join_accept_payload_body_guest_name() -> None:
     p = CallsJoinAcceptPayload.model_validate(
-        {"link_token": "tok", "guest_name": "Alice"}
+        {"link_token": "tok", "body": {"guest_name": "Alice"}}
     )
     assert p.body is not None
     assert p.body.guest_name == "Alice"

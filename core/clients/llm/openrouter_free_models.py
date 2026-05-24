@@ -10,13 +10,21 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
 
+from core.clients.redis_client import RedisClient
 from core.config.base import BaseSettings
 from core.http.client import ProxyStrategy, request_with_strategy
 from core.logging import get_logger
+from core.types import (
+    JsonArray,
+    JsonObject,
+    JsonValue,
+    parse_json_object,
+    require_json_array,
+    require_json_object,
+)
 
 logger = get_logger(__name__)
 
@@ -37,9 +45,11 @@ class OpenRouterFreeModelRecord:
     created: int | None = None
 
 
-def _float_zero(value: Any) -> bool:
+def _float_zero(value: JsonValue | None) -> bool:
+    if not isinstance(value, (str, int, float)) or isinstance(value, bool):
+        return False
     try:
-        return float(value or 0) == 0
+        return float(value) == 0
     except (TypeError, ValueError):
         return False
 
@@ -56,11 +66,28 @@ def _model_size_score(*texts: str) -> float:
     return best_size_billions
 
 
-def is_free_text_model(item: dict[str, Any]) -> bool:
-    pricing = item.get("pricing") or {}
-    architecture = item.get("architecture") or {}
-    input_modalities = set(architecture.get("input_modalities") or ())
-    output_modalities = set(architecture.get("output_modalities") or ())
+def is_free_text_model(item: JsonObject) -> bool:
+    pricing = require_json_object(item.get("pricing", {}), "openrouter.model.pricing")
+    architecture = require_json_object(
+        item.get("architecture", {}),
+        "openrouter.model.architecture",
+    )
+    input_modalities = {
+        modality
+        for modality in require_json_array(
+            architecture.get("input_modalities", []),
+            "openrouter.model.architecture.input_modalities",
+        )
+        if isinstance(modality, str)
+    }
+    output_modalities = {
+        modality
+        for modality in require_json_array(
+            architecture.get("output_modalities", []),
+            "openrouter.model.architecture.output_modalities",
+        )
+        if isinstance(modality, str)
+    }
     if "text" not in input_modalities or "text" not in output_modalities:
         return False
     if item.get("expiration_date") is not None:
@@ -73,7 +100,7 @@ def is_free_text_model(item: dict[str, Any]) -> bool:
 
 
 def rank_openrouter_free_models(
-    items: Iterable[dict[str, Any]],
+    items: Iterable[JsonObject],
     *,
     max_candidates: int,
     include_router_as_last: bool,
@@ -85,15 +112,36 @@ def rank_openrouter_free_models(
         model_id = str(item.get("id") or "").strip()
         if not model_id or not is_free_text_model(item):
             continue
-        architecture = item.get("architecture") or {}
+        architecture = require_json_object(
+            item.get("architecture", {}),
+            "openrouter.model.architecture",
+        )
         supported = tuple(
-            sorted(str(parameter) for parameter in (item.get("supported_parameters") or []))
+            sorted(
+                str(parameter)
+                for parameter in require_json_array(
+                    item.get("supported_parameters", []),
+                    "openrouter.model.supported_parameters",
+                )
+            )
         )
         input_modalities = tuple(
-            sorted(str(value) for value in (architecture.get("input_modalities") or []))
+            sorted(
+                str(value)
+                for value in require_json_array(
+                    architecture.get("input_modalities", []),
+                    "openrouter.model.architecture.input_modalities",
+                )
+            )
         )
         output_modalities = tuple(
-            sorted(str(value) for value in (architecture.get("output_modalities") or []))
+            sorted(
+                str(value)
+                for value in require_json_array(
+                    architecture.get("output_modalities", []),
+                    "openrouter.model.architecture.output_modalities",
+                )
+            )
         )
         context_length = item.get("context_length")
         if not isinstance(context_length, int):
@@ -141,12 +189,24 @@ def rank_openrouter_free_models(
 
 
 def serialize_openrouter_free_models(records: Sequence[OpenRouterFreeModelRecord]) -> str:
+    models: JsonArray = [
+        {
+            "id": record.id,
+            "score": record.score,
+            "context_length": record.context_length,
+            "supported_parameters": list(record.supported_parameters),
+            "input_modalities": list(record.input_modalities),
+            "output_modalities": list(record.output_modalities),
+            "created": record.created,
+        }
+        for record in records
+    ]
     return json.dumps(
         {
             "version": OPENROUTER_FREE_MODELS_CACHE_VERSION,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "provider": "openrouter",
-            "models": [asdict(record) for record in records],
+            "models": models,
         },
         ensure_ascii=False,
         separators=(",", ":"),
@@ -157,46 +217,69 @@ def parse_openrouter_free_models(raw_cache_payload: str | None) -> list[OpenRout
     if not raw_cache_payload:
         return []
     try:
-        cache_payload = json.loads(raw_cache_payload)
-    except json.JSONDecodeError:
+        cache_payload = parse_json_object(raw_cache_payload, "openrouter.free_models.cache")
+    except ValueError:
         logger.warning("openrouter.free_models.cache_invalid_json")
         return []
     if (
-        not isinstance(cache_payload, dict)
-        or cache_payload.get("version") != OPENROUTER_FREE_MODELS_CACHE_VERSION
+        cache_payload.get("version") != OPENROUTER_FREE_MODELS_CACHE_VERSION
     ):
         return []
-    models = cache_payload.get("models")
-    if not isinstance(models, list):
+    models_raw = cache_payload.get("models")
+    if not isinstance(models_raw, list):
         return []
     records: list[OpenRouterFreeModelRecord] = []
-    for item in models:
-        if not isinstance(item, dict):
+    for raw_item in models_raw:
+        if not isinstance(raw_item, dict):
             continue
+        item = require_json_object(raw_item, "openrouter.free_models.cache.models[]")
         model_id = str(item.get("id") or "").strip()
         if not model_id:
             continue
+        score_value = item.get("score")
+        context_length = item.get("context_length")
+        created = item.get("created")
         records.append(
             OpenRouterFreeModelRecord(
                 id=model_id,
-                score=float(item.get("score") or 0),
-                context_length=item.get("context_length") if isinstance(item.get("context_length"), int) else None,
+                score=(
+                    float(score_value)
+                    if isinstance(score_value, (int, float)) and not isinstance(score_value, bool)
+                    else 0.0
+                ),
+                context_length=(
+                    context_length
+                    if isinstance(context_length, int) and not isinstance(context_length, bool)
+                    else None
+                ),
                 supported_parameters=tuple(
-                    str(parameter) for parameter in (item.get("supported_parameters") or [])
+                    str(parameter)
+                    for parameter in require_json_array(
+                        item.get("supported_parameters", []),
+                        "openrouter.free_models.supported_parameters",
+                    )
                 ),
                 input_modalities=tuple(
-                    str(modality) for modality in (item.get("input_modalities") or [])
+                    str(modality)
+                    for modality in require_json_array(
+                        item.get("input_modalities", []),
+                        "openrouter.free_models.input_modalities",
+                    )
                 ),
                 output_modalities=tuple(
-                    str(modality) for modality in (item.get("output_modalities") or [])
+                    str(modality)
+                    for modality in require_json_array(
+                        item.get("output_modalities", []),
+                        "openrouter.free_models.output_modalities",
+                    )
                 ),
-                created=item.get("created") if isinstance(item.get("created"), int) else None,
+                created=created if isinstance(created, int) and not isinstance(created, bool) else None,
             )
         )
     return records
 
 
-async def fetch_openrouter_model_items(settings: BaseSettings) -> list[dict[str, Any]]:
+async def fetch_openrouter_model_items(settings: BaseSettings) -> list[JsonObject]:
     openrouter_config = settings.llm.openrouter
     if openrouter_config is None or not openrouter_config.api_key:
         logger.warning("openrouter.free_models.no_api_key")
@@ -215,13 +298,20 @@ async def fetch_openrouter_model_items(settings: BaseSettings) -> list[dict[str,
         direct_attempts=3,
         proxy_attempts=3,
     )
-    http_response.raise_for_status()
-    response_payload = http_response.json()
-    model_items = response_payload.get("data", [])
-    return [item for item in model_items if isinstance(item, dict)]
+    _ = http_response.raise_for_status()
+    response_payload = parse_json_object(http_response.content, "openrouter.models.response")
+    model_items = require_json_array(response_payload.get("data", []), "openrouter.models.data")
+    return [
+        require_json_object(item, "openrouter.models.data[]")
+        for item in model_items
+        if isinstance(item, dict)
+    ]
 
 
-async def refresh_openrouter_free_models_cache(redis_client: Any, settings: BaseSettings) -> dict[str, Any]:
+async def refresh_openrouter_free_models_cache(
+    redis_client: RedisClient,
+    settings: BaseSettings,
+) -> JsonObject:
     free_pool_config = settings.llm.openrouter_free_pool
     model_items = await fetch_openrouter_model_items(settings)
     records = rank_openrouter_free_models(

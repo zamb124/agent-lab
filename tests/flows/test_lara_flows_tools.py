@@ -117,10 +117,10 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
     proposed = json.loads(propose_raw)
     pending_action_id = proposed["pending_action_id"]
     assert proposed["success"] is True
-    pending_events = getattr(state, "ui_events_pending")
-    assert pending_events[0]["type"] == "action_previewed"
-    assert pending_events[0]["payload"]["changes"]["prompt"] == new_prompt
-    preview_buttons = pending_events[0]["payload"]["blocks"][1]["buttons"]
+    pending_events = state.ui_events_pending
+    assert pending_events[0].type == "action_previewed"
+    assert pending_events[0].payload["changes"]["prompt"] == new_prompt
+    preview_buttons = pending_events[0].payload["blocks"][1]["buttons"]
     assert preview_buttons[0]["action_kind"] == "apply"
     assert preview_buttons[0]["action_id"] == "flows.node.patch.apply"
 
@@ -134,9 +134,9 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
     data = json.loads(apply_raw)
     assert data["success"] is True
     assert data["node_after"]["prompt"] == new_prompt
-    pending_events = getattr(state, "ui_events_pending")
-    assert pending_events[-1]["type"] == "action_applied"
-    assert pending_events[-1]["payload"]["changes"]["prompt"] == new_prompt
+    pending_events = state.ui_events_pending
+    assert pending_events[-1].type == "action_applied"
+    assert pending_events[-1].payload["changes"]["prompt"] == new_prompt
 
     flow_resp = await flows_client.get(f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system)
     assert flow_resp.status_code == 200, flow_resp.text
@@ -168,10 +168,10 @@ async def test_flows_patch_flow_propose_does_not_persist(
     assert data["success"] is True
     assert data["flow_after"]["name"] == proposed_name
     assert isinstance(data.get("pending_action_id"), str) and data["pending_action_id"]
-    pending_events = getattr(state, "ui_events_pending")
-    assert pending_events[0]["type"] == "action_previewed"
-    assert pending_events[0]["payload"]["flow_changes"]["name"] == proposed_name
-    preview_buttons = pending_events[0]["payload"]["blocks"][1]["buttons"]
+    pending_events = state.ui_events_pending
+    assert pending_events[0].type == "action_previewed"
+    assert pending_events[0].payload["flow_changes"]["name"] == proposed_name
+    preview_buttons = pending_events[0].payload["blocks"][1]["buttons"]
     assert preview_buttons[0]["action_kind"] == "apply"
     assert preview_buttons[0]["action_id"] == "flows.flow.patch.apply"
 

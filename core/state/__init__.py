@@ -15,6 +15,7 @@ from core.state.execution_state import (
     InterruptPathItem,
     NestedStateData,
     NodeCallInfo,
+    PendingUIEvent,
     PromptHistoryItem,
     State,
 )
@@ -76,6 +77,7 @@ __all__ = [
     "InterruptPathItem",
     "NodeCallInfo",
     "NestedStateData",
+    "PendingUIEvent",
     "PromptHistoryItem",
     "ExecutionExceptionRecord",
     "TriggerRuntimeSnapshot",

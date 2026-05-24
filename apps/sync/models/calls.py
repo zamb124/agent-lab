@@ -3,14 +3,40 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
+
+from core.calls.models import SignalType
+from core.types import JsonObject
 
 CallStatus = Literal["ringing", "active", "ended"]
 CallType = Literal["video"]
 CallMode = Literal["p2p", "sfu"]
 ParticipantStatus = Literal["invited", "joined", "declined", "left"]
+
+
+class CallsInvitePayload(BaseModel):
+    channel_id: str = Field(min_length=1)
+
+
+class CallsAcceptPayload(BaseModel):
+    call_id: str = Field(min_length=1)
+
+
+class CallsDeclinePayload(BaseModel):
+    call_id: str = Field(min_length=1)
+
+
+class CallsHangupPayload(BaseModel):
+    call_id: str = Field(min_length=1)
+
+
+class CallsSignalPayload(BaseModel):
+    call_id: str = Field(min_length=1)
+    target_user_id: str = Field(min_length=1)
+    signal_type: SignalType
+    data: JsonObject
 
 
 class CallParticipantRead(BaseModel):
@@ -60,13 +86,6 @@ class CallLinkCreate(BaseModel):
         default=True,
         description="Для channel без calendar: вернуть существующую постоянную ссылку и продлить TTL.",
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def _legacy_audio_to_video(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("call_type") == "audio":
-            return {**data, "call_type": "video"}
-        return data
 
     @model_validator(mode="after")
     def _calendar_or_channel(self) -> "CallLinkCreate":

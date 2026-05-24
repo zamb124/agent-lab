@@ -11,19 +11,28 @@ import hashlib
 import json
 import logging
 import uuid
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING
 
 from opentelemetry import trace
-from opentelemetry.trace import Span, SpanKind, Status, StatusCode
+from opentelemetry.sdk.trace import Span as SDKSpan
+from opentelemetry.trace import Span, SpanKind, Status, StatusCode, Tracer
 
 import core.tracing.attributes as attr
 from core.config import get_settings
 from core.context import get_context
 from core.logging import get_logger
-from core.types import JsonObject
+from core.tracing.models import TraceSpanEvent, TraceSpanWrite
+from core.types import (
+    JsonObject,
+    JsonValue,
+    OtelAttributes,
+    OtelAttributeValue,
+    otel_attributes_to_json_object,
+    require_json_object,
+)
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -35,43 +44,28 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-
-class _SpanParentContext(Protocol):
-    span_id: int
-
-
-class _ReadableSpan(Protocol):
-    parent: _SpanParentContext | None
-    status: Status
-    attributes: Mapping[str, Any] | None
-    events: Any
+def _span_event_timestamp(timestamp: int | None) -> str | None:
+    if timestamp is None:
+        return None
+    return datetime.fromtimestamp(timestamp / 1_000_000_000, tz=timezone.utc).isoformat()
 
 
-def _json_safe(value: Any) -> Any:
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, Mapping):
-        return {str(k): _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe(v) for v in value]
-    return str(value)
+def _sdk_span(span: Span) -> SDKSpan:
+    if not isinstance(span, SDKSpan):
+        raise TypeError("OpenTelemetry SDK span is required for platform tracing persistence")
+    return span
 
 
-def _span_event_timestamp(timestamp: Any) -> str | Any:
-    if isinstance(timestamp, int):
-        return datetime.fromtimestamp(timestamp / 1_000_000_000, tz=timezone.utc).isoformat()
-    return timestamp
-
-
-def _serialize_span_events(readable_span: _ReadableSpan) -> list[dict[str, Any]]:
-    events = []
-    for event in getattr(readable_span, "events", None) or []:
+def _serialize_span_events(readable_span: SDKSpan) -> list[TraceSpanEvent]:
+    events: list[TraceSpanEvent] = []
+    for event in readable_span.events:
+        event_attributes = otel_attributes_to_json_object(event.attributes)
         events.append(
-            {
-                "name": str(getattr(event, "name", "")),
-                "timestamp": _span_event_timestamp(getattr(event, "timestamp", None)),
-                "attributes": _json_safe(dict(getattr(event, "attributes", None) or {})),
-            }
+            TraceSpanEvent(
+                name=event.name,
+                timestamp=_span_event_timestamp(event.timestamp),
+                attributes=event_attributes,
+            )
         )
     return events
 
@@ -100,12 +94,20 @@ _span_repository: SpanRepository | None = None
 _process_tracing_service_name: str | None = None
 
 
-def _span_attribute(span: Span, key: str) -> Any:
-    span_attrs = getattr(span, "attributes", None) or {}
-    try:
-        return span_attrs.get(key)
-    except AttributeError:
+def _span_attribute(span: Span, key: str) -> OtelAttributeValue | None:
+    span_attrs = _sdk_span(span).attributes
+    if span_attrs is None:
         return None
+    return span_attrs.get(key)
+
+
+def _optional_json_string(attributes: JsonObject, key: str) -> str | None:
+    value = attributes.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{key} должен быть строкой")
+    return value
 
 
 def _llm_operation_name(span: Span, fallback_model: str) -> str:
@@ -149,8 +151,8 @@ class PlatformTracer:
     """
 
     def __init__(self, service_name: str = "platform"):
-        self._otel_tracer = trace.get_tracer(service_name)
-        self._service_name = service_name
+        self._otel_tracer: Tracer = trace.get_tracer(service_name)
+        self._service_name: str = service_name
 
     def _generate_ids(self) -> tuple[str, str]:
         """Генерирует trace_id и span_id."""
@@ -165,7 +167,7 @@ class PlatformTracer:
         kind: str,
         start_time: datetime,
         trace_ctx: TraceContext | None,
-        extra_attrs: dict[str, Any] | None = None,
+        extra_attrs: OtelAttributes | None = None,
     ) -> None:
         """Сохраняет span в PostgreSQL."""
         if _span_repository is None:
@@ -178,7 +180,7 @@ class PlatformTracer:
         ctx = span.get_span_context()
         trace_id = format(ctx.trace_id, "032x")
         span_id = format(ctx.span_id, "016x")
-        readable_span = cast(_ReadableSpan, cast(Any, span))
+        readable_span = _sdk_span(span)
 
         parent_ctx = readable_span.parent
         parent_span_id = format(parent_ctx.span_id, "016x") if parent_ctx else None
@@ -189,9 +191,12 @@ class PlatformTracer:
             status = "ERROR"
             status_message = readable_span.status.description
 
-        all_attrs = dict(readable_span.attributes) if readable_span.attributes else {}
+        all_attrs = require_json_object(
+            otel_attributes_to_json_object(readable_span.attributes),
+            "span.attributes",
+        )
         if extra_attrs:
-            all_attrs.update(extra_attrs)
+            all_attrs.update(otel_attributes_to_json_object(extra_attrs))
 
         if trace_ctx:
             if trace_ctx.flow_id and attr.ATTR_FLOW_ID not in all_attrs:
@@ -238,34 +243,34 @@ class PlatformTracer:
             if ns_str != "":
                 namespace = ns_str
 
-        channel_val = trace_ctx.channel if trace_ctx else all_attrs.get(attr.ATTR_CHANNEL)
+        channel_val = trace_ctx.channel if trace_ctx else _optional_json_string(all_attrs, attr.ATTR_CHANNEL)
 
-        span_data = {
-            "span_id": span_id,
-            "trace_id": trace_id,
-            "parent_span_id": parent_span_id,
-            "operation_name": operation_name,
-            "kind": kind,
-            "start_time": start_time,
-            "end_time": end_time,
-            "duration_ms": duration_ms,
-            "status": status,
-            "status_message": status_message,
-            "service_name": _resolve_tracing_service_name(),
-            "company_id": company_id,
-            "namespace": namespace,
-            "user_id": trace_ctx.user_id if trace_ctx else all_attrs.get(attr.ATTR_USER_ID),
-            "user_name": trace_ctx.user_name if trace_ctx else None,
-            "user_groups": trace_ctx.user_groups if trace_ctx else None,
-            "session_auth": trace_ctx.session_auth if trace_ctx else None,
-            "session_agent": trace_ctx.session_agent if trace_ctx else None,
-            "channel": channel_val,
-            "event_type": all_attrs.get(attr.ATTR_EVENT_TYPE),
-            "resource_type": all_attrs.get(attr.ATTR_RESOURCE_TYPE),
-            "resource_id": all_attrs.get(attr.ATTR_RESOURCE_ID),
-            "attributes": all_attrs,
-            "events": _serialize_span_events(readable_span),
-        }
+        span_data = TraceSpanWrite(
+            span_id=span_id,
+            trace_id=trace_id,
+            parent_span_id=parent_span_id,
+            operation_name=operation_name,
+            kind=kind,
+            start_time=start_time,
+            end_time=end_time,
+            duration_ms=duration_ms,
+            status=status,
+            status_message=status_message,
+            service_name=_resolve_tracing_service_name(),
+            company_id=company_id,
+            namespace=namespace,
+            user_id=trace_ctx.user_id if trace_ctx else _optional_json_string(all_attrs, attr.ATTR_USER_ID),
+            user_name=trace_ctx.user_name if trace_ctx else None,
+            user_groups=trace_ctx.user_groups if trace_ctx else None,
+            session_auth=trace_ctx.session_auth if trace_ctx else None,
+            session_agent=trace_ctx.session_agent if trace_ctx else None,
+            channel=channel_val,
+            event_type=_optional_json_string(all_attrs, attr.ATTR_EVENT_TYPE),
+            resource_type=_optional_json_string(all_attrs, attr.ATTR_RESOURCE_TYPE),
+            resource_id=_optional_json_string(all_attrs, attr.ATTR_RESOURCE_ID),
+            attributes=all_attrs,
+            events=_serialize_span_events(readable_span),
+        )
 
         await _span_repository.save_span(span_data)
 
@@ -301,12 +306,12 @@ class PlatformTracer:
             is_resume=is_resume,
         )
 
-    def _base_attributes(self, trace_ctx: TraceContext | None) -> dict[str, Any]:
+    def _base_attributes(self, trace_ctx: TraceContext | None) -> dict[str, OtelAttributeValue]:
         """Возвращает базовые атрибуты для всех spans."""
         if trace_ctx is None:
             return {}
 
-        attrs = {}
+        attrs: dict[str, OtelAttributeValue] = {}
         if trace_ctx.user_id:
             attrs[attr.ATTR_USER_ID] = trace_ctx.user_id
         if trace_ctx.user_name:
@@ -443,7 +448,7 @@ class PlatformTracer:
         resource_type: str | None = None,
         resource_id: str | None = None,
         trace_ctx: TraceContext | None = None,
-        extra_attributes: dict[str, Any] | None = None,
+        extra_attributes: OtelAttributes | None = None,
     ) -> AsyncGenerator[Span, None]:
         """
         Универсальный span значимой операции сервиса (RAG, Sync, CRM, …).
@@ -633,9 +638,9 @@ class PlatformTracer:
     def record_llm_request(
         self,
         span: Span,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        response_format: dict[str, Any] | None = None,
+        messages: list[JsonObject],
+        tools: list[JsonObject] | None = None,
+        response_format: JsonObject | None = None,
     ) -> None:
         """
         Записывает полный LLM request в span.
@@ -646,7 +651,7 @@ class PlatformTracer:
             tools: Список tools schemas
             response_format: Structured output schema (json_schema)
         """
-        request_data: dict[str, Any] = {
+        request_data: JsonObject = {
             "messages": messages,
             "tools": tools or [],
         }
@@ -686,9 +691,7 @@ class PlatformTracer:
                 attr.ATTR_LLM_DURATION_MS: duration_ms,
             }
         )
-        resolved_model: Any = llm_model
-        if isinstance(resolved_model, str):
-            resolved_model = resolved_model.strip()
+        resolved_model = llm_model.strip() if llm_model is not None else None
         if resolved_model:
             span.set_attribute(attr.ATTR_LLM_MODEL, resolved_model)
         if llm_provider:
@@ -707,7 +710,12 @@ class PlatformTracer:
                 raise ValueError("settlement_quantity_rub должна быть >= 1")
             span.set_attribute(attr.ATTR_BILLING_SETTLEMENT_QUANTITY_RUB, settlement_quantity_rub)
 
-        model = resolved_model or _span_attribute(span, attr.ATTR_LLM_MODEL) or "unknown"
+        model_attribute = _span_attribute(span, attr.ATTR_LLM_MODEL)
+        model = resolved_model
+        if model is None and isinstance(model_attribute, str) and model_attribute:
+            model = model_attribute
+        if model is None:
+            model = "unknown"
         resource_name = billing_resource_name if billing_resource_name else f"llm:{model}"
         span.set_attributes(
             {
@@ -764,7 +772,7 @@ class PlatformTracer:
         self,
         tool_name: str,
         tool_call_id: str,
-        args: dict[str, Any],
+        args: JsonObject,
         nested_flow_tool: bool = False,
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
@@ -800,7 +808,7 @@ class PlatformTracer:
     def record_tool_result(
         self,
         span: Span,
-        result: Any,
+        result: JsonValue | None,
         duration_ms: float,
         error: str | None = None,
     ) -> None:
@@ -819,7 +827,10 @@ class PlatformTracer:
     def record_state_snapshot(self, span: Span, state: "ExecutionState") -> None:
         """Записывает snapshot state в span."""
         # Конвертируем ExecutionState в dict для JSON сериализации
-        state_dict = state.model_dump(exclude_none=False)
+        state_dict = require_json_object(
+            state.model_dump(mode="json", exclude_none=False),
+            "state.snapshot",
+        )
 
         snapshot = {
             k: v for k, v in state_dict.items() if not k.startswith("__") or k == "__tools__"
@@ -867,7 +878,7 @@ class PlatformTracer:
         self,
         node_id: str,
         template: str,
-        variables: dict[str, Any],
+        variables: JsonObject,
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для сборки системного промпта."""
@@ -911,7 +922,6 @@ class PlatformTracer:
         self,
         span: Span,
         rendered_prompt: str,
-        variables: dict[str, Any],
     ) -> None:
         """Записывает результат сборки промпта в span."""
         prompt_hash = hashlib.md5(rendered_prompt.encode()).hexdigest()

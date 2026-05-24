@@ -13,43 +13,12 @@ from apps.flows.src.runtime.llm_context_memory import (
 from core.llm_context import (
     LLMContextBudget,
     LLMContextMemoryEpisode,
+    LLMContextMemoryRecallRequest,
+    LLMContextMemoryRecord,
     LLMContextProfile,
     LLMContextRetrievalPolicy,
 )
 from core.state import ExecutionState
-
-
-class State:
-    session_id = "flow:ctx"
-    session_flow_id = "flow"
-    branch_id = "default"
-    user_id = "user"
-    llm_context_memory_cursor = {}
-
-
-def test_resolves_memory_context_source_from_runtime_state() -> None:
-    store = object()
-    source = resolve_memory_context_source_for_runtime(
-        store=store,
-        state=State(),
-        node_id="agent",
-    )
-
-    assert source is not None
-    assert source.store is store
-    assert source.session_id == "flow:ctx"
-    assert source.flow_id == "flow"
-    assert source.branch_id == "default"
-    assert source.node_id == "agent"
-    assert source.user_id == "user"
-
-
-def test_memory_context_source_is_absent_without_state() -> None:
-    assert resolve_memory_context_source_for_runtime(
-        store=object(),
-        state=None,
-        node_id="agent",
-    ) is None
 
 
 class RecordingStore:
@@ -64,6 +33,41 @@ class RecordingStore:
             raise RuntimeError("memory write failed")
         self.episodes.append(episode)
         return episode.memory_id
+
+    async def recall(self, _request: LLMContextMemoryRecallRequest) -> list[LLMContextMemoryRecord]:
+        return []
+
+
+def test_resolves_memory_context_source_from_runtime_state() -> None:
+    store = RecordingStore()
+    state = ExecutionState(
+        task_id="task",
+        context_id="ctx",
+        user_id="user",
+        session_id="flow:ctx",
+        branch_id="default",
+    )
+    source = resolve_memory_context_source_for_runtime(
+        store=store,
+        state=state,
+        node_id="agent",
+    )
+
+    assert source is not None
+    assert source.store is store
+    assert source.session_id == "flow:ctx"
+    assert source.flow_id == "flow"
+    assert source.branch_id == "default"
+    assert source.node_id == "agent"
+    assert source.user_id == "user"
+
+
+def test_memory_context_source_is_absent_without_state() -> None:
+    assert resolve_memory_context_source_for_runtime(
+        store=RecordingStore(),
+        state=None,
+        node_id="agent",
+    ) is None
 
 
 def _policy() -> LLMContextProfile:
@@ -265,7 +269,7 @@ async def test_runtime_memory_schedule_failure_does_not_propagate() -> None:
         state=state,
         node_id="agent",
         policy=_policy(),
-        messages=[object()],
+        messages=[{"content": 123}],
     )
 
     assert changed is False
@@ -384,7 +388,6 @@ def test_runtime_memory_prune_is_noop_without_cursor_or_tail() -> None:
     )
 
     assert prune_state_messages_to_memory_cursor_for_runtime(state) == 0
-    assert prune_state_messages_to_memory_cursor_for_runtime(None) == 0
 
     state.messages.append(build_user_message("second", "agent", context_id="ctx", task_id="task"))
     state.llm_context_memory_cursor = {}
@@ -395,18 +398,17 @@ def test_runtime_memory_prune_is_noop_without_cursor_or_tail() -> None:
 
 
 @pytest.mark.asyncio
-async def test_runtime_memory_close_is_absent_without_policy_or_state() -> None:
+async def test_runtime_memory_close_is_absent_without_policy() -> None:
     store = RecordingStore()
+    state = ExecutionState(
+        task_id="task",
+        context_id="ctx",
+        user_id="user",
+        session_id="flow:ctx",
+    )
     assert schedule_state_messages_to_memory_for_runtime(
         store=store,
-        state=None,
-        node_id="agent",
-        policy=_policy(),
-        messages=[],
-    ) is False
-    assert schedule_state_messages_to_memory_for_runtime(
-        store=store,
-        state=State(),
+        state=state,
         node_id="agent",
         policy=None,
         messages=[],

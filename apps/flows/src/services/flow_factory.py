@@ -23,10 +23,10 @@ from apps.flows.src.models.registry_contracts import (
     RegistrySchemaSubflow,
 )
 from apps.flows.src.runtime.flow import Flow
-from apps.flows.src.services.bundle_node_repair import repair_effective_nodes_from_bundle
 from apps.flows.src.utils.merge import deep_merge
 from apps.flows.src.variables import VariablesService
 from core.compiler import GraphCompiler
+from core.errors import InvalidGraphError
 from core.logging import get_logger
 from core.types import JsonArray, JsonObject, JsonValue, require_json_object
 from core.variables import VarResolver
@@ -169,9 +169,6 @@ class FlowFactory:
             raise ValueError(f"Flow '{flow_id}' не найден")
         effective = self.apply_branch(config, branch_id)
         nodes = effective["nodes"]
-        source = getattr(config, "source", None) or "manual"
-        if source == "file":
-            nodes = repair_effective_nodes_from_bundle(config.flow_id, source, nodes)
         return nodes
 
     async def get_resolved_variables_map(
@@ -209,14 +206,22 @@ class FlowFactory:
             Flow
         """
         effective = self.apply_branch(config, branch_id)
-        source = getattr(config, "source", None) or "manual"
-        if source == "file":
-            effective["nodes"] = repair_effective_nodes_from_bundle(
-                config.flow_id, source, effective["nodes"]
+        entry = effective["entry"]
+        if entry is None:
+            raise InvalidGraphError(
+                message=f"Flow '{config.flow_id}' branch '{branch_id}' не имеет entry-ноды",
+                payload={"flow_id": config.flow_id, "branch_id": branch_id},
             )
 
         # Валидация графа через GraphCompiler
-        _ = self.compiler.compile(config, branch_config=None, variables=effective["variables"])
+        _ = self.compiler.compile(
+            flow_id=config.flow_id,
+            branch_id=branch_id,
+            entry=entry,
+            nodes=effective["nodes"],
+            edges=effective["edges"],
+            variables=effective["variables"],
+        )
 
         resolved_variables = await self._resolve_variables(effective["variables"])
 
@@ -233,7 +238,7 @@ class FlowFactory:
         # Полный inline конфиг
         config_dict = require_json_object(config.model_dump(mode="json"), "flow_config")
         config_dict["resolved_variables"] = resolved_variables
-        config_dict["entry"] = effective["entry"]
+        config_dict["entry"] = entry
         config_dict["nodes"] = effective["nodes"]
         config_dict["edges"] = edges
 

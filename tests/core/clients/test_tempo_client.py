@@ -2,6 +2,7 @@
 Юнит-тесты для TempoClient: парсинг OTLP JSON и поведение при ошибках.
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -202,7 +203,7 @@ class TestTempoClientGetTrace:
     async def test_get_trace_returns_spans(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = _SAMPLE_OTLP_BODY
+        mock_resp.content = json.dumps(_SAMPLE_OTLP_BODY).encode()
 
         with patch("core.clients.tempo_client.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
@@ -264,12 +265,12 @@ class TestTempoClientSearch:
     async def test_search_returns_trace_ids(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {
+        mock_resp.content = json.dumps({
             "traces": [
                 {"traceID": "abc123"},
                 {"traceID": "def456"},
             ]
-        }
+        }).encode()
 
         with patch("core.clients.tempo_client.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()

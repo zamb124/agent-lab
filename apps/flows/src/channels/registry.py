@@ -25,7 +25,7 @@ class ChannelRegistry:
     - и т.д.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._handlers: dict[ChannelType, type[BaseChannelHandler]] = {}
         self._instances: dict[ChannelType, BaseChannelHandler] = {}
 
@@ -57,7 +57,7 @@ class ChannelRegistry:
         Raises:
             ValueError: Если канал не зарегистрирован
         """
-        if isinstance(channel_type, str):
+        if not isinstance(channel_type, ChannelType):
             channel_type = ChannelType(channel_type)
 
         if channel_type in self._instances:
@@ -68,8 +68,7 @@ class ChannelRegistry:
         if handler_class is None:
             available = [ct.value for ct in self._handlers.keys()]
             raise ValueError(
-                f"Unknown channel type: {channel_type.value}. "
-                f"Available: {', '.join(available)}"
+                f"Unknown channel type: {channel_type.value}. Available: {', '.join(available)}"
             )
 
         instance = handler_class()
@@ -78,7 +77,7 @@ class ChannelRegistry:
 
     def has(self, channel_type: ChannelType | str) -> bool:
         """Проверяет зарегистрирован ли канал."""
-        if isinstance(channel_type, str):
+        if not isinstance(channel_type, ChannelType):
             channel_type = ChannelType(channel_type)
         return channel_type in self._handlers
 

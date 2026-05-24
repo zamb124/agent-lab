@@ -4,55 +4,51 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from core.config.models import LoggingConfig
 from core.observability.grafana_explore import (
     build_grafana_explore_loki_url,
     build_platform_correlation_logql,
 )
+from core.types import JsonObject
 
 
 def merge_platform_error_into_dict(
-    body: dict[str, Any],
+    body: JsonObject,
     *,
     trace_id: str,
     platform_request_id: str,
     service_name: str,
     logging_cfg: LoggingConfig,
     active_company_id: str | None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Добавляет или перезаписывает ключи платформы: request_id (кореляция выполнения), trace_id, service.
 
     Поле observability.logs_explore_url — только при active_company_id == 'system' и заданном
     grafana_public_url + grafana_loki_datasource_uid.
     """
-    if not isinstance(body, dict):
-        raise TypeError("merge_platform_error_into_dict: body must be dict")
-    if not isinstance(trace_id, str) or not trace_id.strip():
+    if not trace_id.strip():
         raise ValueError("merge_platform_error_into_dict: trace_id обязателен")
-    if not isinstance(platform_request_id, str) or not platform_request_id.strip():
+    if not platform_request_id.strip():
         raise ValueError("merge_platform_error_into_dict: platform_request_id обязателен")
-    if not isinstance(service_name, str) or not service_name.strip():
+    if not service_name.strip():
         raise ValueError("merge_platform_error_into_dict: service_name обязателен")
 
-    merged: dict[str, Any] = dict(body)
+    merged: JsonObject = dict(body)
     merged["request_id"] = platform_request_id.strip()
     merged["trace_id"] = trace_id.strip()
     merged["service"] = service_name.strip()
 
-    observability: dict[str, str] | None = None
-    base = getattr(logging_cfg, "grafana_public_url", None)
-    uid = getattr(logging_cfg, "grafana_loki_datasource_uid", None)
-    org_id = getattr(logging_cfg, "grafana_org_id", None)
+    observability: JsonObject | None = None
+    base = logging_cfg.grafana_public_url
+    uid = logging_cfg.grafana_loki_datasource_uid
+    org_id = logging_cfg.grafana_org_id
     if (
         active_company_id == "system"
-        and isinstance(base, str)
+        and base is not None
         and base.strip()
-        and isinstance(uid, str)
+        and uid is not None
         and uid.strip()
-        and isinstance(org_id, str)
         and org_id.strip()
     ):
         logql = build_platform_correlation_logql(
@@ -76,14 +72,14 @@ def merge_platform_error_into_dict(
 
 
 def try_merge_platform_error_into_dict(
-    body: dict[str, Any],
+    body: JsonObject,
     *,
     trace_id: str | None,
     platform_request_id: str | None,
     service_name: str,
     logging_cfg: LoggingConfig,
     active_company_id: str | None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Как merge_platform_error_into_dict, но без raise при отсутствии id — возвращает body без изменений."""
     if (
         not isinstance(trace_id, str)

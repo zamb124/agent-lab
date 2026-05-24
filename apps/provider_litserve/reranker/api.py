@@ -6,6 +6,7 @@ import litserve as ls
 
 from apps.provider_litserve.shared import resolve_rerank_device, resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
+from core.types import JsonObject, JsonValue
 
 from .engines import LocalRerankerEngine, parse_rerank_body
 
@@ -26,3 +27,7 @@ class RerankerLitAPI(ls.LitAPI):
 
     def predict(self, x, **kwargs):
         return self._engine.rerank(x["query"], x["passages"], x.get("model"))
+
+    def encode_response(self, output: JsonObject, **kwargs: JsonValue) -> JsonObject:
+        _ = kwargs
+        return output

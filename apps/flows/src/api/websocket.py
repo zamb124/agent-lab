@@ -6,7 +6,6 @@ WebSocket A2A endpoints.
 """
 
 import json
-from typing import Any
 
 from a2a.types import (
     DeleteTaskPushNotificationConfigParams,
@@ -29,10 +28,9 @@ from apps.flows.src.models import FlowConfig
 from core.auth.utils import get_token_info
 from core.context import Context, User, set_context
 from core.logging import get_logger
-from core.types import JsonArray
+from core.types import JsonArray, JsonObject, JsonValue, parse_json_value, require_json_object
 
 logger = get_logger(__name__)
-JsonDict = dict[str, Any]
 JsonRpcId = str | int
 JWT_ALGORITHM = "HS256"
 
@@ -61,7 +59,7 @@ def _auth_jwt_secret() -> str:
     return secret
 
 
-def _strict_json_rpc_id(raw_id: Any) -> JsonRpcId | None:
+def _strict_json_rpc_id(raw_id: JsonValue | None) -> JsonRpcId | None:
     if raw_id is None:
         return None
     if isinstance(raw_id, bool):
@@ -71,7 +69,7 @@ def _strict_json_rpc_id(raw_id: Any) -> JsonRpcId | None:
     return None
 
 
-def _string_list(raw: Any) -> list[str]:
+def _string_list(raw: JsonValue | None) -> list[str]:
     if not isinstance(raw, list):
         return []
     return [item for item in raw if isinstance(item, str)]
@@ -106,7 +104,7 @@ def _extract_bearer_token(websocket: WebSocket) -> str | None:
     return None
 
 
-async def _send_json(websocket: WebSocket, payload: dict[str, Any]) -> None:
+async def _send_json(websocket: WebSocket, payload: JsonObject) -> None:
     await websocket.send_text(json.dumps(payload, ensure_ascii=False))
 
 
@@ -130,7 +128,9 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
 
     token = _extract_bearer_token(websocket)
     user_groups = _get_user_groups_from_token(token)
-    channel_context: dict[str, Any] = {"user_groups": user_groups}
+    user_groups_payload: JsonArray = []
+    user_groups_payload.extend(user_groups)
+    channel_context: JsonObject = {"user_groups": user_groups_payload}
 
     # Создаем Context для WebSocket (не проходит через HTTP middleware)
     user_id = "websocket_user"
@@ -141,10 +141,9 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
             jwt_algorithm=JWT_ALGORITHM,
         )
         if token_info:
-            user_id = str(token_info.get("id", user_id))
-
-    user_groups_payload: JsonArray = []
-    user_groups_payload.extend(user_groups)
+            token_user_id = token_info.get("id")
+            if isinstance(token_user_id, (str, int)) and not isinstance(token_user_id, bool):
+                user_id = str(token_user_id)
 
     context = Context(
         user=User(user_id=user_id, name="WebSocket User"),
@@ -168,8 +167,8 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                 break
 
             try:
-                body = json.loads(raw_message)
-            except json.JSONDecodeError as e:
+                body_value = parse_json_value(raw_message, "websocket.request")
+            except ValueError as e:
                 await _send_json(
                     websocket,
                     {
@@ -180,7 +179,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                 )
                 continue
 
-            if not isinstance(body, dict):
+            if not isinstance(body_value, dict):
                 await _send_json(
                     websocket,
                     {
@@ -193,6 +192,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                     },
                 )
                 continue
+            body = require_json_object(body_value, "websocket.request")
 
             rpc_id = _strict_json_rpc_id(body.get("id"))
             if rpc_id is None:
@@ -227,9 +227,9 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
 
             raw_params = body.get("params")
             if raw_params is None:
-                params_dict: JsonDict = {}
+                params_dict: JsonObject = {}
             elif isinstance(raw_params, dict):
-                params_dict = dict(raw_params)
+                params_dict = require_json_object(raw_params, "params")
             else:
                 await _send_json(
                     websocket,
@@ -257,9 +257,9 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
 
             metadata_raw = params_dict.get("metadata")
             if metadata_raw is None:
-                metadata: JsonDict = {}
+                metadata: JsonObject = {}
             elif isinstance(metadata_raw, dict):
-                metadata = metadata_raw
+                metadata = require_json_object(metadata_raw, "params.metadata")
             else:
                 await _send_json(
                     websocket,
@@ -271,12 +271,12 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                 )
                 continue
             if metadata.get("__user_groups__") is None:
-                metadata["__user_groups__"] = user_groups
+                metadata["__user_groups__"] = user_groups_payload
             params_dict["metadata"] = metadata
 
             try:
                 if method == "message/send":
-                    params = MessageSendParams(**params_dict)
+                    params = MessageSendParams.model_validate(params_dict)
                     result = await handler.on_message_send(
                         params, context=channel_context
                     )
@@ -285,14 +285,15 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                         {
                             "jsonrpc": "2.0",
                             "id": rpc_id,
-                            "result": result.model_dump(
-                                by_alias=True, exclude_none=True
+                            "result": require_json_object(
+                                result.model_dump(by_alias=True, exclude_none=True),
+                                "message.send.result",
                             ),
                         },
                     )
 
                 elif method == "message/stream":
-                    params = MessageSendParams(**params_dict)
+                    params = MessageSendParams.model_validate(params_dict)
                     async for event in handler.on_message_stream(
                         params, context=channel_context
                     ):
@@ -304,20 +305,21 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                             {
                                 "jsonrpc": "2.0",
                                 "id": rpc_id,
-                                "result": event_data,
+                                "result": require_json_object(event_data, "message.stream.event"),
                             },
                         )
 
                 elif method == "tasks/get":
-                    req = TaskQueryParams(**params_dict)
+                    req = TaskQueryParams.model_validate(params_dict)
                     result = await handler.on_get_task(req, context=channel_context)
                     await _send_json(
                         websocket,
                         {
                             "jsonrpc": "2.0",
                             "id": rpc_id,
-                            "result": result.model_dump(
-                                by_alias=True, exclude_none=True
+                            "result": require_json_object(
+                                result.model_dump(by_alias=True, exclude_none=True),
+                                "tasks.get.result",
                             )
                             if result
                             else None,
@@ -325,7 +327,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                     )
 
                 elif method == "tasks/cancel":
-                    req = TaskIdParams(**params_dict)
+                    req = TaskIdParams.model_validate(params_dict)
                     result = await handler.on_cancel_task(req, context=channel_context)
                     if result is None:
                         await _send_json(
@@ -345,14 +347,15 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                             {
                                 "jsonrpc": "2.0",
                                 "id": rpc_id,
-                                "result": result.model_dump(
-                                    by_alias=True, exclude_none=True
+                                "result": require_json_object(
+                                    result.model_dump(by_alias=True, exclude_none=True),
+                                    "tasks.cancel.result",
                                 ),
                             },
                         )
 
                 elif method == "tasks/resubscribe":
-                    params = TaskIdParams(**params_dict)
+                    params = TaskIdParams.model_validate(params_dict)
                     async for event in handler.on_resubscribe_to_task(
                         params, context=channel_context
                     ):
@@ -364,12 +367,12 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                             {
                                 "jsonrpc": "2.0",
                                 "id": rpc_id,
-                                "result": event_data,
+                                "result": require_json_object(event_data, "tasks.resubscribe.event"),
                             },
                         )
 
                 elif method == "tasks/pushNotificationConfig/get":
-                    req = GetTaskPushNotificationConfigParams(**params_dict)
+                    req = GetTaskPushNotificationConfigParams.model_validate(params_dict)
                     result = await handler.on_get_task_push_notification_config(
                         req, context=channel_context
                     )
@@ -378,8 +381,9 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                         {
                             "jsonrpc": "2.0",
                             "id": rpc_id,
-                            "result": result.model_dump(
-                                by_alias=True, exclude_none=True
+                            "result": require_json_object(
+                                result.model_dump(by_alias=True, exclude_none=True),
+                                "pushNotificationConfig.get.result",
                             )
                             if result
                             else None,
@@ -387,7 +391,7 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                     )
 
                 elif method == "tasks/pushNotificationConfig/set":
-                    params = TaskPushNotificationConfig(**params_dict)
+                    params = TaskPushNotificationConfig.model_validate(params_dict)
                     result = await handler.on_set_task_push_notification_config(
                         params, context=channel_context
                     )
@@ -396,14 +400,15 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                         {
                             "jsonrpc": "2.0",
                             "id": rpc_id,
-                            "result": result.model_dump(
-                                by_alias=True, exclude_none=True
+                            "result": require_json_object(
+                                result.model_dump(by_alias=True, exclude_none=True),
+                                "pushNotificationConfig.set.result",
                             ),
                         },
                     )
 
                 elif method == "tasks/pushNotificationConfig/delete":
-                    req = DeleteTaskPushNotificationConfigParams(**params_dict)
+                    req = DeleteTaskPushNotificationConfigParams.model_validate(params_dict)
                     await handler.on_delete_task_push_notification_config(
                         req, context=channel_context
                     )
@@ -413,19 +418,24 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                     )
 
                 elif method == "tasks/pushNotificationConfig/list":
-                    req = ListTaskPushNotificationConfigParams(**params_dict)
+                    req = ListTaskPushNotificationConfigParams.model_validate(params_dict)
                     result = await handler.on_list_task_push_notification_config(
                         req, context=channel_context
                     )
+                    result_items: JsonArray = []
+                    for item in result:
+                        result_items.append(
+                            require_json_object(
+                                item.model_dump(by_alias=True, exclude_none=True),
+                                "pushNotificationConfig.list.result[]",
+                            )
+                        )
                     await _send_json(
                         websocket,
                         {
                             "jsonrpc": "2.0",
                             "id": rpc_id,
-                            "result": [
-                                r.model_dump(by_alias=True, exclude_none=True)
-                                for r in result
-                            ],
+                            "result": result_items,
                         },
                     )
 
@@ -434,12 +444,16 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
                         params_dict, context=channel_context
                     )
                     if card:
-                        result_data = card.model_dump(
-                            by_alias=True, exclude_none=True
+                        result_data = require_json_object(
+                            card.model_dump(by_alias=True, exclude_none=True),
+                            "agent.authenticated_card",
                         )
                     else:
                         base_url = ""
-                        result_data = await handler.get_agent_card(base_url)
+                        result_data = require_json_object(
+                            await handler.get_agent_card(base_url),
+                            "agent.card",
+                        )
                     await _send_json(
                         websocket,
                         {"jsonrpc": "2.0", "id": rpc_id, "result": result_data},

@@ -9,8 +9,8 @@ from dataclasses import dataclass
 
 from a2a.types import FilePart, FileWithBytes, FileWithUri, Message
 
+from core.files.file_ref import FileRef
 from core.logging import get_logger
-from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -77,7 +77,7 @@ def extract_incoming_a2a_files(message: Message) -> list[IncomingA2aFile]:
     return result
 
 
-def format_a2a_files_content(files_data: list[JsonObject]) -> str:
+def format_a2a_files_content(files_data: list[FileRef]) -> str:
     """
     Добавляет в текст сообщения блоки [FILE]...[/FILE] по записям для state.files.
 
@@ -87,12 +87,13 @@ def format_a2a_files_content(files_data: list[JsonObject]) -> str:
         return ""
 
     parts: list[str] = []
-    for fd in files_data:
-        original_name = fd.get("original_name", "")
-        url = fd.get("url", "")
-        content_type = fd.get("content_type", "")
+    for file_ref in files_data:
         parts.append(
-            f"\n[FILE]\noriginal_name: {original_name}\nurl: {url}\ncontent_type: {content_type}\n[/FILE]"
+            "\n[FILE]\n"
+            + f"original_name: {file_ref.original_name}\n"
+            + f"url: {file_ref.url}\n"
+            + f"content_type: {file_ref.content_type}\n"
+            + "[/FILE]"
         )
 
     return "".join(parts)

@@ -4,19 +4,128 @@ Redis клиент для кэширования, сессий и Pub/Sub stream
 
 import asyncio
 import time
-from collections.abc import AsyncIterator
-from typing import Any
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Protocol, TypedDict
+from typing import cast as type_cast
 from urllib.parse import urlparse
 
-try:
-    import redis.asyncio as redis
-except ImportError:
-    redis = None
+from redis.asyncio.client import PubSub, Redis
 
 from core.logging import get_logger
 from core.types import JsonValue, require_json_value
 
 logger = get_logger(__name__)
+
+
+class _RedisSetCommand(Protocol):
+    def __call__(
+        self,
+        key: str,
+        value: str,
+        *,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> Awaitable[bool | None]: ...
+
+
+class _RedisGetMessageCommand(Protocol):
+    def __call__(
+        self,
+        *,
+        ignore_subscribe_messages: bool,
+        timeout: float,
+    ) -> Awaitable["_RedisPubSubMessage | None"]: ...
+
+
+class _RedisPubSubMessage(TypedDict):
+    type: str
+    data: str
+
+
+class _RedisSdkPubSub:
+    def __init__(self, raw: PubSub) -> None:
+        self._raw: PubSub = raw
+
+    async def subscribe(self, *channels: str) -> None:
+        command = type_cast(Callable[..., Awaitable[None]], self._raw.subscribe)
+        await command(*channels)
+
+    async def unsubscribe(self, *channels: str) -> None:
+        command = type_cast(Callable[..., Awaitable[None]], self._raw.unsubscribe)
+        await command(*channels)
+
+    async def aclose(self) -> None:
+        command = type_cast(Callable[[], Awaitable[None]], self._raw.aclose)
+        await command()
+
+    async def get_message(
+        self,
+        *,
+        ignore_subscribe_messages: bool,
+        timeout: float,
+    ) -> _RedisPubSubMessage | None:
+        command = type_cast(_RedisGetMessageCommand, self._raw.get_message)
+        return await command(ignore_subscribe_messages=ignore_subscribe_messages, timeout=timeout)
+
+
+class _RedisSdkConnection:
+    def __init__(self, raw: Redis) -> None:
+        self._raw: Redis = raw
+
+    async def ping(self) -> bool:
+        command = type_cast(Callable[[], Awaitable[bool]], self._raw.ping)
+        return await command()
+
+    async def aclose(self) -> None:
+        command = type_cast(Callable[[], Awaitable[None]], self._raw.aclose)
+        await command()
+
+    async def get(self, key: str) -> str | None:
+        command = type_cast(Callable[[str], Awaitable[str | None]], self._raw.get)
+        return await command(key)
+
+    async def getdel(self, key: str) -> str | None:
+        command = type_cast(Callable[[str], Awaitable[str | None]], self._raw.getdel)
+        return await command(key)
+
+    async def set(
+        self,
+        key: str,
+        value: str,
+        *,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> bool | None:
+        command = type_cast(_RedisSetCommand, self._raw.set)
+        return await command(key, value, ex=ex, nx=nx)
+
+    async def setex(self, key: str, seconds: int, value: str) -> bool:
+        command = type_cast(Callable[[str, int, str], Awaitable[bool]], self._raw.setex)
+        return await command(key, seconds, value)
+
+    async def delete(self, *keys: str) -> int:
+        command = type_cast(Callable[..., Awaitable[int]], self._raw.delete)
+        return await command(*keys)
+
+    async def eval(self, script: str, numkeys: int, *keys_and_args: JsonValue) -> JsonValue:
+        command = type_cast(Callable[..., Awaitable[JsonValue]], self._raw.eval)
+        return await command(script, numkeys, *keys_and_args)
+
+    async def rpush(self, key: str, *values: str) -> int:
+        command = type_cast(Callable[..., Awaitable[int]], self._raw.rpush)
+        return await command(key, *values)
+
+    async def lrange(self, key: str, start: int, end: int) -> list[str]:
+        command = type_cast(Callable[[str, int, int], Awaitable[list[str]]], self._raw.lrange)
+        return await command(key, start, end)
+
+    async def publish(self, channel: str, message: str) -> int:
+        command = type_cast(Callable[[str, str], Awaitable[int]], self._raw.publish)
+        return await command(channel, message)
+
+    def pubsub(self) -> _RedisSdkPubSub:
+        command = type_cast(Callable[[], PubSub], self._raw.pubsub)
+        return _RedisSdkPubSub(command())
 
 
 class RedisClient:
@@ -30,30 +139,29 @@ class RedisClient:
             redis_url: URL подключения к Redis (например, redis://localhost:6379/0)
             max_retries: Максимальное количество попыток переподключения
         """
-        self.redis_url = redis_url
-        self._client: Any | None = None
-        self._max_retries = max_retries
-        self._connection_lock = asyncio.Lock()
+        self.redis_url: str = redis_url
+        self._client: _RedisSdkConnection | None = None
+        self._max_retries: int = max_retries
+        self._connection_lock: asyncio.Lock = asyncio.Lock()
 
     async def connect(self) -> None:
         """Подключается к Redis"""
-        if redis is None:
-            logger.warning("Redis не установлен, RedisClient будет работать в режиме без подключения")
-            return
         try:
             parsed = urlparse(self.redis_url)
             db = int(parsed.path.lstrip("/")) if parsed.path else 0
 
-            self._client = redis.Redis(
-                host=parsed.hostname or "localhost",
-                port=parsed.port or 6379,
-                db=db,
-                decode_responses=True,
-                socket_connect_timeout=5,
-                socket_timeout=5,
-                health_check_interval=30,
+            self._client = _RedisSdkConnection(
+                Redis(
+                    host=parsed.hostname or "localhost",
+                    port=parsed.port or 6379,
+                    db=db,
+                    decode_responses=True,
+                    socket_connect_timeout=5,
+                    socket_timeout=5,
+                    health_check_interval=30,
+                )
             )
-            await self._client.ping()
+            _ = await self._client.ping()
             logger.info("RedisClient: подключение к Redis установлено")
         except Exception as e:
             logger.warning(f"RedisClient: не удалось подключиться к Redis: {e}")
@@ -72,7 +180,7 @@ class RedisClient:
             # Проверяем текущее соединение
             if self._client:
                 try:
-                    await self._client.ping()
+                    _ = await self._client.ping()
                     return True
                 except Exception:
                     logger.warning("Redis connection lost, reconnecting...")
@@ -87,15 +195,19 @@ class RedisClient:
                         return True
                 except Exception as e:
                     if attempt < self._max_retries - 1:
-                        wait_time = 2 ** attempt
-                        logger.warning(f"Reconnect attempt {attempt+1} failed: {e}, retry in {wait_time}s")
+                        wait_time: int = 1 << attempt
+                        logger.warning(
+                            f"Reconnect attempt {attempt + 1} failed: {e}, retry in {wait_time}s"
+                        )
                         await asyncio.sleep(wait_time)
                     else:
-                        logger.error(f"Failed to reconnect to Redis after {self._max_retries} attempts")
+                        logger.error(
+                            f"Failed to reconnect to Redis after {self._max_retries} attempts"
+                        )
 
             return False
 
-    def _require_client(self) -> Any:
+    def _require_client(self) -> _RedisSdkConnection:
         if self._client is None:
             raise RuntimeError("Redis client not connected after retries")
         return self._client
@@ -125,9 +237,7 @@ class RedisClient:
             return None
         client = self._require_client()
         try:
-            getter = getattr(client, "getdel", None)
-            if callable(getter):
-                return await client.getdel(key)
+            return await client.getdel(key)
         except Exception as e:
             logger.warning(f"getdel failed for key {key}: {e}")
 
@@ -135,7 +245,10 @@ class RedisClient:
         try:
             if await self._ensure_connected():
                 client = self._require_client()
-                return await client.eval(lua, 1, key)
+                lua_result = await client.eval(lua, 1, key)
+                if lua_result is None or isinstance(lua_result, str):
+                    return lua_result
+                raise ValueError("redis GETDEL lua returned non-string value")
         except Exception as e:
             logger.warning(f"getdel lua failed for key {key}: {e}")
         return None
@@ -148,7 +261,7 @@ class RedisClient:
         for attempt in range(2):
             try:
                 client = self._require_client()
-                await client.set(key, value, ex=ttl)
+                _ = await client.set(key, value, ex=ttl)
                 return True
             except Exception as e:
                 if attempt == 0 and await self._ensure_connected():
@@ -182,7 +295,7 @@ class RedisClient:
             return False
         try:
             client = self._require_client()
-            await client.setex(key, seconds, value)
+            _ = await client.setex(key, seconds, value)
             return True
         except Exception as e:
             logger.warning(f"RedisClient: ошибка установки ключа {key} с TTL: {e}")
@@ -233,7 +346,7 @@ class RedisClient:
         if not self._client:
             return False
         try:
-            await self._client.ping()
+            _ = await self._client.ping()
             return True
         except Exception:
             return False
@@ -304,7 +417,9 @@ class RedisClient:
                     break
                 if now - last_activity >= timeout:
                     logger.warning(
-                        "Subscription idle-timeout on %s after %.1fs idle", channel, now - last_activity
+                        "Subscription idle-timeout on %s after %.1fs idle",
+                        channel,
+                        now - last_activity,
                     )
                     break
 

@@ -125,7 +125,7 @@ def _call_parameters_from_pydantic_model(model: type[BaseModel]) -> dict[str, Ca
         if isinstance(any_of, list):
             for br in any_of:
                 if isinstance(br, dict) and br.get("type") not in (None, "null"):
-                    return prop_type(cast(JsonObject, br))
+                    return prop_type(br)
         return "string"
 
     out: dict[str, CallParameter] = {}
@@ -476,7 +476,6 @@ class FlowsLoader:
             if not isinstance(raw_node, dict):
                 logger.warning(f"Нода должна быть объектом в {nodes_path}")
                 continue
-            raw_node = cast(JsonObject, raw_node)
             node_id = raw_node.get("id")
             if not isinstance(node_id, str) or not node_id.strip():
                 logger.warning(f"Нода без id в {nodes_path}")
@@ -591,7 +590,7 @@ class FlowsLoader:
         for index, entry in enumerate(files):
             if not isinstance(entry, dict):
                 raise ValueError(f"Node '{node_id}': files[{index}] должен быть объектом")
-            file_entry = cast(JsonObject, entry)
+            file_entry = entry
             original_name_value = file_entry.get("original_name")
             if not isinstance(original_name_value, str) or not original_name_value.strip():
                 raise ValueError(f"Node '{node_id}': files[{index}].original_name должен быть непустой строкой")
@@ -602,7 +601,7 @@ class FlowsLoader:
             source = self._resolve_file_source(file_entry, node_id, index)
             original_name = original_name_value.strip()
             raw_bytes, _resolved_name = await reader.resolve_source(source, original_name, ReadOptions())
-            item = await processor.persist_uploaded_file_as_state_files_item(
+            item = await processor.persist_uploaded_file_as_file_ref(
                 data=raw_bytes,
                 original_name=original_name,
                 content_type=content_type.strip(),
@@ -611,7 +610,7 @@ class FlowsLoader:
                 public=False,
                 download_url_prefix=prefix,
             )
-            materialized.append(require_json_object(item, f"nodes.{node_id}.files[{index}]"))
+            materialized.append(item.to_json_object())
 
         node["files"] = materialized
         return node
@@ -970,7 +969,7 @@ class FlowsLoader:
             raise ValueError(f"{context}: ID '{tool}' не найден ни в tools_cache ни в nodes_cache")
 
         elif isinstance(tool, dict):
-            tool_payload = cast(JsonObject, tool)
+            tool_payload = tool
             tool_id = tool_payload.get("tool_id")
             exec_kind = tool_payload.get("type")
 

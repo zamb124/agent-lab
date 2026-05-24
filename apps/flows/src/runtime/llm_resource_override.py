@@ -2,24 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from apps.flows.src.models import ResourceType
 from apps.flows.src.models.node_config import NodeLLMConfig
-from apps.flows.src.models.resource import LLMResourceConfig, ResourceReference
+from apps.flows.src.models.resource import (
+    LLMResourceConfig,
+    ResourceReference,
+    ResourceReferenceInput,
+)
 from apps.flows.src.resources.merge import (
     merge_flow_skill_node_resource_maps,
     merge_shared_definition_config_with_patch,
 )
 from apps.flows.src.resources.merge_llm import merge_llm_resource_into_node_config
 
+if TYPE_CHECKING:
+    from apps.flows.src.db import ResourceRepository
+
 
 async def infer_unique_llm_resource_key_from_merged_maps(
     *,
-    flow_resources: dict[str, Any],
-    skill_resources: dict[str, Any] | None,
-    node_resources_raw: dict[str, Any],
-    repository: Any,
+    flow_resources: Mapping[str, ResourceReferenceInput],
+    skill_resources: Mapping[str, ResourceReferenceInput] | None,
+    node_resources_raw: Mapping[str, ResourceReferenceInput],
+    repository: ResourceRepository | None,
 ) -> str | None:
     """
     Если в merge (flow → skill → node) ровно один ключ с типом LLM — возвращает его идентификатор.
@@ -37,7 +45,12 @@ async def infer_unique_llm_resource_key_from_merged_maps(
             if ref.type == ResourceType.LLM:
                 llm_keys.append(key)
             continue
-        definition = await repository.get(ref.resource_id)
+        if repository is None:
+            raise ValueError("resource_repository обязателен для shared LLM resources")
+        resource_id = ref.resource_id
+        if resource_id is None:
+            raise ValueError(f"Ресурс '{key}': shared reference без resource_id")
+        definition = await repository.get(resource_id)
         if definition is not None and definition.type == ResourceType.LLM:
             llm_keys.append(key)
     if len(llm_keys) != 1:
@@ -48,10 +61,10 @@ async def infer_unique_llm_resource_key_from_merged_maps(
 async def resolve_llm_config_with_resource_key(
     *,
     llm_config: NodeLLMConfig | None,
-    flow_resources: dict[str, Any],
-    skill_resources: dict[str, Any] | None,
-    node_resources_raw: dict[str, Any],
-    repository: Any,
+    flow_resources: Mapping[str, ResourceReferenceInput],
+    skill_resources: Mapping[str, ResourceReferenceInput] | None,
+    node_resources_raw: Mapping[str, ResourceReferenceInput],
+    repository: ResourceRepository | None,
 ) -> NodeLLMConfig | None:
     """
     Если в config задан llm_resource_key — подмешивает LLMResourceConfig из мержи ресурсов.
@@ -76,16 +89,21 @@ async def resolve_llm_config_with_resource_key(
     if ref.is_inline:
         if ref.type != ResourceType.LLM:
             raise ValueError(f"Ресурс '{key}': ожидается type llm, получено {ref.type!r}")
-        if not ref.config:
+        if ref.config is None:
             raise ValueError(f"Ресурс '{key}': inline LLM без config")
         base_cfg = LLMResourceConfig.model_validate(ref.config)
     else:
-        definition = await repository.get(ref.resource_id)
+        if repository is None:
+            raise ValueError("resource_repository обязателен для shared LLM resources")
+        resource_id = ref.resource_id
+        if resource_id is None:
+            raise ValueError(f"Ресурс '{key}': shared reference без resource_id")
+        definition = await repository.get(resource_id)
         if definition is None:
-            raise ValueError(f"Shared resource '{ref.resource_id}' не найден в БД")
+            raise ValueError(f"Shared resource '{resource_id}' не найден в БД")
         if definition.type != ResourceType.LLM:
             raise ValueError(
-                f"Ресурс '{key}': shared '{ref.resource_id}' не LLM, а {definition.type!r}"
+                f"Ресурс '{key}': shared '{resource_id}' не LLM, а {definition.type!r}"
             )
         merged_dict = definition.config
         if ref.config:
@@ -103,10 +121,10 @@ async def resolve_llm_config_with_resource_key(
 async def resolve_llm_override_with_resource_key(
     *,
     llm_override: NodeLLMConfig | None,
-    flow_resources: dict[str, Any],
-    skill_resources: dict[str, Any] | None,
-    node_resources_raw: dict[str, Any],
-    repository: Any,
+    flow_resources: Mapping[str, ResourceReferenceInput],
+    skill_resources: Mapping[str, ResourceReferenceInput] | None,
+    node_resources_raw: Mapping[str, ResourceReferenceInput],
+    repository: ResourceRepository | None,
 ) -> NodeLLMConfig | None:
     return await resolve_llm_config_with_resource_key(
         llm_config=llm_override,

@@ -5,15 +5,15 @@
 Zero-Guess: все ресурсы регистрируются явно при startup.
 """
 
-from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from core.errors import ResourceAlreadyExistsError, ResourceNotFoundError
+from core.types import JsonObject
 
 T = TypeVar("T")
 
 
-class ResourceRegistry(ABC, Generic[T]):
+class ResourceRegistry(Generic[T]):
     """
     Универсальный реестр ресурсов.
 
@@ -29,12 +29,11 @@ class ResourceRegistry(ABC, Generic[T]):
         >>> node_class = registry.get("llm_node")
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._resources: dict[str, T] = {}
-        self._metadata: dict[str, dict[str, Any]] = {}
+        self._metadata: dict[str, JsonObject] = {}
 
-    @abstractmethod
-    def register(self, key: str, resource: T, metadata: dict[str, Any] | None = None) -> None:
+    def register(self, key: str, resource: T, metadata: JsonObject | None = None) -> None:
         """
         Регистрирует ресурс в реестре.
 
@@ -53,10 +52,9 @@ class ResourceRegistry(ABC, Generic[T]):
             )
 
         self._resources[key] = resource
-        if metadata:
-            self._metadata[key] = metadata
+        if metadata is not None:
+            self._metadata[key] = dict(metadata)
 
-    @abstractmethod
     def get(self, key: str) -> T:
         """
         Получает ресурс из реестра.
@@ -107,7 +105,7 @@ class ResourceRegistry(ABC, Generic[T]):
         """
         return list(self._resources.keys())
 
-    def get_metadata(self, key: str) -> dict[str, Any]:
+    def get_metadata(self, key: str) -> JsonObject:
         """
         Получает метаданные ресурса.
 
@@ -117,7 +115,15 @@ class ResourceRegistry(ABC, Generic[T]):
         Returns:
             Метаданные или пустой dict
         """
-        return self._metadata.get(key, {})
+        if key not in self._resources:
+            raise ResourceNotFoundError(
+                resource_type=self.__class__.__name__,
+                resource_id=key,
+            )
+        metadata = self._metadata.get(key)
+        if metadata is None:
+            return {}
+        return dict(metadata)
 
     def unregister(self, key: str) -> None:
         """

@@ -10,8 +10,9 @@ Public API:
 - ``CUSTOM_PROVIDER_SLUG`` — внутренний slug ``custom_openai_compatible`` для get_llm.
 - ``encrypt_secret`` / ``decrypt_secret`` / ``mask_encrypted_secret`` — Fernet helpers (API).
 
-Никаких dual-read / fallback на старые ключи: единственный канон —
-``ai_providers`` под ``Company.metadata`` (см. schema.py).
+Никаких dual-read / fallback на старые ключи: company-level канон —
+``ai_providers`` под ``Company.metadata`` (см. schema.py), platform-default LLM-route —
+``humanitec_llm``.
 """
 
 from core.company_ai.crypto import (

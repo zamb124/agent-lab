@@ -26,7 +26,7 @@ logger = get_logger(__name__)
 
 @broker.task(task_name=TASK_INVOKE_LLM, queue_name="flows_worker")
 async def invoke_llm(
-    messages: list[dict[str, str]],
+    messages: list[JsonObject],
     tools: list[JsonObject] | None = None,
     task_id: str | None = None,
     context_id: str | None = None,
@@ -62,11 +62,13 @@ async def invoke_llm(
         if not str(actx.user.user_id).strip():
             raise ValueError("Контекст с user обязателен для invoke_llm (биллинг и уведомления)")
         uid = str(actx.user.user_id).strip()
-        resolved = resolve_llm_for_capability(AICapability.LLM_CHAT)
+        resolved = resolve_llm_for_capability(
+            AICapability.LLM_CHAT,
+            include_platform_default=True,
+        )
         if resolved is None:
             raise ValueError(
-                "invoke_llm требует company override для capability=llm_chat; "
-                + "скрытый fallback на settings.llm.default_model запрещён"
+                "invoke_llm: platform default для capability=llm_chat не настроен"
             )
         llm = get_llm(
             model_name=resolved.model,

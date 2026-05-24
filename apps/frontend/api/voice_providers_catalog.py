@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 
 from apps.frontend.api.voice_providers_catalog_helpers import (
     VoiceProvidersCatalogDTO,
@@ -17,20 +17,22 @@ from apps.frontend.api.voice_providers_catalog_helpers import (
 )
 from apps.frontend.dependencies import ContainerDep
 from core.config import get_settings
+from core.context import get_context
 from core.models.identity_models import User
 
 router = APIRouter(prefix="/api/voice-providers", tags=["frontend", "voice"])
 
 
-def _require_authenticated_user(request: Request) -> User:
-    if not hasattr(request.state, "user") or not request.state.user:
+def _require_authenticated_user() -> User:
+    context = get_context()
+    if context is None:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
-    return request.state.user
+    return context.user
 
 
 @router.get("/catalog", response_model=VoiceProvidersCatalogDTO)
-async def voice_providers_catalog(request: Request, container: ContainerDep) -> VoiceProvidersCatalogDTO:
+async def voice_providers_catalog(container: ContainerDep) -> VoiceProvidersCatalogDTO:
     _ = container
-    _require_authenticated_user(request)
+    _ = _require_authenticated_user()
     pls = get_settings().provider_litserve
     return build_voice_providers_catalog_dto(pls)

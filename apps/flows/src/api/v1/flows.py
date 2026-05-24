@@ -32,15 +32,9 @@ from apps.flows.src.models import (
     TriggerConfig,
 )
 from apps.flows.src.models.flow_speech_settings import FlowSpeechSettings
-from apps.flows.src.services.bundle_node_repair import (
-    get_bundle_base_nodes_for_flow,
-    repair_node_map_with_canonical_top_level,
-)
-from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
 from apps.flows.src.services.flow_dataflow_inspector import (
     inspect_flow_dataflow,
 )
-from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
 from apps.flows.src.services.flow_speech_resolve import (
     effective_flow_speech_settings,
     flow_speech_to_triple_override,
@@ -167,18 +161,6 @@ def _flow_semantic_payload(flow_cfg: FlowConfig) -> JsonObject:
     return require_json_object(_drop_files_fields(payload), "flow.semantic_payload")
 
 
-def _canonical_flow_semantic_payload(flow_cfg: FlowConfig) -> JsonObject:
-    """
-    Payload для сравнения с bundle после того же пайплайна, что при READ из БД:
-    ``model_dump`` → ``normalize_flow_config_dict`` → ``FlowConfig.model_validate``.
-    Иначе свежесобранный bundle и конфиг из репозитория расходятся в ``nodes.tools`` и т.п.
-    """
-    payload = parse_json_object(flow_cfg.model_dump_json(), "flow")
-    normalized = normalize_flow_config_dict(payload)
-    canonical = FlowConfig.model_validate(normalized)
-    return _flow_semantic_payload(canonical)
-
-
 def _build_bundle_index(flows_root: Path) -> dict[str, str]:
     """flow_id -> bundle_id для записей из registry.yaml."""
     registry_path = flows_root / "registry.yaml"
@@ -262,9 +244,7 @@ async def _get_bundle_update_flags(
         if bundle_cfg is None:
             raise HTTPException(status_code=500, detail=f"Failed to build bundle config for '{bundle_id}'")
 
-        flags[flow_cfg.flow_id] = _canonical_flow_semantic_payload(flow_cfg) != _canonical_flow_semantic_payload(
-            bundle_cfg
-        )
+        flags[flow_cfg.flow_id] = _flow_semantic_payload(flow_cfg) != _flow_semantic_payload(bundle_cfg)
 
     return flags
 
@@ -487,7 +467,7 @@ class BranchRequest(BaseModel):
     description: str = ""
     tags: list[str] = Field(default_factory=list)
     entry: str | None = None
-    nodes: dict[str, JsonObject] | None = None
+    nodes: dict[str, GraphNodeConfig] | None = None
     nodes_mode: str | None = None
     edges: list[Edge] | None = None
     edges_mode: str | None = None
@@ -555,12 +535,14 @@ def _branch_request_to_config(
     elif existing is not None:
         speech_val = existing.speech
 
+    branch_nodes = _graph_nodes_payload(branch_req.nodes) if branch_req.nodes is not None else None
+
     return BranchConfig(
         name=branch_req.name,
         description=branch_req.description,
         tags=branch_req.tags,
         entry=branch_req.entry,
-        nodes=branch_req.nodes,
+        nodes=branch_nodes,
         edges=branch_req.edges,
         variables=_flow_variable_models(branch_req.variables, f"branches.{branch_id}.variables"),
         nodes_mode=_mode(branch_req.nodes_mode, ex_n, MergeMode.REPLACE),
@@ -577,7 +559,7 @@ class FlowCreateRequest(BaseModel):
     name: str
     description: str | None = None
     entry: str
-    nodes: dict[str, JsonObject]
+    nodes: dict[str, GraphNodeConfig]
     edges: list[Edge]
     variables: JsonObject = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
@@ -674,7 +656,7 @@ class FlowStoreBundleResponse(BaseModel):
 class FlowValidateRequest(BaseModel):
     """Запрос на валидацию агента"""
 
-    nodes: dict[str, JsonObject]
+    nodes: dict[str, GraphNodeConfig]
     edges: list[Edge]
     entry: str
     variables: JsonObject = Field(default_factory=dict)
@@ -851,7 +833,7 @@ async def validate_flow(
     )
 
     result = await validator.validate(
-        nodes=request.nodes,
+        nodes=_graph_nodes_payload(request.nodes),
         edges=[_edge_to_json(edge) for edge in request.edges],
         entry=request.entry,
         variables=request.variables,
@@ -1066,12 +1048,13 @@ async def create_flow(
 ) -> FlowResponse:
     """Создаёт flow."""
     variables = _flow_variable_models(request.variables, "variables")
+    request_nodes = _graph_nodes_payload(request.nodes)
 
     # Валидируем tool_id в tool нодах
-    await _validate_tool_nodes(dict(request.nodes), container)
+    await _validate_tool_nodes(request_nodes, container)
 
     # Инлайним tools - заменяем tool_id на полные конфиги с кодом ПЕРЕД валидацией
-    nodes = await _inline_tools_in_nodes(dict(request.nodes), container)
+    nodes = await _inline_tools_in_nodes(request_nodes, container)
 
     # Валидируем ссылки (node_id, tool_id, flow_id) после инлайна
     validator = FlowValidator(
@@ -1434,29 +1417,14 @@ async def update_flow(
 
     variables = _flow_variable_models(request.variables, "variables")
 
-    # Патч только с координатами не затирает семантику ноды, сохранённую ранее
-    merged_top_nodes = merge_incoming_node_dict_for_persist(
-        dict(request.nodes), existing.nodes or {}
-    )
+    top_nodes = _graph_nodes_payload(request.nodes)
     branches: dict[str, BranchConfig] = {}
     for branch_id, branch_req in request.branches.items():
-        ex = (existing.branches or {}).get(branch_id)
-        ex_n = (ex.nodes if ex else None) or {}
-        if branch_req.nodes is None:
-            merged_n = branch_req.nodes
-        else:
-            merged_n = merge_incoming_node_dict_for_persist(dict(branch_req.nodes), ex_n)
         ex_cfg = (existing.branches or {}).get(branch_id)
-        branches[branch_id] = _branch_request_to_config(
-            branch_id, branch_req.model_copy(update={"nodes": merged_n}), ex_cfg
-        )
+        branches[branch_id] = _branch_request_to_config(branch_id, branch_req, ex_cfg)
 
     # Инлайним tools - заменяем tool_id на полные конфиги с кодом
-    nodes = await _inline_tools_in_nodes(merged_top_nodes, container)
-    if (existing.source or "manual") == "file":
-        b_nodes = get_bundle_base_nodes_for_flow(flow_id)
-        if b_nodes:
-            nodes = repair_node_map_with_canonical_top_level(nodes, b_nodes)
+    nodes = await _inline_tools_in_nodes(top_nodes, container)
 
     speech_merged = request.speech if request.speech is not None else existing.speech
 
