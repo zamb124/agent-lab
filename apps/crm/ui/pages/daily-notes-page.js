@@ -122,8 +122,8 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
 
             .layout {
                 display: grid;
-                grid-template-columns: 1fr 350px;
-                gap: var(--space-4);
+                grid-template-columns: minmax(0, 1fr) 324px;
+                gap: 24px;
                 width: 100%;
                 max-width: 100%;
                 min-width: 0;
@@ -194,7 +194,7 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
                 gap: var(--space-2);
                 padding: 0 var(--space-3);
                 border-radius: var(--radius-full);
-                border: 1px solid var(--crm-stroke);
+                border: 1px solid transparent;
                 background: var(--crm-surface-muted);
                 min-height: 44px;
                 width: 100%;
@@ -241,9 +241,9 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             .voice-btn {
                 min-height: 44px;
                 width: 44px;
-                border: 1px solid var(--crm-stroke);
+                border: 1px solid transparent;
                 border-radius: var(--radius-full);
-                background: var(--crm-surface);
+                background: var(--crm-surface-muted);
                 color: var(--text-secondary);
                 cursor: pointer;
                 display: flex;
@@ -477,9 +477,9 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
 
             .summary-panel {
                 background: var(--crm-summary-bg);
-                border-radius: var(--radius-xl);
-                border: 1px solid var(--crm-summary-stroke);
-                padding: var(--space-4);
+                border-radius: 16px;
+                border: none;
+                padding: 20px;
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
@@ -501,17 +501,17 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
             .summary-title-text {
                 flex: 1 1 12rem;
                 min-width: 0;
-                font-size: var(--text-xl);
+                font-size: 20px;
                 font-weight: 700;
-                line-height: 1.35;
+                line-height: 26px;
                 background: var(--crm-summary-title-gradient);
                 -webkit-background-clip: text;
                 background-clip: text;
                 -webkit-text-fill-color: transparent;
             }
             .summary-title-icon {
-                width: 36px;
-                height: 36px;
+                width: 24px;
+                height: 24px;
                 border-radius: var(--radius-full);
                 display: inline-flex;
                 align-items: center;
@@ -543,13 +543,14 @@ export class CRMDailyNotesPage extends CRMNamespacePage {
 
             .summary-meta {
                 color: var(--crm-summary-meta);
-                font-size: var(--text-base);
+                font-size: 12px;
+                line-height: 15px;
                 margin-bottom: var(--space-4);
             }
             .summary-text {
                 color: var(--text-primary);
-                font-size: var(--text-xl);
-                line-height: 1.32;
+                font-size: 16px;
+                line-height: 20px;
                 margin: 0;
                 flex: 1;
                 min-height: 0;

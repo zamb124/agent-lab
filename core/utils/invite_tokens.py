@@ -90,24 +90,15 @@ class InviteTokenService:
             algorithms=[self._algorithm],
             audience=INVITE_TOKEN_AUDIENCE,
         )
+        data = InviteTokenData.model_validate(payload)
 
-        if payload.get("typ") != INVITE_TOKEN_TYPE:
-            raise ValueError(f"Неверный тип токена: {payload.get('typ')!r}")
+        if data.typ != INVITE_TOKEN_TYPE:
+            raise ValueError(f"Неверный тип токена: {data.typ!r}")
 
-        raw_inv = payload.get("invited_by")
-        if not isinstance(raw_inv, str) or raw_inv == "":
+        if data.invited_by == "":
             raise ValueError("Инвайт-токен без invited_by")
 
-        return InviteTokenData(
-            company_id=payload["company_id"],
-            role=payload["role"],
-            invited_by=raw_inv,
-            jti=payload["jti"],
-            exp=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
-            iat=datetime.fromtimestamp(payload["iat"], tz=timezone.utc),
-            typ=payload["typ"],
-            aud=payload["aud"],
-        )
+        return data
 
 async def burn_invite_token(jti: str, ttl_seconds: int) -> bool:
     """

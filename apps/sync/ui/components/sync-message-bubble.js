@@ -29,6 +29,7 @@ import '@platform/lib/components/platform-audio-message-player.js';
 import { parseMentionsToSegments } from '../_helpers/sync-mention-text.js';
 import { resolveAvatarImageSrc } from '@platform/lib/utils/placeholder-avatar.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
+import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { initialsFromName, syncAvatarHueVar } from '../_helpers/sync-hue.js';
 
 const FILE_DOWNLOAD_BASE = '/sync/api/v1/files/download';
@@ -339,24 +340,53 @@ export class SyncMessageBubble extends PlatformElement {
         :host([data-own]) .reaction { background: rgba(255,255,255,0.2); color: white; }
         .reaction.mine { border-color: var(--accent); }
         .file {
-            display: flex;
+            display: grid;
+            grid-template-columns: 32px minmax(0, 1fr) 34px;
             align-items: center;
-            gap: var(--space-2);
-            padding: var(--space-2);
-            background: var(--glass-hover);
-            border-radius: var(--radius-sm);
-            min-width: 200px;
+            gap: 10px;
+            box-sizing: border-box;
+            width: min(100%, 520px);
+            min-width: min(260px, 100%);
+            padding: 10px 12px;
+            background: color-mix(in srgb, var(--glass-hover) 84%, transparent);
+            border: 1px solid var(--glass-border-subtle, rgba(15, 23, 42, 0.1));
+            border-radius: var(--radius-lg, 12px);
             cursor: pointer;
+            transition: background var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast);
+        }
+        .body + .file,
+        .file + .file {
+            margin-top: 8px;
+        }
+        .file:hover {
+            background: color-mix(in srgb, var(--glass-hover) 94%, var(--accent-subtle, rgba(153, 166, 249, 0.12)));
+            border-color: color-mix(in srgb, var(--glass-border-subtle, rgba(15, 23, 42, 0.1)) 64%, var(--accent));
+        }
+        .file:active {
+            transform: translateY(1px);
         }
         .file:focus-visible {
             outline: 2px solid var(--accent);
             outline-offset: 2px;
         }
-        :host([data-own]) .file { background: rgba(255,255,255,0.18); }
+        .file platform-icon[file-icon] {
+            width: 32px;
+            height: 32px;
+            justify-self: center;
+        }
+        :host([data-own]) .file {
+            background: rgba(255,255,255,0.16);
+            border-color: rgba(255,255,255,0.16);
+        }
+        :host([data-own]) .file:hover {
+            background: rgba(255,255,255,0.22);
+            border-color: rgba(255,255,255,0.28);
+        }
         .file-info { flex: 1; min-width: 0; }
         .file-name {
             font-size: var(--text-sm);
-            font-weight: 500;
+            font-weight: 650;
+            line-height: 1.25;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -364,8 +394,28 @@ export class SyncMessageBubble extends PlatformElement {
         .file-size {
             font-size: var(--text-xs);
             color: var(--text-secondary);
+            margin-top: 2px;
         }
         :host([data-own]) .file-size { color: rgba(255,255,255,0.85); }
+        .file a {
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            color: inherit;
+            opacity: 0.74;
+            text-decoration: none;
+            transition: background var(--duration-fast), opacity var(--duration-fast);
+        }
+        .file a:hover {
+            background: rgba(15, 23, 42, 0.08);
+            opacity: 1;
+        }
+        :host([data-own]) .file a:hover {
+            background: rgba(255, 255, 255, 0.18);
+        }
         .audio-attachment {
             display: block;
             align-self: flex-start;
@@ -822,6 +872,10 @@ export class SyncMessageBubble extends PlatformElement {
         const size = data && typeof data.file_size === 'number'
             ? formatFileSize(data.file_size)
             : '';
+        const mimeType = data && typeof data.content_type === 'string'
+            ? data.content_type
+            : (data && typeof data.mime_type === 'string' ? data.mime_type : '');
+        const iconKey = resolveFileIconKey(name, mimeType);
         return html`
             <div
                 class="file"
@@ -830,7 +884,7 @@ export class SyncMessageBubble extends PlatformElement {
                 @click=${() => this._openFileData(data, url, 'sync_message_file')}
                 @keydown=${(event) => this._onFileOpenKeydown(event, data, url)}
             >
-                <platform-icon name="file" size="24"></platform-icon>
+                <platform-icon file-icon name=${iconKey} size="28"></platform-icon>
                 <div class="file-info">
                     <div class="file-name">${name}</div>
                     ${size ? html`<div class="file-size">${size}</div>` : ''}

@@ -5,22 +5,30 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-import json
 import time
 from datetime import datetime, timezone
-from typing import Any
 from urllib.parse import quote, urlencode
+
+from pydantic import Field
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
 from apps.flows.src.models.mcp import MCPCallResult, MCPServerConfig
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
 from core.logging import get_logger
+from core.models.base import StrictBaseModel
+from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
 
 BROWSER_PREVIEW_EVENT_PREFIX = "browser.preview."
 _BROWSER_SERVER_ID = "browser"
 _TOKEN_TTL_SECONDS = 6 * 60 * 60
+
+
+class BrowserPreviewTokenClaims(StrictBaseModel):
+    sid: str
+    tid: str
+    exp: int = Field(ge=1)
 
 
 def _now_iso() -> str:
@@ -48,18 +56,18 @@ def create_browser_preview_token(
     task_id: str,
     ttl_seconds: int = _TOKEN_TTL_SECONDS,
 ) -> str:
-    payload = {
-        "sid": session_id,
-        "tid": task_id,
-        "exp": int(time.time()) + int(ttl_seconds),
-    }
-    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    claims = BrowserPreviewTokenClaims(
+        sid=session_id,
+        tid=task_id,
+        exp=int(time.time()) + int(ttl_seconds),
+    )
+    raw = claims.model_dump_json().encode("utf-8")
     body = _b64url_encode(raw)
     sig = hmac.new(_preview_secret(), body.encode("ascii"), hashlib.sha256).digest()
     return f"{body}.{_b64url_encode(sig)}"
 
 
-def verify_browser_preview_token(*, token: str, session_id: str) -> dict[str, Any]:
+def verify_browser_preview_token(*, token: str, session_id: str) -> BrowserPreviewTokenClaims:
     try:
         body, sig = token.split(".", 1)
     except ValueError as exc:
@@ -70,17 +78,14 @@ def verify_browser_preview_token(*, token: str, session_id: str) -> dict[str, An
     if not hmac.compare_digest(expected, sig):
         raise ValueError("invalid preview token signature")
     try:
-        payload = json.loads(_b64url_decode(body).decode("utf-8"))
-    except (ValueError, json.JSONDecodeError) as exc:
+        claims = BrowserPreviewTokenClaims.model_validate_json(_b64url_decode(body))
+    except ValueError as exc:
         raise ValueError("invalid preview token payload") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("invalid preview token payload")
-    if str(payload.get("sid", "")) != session_id:
+    if claims.sid != session_id:
         raise ValueError("preview token session mismatch")
-    exp = int(payload.get("exp", 0) or 0)
-    if exp <= int(time.time()):
+    if claims.exp <= int(time.time()):
         raise ValueError("preview token expired")
-    return payload
+    return claims
 
 
 def build_browser_preview_urls(*, session_id: str, task_id: str) -> dict[str, str]:
@@ -101,20 +106,19 @@ def is_browser_mcp_server(config: MCPServerConfig) -> bool:
     return server_id == _BROWSER_SERVER_ID or "/browser/api/" in url
 
 
-def _mcp_result_json(result: MCPCallResult | None) -> dict[str, Any]:
+def _mcp_result_json(result: MCPCallResult | None) -> JsonObject:
     if result is None:
         return {}
     text = result.get_text().strip()
     if text == "":
         return {}
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
+        return parse_json_object(text, "browser MCP result")
+    except ValueError:
         return {}
-    return data if isinstance(data, dict) else {}
 
 
-def _session_id_from(tool_name: str, args: dict[str, Any], result: MCPCallResult | None) -> str:
+def _session_id_from(tool_name: str, args: JsonObject, result: MCPCallResult | None) -> str:
     if tool_name == "browser_create_session":
         created = _mcp_result_json(result)
         sid = created.get("session_id")
@@ -135,7 +139,7 @@ def _event_type_for_phase(tool_name: str, phase: str) -> str:
     return f"{BROWSER_PREVIEW_EVENT_PREFIX}step_finished"
 
 
-def _safe_args_preview(args: dict[str, Any]) -> dict[str, Any]:
+def _safe_args_preview(args: JsonObject) -> JsonObject:
     allowed = {
         "session_id",
         "url",
@@ -153,7 +157,7 @@ async def emit_browser_preview_mcp_event(
     *,
     config: MCPServerConfig,
     tool_name: str,
-    arguments: dict[str, Any],
+    arguments: JsonObject,
     phase: str,
     result: MCPCallResult | None = None,
     error: str | None = None,
@@ -181,7 +185,7 @@ async def _emit_browser_preview_mcp_event(
     *,
     config: MCPServerConfig,
     tool_name: str,
-    arguments: dict[str, Any],
+    arguments: JsonObject,
     phase: str,
     result: MCPCallResult | None = None,
     error: str | None = None,
@@ -201,7 +205,7 @@ async def _emit_browser_preview_mcp_event(
     session_id = _session_id_from(tool_name, arguments, result)
     result_json = _mcp_result_json(result)
 
-    payload: dict[str, Any] = {
+    payload: JsonObject = {
         "server_id": config.server_id,
         "browser_tool_name": tool_name,
         "top_level_tool_name": ctx.tool_name,

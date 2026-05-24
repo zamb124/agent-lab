@@ -35,8 +35,10 @@ from core.clients.llm.messages import (
 from core.clients.llm.messages import (
     normalize_messages as _normalize_messages,
 )
+from core.clients.redis_client import RedisClient
 from core.llm_context import LLMContextBlock, LLMContextSourceRegistry
 from core.logging import get_logger
+from core.types import JsonValue, parse_json_value
 
 logger = get_logger(__name__)
 
@@ -119,9 +121,9 @@ class MockLLM:
         self._responses: dict[str, str] = {}
         self._tool_responses: dict[str, dict[str, Any]] = {}
         self._default_response: str = "Mock LLM ответ"
-        self._redis_client = None
+        self._redis_client: RedisClient | None = None
 
-    def set_redis_client(self, redis_client) -> "MockLLM":
+    def set_redis_client(self, redis_client: RedisClient) -> "MockLLM":
         """Устанавливает Redis клиент для межпроцессного обмена."""
         self._redis_client = redis_client
         return self
@@ -156,7 +158,7 @@ class MockLLM:
         self._tool_responses = {}
         self._default_response = "Mock LLM ответ"
 
-    async def _get_redis_response(self) -> Any | None:
+    async def _get_redis_response(self) -> JsonValue | None:
         """Получает ответ из Redis (межпроцессная очередь)."""
         if not self._redis_client:
             return None
@@ -168,7 +170,9 @@ class MockLLM:
             )
             if redis_response_payload is None:
                 return None
-            redis_response = json.loads(redis_response_payload)
+            if not isinstance(redis_response_payload, str):
+                raise ValueError("mock_llm redis response must be a JSON string")
+            redis_response = parse_json_value(redis_response_payload, "mock_llm.redis_response")
             logger.info("mock_llm.redis_response_popped")
             return redis_response
         except Exception as exc:
@@ -766,7 +770,9 @@ def get_global_mock_llm(model: str = "mock-gpt-4") -> MockLLM | None:
     return _global_mock_registry.get(model)
 
 
-def configure_mock_llm_redis(redis_client, model: str = "mock-gpt-4") -> MockLLM | None:
+def configure_mock_llm_redis(
+    redis_client: RedisClient, model: str = "mock-gpt-4"
+) -> MockLLM | None:
     """Настраивает MockLLM для чтения из Redis."""
     mock_llm = get_global_mock_llm(model)
     if mock_llm:

@@ -47,6 +47,10 @@ class TestSettingsAPI:
         assert any(p.get("kind") == "platform" for p in prov_items)
         assert body["llm_context"]["configured"] is False
         assert body["llm_context"]["config"] == {}
+        assert body["llm_context"]["resolved"]["profile"] == "off"
+        assert body["llm_context"]["resolved"]["mode"] == "off"
+        assert body["llm_context"]["resolved"]["retrieval"]["mode"] == "off"
+        assert body["llm_context"]["resolved"]["budget"]["max_input_tokens"] > 0
         assert "standard" in body["llm_context"]["profiles"]
         assert "large" in body["llm_context"]["budgets"]
 
@@ -96,6 +100,8 @@ class TestSettingsAPI:
         assert body["configured"] is True
         assert body["config"]["profile"] == "agent"
         assert body["config"]["retrieval"]["rerank"] is True
+        assert body["resolved"]["profile"] == "agent"
+        assert body["resolved"]["retrieval"]["top_k"] == 24
 
         cleared = await frontend_client.delete(
             "/frontend/api/settings/ai-providers/llm-context",
@@ -120,6 +126,51 @@ class TestSettingsAPI:
 
         assert response.status_code == 400
         assert "missing-profile" in response.json()["detail"]
+
+    async def test_ai_providers_accept_user_company_admin_role_when_company_members_stale(
+        self,
+        frontend_client: AsyncClient,
+        frontend_container,
+    ):
+        """AI providers не падает 403, если admin роль есть в user.companies, но company.members устарел."""
+        import uuid
+
+        from core.models.identity_models import Company, User
+        from core.utils.tokens import get_token_service
+
+        company_id = f"ai_roles_{uuid.uuid4().hex[:8]}"
+        user_id = f"ai_admin_{uuid.uuid4().hex[:8]}"
+        company = Company(
+            company_id=company_id,
+            name="AI Roles Company",
+            owner_user_id="other_user",
+            members={},
+        )
+        user = User(
+            user_id=user_id,
+            name="AI Admin",
+            groups=["user"],
+            companies={company_id: ["admin"]},
+            active_company_id=company_id,
+        )
+        await frontend_container.company_repository.set(company)
+        await frontend_container.user_repository.set(user)
+
+        token = get_token_service().create_token(user_id, company_id=company_id)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        snapshot = await frontend_client.get(
+            "/frontend/api/settings/ai-providers",
+            headers=headers,
+        )
+        assert snapshot.status_code == 200
+
+        updated = await frontend_client.put(
+            "/frontend/api/settings/ai-providers/llm-context",
+            headers=headers,
+            json={"profile": "standard"},
+        )
+        assert updated.status_code == 200
 
     async def test_get_company_settings_unauthorized(self, frontend_client: AsyncClient):
         """Попытка получить настройки без авторизации"""

@@ -32,7 +32,7 @@ def test_registry_custom_provider_options_use_label_and_custom_ref():
         ]
     )
 
-    assert _custom_provider_options(aip) == [
+    assert [item.model_dump(mode="json", exclude_none=True) for item in _custom_provider_options(aip)] == [
         {
             "value": "custom:corp",
             "label": "Corp LLM",
@@ -44,14 +44,14 @@ def test_registry_custom_provider_options_use_label_and_custom_ref():
 
 
 def test_registry_platform_provider_options_labels_humanitec_llm():
-    assert _platform_provider_options(["openrouter", HUMANITEC_LLM_PROVIDER]) == [
-        "openrouter",
-        {
-            "value": HUMANITEC_LLM_PROVIDER,
-            "label": "Humanitec LLM",
-            "kind": "virtual",
-        },
-    ]
+    options = _platform_provider_options(["openrouter", HUMANITEC_LLM_PROVIDER])
+    assert options[0] == "openrouter"
+    assert not isinstance(options[1], str)
+    assert options[1].model_dump(mode="json", exclude_none=True) == {
+        "value": HUMANITEC_LLM_PROVIDER,
+        "label": "Humanitec LLM",
+        "kind": "virtual",
+    }
 
 
 @pytest.mark.asyncio

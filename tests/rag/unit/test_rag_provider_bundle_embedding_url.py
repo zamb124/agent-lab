@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
+from core.config.base import BaseSettings
 from core.config.models import (
     EmbeddingApiConfig,
     EmbeddingConfig,
@@ -24,14 +23,14 @@ def _minimal_settings(
     embedding: EmbeddingConfig,
     provider_litserve: ProviderLitserveConfig,
     llm: LLMConfig | None = None,
-) -> SimpleNamespace:
+) -> BaseSettings:
     rag = RAGConfig(
         enabled=True,
         default_provider="pgvector",
         embedding=embedding,
         providers={"pgvector": RAGProviderConfig(enabled=True)},
     )
-    return SimpleNamespace(
+    return BaseSettings(
         rag=rag,
         llm=llm if llm is not None else LLMConfig(),
         provider_litserve=provider_litserve,
@@ -47,10 +46,10 @@ def test_resolve_rag_provider_bundle_litserve_uses_resolved_v1_base() -> None:
     settings = _minimal_settings(embedding=emb, provider_litserve=lit)
     bundle = resolve_rag_provider_bundle(settings)
     assert bundle.embedding_runtime is not None
-    assert bundle.embedding_runtime["provider"] == "provider_litserve"
-    assert bundle.embedding_runtime["base_url"] == "http://127.0.0.1:8014/v1"
-    assert bundle.embedding_runtime["model"] == "qwen/qwen3-embedding-0.6b"
-    assert bundle.embedding_runtime["dimension"] == 1024
+    assert bundle.embedding_runtime.provider == "provider_litserve"
+    assert bundle.embedding_runtime.base_url == "http://127.0.0.1:8014/v1"
+    assert bundle.embedding_runtime.model == "qwen/qwen3-embedding-0.6b"
+    assert bundle.embedding_runtime.dimension == 1024
 
 
 def test_resolve_rag_embedding_runtime_litserve_prefers_embedding_api_base_url() -> None:
@@ -75,5 +74,4 @@ def test_resolve_rag_embedding_runtime_litserve_requires_root_when_api_base_url_
         api=EmbeddingApiConfig(model="qwen/qwen3-embedding-0.6b", dimension=1024, base_url=None, mrl_output_dimension=1024),
     )
     with pytest.raises(ValueError, match="provider_litserve.api.base_url"):
-        resolve_rag_embedding_runtime(emb, LLMConfig(), lit)
-
+        _ = resolve_rag_embedding_runtime(emb, LLMConfig(), lit)

@@ -23,6 +23,7 @@ from core.logging import get_logger
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
 from core.rag.providers.pgvector_provider import PgVectorProvider
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -32,7 +33,7 @@ async def execute_reembed_tick(
     container: BaseContainer,
     channel: str,
     schedule_task_id: str,
-) -> dict[str, object]:
+) -> JsonObject:
     """
     Запускает один тик перевекторизации для воркера.
 
@@ -169,7 +170,7 @@ async def _run_reembed_round(
             if len(embeddings) != len(slice_pairs):
                 raise ValueError(
                     f"reembed_stale: размер батча embedding {len(embeddings)} "
-                    f"не совпадает с числом чанков {len(slice_pairs)}",
+                    + f"не совпадает с числом чанков {len(slice_pairs)}",
                 )
             doc_emb = [(slice_pairs[i][0], embeddings[i]) for i in range(len(slice_pairs))]
             written = await provider.write_reembed_chunk_embeddings(

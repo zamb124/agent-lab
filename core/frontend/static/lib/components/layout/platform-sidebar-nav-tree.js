@@ -76,7 +76,7 @@ export class PlatformSidebarNavTree extends PlatformElement {
                 flex-direction: column;
                 gap: 2px;
                 padding-left: var(--space-2);
-                border-left: 1px solid var(--glass-border-subtle);
+                border-left: var(--sidebar-nav-tree-children-border, 1px solid var(--glass-border-subtle));
                 margin-left: var(--space-3);
             }
             .nav-tree-leaf .nav-item {

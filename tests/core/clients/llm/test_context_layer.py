@@ -62,6 +62,14 @@ class QueryEchoContextSource:
         ]
 
 
+class ExplodingContextSource:
+    name = "query.exploding"
+
+    async def collect(self, request: LLMContextSourceRequest) -> list[LLMContextBlock]:
+        _ = request
+        raise AssertionError("disabled LLM context must not collect sources")
+
+
 @pytest.mark.asyncio
 async def test_context_layer_preserves_system_prefix_and_trims_active_window() -> None:
     messages = normalize_messages(
@@ -126,6 +134,23 @@ async def test_context_layer_collects_blocks_from_source_registry() -> None:
         "query:current question",
         "current question",
     ]
+
+
+@pytest.mark.asyncio
+async def test_context_layer_mode_off_does_not_collect_sources() -> None:
+    messages = normalize_messages([{"role": "user", "content": "current question"}])
+    off_policy = _profile().model_copy(update={"mode": "off"})
+
+    prepared = await prepare_messages_for_context_layer(
+        messages,
+        llm_context=off_policy,
+        llm_context_source_registry=LLMContextSourceRegistry([ExplodingContextSource()]),
+        compiler=_compiler(),
+    )
+
+    assert prepared.compiled_context is not None
+    assert prepared.compiled_context.selected_blocks == []
+    assert prepared.openai_messages == [{"role": "user", "content": "current question"}]
 
 
 @pytest.mark.asyncio

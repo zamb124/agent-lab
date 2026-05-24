@@ -84,6 +84,16 @@ def test_resolver_applies_layers_in_platform_company_resource_node_call_order() 
     assert policy.cache == "off"
 
 
+def test_platform_default_context_profile_is_off() -> None:
+    config = LLMContextConfig()
+    policy = resolve_llm_context_policy(config=config)
+
+    assert config.default_profile == "off"
+    assert policy.mode == "off"
+    assert policy.memory == "off"
+    assert policy.retrieval.mode == "off"
+
+
 def test_resolver_rejects_unknown_profile_and_budget() -> None:
     with pytest.raises(ValueError, match="profile"):
         resolve_llm_context_policy(config=_config(), node={"profile": "missing"})

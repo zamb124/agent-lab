@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.container import get_crm_container
+from apps.crm.container import CRMContainer, get_crm_container
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm_worker.broker import broker
@@ -17,6 +16,7 @@ from core.logging import get_logger
 from core.text_transforms import TextTransformService
 from core.text_transforms.chunking import split_text_into_markdown_chunks
 from core.text_transforms.strip_outer_markdown_fence import strip_outer_markdown_code_fence
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -36,7 +36,7 @@ def _parse_expected_updated_at(raw: str) -> datetime:
 
 async def _journal_terminal_markdown(
     *,
-    container,
+    container: CRMContainer,
     task_id: str | None,
     company_id: str,
     snapshot_user_id: str,
@@ -44,7 +44,7 @@ async def _journal_terminal_markdown(
     stage: str,
     progress_pct: int,
     error_message: str | None = None,
-    data_patch: dict[str, Any] | None = None,
+    data_patch: JsonObject | None = None,
 ) -> None:
     if not task_id:
         return
@@ -78,7 +78,7 @@ async def format_note_description_markdown_task(
     interface_language: str,
     expected_updated_at_iso: str,
     task_id: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Форматирует заметку через общий TextTransformService. По умолчанию это платформенный
     платформенный LLM default-route с candidate/fallback логикой; явный LitServe остаётся

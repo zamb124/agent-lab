@@ -76,26 +76,27 @@ async def prepare_messages_for_context_layer(
 
     policy = _resolve_context_policy(llm_context, company_patch=company_patch)
     source_blocks: list[LLMContextBlock] = []
-    profile_blocks = await IdentityLLMContextProfileSource().collect(
-        LLMContextSourceRequest(
-            messages=openai_messages,
-            policy=policy,
-            query=_latest_user_text(openai_messages),
-            metadata=metadata or {},
-        )
-    )
-    source_blocks.extend(profile_blocks)
-    if llm_context_source_registry is not None:
-        source_blocks.extend(
-            await llm_context_source_registry.collect(
-                LLMContextSourceRequest(
-                    messages=openai_messages,
-                    policy=policy,
-                    query=_latest_user_text(openai_messages),
-                    metadata=metadata or {},
-                )
+    if policy.mode != "off":
+        profile_blocks = await IdentityLLMContextProfileSource().collect(
+            LLMContextSourceRequest(
+                messages=openai_messages,
+                policy=policy,
+                query=_latest_user_text(openai_messages),
+                metadata=metadata or {},
             )
         )
+        source_blocks.extend(profile_blocks)
+        if llm_context_source_registry is not None:
+            source_blocks.extend(
+                await llm_context_source_registry.collect(
+                    LLMContextSourceRequest(
+                        messages=openai_messages,
+                        policy=policy,
+                        query=_latest_user_text(openai_messages),
+                        metadata=metadata or {},
+                    )
+                )
+            )
     compiled = (compiler or LLMContextCompiler()).compile(
         LLMContextCompileRequest(
             messages=openai_messages,

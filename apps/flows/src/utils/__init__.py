@@ -2,12 +2,13 @@
 
 import json
 import re
-from typing import Any
+
+from core.types import JsonValue, parse_json_value
 
 from .merge import deep_merge
 
 
-def extract_json_from_response(text: str) -> Any:
+def extract_json_from_response(text: str) -> JsonValue | None:
     """
     Извлекает JSON из текста.
 
@@ -25,20 +26,19 @@ def extract_json_from_response(text: str) -> Any:
     match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text, re.IGNORECASE)
     if match:
         try:
-            return json.loads(match.group(1).strip())
-        except json.JSONDecodeError:
+            return parse_json_value(match.group(1).strip(), "response.json_block")
+        except (ValueError, json.JSONDecodeError):
             pass
 
     # Пробуем распарсить как JSON напрямую
     stripped = text.strip()
     if stripped.startswith('{') or stripped.startswith('['):
         try:
-            return json.loads(stripped)
-        except json.JSONDecodeError:
+            return parse_json_value(stripped, "response.json")
+        except (ValueError, json.JSONDecodeError):
             pass
 
     return None
 
 
 __all__ = ["deep_merge", "extract_json_from_response"]
-

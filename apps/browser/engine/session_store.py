@@ -60,7 +60,7 @@ class SessionStateStore:
         return self._blobs[state_key]
 
     def delete(self, state_key: str) -> None:
-        self._blobs.pop(state_key, None)
+        _ = self._blobs.pop(state_key, None)
 
     async def capture_from(
         self,
@@ -131,7 +131,7 @@ class SessionStateStore:
 
     def current_url(self, state_key: str) -> str:
         blob = self.get(state_key)
-        if not isinstance(blob.current_url, str) or not blob.current_url:
+        if not blob.current_url:
             raise RuntimeError("SessionStateBlob.current_url должен быть непустой строкой")
         return blob.current_url
 
@@ -142,7 +142,7 @@ class SessionStateStore:
             hard = blob.pause_ttl_hard_sec
             if soft is None or hard is None:
                 raise ValueError("pause_ttl_soft_sec и pause_ttl_hard_sec должны быть заданы вместе")
-            if not isinstance(soft, int) or not isinstance(hard, int) or soft <= 0 or hard <= 0:
+            if soft <= 0 or hard <= 0:
                 raise ValueError("pause_ttl_soft_sec и pause_ttl_hard_sec должны быть int > 0")
             if soft > hard:
                 raise ValueError("pause_ttl_soft_sec должен быть <= pause_ttl_hard_sec")

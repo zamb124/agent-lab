@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import math
-from typing import Any
 
 from core.llm_context import LLMContextBlock, LLMContextSourceRequest
-from core.rag.models import RAGSearchResult
+from core.rag.models import RAGMetadataFilter, RAGSearchOptions, RAGSearchResult
 from core.rag.rag_resource_bind import RagResourceBindParams
 from core.rag.repository import RAGRepository
+from core.rag_indexing_schema import SearchChannelsDefaults
+from core.types import JsonObject, JsonValue, require_json_object
 
 
 class RAGLLMContextSource:
@@ -19,17 +20,13 @@ class RAGLLMContextSource:
         self,
         *,
         repository: RAGRepository,
-        bind: RagResourceBindParams | dict[str, Any],
+        bind: RagResourceBindParams,
         name: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: RAGMetadataFilter | None = None,
         timeout: float = 30.0,
     ) -> None:
         self.repository = repository
-        self.bind = (
-            bind
-            if isinstance(bind, RagResourceBindParams)
-            else RagResourceBindParams.model_validate(bind)
-        )
+        self.bind = bind
         self.name = _source_name(name or f"rag.{self.bind.namespace}")
         self.filters = dict(filters) if filters else None
         self.timeout = timeout
@@ -54,29 +51,31 @@ class RAGLLMContextSource:
         ]
 
 
-def _search_options_from_policy(request: LLMContextSourceRequest) -> dict[str, Any]:
+def _search_options_from_policy(request: LLMContextSourceRequest) -> RAGSearchOptions:
     retrieval = request.policy.retrieval
-    return {
-        "channels": _channels_from_retrieval_mode(retrieval.mode),
-        "rerank": retrieval.rerank,
-        "retrieval": retrieval.mode != "off",
-    }
+    return RAGSearchOptions(
+        channels=_channels_from_retrieval_mode(retrieval.mode),
+        rerank=retrieval.rerank,
+        retrieval=retrieval.mode != "off",
+    )
 
 
-def _channels_from_retrieval_mode(mode: str) -> dict[str, bool]:
+def _channels_from_retrieval_mode(mode: str) -> SearchChannelsDefaults:
     if mode == "hybrid":
-        return {"semantic": True, "lexical": True}
+        return SearchChannelsDefaults(semantic=True, lexical=True)
     if mode == "lexical":
-        return {"semantic": False, "lexical": True}
-    return {"semantic": True, "lexical": False}
+        return SearchChannelsDefaults(semantic=False, lexical=True)
+    return SearchChannelsDefaults(semantic=True, lexical=False)
 
 
-def _coerce_results(response: dict[str, Any]) -> list[RAGSearchResult]:
+def _coerce_results(response: JsonObject) -> list[RAGSearchResult]:
     raw_results = response.get("results")
     if not isinstance(raw_results, list):
         raise ValueError("RAG LLM context source expected response.results list")
     return [
-        item if isinstance(item, RAGSearchResult) else RAGSearchResult.model_validate(item)
+        item if isinstance(item, RAGSearchResult) else RAGSearchResult.model_validate(
+            require_json_object(item, "RAG LLM context result")
+        )
         for item in raw_results
     ]
 
@@ -137,10 +136,17 @@ def _stable_key(result: RAGSearchResult) -> str:
     return f"rag:{result.namespace}:{result.document_id}:{chunk_id}"
 
 
-def _clamp_score(value: Any) -> float | None:
-    try:
+def _clamp_score(value: JsonValue) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
         score = float(value)
-    except (TypeError, ValueError):
+    elif isinstance(value, str):
+        try:
+            score = float(value)
+        except ValueError:
+            return None
+    else:
         return None
     if not math.isfinite(score):
         return None

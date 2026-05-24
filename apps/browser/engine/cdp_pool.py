@@ -69,7 +69,7 @@ class CDPConnectionPool:
     """
 
     def __init__(self) -> None:
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock = asyncio.Lock()
         self._playwright: Playwright | None = None
         self._browsers: dict[str, BrowserHandle] = {}
 

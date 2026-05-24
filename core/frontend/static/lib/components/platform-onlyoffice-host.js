@@ -102,6 +102,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
     static properties = {
         config: { type: Object },
         bindingId: { type: String, attribute: 'binding-id' },
+        suspended: { type: Boolean, reflect: true },
         _initializing: { state: true },
     };
 
@@ -159,6 +160,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         super();
         this.config = null;
         this.bindingId = '';
+        this.suspended = false;
         this._initializing = false;
         this._docEditor = null;
         this._configKey = null;
@@ -183,6 +185,13 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         super.updated(changed);
         if (changed.has('config')) {
             this._bootIfConfigChanged();
+        }
+        if (changed.has('suspended')) {
+            if (this.suspended) {
+                this._syncOoLayout();
+            } else {
+                requestAnimationFrame(() => this._syncOoLayout());
+            }
         }
     }
 
@@ -352,6 +361,23 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         iframe.style.setProperty('pointer-events', 'auto', imp);
     }
 
+    _parkIframeOffscreen(iframe) {
+        if (!iframe) return;
+        const imp = 'important';
+        ensureOnlyOfficeIframePermissions(iframe);
+        iframe.style.setProperty('position', 'fixed', imp);
+        iframe.style.setProperty('left', '-2px', imp);
+        iframe.style.setProperty('top', '-2px', imp);
+        iframe.style.setProperty('width', '1px', imp);
+        iframe.style.setProperty('height', '1px', imp);
+        iframe.style.setProperty('max-width', '1px', imp);
+        iframe.style.setProperty('max-height', '1px', imp);
+        iframe.style.setProperty('z-index', '-1', imp);
+        iframe.style.setProperty('opacity', '0', imp);
+        iframe.style.setProperty('pointer-events', 'none', imp);
+        iframe.style.setProperty('border', '0', imp);
+    }
+
     _ensureIframeAttrObserver(iframe) {
         if (this._ooIframeAttrObserver || !(iframe && iframe.isConnected)) {
             return;
@@ -399,6 +425,11 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         const iframeInMount = mount && mount.isConnected
             ? mount.querySelector('iframe[name="frameEditor"]')
             : null;
+        if (this.suspended) {
+            ph.style.cssText = this._minimalOoPlaceholderStyle();
+            this._parkIframeOffscreen(iframeInMount || this._pickFrameEditorIframe());
+            return;
+        }
         if (iframeInMount) {
             ph.style.cssText = this._minimalOoPlaceholderStyle();
             this._pinIframeToHost(iframeInMount);

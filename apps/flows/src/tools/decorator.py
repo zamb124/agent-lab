@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, TypeAlias, TypeVar, cast, get_type_hints, over
 
 from pydantic import BaseModel
 
-from apps.flows.src.mock import get_mock_for_tool
+from apps.flows.src.mock.resolver import get_mock_for_tool
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.tools.base import (

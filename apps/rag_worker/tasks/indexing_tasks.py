@@ -2,8 +2,6 @@
 Tasks для индексации документов через pgvector.
 """
 
-from typing import Any
-
 import core.tracing.attributes as trace_attributes
 from apps.rag.container import get_rag_container
 from apps.rag_worker.broker import broker
@@ -11,9 +9,11 @@ from core.config import get_settings
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.identity_models import User
+from core.rag.models import RAGMetadata
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 
@@ -55,14 +55,15 @@ async def index_rag_document_s3_task(
     namespace_id: str,
     s3_key: str,
     document_name: str,
-    metadata: dict[str, Any],
-) -> dict[str, Any]:
+    metadata: RAGMetadata,
+) -> JsonObject:
     """
     Одна TaskIQ-задача: индексация S3-файла с конфигом ``rag.document_indexing`` (settings).
     """
-    document_id = metadata.get("document_id")
-    if not document_id:
+    document_id_value = metadata.get("document_id")
+    if not isinstance(document_id_value, str) or not document_id_value.strip():
         raise ValueError("metadata.document_id обязателен")
+    document_id = document_id_value.strip()
 
     meta_company = metadata.get("company_id")
     if not meta_company or str(meta_company).strip() != str(company_id).strip():
@@ -123,12 +124,19 @@ async def index_rag_document_s3_task(
                 await status_repo.record_indexing_failed(document_id, str(e))
                 raise
 
-            chunks = int(document.metadata.get("total_chunks") or 0)
+            raw_chunks = document.metadata.get("total_chunks")
+            if not isinstance(raw_chunks, int) or isinstance(raw_chunks, bool):
+                raise ValueError("RAG document metadata.total_chunks должен быть целым числом")
+            chunks = raw_chunks
             runtime = document.metadata.get("indexing_runtime")
             await status_repo.record_indexing_done(
                 document_id,
                 chunks,
-                indexing_runtime=runtime if isinstance(runtime, dict) else None,
+                indexing_runtime=(
+                    require_json_object(runtime, "RAG document metadata.indexing_runtime")
+                    if runtime is not None
+                    else None
+                ),
             )
 
             logger.info(
@@ -153,7 +161,7 @@ async def delete_document_task(
     document_id: str,
     company_id: str,
     user_id: str,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Удаление документа из vector_documents.
 
@@ -204,8 +212,8 @@ async def process_document_upload(
     namespace_id: str,
     file_data: bytes,
     document_name: str,
-    metadata: dict[str, Any],
-) -> dict[str, Any]:
+    metadata: RAGMetadata,
+) -> JsonObject:
     """
     Полная обработка загрузки документа:
     1. Загрузка в S3
@@ -277,6 +285,8 @@ async def process_document_upload(
             logger.info(f"RAG Worker: документ проиндексирован: {document.document_id}")
 
             chunks_count = document.metadata.get("total_chunks")
+            if not isinstance(chunks_count, int) or isinstance(chunks_count, bool):
+                raise ValueError("RAG document metadata.total_chunks должен быть целым числом")
             await status_repo.update_status(
                 document_id,
                 "completed",

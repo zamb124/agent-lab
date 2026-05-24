@@ -115,7 +115,8 @@ async def test_memory_source_recalls_and_outputs_chronological_memory_blocks() -
     assert "older memory" in blocks[0].content
     assert store.requests[0].top_k == 3
     assert store.requests[0].session_id == "flow:ctx"
-    assert store.requests[0].search_options == {
+    assert store.requests[0].search_options is not None
+    assert store.requests[0].search_options.model_dump(exclude_none=True) == {
         "channels": {"semantic": True, "lexical": True},
         "rerank": False,
     }
@@ -155,11 +156,13 @@ async def test_memory_source_search_options_cover_single_channel_modes() -> None
         LLMContextSourceRequest(query="billing", policy=_policy(memory="flow", retrieval="semantic"))
     )
 
-    assert store.requests[0].search_options == {
+    assert store.requests[0].search_options is not None
+    assert store.requests[0].search_options.model_dump(exclude_none=True) == {
         "channels": {"semantic": False, "lexical": True},
         "rerank": False,
     }
-    assert store.requests[1].search_options == {
+    assert store.requests[1].search_options is not None
+    assert store.requests[1].search_options.model_dump(exclude_none=True) == {
         "channels": {"semantic": True, "lexical": False},
         "rerank": False,
     }

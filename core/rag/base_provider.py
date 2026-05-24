@@ -128,8 +128,7 @@ def validate_metadata_filters(filters: RAGMetadataFilter) -> None:
             else:
                 if not _is_scalar_filter_value(field_filter):
                     raise ValueError(
-                        f"RAG filters: {path}.{field_name} должен быть string/number/boolean "
-                        f"или объектом оператора"
+                        f"RAG filters: {path}.{field_name} должен быть string/number/boolean или объектом оператора"
                     )
 
     _validate_node(filters, "filters")
@@ -141,7 +140,7 @@ class BaseRAGProvider(ABC):
     """
 
     def __init__(self, config: RAGProviderConfig) -> None:
-        self.config = config
+        self.config: RAGProviderConfig = config
 
     def _get_content_type(self, file_path: str) -> str:
         """Определяет content type по расширению файла."""
@@ -167,7 +166,7 @@ class BaseRAGProvider(ABC):
             file_data = f.read()
 
         try:
-            await s3_client.upload_bytes(
+            _ = await s3_client.upload_bytes(
                 data=file_data,
                 key=s3_key,
                 content_type=self._get_content_type(file_path),
@@ -219,7 +218,7 @@ class BaseRAGProvider(ABC):
         s3_key = f"rag/{namespace_id}/{uuid.uuid4().hex[:8]}_{path.name}"
 
         try:
-            await s3_client.upload_bytes(
+            _ = await s3_client.upload_bytes(
                 data=file_data,
                 key=s3_key,
                 content_type=self._get_content_type(filename),
@@ -248,7 +247,7 @@ class BaseRAGProvider(ABC):
         s3_key = f"rag_text/{namespace_id}/{uuid.uuid4().hex[:8]}_{safe_name}.txt"
 
         try:
-            await s3_client.upload_bytes(
+            _ = await s3_client.upload_bytes(
                 data=text.encode('utf-8'),
                 key=s3_key,
                 content_type="text/plain",
@@ -312,6 +311,7 @@ class BaseRAGProvider(ABC):
         s3_key: str,
         document_name: str | None = None,
         metadata: RAGMetadata | None = None,
+        *,
         upload_profile: UploadProfileBinding | None = None,
     ) -> RAGDocument:
         """
@@ -412,7 +412,9 @@ class BaseRAGProvider(ABC):
 
     async def delete_orphan_company_chunks(self, *, limit: int) -> int:
         """Удаляет chunks без company_id, если backend хранит company-scoped chunks."""
-        raise NotImplementedError(f"{self.provider_name} не поддерживает orphan chunks cleanup")
+        raise NotImplementedError(
+            f"{self.provider_name} не поддерживает orphan chunks cleanup (limit={limit})"
+        )
 
     async def close(self) -> None:
         """Закрывает соединения"""

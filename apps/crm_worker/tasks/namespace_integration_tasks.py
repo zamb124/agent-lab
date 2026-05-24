@@ -7,16 +7,16 @@ TaskIQ: фоновая синхронизация интеграций namespace
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 
 import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
 from apps.crm_worker.broker import broker
 from apps.crm_worker.task_names import CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME
 from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
-from apps.crm_worker.tasks.knowledge_import_tasks import _notify_task_user
+from apps.crm_worker.tasks.knowledge_import_tasks import notify_task_user
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -53,7 +53,7 @@ async def run_namespace_integration_job(
     company_id: str,
     auth_token: str | None,
     interface_language: str,
-) -> dict[str, Any]:
+) -> JsonObject:
     container = get_crm_container()
     repo = container.task_repository
     row = await repo.get_for_worker(task_id, company_id)
@@ -107,7 +107,7 @@ async def run_namespace_integration_job(
             cancel_requested=False,
         )
         title = _notification_cancelled_title(label, job=job)
-        await _notify_task_user(
+        await notify_task_user(
             row.user_id,
             repo,
             company_id,
@@ -172,7 +172,7 @@ async def run_namespace_integration_job(
         )
         title = _notification_title(label, job=job, ok=True)
         msg = _stats_message(stats)
-        await _notify_task_user(
+        await notify_task_user(
             row.user_id,
             repo,
             company_id,
@@ -209,7 +209,7 @@ async def run_namespace_integration_job(
             error_message=err_text,
         )
         title = _notification_title(label, job=job, ok=False)
-        await _notify_task_user(
+        await notify_task_user(
             row.user_id,
             repo,
             company_id,

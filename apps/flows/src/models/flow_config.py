@@ -310,6 +310,8 @@ class BranchConfig(StrictBaseModel):
     Если branches не указаны в FlowConfig, автоматически создаётся default-ветка.
     """
 
+    model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
+
     name: str = Field(..., description="Название ветки")
     description: str = Field(default="", description="Описание ветки")
     tags: list[str] = Field(default_factory=list, description="Теги ветки")

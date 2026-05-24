@@ -2,13 +2,127 @@
 Модель EvaluationResult - результат оценки тест-кейса.
 """
 
+from __future__ import annotations
+
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Literal, NotRequired, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from core.clients.llm.messages import LLMToolCall
+from core.models import StrictBaseModel
+
+EvaluationStatus = Literal["passed", "failed", "error", "timeout"]
+EvaluationRunStatus = Literal["running", "passed", "failed", "partial", "error"]
+EvaluationDialogRole = Literal["user", "assistant", "tester"]
+EvaluationScoreValue = float | bool
+EvaluationScores = dict[str, EvaluationScoreValue]
 
 
-class EvaluationResult(BaseModel):
+class EvaluationDialogMessage(StrictBaseModel):
+    """Одна реплика evaluation-диалога, сохраняемая в результатах."""
+
+    role: EvaluationDialogRole
+    content: str
+
+
+class EvaluationJudgeResult(StrictBaseModel):
+    """Строгий JSON-контракт ответа judge-ноды."""
+
+    scores: EvaluationScores = Field(default_factory=dict)
+    total_score: float | None = None
+    passed: bool | None = None
+    feedback: str | None = None
+
+
+class EvaluationLLMResponse(StrictBaseModel):
+    """Собранный ответ LLM evaluation-ноды из A2A stream-событий."""
+
+    content: str = ""
+    reasoning: str | None = None
+    tool_calls: list[LLMToolCall] | None = None
+
+
+class EvaluationStartEvent(TypedDict):
+    type: Literal["start"]
+    test_case_id: str
+    name: str
+
+
+class EvaluationErrorEvent(TypedDict):
+    type: Literal["error"]
+    message: str
+
+
+class EvaluationMessageEvent(TypedDict):
+    type: Literal["user", "assistant"]
+    content: str
+
+
+class EvaluationResultEvent(TypedDict):
+    type: Literal["result"]
+    status: EvaluationStatus
+    duration_ms: int
+    task_id: str
+    context_id: str
+    turns_count: NotRequired[int]
+    scores: NotRequired[EvaluationScores]
+    dialog: NotRequired[list[EvaluationDialogMessage]]
+    judge_feedback: NotRequired[str | None]
+    error: NotRequired[str]
+
+
+class EvaluationRunStartEvent(TypedDict):
+    type: Literal["run_start"]
+    flow_id: str
+    branch_id: str
+    run_date: str
+    iteration: int
+    total_tests: int
+
+
+class EvaluationTestStartEvent(TypedDict):
+    type: Literal["test_start"]
+    test_case_id: str
+    name: str
+
+
+class EvaluationTestResultEvent(TypedDict):
+    type: Literal["test_result"]
+    test_case_id: str
+    status: EvaluationStatus
+    duration_ms: NotRequired[int]
+    dialog: NotRequired[list[EvaluationDialogMessage]]
+    scores: NotRequired[EvaluationScores | None]
+    total_score: NotRequired[float | None]
+    judge_feedback: NotRequired[str | None]
+    error: NotRequired[str | None]
+
+
+class EvaluationSummaryEvent(TypedDict):
+    type: Literal["summary"]
+    total_tests: int
+    passed_tests: int
+    failed_tests: int
+    error_tests: int
+    average_score: float | None
+    status: Literal["passed", "failed", "partial"]
+
+
+EvaluationRunnerEvent = EvaluationMessageEvent | EvaluationResultEvent
+EvaluationServiceStreamEvent = (
+    EvaluationStartEvent | EvaluationErrorEvent | EvaluationMessageEvent | EvaluationResultEvent
+)
+EvaluationAllTestsStreamEvent = (
+    EvaluationRunStartEvent
+    | EvaluationErrorEvent
+    | EvaluationTestStartEvent
+    | EvaluationTestResultEvent
+    | EvaluationSummaryEvent
+)
+
+
+class EvaluationResult(StrictBaseModel):
     """
     Результат выполнения тест-кейса.
 
@@ -27,15 +141,15 @@ class EvaluationResult(BaseModel):
     test_case_id: str = Field(..., description="ID тест-кейса")
     task_id: str | None = Field(default=None, description="ID задачи для трейсинга")
 
-    status: str = Field(..., description="Статус: passed, failed, error, timeout")
+    status: EvaluationStatus = Field(..., description="Статус: passed, failed, error, timeout")
     duration_ms: int = Field(..., description="Длительность в миллисекундах")
     turns_count: int = Field(default=0, description="Количество итераций диалога")
 
-    dialog: list[dict[str, Any]] = Field(
+    dialog: list[EvaluationDialogMessage] = Field(
         default_factory=list, description="История диалога [{role, content}, ...]"
     )
 
-    scores: dict[str, float | bool] | None = Field(
+    scores: EvaluationScores | None = Field(
         default=None, description="Оценки {attr_name: score/passed}"
     )
     judge_feedback: str | None = Field(default=None, description="Комментарий судьи")
@@ -60,12 +174,12 @@ class EvaluationResult(BaseModel):
         if not self.scores:
             return None
 
-        values = []
+        values: list[float] = []
         for v in self.scores.values():
             if isinstance(v, bool):
                 values.append(10.0 if v else 0.0)
             else:
-                values.append(float(v))
+                values.append(v)
 
         return sum(values) / len(values) if values else None
 
@@ -81,13 +195,13 @@ class EvaluationResult(BaseModel):
         for v in self.scores.values():
             if isinstance(v, bool) and not v:
                 return False
-            if isinstance(v, (int, float)) and v < 5.0:
+            if not isinstance(v, bool) and v < 5.0:
                 return False
 
         return True
 
 
-class EvaluationRunSummary(BaseModel):
+class EvaluationRunSummary(StrictBaseModel):
     """
     Сводка по запуску всех тестов для skill.
     """
@@ -105,4 +219,4 @@ class EvaluationRunSummary(BaseModel):
     error_tests: int = 0
 
     average_score: float | None = None
-    status: str = Field(default="running", description="running, passed, failed, partial")
+    status: EvaluationRunStatus = Field(default="running", description="running, passed, failed, partial")

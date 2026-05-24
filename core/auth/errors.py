@@ -4,9 +4,11 @@
 Используют JSON-RPC формат с кастомными кодами ошибок.
 """
 
-from typing import Any, Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from core.types import JsonObject
 
 
 def to_camel(string: str) -> str:
@@ -23,7 +25,7 @@ class PermissionDeniedA2AError(BaseModel):
     Код -32008 - кастомный код для permission denied.
     """
 
-    model_config = ConfigDict(
+    model_config: ClassVar[ConfigDict] = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
         serialize_by_alias=True,
@@ -31,7 +33,7 @@ class PermissionDeniedA2AError(BaseModel):
 
     code: Literal[-32008] = Field(default=-32008, description="Код ошибки")
     message: str = Field(default="Permission denied", description="Сообщение об ошибке")
-    data: dict[str, Any] | None = Field(
+    data: JsonObject | None = Field(
         default=None,
         description="Дополнительные данные (resource type, resource id)",
     )
@@ -73,9 +75,9 @@ class PermissionDeniedA2AError(BaseModel):
             },
         )
 
-    def to_json_rpc_error(self) -> dict[str, Any]:
+    def to_json_rpc_error(self) -> JsonObject:
         """Возвращает ошибку в формате JSON-RPC."""
-        error: dict[str, Any] = {
+        error: JsonObject = {
             "code": self.code,
             "message": self.message,
         }

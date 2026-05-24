@@ -7,6 +7,7 @@ import pytest
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, CodeNode
+from core.clients.llm import LLMToolCall
 from core.errors import FlowPrematureCompletionError
 
 
@@ -20,7 +21,7 @@ class _InterruptNode(BaseNode):
     async def _run_impl(self, state, inputs):
         raise FlowInterrupt(
             question=f"question from {self.node_id}",
-            tool_call={"name": f"ask_{self.node_id}"},
+            tool_call=LLMToolCall(id=f"call_{self.node_id}", name=f"ask_{self.node_id}"),
         )
 
 

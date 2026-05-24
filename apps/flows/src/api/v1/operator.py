@@ -5,7 +5,7 @@ API операторских очередей и задач: /flows/api/v1/opera
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Annotated
 
 from a2a.types import Message
 from a2a.utils.message import get_message_text
@@ -17,11 +17,14 @@ from apps.flows.src.db.operator_repository import OperatorRepository
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.operator_schemas import (
+    OperatorInterruptSnapshot,
     OperatorMemberAdd,
     OperatorQueueCreate,
     OperatorQueueOut,
     OperatorQueuePatch,
+    OperatorResolutionPayload,
     OperatorTaskCompleteBody,
+    OperatorTaskDetailOut,
     OperatorTaskMessageBody,
     OperatorTaskOut,
     OperatorTaskPatch,
@@ -32,6 +35,7 @@ from apps.flows.src.services.operator_tasks_broadcast import publish_operator_ta
 from core.context import get_context
 from core.logging import get_logger
 from core.pagination import OffsetPage
+from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
 
@@ -40,21 +44,17 @@ HANDOFF_PREVIEW_MAX_LEN = 200
 router = APIRouter(tags=["operator"])
 
 
-def _dialog_message_entry_for_api(m: Any) -> dict[str, Any]:
+def _dialog_message_entry_for_api(message: Message) -> JsonObject:
     """Сериализация A2A Message + плоский текст для UI (get_message_text)."""
-    if hasattr(m, "model_dump"):
-        raw: dict[str, Any] = m.model_dump(mode="json")
-    elif isinstance(m, dict):
-        raw = dict(m)
-    else:
-        raise TypeError("dialog message must be Message or dict")
-    text = get_message_text(Message.model_validate(raw))
-    return {**raw, "message_text": text}
+    raw = parse_json_object(message.model_dump_json(by_alias=True), "A2A Message")
+    text = get_message_text(message)
+    raw["message_text"] = text
+    return raw
 
 
 def _company_and_user() -> tuple[str, str]:
     ctx = get_context()
-    if ctx is None or ctx.active_company is None or ctx.user is None:
+    if ctx is None or ctx.active_company is None:
         raise HTTPException(status_code=401, detail="Требуется авторизация и активная компания")
     uid = str(ctx.user.user_id).strip()
     if not uid:
@@ -64,22 +64,16 @@ def _company_and_user() -> tuple[str, str]:
 
 def _company_operator_roles_normalized() -> set[str]:
     ctx = get_context()
-    if ctx is None or ctx.active_company is None or ctx.user is None:
+    if ctx is None or ctx.active_company is None:
         return set()
     company_id = ctx.active_company.company_id
-    raw = ctx.user.companies.get(company_id)
-    if raw is None:
-        role_list: list[str] = []
-    elif isinstance(raw, str):
-        role_list = [raw]
-    else:
-        role_list = list(raw)
-    return {str(r).strip().lower() for r in role_list if str(r).strip()}
+    role_list = ctx.user.companies.get(company_id, [])
+    return {role.strip().lower() for role in role_list if role.strip()}
 
 
 def _require_operator_queue_manage_role() -> None:
     ctx = get_context()
-    if ctx is None or ctx.active_company is None or ctx.user is None:
+    if ctx is None or ctx.active_company is None:
         raise HTTPException(status_code=401, detail="Требуется авторизация и активная компания")
     normalized = _company_operator_roles_normalized()
     if not (normalized & {"admin", "owner"}):
@@ -103,7 +97,6 @@ def _queue_to_out(row: OperatorQueues, *, i_am_member: bool = False) -> Operator
 
 
 async def _caller_may_mutate_queue(
-    company_id: str,
     user_id: str,
     queue_id: str,
     repo: OperatorRepository,
@@ -116,24 +109,16 @@ async def _caller_may_mutate_queue(
 
 
 def _interrupt_handoff_texts(row: OperatorTasks) -> tuple[str | None, str | None]:
-    snap = row.interrupt_snapshot
-    if snap is None or not isinstance(snap, dict):
-        return None, None
-    title: str | None = None
-    raw_t = snap.get("task_title")
-    if raw_t is not None:
-        s = str(raw_t).strip()
-        if s:
-            title = s
+    if row.interrupt_snapshot is None:
+        raise ValueError("OperatorTasks.interrupt_snapshot обязателен для handoff preview")
+    snapshot = OperatorInterruptSnapshot.model_validate(row.interrupt_snapshot)
+    title = snapshot.task_title
     preview: str | None = None
-    raw_q = snap.get("question")
-    if raw_q is not None:
-        q = str(raw_q).strip()
-        if q:
-            if len(q) > HANDOFF_PREVIEW_MAX_LEN:
-                preview = q[: HANDOFF_PREVIEW_MAX_LEN - 1].rstrip() + "\u2026"
-            else:
-                preview = q
+    question = snapshot.question
+    if len(question) > HANDOFF_PREVIEW_MAX_LEN:
+        preview = question[: HANDOFF_PREVIEW_MAX_LEN - 1].rstrip() + "\u2026"
+    else:
+        preview = question
     return title, preview
 
 
@@ -159,12 +144,12 @@ def _task_to_out(
     flow_cfg: FlowConfig | None = None,
 ) -> OperatorTaskOut:
     ht, hp = _interrupt_handoff_texts(row)
-    handoff_mode = parse_handoff_mode(row).value
+    handoff_mode = parse_handoff_mode(row)
     return OperatorTaskOut(
         id=row.id,
         company_id=row.company_id,
         queue_id=row.queue_id,
-        status=row.status,
+        status=OperatorTaskStatus(row.status),
         session_id=row.session_id,
         end_user_id=row.end_user_id,
         flow_id=row.flow_id,
@@ -210,7 +195,7 @@ async def create_queue(
         slug=body.slug.strip(),
         description=body.description,
     )
-    await repo.add_member(qid, user_id, role="agent")
+    _ = await repo.add_member(qid, user_id, role="agent")
     row = await repo.get_queue_by_id(company_id, qid)
     if row is None:
         raise HTTPException(status_code=500, detail="Очередь создана, но не читается")
@@ -220,8 +205,8 @@ async def create_queue(
 @router.get("/queues", response_model=OffsetPage[OperatorQueueOut])
 async def list_queues(
     container: ContainerDep,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[OperatorQueueOut]:
     _require_operator_queue_manage_role()
     company_id, user_id = _company_and_user()
@@ -244,7 +229,7 @@ async def patch_queue(
     row = await repo.get_queue_by_id(company_id, queue_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Очередь не найдена")
-    if not await _caller_may_mutate_queue(company_id, user_id, queue_id, repo):
+    if not await _caller_may_mutate_queue(user_id, queue_id, repo):
         raise HTTPException(status_code=403, detail="Нет доступа к очереди")
     await repo.update_queue(
         company_id,
@@ -270,7 +255,7 @@ async def add_queue_member(
     row = await repo.get_queue_by_id(company_id, queue_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Очередь не найдена")
-    if not await _caller_may_mutate_queue(company_id, user_id, queue_id, repo):
+    if not await _caller_may_mutate_queue(user_id, queue_id, repo):
         raise HTTPException(status_code=403, detail="Нет доступа к очереди")
     mid = await repo.add_member(queue_id, body.user_id.strip(), role=body.role.strip())
     await publish_operator_tasks_refresh(repo, queue_id)
@@ -288,7 +273,7 @@ async def remove_queue_member(
     row = await repo.get_queue_by_id(company_id, queue_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Очередь не найдена")
-    if not await _caller_may_mutate_queue(company_id, user_id, queue_id, repo):
+    if not await _caller_may_mutate_queue(user_id, queue_id, repo):
         raise HTTPException(status_code=403, detail="Нет доступа к очереди")
     await repo.remove_member(queue_id, member_user_id)
     await publish_operator_tasks_refresh(repo, queue_id)
@@ -297,10 +282,10 @@ async def remove_queue_member(
 @router.get("/tasks", response_model=OffsetPage[OperatorTaskOut])
 async def list_operator_tasks(
     container: ContainerDep,
-    queue_id: str | None = Query(None),
-    status: str | None = Query(None),
-    limit: int = Query(100, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    queue_id: Annotated[str | None, Query()] = None,
+    status: Annotated[OperatorTaskStatus | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[OperatorTaskOut]:
     company_id, user_id = _company_and_user()
     repo = container.operator_repository
@@ -311,7 +296,7 @@ async def list_operator_tasks(
         rows, total = await repo.list_tasks(
             company_id,
             queue_id=queue_id,
-            status=status,
+            status=status.value if status is not None else None,
             limit=limit,
             offset=offset,
         )
@@ -321,7 +306,7 @@ async def list_operator_tasks(
         rows, total = await repo.list_tasks(
             company_id,
             queue_ids=allowed,
-            status=status,
+            status=status.value if status is not None else None,
             limit=limit,
             offset=offset,
         )
@@ -337,11 +322,11 @@ async def list_operator_tasks(
     )
 
 
-@router.get("/tasks/{task_id}")
+@router.get("/tasks/{task_id}", response_model=OperatorTaskDetailOut)
 async def get_operator_task(
     task_id: str,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> OperatorTaskDetailOut:
     company_id, user_id = _company_and_user()
     repo = container.operator_repository
     task = await repo.get_task(company_id, task_id)
@@ -349,19 +334,25 @@ async def get_operator_task(
         raise HTTPException(status_code=404, detail="Задача не найдена")
     if not await repo.is_user_member_of_queue(task.queue_id, user_id):
         raise HTTPException(status_code=403, detail="Нет доступа к задаче")
-    dialog_messages: list[dict[str, Any]] = []
+    dialog_messages: list[JsonObject] = []
     saved = await container.state_manager.get_state(task.session_id)
     if saved is not None and saved.messages:
         for m in saved.messages:
             dialog_messages.append(_dialog_message_entry_for_api(m))
     flow_cfg = await container.flow_repository.get(task.flow_id)
-    return {
-        "task": _task_to_out(task, flow_cfg=flow_cfg).model_dump(mode="json"),
-        "interrupt_snapshot": task.interrupt_snapshot,
-        "resolution_payload": task.resolution_payload,
-        "dialog_log": task.dialog_log or [],
-        "dialog_messages": dialog_messages,
-    }
+    if task.interrupt_snapshot is None:
+        raise HTTPException(status_code=500, detail="Задача оператора без interrupt_snapshot")
+    return OperatorTaskDetailOut(
+        task=_task_to_out(task, flow_cfg=flow_cfg),
+        interrupt_snapshot=OperatorInterruptSnapshot.model_validate(task.interrupt_snapshot),
+        resolution_payload=(
+            OperatorResolutionPayload.model_validate(task.resolution_payload)
+            if task.resolution_payload is not None
+            else None
+        ),
+        dialog_log=await repo.get_dialog_log(company_id, task_id),
+        dialog_messages=dialog_messages,
+    )
 
 
 @router.patch("/tasks/{task_id}", response_model=OperatorTaskOut)
@@ -377,11 +368,8 @@ async def patch_operator_task(
         raise HTTPException(status_code=404, detail="Задача не найдена")
     if not await repo.is_user_member_of_queue(task.queue_id, user_id):
         raise HTTPException(status_code=403, detail="Нет доступа к задаче")
-    allowed_status = {s.value for s in OperatorTaskStatus}
-    if body.status not in allowed_status:
-        raise HTTPException(status_code=400, detail="Неизвестный статус задачи")
     queue_id = task.queue_id
-    await repo.update_task_fields(company_id, task_id, status=body.status)
+    await repo.update_task_fields(company_id, task_id, status=body.status.value)
     await publish_operator_tasks_refresh(repo, queue_id)
     updated = await repo.get_task(company_id, task_id)
     if updated is None:

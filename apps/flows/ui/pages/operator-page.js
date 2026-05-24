@@ -28,6 +28,7 @@ import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
+import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { asArray, asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 
 const STATUSES = Object.freeze(['open', 'claimed', 'user_dialog', 'awaiting_agent', 'completed', 'cancelled']);
@@ -631,7 +632,7 @@ export class OperatorPage extends PlatformPage {
                     <div class="pending-files">
                         ${this._pendingFiles.map((f, i) => html`
                             <span class="pending-file">
-                                <platform-icon name="file" size="12"></platform-icon>
+                                <platform-icon file-icon name=${resolveFileIconKey(f.original_name, f.content_type || f.mime_type)} size="12"></platform-icon>
                                 <span>${f.original_name}</span>
                                 <button type="button" @click=${() => this._removePendingFile(i)}>
                                     <platform-icon name="close" size="10"></platform-icon>

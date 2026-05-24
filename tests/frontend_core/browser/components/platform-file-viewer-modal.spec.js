@@ -64,6 +64,7 @@ import { graphViewSlice } from '../../../../apps/crm/ui/events/resources/graph-v
 
 const DOC_SERVER_URL = 'https://docs.example.test';
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const PDF_MIME = 'application/pdf';
 const MINIMAL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M2 2h12v12H2z"/></svg>';
 
 class PlatformFileViewerOpenFixture extends PlatformElement {
@@ -378,6 +379,7 @@ describe('platform-file-viewer-modal global viewer', () => {
         fetchMock.uninstall();
         fixtureCleanup();
         document.querySelectorAll('platform-file-viewer-modal, iframe[name="frameEditor"]').forEach((node) => node.remove());
+        document.querySelectorAll('[data-file-viewer-underlay]').forEach((node) => node.remove());
     });
 
     it('opens through openFile, fetches editor config from FileRecord endpoint, renders invisible shell and syncs on close', async () => {
@@ -418,16 +420,35 @@ describe('platform-file-viewer-modal global viewer', () => {
 
     it('minimizes to a compact draggable file chip, restores, drags full controls, and supports multiple viewers', async () => {
         await mountStack();
+        const underlay = document.createElement('button');
+        underlay.dataset.fileViewerUnderlay = 'true';
+        underlay.textContent = 'Underlying action';
+        underlay.style.cssText = 'position:fixed;left:24px;top:24px;width:180px;height:44px;z-index:10;';
+        let underlayClicks = 0;
+        underlay.addEventListener('click', () => {
+            underlayClicks += 1;
+        });
+        document.body.appendChild(underlay);
+
         await clickOpenButton({ file_id: 'first-docx', original_name: 'First.docx', content_type: DOCX_MIME });
         let [first] = await waitForViewerCount(1);
-        await waitForOnlyOfficeIframe(first);
+        const firstIframe = await waitForOnlyOfficeIframe(first);
 
         const minimizeButton = first.shadowRoot.querySelector('.header-buttons .header-btn:first-child');
         minimizeButton.click();
         await elementUpdated(first);
+        await aTimeout(0);
         expect(first.minimized).to.equal(true);
         expect(first.shadowRoot.querySelector('.drag-dots')).to.exist;
         expect(first.shadowRoot.querySelector('platform-icon[file-icon]')).to.exist;
+        expect(first.shadowRoot.querySelector('.header-buttons .header-btn:first-child platform-icon').name).to.equal('fullscreen');
+        expect(getComputedStyle(first.shadowRoot.querySelector('.modal-scrim')).display).to.equal('none');
+        expect(first.shadowRoot.querySelector('platform-onlyoffice-host').suspended).to.equal(true);
+        expect(firstIframe.style.pointerEvents).to.equal('none');
+        const hit = document.elementFromPoint(48, 40);
+        expect(hit === underlay || underlay.contains(hit)).to.equal(true);
+        hit.click();
+        expect(underlayClicks).to.equal(1);
         const chip = first.shadowRoot.querySelector('.modal');
         const chipRect = chip.getBoundingClientRect();
         expect(chipRect.width).to.be.lessThan(340);
@@ -446,6 +467,21 @@ describe('platform-file-viewer-modal global viewer', () => {
         const draggedChipRect = chip.getBoundingClientRect();
         expect(draggedChipRect.left).to.be.lessThan(chipRect.left - 30);
         expect(draggedChipRect.top).to.be.lessThan(chipRect.top - 20);
+
+        mouse(chipHeader, 'mousedown', draggedChipRect.left + 24, draggedChipRect.top + 24);
+        document.dispatchEvent(new MouseEvent('mousemove', {
+            bubbles: true,
+            clientX: -2000,
+            clientY: -2000,
+            buttons: 1,
+        }));
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: -2000, clientY: -2000 }));
+        await elementUpdated(first);
+        const clampedChipRect = chip.getBoundingClientRect();
+        expect(clampedChipRect.left).to.be.at.least(0);
+        expect(clampedChipRect.top).to.be.at.least(0);
+        expect(clampedChipRect.right).to.be.at.most(window.innerWidth);
+        expect(clampedChipRect.bottom).to.be.at.most(window.innerHeight);
 
         first.shadowRoot.querySelector('.header-buttons .header-btn:first-child').click();
         await elementUpdated(first);
@@ -511,6 +547,7 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
             ></flows-chat-message>
         `);
         await elementUpdated(message);
+        expect(message.shadowRoot.querySelector('.file-item platform-icon[file-icon]').name).to.equal('word');
         message.shadowRoot.querySelector('.file-item').click();
         await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'flows-message-docx', 'flows message opened file');
 
@@ -527,6 +564,7 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
         await elementUpdated(panel);
         panel.shadowRoot.querySelector('.trigger').click();
         await elementUpdated(panel);
+        expect(panel.shadowRoot.querySelector('.file-row platform-icon[file-icon]').name).to.equal('word');
         panel.shadowRoot.querySelector('.file-row').click();
         await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'flows-panel-docx', 'flows file panel opened file');
 
@@ -538,6 +576,7 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
             ></flows-chat-ui-file-card>
         `);
         await elementUpdated(card);
+        expect(card.shadowRoot.querySelector('platform-icon[file-icon]').name).to.equal('word');
         card.shadowRoot.querySelector('button').click();
         await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'flows-card-docx', 'flows file card opened file');
     });
@@ -561,18 +600,33 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
                             content_type: DOCX_MIME,
                             file_size: 128,
                         },
+                    }, {
+                        type: 'file/document',
+                        data: {
+                            file_id: 'sync-pdf',
+                            original_name: 'Coverage.pdf',
+                            content_type: PDF_MIME,
+                            file_size: 256,
+                        },
                     }],
                 }}
                 my-user-id="u1"
             ></sync-message-bubble>
         `);
         await elementUpdated(bubble);
-        bubble.shadowRoot.querySelector('.file').click();
+        const syncRows = [...bubble.shadowRoot.querySelectorAll('.file')];
+        const syncIcons = [...bubble.shadowRoot.querySelectorAll('.file platform-icon[file-icon]')].map((icon) => icon.name);
+        expect(syncRows).to.have.length(2);
+        expect(syncIcons).to.deep.equal(['word', 'pdf']);
+        const firstRect = syncRows[0].getBoundingClientRect();
+        const secondRect = syncRows[1].getBoundingClientRect();
+        expect(secondRect.top - firstRect.bottom).to.be.greaterThan(6);
+        syncRows[0].click();
         await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'sync-docx', 'sync attachment opened file');
         expect(lastFileOpenEvent(events).payload.file.original_name).to.equal('Sync.docx');
     });
 
-    it('CRM entity and note attachment actions open through the same global viewer event', async () => {
+    it('CRM entity and note attachment rows/actions open through the same global viewer event', async () => {
         setupBusWithFactories(crmFactories());
         getPlatformBus().subscribeAny((event) => events.push(event));
         await mountStack();
@@ -587,6 +641,20 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
         });
         await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'crm-entity-docx', 'CRM entity attachment opened file');
 
+        events.length = 0;
+        entityCard._attachmentsData = [{
+            document_id: 'crm-entity-row-docx',
+            filename: 'Entity Row.docx',
+            metadata: { content_type: DOCX_MIME, file_size: 300 },
+            download_url: '/api/v1/files/download/crm-entity-row-docx',
+            status: 'ready',
+        }];
+        const entityPopover = await fixture(html`${entityCard._renderEntityAttachmentsPopover('view')}`);
+        expect(entityPopover.querySelector('.attachments-popover-row platform-icon[file-icon]').name).to.equal('word');
+        entityPopover.querySelector('.attachments-popover-row').click();
+        await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'crm-entity-row-docx', 'CRM entity attachment row opened file');
+
+        events.length = 0;
         const noteCard = document.createElement('crm-note-card-view');
         noteCard._openAttachmentItem({
             id: 'crm-note-docx',
@@ -597,5 +665,20 @@ describe('global file entrypoints dispatch the shared viewer event', () => {
         });
         await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'crm-note-docx', 'CRM note attachment opened file');
         expect(lastFileOpenEvent(events).payload.file.original_name).to.equal('Note.docx');
+
+        events.length = 0;
+        const noteRow = await fixture(html`${noteCard._renderAttachmentRow({
+            id: 'crm-note-row-docx',
+            filename: 'Note Row.docx',
+            contentType: DOCX_MIME,
+            sizeBytes: 512,
+            status: 'ready',
+            downloadUrl: '/api/v1/files/download/crm-note-row-docx',
+            canDelete: true,
+        }, 'view')}`);
+        expect(noteRow.querySelector('platform-icon[file-icon]').name).to.equal('word');
+        noteRow.click();
+        await waitUntil(() => lastFileOpenEvent(events)?.payload?.file?.file_id === 'crm-note-row-docx', 'CRM note attachment row opened file');
+        expect(lastFileOpenEvent(events).payload.file.original_name).to.equal('Note Row.docx');
     });
 });

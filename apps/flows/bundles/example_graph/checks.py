@@ -4,10 +4,10 @@
 Демонстрирует проверки для графовых flow с маршрутизацией.
 """
 
-from typing import Any
+from core.types import JsonObject
 
 
-def check_order_route(state: dict[str, Any], response: str) -> bool:
+def check_order_route(state: JsonObject, response: str) -> bool:
     """
     Проверяет что запрос о заказе был обработан order_processor.
 
@@ -28,7 +28,7 @@ def check_order_route(state: dict[str, Any], response: str) -> bool:
     return any(k in response_lower for k in order_keywords)
 
 
-def check_complaint_route(state: dict[str, Any], response: str) -> bool:
+def check_complaint_route(state: JsonObject, response: str) -> bool:
     """Проверяет что запрос о жалобе был обработан complaint_processor."""
     if state.get("route") == "complaint":
         return True
@@ -38,7 +38,7 @@ def check_complaint_route(state: dict[str, Any], response: str) -> bool:
     return any(k in response_lower for k in complaint_keywords)
 
 
-def check_general_route(state: dict[str, Any], response: str) -> bool:
+def check_general_route(state: JsonObject, response: str) -> bool:
     """Проверяет что общий запрос был обработан general_processor."""
     if state.get("route") == "general":
         return True
@@ -48,29 +48,30 @@ def check_general_route(state: dict[str, Any], response: str) -> bool:
     return "ord-" not in response_lower and "cmp-" not in response_lower
 
 
-def check_no_formatter(state: dict[str, Any], response: str) -> bool:
+def check_no_formatter(state: JsonObject, response: str) -> bool:
     """Проверяет что formatter не был вызван (для fast_track skill)."""
     # В fast_track ответ не должен иметь форматирования
     # Formatter добавляет квадратные скобки
     return not response.startswith("[") or state.get("processed") is None
 
 
-def check_mock_order_route(state: dict[str, Any], response: str) -> bool:
+def check_mock_order_route(state: JsonObject, response: str) -> bool:
     """Проверяет что mock маршрутизация работает."""
+    _ = state
     # Mock должен вернуть предопределённый ответ
     return "ORD-TEST" in response or "тестовый заказ" in response.lower()
 
 
-def check_formatted_response(state: dict[str, Any], response: str) -> bool:
+def check_formatted_response(state: JsonObject, response: str) -> bool:
     """Проверяет что ответ был отформатирован."""
     # Formatter добавляет квадратные скобки в начало
     return response.startswith("[") and state.get("processed") is True
 
 
 def test_classifier(
-    state: dict[str, Any] | None = None,
+    state: JsonObject | None = None,
     response: str | None = None,
-) -> Any:
+) -> str | bool:
     """
     Универсальная функция для теста classifier.
 
@@ -84,6 +85,7 @@ def test_classifier(
     Returns:
         str (input) или bool (результат проверки)
     """
+    _ = response
     if state is None:
         # Режим sender
         return "Хочу оформить заказ номер 12345"
@@ -98,16 +100,17 @@ def test_classifier(
     return route == "order"
 
 
-def check_graph_execution(state: dict[str, Any], response: str) -> bool:
+def check_graph_execution(state: JsonObject, response: str) -> bool:
     """Проверяет что граф выполнился полностью."""
+    _ = state
     # Должен быть response и processed от formatter
     return bool(response) and len(response) > 5
 
 
 def universal_graph_test(
-    state: dict[str, Any] | None = None,
+    state: JsonObject | None = None,
     response: str | None = None,
-) -> Any:
+) -> str | bool:
     """
     Универсальная функция: sender + checker в одном для графа.
 
@@ -131,4 +134,3 @@ def universal_graph_test(
 
     # Проверяем что есть осмысленный ответ
     return len(response) > 10 and ("заказ" in response.lower() or "order" in response.lower())
-

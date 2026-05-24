@@ -4,21 +4,21 @@ API endpoints для flows.
 
 import asyncio
 import copy
-import json
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, ClassVar
 
 import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field, TypeAdapter, field_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import (
     BranchConfig,
+    DataflowInspectResult,
     Edge,
     ExternalAgentStatus,
     FlowConfig,
@@ -27,6 +27,8 @@ from apps.flows.src.models import (
     GraphNodeConfig,
     MergeMode,
     NodeConfig,
+    ResourceReference,
+    TestCaseConfig,
     TriggerConfig,
 )
 from apps.flows.src.models.flow_speech_settings import FlowSpeechSettings
@@ -36,7 +38,6 @@ from apps.flows.src.services.bundle_node_repair import (
 )
 from apps.flows.src.services.flow_contract_normalize import normalize_flow_config_dict
 from apps.flows.src.services.flow_dataflow_inspector import (
-    DataflowInspectResult,
     inspect_flow_dataflow,
 )
 from apps.flows.src.services.flow_node_merge import merge_incoming_node_dict_for_persist
@@ -56,7 +57,15 @@ from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
 from core.pagination import ListResponse, OffsetPage
 from core.short_links.service import require_platform_public_base_url
-from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+from core.types import (
+    JsonArray,
+    JsonObject,
+    JsonValue,
+    parse_json_object,
+    require_json_array,
+    require_json_object,
+    require_json_value,
+)
 from core.ui_events.dispatcher import publish_ui_event_to_user
 from core.utils.tokens import get_token_service
 
@@ -101,27 +110,30 @@ class FlowPreviewShareResponse(BaseModel):
     share_url: str
 
 
-def _speech_to_json(settings: FlowSpeechSettings | None) -> dict[str, Any] | None:
+def _speech_to_json(settings: FlowSpeechSettings | None) -> JsonObject | None:
     if settings is None:
         return None
-    dumped = settings.model_dump(mode="json", exclude_none=True)
+    dumped = parse_json_object(settings.model_dump_json(exclude_none=True), "speech")
     return dumped if dumped else None
 
 
-def _drop_files_fields(value: Any) -> Any:
+def _drop_files_fields(value: JsonValue) -> JsonValue:
     """Рекурсивно удаляет поле files из payload для семантического сравнения."""
     if isinstance(value, dict):
-        return {
-            key: _drop_files_fields(item)
-            for key, item in value.items()
-            if key != "files"
-        }
+        out: JsonObject = {}
+        for key, item in value.items():
+            if key != "files":
+                out[key] = _drop_files_fields(item)
+        return out
     if isinstance(value, list):
-        return [_drop_files_fields(item) for item in value]
+        out_array: JsonArray = []
+        for item in value:
+            out_array.append(_drop_files_fields(item))
+        return out_array
     return value
 
 
-def _flow_semantic_payload(flow_cfg: FlowConfig) -> dict[str, Any]:
+def _flow_semantic_payload(flow_cfg: FlowConfig) -> JsonObject:
     """
     Детерминированный payload для сравнения текущего flow и bundle.
 
@@ -129,37 +141,40 @@ def _flow_semantic_payload(flow_cfg: FlowConfig) -> dict[str, Any]:
     (defaults FlowConfig), поля редактора/платформы (metadata, speech, resources)
     и служебные — иначе ``has_bundle_update`` ложноположительный.
     """
-    payload = flow_cfg.model_dump(
-        mode="json",
-        exclude={
-            "version",
-            "created_at",
-            "updated_at",
-            "source",
-            "public_fields",
-            "store_card_image_url",
-            "metadata",
-            "speech",
-            "resources",
-            "channels",
-            "store",
-            "mock",
-            "permission",
-            "timeout",
-            "max_retries",
-            "hidden",
-        },
+    payload = parse_json_object(
+        flow_cfg.model_dump_json(
+            exclude={
+                "version",
+                "created_at",
+                "updated_at",
+                "source",
+                "public_fields",
+                "store_card_image_url",
+                "metadata",
+                "speech",
+                "resources",
+                "channels",
+                "store",
+                "mock",
+                "permission",
+                "timeout",
+                "max_retries",
+                "hidden",
+            },
+        ),
+        "flow.semantic_payload",
     )
-    return _drop_files_fields(payload)
+    return require_json_object(_drop_files_fields(payload), "flow.semantic_payload")
 
 
-def _canonical_flow_semantic_payload(flow_cfg: FlowConfig) -> dict[str, Any]:
+def _canonical_flow_semantic_payload(flow_cfg: FlowConfig) -> JsonObject:
     """
     Payload для сравнения с bundle после того же пайплайна, что при READ из БД:
     ``model_dump`` → ``normalize_flow_config_dict`` → ``FlowConfig.model_validate``.
     Иначе свежесобранный bundle и конфиг из репозитория расходятся в ``nodes.tools`` и т.п.
     """
-    normalized = normalize_flow_config_dict(flow_cfg.model_dump(mode="json"))
+    payload = parse_json_object(flow_cfg.model_dump_json(), "flow")
+    normalized = normalize_flow_config_dict(payload)
     canonical = FlowConfig.model_validate(normalized)
     return _flow_semantic_payload(canonical)
 
@@ -173,11 +188,12 @@ def _build_bundle_index(flows_root: Path) -> dict[str, str]:
         raise HTTPException(status_code=500, detail=f"Registry not found: {registry_path}")
 
     with open(registry_path, "r", encoding="utf-8") as f:
-        registry_data = yaml.safe_load(f) or {}
+        registry_data = require_json_object(yaml.safe_load(f) or {}, "registry.yaml")
 
-    registry_flows = registry_data.get("flows")
-    if not isinstance(registry_flows, list):
-        raise HTTPException(status_code=500, detail="Registry field 'flows' must be a list")
+    try:
+        registry_flows = require_json_array(registry_data.get("flows", []), "registry.flows")
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail="Registry field 'flows' must be a list") from exc
 
     flow_to_bundle: dict[str, str] = {}
     for entry in registry_flows:
@@ -195,7 +211,7 @@ def _build_bundle_index(flows_root: Path) -> dict[str, str]:
             raise HTTPException(status_code=500, detail=f"Bundle flow.json not found for '{bundle_id}'")
 
         with open(flow_path, "r", encoding="utf-8") as f:
-            raw_flow = json.load(f)
+            raw_flow = parse_json_object(f.read(), f"bundles.{bundle_id}.flow")
 
         flow_id = raw_flow.get("flow_id") or raw_flow.get("id")
         if not isinstance(flow_id, str) or not flow_id:
@@ -213,7 +229,7 @@ async def _get_bundle_update_flags(
 ) -> dict[str, bool]:
     """Возвращает признак наличия обновлений bundle для flow с source=file."""
     flow_to_bundle = _build_bundle_index(flows_root)
-    file_flow_ids = [f.flow_id for f in flows if (getattr(f, "source", None) or "manual") == "file"]
+    file_flow_ids = [f.flow_id for f in flows if (f.source or "manual") == "file"]
     if not file_flow_ids:
         return {}
 
@@ -233,7 +249,7 @@ async def _get_bundle_update_flags(
 
     flags: dict[str, bool] = {}
     for flow_cfg in flows:
-        source_value = getattr(flow_cfg, "source", None) or "manual"
+        source_value = flow_cfg.source or "manual"
         if source_value != "file":
             continue
 
@@ -262,18 +278,22 @@ def _generate_flow_url(flow_id: str, flow_kind: FlowType | None = None, external
     return f"https://{settings.server.host}:{settings.server.port}/flows/{flow_id}"
 
 
-def _dataflow_edge_models(raw_edges: object, field_name: str) -> list[Edge]:
+def _edge_to_json(edge: Edge) -> JsonObject:
+    return parse_json_object(edge.model_dump_json(by_alias=True), "edge")
+
+
+def _dataflow_edge_models(raw_edges: Sequence[JsonValue | Edge] | JsonValue | None, field_name: str) -> list[Edge]:
     if raw_edges is None:
         return []
     if not isinstance(raw_edges, list):
         raise ValueError(f"{field_name} must be a list")
     out: list[Edge] = []
-    for idx, edge in enumerate(cast(list[object], raw_edges)):
+    for idx, edge in enumerate(raw_edges):
         item_name = f"{field_name}[{idx}]"
         if isinstance(edge, Edge):
             out.append(edge)
         elif isinstance(edge, BaseModel):
-            payload = require_json_object(cast(object, edge.model_dump(mode="json", by_alias=True)), item_name)
+            payload = parse_json_object(edge.model_dump_json(by_alias=True), item_name)
             out.append(Edge.model_validate(payload))
         else:
             payload = require_json_value(edge, item_name)
@@ -281,19 +301,24 @@ def _dataflow_edge_models(raw_edges: object, field_name: str) -> list[Edge]:
     return out
 
 
-def _flow_variable_models(raw_variables: object, field_name: str) -> dict[str, FlowVariableConfig]:
+def _flow_variable_models(
+    raw_variables: JsonValue | Mapping[str, FlowVariableConfig] | None,
+    field_name: str,
+) -> dict[str, FlowVariableConfig]:
     if raw_variables is None:
         return {}
     if not isinstance(raw_variables, Mapping):
         raise ValueError(f"{field_name} must be an object")
     out: dict[str, FlowVariableConfig] = {}
-    for key, raw_value in cast(Mapping[object, object], raw_variables).items():
-        if not isinstance(key, str) or not key:
+    for key, raw_value in raw_variables.items():
+        if not key:
             raise ValueError(f"{field_name} keys must be non-empty strings")
         if isinstance(raw_value, FlowVariableConfig):
             out[key] = raw_value
         elif isinstance(raw_value, Mapping):
-            out[key] = FlowVariableConfig.model_validate(dict(raw_value))
+            out[key] = FlowVariableConfig.model_validate(
+                require_json_object(raw_value, f"{field_name}.{key}")
+            )
         else:
             out[key] = FlowVariableConfig(
                 value=require_json_value(raw_value, f"{field_name}.{key}"),
@@ -303,10 +328,7 @@ def _flow_variable_models(raw_variables: object, field_name: str) -> dict[str, F
 
 def _graph_nodes_payload(nodes: Mapping[str, GraphNodeConfig]) -> dict[str, JsonObject]:
     return {
-        node_id: require_json_object(
-            cast(object, node.model_dump(mode="json", by_alias=True, exclude_none=True)),
-            f"nodes.{node_id}",
-        )
+        node_id: parse_json_object(node.model_dump_json(by_alias=True, exclude_none=True), f"nodes.{node_id}")
         for node_id, node in nodes.items()
     }
 
@@ -342,10 +364,7 @@ async def _inline_tools_in_nodes(
                         for k, v in tool_ref.args_schema.items()
                     }
                 if tool_ref.parameters_schema:
-                    node_config["parameters_schema"] = require_json_object(
-                        cast(object, tool_ref.parameters_schema),
-                        "tool.parameters_schema",
-                    )
+                    node_config["parameters_schema"] = tool_ref.parameters_schema
                 if tool_ref.description and not node_config.get("description"):
                     node_config["description"] = tool_ref.description
         nodes[node_id] = node_config
@@ -357,7 +376,7 @@ async def inline_tools_list(
     container: FlowContainer
 ) -> list[JsonValue]:
     """Инлайнит список tools."""
-    inlined = []
+    inlined: list[JsonValue] = []
     for tool in tools:
         inlined_tool = await _inline_single_tool(tool, container)
         if inlined_tool:
@@ -374,7 +393,7 @@ async def _inline_single_tool(
         # tool_id - достаём из библиотеки
         tool_ref = await container.tool_repository.get(tool)
         if tool_ref:
-            return require_json_object(cast(object, tool_ref.model_dump(mode="json")), "tool")
+            return parse_json_object(tool_ref.model_dump_json(), "tool")
 
         # Может быть node (llm_node as tool)
         node = await container.node_repository.get(tool)
@@ -403,7 +422,7 @@ async def _inline_single_tool(
         if isinstance(tool_id, str) and tool_id and not tool_obj.get("code"):
             tool_ref = await container.tool_repository.get(tool_id)
             if tool_ref and tool_ref.code:
-                merged = require_json_object(cast(object, tool_ref.model_dump(mode="json")), "tool")
+                merged = parse_json_object(tool_ref.model_dump_json(), "tool")
                 merged.update(tool_obj)  # Переопределения из запроса приоритетнее
                 return merged
 
@@ -422,7 +441,7 @@ async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> Js
         "prompt": node.prompt,
     }
     if node.llm:
-        result["llm"] = require_json_object(cast(object, node.llm.model_dump(mode="json")), "node.llm")
+        result["llm"] = parse_json_object(node.llm.model_dump_json(), "node.llm")
     if node.code:
         result["code"] = node.code
     if node.tools:
@@ -431,28 +450,22 @@ async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> Js
             if isinstance(tool, str):
                 tools_list.append(tool)
             else:
-                tools_list.append(require_json_object(cast(object, tool.model_dump(mode="json")), "node.tools[]"))
+                tools_list.append(parse_json_object(tool.model_dump_json(), "node.tools[]"))
         result["tools"] = await inline_tools_list(tools_list, container)
     return result
 
 
 def _flow_config_to_inline_tool(flow_cfg: FlowConfig) -> JsonObject:
     """Конвертирует FlowConfig в inline tool."""
-    return require_json_object(
-        cast(
-            object,
-            {
-                "tool_id": flow_cfg.flow_id,
-                "type": "flow",
-                "name": flow_cfg.name,
-                "description": flow_cfg.description,
-                "entry": flow_cfg.entry,
-                "nodes": flow_cfg.nodes,
-                "edges": [e.model_dump(mode="json", by_alias=True) for e in flow_cfg.edges] if flow_cfg.edges else [],
-            },
-        ),
-        "flow_tool",
-    )
+    return {
+        "tool_id": flow_cfg.flow_id,
+        "type": "flow",
+        "name": flow_cfg.name,
+        "description": flow_cfg.description,
+        "entry": flow_cfg.entry,
+        "nodes": flow_cfg.nodes or {},
+        "edges": [_edge_to_json(edge) for edge in flow_cfg.edges],
+    }
 
 router = APIRouter(tags=["flows"])
 
@@ -460,7 +473,7 @@ router = APIRouter(tags=["flows"])
 class EdgeRequest(BaseModel):
     """Edge в запросе"""
 
-    model_config = {"populate_by_name": True}
+    model_config: ClassVar[ConfigDict] = ConfigDict(populate_by_name=True)
 
     from_node: str
     to_node: str | None
@@ -472,13 +485,13 @@ class BranchRequest(BaseModel):
 
     name: str
     description: str = ""
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     entry: str | None = None
-    nodes: dict[str, Any] | None = None
+    nodes: dict[str, JsonObject] | None = None
     nodes_mode: str | None = None
-    edges: list[dict[str, Any]] | None = None
+    edges: list[Edge] | None = None
     edges_mode: str | None = None
-    variables: dict[str, Any] = {}
+    variables: JsonObject = Field(default_factory=dict)
     variables_mode: str | None = None
     speech: FlowSpeechSettings | None = None
 
@@ -488,57 +501,30 @@ class BranchResponse(BaseModel):
 
     name: str
     description: str = ""
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     entry: str | None = None
-    nodes: dict[str, Any] | None = None
-    edges: list[dict[str, Any]] | None = None
-    variables: dict[str, Any] = {}
+    nodes: dict[str, JsonObject] | None = None
+    edges: list[Edge] | None = None
+    variables: dict[str, FlowVariableConfig] = Field(default_factory=dict)
     nodes_mode: str | None = None
     edges_mode: str | None = None
     variables_mode: str | None = None
-    speech: dict[str, Any] | None = None
+    speech: JsonObject | None = None
 
 
 def _branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
     """Конвертирует BranchConfig в BranchResponse."""
-    edges = None
-    if branch_cfg.edges:
-        edges = []
-        for e in branch_cfg.edges:
-            if e is None:
-                continue
-            edges.append({
-                "from": e.from_node,
-                "to": e.to_node,
-                "condition": e.condition
-            })
-        if not edges:
-            edges = None
-
-    # Конвертируем mode в строку (может быть Enum или уже строка)
-    nodes_mode = None
-    if branch_cfg.nodes_mode:
-        nodes_mode = branch_cfg.nodes_mode.value if hasattr(branch_cfg.nodes_mode, 'value') else str(branch_cfg.nodes_mode)
-
-    edges_mode = None
-    if branch_cfg.edges_mode:
-        edges_mode = branch_cfg.edges_mode.value if hasattr(branch_cfg.edges_mode, 'value') else str(branch_cfg.edges_mode)
-
-    variables_mode = None
-    if branch_cfg.variables_mode:
-        variables_mode = branch_cfg.variables_mode.value if hasattr(branch_cfg.variables_mode, 'value') else str(branch_cfg.variables_mode)
-
     return BranchResponse(
         name=branch_cfg.name,
         description=branch_cfg.description,
         tags=branch_cfg.tags,
         entry=branch_cfg.entry,
         nodes=branch_cfg.nodes,
-        edges=edges,
+        edges=branch_cfg.edges if branch_cfg.edges else None,
         variables=branch_cfg.variables,
-        nodes_mode=nodes_mode,
-        edges_mode=edges_mode,
-        variables_mode=variables_mode,
+        nodes_mode=branch_cfg.nodes_mode.value,
+        edges_mode=branch_cfg.edges_mode.value,
+        variables_mode=branch_cfg.variables_mode.value,
         speech=_speech_to_json(branch_cfg.speech),
     )
 
@@ -549,17 +535,6 @@ def _branch_request_to_config(
     existing: BranchConfig | None = None,
 ) -> BranchConfig:
     """Конвертирует BranchRequest в BranchConfig."""
-    edges = None
-    if branch_req.edges:
-        edges = [
-            Edge.model_validate({
-                "from": e.get("from") or e.get("from_node"),
-                "to": e.get("to") or e.get("to_node"),
-                "condition": e.get("condition"),
-            })
-            for e in branch_req.edges
-        ]
-
     def _mode(
         raw: str | None,
         ex: MergeMode | None,
@@ -586,8 +561,8 @@ def _branch_request_to_config(
         tags=branch_req.tags,
         entry=branch_req.entry,
         nodes=branch_req.nodes,
-        edges=edges,
-        variables=branch_req.variables,
+        edges=branch_req.edges,
+        variables=_flow_variable_models(branch_req.variables, f"branches.{branch_id}.variables"),
         nodes_mode=_mode(branch_req.nodes_mode, ex_n, MergeMode.REPLACE),
         edges_mode=_mode(branch_req.edges_mode, ex_e, MergeMode.REPLACE),
         variables_mode=_mode(branch_req.variables_mode, ex_v, MergeMode.MERGE),
@@ -602,24 +577,26 @@ class FlowCreateRequest(BaseModel):
     name: str
     description: str | None = None
     entry: str
-    nodes: dict[str, Any]
-    edges: list[dict[str, Any]]
-    variables: dict[str, Any] = {}
-    tags: list[str] = []
-    branches: dict[str, BranchRequest] = {}
-    evaluation: dict[str, Any] | None = None
-    triggers: dict[str, Any] = {}
-    resources: dict[str, Any] = {}
+    nodes: dict[str, JsonObject]
+    edges: list[Edge]
+    variables: JsonObject = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
+    branches: dict[str, BranchRequest] = Field(default_factory=dict)
+    evaluation: dict[str, TestCaseConfig] | None = None
+    triggers: dict[str, TriggerConfig] = Field(default_factory=dict)
+    resources: dict[str, ResourceReference] = Field(default_factory=dict)
     store_card_image_url: str | None = None
     speech: FlowSpeechSettings | None = None
 
     @field_validator("store_card_image_url", mode="before")
     @classmethod
-    def _empty_store_card_image_url(cls, value: Any) -> str | None:
+    def _empty_store_card_image_url(cls, value: JsonValue) -> str | None:
         if value is None:
             return None
         if isinstance(value, str) and not value.strip():
             return None
+        if not isinstance(value, str):
+            raise ValueError("store_card_image_url must be a string")
         return value
 
 
@@ -634,36 +611,36 @@ class FlowResponse(BaseModel):
 
     # LOCAL flow
     entry: str | None = None
-    nodes: dict[str, Any] | None = None
-    edges: list[dict[str, Any]] | None = None
-    variables: dict[str, Any] = {}
-    tags: list[str] = []
-    branches: dict[str, BranchResponse] = {}
-    evaluation: dict[str, Any] | None = None
+    nodes: dict[str, JsonObject] | None = None
+    edges: list[Edge] | None = None
+    variables: dict[str, FlowVariableConfig] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
+    branches: dict[str, BranchResponse] = Field(default_factory=dict)
+    evaluation: dict[str, TestCaseConfig] | None = None
     hidden: bool = False
     has_bundle_update: bool = False
 
     # Внешний flow (A2A)
     url: str | None = None
     headers: dict[str, str] | None = None
-    status: str | None = None
+    status: ExternalAgentStatus | None = None
     last_health_check: str | None = None
-    agent_card: dict[str, Any] | None = None
+    agent_card: JsonObject | None = None
 
     # A2A capabilities
-    capabilities: dict[str, Any] = {
+    capabilities: JsonObject = Field(default_factory=lambda: {
         "streaming": True,
         "pushNotifications": True,
-    }
+    })
 
     # Триггеры агента
-    triggers: dict[str, Any] = {}
+    triggers: dict[str, TriggerConfig] = Field(default_factory=dict)
 
     # Ресурсы агента
-    resources: dict[str, Any] = {}
+    resources: dict[str, ResourceReference] = Field(default_factory=dict)
 
     # UI-метаданные (sticky_notes и пр.)
-    metadata: dict[str, Any] = {}
+    metadata: JsonObject = Field(default_factory=dict)
 
     # URL обложки агента (после загрузки файла или из bundle)
     store_card_image_url: str | None = None
@@ -671,7 +648,7 @@ class FlowResponse(BaseModel):
     # manual | api | file (bundle в репозитории)
     source: str = "manual"
 
-    speech: dict[str, Any] | None = None
+    speech: JsonObject | None = None
 
 
 class FlowVoiceSessionQueryResponse(BaseModel):
@@ -697,10 +674,10 @@ class FlowStoreBundleResponse(BaseModel):
 class FlowValidateRequest(BaseModel):
     """Запрос на валидацию агента"""
 
-    nodes: dict[str, Any]
-    edges: list[dict[str, Any]]
+    nodes: dict[str, JsonObject]
+    edges: list[Edge]
     entry: str
-    variables: dict[str, Any] = {}
+    variables: JsonObject = Field(default_factory=dict)
     flow_id: str | None = None
 
 
@@ -711,7 +688,7 @@ class ValidationErrorResponse(BaseModel):
     message: str
     severity: str
     node_id: str | None = None
-    details: dict[str, Any] | None = None
+    details: JsonObject | None = None
 
 
 class FlowValidateResponse(BaseModel):
@@ -737,7 +714,10 @@ class FlowDataflowInspectRequest(BaseModel):
 
     @field_validator("variables", mode="before")
     @classmethod
-    def _normalize_variables(cls, value: object) -> dict[str, FlowVariableConfig]:
+    def _normalize_variables(
+        cls,
+        value: JsonValue | Mapping[str, FlowVariableConfig] | None,
+    ) -> dict[str, FlowVariableConfig]:
         return _flow_variable_models(value, "variables")
 
 
@@ -784,20 +764,17 @@ async def _attach_nested_dataflow_for_editor(
             container,
             seen_flow_ids={*seen, nested_flow_id},
         )
-        node["__dataflow_nested"] = require_json_object(
-            cast(
-                object,
-                inspect_flow_dataflow(
-                    flow_id=nested_flow_id,
-                    branch_id=nested_branch_id,
-                    entry=nested_effective.get("entry"),
-                    nodes=_GRAPH_NODE_MAP_ADAPTER.validate_python(nested_nodes),
-                    edges=nested_edges,
-                    variables=_flow_variable_models(nested_effective.get("variables"), "nested.variables"),
-                    sample_state=None,
-                    observed_runs={},
-                ).model_dump(mode="json"),
-            ),
+        node["__dataflow_nested"] = parse_json_object(
+            inspect_flow_dataflow(
+                flow_id=nested_flow_id,
+                branch_id=nested_branch_id,
+                entry=nested_effective.get("entry"),
+                nodes=_GRAPH_NODE_MAP_ADAPTER.validate_python(nested_nodes),
+                edges=nested_edges,
+                variables=_flow_variable_models(nested_effective.get("variables"), "nested.variables"),
+                sample_state=None,
+                observed_runs={},
+            ).model_dump_json(),
             "__dataflow_nested",
         )
         out[node_id] = node
@@ -875,7 +852,7 @@ async def validate_flow(
 
     result = await validator.validate(
         nodes=request.nodes,
-        edges=request.edges,
+        edges=[_edge_to_json(edge) for edge in request.edges],
         entry=request.entry,
         variables=request.variables,
         flow_id=request.flow_id,
@@ -903,8 +880,8 @@ async def validate_flow(
 async def list_flows(
     container: ContainerDep,
     type: FlowType | None = None,
-    limit: int = Query(500, ge=1, le=2000, description="Максимум flows"),
-    offset: int = Query(0, ge=0, description="Смещение для пагинации"),
+    limit: Annotated[int, Query(ge=1, le=2000, description="Максимум flows")] = 500,
+    offset: Annotated[int, Query(ge=0, description="Смещение для пагинации")] = 0,
 ) -> OffsetPage[FlowResponse]:
     """Список всех flows с опциональным фильтром по типу (local/external)"""
     flows, total = await asyncio.gather(
@@ -920,53 +897,51 @@ async def list_flows(
 
     result: list[FlowResponse] = []
     for f in flows:
-        branches_response = {
+        branches_response: dict[str, BranchResponse] = {
             branch_id: _branch_config_to_response(branch_cfg)
             for branch_id, branch_cfg in (f.branches or {}).items()
         }
-        evaluation_dict = None
-        if f.evaluation:
-            evaluation_dict = {k: v.model_dump() if hasattr(v, 'model_dump') else v for k, v in f.evaluation.items()}
-        hidden = getattr(f, 'hidden', False)
-
-        response_data: dict[str, Any] = {
-            "flow_id": f.flow_id,
-            "version": f.version,
-            "name": f.name,
-            "description": f.description,
-            "type": f.type,
-            "tags": f.tags,
-            "hidden": hidden,
-            "source": getattr(f, "source", None) or "manual",
-            "has_bundle_update": bundle_update_flags.get(f.flow_id, False),
-            "store_card_image_url": getattr(f, "store_card_image_url", None),
-        }
-
-        # LOCAL flow
         if f.type == FlowType.LOCAL:
-            response_data.update({
-                "entry": f.entry,
-                "nodes": f.nodes,
-                "edges": [
-                    {"from": e.from_node, "to": e.to_node, "condition": e.condition}
-                    for e in f.edges
-                ],
-                "variables": f.variables,
-                "branches": branches_response,
-                "evaluation": evaluation_dict,
-            })
-        # Внешний flow (A2A endpoint)
+            result.append(
+                FlowResponse(
+                    flow_id=f.flow_id,
+                    version=f.version,
+                    name=f.name,
+                    description=f.description,
+                    type=f.type,
+                    tags=f.tags,
+                    hidden=f.hidden,
+                    source=f.source,
+                    has_bundle_update=bundle_update_flags.get(f.flow_id, False),
+                    store_card_image_url=f.store_card_image_url,
+                    entry=f.entry,
+                    nodes=f.nodes,
+                    edges=f.edges,
+                    variables=f.variables,
+                    branches=branches_response,
+                    evaluation=f.evaluation,
+                )
+            )
         elif f.type == FlowType.EXTERNAL:
-            status_value = f.status.value if isinstance(f.status, ExternalAgentStatus) else f.status
-            response_data.update({
-                "url": f.url,
-                "headers": f.headers,
-                "status": status_value,
-                "last_health_check": f.last_health_check.isoformat() if f.last_health_check else None,
-                "agent_card": f.agent_card,
-            })
-
-        result.append(FlowResponse(**response_data))
+            result.append(
+                FlowResponse(
+                    flow_id=f.flow_id,
+                    version=f.version,
+                    name=f.name,
+                    description=f.description,
+                    type=f.type,
+                    tags=f.tags,
+                    hidden=f.hidden,
+                    source=f.source,
+                    has_bundle_update=bundle_update_flags.get(f.flow_id, False),
+                    store_card_image_url=f.store_card_image_url,
+                    url=f.url,
+                    headers=f.headers,
+                    status=f.status,
+                    last_health_check=f.last_health_check.isoformat() if f.last_health_check else None,
+                    agent_card=f.agent_card,
+                )
+            )
     return OffsetPage[FlowResponse](items=result, total=total, limit=limit, offset=offset)
 
 
@@ -985,11 +960,12 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
         raise HTTPException(status_code=500, detail=f"Registry not found: {registry_path}")
 
     with open(registry_path, "r", encoding="utf-8") as f:
-        registry_data = yaml.safe_load(f) or {}
+        registry_data = require_json_object(yaml.safe_load(f) or {}, "registry.yaml")
 
-    registry_flows = registry_data.get("flows")
-    if not isinstance(registry_flows, list):
-        raise HTTPException(status_code=500, detail="Registry field 'flows' must be a list")
+    try:
+        registry_flows = require_json_array(registry_data.get("flows", []), "registry.flows")
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail="Registry field 'flows' must be a list") from exc
 
     result: list[FlowStoreBundleResponse] = []
     for entry in registry_flows:
@@ -998,7 +974,10 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
             is_public = True
         elif isinstance(entry, dict):
             bundle_id = entry.get("id")
-            is_public = entry.get("public", False)
+            raw_public = entry.get("public", False)
+            if not isinstance(raw_public, bool):
+                raise HTTPException(status_code=500, detail="Registry flow entry field 'public' must be boolean")
+            is_public = raw_public
         else:
             raise HTTPException(status_code=500, detail="Registry flow entry must be string or object")
 
@@ -1013,7 +992,7 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
             raise HTTPException(status_code=500, detail=f"Bundle flow.json not found for '{bundle_id}'")
 
         with open(flow_path, "r", encoding="utf-8") as f:
-            raw_flow = json.load(f)
+            raw_flow = parse_json_object(f.read(), f"bundles.{bundle_id}.flow")
 
         hidden_value = raw_flow.get("hidden", False)
         if not isinstance(hidden_value, bool):
@@ -1033,9 +1012,14 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
         if description is not None and not isinstance(description, str):
             raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' field 'description' must be string")
 
-        tags = raw_flow.get("tags", [])
-        if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
+        raw_tags = raw_flow.get("tags", [])
+        if not isinstance(raw_tags, list):
             raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' field 'tags' must be list[str]")
+        tags: list[str] = []
+        for tag in raw_tags:
+            if not isinstance(tag, str):
+                raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' field 'tags' must be list[str]")
+            tags.append(tag)
 
         installed = await container.flow_repository.get(flow_id) is not None
         result.append(
@@ -1057,7 +1041,7 @@ async def _validate_tool_nodes(
     container: FlowContainer
 ) -> None:
     """Валидирует tool_id в code-нодах при отсутствии inline code."""
-    for node_id, node_config in nodes.items():
+    for node_config in nodes.values():
         if node_config.get("type") == "code":
             tool_id = node_config.get("tool_id")
             has_code = "code" in node_config and node_config.get("code")
@@ -1081,6 +1065,8 @@ async def create_flow(
     request: FlowCreateRequest, container: ContainerDep
 ) -> FlowResponse:
     """Создаёт flow."""
+    variables = _flow_variable_models(request.variables, "variables")
+
     # Валидируем tool_id в tool нодах
     await _validate_tool_nodes(dict(request.nodes), container)
 
@@ -1096,9 +1082,9 @@ async def create_flow(
     )
     validation_result = await validator.validate(
         nodes=nodes,
-        edges=request.edges,
+        edges=[_edge_to_json(edge) for edge in request.edges],
         entry=request.entry,
-        variables=request.variables or {},
+        variables=request.variables,
     )
 
     if not validation_result.valid:
@@ -1107,15 +1093,6 @@ async def create_flow(
             status_code=400,
             detail="; ".join(errors)
         )
-
-    edges = [
-        Edge.model_validate({
-            "from": e.get("from") or e.get("from_node"),
-            "to": e.get("to") or e.get("to_node"),
-            "condition": e.get("condition"),
-        })
-        for e in request.edges
-    ]
 
     branches_payload = {
         branch_id: _branch_request_to_config(branch_id, branch_req, None)
@@ -1128,8 +1105,8 @@ async def create_flow(
         description=request.description or "",
         entry=request.entry,
         nodes=nodes,  # Инлайненные nodes
-        edges=edges,
-        variables=request.variables,
+        edges=request.edges,
+        variables=variables,
         tags=request.tags,
         branches=branches_payload,
         evaluation=request.evaluation,
@@ -1138,7 +1115,7 @@ async def create_flow(
         speech=request.speech,
     )
 
-    await container.flow_repository.set(flow_config)
+    _ = await container.flow_repository.set(flow_config)
 
     branches_response = {
         branch_id: _branch_config_to_response(branch_cfg)
@@ -1154,18 +1131,15 @@ async def create_flow(
         type=flow_config.type or FlowType.LOCAL,
         entry=flow_config.entry,
         nodes=flow_config.nodes,
-        edges=[
-            {"from": e.from_node, "to": e.to_node, "condition": e.condition}
-            for e in flow_config.edges
-        ],
+        edges=flow_config.edges,
         variables=flow_config.variables,
         tags=flow_config.tags,
         branches=branches_response,
-        evaluation=request.evaluation,
-        hidden=getattr(flow_config, 'hidden', False),
-        url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
+        evaluation=flow_config.evaluation,
+        hidden=flow_config.hidden,
+        url=_generate_flow_url(flow_config.flow_id, flow_config.type, flow_config.url),
         source=flow_config.source,
-        store_card_image_url=getattr(flow_config, "store_card_image_url", None),
+        store_card_image_url=flow_config.store_card_image_url,
         speech=_speech_to_json(flow_config.speech),
     )
 
@@ -1174,7 +1148,7 @@ async def create_flow(
 async def get_flow_voice_session_query(
     flow_id: str,
     container: ContainerDep,
-    branch_id: str = Query("default", description="ID ветки графа для мержа speech"),
+    branch_id: Annotated[str, Query(description="ID ветки графа для мержа speech")] = "default",
 ) -> FlowVoiceSessionQueryResponse:
     """Собирает query для Voice WS: STT/TTS/VAD/language из effective_flow_speech_settings.
 
@@ -1199,7 +1173,7 @@ async def get_flow_voice_session_query(
     if resolved_voice:
         query["tts_voice"] = str(resolved_voice)
     else:
-        query.pop("tts_voice", None)
+        _ = query.pop("tts_voice", None)
     logger.info(
         "flows.voice_session_query",
         flow_id=flow_id,
@@ -1220,14 +1194,7 @@ async def get_flow(
         if flow_cfg is None:
             raise HTTPException(status_code=404, detail="Flow not found")
 
-        evaluation_dict = None
-        if flow_cfg.evaluation:
-            evaluation_dict = {
-                test_case_id: test_case.model_dump()
-                for test_case_id, test_case in flow_cfg.evaluation.items()
-            }
-
-        branches_response = {}
+        branches_response: dict[str, BranchResponse] = {}
         if flow_cfg.branches:
             for branch_id, branch_cfg in flow_cfg.branches.items():
                 try:
@@ -1239,23 +1206,7 @@ async def get_flow(
                         detail=f"Ошибка обработки ветки '{branch_id}': {str(e)}"
                     )
 
-        edges_list = []
-        if flow_cfg.edges:
-            for e in flow_cfg.edges:
-                if e is None:
-                    continue
-                edges_list.append({
-                    "from": e.from_node,
-                    "to": e.to_node,
-                    "condition": e.condition
-                })
-
-        triggers_response = {}
-        if flow_cfg.triggers:
-            for trigger_id, trigger in flow_cfg.triggers.items():
-                triggers_response[trigger_id] = trigger.model_dump() if hasattr(trigger, 'model_dump') else trigger
-
-        source_value = getattr(flow_cfg, "source", None) or "manual"
+        source_value = flow_cfg.source or "manual"
         bundle_update = False
         if source_value == "file":
             flows_root = Path(__file__).resolve().parents[3]
@@ -1270,19 +1221,19 @@ async def get_flow(
             type=flow_cfg.type or FlowType.LOCAL,
             entry=flow_cfg.entry,
             nodes=flow_cfg.nodes or {},
-            edges=edges_list,
+            edges=flow_cfg.edges,
             variables=flow_cfg.variables or {},
             tags=flow_cfg.tags or [],
             branches=branches_response,
-            evaluation=evaluation_dict,
-            hidden=getattr(flow_cfg, 'hidden', False),
-            url=_generate_flow_url(flow_cfg.flow_id, flow_cfg.type, getattr(flow_cfg, 'url', None)),
-            triggers=triggers_response,
+            evaluation=flow_cfg.evaluation,
+            hidden=flow_cfg.hidden,
+            url=_generate_flow_url(flow_cfg.flow_id, flow_cfg.type, flow_cfg.url),
+            triggers=flow_cfg.triggers,
             resources=flow_cfg.resources or {},
-            metadata=getattr(flow_cfg, "metadata", None) or {},
-            source=getattr(flow_cfg, "source", None) or "manual",
+            metadata=flow_cfg.metadata or {},
+            source=flow_cfg.source or "manual",
             has_bundle_update=bundle_update,
-            store_card_image_url=getattr(flow_cfg, "store_card_image_url", None),
+            store_card_image_url=flow_cfg.store_card_image_url,
             speech=_speech_to_json(flow_cfg.speech),
         )
     except HTTPException:
@@ -1302,7 +1253,7 @@ async def reload_flow_from_bundle(
     """
     # Для установки bundle в компанию требуются все code-tools из runtime-модулей.
     # Иначе инлайнинг упадёт на tool_id, которого нет в tool_repository текущей компании.
-    await load_tools_to_db(container.tool_repository)
+    _ = await load_tools_to_db(container.tool_repository)
 
     flows_root = Path(__file__).resolve().parents[3]
     bundles_dir = flows_root / "bundles"
@@ -1351,7 +1302,7 @@ async def create_flow_preview_share(
 ) -> FlowPreviewShareResponse:
     """Одноразовая короткая ссылка на гостевую страницу с embed-чатом по flow/ветке."""
     ctx = get_context()
-    if ctx is None or ctx.user is None:
+    if ctx is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
     if ctx.active_company is None:
         raise HTTPException(status_code=400, detail="Company required")
@@ -1366,7 +1317,7 @@ async def create_flow_preview_share(
     if not branch_id_raw:
         branch_id_raw = "default"
 
-    flow_type = getattr(flow_cfg, "type", None) or FlowType.LOCAL
+    flow_type = flow_cfg.type or FlowType.LOCAL
     if flow_type == FlowType.EXTERNAL:
         branch_id = "default"
     else:
@@ -1403,9 +1354,9 @@ async def create_flow_preview_share(
         guest_max_user_messages=body.guest_max_user_messages,
         created_by=ctx.user.user_id,
     )
-    await container.embed_config_repository.set(config)
+    _ = await container.embed_config_repository.set(config)
     mapping = EmbedMapping(embed_id=embed_id, company_id=company_id)
-    await container.embed_mapping_repository.set(mapping)
+    _ = await container.embed_mapping_repository.set(mapping)
 
     guest_id = f"flow_preview_{uuid.uuid4().hex}"
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=_FLOW_PREVIEW_SHARE_TTL_SECONDS)
@@ -1439,7 +1390,7 @@ async def create_flow_preview_share(
     )
 
     handoff_id = str(uuid.uuid4())
-    handoff_payload: dict[str, Any] = {
+    handoff_payload: JsonObject = {
         "jwt": token,
         "embed_id": embed_id,
         "flow_id": flow_id,
@@ -1481,6 +1432,8 @@ async def update_flow(
     if existing is None:
         raise HTTPException(status_code=404, detail="Flow not found")
 
+    variables = _flow_variable_models(request.variables, "variables")
+
     # Патч только с координатами не затирает семантику ноды, сохранённую ранее
     merged_top_nodes = merge_incoming_node_dict_for_persist(
         dict(request.nodes), existing.nodes or {}
@@ -1500,26 +1453,10 @@ async def update_flow(
 
     # Инлайним tools - заменяем tool_id на полные конфиги с кодом
     nodes = await _inline_tools_in_nodes(merged_top_nodes, container)
-    if (getattr(existing, "source", None) or "manual") == "file":
+    if (existing.source or "manual") == "file":
         b_nodes = get_bundle_base_nodes_for_flow(flow_id)
         if b_nodes:
             nodes = repair_node_map_with_canonical_top_level(nodes, b_nodes)
-
-    edges = [
-        Edge.model_validate({
-            "from": e.get("from") or e.get("from_node"),
-            "to": e.get("to") or e.get("to_node"),
-            "condition": e.get("condition"),
-        })
-        for e in request.edges
-    ]
-
-    triggers = {
-        trigger_id: TriggerConfig(**trigger_data) if isinstance(trigger_data, dict) else trigger_data
-        for trigger_id, trigger_data in request.triggers.items()
-    }
-
-    resources = request.resources or {}
 
     speech_merged = request.speech if request.speech is not None else existing.speech
 
@@ -1529,20 +1466,20 @@ async def update_flow(
         description=request.description or "",
         entry=request.entry,
         nodes=nodes,  # Инлайненные nodes
-        edges=edges,
-        variables=request.variables,
+        edges=request.edges,
+        variables=variables,
         tags=request.tags,
         branches=branches,
         evaluation=request.evaluation,
         source=existing.source,
-        triggers=triggers,
-        resources=resources,
-        metadata=getattr(existing, "metadata", None) or {},
+        triggers=request.triggers,
+        resources=request.resources,
+        metadata=existing.metadata or {},
         store_card_image_url=request.store_card_image_url,
         speech=speech_merged,
     )
 
-    await container.flow_repository.set(flow_config)
+    _ = await container.flow_repository.set(flow_config)
 
     ctx = get_context()
     if ctx and ctx.user and ctx.user.user_id:
@@ -1557,11 +1494,6 @@ async def update_flow(
         for branch_id, branch_cfg in flow_config.branches.items()
     }
 
-    triggers_response = {
-        trigger_id: trigger.model_dump() if hasattr(trigger, 'model_dump') else trigger
-        for trigger_id, trigger in flow_config.triggers.items()
-    }
-
     return FlowResponse(
         flow_id=flow_config.flow_id,
         version=flow_config.version or "",
@@ -1570,21 +1502,18 @@ async def update_flow(
         type=flow_config.type or FlowType.LOCAL,
         entry=flow_config.entry,
         nodes=flow_config.nodes,
-        edges=[
-            {"from": e.from_node, "to": e.to_node, "condition": e.condition}
-            for e in flow_config.edges
-        ],
+        edges=flow_config.edges,
         variables=flow_config.variables,
         tags=flow_config.tags,
         branches=branches_response,
-        evaluation=request.evaluation,
-        hidden=getattr(flow_config, 'hidden', False),
-        url=_generate_flow_url(flow_config.flow_id, flow_config.type, getattr(flow_config, 'url', None)),
-        triggers=triggers_response,
+        evaluation=flow_config.evaluation,
+        hidden=flow_config.hidden,
+        url=_generate_flow_url(flow_config.flow_id, flow_config.type, flow_config.url),
+        triggers=flow_config.triggers,
         resources=flow_config.resources or {},
-        metadata=getattr(flow_config, "metadata", None) or {},
+        metadata=flow_config.metadata or {},
         source=flow_config.source,
-        store_card_image_url=getattr(flow_config, "store_card_image_url", None),
+        store_card_image_url=flow_config.store_card_image_url,
         speech=_speech_to_json(flow_config.speech),
     )
 
@@ -1619,7 +1548,7 @@ async def bulk_delete_nodes(
 
     target_ids = set(request.node_ids)
     deleted_ids: list[str] = []
-    new_nodes: dict[str, Any] = {}
+    new_nodes: dict[str, JsonObject] = {}
     for node_id, node_value in (existing.nodes or {}).items():
         if node_id in target_ids:
             deleted_ids.append(node_id)
@@ -1651,11 +1580,11 @@ async def bulk_delete_nodes(
         source=existing.source,
         triggers=existing.triggers or {},
         resources=existing.resources or {},
-        metadata=getattr(existing, "metadata", None) or {},
-        store_card_image_url=getattr(existing, "store_card_image_url", None),
-        speech=getattr(existing, "speech", None),
+        metadata=existing.metadata or {},
+        store_card_image_url=existing.store_card_image_url,
+        speech=existing.speech,
     )
-    await container.flow_repository.set(flow_config)
+    _ = await container.flow_repository.set(flow_config)
 
     ctx = get_context()
     if ctx and ctx.user and ctx.user.user_id:
@@ -1675,12 +1604,12 @@ async def bulk_delete_nodes(
 class FlowMetadataRequest(BaseModel):
     """PATCH-обновление flow.config.metadata (sticky_notes, etc.)."""
 
-    sticky_notes: list[dict[str, Any]] | None = None
+    sticky_notes: list[JsonObject] | None = None
 
 
 class FlowMetadataResponse(BaseModel):
     flow_id: str
-    metadata: dict[str, Any]
+    metadata: JsonObject
 
 
 @router.patch("/{flow_id}/metadata", response_model=FlowMetadataResponse)
@@ -1694,7 +1623,7 @@ async def update_flow_metadata(
     if existing is None:
         raise HTTPException(status_code=404, detail="Flow not found")
 
-    metadata: dict[str, Any] = dict(getattr(existing, "metadata", None) or {})
+    metadata: JsonObject = dict(existing.metadata or {})
     if request.sticky_notes is not None:
         metadata["sticky_notes"] = request.sticky_notes
 
@@ -1714,10 +1643,10 @@ async def update_flow_metadata(
         triggers=existing.triggers or {},
         resources=existing.resources or {},
         metadata=metadata,
-        store_card_image_url=getattr(existing, "store_card_image_url", None),
-        speech=getattr(existing, "speech", None),
+        store_card_image_url=existing.store_card_image_url,
+        speech=existing.speech,
     )
-    await container.flow_repository.set(flow_config)
+    _ = await container.flow_repository.set(flow_config)
 
     return FlowMetadataResponse(flow_id=flow_id, metadata=metadata)
 
@@ -1725,7 +1654,7 @@ async def update_flow_metadata(
 @router.delete("/{flow_id}")
 async def delete_flow(
     flow_id: str, container: ContainerDep
-) -> dict[str, Any]:
+) -> JsonObject:
     """Удаляет flow."""
     deleted = await container.flow_repository.delete(flow_id)
     if not deleted:
@@ -1762,24 +1691,10 @@ async def get_version(
     if version_cfg is None:
         raise HTTPException(status_code=404, detail="Version not found")
 
-    branches_response = {
+    branches_response: dict[str, BranchResponse] = {
         branch_id: _branch_config_to_response(branch_cfg)
         for branch_id, branch_cfg in (version_cfg.branches or {}).items()
     }
-
-    edges_list = [
-        {"from": e.from_node, "to": e.to_node, "condition": e.condition}
-        for e in (version_cfg.edges or []) if e
-    ]
-
-    triggers_response = {}
-    if version_cfg.triggers:
-        for trigger_id, trigger in version_cfg.triggers.items():
-            triggers_response[trigger_id] = trigger.model_dump() if hasattr(trigger, 'model_dump') else trigger
-
-    evaluation_dict = None
-    if version_cfg.evaluation:
-        evaluation_dict = {k: v.model_dump() if hasattr(v, 'model_dump') else v for k, v in version_cfg.evaluation.items()}
 
     return FlowResponse(
         flow_id=version_cfg.flow_id,
@@ -1789,18 +1704,18 @@ async def get_version(
         type=version_cfg.type or FlowType.LOCAL,
         entry=version_cfg.entry,
         nodes=version_cfg.nodes or {},
-        edges=edges_list,
+        edges=version_cfg.edges,
         variables=version_cfg.variables or {},
         tags=version_cfg.tags or [],
         branches=branches_response,
-        evaluation=evaluation_dict,
-        hidden=getattr(version_cfg, 'hidden', False),
-        url=_generate_flow_url(version_cfg.flow_id, version_cfg.type, getattr(version_cfg, 'url', None)),
-        triggers=triggers_response,
+        evaluation=version_cfg.evaluation,
+        hidden=version_cfg.hidden,
+        url=_generate_flow_url(version_cfg.flow_id, version_cfg.type, version_cfg.url),
+        triggers=version_cfg.triggers,
         resources=version_cfg.resources or {},
-        metadata=getattr(version_cfg, "metadata", None) or {},
-        source=getattr(version_cfg, "source", None) or "manual",
-        store_card_image_url=getattr(version_cfg, "store_card_image_url", None),
+        metadata=version_cfg.metadata or {},
+        source=version_cfg.source or "manual",
+        store_card_image_url=version_cfg.store_card_image_url,
         speech=_speech_to_json(version_cfg.speech),
     )
 
@@ -1810,7 +1725,7 @@ async def rollback_version(
     flow_id: str,
     version: str,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Откатывает flow к указанной версии.
 

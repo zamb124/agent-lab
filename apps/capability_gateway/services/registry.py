@@ -152,7 +152,7 @@ def _schema_properties(schema: JsonObject) -> dict[str, dict[str, JsonValue]]:
 def _schema_enum_values(schema: dict[str, JsonValue]) -> list[JsonValue] | None:
     raw_enum = schema.get("enum")
     if isinstance(raw_enum, list):
-        return cast(list[JsonValue], raw_enum)
+        return raw_enum
     return None
 
 
@@ -172,7 +172,7 @@ def _schema_type(schema: dict[str, JsonValue]) -> str:
         types: list[str] = []
         for item in raw_any_of:
             if isinstance(item, dict):
-                item_type = _schema_type(cast(dict[str, JsonValue], item))
+                item_type = _schema_type(item)
                 if item_type not in types:
                     types.append(item_type)
         return " | ".join(types) if types else "any"
@@ -182,7 +182,7 @@ def _schema_type(schema: dict[str, JsonValue]) -> str:
     if raw_type == "array":
         raw_items = schema.get("items")
         if isinstance(raw_items, dict):
-            return f"array<{_schema_type(cast(dict[str, JsonValue], raw_items))}>"
+            return f"array<{_schema_type(raw_items)}>"
         return "array"
     if isinstance(raw_type, str):
         return raw_type
@@ -1778,7 +1778,7 @@ class CapabilityRegistry:
         results = request.state.get("tool_results")
         if not isinstance(results, dict):
             return None
-        return cast(JsonValue, results.get(tool_name))
+        return results.get(tool_name)
 
     async def _state_get_messages(self, request: CapabilityCallRequest) -> JsonValue:
         self._reject_positional_args(request)

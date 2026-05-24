@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Literal
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.container import get_crm_container
+from apps.crm.container import CRMContainer, get_crm_container
 from apps.crm.db.repositories.task_repository import CRM_TASK_TERMINAL_STATUSES
 from apps.crm.services.crm_note_ws_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
@@ -14,6 +14,7 @@ from apps.crm_worker.broker import broker
 from apps.crm_worker.task_names import CRM_REPAIR_NOTE_ANALYSIS_DRAFT_TASK_NAME
 from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -24,7 +25,7 @@ async def _broadcast_draft_repair_phase(
     namespace: str,
     note_id: str,
     phase: Literal["started", "failed", "complete"],
-    container,
+    container: CRMContainer,
 ) -> None:
     entity = await container.entity_repository.get(note_id)
     if entity is None:
@@ -50,7 +51,7 @@ async def _broadcast_draft_repair_phase(
 
 async def _journal_failed(
     *,
-    container,
+    container: CRMContainer,
     task_id: str | None,
     company_id: str,
     snapshot_user_id: str,
@@ -79,7 +80,7 @@ async def _journal_failed(
 
 async def _journal_completed(
     *,
-    container,
+    container: CRMContainer,
     task_id: str | None,
     company_id: str,
     snapshot_user_id: str,
@@ -113,7 +114,7 @@ async def repair_note_analysis_draft_task(
     user_id: str,
     interface_language: str,
     task_id: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     await set_crm_context(
         company_id,
         namespace,

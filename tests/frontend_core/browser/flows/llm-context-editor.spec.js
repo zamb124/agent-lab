@@ -29,6 +29,9 @@ describe('platform-llm-context-editor', () => {
         expect(fields.length).to.equal(4);
         expect(fields[0].type).to.equal('enum');
         expect(fields[0].config.values.some((item) => item.value === 'enterprise')).to.equal(true);
+        const offOption = fields[1].config.values.find((item) => item.value === 'off');
+        expect(offOption).to.not.equal(undefined);
+        expect(offOption.label).to.not.equal('off');
         expect(fields[3].config.values.some((item) => item.value === 'enterprise')).to.equal(true);
         expect(fields[3].value).to.equal('medium');
     });
@@ -44,10 +47,38 @@ describe('platform-llm-context-editor', () => {
 
         const fields = Array.from(el.shadowRoot.querySelectorAll('platform-field'));
         expect(fields.length).to.equal(18);
+        expect(fields.every((field) => typeof field.hint === 'string' && field.hint.length > 0)).to.equal(true);
         expect(fields.some((field) => field.type === 'integer' && field.value === 16)).to.equal(true);
         expect(fields.some((field) => field.type === 'number' && field.value === 0.7)).to.equal(true);
         expect(fields.filter((field) => field.type === 'integer')).to.have.lengthOf(9);
-        expect(fields.filter((field) => field.type === 'boolean')).to.have.lengthOf(1);
+        expect(fields.filter((field) => field.type === 'boolean')).to.have.lengthOf(0);
+    });
+
+    it('advanced показывает effective значения для inherited числовых полей', async () => {
+        const el = await fixture(html`
+            <platform-llm-context-editor
+                .config=${{}}
+                .resolved=${{
+                    profile: 'standard',
+                    mode: 'smart',
+                    memory: 'session',
+                    retrieval: { mode: 'hybrid', top_k: 32, min_score: 0.65, rerank: true },
+                    budget: { max_input_tokens: 128000, active_window_tokens: 20000 },
+                    compaction: 'auto',
+                    cache: 'auto',
+                }}
+            ></platform-llm-context-editor>
+        `);
+        await elementUpdated(el);
+
+        el.shadowRoot.querySelector('glass-button').click();
+        await elementUpdated(el);
+
+        const fields = Array.from(el.shadowRoot.querySelectorAll('platform-field'));
+        expect(fields.some((field) => field.placeholder === '32')).to.equal(true);
+        expect(fields.some((field) => field.placeholder === '0.65')).to.equal(true);
+        expect(fields.some((field) => field.placeholder === '128000')).to.equal(true);
+        expect(fields.some((field) => field.placeholder === '20000')).to.equal(true);
     });
 
     it('advanced пишет точные token budget override без отдельного UI-контракта', async () => {
@@ -73,6 +104,34 @@ describe('platform-llm-context-editor', () => {
         await elementUpdated(el);
         el._onBudgetNumber('max_input_tokens')({ detail: { value: 0 } });
         expect(last).to.deep.equal({ budget: { max_input_tokens: 1 } });
+    });
+
+    it('не пропускает внутренний change поля наружу без detail.config', async () => {
+        const el = await fixture(html`
+            <platform-llm-context-editor .config=${{}}></platform-llm-context-editor>
+        `);
+        await elementUpdated(el);
+
+        const seen = [];
+        el.addEventListener('change', (e) => {
+            seen.push(e.detail);
+            const cfg = e.detail && e.detail.config && typeof e.detail.config === 'object'
+                ? e.detail.config
+                : {};
+            el.config = { ...cfg };
+        });
+
+        const field = el.shadowRoot.querySelector('platform-field');
+        field.dispatchEvent(new CustomEvent('change', {
+            detail: { value: 'agent' },
+            bubbles: true,
+            composed: true,
+        }));
+        await elementUpdated(el);
+
+        expect(seen).to.deep.equal([{ config: { profile: 'agent' } }]);
+        expect(el.config).to.deep.equal({ profile: 'agent' });
+        expect(el.shadowRoot.querySelector('platform-field').value).to.equal('agent');
     });
 
     it('rerank включает hybrid retrieval, если поиск был выключен', async () => {

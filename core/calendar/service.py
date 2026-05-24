@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
-from enum import Enum
-from typing import Any
+from typing import ClassVar
 from uuid import uuid4
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
 import httpx
+from pydantic import ConfigDict, Field
 
 from core.calendar.repositories import CalendarEventSqlRepository
 from core.clients.service_client import ServiceClient, ServiceClientError
@@ -22,6 +22,7 @@ from core.db.repositories.user_repository import UserRepository
 from core.http import get_httpx_client
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
+from core.integrations.repository import IntegrationCredentialRepository
 from core.logging import get_logger
 from core.models import (
     CalendarAttendee,
@@ -32,11 +33,13 @@ from core.models import (
     CalendarExternalRef,
     CalendarIntegration,
     CalendarIntegrationConnectPayload,
+    CalendarIntegrationCredentialMetadata,
     CalendarIntegrationCredentials,
     CalendarIntegrationSettings,
     CalendarProvider,
 )
-from core.types import require_json_array
+from core.models.base import FlexibleBaseModel, StrictBaseModel
+from core.types import JsonObject, require_json_array, require_json_object
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 SYNC_LINK_TOKEN_META = "sync_link_token"
@@ -44,27 +47,75 @@ SYNC_CHANNEL_ID_META = "sync_channel_id"
 SYNC_MEETING_FLAG_META = "sync_meeting"
 SYNC_REMINDER_SENT_META = "sync_join_reminder_sent_at"
 
-JsonObject = dict[str, Any]
-
 logger = get_logger(__name__)
 
 
-def _enum_field_to_str(value: Enum | str) -> str:
-    """StrictBaseModel с use_enum_values отдаёт enum-поля как str; в API внешних сервисов нужна строка."""
-    return value.value if isinstance(value, Enum) else value
-
-
-def _require_json_object(value: object, label: str) -> JsonObject:
-    if not isinstance(value, dict):
-        raise ValueError(f"{label} must be a JSON object")
-    return value
-
-
-def _optional_str(value: object) -> str | None:
-    return value if isinstance(value, str) else None
-
-
 GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
+
+
+class GoogleCalendarDateTimePayload(FlexibleBaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(populate_by_name=True)
+
+    date_time: str | None = Field(default=None, alias="dateTime")
+    date: str | None = None
+    time_zone: str | None = Field(default=None, alias="timeZone")
+
+
+class GoogleCalendarEventPayload(FlexibleBaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(populate_by_name=True)
+
+    id: str | None = None
+    status: str | None = None
+    summary: str | None = None
+    description: str | None = None
+    location: str | None = None
+    start: GoogleCalendarDateTimePayload | None = None
+    end: GoogleCalendarDateTimePayload | None = None
+    recurrence: list[str] = Field(default_factory=list)
+    recurring_event_id: str | None = Field(default=None, alias="recurringEventId")
+    i_cal_uid: str | None = Field(default=None, alias="iCalUID")
+    html_link: str | None = Field(default=None, alias="htmlLink")
+    etag: str | None = None
+
+
+class GoogleCalendarEventsResponse(FlexibleBaseModel):
+    items: list[GoogleCalendarEventPayload] = Field(default_factory=list)
+
+
+class GoogleCalendarEventUpsertPayload(StrictBaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(populate_by_name=True)
+
+    summary: str
+    description: str
+    location: str
+    status: str
+    start: GoogleCalendarDateTimePayload
+    end: GoogleCalendarDateTimePayload
+
+
+class GoogleCalendarMutationResult(FlexibleBaseModel):
+    id: str
+    etag: str | None = None
+
+
+class YandexCalendarEventPayload(StrictBaseModel):
+    id: str
+    href: str
+    etag: str | None = None
+    summary: str
+    description: str | None = None
+    location: str | None = None
+    status: str = CalendarEventStatus.CONFIRMED.value
+    all_day: bool = False
+    start_at: datetime
+    end_at: datetime
+    url: str | None = None
+
+
+class YandexCalendarMutationResult(StrictBaseModel):
+    id: str
+    href: str
+    etag: str | None = None
 
 
 class CalendarReauthRequiredError(RuntimeError):
@@ -110,7 +161,7 @@ def _parse_ical_datetime(value: str, all_day: bool) -> datetime:
     return parsed.replace(tzinfo=timezone.utc)
 
 
-def _parse_ical_event(raw_ics: str) -> JsonObject:
+def _parse_ical_event(raw_ics: str, *, href: str, etag: str | None) -> YandexCalendarEventPayload:
     lines = _unfold_ical_lines(raw_ics)
     values: dict[str, str] = {}
     for line in lines:
@@ -131,31 +182,31 @@ def _parse_ical_event(raw_ics: str) -> JsonObject:
     all_day = "VALUE=DATE" in dtstart_key
     start_at = _parse_ical_datetime(dtstart_value, all_day=all_day)
     end_at = _parse_ical_datetime(dtend_value, all_day=all_day)
-    return {
-        "id": uid,
-        "summary": values.get("SUMMARY", "Yandex event"),
-        "description": values.get("DESCRIPTION"),
-        "location": values.get("LOCATION"),
-        "status": values.get("STATUS", "CONFIRMED").lower(),
-        "all_day": all_day,
-        "start_at": start_at,
-        "end_at": end_at,
-        "url": values.get("URL"),
-    }
+    return YandexCalendarEventPayload(
+        id=uid,
+        href=href,
+        etag=etag,
+        summary=values.get("SUMMARY", "Yandex event"),
+        description=values.get("DESCRIPTION"),
+        location=values.get("LOCATION"),
+        status=values.get("STATUS", "CONFIRMED").lower(),
+        all_day=all_day,
+        start_at=start_at,
+        end_at=end_at,
+        url=values.get("URL"),
+    )
 
 
-def _parse_google_datetime(payload: JsonObject) -> datetime:
-    date_time = payload.get("dateTime")
-    if isinstance(date_time, str):
-        return datetime.fromisoformat(date_time.replace("Z", "+00:00"))
-    date = payload.get("date")
-    if not isinstance(date, str):
+def _parse_google_datetime(payload: GoogleCalendarDateTimePayload) -> datetime:
+    if payload.date_time is not None:
+        return datetime.fromisoformat(payload.date_time.replace("Z", "+00:00"))
+    if payload.date is None:
         raise ValueError("Google event must have start/end dateTime or date")
-    return datetime.fromisoformat(f"{date}T00:00:00+00:00")
+    return datetime.fromisoformat(f"{payload.date}T00:00:00+00:00")
 
 
 class GoogleCalendarClient:
-    BASE_URL = "https://www.googleapis.com/calendar/v3"
+    BASE_URL: ClassVar[str] = "https://www.googleapis.com/calendar/v3"
 
     async def list_events(
         self,
@@ -163,7 +214,7 @@ class GoogleCalendarClient:
         calendar_id: str,
         start_at: datetime,
         end_at: datetime,
-    ) -> list[JsonObject]:
+    ) -> list[GoogleCalendarEventPayload]:
         url = f"{self.BASE_URL}/calendars/{calendar_id}/events"
         params = {
             "timeMin": _iso_datetime(start_at),
@@ -174,41 +225,38 @@ class GoogleCalendarClient:
         headers = {"Authorization": f"Bearer {access_token}"}
         async with get_httpx_client(timeout=60.0) as client:
             response = await client.get(url, params=params, headers=headers)
-            response.raise_for_status()
-        payload = _require_json_object(response.json(), "Google events response")
-        items = payload.get("items")
-        if not isinstance(items, list):
-            raise ValueError("Google events response must contain list 'items'")
-        return [_require_json_object(item, "Google event item") for item in items]
+            _ = response.raise_for_status()
+        return GoogleCalendarEventsResponse.model_validate_json(response.text).items
 
     async def upsert_event(
         self,
         access_token: str,
         calendar_id: str,
         external_event_id: str | None,
-        body: JsonObject,
-    ) -> JsonObject:
+        body: GoogleCalendarEventUpsertPayload,
+    ) -> GoogleCalendarMutationResult:
         headers = {"Authorization": f"Bearer {access_token}"}
+        json_body = require_json_object(body.model_dump(mode="json", by_alias=True), "Google event upsert payload")
         async with get_httpx_client(timeout=60.0) as client:
             if external_event_id:
                 url = f"{self.BASE_URL}/calendars/{calendar_id}/events/{external_event_id}"
-                response = await client.put(url, json=body, headers=headers)
+                response = await client.put(url, json=json_body, headers=headers)
             else:
                 url = f"{self.BASE_URL}/calendars/{calendar_id}/events"
-                response = await client.post(url, json=body, headers=headers)
-            response.raise_for_status()
-        return _require_json_object(response.json(), "Google event upsert response")
+                response = await client.post(url, json=json_body, headers=headers)
+            _ = response.raise_for_status()
+        return GoogleCalendarMutationResult.model_validate_json(response.text)
 
     async def delete_event(self, access_token: str, calendar_id: str, external_event_id: str) -> None:
         headers = {"Authorization": f"Bearer {access_token}"}
         url = f"{self.BASE_URL}/calendars/{calendar_id}/events/{external_event_id}"
         async with get_httpx_client(timeout=60.0) as client:
             response = await client.delete(url, headers=headers)
-            response.raise_for_status()
+            _ = response.raise_for_status()
 
 
 class YandexCalDavClient:
-    BASE_URL = "https://caldav.yandex.ru"
+    BASE_URL: ClassVar[str] = "https://caldav.yandex.ru"
 
     def _calendar_url(self, username: str, calendar_id: str) -> str:
         return f"{self.BASE_URL}/calendars/{username}/{calendar_id}/"
@@ -227,7 +275,7 @@ class YandexCalDavClient:
         calendar_id: str,
         start_at: datetime,
         end_at: datetime,
-    ) -> list[JsonObject]:
+    ) -> list[YandexCalendarEventPayload]:
         url = self._calendar_url(username=username, calendar_id=calendar_id)
         report_body = f"""<?xml version="1.0" encoding="utf-8" ?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
@@ -252,19 +300,21 @@ class YandexCalDavClient:
                 headers=headers,
                 auth=(username, app_password),
             )
-            response.raise_for_status()
+            _ = response.raise_for_status()
         root = ElementTree.fromstring(response.text)
         ns = {"d": "DAV:", "c": "urn:ietf:params:xml:ns:caldav"}
-        events: list[JsonObject] = []
+        events: list[YandexCalendarEventPayload] = []
         for item in root.findall("d:response", ns):
             href_node = item.find("d:href", ns)
             calendar_data_node = item.find("d:propstat/d:prop/c:calendar-data", ns)
             etag_node = item.find("d:propstat/d:prop/d:getetag", ns)
-            if href_node is None or calendar_data_node is None or not calendar_data_node.text:
+            if href_node is None or not href_node.text or calendar_data_node is None or not calendar_data_node.text:
                 continue
-            parsed = _parse_ical_event(calendar_data_node.text)
-            parsed["href"] = href_node.text
-            parsed["etag"] = etag_node.text if etag_node is not None else None
+            parsed = _parse_ical_event(
+                calendar_data_node.text,
+                href=href_node.text,
+                etag=etag_node.text if etag_node is not None else None,
+            )
             events.append(parsed)
         return events
 
@@ -275,7 +325,7 @@ class YandexCalDavClient:
         calendar_id: str,
         external_event_id: str | None,
         event: CalendarEvent,
-    ) -> JsonObject:
+    ) -> YandexCalendarMutationResult:
         if external_event_id:
             event_url = self._event_url(
                 username=username,
@@ -293,7 +343,7 @@ class YandexCalDavClient:
                 calendar_id=calendar_id,
                 external_event_id=uid,
             )
-        status = _enum_field_to_str(event.status).upper()
+        status = event.status.upper()
         ics = "\r\n".join(
             [
                 "BEGIN:VCALENDAR",
@@ -315,12 +365,10 @@ class YandexCalDavClient:
         headers = {"Content-Type": "text/calendar; charset=utf-8"}
         async with get_httpx_client(timeout=60.0) as client:
             response = await client.put(event_url, content=ics.encode("utf-8"), headers=headers, auth=(username, app_password))
-            response.raise_for_status()
-        return {
-            "id": uid,
-            "href": event_url,
-            "etag": response.headers.get("ETag"),
-        }
+            _ = response.raise_for_status()
+        response_headers = dict(response.headers.items())
+        etag = response_headers.get("ETag")
+        return YandexCalendarMutationResult(id=uid, href=event_url, etag=etag)
 
     async def delete_event(
         self,
@@ -336,26 +384,26 @@ class YandexCalDavClient:
         )
         async with get_httpx_client(timeout=60.0) as client:
             response = await client.delete(event_url, auth=(username, app_password))
-            response.raise_for_status()
+            _ = response.raise_for_status()
 
 
 def _credential_to_calendar_integration(cred: IntegrationCredential) -> CalendarIntegration:
     """IntegrationCredential → CalendarIntegration (view model)."""
-    cal_settings = cred.metadata.get("calendar_settings", {})
+    metadata = CalendarIntegrationCredentialMetadata.model_validate(cred.metadata)
     return CalendarIntegration(
         integration_id=cred.credential_id,
         company_id=cred.company_id,
         user_id=cred.user_id,
         provider=CalendarProvider(cred.provider),
         credentials=CalendarIntegrationCredentials(
-            username=cred.metadata.get("username"),
+            username=metadata.username,
             access_token=cred.access_token,
             refresh_token=cred.refresh_token,
             expires_at=cred.expires_at,
             scope=cred.scope,
             token_type=cred.token_type,
         ),
-        settings=CalendarIntegrationSettings.model_validate(cal_settings) if cal_settings else CalendarIntegrationSettings(),
+        settings=metadata.calendar_settings,
         created_at=cred.created_at,
         updated_at=cred.updated_at,
     )
@@ -363,6 +411,10 @@ def _credential_to_calendar_integration(cred: IntegrationCredential) -> Calendar
 
 def _calendar_integration_to_credential(integration: CalendarIntegration) -> IntegrationCredential:
     """CalendarIntegration → IntegrationCredential (storage model)."""
+    metadata = CalendarIntegrationCredentialMetadata(
+        username=integration.credentials.username,
+        calendar_settings=integration.settings,
+    )
     return IntegrationCredential(
         credential_id=integration.integration_id,
         company_id=integration.company_id,
@@ -374,10 +426,7 @@ def _calendar_integration_to_credential(integration: CalendarIntegration) -> Int
         expires_at=integration.credentials.expires_at,
         scope=integration.credentials.scope,
         token_type=integration.credentials.token_type,
-        metadata={
-            "username": integration.credentials.username,
-            "calendar_settings": integration.settings.model_dump(mode="json"),
-        },
+        metadata=require_json_object(metadata.model_dump(mode="json"), "calendar.integration.metadata"),
         created_at=integration.created_at,
         updated_at=integration.updated_at,
     )
@@ -388,18 +437,19 @@ class CalendarService:
         self,
         event_repository: CalendarEventSqlRepository,
         oauth_service: OAuthService,
+        credential_repository: IntegrationCredentialRepository,
         user_repository: UserRepository,
         company_repository: CompanyRepository,
         service_client: ServiceClient,
     ) -> None:
-        self._event_repository = event_repository
-        self._oauth_service = oauth_service
-        self._credential_repository = oauth_service._repository
-        self._user_repository = user_repository
-        self._company_repository = company_repository
-        self._service_client = service_client
-        self._google_client = GoogleCalendarClient()
-        self._yandex_client = YandexCalDavClient()
+        self._event_repository: CalendarEventSqlRepository = event_repository
+        self._oauth_service: OAuthService = oauth_service
+        self._credential_repository: IntegrationCredentialRepository = credential_repository
+        self._user_repository: UserRepository = user_repository
+        self._company_repository: CompanyRepository = company_repository
+        self._service_client: ServiceClient = service_client
+        self._google_client: GoogleCalendarClient = GoogleCalendarClient()
+        self._yandex_client: YandexCalDavClient = YandexCalDavClient()
 
     async def _refresh_google_access_token(
         self,
@@ -450,18 +500,18 @@ class CalendarService:
             sync_outbound_enabled=True,
             notifications_enabled=True,
         )
+        metadata = CalendarIntegrationCredentialMetadata.model_validate(credential.metadata).model_copy(
+            update={"calendar_settings": cal_settings}
+        )
         updated = credential.model_copy(
             update={
-                "metadata": {
-                    **credential.metadata,
-                    "calendar_settings": cal_settings.model_dump(mode="json"),
-                },
+                "metadata": require_json_object(metadata.model_dump(mode="json"), "calendar.integration.metadata"),
             }
         )
         await self._credential_repository.upsert(updated)
 
         now = datetime.now(timezone.utc)
-        await self.run_sync(
+        _ = await self.run_sync(
             user_id=credential.user_id,
             company_id=credential.company_id,
             start_at=now - timedelta(days=30),
@@ -642,7 +692,7 @@ class CalendarService:
                     "scheduled_end_at": _iso_datetime(end_at),
                     "calendar_member_user_ids": invited,
                 }
-                data = _require_json_object(
+                data = require_json_object(
                     await self._service_client.post(
                         "sync",
                         "/sync/api/v1/calls/links",
@@ -669,7 +719,7 @@ class CalendarService:
                 "scheduled_end_at": _iso_datetime(end_at),
                 "calendar_member_user_ids": invited,
             }
-            data = _require_json_object(
+            data = require_json_object(
                 await self._service_client.patch(
                     "sync",
                     f"/sync/api/v1/calls/links/{prev_token}",
@@ -692,14 +742,14 @@ class CalendarService:
             return True, join
 
         if prev_token:
-            await self._service_client.delete(
+            _ = await self._service_client.delete(
                 "sync",
                 f"/sync/api/v1/calls/links/{prev_token}",
             )
-            metadata.pop(SYNC_LINK_TOKEN_META, None)
-            metadata.pop(SYNC_CHANNEL_ID_META, None)
-            metadata.pop(SYNC_MEETING_FLAG_META, None)
-            metadata.pop(SYNC_REMINDER_SENT_META, None)
+            _ = metadata.pop(SYNC_LINK_TOKEN_META, None)
+            _ = metadata.pop(SYNC_CHANNEL_ID_META, None)
+            _ = metadata.pop(SYNC_MEETING_FLAG_META, None)
+            _ = metadata.pop(SYNC_REMINDER_SENT_META, None)
             return True, None
 
         return False, None
@@ -796,13 +846,13 @@ class CalendarService:
             )
         return event
 
-    async def delete_event(self, event_id: str, user_id: str, company_id: str) -> None:
+    async def delete_event(self, event_id: str, company_id: str) -> None:
         event = await self._event_repository.get(event_id=event_id, company_id=company_id)
         if event is None:
             raise ValueError(f"Calendar event {event_id} not found")
         token = event.metadata.get(SYNC_LINK_TOKEN_META)
         if token:
-            await self._service_client.delete(
+            _ = await self._service_client.delete(
                 "sync",
                 f"/sync/api/v1/calls/links/{token}",
             )
@@ -1012,8 +1062,7 @@ class CalendarService:
         imported = 0
         now = datetime.now(timezone.utc)
         for item in items:
-            external_id = item.get("id")
-            if not isinstance(external_id, str) or external_id == "":
+            if item.id is None or item.id == "":
                 continue
             matched = None
             for candidate in existing:
@@ -1021,57 +1070,47 @@ class CalendarService:
                     if (
                         ref.provider == CalendarProvider.GOOGLE
                         and ref.calendar_id == calendar_id
-                        and ref.external_event_id == external_id
+                        and ref.external_event_id == item.id
                     ):
                         matched = candidate
                         break
                 if matched:
                     break
-            start_payload = item.get("start")
-            end_payload = item.get("end")
-            if not isinstance(start_payload, dict) or not isinstance(end_payload, dict):
+            if item.start is None or item.end is None:
                 continue
-            start_value = _ensure_utc(_parse_google_datetime(start_payload))
-            end_value = _ensure_utc(_parse_google_datetime(end_payload))
+            start_value = _ensure_utc(_parse_google_datetime(item.start))
+            end_value = _ensure_utc(_parse_google_datetime(item.end))
             if start_value >= end_value:
                 continue
-            raw_status = item.get("status") or CalendarEventStatus.CONFIRMED.value
+            raw_status = item.status or CalendarEventStatus.CONFIRMED.value
             status = CalendarEventStatus(raw_status)
-            summary = _optional_str(item.get("summary"))
-            recurrence = item.get("recurrence")
-            recurrence_rule = (
-                recurrence[0]
-                if isinstance(recurrence, list)
-                and recurrence
-                and isinstance(recurrence[0], str)
-                else None
-            )
+            recurrence_rule = item.recurrence[0] if item.recurrence else None
             event = CalendarEvent(
                 event_id=matched.event_id if matched else uuid4().hex,
                 source=CalendarEventSource.GOOGLE,
-                source_id=external_id,
+                source_id=item.id,
                 company_id=company_id,
                 namespace=None,
                 kind="event",
-                title=summary if summary else "Google event",
-                description=_optional_str(item.get("description")),
-                location=_optional_str(item.get("location")),
+                title=item.summary if item.summary else "Google event",
+                description=item.description,
+                location=item.location,
                 status=status,
-                timezone=_optional_str(start_payload.get("timeZone")) or "UTC",
-                all_day="date" in start_payload and "dateTime" not in start_payload,
+                timezone=item.start.time_zone or "UTC",
+                all_day=item.start.date is not None and item.start.date_time is None,
                 start_at=start_value,
                 end_at=end_value,
                 attendees=[],
                 recurrence_rule=recurrence_rule,
-                recurrence_id=_optional_str(item.get("recurringEventId")),
-                series_id=_optional_str(item.get("iCalUID")),
-                deep_link=_optional_str(item.get("htmlLink")),
+                recurrence_id=item.recurring_event_id,
+                series_id=item.i_cal_uid,
+                deep_link=item.html_link,
                 external_refs=[
                     CalendarExternalRef(
                         provider=CalendarProvider.GOOGLE,
                         calendar_id=calendar_id,
-                        external_event_id=external_id,
-                        etag=_optional_str(item.get("etag")),
+                        external_event_id=item.id,
+                        etag=item.etag,
                         last_synced_at=now,
                     )
                 ],
@@ -1112,61 +1151,49 @@ class CalendarService:
         imported = 0
         now = datetime.now(timezone.utc)
         for item in items:
-            external_id = item.get("href")
-            if not isinstance(external_id, str) or external_id == "":
-                raise ValueError("Yandex event must contain href")
             matched = None
             for candidate in existing:
                 for ref in candidate.external_refs:
                     if (
                         ref.provider == CalendarProvider.YANDEX
                         and ref.calendar_id == calendar_id
-                        and ref.external_event_id == external_id
+                        and ref.external_event_id == item.href
                     ):
                         matched = candidate
                         break
                 if matched:
                     break
-            start_raw = item.get("start_at")
-            end_raw = item.get("end_at")
-            if not isinstance(start_raw, datetime) or not isinstance(end_raw, datetime):
-                raise ValueError("Yandex event must contain datetime start_at/end_at")
-            start_value = _ensure_utc(start_raw)
-            end_value = _ensure_utc(end_raw)
+            start_value = _ensure_utc(item.start_at)
+            end_value = _ensure_utc(item.end_at)
             if start_value >= end_value:
                 raise ValueError("Yandex event start must be before end")
-            raw_status = item.get("status") or CalendarEventStatus.CONFIRMED.value
-            status = CalendarEventStatus(raw_status)
-            source_id = item.get("id")
-            if not isinstance(source_id, str) or source_id == "":
-                raise ValueError("Yandex event must contain id")
-            summary = _optional_str(item.get("summary"))
+            status = CalendarEventStatus(item.status)
             event = CalendarEvent(
                 event_id=matched.event_id if matched else uuid4().hex,
                 source=CalendarEventSource.YANDEX,
-                source_id=source_id,
+                source_id=item.id,
                 company_id=company_id,
                 namespace=None,
                 kind="event",
-                title=summary if summary else "Yandex event",
-                description=_optional_str(item.get("description")),
-                location=_optional_str(item.get("location")),
+                title=item.summary if item.summary else "Yandex event",
+                description=item.description,
+                location=item.location,
                 status=status,
                 timezone="UTC",
-                all_day=bool(item.get("all_day")),
+                all_day=item.all_day,
                 start_at=start_value,
                 end_at=end_value,
                 attendees=[],
                 recurrence_rule=None,
                 recurrence_id=None,
                 series_id=None,
-                deep_link=_optional_str(item.get("url")),
+                deep_link=item.url,
                 external_refs=[
                     CalendarExternalRef(
                         provider=CalendarProvider.YANDEX,
                         calendar_id=calendar_id,
-                        external_event_id=external_id,
-                        etag=_optional_str(item.get("etag")),
+                        external_event_id=item.href,
+                        etag=item.etag,
                         last_synced_at=now,
                     )
                 ],
@@ -1209,30 +1236,37 @@ class CalendarService:
                 if ref.provider == CalendarProvider.GOOGLE and ref.calendar_id == calendar_id:
                     ext_id = ref.external_event_id
                     break
-            payload: JsonObject = {
-                "summary": event.title,
-                "description": event.description or "",
-                "location": event.location or "",
-                "status": _enum_field_to_str(event.status),
-                "start": {"dateTime": _iso_datetime(event.start_at), "timeZone": event.timezone},
-                "end": {"dateTime": _iso_datetime(event.end_at), "timeZone": event.timezone},
-            }
+            payload = GoogleCalendarEventUpsertPayload(
+                summary=event.title,
+                description=event.description or "",
+                location=event.location or "",
+                status=event.status,
+                start=GoogleCalendarDateTimePayload.model_validate(
+                    {
+                        "dateTime": _iso_datetime(event.start_at),
+                        "timeZone": event.timezone,
+                    }
+                ),
+                end=GoogleCalendarDateTimePayload.model_validate(
+                    {
+                        "dateTime": _iso_datetime(event.end_at),
+                        "timeZone": event.timezone,
+                    }
+                ),
+            )
             saved = await self._google_client.upsert_event(
                 access_token=credentials.access_token,
                 calendar_id=calendar_id,
                 external_event_id=ext_id,
                 body=payload,
             )
-            external_event_id = saved.get("id")
-            if not isinstance(external_event_id, str) or external_event_id == "":
-                raise RuntimeError("Google upsert response must contain id")
             refs = [ref for ref in event.external_refs if not (ref.provider == CalendarProvider.GOOGLE and ref.calendar_id == calendar_id)]
             refs.append(
                 CalendarExternalRef(
                     provider=CalendarProvider.GOOGLE,
                     calendar_id=calendar_id,
-                    external_event_id=external_event_id,
-                    etag=_optional_str(saved.get("etag")),
+                    external_event_id=saved.id,
+                    etag=saved.etag,
                     last_synced_at=datetime.now(timezone.utc),
                 )
             )
@@ -1281,16 +1315,13 @@ class CalendarService:
                 external_event_id=ext_id,
                 event=event,
             )
-            external_event_id = saved.get("href")
-            if not isinstance(external_event_id, str) or external_event_id == "":
-                raise RuntimeError("Yandex upsert response must contain href")
             refs = [ref for ref in event.external_refs if not (ref.provider == CalendarProvider.YANDEX and ref.calendar_id == calendar_id)]
             refs.append(
                 CalendarExternalRef(
                     provider=CalendarProvider.YANDEX,
                     calendar_id=calendar_id,
-                    external_event_id=external_event_id,
-                    etag=_optional_str(saved.get("etag")),
+                    external_event_id=saved.href,
+                    etag=saved.etag,
                     last_synced_at=datetime.now(timezone.utc),
                 )
             )
@@ -1417,7 +1448,6 @@ class CalendarService:
         end_at: datetime,
         exclude_platform_event_ids: set[str],
     ) -> list[CalendarEvent]:
-        get_settings()
         params: dict[str, str] = {
             "start_at": _iso_datetime(_ensure_utc(start_at)),
             "end_at": _iso_datetime(_ensure_utc(end_at)),

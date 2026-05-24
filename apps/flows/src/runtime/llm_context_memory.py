@@ -52,6 +52,8 @@ def schedule_state_messages_to_memory_for_runtime(
     """Schedule persistence of the closed runtime message window into generic memory."""
     if state is None or policy is None:
         return False
+    if policy.mode == "off" or policy.memory == "off" or policy.compaction == "off":
+        return False
 
     session_id = getattr(state, "session_id", None)
     flow_id = getattr(state, "session_flow_id", None)

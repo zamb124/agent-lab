@@ -6,6 +6,8 @@ Loki-клиент мокается через DI контейнер.
 
 import pytest
 
+from core.clients.loki_client import LokiLogEntry
+
 _LOKI_CACHE_KEY = "_cached_loki_client"
 
 
@@ -24,18 +26,20 @@ def _restore_loki_client_cache(container, had_key, previous):
 
 
 _SAMPLE_LOG_ENTRIES = [
-    {
-        "timestamp": "2023-11-14T12:00:00+00:00",
-        "level": "info",
-        "message": "flow started",
-        "logger": "apps.flows.src.runtime",
-        "service": "flows",
-        "trace_id": "abc123",
-        "request_id": "req-1",
-        "user_id": "user_test",
-        "session_id": "my_flow:ctx1",
-        "raw": {"message": "flow started"},
-    }
+    LokiLogEntry(
+        timestamp="2023-11-14T12:00:00+00:00",
+        level="info",
+        message="flow started",
+        logger="apps.flows.src.runtime",
+        service="flows",
+        trace_id="abc123",
+        span_id="span01",
+        request_id="req-1",
+        user_id="user_test",
+        session_id="my_flow:ctx1",
+        session_agent="my_flow:ctx1",
+        raw={"message": "flow started"},
+    )
 ]
 
 

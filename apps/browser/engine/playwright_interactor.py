@@ -64,10 +64,10 @@ class PlaywrightBrowserInteractor:
         lease_manager: PageLeaseManager,
         settings: BrowserRuntimeSettingsView,
     ) -> None:
-        self._pool = pool
-        self._store = session_store
-        self._leases = lease_manager
-        self._settings = settings
+        self._pool: CDPConnectionPool = pool
+        self._store: SessionStateStore = session_store
+        self._leases: PageLeaseManager = lease_manager
+        self._settings: BrowserRuntimeSettingsView = settings
 
     def _cdp_url(self, endpoint_key: str) -> str:
         urls = self._settings.cdp_urls_by_endpoint
@@ -122,7 +122,7 @@ class PlaywrightBrowserInteractor:
         )
         if req.restore_state_key is not None:
             url = self._store.current_url(req.restore_state_key)
-            await page.goto(
+            _ = await page.goto(
                 url,
                 wait_until="domcontentloaded",
                 timeout=req.timeout_ms,
@@ -150,7 +150,7 @@ class PlaywrightBrowserInteractor:
                 wait_until="domcontentloaded",
                 timeout=timeout,
             )
-            await page.wait_for_selector(css, timeout=timeout)
+            _ = await page.wait_for_selector(css, timeout=timeout)
         elif wait_policy == "domcontentloaded":
             response = await page.goto(
                 req.url,
@@ -166,7 +166,7 @@ class PlaywrightBrowserInteractor:
         else:
             raise ValueError(
                 f"Неизвестный wait_policy: {wait_policy} "
-                f"(ожидались domcontentloaded, networkidle, selector:...)"
+                + "(ожидались domcontentloaded, networkidle, selector:...)"
             )
 
         final_url = page.url
@@ -176,7 +176,7 @@ class PlaywrightBrowserInteractor:
             status_code = response.status
             response_headers = dict(response.headers)
 
-        html: str | None = await page.content()
+        html = await page.content()
 
         artifacts_root = Path(self._settings.artifacts_dir)
         artifacts_root.mkdir(parents=True, exist_ok=True)
@@ -185,14 +185,22 @@ class PlaywrightBrowserInteractor:
         snap_ref: str | None = None
         token = uuid.uuid4().hex
         if req.screenshot:
-            shot_ref = None
+            shot_path = artifacts_root / f"page-{token}.png"
+            _ = await page.screenshot(
+                path=str(shot_path),
+                type="png",
+                full_page=False,
+                timeout=5_000,
+                animations="disabled",
+            )
+            shot_ref = str(shot_path)
         if req.capture_pdf:
             pdf_path = artifacts_root / f"page-{token}.pdf"
-            await page.pdf(path=str(pdf_path))
+            _ = await page.pdf(path=str(pdf_path))
             pdf_ref = str(pdf_path)
         if req.snapshot:
             snap_path = artifacts_root / f"snapshot-{token}.html"
-            snap_path.write_text(html if html is not None else "", encoding="utf-8")
+            _ = snap_path.write_text(html, encoding="utf-8")
             snap_ref = str(snap_path)
 
         return BrowserFetchResult(

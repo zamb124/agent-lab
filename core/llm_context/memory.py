@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Protocol
 
 from pydantic import Field, field_validator, model_validator
 
 from core.llm_context.models import LLMContextBlock, LLMContextMemoryScope
 from core.llm_context.sources import LLMContextSourceRequest
 from core.models import StrictBaseModel
+from core.rag.models import RAGSearchOptions
+from core.rag_indexing_schema import SearchChannelsDefaults
+from core.types import JsonObject
 
 
 class LLMContextMemoryEpisode(StrictBaseModel):
@@ -25,7 +28,7 @@ class LLMContextMemoryEpisode(StrictBaseModel):
     user_id: str | None = None
     title: str | None = None
     source: str = Field(default="conversation", min_length=1)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator("scope")
@@ -57,8 +60,8 @@ class LLMContextMemoryRecallRequest(StrictBaseModel):
     branch_id: str | None = None
     node_id: str | None = None
     user_id: str | None = None
-    search_options: dict[str, Any] | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    search_options: RAGSearchOptions | None = None
+    metadata: JsonObject = Field(default_factory=dict)
 
     @field_validator("scope")
     @classmethod
@@ -82,7 +85,7 @@ class LLMContextMemoryRecord(StrictBaseModel):
     user_id: str | None = None
     title: str | None = None
     source: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
     created_at: datetime | None = None
 
 
@@ -177,15 +180,15 @@ def _chronological(records: list[LLMContextMemoryRecord]) -> list[LLMContextMemo
     )
 
 
-def _search_options_from_request(request: LLMContextSourceRequest) -> dict[str, Any]:
+def _search_options_from_request(request: LLMContextSourceRequest) -> RAGSearchOptions:
     mode = request.policy.retrieval.mode
     if mode == "hybrid":
-        channels = {"semantic": True, "lexical": True}
+        channels = SearchChannelsDefaults(semantic=True, lexical=True)
     elif mode == "lexical":
-        channels = {"semantic": False, "lexical": True}
+        channels = SearchChannelsDefaults(semantic=False, lexical=True)
     else:
-        channels = {"semantic": True, "lexical": False}
-    return {"channels": channels, "rerank": request.policy.retrieval.rerank}
+        channels = SearchChannelsDefaults(semantic=True, lexical=False)
+    return RAGSearchOptions(channels=channels, rerank=request.policy.retrieval.rerank)
 
 
 def _record_to_block(record: LLMContextMemoryRecord, *, rank: int) -> LLMContextBlock:

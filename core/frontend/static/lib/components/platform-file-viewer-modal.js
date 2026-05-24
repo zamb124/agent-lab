@@ -37,9 +37,28 @@ export class PlatformFileViewerModal extends PlatformModal {
                 pointer-events: none;
             }
 
+            :host([minimized][open]),
+            :host([minimized][closing]) {
+                inset: auto;
+                width: 0;
+                height: 0;
+                overflow: visible;
+            }
+
             .modal-overlay {
                 padding: 0;
                 pointer-events: none;
+            }
+
+            :host([minimized]) .modal-overlay {
+                position: fixed;
+                inset: auto;
+                width: 0;
+                height: 0;
+                overflow: visible;
+                opacity: 1;
+                visibility: visible;
+                animation: none;
             }
 
             .modal-scrim {
@@ -47,6 +66,10 @@ export class PlatformFileViewerModal extends PlatformModal {
                 backdrop-filter: none;
                 -webkit-backdrop-filter: none;
                 pointer-events: none;
+            }
+
+            :host([minimized]) .modal-scrim {
+                display: none;
             }
 
             .modal {
@@ -257,9 +280,10 @@ export class PlatformFileViewerModal extends PlatformModal {
             }
 
             :host([minimized]) .modal-content {
+                display: none;
                 position: fixed;
-                width: 1px;
-                height: 1px;
+                width: 0;
+                height: 0;
                 opacity: 0;
                 overflow: hidden;
                 pointer-events: none;
@@ -416,6 +440,29 @@ export class PlatformFileViewerModal extends PlatformModal {
         this.style.setProperty('--file-viewer-header-right', 'auto');
     }
 
+    _handleMouseMove(event) {
+        if (this.minimized && this._isDragging) {
+            const modal = this.shadowRoot?.querySelector('.modal');
+            const rect = modal instanceof HTMLElement ? modal.getBoundingClientRect() : null;
+            const halfW = rect && rect.width > 0 ? rect.width / 2 : 160;
+            const halfH = rect && rect.height > 0 ? rect.height / 2 : 28;
+            const margin = 8;
+            const minX = halfW + margin;
+            const maxX = Math.max(minX, window.innerWidth - halfW - margin);
+            const minY = halfH + margin;
+            const maxY = Math.max(minY, window.innerHeight - halfH - margin);
+            const nextX = event.clientX - this._dragStart.x;
+            const nextY = event.clientY - this._dragStart.y;
+            this._position = {
+                x: Math.min(maxX, Math.max(minX, nextX)),
+                y: Math.min(maxY, Math.max(minY, nextY)),
+            };
+            this.requestUpdate();
+            return;
+        }
+        super._handleMouseMove(event);
+    }
+
     _handleHeaderMouseUp() {
         this._endHeaderDrag();
     }
@@ -523,7 +570,7 @@ export class PlatformFileViewerModal extends PlatformModal {
 
     _getModalStyle() {
         if (this.minimized && this._position.x !== null && this._position.y !== null) {
-            return `position: fixed; left: ${this._position.x}px; top: ${this._position.y}px; right: auto; bottom: auto; z-index: 2; transform: translate(-50%, -50%) scale(1);`;
+            return `position: fixed !important; left: ${this._position.x}px !important; top: ${this._position.y}px !important; right: auto !important; bottom: auto !important; z-index: 2; transform: translate(-50%, -50%) scale(1) !important;`;
         }
         return super._getModalStyle();
     }
@@ -551,7 +598,7 @@ export class PlatformFileViewerModal extends PlatformModal {
                 ?disabled=${this._syncing}
                 @click=${this._toggleMinimized}
             >
-                <platform-icon name=${this.minimized ? 'expand' : 'minimize'} size="16"></platform-icon>
+                <platform-icon name=${this.minimized ? 'fullscreen' : 'minimize'} size="16"></platform-icon>
             </button>
         `;
     }
@@ -565,6 +612,7 @@ export class PlatformFileViewerModal extends PlatformModal {
                         <platform-onlyoffice-host
                             .bindingId=${fileId}
                             .config=${this.config}
+                            .suspended=${this.minimized}
                             @editor-error=${this._onEditorError}
                             @document-state=${this._onDocumentState}
                         >

@@ -16,6 +16,7 @@ from apps.crm.scheduled_task_constants import CRM_REEMBED_STALE_DOCUMENTS_TASK_N
 from apps.crm.services.task_service import ALL_NAMESPACES_TASK_KEY
 from apps.crm_worker.broker import broker
 from core.rag.reembed_stale_documents import execute_reembed_tick
+from core.types import JsonObject
 
 
 @broker.task(
@@ -27,7 +28,7 @@ from core.rag.reembed_stale_documents import execute_reembed_tick
 async def crm_reembed_stale_documents_tick(
     schedule_task_id: str,
     company_id: str | None = None,
-) -> dict[str, object]:
+) -> JsonObject:
     """
     ``company_id`` приходит из ``SchedulerService.create`` в ``task.payload``
     для всех cron-задач; reembed группирует чанки по ``vector_documents.company_id``.
@@ -42,7 +43,7 @@ async def crm_reembed_stale_documents_tick(
     by_company: dict[str, int] = {}
     if isinstance(raw_by_company, dict):
         for k, v in raw_by_company.items():
-            if isinstance(k, str) and isinstance(v, int):
+            if isinstance(v, int):
                 by_company[k] = v
 
     container = get_crm_container()
@@ -53,7 +54,7 @@ async def crm_reembed_stale_documents_tick(
         if cnt <= 0:
             continue
         task_row_id = str(uuid.uuid4())
-        await repo.create(
+        _ = await repo.create(
             CRMTask(
                 task_id=task_row_id,
                 task_type="reembed_stale_documents_tick",

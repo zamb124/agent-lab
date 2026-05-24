@@ -43,6 +43,7 @@ from core.db.utils import get_rowcount
 from core.logging import get_logger
 from core.rag import RAGRepository
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.models import RAGMetadata, RAGMetadataFilter
 from core.rag.post_retrieval_rerank import apply_rerank_after_retrieve
 from core.rag.providers.pgvector_provider import PgVectorProvider
 from core.tracing.operation_span import traced_operation
@@ -131,7 +132,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
 
         return "\n".join(parts)
 
-    def _rag_chunk_metadata(self, entity: CRMEntity) -> dict[str, object]:
+    def _rag_chunk_metadata(self, entity: CRMEntity) -> RAGMetadata:
         return {
             "document_id": entity.entity_id,
             "company_id": entity.company_id,
@@ -871,7 +872,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
                 "platform.crm.namespace": resolved_namespace,
             },
         ) as search_span:
-            search_filters: dict[str, object] = {"company_id": cid}
+            search_filters: RAGMetadataFilter = {"company_id": cid}
             if entity_type:
                 search_filters["entity_type"] = entity_type
 

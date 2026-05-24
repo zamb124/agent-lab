@@ -6,34 +6,39 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 from uuid import UUID
 
 from apps.flows.src.db.models import OperatorTasks
 from apps.flows.src.db.operator_repository import OperatorRepository
-from apps.flows.src.models.operator_schemas import OperatorTaskStatus
+from apps.flows.src.models.operator_schemas import (
+    OperatorDialogLogEntry,
+    OperatorInterruptSnapshot,
+    OperatorResolutionPayload,
+    OperatorTaskStatus,
+)
 from apps.flows.src.services.operator_tasks_broadcast import publish_operator_tasks_refresh
 from apps.flows.src.state.persistence import create_initial_state
 from apps.flows.src.streaming.emitter import Emitter
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows_worker.broker import broker as flows_broker
+from core.clients.redis_client import RedisClient
 from core.context import get_context
+from core.files.file_repository import FileRepository
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.state.interrupt import HandoffMode
 from core.tasks.kicker import kiq_task_name_with_context
+from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
 
 
 def parse_handoff_mode(task: "OperatorTasks") -> HandoffMode:
     """Извлекает HandoffMode из interrupt_snapshot задачи."""
-    snap = task.interrupt_snapshot
-    if isinstance(snap, dict):
-        raw = snap.get("handoff_mode")
-        if isinstance(raw, str) and raw.strip():
-            return HandoffMode(raw.strip())
-    return HandoffMode.SINGLE_REPLY
+    if task.interrupt_snapshot is None:
+        raise ValueError("OperatorTasks.interrupt_snapshot обязателен для handoff mode")
+    snapshot = OperatorInterruptSnapshot.model_validate(task.interrupt_snapshot)
+    return snapshot.handoff_mode
 
 
 class OperatorHandoffService:
@@ -43,12 +48,12 @@ class OperatorHandoffService:
         self,
         repository: OperatorRepository,
         *,
-        file_repository: Any,
-        redis_client: Any,
+        file_repository: FileRepository,
+        redis_client: RedisClient,
     ) -> None:
-        self._repo = repository
-        self._file_repo = file_repository
-        self._redis_client = redis_client
+        self._repo: OperatorRepository = repository
+        self._file_repo: FileRepository = file_repository
+        self._redis_client: RedisClient = redis_client
 
     async def register_handoff(
         self,
@@ -77,14 +82,14 @@ class OperatorHandoffService:
         if existing is not None:
             return cid, existing.id
 
-        snap_ctx = ctx.model_dump(mode="json")
-        interrupt_snapshot: dict[str, Any] = {
-            "question": question,
-            "task_title": task_title,
-            "assignee_queue": slug,
-            "queue_id": queue.id,
-            "handoff_mode": handoff_mode.value,
-        }
+        snap_ctx: JsonObject = ctx.to_dict()
+        interrupt_snapshot = OperatorInterruptSnapshot(
+            question=question,
+            task_title=task_title,
+            assignee_queue=slug,
+            queue_id=queue.id,
+            handoff_mode=handoff_mode,
+        )
         task_row = OperatorTasks(
             id=str(uuid.uuid4()),
             company_id=company_id,
@@ -97,7 +102,10 @@ class OperatorHandoffService:
             a2a_task_id=state.task_id,
             context_id=state.context_id,
             correlation_id=cid_str,
-            interrupt_snapshot=interrupt_snapshot,
+            interrupt_snapshot=parse_json_object(
+                interrupt_snapshot.model_dump_json(),
+                "OperatorInterruptSnapshot",
+            ),
             context_data_snapshot=snap_ctx,
         )
         await self._repo.insert_task(task_row)
@@ -161,14 +169,13 @@ class OperatorHandoffService:
 
         validated_file_ids = await self._validate_file_ids(file_ids) if file_ids else []
 
-        log_entry: dict[str, Any] = {
-            "role": "operator",
-            "text": text.strip(),
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "user_id": operator_user_id,
-        }
-        if validated_file_ids:
-            log_entry["file_ids"] = validated_file_ids
+        log_entry = OperatorDialogLogEntry(
+            role="operator",
+            text=text.strip(),
+            ts=datetime.now(timezone.utc).isoformat(),
+            user_id=operator_user_id,
+            file_ids=validated_file_ids,
+        )
         await self._repo.append_dialog_log(company_id, task_id, log_entry)
 
         exec_state = create_initial_state(
@@ -205,7 +212,7 @@ class OperatorHandoffService:
         return validated
 
     @staticmethod
-    def _format_dialog_log_for_tool_result(dialog_log: list[dict[str, Any]]) -> str:
+    def _format_dialog_log_for_tool_result(dialog_log: list[OperatorDialogLogEntry]) -> str:
         """Форматирует реплики takeover-диалога для включения в tool_result.
 
         Вставка dialog_log напрямую в state.messages невозможна: это ломает
@@ -215,16 +222,14 @@ class OperatorHandoffService:
         """
         lines: list[str] = []
         for entry in dialog_log:
-            role_raw = entry.get("role", "")
-            text = str(entry.get("text", "")).strip()
-            if not text and not entry.get("file_ids"):
+            text = entry.text.strip()
+            if not text and not entry.file_ids:
                 continue
-            label = "Оператор" if role_raw == "operator" else "Пользователь"
-            parts = []
+            label = "Оператор" if entry.role == "operator" else "Пользователь"
+            parts: list[str] = []
             if text:
                 parts.append(text)
-            entry_file_ids = entry.get("file_ids", [])
-            for fid in entry_file_ids:
+            for fid in entry.file_ids:
                 parts.append(f"[Файл: /flows/api/v1/files/download/{fid}]")
             if parts:
                 lines.append(f"[{label}]: {' '.join(parts)}")
@@ -246,7 +251,7 @@ class OperatorHandoffService:
             raise PermissionError("Нет доступа к очереди этой задачи")
         if task.context_data_snapshot is None:
             raise ValueError("У задачи нет context_data_snapshot, resume невозможен")
-        ctx_dict = dict(task.context_data_snapshot)
+        ctx_dict = task.context_data_snapshot
         channel = ctx_dict.get("channel")
         if not channel or not isinstance(channel, str):
             raise ValueError("context_data_snapshot не содержит строковый channel")
@@ -256,14 +261,13 @@ class OperatorHandoffService:
         content_for_resume = resolution.strip()
 
         if mode == HandoffMode.TAKEOVER:
-            log_entry: dict[str, Any] = {
-                "role": "operator",
-                "text": resolution.strip(),
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "user_id": operator_user_id,
-            }
-            if validated_file_ids:
-                log_entry["file_ids"] = validated_file_ids
+            log_entry = OperatorDialogLogEntry(
+                role="operator",
+                text=resolution.strip(),
+                ts=datetime.now(timezone.utc).isoformat(),
+                user_id=operator_user_id,
+                file_ids=validated_file_ids,
+            )
             await self._repo.append_dialog_log(company_id, task_id, log_entry)
 
             if task.a2a_task_id:
@@ -296,9 +300,10 @@ class OperatorHandoffService:
                     f"Итог оператора: {resolution.strip()}"
                 )
 
-        resolution_payload: dict[str, Any] = {"text": resolution.strip()}
-        if validated_file_ids:
-            resolution_payload["file_ids"] = validated_file_ids
+        resolution_payload = OperatorResolutionPayload(
+            text=resolution.strip(),
+            file_ids=validated_file_ids,
+        )
         await self._repo.update_task_fields(
             company_id,
             task_id,
@@ -310,7 +315,7 @@ class OperatorHandoffService:
         tid = task.a2a_task_id if task.a2a_task_id else ""
         cid = task.context_id if task.context_id else task.session_id.split(":", 1)[-1]
 
-        await kiq_task_name_with_context(
+        _ = await kiq_task_name_with_context(
             TASK_PROCESS_FLOW,
             flows_broker,
             flow_id=task.flow_id,
@@ -354,14 +359,13 @@ class OperatorHandoffService:
                 f"Задача в статусе {task.status!r}, ответ пользователя недоступен"
             )
 
-        log_entry: dict[str, Any] = {
-            "role": "user",
-            "text": text.strip(),
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "user_id": user_id,
-        }
-        if file_ids:
-            log_entry["file_ids"] = file_ids
+        log_entry = OperatorDialogLogEntry(
+            role="user",
+            text=text.strip(),
+            ts=datetime.now(timezone.utc).isoformat(),
+            user_id=user_id,
+            file_ids=file_ids or [],
+        )
         await self._repo.append_dialog_log(company_id, task_id, log_entry)
 
         await publish_operator_tasks_refresh(self._repo, task.queue_id)

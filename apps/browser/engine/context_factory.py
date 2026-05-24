@@ -86,7 +86,7 @@ class ContextFactory:
     - Возможно: реюз контекстов можно вернуть позже как отдельный слой оптимизации.
     """
     def __init__(self) -> None:
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock = asyncio.Lock()
 
     @staticmethod
     def _proxy_config(proxy_policy: str) -> ProxySettings | None:

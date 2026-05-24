@@ -44,32 +44,32 @@ class BrowserRuntimeFacade:
       отдельные компоненты напрямую.
     """
     def __init__(self, settings: BrowserRuntimeSettingsView) -> None:
-        self.settings = settings
-        self.pool = CDPConnectionPool()
-        self.context_factory = ContextFactory()
-        self.session_store = SessionStateStore()
-        self.session_artifacts = ControlSessionArtifactsWriter(
+        self.settings: BrowserRuntimeSettingsView = settings
+        self.pool: CDPConnectionPool = CDPConnectionPool()
+        self.context_factory: ContextFactory = ContextFactory()
+        self.session_store: SessionStateStore = SessionStateStore()
+        self.session_artifacts: ControlSessionArtifactsWriter = ControlSessionArtifactsWriter(
             artifacts_dir=settings.artifacts_dir,
         )
-        self.lease_manager = PageLeaseManager(
+        self.lease_manager: PageLeaseManager = PageLeaseManager(
             self.context_factory,
             page_event_logger=self._log_page_event,
         )
-        self.lifecycle = CDPLifecycleManagerImpl(
+        self.lifecycle: CDPLifecycleManagerImpl = CDPLifecycleManagerImpl(
             self.pool,
             self.lease_manager,
         )
-        self.interactor = PlaywrightBrowserInteractor(
+        self.interactor: PlaywrightBrowserInteractor = PlaywrightBrowserInteractor(
             pool=self.pool,
             session_store=self.session_store,
             lease_manager=self.lease_manager,
             settings=settings,
         )
-        self.observe_store = ControlObserveStore()
+        self.observe_store: ControlObserveStore = ControlObserveStore()
         self._control_adapter: BrowserControlAdapter | None = None
 
     def _log_page_event(self, session_id: str, event: JsonObject) -> None:
-        self.session_artifacts.append_jsonl_for_session(
+        _ = self.session_artifacts.append_jsonl_for_session(
             session_id=session_id,
             filename="page_events.jsonl",
             record=event,

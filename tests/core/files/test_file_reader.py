@@ -151,5 +151,12 @@ async def test_read_accepts_file_entry_dict(tmp_path) -> None:
     path = tmp_path / "a.txt"
     path.write_text("hello", encoding="utf-8")
     reader = FileReader()
-    res = await reader.read({"name": "a.txt", "path": str(path)})
+    res = await reader.read(
+        {
+            "original_name": "a.txt",
+            "url": str(path),
+            "content_type": "text/plain",
+            "file_size": path.stat().st_size,
+        }
+    )
     assert "hello" in res.pages[0].text

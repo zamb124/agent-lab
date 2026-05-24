@@ -493,6 +493,7 @@ export class FrontendSettingsPage extends PlatformPage {
                 <div class="context-card">
                     <platform-llm-context-editor
                         .config=${this._llmContextDraft}
+                        .resolved=${info.resolved && typeof info.resolved === 'object' ? info.resolved : {}}
                         .profiles=${Array.isArray(info.profiles) ? info.profiles : []}
                         .budgets=${Array.isArray(info.budgets) ? info.budgets : []}
                         .clearable=${configured || Object.keys(this._llmContextDraft || {}).length > 0}

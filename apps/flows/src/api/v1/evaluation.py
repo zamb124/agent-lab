@@ -6,12 +6,14 @@ API для получения результатов evaluation.
 """
 
 from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, Query
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import EvaluationResult
 from core.pagination import OffsetPage
+from core.types import JsonObject
 
 router = APIRouter(tags=["evaluation"])
 
@@ -19,11 +21,11 @@ router = APIRouter(tags=["evaluation"])
 @router.get("/results", response_model=OffsetPage[EvaluationResult])
 async def get_evaluation_results(
     container: ContainerDep,
-    flow_id: str = Query(..., description="ID агента"),
-    branch_id: str = Query("default", description="ID ветки (branch)"),
-    run_date: date | None = Query(None, description="Дата запуска (по умолчанию сегодня)"),
-    limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    flow_id: Annotated[str, Query(description="ID агента")],
+    branch_id: Annotated[str, Query(description="ID ветки (branch)")] = "default",
+    run_date: Annotated[date | None, Query(description="Дата запуска (по умолчанию сегодня)")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[EvaluationResult]:
     if run_date:
         results = await container.evaluation_repository.get_by_run(
@@ -45,10 +47,10 @@ async def get_evaluation_results(
 @router.get("/results/summary")
 async def get_evaluation_summary(
     container: ContainerDep,
-    flow_id: str = Query(..., description="ID агента"),
-    branch_id: str = Query("default", description="ID ветки (branch)"),
-    run_date: date | None = Query(None, description="Дата запуска"),
-):
+    flow_id: Annotated[str, Query(description="ID агента")],
+    branch_id: Annotated[str, Query(description="ID ветки (branch)")] = "default",
+    run_date: Annotated[date | None, Query(description="Дата запуска")] = None,
+) -> JsonObject:
     """
     Получение сводки по результатам evaluation.
 
@@ -87,10 +89,10 @@ async def get_evaluation_summary(
     if total_scores:
         avg_score = sum(total_scores) / len(total_scores)
 
-    return {
+    response: JsonObject = {
         "flow_id": flow_id,
         "branch_id": branch_id,
-        "run_date": run_date or date.today().isoformat(),
+        "run_date": run_date.isoformat() if run_date is not None else date.today().isoformat(),
         "total": total,
         "passed": passed,
         "failed": failed,
@@ -111,15 +113,16 @@ async def get_evaluation_summary(
             for r in results
         ],
     }
+    return response
 
 
 @router.get("/results/{test_case_id}")
 async def get_test_result(
     test_case_id: str,
     container: ContainerDep,
-    flow_id: str = Query(..., description="ID агента"),
-    branch_id: str = Query("default", description="ID ветки (branch)"),
-    run_date: date | None = Query(None, description="Дата запуска"),
+    flow_id: Annotated[str, Query(description="ID агента")],
+    branch_id: Annotated[str, Query(description="ID ветки (branch)")] = "default",
+    run_date: Annotated[date | None, Query(description="Дата запуска")] = None,
 ) -> EvaluationResult | None:
     """
     Получение результата конкретного теста.
@@ -150,8 +153,8 @@ async def get_test_result(
 @router.delete("/results")
 async def delete_old_results(
     container: ContainerDep,
-    days: int = Query(30, ge=1, le=365, description="Удалить результаты старше N дней"),
-):
+    days: Annotated[int, Query(ge=1, le=365, description="Удалить результаты старше N дней")] = 30,
+) -> JsonObject:
     """
     Удаление старых результатов evaluation.
     """

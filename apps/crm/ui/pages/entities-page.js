@@ -179,7 +179,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 gap: var(--space-2);
                 padding: 0 var(--space-3);
                 border-radius: var(--radius-full);
-                border: 1px solid var(--crm-stroke);
+                border: 1px solid transparent;
                 background: var(--crm-surface-muted);
                 min-height: 40px;
                 flex: 1;
@@ -224,7 +224,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 gap: 4px;
                 padding: 6px 12px;
                 border-radius: var(--radius-full);
-                border: 1px solid var(--crm-stroke);
+                border: 1px solid transparent;
                 background: var(--crm-surface-muted);
                 color: var(--text-secondary);
                 font-size: 13px;
@@ -244,7 +244,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 display: inline-flex;
                 align-items: stretch;
                 flex-wrap: nowrap;
-                border: 1px solid var(--crm-stroke);
+                border: 1px solid transparent;
                 border-radius: var(--radius-full);
                 overflow: hidden;
                 flex-shrink: 0;
@@ -270,7 +270,7 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 align-items: center;
                 gap: 2px;
                 padding: 2px;
-                border: 1px solid var(--crm-stroke);
+                border: 1px solid transparent;
                 border-radius: var(--radius-full);
                 background: var(--crm-surface-muted);
                 flex-shrink: 0;
@@ -802,11 +802,11 @@ export class CRMEntitiesPage extends CRMNamespacePage {
                 border: 1px solid transparent;
                 background: var(--crm-list-card-bg);
                 border-radius: 16px;
-                padding: 16px;
+                padding: 20px;
                 display: flex;
                 flex-direction: column;
-                gap: 10px;
-                min-height: 130px;
+                gap: 16px;
+                min-height: 150px;
                 min-width: 0;
                 max-width: 100%;
                 box-sizing: border-box;

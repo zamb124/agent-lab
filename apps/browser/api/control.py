@@ -14,7 +14,11 @@ from typing import Annotated, ClassVar, Literal, TypeAlias, TypedDict, cast
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.browser.contracts.control_types import BrowserCapabilityError
+from apps.browser.contracts.control_types import (
+    BrowserCapabilityError,
+    ControlPointerClickBody,
+    ControlSessionStatusResponse,
+)
 from apps.browser.dependencies import ContainerDep
 from apps.browser.engine.types import (
     BrowserAcquireRequest,
@@ -388,17 +392,6 @@ class ControlClickBody(BaseModel):
     timeout_ms: int = Field(default=5_000, ge=1000)
 
 
-class ControlPointerClickBody(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    x: float = Field(ge=0)
-    y: float = Field(ge=0)
-    image_width: float = Field(gt=0)
-    image_height: float = Field(gt=0)
-    button: Literal["left", "right", "middle"] = "left"
-    click_count: int = Field(default=1, ge=1, le=3)
-
-
 class ControlFillBody(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
@@ -420,15 +413,6 @@ class ControlWaitBody(BaseModel):
     selector: str | None = None
     load_state: Literal["domcontentloaded", "networkidle"] | None = None
     timeout_ms: int = Field(default=5_000, ge=1000)
-
-
-class ControlSessionStatusResponse(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    session_id: str
-    url: str
-    title: str
-    closed: bool = False
 
 
 def _features_dict(runtime: BrowserRuntimeFacade) -> dict[str, bool]:

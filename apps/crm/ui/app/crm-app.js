@@ -450,6 +450,9 @@ export class CRMApp extends PlatformApp {
             default:                    content = html`<crm-daily-notes-page></crm-daily-notes-page>`; break;
         }
         const mobileIslandFullBleed = this._crmMobile;
+        const graphIslandFullBleed = routeKey === 'graph';
+        const islandPadding = mobileIslandFullBleed || graphIslandFullBleed ? 'none' : 'md';
+        const islandContentNoScroll = graphIslandFullBleed || routeKey === 'entities' || routeKey === 'entity';
         const companyRaw = this._laraActiveCompanySel.value;
         const companyId = typeof companyRaw === 'string' && companyRaw.trim() !== '' ? companyRaw.trim() : '';
         const voiceBase =
@@ -460,9 +463,9 @@ export class CRMApp extends PlatformApp {
             <div class="sidebar"><crm-sidebar></crm-sidebar></div>
             <div class="main">
                 <platform-island
-                    padding=${mobileIslandFullBleed ? 'none' : 'md'}
+                    padding=${islandPadding}
                     ?safe-bottom=${mobileIslandFullBleed}
-                    ?content-no-scroll=${routeKey === 'entities' || routeKey === 'entity'}
+                    ?content-no-scroll=${islandContentNoScroll}
                 >${content}</platform-island>
             </div>
             <platform-lara-assistant

@@ -37,9 +37,9 @@ class _PythonWorker:
     """Один persistent Python sandbox worker с JSON-lines IPC."""
 
     def __init__(self, *, worker_path: Path, gateway_url: str):
-        self._worker_path = worker_path
-        self._gateway_url = gateway_url
-        self._lock = asyncio.Lock()
+        self._worker_path: Path = worker_path
+        self._gateway_url: str = gateway_url
+        self._lock: asyncio.Lock = asyncio.Lock()
         self._process: asyncio.subprocess.Process | None = None
 
     async def invoke(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
@@ -184,11 +184,11 @@ class PythonSandboxExecutor:
 
     def __init__(self) -> None:
         self._workers: list[_PythonWorker] = []
-        self._next_worker = 0
-        self._pool_lock = asyncio.Lock()
-        self._runtime_dir = Path(tempfile.mkdtemp(prefix="code-runner-python-runtime-"))
-        self._worker_path = self._runtime_dir / "python_worker.py"
-        self._worker_path.write_text(self._worker_source(), encoding="utf-8")
+        self._next_worker: int = 0
+        self._pool_lock: asyncio.Lock = asyncio.Lock()
+        self._runtime_dir: Path = Path(tempfile.mkdtemp(prefix="code-runner-python-runtime-"))
+        self._worker_path: Path = self._runtime_dir / "python_worker.py"
+        _ = self._worker_path.write_text(self._worker_source(), encoding="utf-8")
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
         if request.language != "python":

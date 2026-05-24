@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, assert_never
 
 InteractionProfileName = Literal["off", "fast", "human"]
 
@@ -83,5 +83,4 @@ def get_interaction_profile(name: InteractionProfileName) -> InteractionProfile:
             post_navigate_scroll_px_per_step_range=(120, 420),
             post_navigate_pause_between_scroll_steps_ms_range=(450, 1400),
         )
-    raise ValueError(f"Неизвестный interaction profile: {name!r}")
-
+    assert_never(name)

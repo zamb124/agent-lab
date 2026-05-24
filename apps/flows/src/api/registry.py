@@ -1,20 +1,26 @@
-"""
-Registry API - совместимость с platformweb.
-Предоставляет endpoints для получения списка flows и tools.
-"""
-
-from typing import Any
+"""Registry API - совместимость с platformweb."""
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import BranchConfig, FlowConfig
+from apps.flows.src.models.registry_contracts import (
+    RegistryBranchInfo,
+    RegistryBranchSchema,
+    RegistryFlowCapabilities,
+    RegistryFlowCard,
+    RegistryFlowSchema,
+    RegistryProviderOption,
+    RegistrySchemaSubflow,
+)
 from apps.flows.src.services.flows_loader import get_all_flows
 from core.clients.llm.model_routing import HUMANITEC_LLM_PROVIDER
 from core.company_ai import CUSTOM_PROVIDER_REF_PREFIX, AICapability, CompanyAIProviders
+from core.context import get_context
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -30,39 +36,39 @@ _LLM_CAPABILITY_VALUES = {
 }
 
 
-def _company_ai_from_request(request: Request) -> CompanyAIProviders:
-    company = getattr(request.state, "company", None)
-    if company is None:
+def _company_ai_from_context() -> CompanyAIProviders:
+    context = get_context()
+    if context is None or context.active_company is None:
         return CompanyAIProviders()
-    return CompanyAIProviders.from_metadata(getattr(company, "metadata", None) or {})
+    return CompanyAIProviders.from_metadata(context.active_company.metadata)
 
 
-def _custom_provider_options(aip: CompanyAIProviders) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
+def _custom_provider_options(aip: CompanyAIProviders) -> list[RegistryProviderOption]:
+    items: list[RegistryProviderOption] = []
     for provider in aip.custom_providers:
         if not any(cap in _LLM_CAPABILITY_VALUES for cap in provider.capabilities):
             continue
         items.append(
-            {
-                "value": f"{CUSTOM_PROVIDER_REF_PREFIX}{provider.id}",
-                "label": provider.label,
-                "kind": "custom",
-                "custom_id": provider.id,
-            }
+            RegistryProviderOption(
+                value=f"{CUSTOM_PROVIDER_REF_PREFIX}{provider.id}",
+                label=provider.label,
+                kind="custom",
+                custom_id=provider.id,
+            )
         )
     return items
 
 
-def _platform_provider_options(providers: list[str]) -> list[Any]:
-    out: list[Any] = []
+def _platform_provider_options(providers: list[str]) -> list[str | RegistryProviderOption]:
+    out: list[str | RegistryProviderOption] = []
     for provider in providers:
         if provider == HUMANITEC_LLM_PROVIDER:
             out.append(
-                {
-                    "value": HUMANITEC_LLM_PROVIDER,
-                    "label": "Humanitec LLM",
-                    "kind": "virtual",
-                }
+                RegistryProviderOption(
+                    value=HUMANITEC_LLM_PROVIDER,
+                    label="Humanitec LLM",
+                    kind="virtual",
+                )
             )
             continue
         out.append(provider)
@@ -114,23 +120,23 @@ def get_base_url(request: Request) -> str:
     return f"{scheme}://{host}"
 
 
-def build_branch_info(branch_id: str, branch: BranchConfig) -> dict[str, Any]:
+def build_branch_info(branch_id: str, branch: BranchConfig) -> RegistryBranchInfo:
     """Конвертирует BranchConfig в элемент списка branches карточки агента (A2A)."""
-    return {
-        "id": branch_id,
-        "name": branch.name,
-        "description": branch.description or "",
-        "tags": branch.tags,
-        "inputModes": ["text"],
-        "outputModes": ["text"],
-        "examples": None,
-        "security": None,
-    }
+    return RegistryBranchInfo(
+        id=branch_id,
+        name=branch.name,
+        description=branch.description or "",
+        tags=branch.tags,
+        inputModes=["text"],
+        outputModes=["text"],
+        examples=None,
+        security=None,
+    )
 
 
 def build_flow_card(
     config: FlowConfig, base_url: str = "", branches: dict[str, BranchConfig] | None = None
-) -> dict[str, Any]:
+) -> RegistryFlowCard:
     """
     Собирает AgentCard из FlowConfig.
     Формат совместим с A2A протоколом и platformweb.
@@ -157,74 +163,62 @@ def build_flow_card(
         build_branch_info(branch_id, br) for branch_id, br in effective_branches.items()
     ]
 
-    card_dict = {
-        "flow_id": flow_id,
-        "name": name,
-        "url": f"{base_url}/flows/api/v1/flows/{flow_id}",
-        "description": description,
-        "version": "1.0.0",
-        "protocolVersion": "1.0",
-        "preferredTransport": "http",
-        "defaultInputModes": ["text"],
-        "defaultOutputModes": ["text"],
-        "capabilities": {
-            "streaming": False,
-            "pushNotifications": None,
-            "stateTransitionHistory": None,
-            "extensions": None,
-        },
-        "branches": branches_list,
-        "tags": tags,
-        "provider": None,
-        "documentationUrl": None,
-        "iconUrl": None,
-        "security": None,
-        "securitySchemes": None,
-        "signatures": None,
-        "supportsAuthenticatedExtendedCard": False,
-        "additionalInterfaces": None,
-    }
+    public_vars: dict[str, JsonObject] = {}
+    for var_name, var_config in (config.variables or {}).items():
+        if not var_config.public:
+            continue
+        var_value = var_config.value
+        var_info: JsonObject = {}
+        if var_config.title:
+            var_info["title"] = var_config.title
+        if var_config.description:
+            var_info["description"] = var_config.description
+        if isinstance(var_value, str) and var_value.startswith("@var:"):
+            var_info["type"] = "reference"
+            var_info["key"] = var_value[5:]
+        else:
+            var_info["value"] = var_value
+        public_vars[var_name] = var_info
 
-    # Добавляем публичные variables как дополнительное поле (не входит в стандарт A2A)
-    public_vars = {}
-    if isinstance(config, FlowConfig):
-        flow_variables = config.variables or {}
-        for var_name, var_config in flow_variables.items():
-            # FlowVariableConfig объект
-            if var_config.public:
-                var_value = var_config.value
-                var_info = {}
-
-                # Добавляем метаданные если есть
-                if var_config.title:
-                    var_info["title"] = var_config.title
-                if var_config.description:
-                    var_info["description"] = var_config.description
-
-                # Обрабатываем значение
-                if isinstance(var_value, str) and var_value.startswith("@var:"):
-                    var_info["type"] = "reference"
-                    var_info["key"] = var_value[5:]
-                else:
-                    var_info["value"] = var_value
-
-                public_vars[var_name] = var_info
-
-    if public_vars:
-        card_dict["variables"] = public_vars
-
-    return card_dict
+    return RegistryFlowCard(
+        flow_id=flow_id,
+        name=name,
+        url=f"{base_url}/flows/api/v1/flows/{flow_id}",
+        description=description,
+        version="1.0.0",
+        protocolVersion="1.0",
+        preferredTransport="http",
+        defaultInputModes=["text"],
+        defaultOutputModes=["text"],
+        capabilities=RegistryFlowCapabilities(
+            streaming=False,
+            pushNotifications=None,
+            stateTransitionHistory=None,
+            extensions=None,
+        ),
+        branches=branches_list,
+        tags=tags,
+        provider=None,
+        documentationUrl=None,
+        iconUrl=None,
+        security=None,
+        securitySchemes=None,
+        signatures=None,
+        supportsAuthenticatedExtendedCard=False,
+        additionalInterfaces=None,
+        variables=public_vars or None,
+    )
 
 
 @router.get("/flows")
-async def list_registry_flows(request: Request, container: ContainerDep) -> list[dict[str, Any]]:
+async def list_registry_flows(request: Request, container: ContainerDep) -> list[RegistryFlowCard]:
     """
     Список flows как AgentCard[] (A2A формат).
     """
     base_url = get_base_url(request)
     configs = await get_all_flows(container.flow_repository)
 
-    cards: list[dict[str, Any]] = []
+    cards: list[RegistryFlowCard] = []
     for config in configs.values():
         card = build_flow_card(config, base_url)
         cards.append(card)
@@ -233,7 +227,7 @@ async def list_registry_flows(request: Request, container: ContainerDep) -> list
 
 
 @router.get("/tools")
-async def get_tools(container: ContainerDep) -> list[dict[str, Any]]:
+async def get_tools(container: ContainerDep) -> list[JsonObject]:
     """
     Список tools в формате совместимом с platformweb.
     Совместимость с platformweb OrchestratorService.getTools()
@@ -243,16 +237,16 @@ async def get_tools(container: ContainerDep) -> list[dict[str, Any]]:
 
 
 @router.get("/providers/values")
-async def get_providers_values(request: Request, container: ContainerDep) -> list[Any]:
+async def get_providers_values(container: ContainerDep) -> list[str | RegistryProviderOption]:
     """
     Список настроенных LLM-провайдеров платформы и custom-провайдеров активной компании.
     """
     platform_items = _platform_provider_options(container.llm_models_service.get_configured_providers())
-    return [*platform_items, *_custom_provider_options(_company_ai_from_request(request))]
+    return [*platform_items, *_custom_provider_options(_company_ai_from_context())]
 
 
 @router.get("/models/values")
-async def get_models_values(request: Request, container: ContainerDep, provider: str | None = None) -> list[str]:
+async def get_models_values(container: ContainerDep, provider: str | None = None) -> list[str]:
     """
     Список доступных моделей.
 
@@ -262,7 +256,7 @@ async def get_models_values(request: Request, container: ContainerDep, provider:
     """
 
     if provider and provider.startswith(CUSTOM_PROVIDER_REF_PREFIX):
-        models = _custom_provider_models(_company_ai_from_request(request), provider)
+        models = _custom_provider_models(_company_ai_from_context(), provider)
     elif provider:
         models = await container.llm_models_service.get_models_by_provider(provider)
     else:
@@ -272,7 +266,7 @@ async def get_models_values(request: Request, container: ContainerDep, provider:
 
 
 @router.post("/models/sync")
-async def sync_models(container: ContainerDep, provider: str | None = None) -> dict[str, Any]:
+async def sync_models(container: ContainerDep, provider: str | None = None) -> JsonObject:
     """
     Синхронизация моделей от провайдеров.
 
@@ -292,7 +286,7 @@ async def sync_models(container: ContainerDep, provider: str | None = None) -> d
 def _add_subflows_recursive(
     lines: list[str],
     parent_id: str,
-    subflows: list[dict[str, Any]],
+    subflows: list[RegistrySchemaSubflow],
     depth: int = 0,
 ) -> None:
     """Рекурсивно добавляет вложенные flow (как tools) и их tools в Mermaid."""
@@ -300,24 +294,24 @@ def _add_subflows_recursive(
         return
 
     for subflow in subflows:
-        sub_id = subflow["id"].replace("_", "__")
-        sub_name = subflow.get("name", subflow["id"])
+        sub_id = subflow.id.replace("_", "__")
+        sub_name = subflow.name
         sub_safe_id = f"{parent_id}__sub__{sub_id}"
 
         lines.append(f"    {sub_safe_id}([{sub_name}]):::subflow")
         lines.append(f"    {parent_id} ==> {sub_safe_id}")
 
-        for sub_tool in subflow.get("tools", []):
+        for sub_tool in subflow.tools:
             sub_tool_id = f"{sub_safe_id}__tool__{sub_tool.replace('_', '__')}"
             lines.append(f"    {sub_tool_id}[/{sub_tool}/]:::tool")
             lines.append(f"    {sub_safe_id} -.-> {sub_tool_id}")
 
-        nested = subflow.get("subflows", [])
+        nested = subflow.subflows
         if nested:
             _add_subflows_recursive(lines, sub_safe_id, nested, depth + 1)
 
 
-def _generate_mermaid(branch_schema: dict[str, Any]) -> str:
+def _generate_mermaid(branch_schema: RegistryBranchSchema) -> str:
     """Генерирует Mermaid код для схемы ветки (branch)."""
     lines = ["flowchart TD"]
 
@@ -327,16 +321,16 @@ def _generate_mermaid(branch_schema: dict[str, Any]) -> str:
     lines.append("    classDef flow fill:#ec4899,stroke:#f472b6,color:#fff,stroke-width:2px")
     lines.append("    classDef terminal fill:#374151,stroke:#6b7280,color:#fff,stroke-width:2px")
 
-    nodes = branch_schema["nodes"]
-    edges = branch_schema["edges"]
-    entry = branch_schema["entry"]
+    nodes = branch_schema.nodes
+    edges = branch_schema.edges
+    entry = branch_schema.entry
 
     # Собираем ноды которые реально используются в edges
     used_nodes = {entry}
     for edge in edges:
-        used_nodes.add(edge["from"])
-        if edge.get("to"):
-            used_nodes.add(edge["to"])
+        used_nodes.add(edge.from_node)
+        if edge.to:
+            used_nodes.add(edge.to)
 
     # Определяем специальные ноды
     lines.append("    start((start)):::terminal")
@@ -352,12 +346,12 @@ def _generate_mermaid(branch_schema: dict[str, Any]) -> str:
         if node_id not in used_nodes:
             continue
 
-        node_type = node_info.get("type", "unknown")
+        node_type = node_info.type
         # Безопасный ID для mermaid (заменяем _ на __)
         safe_id = node_id.replace("_", "__")
 
         # Имя для отображения (name агента или node_id)
-        display_name = node_info.get("name", node_id)
+        display_name = node_info.name
 
         # Форма и класс зависит от типа
         if node_type == "code":
@@ -370,15 +364,14 @@ def _generate_mermaid(branch_schema: dict[str, Any]) -> str:
             lines.append(f"    {safe_id}([{display_name}]):::react")
 
         # Добавляем tools для llm_node
-        tools = node_info.get("tools", [])
+        tools = node_info.tools
         if tools and node_type == "llm_node":
             for tool_name in tools:
                 tool_safe_id = f"{safe_id}__tool__{tool_name.replace('_', '__')}"
                 lines.append(f"    {tool_safe_id}[/{tool_name}/]:::tool")
                 lines.append(f"    {safe_id} -.-> {tool_safe_id}")
 
-        subflows = node_info.get("subflows", [])
-        _add_subflows_recursive(lines, safe_id, subflows)
+        _add_subflows_recursive(lines, safe_id, node_info.subflows)
 
     # Отмечаем entry
     safe_entry = entry.replace("_", "__")
@@ -387,9 +380,9 @@ def _generate_mermaid(branch_schema: dict[str, Any]) -> str:
     # Добавляем edges
     if edges:
         for edge in edges:
-            from_node = edge["from"].replace("_", "__")
-            to_node = edge.get("to")
-            condition = edge.get("condition")
+            from_node = edge.from_node.replace("_", "__")
+            to_node = edge.to
+            condition = edge.condition
 
             if to_node is None:
                 lines.append(f"    {from_node} --> finish")
@@ -409,39 +402,39 @@ def _generate_mermaid(branch_schema: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _generate_html(schema: dict[str, Any]) -> str:
+def _generate_html(schema: RegistryFlowSchema) -> str:
     """Генерирует HTML страницу с Mermaid диаграммами."""
-    flow_id = schema["flow_id"]
-    flow_title = schema["name"]
-    flow_description = schema["description"]
-    branches_map = schema["branches"]
+    flow_id = schema.flow_id
+    flow_title = schema.name
+    flow_description = schema.description
+    branches_map = schema.branches
 
     branch_ids = list(branches_map.keys())
 
     # Генерируем табы и контент
-    tabs_html = []
-    content_html = []
+    tabs_html: list[str] = []
+    content_html: list[str] = []
 
     for i, branch_id in enumerate(branch_ids):
         branch_payload = branches_map[branch_id]
         active = "active" if i == 0 else ""
         hidden = "" if i == 0 else "hidden"
 
-        tabs_html.append(
-            f'<button class="tab {active}" data-branch="{branch_id}">'
-            f"{branch_payload['name']} ({branch_id})</button>"
-        )
+        tabs_html.append(f'<button class="tab {active}" data-branch="{branch_id}">{branch_payload.name} ({branch_id})</button>')
 
         mermaid_code = _generate_mermaid(branch_payload)
         content_html.append(f"""
         <div id="tab-{branch_id}" class="tab-content {hidden}">
-            <p class="branch-desc">{branch_payload["description"]}</p>
-            <p class="branch-entry">Entry: <code>{branch_payload["entry"]}</code></p>
+            <p class="branch-desc">{branch_payload.description}</p>
+            <p class="branch-entry">Entry: <code>{branch_payload.entry}</code></p>
             <pre class="mermaid">
 {mermaid_code}
             </pre>
         </div>
         """)
+
+    tabs_markup = "".join(tabs_html)
+    content_markup = "".join(content_html)
 
     return f"""<!DOCTYPE html>
 <html lang="ru">
@@ -624,10 +617,10 @@ def _generate_html(schema: dict[str, Any]) -> str:
         <div class="flow-id">{flow_id}</div>
 
         <div class="tabs">
-            {"".join(tabs_html)}
+            {tabs_markup}
         </div>
 
-        {"".join(content_html)}
+        {content_markup}
 
         <div class="legend">
             <h3>Components</h3>

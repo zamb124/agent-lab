@@ -7,18 +7,23 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy import delete, func, select, update
 
 from apps.flows.src.db.models import OperatorQueueMembers, OperatorQueues, OperatorTasks
+from apps.flows.src.models.operator_schemas import (
+    OperatorDialogLogEntry,
+    OperatorResolutionPayload,
+)
+from core.db.storage import Storage
+from core.types import JsonArray, JsonObject, parse_json_object
 
 
 class OperatorRepository:
     """CRUD для operator_queues, operator_queue_members, operator_tasks."""
 
-    def __init__(self, storage: Any) -> None:
-        self._storage = storage
+    def __init__(self, storage: Storage) -> None:
+        self._storage: Storage = storage
 
     async def create_queue(
         self,
@@ -78,7 +83,7 @@ class OperatorRepository:
         name: str | None = None,
         description: str | None = None,
     ) -> None:
-        values: dict[str, Any] = {}
+        values: dict[str, str] = {}
         if name is not None:
             values["name"] = name
         if description is not None:
@@ -86,7 +91,7 @@ class OperatorRepository:
         if not values:
             return
         async with self._storage.get_session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(OperatorQueues)
                 .where(
                     OperatorQueues.id == queue_id,
@@ -121,7 +126,7 @@ class OperatorRepository:
 
     async def remove_member(self, queue_id: str, user_id: str) -> None:
         async with self._storage.get_session() as session:
-            await session.execute(
+            _ = await session.execute(
                 delete(OperatorQueueMembers).where(
                     OperatorQueueMembers.queue_id == queue_id,
                     OperatorQueueMembers.user_id == user_id,
@@ -242,21 +247,24 @@ class OperatorRepository:
         task_id: str,
         *,
         status: str | None = None,
-        claimed_by_user_id: Any = ...,
-        resolution_payload: dict[str, Any] | None = None,
+        claimed_by_user_id: str | None = None,
+        resolution_payload: OperatorResolutionPayload | None = None,
     ) -> None:
-        values: dict[str, Any] = {}
+        values: dict[str, str | JsonObject | datetime] = {}
         if status is not None:
             values["status"] = status
-        if claimed_by_user_id is not ...:
+        if claimed_by_user_id is not None:
             values["claimed_by_user_id"] = claimed_by_user_id
         if resolution_payload is not None:
-            values["resolution_payload"] = resolution_payload
+            values["resolution_payload"] = parse_json_object(
+                resolution_payload.model_dump_json(),
+                "OperatorResolutionPayload",
+            )
         if not values:
             return
         values["updated_at"] = datetime.now(timezone.utc)
         async with self._storage.get_session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(OperatorTasks)
                 .where(
                     OperatorTasks.id == task_id,
@@ -270,7 +278,7 @@ class OperatorRepository:
         self,
         company_id: str,
         task_id: str,
-        entry: dict[str, Any],
+        entry: OperatorDialogLogEntry,
     ) -> None:
         """Атомарно добавляет реплику в dialog_log (JSONB append)."""
         async with self._storage.get_session() as session:
@@ -282,15 +290,23 @@ class OperatorRepository:
             )
             if task is None:
                 raise ValueError(f"Задача {task_id!r} не найдена")
-            log: list[dict[str, Any]] = list(task.dialog_log) if task.dialog_log else []
+            log = (
+                [OperatorDialogLogEntry.model_validate(item) for item in task.dialog_log]
+                if task.dialog_log
+                else []
+            )
             log.append(entry)
-            await session.execute(
+            log_payload: JsonArray = [
+                parse_json_object(item.model_dump_json(), "OperatorDialogLogEntry")
+                for item in log
+            ]
+            _ = await session.execute(
                 update(OperatorTasks)
                 .where(
                     OperatorTasks.id == task_id,
                     OperatorTasks.company_id == company_id,
                 )
-                .values(dialog_log=log, updated_at=datetime.now(timezone.utc))
+                .values(dialog_log=log_payload, updated_at=datetime.now(timezone.utc))
             )
             await session.commit()
 
@@ -298,9 +314,11 @@ class OperatorRepository:
         self,
         company_id: str,
         task_id: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[OperatorDialogLogEntry]:
         """Возвращает dialog_log задачи."""
         task = await self.get_task(company_id, task_id)
         if task is None:
             raise ValueError(f"Задача {task_id!r} не найдена")
-        return list(task.dialog_log) if task.dialog_log else []
+        if not task.dialog_log:
+            return []
+        return [OperatorDialogLogEntry.model_validate(item) for item in task.dialog_log]

@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, cast, override
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.mock import get_mock_for_flow
+from apps.flows.src.mock.resolver import get_mock_for_flow
 from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.tool_reference import CallParameter

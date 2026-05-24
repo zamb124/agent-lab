@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
@@ -10,6 +9,7 @@ from apps.crm.scheduled_task_constants import CRM_GENERATE_NAMESPACE_SUGGESTS_TA
 from apps.crm_worker.broker import broker
 from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -24,7 +24,7 @@ async def crm_generate_namespace_suggests_tick(
     company_id: str,
     namespace: str,
     schedule_task_id: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Генерация саджестов (дубли/пропущенные) для namespace по крону."""
     logger.info(
         "crm.suggests.generate.started",
@@ -37,7 +37,7 @@ async def crm_generate_namespace_suggests_tick(
     repo = container.task_repository
     task_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    await repo.create(
+    _ = await repo.create(
         CRMTask(
             task_id=task_id,
             task_type="namespace_suggests_tick",
@@ -59,6 +59,7 @@ async def crm_generate_namespace_suggests_tick(
             company_id=company_id,
             namespace=namespace,
         )
+        summary_patch: JsonObject = {key: value for key, value in summary.items()}
         done = datetime.now(timezone.utc)
         await repo.patch_progress(
             task_id,
@@ -67,7 +68,7 @@ async def crm_generate_namespace_suggests_tick(
             stage="completed",
             progress_pct=100,
             completed_at=done,
-            data_patch=dict(summary),
+            data_patch=summary_patch,
         )
         logger.info(
             "crm.suggests.generate.finished",
@@ -76,7 +77,7 @@ async def crm_generate_namespace_suggests_tick(
             namespace=namespace,
             **summary,
         )
-        return summary
+        return summary_patch
     except Exception as exc:
         failed_at = datetime.now(timezone.utc)
         await repo.patch_progress(

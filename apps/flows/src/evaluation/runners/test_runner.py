@@ -8,19 +8,28 @@
 Поддерживает все комбинации input x check.
 """
 
+from __future__ import annotations
+
 import importlib
-import json
 import re
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, ClassVar, cast
 
-from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent, TextPart
+from a2a.types import TaskArtifactUpdateEvent, TextPart
 
 import core.tracing.attributes as trace_attributes
+from apps.flows.src.container_contracts import FlowEvaluationFactoryProtocol, ToolRegistryProtocol
 from apps.flows.src.models import NodeConfig, TestCaseConfig
+from apps.flows.src.models.evaluation_result import (
+    EvaluationDialogMessage,
+    EvaluationJudgeResult,
+    EvaluationLLMResponse,
+    EvaluationRunnerEvent,
+    EvaluationScores,
+)
 from apps.flows.src.models.flow_config import (
     CheckConfig,
     CheckType,
@@ -31,16 +40,24 @@ from apps.flows.src.models.flow_config import (
 from core.billing import get_billing_service
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM
 from core.clients.llm import get_llm
+from core.clients.llm.messages import LLMToolCall
 from core.company_ai import COST_ORIGIN_COMPANY, AICapability, resolve_llm_for_capability
 from core.context import get_context
+from core.llm_context import LLMContextPatch
 from core.logging import get_logger
 from core.models.billing_models import UsageType
 from core.state import ExecutionState
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+
+if TYPE_CHECKING:
+    from apps.flows.src.db import NodeRepository
+    from apps.flows.src.runners.remote import RemoteCodeRunner
 
 logger = get_logger(__name__)
 
 ScoresType = dict[str, float]
+StringChecker = Callable[[JsonObject, str], bool]
 
 TEST_COMPLETE_MARKER = "[TEST_COMPLETE]"
 LOOP_DETECTION_WINDOW = 3
@@ -54,7 +71,7 @@ class TestRunner:
     Поддерживает агентов и отдельные ноды.
     """
 
-    __test__ = False
+    __test__: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -63,19 +80,19 @@ class TestRunner:
         run_date: date,
         iteration: int,
         *,
-        flow_factory: Any | None = None,
-        node_repository: Any | None = None,
-        tool_registry: Any | None = None,
+        flow_factory: FlowEvaluationFactoryProtocol | None = None,
+        node_repository: "NodeRepository | None" = None,
+        tool_registry: ToolRegistryProtocol | None = None,
     ):
-        self.target_id = target_id
-        self.target_callable = target_callable
-        self.run_date = run_date
-        self.iteration = iteration
-        self._flow_factory = flow_factory
-        self._node_repository = node_repository
-        self._tool_registry = tool_registry
+        self.target_id: str = target_id
+        self.target_callable: Callable[[ExecutionState], Awaitable[ExecutionState]] = target_callable
+        self.run_date: date = run_date
+        self.iteration: int = iteration
+        self._flow_factory: FlowEvaluationFactoryProtocol | None = flow_factory
+        self._node_repository: NodeRepository | None = node_repository
+        self._tool_registry: ToolRegistryProtocol | None = tool_registry
 
-    def _get_code_runner(self, language: str) -> Any:
+    def _get_code_runner(self, language: str) -> "RemoteCodeRunner":
         if self._flow_factory is not None:
             container = self._flow_factory.container
             return container.get_code_runner(language=language)
@@ -87,7 +104,7 @@ class TestRunner:
         test_case: TestCaseConfig,
         test_case_id: str,
         task_id: str | None = None,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[EvaluationRunnerEvent]:
         """
         Запускает тест со стримингом.
 
@@ -102,9 +119,7 @@ class TestRunner:
 
         turns_count = 0
         step_scores: ScoresType = {}
-        initial_state_dict: dict[str, object] = {
-            key: value for key, value in (test_case.initial_state or {}).items()
-        }
+        initial_state_dict: JsonObject = dict(test_case.initial_state or {})
 
         context_id = str(uuid.uuid4())
         session_id = f"{self.target_id}:{context_id}"
@@ -120,7 +135,7 @@ class TestRunner:
             }
         )
         response = ""
-        dialog: list[dict[str, Any]] = []
+        dialog: list[EvaluationDialogMessage] = []
 
         try:
             if not test_case.turns:
@@ -166,15 +181,16 @@ class TestRunner:
                     }
                     return
 
-                yield {"type": "user", "content": input_text or "[file]"}
+                user_content = input_text or "[file]"
+                yield {"type": "user", "content": user_content}
 
                 execution_state.content = input_text or ""
                 execution_state = await self.target_callable(execution_state)
 
                 response = execution_state.response or ""
 
-                dialog.append({"role": "user", "content": input_text})
-                dialog.append({"role": "assistant", "content": response})
+                dialog.append(EvaluationDialogMessage(role="user", content=user_content))
+                dialog.append(EvaluationDialogMessage(role="assistant", content=response))
 
                 yield {"type": "assistant", "content": response}
 
@@ -239,9 +255,9 @@ class TestRunner:
         task_id: str,
         elapsed: Callable[[], int],
         execution_state: ExecutionState,
-    ):
+    ) -> AsyncIterator[EvaluationRunnerEvent]:
         """Диалог нода-тестер / нода-судья против тестируемого flow."""
-        dialog: list[dict[str, Any]] = []
+        dialog: list[EvaluationDialogMessage] = []
         turns = 0
 
         tester_config = await self._get_node_config(turn.input, execution_state)
@@ -260,7 +276,7 @@ class TestRunner:
             if TEST_COMPLETE_MARKER in tester_response:
                 break
 
-            dialog.append({"role": "tester", "content": tester_response})
+            dialog.append(EvaluationDialogMessage(role="tester", content=tester_response))
             yield {"type": "user", "content": f"[TESTER] {tester_response}"}
 
             execution_state.content = tester_response
@@ -268,7 +284,7 @@ class TestRunner:
 
             flow_response = execution_state.response or ""
 
-            dialog.append({"role": "assistant", "content": flow_response})
+            dialog.append(EvaluationDialogMessage(role="assistant", content=flow_response))
             yield {"type": "assistant", "content": flow_response}
 
             if self._detect_loop(dialog):
@@ -307,7 +323,7 @@ class TestRunner:
 
     async def _get_input(
         self, input_config: InputConfig, execution_state: ExecutionState
-    ) -> tuple[str | None, list[dict[str, Any]] | None]:
+    ) -> tuple[str | None, list[JsonObject] | None]:
         """Получает input на основе конфигурации."""
         if input_config.type == InputType.TEXT:
             return input_config.value, None
@@ -329,10 +345,13 @@ class TestRunner:
         check_config: CheckConfig,
         execution_state: ExecutionState,
         response: str,
-        dialog: list[dict[str, Any]],
+        dialog: list[EvaluationDialogMessage],
     ) -> dict[str, float]:
         """Выполняет проверку. Всегда возвращает Dict[str, float] (0-10)."""
-        state_dict = execution_state.model_dump()
+        state_dict = require_json_object(
+            execution_state.model_dump(mode="json", exclude_none=False),
+            "execution_state",
+        )
 
         if check_config.type == CheckType.STRING:
             result = self._execute_string_checker(check_config.value, state_dict, response)
@@ -340,9 +359,13 @@ class TestRunner:
 
         if check_config.type == CheckType.INLINE_CODE:
             runner = self._get_code_runner(check_config.language)
+            dialog_payload: list[JsonValue] = [
+                require_json_object(message.model_dump(mode="json"), "evaluation.dialog[]")
+                for message in dialog
+            ]
             result = await runner.execute_tool(
                 check_config.value,
-                {"state": state_dict, "response": response, "dialog": dialog},
+                {"state": state_dict, "response": response, "dialog": dialog_payload},
                 execution_state,
                 entrypoint=check_config.entrypoint,
             )
@@ -355,7 +378,7 @@ class TestRunner:
 
         raise ValueError(f"Unknown check type: {check_config.type}")
 
-    def _normalize_check_result(self, result: Any) -> dict[str, float]:
+    def _normalize_check_result(self, result: JsonValue) -> dict[str, float]:
         """
         Нормализует результат проверки к единой структуре: Dict[str, float] (0-10).
 
@@ -371,7 +394,7 @@ class TestRunner:
             return {"result": float(result)}
 
         if isinstance(result, dict):
-            normalized = {}
+            normalized: dict[str, float] = {}
             for k, v in result.items():
                 if isinstance(v, bool):
                     normalized[k] = 10.0 if v else 0.0
@@ -384,7 +407,7 @@ class TestRunner:
         return {"result": 10.0}
 
     def _execute_string_checker(
-        self, checker: str, state: dict[str, Any], response: str
+        self, checker: str, state: JsonObject, response: str
     ) -> bool:
         """Выполняет строковую проверку."""
         if checker.startswith("contains:"):
@@ -426,7 +449,7 @@ class TestRunner:
         else:
             return length >= int(spec)
 
-    def _check_state_expression(self, expression: str, state: dict[str, Any]) -> bool:
+    def _check_state_expression(self, expression: str, state: JsonObject) -> bool:
         """Проверяет выражение над state."""
         operators = ["==", "!=", ">=", "<=", ">", "<"]
         op = None
@@ -443,22 +466,23 @@ class TestRunner:
             return False
 
         field = parts[0].strip()
-        expected = parts[1].strip()
+        expected_raw = parts[1].strip()
+        expected: JsonValue = expected_raw
 
-        if expected.startswith(("'", '"')) and expected.endswith(("'", '"')):
-            expected = expected[1:-1]
-        elif expected == "true":
+        if expected_raw.startswith(("'", '"')) and expected_raw.endswith(("'", '"')):
+            expected = expected_raw[1:-1]
+        elif expected_raw == "true":
             expected = True
-        elif expected == "false":
+        elif expected_raw == "false":
             expected = False
-        elif expected in ("null", "None"):
+        elif expected_raw in ("null", "None"):
             expected = None
         else:
             try:
-                expected = int(expected)
+                expected = int(expected_raw)
             except ValueError:
                 try:
-                    expected = float(expected)
+                    expected = float(expected_raw)
                 except ValueError:
                     pass
 
@@ -468,21 +492,33 @@ class TestRunner:
             return actual == expected
         elif op == "!=":
             return actual != expected
-        elif op == ">":
-            return actual is not None and actual > expected
-        elif op == "<":
-            return actual is not None and actual < expected
-        elif op == ">=":
-            return actual is not None and actual >= expected
-        elif op == "<=":
-            return actual is not None and actual <= expected
+        elif isinstance(actual, bool) or isinstance(expected, bool):
+            return False
+        elif isinstance(actual, (int, float)) and isinstance(expected, (int, float)):
+            if op == ">":
+                return actual > expected
+            elif op == "<":
+                return actual < expected
+            elif op == ">=":
+                return actual >= expected
+            elif op == "<=":
+                return actual <= expected
+        elif isinstance(actual, str) and isinstance(expected, str):
+            if op == ">":
+                return actual > expected
+            elif op == "<":
+                return actual < expected
+            elif op == ">=":
+                return actual >= expected
+            elif op == "<=":
+                return actual <= expected
 
         return False
 
-    def _get_nested_value(self, data: dict[str, Any], path: str) -> Any:
+    def _get_nested_value(self, data: JsonObject, path: str) -> JsonValue:
         """Получает значение по вложенному пути (a.b.c)."""
         keys = path.split(".")
-        value = data
+        value: JsonValue = data
         for key in keys:
             if isinstance(value, dict):
                 value = value.get(key)
@@ -490,11 +526,14 @@ class TestRunner:
                 return None
         return value
 
-    def _import_function(self, function_path: str) -> Callable[..., Any]:
+    def _import_function(self, function_path: str) -> StringChecker:
         """Импортирует функцию по полному пути модуля."""
         module_path, func_name = function_path.rsplit(".", 1)
         module = importlib.import_module(module_path)
-        return getattr(module, func_name)
+        checker = cast(StringChecker, getattr(module, func_name))
+        if not callable(checker):
+            raise TypeError(f"Checker '{function_path}' is not callable")
+        return checker
 
     async def _get_node_config(
         self, input_config: InputConfig, execution_state: ExecutionState | None = None
@@ -514,9 +553,9 @@ class TestRunner:
             )
             node_dict = nodes_map.get(node_id)
             if node_dict is not None:
-                config = dict(node_dict)
-                config.setdefault("node_id", node_id)
-                return NodeConfig(**config)
+                config = require_json_object(node_dict, f"flow.nodes.{node_id}")
+                config["node_id"] = node_id
+                return NodeConfig.model_validate(config)
 
         if node_id:
             if self._node_repository is None:
@@ -526,8 +565,8 @@ class TestRunner:
                 return node_config
 
         raise ValueError(
-            f"node config is required for NODE input type: "
-            f"neither 'node' inline config nor flow node '{node_id}' found"
+            "node config is required for NODE input type: "
+            + f"neither 'node' inline config nor flow node '{node_id}' found"
         )
 
     async def _invoke_node(
@@ -544,33 +583,33 @@ class TestRunner:
         if last_message and not messages:
             llm_messages.append({"role": "user", "content": last_message})
 
-        tools_for_llm = None
+        tools_for_llm: list[JsonObject] | None = None
         if node_config.tools:
             if self._tool_registry is None:
                 raise ValueError("tool_registry is required for NODE evaluation tools")
             tools = await self._tool_registry.create_tools(node_config.tools)
-            tools_for_llm = [tool.to_llm_format() for tool in tools]
+            tools_for_llm = [tool.to_openai_schema() for tool in tools]
 
         request_ctx = get_context()
         if request_ctx is None:
             raise ValueError(
                 "Для evaluation LLM нужен Context запроса (user, active_company). "
-                "Запуск evaluation tester/judge только из обработчика с установленным контекстом."
+                + "Запуск evaluation tester/judge только из обработчика с установленным контекстом."
             )
         result = await self._invoke_evaluation_llm(
             messages=llm_messages,
             tools=tools_for_llm,
             task_id=str(uuid.uuid4()),
             context_id="evaluation",
-            llm_context=node_config.llm_context or {"profile": "compact"},
+            llm_context=node_config.llm_context or LLMContextPatch(profile="compact"),
         )
 
-        return result.get("content", "").strip()
+        return result.content.strip()
 
     async def _judge_dialog(
         self,
         check_config: CheckConfig | None,
-        dialog: list[dict[str, Any]],
+        dialog: list[EvaluationDialogMessage],
         execution_state: ExecutionState | None = None,
     ) -> tuple[ScoresType, str | None, bool]:
         """Вызывает агента-судью для оценки диалога."""
@@ -579,7 +618,7 @@ class TestRunner:
 
         judge_config = await self._get_judge_config(check_config, execution_state)
 
-        dialog_text = "\n".join(f"{msg['role'].upper()}: {msg['content']}" for msg in dialog)
+        dialog_text = "\n".join(f"{msg.role.upper()}: {msg.content}" for msg in dialog)
 
         judge_prompt = judge_config.prompt or "Оцени диалог от 0 до 10."
         system_message = f"""{judge_prompt}
@@ -588,37 +627,40 @@ class TestRunner:
 {dialog_text}
 
 Верни JSON:
-{{"scores": {{"quality": 8}}, "passed": true, "feedback": "..."}}
+{{"scores": {{"quality": 8}}, "total_score": 8, "passed": true, "feedback": "..."}}
 """
 
         request_ctx = get_context()
         if request_ctx is None:
             raise ValueError(
                 "Для evaluation LLM нужен Context запроса (user, active_company). "
-                "Запуск evaluation tester/judge только из обработчика с установленным контекстом."
+                + "Запуск evaluation tester/judge только из обработчика с установленным контекстом."
             )
         result = await self._invoke_evaluation_llm(
             messages=[{"role": "user", "content": system_message}],
             tools=None,
             task_id=str(uuid.uuid4()),
             context_id="evaluation",
-            llm_context=judge_config.llm_context or {"profile": "compact"},
+            llm_context=judge_config.llm_context or LLMContextPatch(profile="compact"),
         )
 
-        response_text = result.get("content", "")
+        response_text = result.content
 
         start = response_text.find("{")
         end = response_text.rfind("}") + 1
         if start >= 0 and end > start:
-            judge_result = json.loads(response_text[start:end])
-            scores = judge_result.get("scores", {})
-            if not scores:
-                scores = {"result": 10.0 if judge_result.get("passed", True) else 0.0}
+            judge_result = EvaluationJudgeResult.model_validate(
+                parse_json_object(response_text[start:end], "evaluation.judge_response")
+            )
+            if judge_result.scores:
+                scores = self._normalize_check_result(judge_result.scores)
             else:
-                scores = self._normalize_check_result(scores)
-            feedback = judge_result.get("feedback")
-            passed = judge_result.get("passed", self._scores_passed(scores))
-            return scores, feedback, passed
+                judge_passed = True if judge_result.passed is None else judge_result.passed
+                scores = {"result": 10.0 if judge_passed else 0.0}
+            passed = judge_result.passed
+            if passed is None:
+                passed = self._scores_passed(scores)
+            return scores, judge_result.feedback, passed
 
         raise ValueError(f"Judge response is not valid JSON: {response_text}")
 
@@ -626,15 +668,15 @@ class TestRunner:
         self,
         *,
         messages: list[dict[str, str]],
-        tools: list[dict[str, Any]] | None,
+        tools: list[JsonObject] | None,
         task_id: str,
         context_id: str,
-        llm_context: Any | None = None,
-    ) -> dict[str, Any]:
+        llm_context: LLMContextPatch | None = None,
+    ) -> EvaluationLLMResponse:
         actx = get_context()
         if actx is None or actx.active_company is None:
             raise ValueError("Контекст с active_company обязателен для evaluation LLM")
-        if actx.user is None or not str(actx.user.user_id).strip():
+        if not str(actx.user.user_id).strip():
             raise ValueError("Контекст с user обязателен для evaluation LLM")
 
         uid = str(actx.user.user_id).strip()
@@ -642,7 +684,7 @@ class TestRunner:
         if resolved is None:
             raise ValueError(
                 "evaluation LLM требует company override для capability=llm_chat; "
-                "скрытый fallback на settings.llm.default_model запрещён"
+                + "скрытый fallback на settings.llm.default_model запрещён"
             )
         llm = get_llm(
             model_name=resolved.model,
@@ -678,7 +720,7 @@ class TestRunner:
         ) as span:
             content_parts: list[str] = []
             reasoning_parts: list[str] = []
-            tool_calls = None
+            tool_calls: list[LLMToolCall] | None = None
             input_tokens = 0
             output_tokens = 0
 
@@ -700,15 +742,40 @@ class TestRunner:
                                 else:
                                     content_parts.append(text)
                     continue
-                if isinstance(event, TaskStatusUpdateEvent):
-                    if event.status.message and event.status.message.metadata:
-                        tc = event.status.message.metadata.get("tool_calls")
-                        if tc:
-                            tool_calls = tc
-                        usage = event.status.message.metadata.get("usage")
-                        if usage:
-                            input_tokens = usage.get("input_tokens", 0)
-                            output_tokens = usage.get("output_tokens", 0)
+                if event.status.message and event.status.message.metadata:
+                    metadata = require_json_object(
+                        event.status.message.metadata,
+                        "evaluation.llm_event.metadata",
+                    )
+                    raw_tool_calls = metadata.get("tool_calls")
+                    if raw_tool_calls is not None:
+                        if not isinstance(raw_tool_calls, list):
+                            raise ValueError("evaluation.llm_event.metadata.tool_calls must be a list")
+                        parsed_tool_calls: list[LLMToolCall] = []
+                        for index, item in enumerate(raw_tool_calls):
+                            if not isinstance(item, dict):
+                                raise ValueError(
+                                    "evaluation.llm_event.metadata.tool_calls"
+                                    + f"[{index}] must be an object"
+                                )
+                            parsed_tool_calls.append(LLMToolCall.model_validate(item))
+                        tool_calls = parsed_tool_calls
+
+                    raw_usage = metadata.get("usage")
+                    if raw_usage is not None:
+                        usage = require_json_object(raw_usage, "evaluation.llm_event.metadata.usage")
+                        raw_input_tokens = usage.get("input_tokens", 0)
+                        raw_output_tokens = usage.get("output_tokens", 0)
+                        if not isinstance(raw_input_tokens, int) or isinstance(raw_input_tokens, bool):
+                            raise ValueError(
+                                "evaluation.llm_event.metadata.usage.input_tokens must be an int"
+                            )
+                        if not isinstance(raw_output_tokens, int) or isinstance(raw_output_tokens, bool):
+                            raise ValueError(
+                                "evaluation.llm_event.metadata.usage.output_tokens must be an int"
+                            )
+                        input_tokens = raw_input_tokens
+                        output_tokens = raw_output_tokens
 
             total_tokens = input_tokens + output_tokens
             if total_tokens > 0:
@@ -716,11 +783,11 @@ class TestRunner:
                 span.set_attribute(trace_attributes.ATTR_LLM_INPUT_TOKENS, input_tokens)
                 span.set_attribute(trace_attributes.ATTR_LLM_OUTPUT_TOKENS, output_tokens)
 
-            return {
-                "content": "".join(content_parts),
-                "reasoning": "".join(reasoning_parts) if reasoning_parts else None,
-                "tool_calls": tool_calls,
-            }
+            return EvaluationLLMResponse(
+                content="".join(content_parts),
+                reasoning="".join(reasoning_parts) if reasoning_parts else None,
+                tool_calls=tool_calls,
+            )
 
     async def _get_judge_config(
         self, check_config: CheckConfig, execution_state: ExecutionState | None = None
@@ -740,9 +807,9 @@ class TestRunner:
             )
             node_dict = nodes_map.get(node_id)
             if node_dict is not None:
-                config = dict(node_dict)
-                config.setdefault("node_id", node_id)
-                return NodeConfig(**config)
+                config = require_json_object(node_dict, f"flow.nodes.{node_id}")
+                config["node_id"] = node_id
+                return NodeConfig.model_validate(config)
 
         if node_id:
             if self._node_repository is None:
@@ -752,25 +819,29 @@ class TestRunner:
                 return node_config
 
         raise ValueError(
-            f"node config is required for NODE check type: "
-            f"neither 'node' inline config nor flow node '{node_id}' found"
+            "node config is required for NODE check type: "
+            + f"neither 'node' inline config nor flow node '{node_id}' found"
         )
 
-    def _scores_passed(self, scores: ScoresType) -> bool:
+    def _scores_passed(self, scores: EvaluationScores) -> bool:
         """Все scores должны быть >= 5.0."""
         for v in scores.values():
-            if isinstance(v, (int, float)) and v < 5.0:
+            if isinstance(v, bool):
+                if not v:
+                    return False
+            elif v < 5.0:
                 return False
         return True
 
-    def _detect_loop(self, dialog: list[dict[str, Any]]) -> bool:
+    def _detect_loop(self, dialog: list[EvaluationDialogMessage]) -> bool:
         """Определяет зацикливание в диалоге."""
         if len(dialog) < LOOP_DETECTION_WINDOW * 2:
             return False
 
-        recent = [m["content"] for m in dialog[-LOOP_DETECTION_WINDOW:]]
+        recent = [message.content for message in dialog[-LOOP_DETECTION_WINDOW:]]
         previous = [
-            m["content"] for m in dialog[-LOOP_DETECTION_WINDOW * 2 : -LOOP_DETECTION_WINDOW]
+            message.content
+            for message in dialog[-LOOP_DETECTION_WINDOW * 2 : -LOOP_DETECTION_WINDOW]
         ]
 
         return recent == previous

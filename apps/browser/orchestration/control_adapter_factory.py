@@ -4,14 +4,13 @@
 
 from __future__ import annotations
 
-from typing import Literal, Protocol
+from typing import Protocol, assert_never
 
 from apps.browser.adapters.playwright_control_adapter import PlaywrightAdapter
 from apps.browser.adapters.stub_control_adapters import AgentBrowserAdapter, BrowserUseAdapter
 from apps.browser.contracts.control import BrowserControlAdapter
 from apps.browser.engine.playwright_interactor import PlaywrightBrowserInteractor
-
-ControlBackendName = Literal["playwright", "browser_use", "agent_browser"]
+from apps.browser.engine.types import ControlBackend
 
 
 class BrowserControlRuntime(Protocol):
@@ -20,7 +19,7 @@ class BrowserControlRuntime(Protocol):
 
 def build_browser_control_adapter(
     *,
-    backend: ControlBackendName,
+    backend: ControlBackend,
     facade: BrowserControlRuntime,
 ) -> BrowserControlAdapter:
     if backend == "playwright":
@@ -29,4 +28,4 @@ def build_browser_control_adapter(
         return BrowserUseAdapter()
     if backend == "agent_browser":
         return AgentBrowserAdapter()
-    raise ValueError(f"Неизвестный control backend: {backend}")
+    assert_never(backend)

@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from core.types import JsonObject
 
@@ -54,6 +57,10 @@ class BrowserCapabilityError(Exception):
     - Стоит: во всех адаптерах для контролируемых ошибок поддержки capability.
     """
 
+    code: str
+    message: str
+    details: JsonObject
+
     def __init__(
         self,
         code: str,
@@ -72,3 +79,23 @@ class BrowserCapabilityError(Exception):
             "message": self.message,
             "details": self.details,
         }
+
+
+class ControlPointerClickBody(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    x: float = Field(ge=0)
+    y: float = Field(ge=0)
+    image_width: float = Field(gt=0)
+    image_height: float = Field(gt=0)
+    button: Literal["left", "right", "middle"] = "left"
+    click_count: int = Field(default=1, ge=1, le=3)
+
+
+class ControlSessionStatusResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    session_id: str
+    url: str
+    title: str
+    closed: bool = False

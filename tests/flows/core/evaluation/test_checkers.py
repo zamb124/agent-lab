@@ -15,9 +15,10 @@ from datetime import date
 import pytest
 
 from apps.flows.src.evaluation.runners.test_runner import TestRunner
+from core.state import ExecutionState
 
 
-async def _noop_callable(state):
+async def _noop_callable(state: ExecutionState) -> ExecutionState:
     return state
 
 

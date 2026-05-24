@@ -23,7 +23,7 @@ Zero-Guess: при отсутствии активной компании в req
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 from apps.flows.src.services.flow_speech_resolve import (
     load_flow_speech_layers_from_context_metadata,
@@ -34,11 +34,15 @@ from core.clients.voice_resolver import get_stt_client
 from core.context import get_context
 from core.files.types import FileCategory, ext_to_category, mime_to_category
 from core.logging import get_logger
+from core.types import JsonObject
+
+if TYPE_CHECKING:
+    from apps.flows.src.container_contracts import FlowRuntimeContainer
 
 logger = get_logger(__name__)
 
 
-def _is_audio_item(item: dict[str, Any]) -> bool:
+def _is_audio_item(item: JsonObject) -> bool:
     """Определяет категорию AUDIO по content_type, иначе по расширению `original_name`."""
     content_type = item.get("content_type")
     if isinstance(content_type, str) and content_type.strip():
@@ -55,7 +59,7 @@ def _is_audio_item(item: dict[str, Any]) -> bool:
 
 async def _read_persisted_audio_bytes(
     *,
-    container: Any,
+    container: "FlowRuntimeContainer",
     file_id: str,
 ) -> tuple[bytes, str, str]:
     """
@@ -75,8 +79,8 @@ async def _read_persisted_audio_bytes(
 
 async def transcribe_incoming_audio_files(
     *,
-    container: Any,
-    files_data: list[dict[str, Any]],
+    container: "FlowRuntimeContainer",
+    files_data: list[JsonObject],
     company_id: str,
     language: str | None = None,
 ) -> str:
@@ -90,7 +94,7 @@ async def transcribe_incoming_audio_files(
     if company_id == "":
         raise ValueError("transcribe_incoming_audio_files: company_id обязателен.")
 
-    audio_items: list[dict[str, Any]] = [
+    audio_items: list[JsonObject] = [
         item for item in files_data if _is_audio_item(item)
     ]
     if not audio_items:
@@ -104,9 +108,7 @@ async def transcribe_incoming_audio_files(
     if language:
         merged = merged.model_copy(update={"language": language})
     elif ctx is not None and merged.language is None:
-        lv = ctx.language.value if ctx.language is not None else None
-        if lv:
-            merged = merged.model_copy(update={"language": lv})
+        merged = merged.model_copy(update={"language": ctx.language.value})
     stt = await get_stt_client(company_id=company_id, override=merged)
 
     parts: list[str] = []

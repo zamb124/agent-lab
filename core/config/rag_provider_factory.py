@@ -10,27 +10,28 @@ CleanFirst: легаси singleton ``_default_rag_provider`` / ``get_default_rag
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Literal, cast
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
 
 from core.company_ai.resolver import resolve_embedding_for_company
 from core.config.base import BaseSettings, get_settings
-from core.config.models import LLMConfig, ProviderLitserveConfig
+from core.config.models import RAGProviderConfig
 from core.context import get_context
 from core.logging import get_logger
-from core.rag.embedding_runtime import build_rag_embedding_runtime_dict
+from core.rag.embedding_runtime import RagEmbeddingRuntime, resolve_rag_embedding_runtime
 from core.rag.providers.agentset_provider import AgentsetRAGProvider
 from core.rag.providers.pgvector_provider import PgVectorProvider
+from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:
     from core.rag.base_provider import BaseRAGProvider
 
 logger = get_logger(__name__)
-_providers_cache: dict[str, type[Any]] | None = None
-_provider_instances_cache: dict[str, Any] = {}
+_providers_cache: dict[str, type["BaseRAGProvider"]] | None = None
+_provider_instances_cache: dict[str, "BaseRAGProvider"] = {}
 
 
-def _providers() -> dict[str, type[Any]]:
+def _providers() -> dict[str, type["BaseRAGProvider"]]:
     global _providers_cache
     if _providers_cache is None:
         _providers_cache = {
@@ -40,7 +41,7 @@ def _providers() -> dict[str, type[Any]]:
     return _providers_cache
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> dict[str, type["BaseRAGProvider"]]:
     if name == "RAG_PROVIDERS":
         return _providers()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -51,8 +52,8 @@ class ResolvedRagProvider:
     """Ключ провайдера, ``model_dump`` провайдера и runtime эмбеддингов (только ``pgvector``)."""
 
     provider_key: str
-    provider_config: dict[str, Any]
-    embedding_runtime: Any | None
+    provider_config: RAGProviderConfig
+    embedding_runtime: RagEmbeddingRuntime | None
 
 
 def resolve_rag_provider_bundle(
@@ -61,11 +62,11 @@ def resolve_rag_provider_bundle(
 ) -> ResolvedRagProvider:
     rag = settings.rag
     key = rag.get_enabled_provider_key(provider_name)
-    provider_config = dict(rag.providers[key].model_dump())
-    embedding_runtime: Any | None = None
+    provider_config = rag.providers[key]
+    embedding_runtime: RagEmbeddingRuntime | None = None
     if key == "pgvector":
-        llm = getattr(settings, "llm", None) or LLMConfig()
-        pls = getattr(settings, "provider_litserve", None) or ProviderLitserveConfig()
+        llm = settings.llm
+        pls = settings.provider_litserve
         emb = rag.embedding
         if provider_name is None:
             ctx = get_context()
@@ -85,7 +86,7 @@ def resolve_rag_provider_bundle(
                         emb_copy.api.base_url = resolved.base_url
                     emb = emb_copy
 
-        embedding_runtime = build_rag_embedding_runtime_dict(emb, llm, pls)
+        embedding_runtime = resolve_rag_embedding_runtime(emb, llm, pls)
     return ResolvedRagProvider(
         provider_key=key,
         provider_config=provider_config,
@@ -94,13 +95,22 @@ def resolve_rag_provider_bundle(
 
 
 def _bundle_cache_key(bundle: ResolvedRagProvider) -> str:
-    embedding_runtime: Any = bundle.embedding_runtime
-    if embedding_runtime is not None and is_dataclass(embedding_runtime):
-        embedding_runtime = asdict(cast(Any, embedding_runtime))
-    payload = {
+    embedding_runtime_payload: JsonObject | None = None
+    if bundle.embedding_runtime is not None:
+        embedding_runtime_payload = {
+            "provider": bundle.embedding_runtime.provider,
+            "model": bundle.embedding_runtime.model,
+            "dimension": bundle.embedding_runtime.dimension,
+            "base_url": bundle.embedding_runtime.base_url,
+            "mrl_output_dimension": bundle.embedding_runtime.mrl_output_dimension,
+        }
+    payload: JsonObject = {
         "provider_key": bundle.provider_key,
-        "provider_config": bundle.provider_config,
-        "embedding_runtime": embedding_runtime,
+        "provider_config": require_json_object(
+            bundle.provider_config.model_dump(mode="json"),
+            "RAG provider config",
+        ),
+        "embedding_runtime": embedding_runtime_payload,
     }
     return json.dumps(payload, sort_keys=True, ensure_ascii=True)
 
@@ -133,9 +143,9 @@ def get_rag_provider(
 
     provider_class = registry[bundle.provider_key]
     if bundle.provider_key == "pgvector":
-        instance = provider_class(
+        instance = PgVectorProvider(
             bundle.provider_config,
-            embedding_config=bundle.embedding_runtime,
+            embedding_runtime=bundle.embedding_runtime,
         )
     else:
         instance = provider_class(bundle.provider_config)

@@ -1148,9 +1148,10 @@ export class FlowsChatMessage extends PlatformElement {
             <div class="files-container">
                 ${meta.map((file) => {
                     const name = asString(file?.name) || asString(file?.original_name) || this._label('download_file', 'Download');
+                    const mimeType = asString(file?.content_type || file?.mime_type);
                     return html`
                         <div class="file-item">
-                            <platform-icon name="file" size="20"></platform-icon>
+                            <platform-icon file-icon name=${resolveFileIconKey(name, mimeType)} size="20"></platform-icon>
                             <div class="file-name">${name}</div>
                         </div>
                     `;
@@ -1211,7 +1212,7 @@ export class FlowsChatMessage extends PlatformElement {
                         class="file-item"
                         @click=${() => this.openFile(fid, { source: 'flows_chat_operator_file' })}
                     >
-                        <platform-icon name="file" size="20"></platform-icon>
+                        <platform-icon file-icon name="text" size="20"></platform-icon>
                         <div>
                             <div class="file-name">${this._label('operator_files', 'Attached files')}</div>
                         </div>

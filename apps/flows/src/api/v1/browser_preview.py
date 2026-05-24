@@ -4,22 +4,29 @@ from __future__ import annotations
 
 import html
 import json
-from typing import Any, Literal
+from typing import Annotated, Literal
 from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
 
+from apps.browser.contracts.control_types import (
+    ControlPointerClickBody,
+    ControlSessionStatusResponse,
+)
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
-from apps.flows.src.services.browser_preview import verify_browser_preview_token
+from apps.flows.src.services.browser_preview import (
+    BrowserPreviewTokenClaims,
+    verify_browser_preview_token,
+)
 from core.http import ProxyStrategy, get_httpx_client
+from core.types import JsonObject, parse_json_object, require_json_object
 
 router = APIRouter(tags=["browser-preview"])
 
 
-def _verify_token_or_403(*, token: str, session_id: str) -> dict[str, Any]:
+def _verify_token_or_403(*, token: str, session_id: str) -> BrowserPreviewTokenClaims:
     try:
         return verify_browser_preview_token(token=token, session_id=session_id)
     except ValueError as exc:
@@ -36,15 +43,15 @@ async def _browser_get(
     session_id: str,
     suffix: str,
     *,
-    params: dict[str, Any] | None = None,
+    params: dict[str, str] | None = None,
     timeout: float = 8.0,
 ) -> httpx.Response:
     async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.DIRECT_ONLY) as client:
         response = await client.get(
             _browser_control_url(session_id, suffix),
-            params=params or {},
+            params=params,
         )
-        await response.aread()
+        _ = await response.aread()
         return response
 
 
@@ -52,7 +59,7 @@ async def _browser_post(
     session_id: str,
     suffix: str,
     *,
-    json_body: dict[str, Any],
+    json_body: JsonObject,
     timeout: float = 8.0,
 ) -> httpx.Response:
     async with get_httpx_client(timeout=timeout, strategy=ProxyStrategy.DIRECT_ONLY) as client:
@@ -60,7 +67,7 @@ async def _browser_post(
             _browser_control_url(session_id, suffix),
             json=json_body,
         )
-        await response.aread()
+        _ = await response.aread()
         return response
 
 
@@ -71,31 +78,20 @@ def _raise_upstream_error(response: httpx.Response) -> None:
     raise HTTPException(status_code=response.status_code, detail=detail)
 
 
-class BrowserPreviewClickBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    x: float = Field(ge=0)
-    y: float = Field(ge=0)
-    image_width: float = Field(gt=0)
-    image_height: float = Field(gt=0)
-    button: Literal["left", "right", "middle"] = "left"
-    click_count: int = Field(default=1, ge=1, le=3)
-
-
 @router.get("/sessions/{session_id}/status")
 async def browser_preview_status(
     session_id: str,
-    token: str = Query(...),
+    token: Annotated[str, Query()],
 ) -> JSONResponse:
-    _verify_token_or_403(token=token, session_id=session_id)
+    _ = _verify_token_or_403(token=token, session_id=session_id)
     response = await _browser_get(session_id, "status", timeout=5.0)
     _raise_upstream_error(response)
     try:
-        payload = response.json()
-    except json.JSONDecodeError as exc:
+        status = ControlSessionStatusResponse.model_validate_json(response.text)
+    except ValueError as exc:
         raise HTTPException(status_code=502, detail="browser status returned invalid json") from exc
     return JSONResponse(
-        content=payload,
+        content=require_json_object(status.model_dump(mode="json"), "browser status response"),
         headers={"Cache-Control": "no-store, max-age=0"},
     )
 
@@ -103,26 +99,28 @@ async def browser_preview_status(
 @router.get("/sessions/{session_id}/screenshot")
 async def browser_preview_screenshot(
     session_id: str,
-    token: str = Query(...),
-    image_format: Literal["jpeg", "png"] = Query(default="jpeg", alias="format"),
-    quality: int = Query(default=70, ge=1, le=100),
-    full_page: bool = Query(default=False),
+    token: Annotated[str, Query()],
+    image_format: Annotated[Literal["jpeg", "png"], Query(alias="format")] = "jpeg",
+    quality: Annotated[int, Query(ge=1, le=100)] = 70,
+    full_page: Annotated[bool, Query()] = False,
 ) -> Response:
-    _verify_token_or_403(token=token, session_id=session_id)
+    _ = _verify_token_or_403(token=token, session_id=session_id)
     response = await _browser_get(
         session_id,
         "screenshot",
         params={
             "format": image_format,
-            "quality": quality,
+            "quality": str(quality),
             "full_page": str(full_page).lower(),
         },
         timeout=10.0,
     )
     _raise_upstream_error(response)
+    response_headers = dict(response.headers.items())
+    media_type = response_headers.get("content-type") or f"image/{image_format}"
     return Response(
         content=response.content,
-        media_type=response.headers.get("content-type", f"image/{image_format}"),
+        media_type=media_type,
         headers={
             "Cache-Control": "no-store, max-age=0",
             "Pragma": "no-cache",
@@ -133,20 +131,20 @@ async def browser_preview_screenshot(
 @router.post("/sessions/{session_id}/click")
 async def browser_preview_click(
     session_id: str,
-    body: BrowserPreviewClickBody,
-    token: str = Query(...),
+    body: ControlPointerClickBody,
+    token: Annotated[str, Query()],
 ) -> JSONResponse:
-    _verify_token_or_403(token=token, session_id=session_id)
+    _ = _verify_token_or_403(token=token, session_id=session_id)
     response = await _browser_post(
         session_id,
         "pointer/click",
-        json_body=body.model_dump(),
+        json_body=require_json_object(body.model_dump(mode="json"), "browser pointer click body"),
         timeout=10.0,
     )
     _raise_upstream_error(response)
     try:
-        payload = response.json()
-    except json.JSONDecodeError as exc:
+        payload = parse_json_object(response.text, "browser pointer click response")
+    except ValueError as exc:
         raise HTTPException(status_code=502, detail="browser click returned invalid json") from exc
     return JSONResponse(
         content=payload,
@@ -157,9 +155,9 @@ async def browser_preview_click(
 @router.get("/sessions/{session_id}/viewer", response_class=HTMLResponse)
 async def browser_preview_viewer(
     session_id: str,
-    token: str = Query(...),
+    token: Annotated[str, Query()],
 ) -> HTMLResponse:
-    _verify_token_or_403(token=token, session_id=session_id)
+    _ = _verify_token_or_403(token=token, session_id=session_id)
     api_prefix_json = json.dumps(FLOWS_PUBLIC_API_PREFIX)
     token_json = json.dumps(token)
     sid_json = json.dumps(session_id)

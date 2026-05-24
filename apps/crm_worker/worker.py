@@ -65,6 +65,7 @@ async def crm_worker_startup(state: TaskiqState) -> None:
 
 
 async def crm_worker_shutdown(state: TaskiqState) -> None:
+    _ = state
     await notification_manager.stop_redis_listener()
     logger.info("worker.stopping", service="crm_worker")
 

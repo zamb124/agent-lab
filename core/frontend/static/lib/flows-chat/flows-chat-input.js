@@ -4,7 +4,9 @@ import {
     TTS_OUTPUT_CHANGED_EVENT,
     TTS_OUTPUT_STORAGE_KEY,
 } from '../voice/tts-output-pref.js';
+import '../components/platform-icon.js';
 import { formatFileSize } from '../utils/format-file-size.js';
+import { resolveFileIconKey } from '../utils/file-icons.js';
 
 function _label(labels, key, fallback) {
     const source = labels && typeof labels === 'object' ? labels : {};
@@ -617,7 +619,7 @@ export class FlowsChatInput extends LitElement {
             <div class="files-preview" role="list" aria-label=${this._l('attach', 'Attachments')}>
                 ${this._selectedFiles.map((file, index) => html`
                     <div class="file-item" role="listitem">
-                        <span class="file-icon">${_icon('attach')}</span>
+                        <platform-icon class="file-icon" file-icon name=${resolveFileIconKey(file.name, file.type)} size="20"></platform-icon>
                         <span class="file-info">
                             <span class="file-name" title=${file.name}>${file.name}</span>
                             <span class="file-size">${formatFileSize(file.size)}</span>

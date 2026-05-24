@@ -2,9 +2,9 @@
 Модели для сервиса документации.
 """
 
-from typing import Any
-
 from pydantic import BaseModel, Field
+
+from core.types import JsonObject
 
 
 class PlatformToolDoc(BaseModel):
@@ -117,8 +117,8 @@ class CodeTemplate(BaseModel):
     node_type: str = "tool"  # tool или function
     tags: list[str] | None = None
     language: str = "python"
-    args_schema: dict[str, Any] | None = None
-    parameters_schema: dict[str, Any] | None = None
+    args_schema: JsonObject | None = None
+    parameters_schema: JsonObject | None = None
 
 
 class DocumentationResponse(BaseModel):

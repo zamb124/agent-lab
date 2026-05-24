@@ -64,6 +64,7 @@ import {
 import { NOTE_ROOT_ENTITY_TYPE_ID } from '../constants/entity-type-ids.js';
 import { getUserMediaCompat, hasGetUserMediaApi, pickVoiceMimeType } from '@platform/lib/utils/voice-recording.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
+import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { escapeHtml as _escapeHtmlCanon } from '@platform/lib/utils/escape-html.js';
 import { formatPlatformDate, formatPlatformTime } from '@platform/lib/utils/format-platform-date.js';
 import { stripOuterMarkdownCodeFence } from '@platform/lib/utils/strip-outer-markdown-fence.js';
@@ -132,50 +133,8 @@ function formatBytes(value) {
     return formatFileSize(value);
 }
 
-function _getFileExtension(filename) {
-    if (typeof filename !== 'string') {
-        return '';
-    }
-    const trimmed = filename.trim().toLowerCase();
-    const dotIndex = trimmed.lastIndexOf('.');
-    if (dotIndex <= 0 || dotIndex === trimmed.length - 1) {
-        return '';
-    }
-    return trimmed.slice(dotIndex + 1);
-}
-
 function _resolveAttachmentIconName(filename, contentType) {
-    const ext = _getFileExtension(filename);
-    const mime = typeof contentType === 'string' ? contentType.toLowerCase() : '';
-    if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'heic'].includes(ext)) {
-        return 'image';
-    }
-    if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'].includes(ext)) {
-        return 'microphone';
-    }
-    if (mime.startsWith('video/') || ['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) {
-        return 'play';
-    }
-    if (['xls', 'xlsx', 'csv'].includes(ext)) {
-        return 'chart';
-    }
-    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
-        return 'box';
-    }
-    if (mime === 'application/pdf' || ext === 'pdf') {
-        return 'doc-detail';
-    }
-    if ([
-        'doc', 'docx', 'txt', 'rtf', 'md', 'odt', 'ppt', 'pptx',
-    ].includes(ext)) {
-        return 'text-fields';
-    }
-    if ([
-        'json', 'xml', 'yaml', 'yml', 'py', 'js', 'ts', 'tsx', 'jsx', 'html', 'css', 'sql',
-    ].includes(ext)) {
-        return 'code';
-    }
-    return 'paperclip';
+    return resolveFileIconKey(filename, contentType);
 }
 
 
@@ -327,7 +286,7 @@ export class CRMNoteCardView extends PlatformElement {
                 font-weight: 700;
                 color: var(--text-primary);
                 word-break: break-word;
-                font-family: 'Inter', var(--font-sans);
+                font-family: var(--font-sans);
             }
             .title-input {
                 margin: 0;
@@ -341,7 +300,7 @@ export class CRMNoteCardView extends PlatformElement {
                 border-bottom: 1px dashed var(--crm-stroke);
                 padding: 2px 0;
                 outline: none;
-                font-family: 'Inter', var(--font-sans);
+                font-family: var(--font-sans);
             }
             .title-input:focus { border-bottom-color: var(--accent); }
             .note-date {
@@ -417,9 +376,14 @@ export class CRMNoteCardView extends PlatformElement {
                 padding: 8px;
                 border-radius: var(--radius-md);
                 background: transparent;
+                cursor: pointer;
             }
             .attachments-popover-row:hover {
                 background: var(--crm-note-action-bg);
+            }
+            .attachments-popover-row:focus-visible {
+                outline: 2px solid var(--accent);
+                outline-offset: 2px;
             }
             .attachments-popover-info {
                 min-width: 0;
@@ -673,7 +637,7 @@ export class CRMNoteCardView extends PlatformElement {
             .markdown h1, .markdown h2, .markdown h3, .markdown h4 {
                 margin: 24px 0 8px 0;
                 color: var(--text-primary);
-                font-family: 'Inter', var(--font-sans);
+                font-family: var(--font-sans);
             }
             .markdown h1 { font-size: 28px; line-height: 34px; }
             .markdown h2 { font-size: 24px; line-height: 30px; }
@@ -778,7 +742,7 @@ export class CRMNoteCardView extends PlatformElement {
                 line-height: 26px;
                 font-weight: 700;
                 color: var(--text-primary);
-                font-family: 'Inter', var(--font-sans);
+                font-family: var(--font-sans);
                 display: inline-flex;
                 align-items: center;
                 gap: var(--space-2);
@@ -3014,6 +2978,12 @@ export class CRMNoteCardView extends PlatformElement {
         }
     }
 
+    _onAttachmentRowKeydown(event, item) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        this._openAttachmentItem(item);
+    }
+
     _onDeleteViewAttachment(attachmentId) {
         if (!this.note || typeof this.note.entity_id !== 'string' || this.note.entity_id.length === 0) {
             throw new Error('CRMNoteCardView._onDeleteViewAttachment: note entity_id required');
@@ -3080,8 +3050,14 @@ export class CRMNoteCardView extends PlatformElement {
         if (item.status.length > 0) metaParts.push(item.status);
         const metaText = metaParts.join(' · ');
         return html`
-            <div class="attachments-popover-row">
-                <platform-icon name=${iconName} size="16"></platform-icon>
+            <div
+                class="attachments-popover-row"
+                role="button"
+                tabindex="0"
+                @click=${() => this._openAttachmentItem(item)}
+                @keydown=${(event) => this._onAttachmentRowKeydown(event, item)}
+            >
+                <platform-icon file-icon name=${iconName} size="16"></platform-icon>
                 <div class="attachments-popover-info">
                     <p class="attachments-popover-name">${item.filename}</p>
                     <p class="attachments-popover-meta">${metaText}</p>
@@ -3092,7 +3068,10 @@ export class CRMNoteCardView extends PlatformElement {
                             type="button"
                             class="attachment-action-btn"
                             title=${this.t('note_view.download')}
-                            @click=${() => this._openAttachmentItem(item)}
+                            @click=${(event) => {
+                                event.stopPropagation();
+                                this._openAttachmentItem(item);
+                            }}
                         >
                             <platform-icon name="import" size="14"></platform-icon>
                         </button>
@@ -3104,9 +3083,14 @@ export class CRMNoteCardView extends PlatformElement {
                             title=${mode === 'edit'
                                 ? this.t('note_edit.attachment_remove')
                                 : this.t('note_view.attachment_remove')}
-                            @click=${() => mode === 'edit'
-                                ? this._onDeleteEditAttachment(item.id)
-                                : this._onDeleteViewAttachment(item.id)}
+                            @click=${(event) => {
+                                event.stopPropagation();
+                                if (mode === 'edit') {
+                                    this._onDeleteEditAttachment(item.id);
+                                } else {
+                                    this._onDeleteViewAttachment(item.id);
+                                }
+                            }}
                         >
                             <platform-icon name="trash" size="14"></platform-icon>
                         </button>

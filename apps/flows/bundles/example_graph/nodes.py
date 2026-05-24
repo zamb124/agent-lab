@@ -1,15 +1,16 @@
 """Функции для example_graph flow."""
 
-from typing import Any
+from core.types import JsonObject
 
 
-def format_response(state: dict[str, Any]) -> dict[str, Any]:
+def format_response(state: JsonObject) -> JsonObject:
     """Форматирует финальный ответ.
 
     Добавляет метаданные о маршруте обработки.
     Проверяет разные поля state в зависимости от маршрута.
     """
-    route = state.get("route", "unknown")
+    route_raw = state.get("route")
+    route = route_raw if isinstance(route_raw, str) else "unknown"
 
     # Проверяем возможные поля в зависимости от маршрута
     possible_fields = {
@@ -33,4 +34,3 @@ def format_response(state: dict[str, Any]) -> dict[str, Any]:
     state["processed"] = True
 
     return state
-

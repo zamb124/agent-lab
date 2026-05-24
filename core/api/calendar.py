@@ -5,7 +5,7 @@ API платформенного календаря.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, NoReturn
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -20,6 +20,7 @@ from core.models import (
     CalendarEventUpsertPayload,
     CalendarIntegration,
     CalendarIntegrationConnectPayload,
+    CalendarIntegrationSettings,
     CalendarProvider,
 )
 from core.pagination import ListResponse
@@ -54,7 +55,7 @@ class CalendarIntegrationPublic(BaseModel):
     company_id: str
     user_id: str
     provider: CalendarProvider
-    settings: dict[str, Any]
+    settings: CalendarIntegrationSettings
     created_at: datetime
     updated_at: datetime
 
@@ -70,7 +71,7 @@ def _to_public_integration(integration: CalendarIntegration) -> CalendarIntegrat
         company_id=integration.company_id,
         user_id=integration.user_id,
         provider=integration.provider,
-        settings=integration.settings.model_dump(mode="json"),
+        settings=integration.settings,
         created_at=integration.created_at,
         updated_at=integration.updated_at,
     )
@@ -165,7 +166,6 @@ async def delete_calendar_event(event_id: str, service: CalendarServiceDep) -> d
     try:
         await service.delete_event(
             event_id=event_id,
-            user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
         )
     except Exception as exc:

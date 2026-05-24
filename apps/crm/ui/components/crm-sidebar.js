@@ -172,6 +172,7 @@ export class CRMSidebar extends PlatformElement {
                 --platform-namespace-edit-hover-bg: var(--crm-selected-bg);
                 --platform-namespace-edit-hover-fg: var(--crm-selected-text);
                 --platform-namespace-edit-hover-stroke: var(--crm-selected-stroke);
+                --sidebar-nav-tree-children-border: none;
             }
 
             .nav-section { margin-bottom: var(--space-6); }

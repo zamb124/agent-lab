@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
 
 from core.config.llm_openai_compat import resolve_llm_openai_v1_base_url
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
@@ -61,12 +61,3 @@ def resolve_rag_embedding_runtime(
         base_url=bu,
         mrl_output_dimension=api.mrl_output_dimension,
     )
-
-
-def build_rag_embedding_runtime_dict(
-    embedding: "EmbeddingConfig",
-    llm: "LLMConfig",
-    provider_litserve: "ProviderLitserveConfig",
-) -> dict[str, Any]:
-    """Тот же контракт, что у ``RagEmbeddingRuntime``, в виде словаря."""
-    return asdict(resolve_rag_embedding_runtime(embedding, llm, provider_litserve))

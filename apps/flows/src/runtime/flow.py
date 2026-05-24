@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import Any
 
 from apps.flows.src.constants.execution_limits import get_graph_max_iterations
 from apps.flows.src.container_contracts import FlowRuntimeContainer
@@ -44,7 +43,7 @@ from core.state.mutation_policy import should_skip_field_on_user_returned_state_
 from core.tracing import get_tracer
 from core.tracing.context import TraceContext, get_current_trace_context
 from core.tracing.provider import is_tracing_enabled
-from core.types import JsonArray, JsonObject
+from core.types import JsonArray, JsonObject, JsonValue, require_json_array, require_json_object
 
 from .nodes import BaseNode, create_node
 
@@ -72,39 +71,39 @@ class Flow:
         name: str,
         entry: str,
         nodes: dict[str, BaseNode],
-        edges: list[dict[str, Any] | Any],
+        edges: list[JsonObject],
         description: str = "",
         tags: list[str] | None = None,
-        variables: dict[str, Any] | None = None,
-        config: dict[str, Any] | None = None,
+        variables: JsonObject | None = None,
+        config: JsonObject | None = None,
         container: FlowRuntimeContainer | None = None,
     ):
-        self.flow_id = flow_id
-        self.name = name
-        self.entry = entry
-        self.nodes = nodes
-        self.description = description
-        self.tags = tags or []
-        self.variables = variables or {}
-        self.config = config or {}  # Полный inline FlowConfig
-        self.container = container
+        self.flow_id: str = flow_id
+        self.name: str = name
+        self.entry: str = entry
+        self.nodes: dict[str, BaseNode] = nodes
+        self.description: str = description
+        self.tags: list[str] = tags or []
+        self.variables: JsonObject = variables or {}
+        self.config: JsonObject = config or {}  # Полный inline FlowConfig
+        self.container: FlowRuntimeContainer | None = container
         if self.container is not None:
             for node in nodes.values():
                 if node.container is None:
                     node.container = self.container
 
         # Нормализуем edges в единый формат (список словарей)
-        self.edges = self._normalize_edges(edges)
+        self.edges: list[JsonObject] = self._normalize_edges(edges)
 
         # Индекс edges по from_node
-        self._edges_by_from: dict[str, list[dict[str, Any]]] = {}
+        self._edges_by_from: dict[str, list[JsonObject]] = {}
         for edge in self.edges:
-            from_node = edge["from"]
-            if from_node not in self._edges_by_from:
-                self._edges_by_from[from_node] = []
-            self._edges_by_from[from_node].append(edge)
+            from_node = edge.get("from")
+            if not isinstance(from_node, str) or not from_node:
+                raise ValueError("edge.from must be a non-empty string")
+            self._edges_by_from.setdefault(from_node, []).append(edge)
 
-        self._join_required = self._build_join_required_predecessors()
+        self._join_required: dict[str, frozenset[str]] = self._build_join_required_predecessors()
 
     async def _emit_pending_ui_events(self, emitter: Emitter | InMemoryEmitter, state: ExecutionState) -> None:
         await emit_pending_ui_events(emitter=emitter, state=state)
@@ -116,7 +115,7 @@ class Flow:
             return
         if state.session_flow_id != self.flow_id:
             return
-        await self.container.state_manager.save_state(state.session_id, state)
+        _ = await self.container.state_manager.save_state(state.session_id, state)
 
     async def _emit_edge_condition_error_artifact(
         self, emitter: Emitter | InMemoryEmitter, ece: EdgeConditionError
@@ -128,31 +127,31 @@ class Flow:
             str(ece.original),
         )
 
-    def _normalize_edges(self, edges: list[Any]) -> list[dict[str, Any]]:
+    def _normalize_edges(self, edges: list[JsonObject]) -> list[JsonObject]:
         """Нормализует edges в list of dicts."""
-        result = []
+        result: list[JsonObject] = []
         for edge in edges:
-            if isinstance(edge, dict):
-                cj = edge.get("contributes_to_join")
-                contributes = True if cj is None else bool(cj)
-                result.append(
-                    {
-                        "from": edge.get("from"),
-                        "to": edge.get("to"),
-                        "condition": edge.get("condition"),
-                        "contributes_to_join": contributes,
-                    }
-                )
+            from_node = edge.get("from")
+            if not isinstance(from_node, str) or not from_node:
+                raise ValueError("edge.from must be a non-empty string")
+            to_node = edge.get("to")
+            if to_node is not None and (not isinstance(to_node, str) or not to_node):
+                raise ValueError("edge.to must be null or a non-empty string")
+            cj = edge.get("contributes_to_join")
+            if cj is None:
+                contributes = True
+            elif isinstance(cj, bool):
+                contributes = cj
             else:
-                contributes = bool(getattr(edge, "contributes_to_join", True))
-                result.append(
-                    {
-                        "from": edge.from_node,
-                        "to": edge.to_node,
-                        "condition": edge.condition,
-                        "contributes_to_join": contributes,
-                    }
-                )
+                raise ValueError("edge.contributes_to_join must be a boolean")
+            result.append(
+                {
+                    "from": from_node,
+                    "to": to_node,
+                    "condition": edge.get("condition"),
+                    "contributes_to_join": contributes,
+                }
+            )
         return result
 
     def _build_join_required_predecessors(self) -> dict[str, frozenset[str]]:
@@ -161,7 +160,7 @@ class Flow:
         for edge in self.edges:
             to_n = edge.get("to")
             from_n = edge.get("from")
-            if not to_n or not from_n:
+            if not isinstance(to_n, str) or not isinstance(from_n, str):
                 continue
             if not edge.get("contributes_to_join", True):
                 continue
@@ -169,8 +168,11 @@ class Flow:
         return {k: frozenset(v) for k, v in acc.items()}
 
     @staticmethod
-    def _edge_contributes_to_join(edge: dict[str, Any]) -> bool:
-        return bool(edge.get("contributes_to_join", True))
+    def _edge_contributes_to_join(edge: JsonObject) -> bool:
+        raw = edge.get("contributes_to_join", True)
+        if not isinstance(raw, bool):
+            raise ValueError("edge.contributes_to_join must be a boolean")
+        return raw
 
     def _incoming_policy(self, node_id: str) -> str:
         node = self.nodes.get(node_id)
@@ -183,7 +185,7 @@ class Flow:
             )
         return policy
 
-    def _edge_index(self, edge: dict[str, Any]) -> int:
+    def _edge_index(self, edge: JsonObject) -> int:
         """Индекс ребра в `self.edges` (тот же порядок, что в конфиге flow/skill)."""
         for i, e in enumerate(self.edges):
             if e is edge:
@@ -210,6 +212,8 @@ class Flow:
             to_node = edge.get("to")
             if to_node is None:
                 continue
+            if not isinstance(to_node, str):
+                raise ValueError("edge.to must be a string or null")
             edge_idx = self._edge_index(edge)
             condition = edge.get("condition")
             try:
@@ -499,14 +503,12 @@ class Flow:
                     continue
                 if should_skip_field_on_user_returned_state_copy(field):
                     continue
-                value = getattr(result, field)
+                value = result[field]
                 if value is not None:
-                    if isinstance(value, list):
-                        setattr(merged, field, list(value))
-                    else:
-                        setattr(merged, field, value)
+                    setattr(merged, field, value)
 
-            extra = getattr(result, "__pydantic_extra__", None) or {}
+            raw_extra: object | None = getattr(result, "__pydantic_extra__", None)
+            extra = require_json_object(raw_extra, "ExecutionState.extra") if raw_extra else {}
             for key, value in extra.items():
                 if should_skip_field_on_user_returned_state_copy(key):
                     continue
@@ -561,7 +563,7 @@ class Flow:
                 arrived.add(pred_id)
                 if required <= arrived:
                     immediate.add(target)
-                    pending.pop(target, None)
+                    _ = pending.pop(target, None)
                     for p in sorted(required):
                         ei = await self._first_active_edge_index(p, target, state)
                         activations.append((ei, p, target))
@@ -580,7 +582,7 @@ class Flow:
 
     def _all_structural_outgoing_edges_are_conditional(self, node_id: str) -> bool:
         """Все переходы к нодам (to не null) с условием; иначе есть безусловный выход на ноду."""
-        structural: list[dict[str, Any]] = [
+        structural: list[JsonObject] = [
             e
             for e in self._edges_by_from.get(node_id, [])
             if e.get("to") is not None
@@ -747,7 +749,7 @@ class Flow:
                 ordered.append(to_node)
         return ordered
 
-    async def _evaluate_condition(self, condition: Any, state: ExecutionState) -> bool:
+    async def _evaluate_condition(self, condition: JsonValue, state: ExecutionState) -> bool:
         """
         Вычисляет условие перехода.
 
@@ -757,11 +759,16 @@ class Flow:
         3. Строка: "field == value", "field != value", и т.д.
         """
         if isinstance(condition, dict):
-            return await self._evaluate_condition_object(condition, state)
+            return await self._evaluate_condition_object(
+                require_json_object(condition, "edge.condition"),
+                state,
+            )
+        if isinstance(condition, str):
+            return self._evaluate_condition_string(condition, state)
 
-        return self._evaluate_condition_string(str(condition), state)
+        raise ValueError("edge.condition must be a string or an object")
 
-    async def _evaluate_condition_object(self, condition: dict[str, Any], state: ExecutionState) -> bool:
+    async def _evaluate_condition_object(self, condition: JsonObject, state: ExecutionState) -> bool:
         """Вычисляет условие в новом объектном формате."""
         condition_type = condition.get("type")
 
@@ -774,21 +781,28 @@ class Flow:
             f"Неизвестный type условия ребра: {condition_type!r}, ожидаются 'simple' или 'code'"
         )
 
-    def _evaluate_simple_condition(self, condition: dict[str, Any], state: ExecutionState) -> bool:
+    def _evaluate_simple_condition(self, condition: JsonObject, state: ExecutionState) -> bool:
         """Вычисляет простое условие: variable operator value."""
         variable = condition.get("variable", "")
+        if not isinstance(variable, str) or not variable.strip():
+            raise ValueError("Простое условие ребра: variable должен быть непустой строкой")
         op_str = condition.get("operator", "==")
+        if not isinstance(op_str, str) or not op_str.strip():
+            raise ValueError("Простое условие ребра: operator должен быть непустой строкой")
         value = condition.get("value", "")
         left = MappingResolver.get_nested_value(state, variable)
-        right = self._parse_value(str(value)) if not isinstance(value, (bool, int, float)) else value
+        right = self._parse_value(value) if isinstance(value, str) else value
 
         try:
-            return self._evaluate_binary_condition(left, str(op_str), right)
+            return self._evaluate_binary_condition(left, op_str, right)
         except TypeError as e:
-            raise ValueError(
-                f"Условие ребра: несовместимые типы для variable={variable!r} "
-                f"op={op_str!r} left={left!r} right={right!r}"
-            ) from e
+            message = "".join(
+                (
+                    f"Условие ребра: несовместимые типы для variable={variable!r} op={op_str!r} ",
+                    f"left={left!r} right={right!r}",
+                )
+            )
+            raise ValueError(message) from e
 
     @staticmethod
     def _evaluate_binary_condition(left: object, op_str: str, right: object) -> bool:
@@ -827,7 +841,7 @@ class Flow:
                 return left <= right
         raise TypeError(f"unsupported edge condition operator: {op_str!r}")
 
-    async def _evaluate_code_condition(self, condition: dict[str, Any], state: ExecutionState) -> bool:
+    async def _evaluate_code_condition(self, condition: JsonObject, state: ExecutionState) -> bool:
         """
         Вычисляет code-condition через isolated remote code runner.
 
@@ -879,15 +893,18 @@ class Flow:
                 try:
                     return self._evaluate_binary_condition(left, op_str, right)
                 except TypeError as e:
-                    raise ValueError(
-                        f"Строковое условие ребра: несовместимые типы "
-                        f"left_path={left_path!r} right={right_value!r} left={left!r} right={right!r}"
-                    ) from e
+                    message = "".join(
+                        (
+                            f"Строковое условие ребра: несовместимые типы left_path={left_path!r} ",
+                            f"right={right_value!r} left={left!r} right={right!r}",
+                        )
+                    )
+                    raise ValueError(message) from e
 
         value = MappingResolver.get_nested_value(state, condition.strip())
         return bool(value)
 
-    def _parse_value(self, value: str) -> Any:
+    def _parse_value(self, value: str) -> JsonValue:
         """Парсит значение из строки."""
         value = value.strip()
 
@@ -917,8 +934,8 @@ class Flow:
     @classmethod
     async def from_config(
         cls,
-        config: dict[str, Any],
-        variables: dict[str, Any] | None = None,
+        config: JsonObject,
+        variables: JsonObject | None = None,
         *,
         container: FlowRuntimeContainer | None = None,
     ) -> "Flow":
@@ -932,33 +949,72 @@ class Flow:
         Returns:
             Экземпляр Flow
         """
-        # flow_id может быть в "flow_id" или "id"
-        flow_id = config.get("flow_id") or config.get("id")
-
-        nodes = {}
-        nodes_config = config.get("nodes", {})
-        for node_id, node_config in nodes_config.items():
-            nodes[node_id] = await create_node(node_id, node_config, container=container)
-
-        # variables: параметр > config["resolved_variables"] > config["variables"]
-        resolved_variables = (
-            variables
-            or config.get("resolved_variables")
-            or config.get("variables", {})
-        )
-
-        raw_flow_id = flow_id
+        raw_flow_id = config.get("flow_id") or config.get("id")
         if not isinstance(raw_flow_id, str) or not raw_flow_id.strip():
             raise ValueError("Flow.from_config requires non-empty flow_id")
 
+        nodes: dict[str, BaseNode] = {}
+        raw_nodes_config = config.get("nodes")
+        nodes_config = (
+            require_json_object(raw_nodes_config, "flow_config.nodes")
+            if raw_nodes_config is not None
+            else {}
+        )
+        for node_id, node_config in nodes_config.items():
+            nodes[node_id] = await create_node(
+                node_id,
+                require_json_object(node_config, f"flow_config.nodes.{node_id}"),
+                container=container,
+            )
+
+        # variables: параметр > config["resolved_variables"] > config["variables"]
+        raw_variables = variables or config.get("resolved_variables") or config.get("variables")
+        resolved_variables = (
+            require_json_object(raw_variables, "flow_config.variables")
+            if raw_variables is not None
+            else {}
+        )
+
+        raw_entry = config.get("entry", "main")
+        if not isinstance(raw_entry, str) or not raw_entry.strip():
+            raise ValueError("Flow.from_config requires non-empty entry")
+
+        raw_name = config.get("name", "")
+        if raw_name is None:
+            raw_name = ""
+        if not isinstance(raw_name, str):
+            raise ValueError("Flow.from_config name must be a string")
+
+        raw_description = config.get("description", "")
+        if raw_description is None:
+            raw_description = ""
+        if not isinstance(raw_description, str):
+            raise ValueError("Flow.from_config description must be a string")
+
+        raw_tags = config.get("tags")
+        tags: list[str] = []
+        if raw_tags is not None:
+            for index, item in enumerate(require_json_array(raw_tags, "flow_config.tags")):
+                if not isinstance(item, str):
+                    raise ValueError(f"flow_config.tags[{index}] must be a string")
+                tags.append(item)
+
+        raw_edges = config.get("edges")
+        edges: list[JsonObject] = []
+        if raw_edges is not None:
+            edges = [
+                require_json_object(item, f"flow_config.edges[{index}]")
+                for index, item in enumerate(require_json_array(raw_edges, "flow_config.edges"))
+            ]
+
         return cls(
             flow_id=raw_flow_id,
-            name=config.get("name", ""),
-            entry=config.get("entry", "main"),
+            name=raw_name,
+            entry=raw_entry,
             nodes=nodes,
-            edges=config.get("edges", []),
-            description=config.get("description", ""),
-            tags=config.get("tags", []),
+            edges=edges,
+            description=raw_description,
+            tags=tags,
             variables=resolved_variables,
             config=config,
             container=container,

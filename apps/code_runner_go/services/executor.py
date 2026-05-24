@@ -36,9 +36,9 @@ class GoSandboxExecutor:
     """Исполняет Go user code через cached build artifact."""
 
     def __init__(self) -> None:
-        self._artifact_root = Path(tempfile.mkdtemp(prefix="code-runner-go-artifacts-"))
+        self._artifact_root: Path = Path(tempfile.mkdtemp(prefix="code-runner-go-artifacts-"))
         self._build_locks: dict[str, asyncio.Lock] = {}
-        self._build_locks_guard = asyncio.Lock()
+        self._build_locks_guard: asyncio.Lock = asyncio.Lock()
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
         if request.language != "go":
@@ -222,10 +222,10 @@ class GoSandboxExecutor:
             user_path = artifact_path / "user.go"
             entrypoint_path = artifact_path / "entrypoint.go"
             sdk_path = artifact_path / "sdk.go"
-            runner_path.write_text(self._runner_source(), encoding="utf-8")
-            user_path.write_text(request.code, encoding="utf-8")
-            entrypoint_path.write_text(self._entrypoint_source(entrypoint), encoding="utf-8")
-            sdk_path.write_text(self._sdk_source(request), encoding="utf-8")
+            _ = runner_path.write_text(self._runner_source(), encoding="utf-8")
+            _ = user_path.write_text(request.code, encoding="utf-8")
+            _ = entrypoint_path.write_text(self._entrypoint_source(entrypoint), encoding="utf-8")
+            _ = sdk_path.write_text(self._sdk_source(request), encoding="utf-8")
             process = await asyncio.create_subprocess_exec(
                 go_bin,
                 "build",

@@ -5,16 +5,33 @@
 """
 
 import json
+from collections.abc import Mapping
 from datetime import date, datetime, timezone
+from typing import cast
 
+from pydantic import TypeAdapter
 from sqlalchemy import text
 
-from apps.flows.src.models import EvaluationResult
+from apps.flows.src.models import (
+    EvaluationDialogMessage,
+    EvaluationResult,
+    EvaluationScores,
+    EvaluationStatus,
+)
 from core.db import Storage
 from core.db.utils import get_rowcount
 from core.logging import get_logger
+from core.types import (
+    JsonObject,
+    parse_json_array,
+    parse_json_object,
+    require_json_array,
+    require_json_object,
+)
 
 logger = get_logger(__name__)
+_EVALUATION_SCORES_ADAPTER: TypeAdapter[EvaluationScores] = TypeAdapter(EvaluationScores)
+EvaluationResultRowValue = str | int | date | datetime | list[JsonObject] | JsonObject | None
 
 
 class EvaluationRepository:
@@ -26,7 +43,7 @@ class EvaluationRepository:
     """
 
     def __init__(self, storage: Storage):
-        self._storage = storage
+        self._storage: Storage = storage
 
     async def save(self, result: EvaluationResult) -> int:
         """
@@ -70,7 +87,9 @@ class EvaluationRepository:
                     "p7": result.status,
                     "p8": result.duration_ms,
                     "p9": result.turns_count,
-                    "p10": json.dumps(result.dialog) if result.dialog else None,
+                    "p10": json.dumps(
+                        [message.model_dump(mode="json") for message in result.dialog]
+                    ) if result.dialog else None,
                     "p11": json.dumps(result.scores) if result.scores else None,
                     "p12": result.judge_feedback,
                     "p13": result.error,
@@ -133,7 +152,10 @@ class EvaluationRepository:
                 )
 
             rows = result.mappings().all()
-            return [self._row_to_model(row) for row in rows]
+            return [
+                self._row_to_model(cast(Mapping[str, EvaluationResultRowValue], row))
+                for row in rows
+            ]
 
     async def get_latest_results(
         self,
@@ -171,7 +193,10 @@ class EvaluationRepository:
                 },
             )
             rows = result.mappings().all()
-            return [self._row_to_model(row) for row in rows]
+            return [
+                self._row_to_model(cast(Mapping[str, EvaluationResultRowValue], row))
+                for row in rows
+            ]
 
     async def get_next_iteration(self, flow_id: str, branch_id: str, run_date: date) -> int:
         """
@@ -223,29 +248,83 @@ class EvaluationRepository:
             logger.info(f"Удалено {count} старых результатов оценки")
             return count
 
-    def _row_to_model(self, row) -> EvaluationResult:
+    def _row_to_model(self, row: Mapping[str, EvaluationResultRowValue]) -> EvaluationResult:
         """Конвертирует строку БД в модель."""
-        dialog = row["dialog"]
-        if isinstance(dialog, str):
-            dialog = json.loads(dialog) if dialog else []
+        flow_id = row["flow_id"]
+        if not isinstance(flow_id, str):
+            raise ValueError("evaluation_results.flow_id must be a string")
+        branch_id = row["branch_id"]
+        if not isinstance(branch_id, str):
+            raise ValueError("evaluation_results.branch_id must be a string")
+        run_date = row["run_date"]
+        if not isinstance(run_date, date):
+            raise ValueError("evaluation_results.run_date must be a date")
+        iteration = row["iteration"]
+        if not isinstance(iteration, int) or isinstance(iteration, bool):
+            raise ValueError("evaluation_results.iteration must be an int")
+        test_case_id = row["test_case_id"]
+        if not isinstance(test_case_id, str):
+            raise ValueError("evaluation_results.test_case_id must be a string")
+        task_id = row["task_id"]
+        if task_id is not None and not isinstance(task_id, str):
+            raise ValueError("evaluation_results.task_id must be a string or null")
+        status = row["status"]
+        if status not in ("passed", "failed", "error", "timeout"):
+            raise ValueError("evaluation_results.status has unsupported value")
+        status_value = cast(EvaluationStatus, status)
+        duration_ms = row["duration_ms"]
+        if not isinstance(duration_ms, int) or isinstance(duration_ms, bool):
+            raise ValueError("evaluation_results.duration_ms must be an int")
+        turns_count = row["turns_count"]
+        if turns_count is not None and (
+            not isinstance(turns_count, int) or isinstance(turns_count, bool)
+        ):
+            raise ValueError("evaluation_results.turns_count must be an int or null")
+        judge_feedback = row["judge_feedback"]
+        if judge_feedback is not None and not isinstance(judge_feedback, str):
+            raise ValueError("evaluation_results.judge_feedback must be a string or null")
+        error = row["error"]
+        if error is not None and not isinstance(error, str):
+            raise ValueError("evaluation_results.error must be a string or null")
+        created_at = row["created_at"]
+        if not isinstance(created_at, datetime):
+            raise ValueError("evaluation_results.created_at must be a datetime")
 
-        scores = row["scores"]
-        if isinstance(scores, str):
-            scores = json.loads(scores) if scores else None
+        dialog_raw = row["dialog"]
+        if isinstance(dialog_raw, str):
+            dialog_payload = parse_json_array(dialog_raw, "evaluation_results.dialog") if dialog_raw else []
+        elif dialog_raw is None:
+            dialog_payload = []
+        else:
+            dialog_payload = require_json_array(dialog_raw, "evaluation_results.dialog")
+        dialog: list[EvaluationDialogMessage] = [
+            EvaluationDialogMessage.model_validate(item) for item in dialog_payload
+        ]
+
+        scores_raw = row["scores"]
+        if isinstance(scores_raw, str):
+            scores_payload = parse_json_object(scores_raw, "evaluation_results.scores") if scores_raw else None
+        elif scores_raw is None:
+            scores_payload = None
+        else:
+            scores_payload = require_json_object(scores_raw, "evaluation_results.scores")
+        scores: EvaluationScores | None = None
+        if scores_payload is not None:
+            scores = _EVALUATION_SCORES_ADAPTER.validate_python(scores_payload)
 
         return EvaluationResult(
-            flow_id=row["flow_id"],
-            branch_id=row["branch_id"],
-            run_date=row["run_date"],
-            iteration=row["iteration"],
-            test_case_id=row["test_case_id"],
-            task_id=row.get("task_id"),
-            status=row["status"],
-            duration_ms=row["duration_ms"],
-            turns_count=row["turns_count"] or 0,
-            dialog=dialog or [],
+            flow_id=flow_id,
+            branch_id=branch_id,
+            run_date=run_date,
+            iteration=iteration,
+            test_case_id=test_case_id,
+            task_id=task_id,
+            status=status_value,
+            duration_ms=duration_ms,
+            turns_count=turns_count or 0,
+            dialog=dialog,
             scores=scores,
-            judge_feedback=row["judge_feedback"],
-            error=row["error"],
-            created_at=row["created_at"],
+            judge_feedback=judge_feedback,
+            error=error,
+            created_at=created_at,
         )

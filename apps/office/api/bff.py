@@ -88,7 +88,7 @@ from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.pagination import OffsetPage
-from core.types import require_json_array
+from core.types import JsonObject, require_json_array
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
@@ -311,7 +311,7 @@ def _browser_document_server_url(raw_url: str, request: Request) -> str:
 
 async def _post_onlyoffice_command(
     *,
-    payload: dict[str, object],
+    payload: JsonObject,
     binding_id: str,
     command_name: str,
     timeout: float = 10.0,

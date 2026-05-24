@@ -6,11 +6,11 @@ A2A SDK-поля нормализуются в canonical state.files на гра
 
 import base64
 from dataclasses import dataclass
-from typing import Any
 
 from a2a.types import FilePart, FileWithBytes, FileWithUri, Message
 
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -20,8 +20,6 @@ def get_file_parts(message: Message) -> list[FilePart]:
     file_parts: list[FilePart] = []
     for part in message.parts:
         if isinstance(part.root, FilePart):
-            file_parts.append(part.root)
-        elif hasattr(part.root, "kind") and part.root.kind == "file":
             file_parts.append(part.root)
     return file_parts
 
@@ -73,15 +71,13 @@ def extract_incoming_a2a_files(message: Message) -> list[IncomingA2aFile]:
         file_data = file_part.file
         if isinstance(file_data, FileWithBytes):
             result.append(_payload_from_bytes(file_data))
-        elif isinstance(file_data, FileWithUri):
-            result.append(_payload_from_uri(file_data))
         else:
-            raise ValueError(f"Неподдерживаемый тип вложения A2A: {type(file_data)}")
+            result.append(_payload_from_uri(file_data))
 
     return result
 
 
-def format_a2a_files_content(files_data: list[dict[str, Any]]) -> str:
+def format_a2a_files_content(files_data: list[JsonObject]) -> str:
     """
     Добавляет в текст сообщения блоки [FILE]...[/FILE] по записям для state.files.
 

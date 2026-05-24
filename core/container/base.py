@@ -247,12 +247,12 @@ class BaseContainer:
         return CompanyPronunciationRuleRepository(db_url=self.required_shared_db_url)
 
     @lazy
-    def file_repository(self):
+    def file_repository(self) -> FileRepository:
         """FileRepository для работы с файлами"""
         return FileRepository(storage=self.shared_storage)
 
     @lazy
-    def file_processor(self):
+    def file_processor(self) -> FileProcessor:
         """
         Один процессор на процесс контейнера: shared FileRepository + S3.
         Новый экземпляр FileProcessor(...) с тем же репозиторием не менял бы поведение — это та же логика;
@@ -377,6 +377,7 @@ class BaseContainer:
         return CalendarService(
             event_repository=self.calendar_event_repository,
             oauth_service=self.oauth_service,
+            credential_repository=self.integration_credential_repository,
             user_repository=self.user_repository,
             company_repository=self.company_repository,
             service_client=self.service_client,

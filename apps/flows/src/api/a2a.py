@@ -4,7 +4,7 @@ HTTP и JSON-RPC эндпоинты A2A для flows (a2a-sdk).
 """
 
 import json
-from typing import Any
+from collections.abc import AsyncGenerator
 
 from a2a.types import (
     DeleteTaskPushNotificationConfigParams,
@@ -31,25 +31,24 @@ from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_TTL_SECONDS,
 )
 from core.logging import get_logger
+from core.models.identity_models import User
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 from core.ui_events.dispatcher import publish_ui_event_to_user
 from core.utils.tokens import TokenData, TokenType
 
 logger = get_logger(__name__)
-JsonDict = dict[str, Any]
 JsonRpcId = str | int
 
 
-def _embed_session_branch_from_token_metadata(metadata: dict[str, Any]) -> str | None:
-    if not isinstance(metadata, dict):
-        return None
+def _embed_session_branch_from_token_metadata(metadata: JsonObject) -> str | None:
     b = metadata.get("embed_branch_id")
     if isinstance(b, str) and b.strip():
         return b.strip()
     return None
 
 
-def _metadata_effective_branch(metadata: dict[str, Any] | None) -> str | None:
-    if not isinstance(metadata, dict):
+def _metadata_effective_branch(metadata: JsonObject | None) -> str | None:
+    if metadata is None:
         return None
     b = metadata.get("branch")
     if b is not None and str(b).strip():
@@ -57,7 +56,7 @@ def _metadata_effective_branch(metadata: dict[str, Any] | None) -> str | None:
     return None
 
 
-def _strict_json_rpc_id(raw_id: Any) -> JsonRpcId | None:
+def _strict_json_rpc_id(raw_id: JsonValue) -> JsonRpcId | None:
     if raw_id is None:
         return None
     if isinstance(raw_id, bool):
@@ -67,14 +66,14 @@ def _strict_json_rpc_id(raw_id: Any) -> JsonRpcId | None:
     return None
 
 
-def _require_json_rpc_id(raw_id: Any) -> JsonRpcId:
+def _require_json_rpc_id(raw_id: JsonValue) -> JsonRpcId:
     rpc_id = _strict_json_rpc_id(raw_id)
     if rpc_id is None:
         raise ValueError("Invalid Request: id must be string or integer")
     return rpc_id
 
 
-def _string_list(raw: Any) -> list[str]:
+def _string_list(raw: JsonValue | None) -> list[str]:
     if not isinstance(raw, list):
         return []
     return [item for item in raw if isinstance(item, str)]
@@ -82,19 +81,17 @@ def _string_list(raw: Any) -> list[str]:
 
 def _get_user_groups(request: Request) -> list[str]:
     """Извлекает группы пользователя из request.state.user."""
-    if not hasattr(request.state, "user") or request.state.user is None:
+    raw_user: User | JsonObject | None = getattr(request.state, "user", None)
+    if raw_user is None:
         return []
 
-    user = request.state.user
-    if isinstance(user, dict):
-        groups = user.get("grps")
-        if groups is None:
-            groups = user.get("groups")
-        return _string_list(groups)
+    if isinstance(raw_user, User):
+        return raw_user.groups
 
-    groups = getattr(user, "grps", None)
+    user = require_json_object(raw_user, "request.state.user")
+    groups = user.get("grps")
     if groups is None:
-        groups = getattr(user, "groups", None)
+        groups = user.get("groups")
     return _string_list(groups)
 
 router = APIRouter(tags=["public", "a2a"])
@@ -143,7 +140,7 @@ return n
 """
 
 
-def _a2a_message_context_id(params_dict: dict[str, Any]) -> str:
+def _a2a_message_context_id(params_dict: JsonObject) -> str:
     msg = params_dict.get("message")
     if not isinstance(msg, dict):
         return ""
@@ -157,11 +154,10 @@ def _a2a_message_context_id(params_dict: dict[str, Any]) -> str:
 async def _embed_session_guest_turn_limit_error(
     *,
     container: FlowContainer,
-    token_data: TokenData,
     embed_target: EmbedTarget | None,
     method: str | None,
-    params_dict: dict[str, Any],
-) -> dict[str, Any] | None:
+    params_dict: JsonObject,
+) -> JsonObject | None:
     if method not in _EMBED_MESSAGE_METHODS:
         return None
     if embed_target is None or not embed_target.embed_id.strip():
@@ -177,7 +173,7 @@ async def _embed_session_guest_turn_limit_error(
         }
     key = f"{EMBED_GUEST_USER_TURNS_REDIS_PREFIX}:{embed_target.embed_id.strip()}:{ctx_id}"
     try:
-        count_raw = await container.redis_client.eval(
+        count_raw: JsonValue = await container.redis_client.eval(
             _EMBED_GUEST_TURN_LUA,
             1,
             key,
@@ -194,6 +190,8 @@ async def _embed_session_guest_turn_limit_error(
             "message": "Лимит сообщений временно недоступен. Попробуйте позже.",
         }
     try:
+        if isinstance(count_raw, bool) or not isinstance(count_raw, (int, float, str)):
+            raise ValueError("unexpected Redis EVAL response")
         n_turn = int(count_raw)
     except (TypeError, ValueError):
         logger.error(
@@ -222,12 +220,12 @@ def _validate_embed_session_request(
     embed_id: str | None,
     flow_id: str,
     method: str,
-    params_dict: dict[str, Any],
+    params_dict: JsonObject,
     expected_branch_id: str | None = None,
     expected_company_id: str | None = None,
-) -> dict[str, Any] | None:
+) -> JsonObject | None:
     """Проверяет claims embed-session токена для A2A вызова."""
-    metadata = token_data.metadata if isinstance(token_data.metadata, dict) else {}
+    metadata = token_data.metadata
     if expected_company_id is not None and token_data.company_id != expected_company_id:
         return {"code": -32000, "message": "Embed session token is not allowed for this company"}
 
@@ -349,7 +347,7 @@ async def get_agent_card_well_known(
     request: Request,
     container: ContainerDep,
     v: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Agent Card по well-known URL.
 
@@ -380,7 +378,7 @@ async def get_agent_card(
     request: Request,
     container: ContainerDep,
     v: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Agent Card по A2A спецификации - GET на URL агента.
 
@@ -409,8 +407,8 @@ async def _handle_streaming(
     handler: A2AChannel,
     params: MessageSendParams,
     rpc_id: JsonRpcId,
-    context: JsonDict | None = None,
-):
+    context: JsonObject | None = None,
+) -> AsyncGenerator[str, None]:
     try:
         async for event in handler.on_message_stream(params, context=context):
             event_data = event.model_dump(by_alias=True, exclude_none=True)
@@ -427,7 +425,7 @@ async def _handle_streaming(
 
 async def _handle_resubscribe_streaming(
     handler: A2AChannel, params: TaskIdParams, rpc_id: JsonRpcId
-):
+) -> AsyncGenerator[str, None]:
     async for event in handler.on_resubscribe_to_task(params):
         event_data = event.model_dump(by_alias=True, exclude_none=True)
         response = {"jsonrpc": "2.0", "id": rpc_id, "result": event_data}
@@ -450,22 +448,13 @@ async def _json_rpc_handler_internal(
     - В metadata запроса: {"metadata": {"version": "20241226120000000000"}}
     """
     try:
-        body = await request.json()
+        body = parse_json_object(await request.body(), "json_rpc.body")
     except json.JSONDecodeError as e:
         return JSONResponse(
             {
                 "jsonrpc": "2.0",
                 "id": None,
                 "error": {"code": -32700, "message": f"Parse error: {e}"},
-            }
-        )
-
-    if not isinstance(body, dict):
-        return JSONResponse(
-            {
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {"code": -32600, "message": "Invalid Request: expected JSON object"},
             }
         )
 
@@ -491,9 +480,9 @@ async def _json_rpc_handler_internal(
 
     _raw_params = body.get("params")
     if _raw_params is None:
-        params_dict: dict[str, Any] = {}
+        params_dict: JsonObject = {}
     elif isinstance(_raw_params, dict):
-        params_dict = dict(_raw_params)
+        params_dict = require_json_object(_raw_params, "params")
     else:
         return {
             "jsonrpc": "2.0",
@@ -546,7 +535,6 @@ async def _json_rpc_handler_internal(
     if _is_embed_session_token(token_data) and isinstance(token_data, TokenData):
         lim_err = await _embed_session_guest_turn_limit_error(
             container=container,
-            token_data=token_data,
             embed_target=embed_target,
             method=method,
             params_dict=params_dict,
@@ -557,9 +545,9 @@ async def _json_rpc_handler_internal(
     # Версия: приоритет query param > metadata.version
     metadata_raw = params_dict.get("metadata")
     if metadata_raw is None:
-        metadata: JsonDict = {}
+        metadata: JsonObject = {}
     elif isinstance(metadata_raw, dict):
-        metadata = metadata_raw
+        metadata = require_json_object(metadata_raw, "params.metadata")
     else:
         return {
             "jsonrpc": "2.0",
@@ -617,7 +605,7 @@ async def _json_rpc_handler_internal(
             "id": rpc_id,
             "error": {"code": -32602, "message": "Invalid params: metadata.__user_groups__ must be string array"},
         }
-    channel_context: JsonDict = {"user_groups": user_groups}
+    channel_context: JsonObject = {"user_groups": user_groups}
 
     # Добавляем groups в metadata для передачи в worker (для проверки permissions на tools)
     params_dict["metadata"] = metadata
@@ -625,7 +613,7 @@ async def _json_rpc_handler_internal(
 
     try:
         if method == "message/send":
-            params = MessageSendParams(**params_dict)
+            params = MessageSendParams.model_validate(params_dict)
             result = await handler.on_message_send(params, context=channel_context)
             return {
                 "jsonrpc": "2.0",
@@ -634,7 +622,7 @@ async def _json_rpc_handler_internal(
             }
 
         elif method == "message/stream":
-            params = MessageSendParams(**params_dict)
+            params = MessageSendParams.model_validate(params_dict)
             return StreamingResponse(
                 _handle_streaming(handler, params, rpc_id, channel_context),
                 media_type="text/event-stream",
@@ -642,7 +630,7 @@ async def _json_rpc_handler_internal(
             )
 
         elif method == "tasks/get":
-            params = TaskQueryParams(**params_dict)
+            params = TaskQueryParams.model_validate(params_dict)
             result = await handler.on_get_task(params)
             return {
                 "jsonrpc": "2.0",
@@ -651,7 +639,7 @@ async def _json_rpc_handler_internal(
             }
 
         elif method == "tasks/cancel":
-            params = TaskIdParams(**params_dict)
+            params = TaskIdParams.model_validate(params_dict)
             result = await handler.on_cancel_task(params)
             if result is None:
                 return {
@@ -666,7 +654,7 @@ async def _json_rpc_handler_internal(
             }
 
         elif method == "tasks/resubscribe":
-            params = TaskIdParams(**params_dict)
+            params = TaskIdParams.model_validate(params_dict)
             return StreamingResponse(
                 _handle_resubscribe_streaming(handler, params, rpc_id),
                 media_type="text/event-stream",
@@ -674,7 +662,7 @@ async def _json_rpc_handler_internal(
             )
 
         elif method == "tasks/pushNotificationConfig/get":
-            params = GetTaskPushNotificationConfigParams(**params_dict)
+            params = GetTaskPushNotificationConfigParams.model_validate(params_dict)
             result = await handler.on_get_task_push_notification_config(params)
             return {
                 "jsonrpc": "2.0",
@@ -683,7 +671,7 @@ async def _json_rpc_handler_internal(
             }
 
         elif method == "tasks/pushNotificationConfig/set":
-            params = TaskPushNotificationConfig(**params_dict)
+            params = TaskPushNotificationConfig.model_validate(params_dict)
             result = await handler.on_set_task_push_notification_config(params)
             return {
                 "jsonrpc": "2.0",
@@ -692,12 +680,12 @@ async def _json_rpc_handler_internal(
             }
 
         elif method == "tasks/pushNotificationConfig/delete":
-            params = DeleteTaskPushNotificationConfigParams(**params_dict)
+            params = DeleteTaskPushNotificationConfigParams.model_validate(params_dict)
             await handler.on_delete_task_push_notification_config(params)
             return {"jsonrpc": "2.0", "id": rpc_id, "result": None}
 
         elif method == "tasks/pushNotificationConfig/list":
-            params = ListTaskPushNotificationConfigParams(**params_dict)
+            params = ListTaskPushNotificationConfigParams.model_validate(params_dict)
             result = await handler.on_list_task_push_notification_config(params)
             return {
                 "jsonrpc": "2.0",
@@ -727,7 +715,13 @@ async def _json_rpc_handler_internal(
         logger.warning(f"Permission denied for {method}: {e}")
         err = e.error.to_json_rpc_error()
         if method in _STREAM_METHODS:
-            return _sse_error_response(rpc_id, err.get("code", -32000), err.get("message", str(e)))
+            err_code = err.get("code", -32000)
+            if isinstance(err_code, bool) or not isinstance(err_code, int):
+                err_code = -32000
+            err_message = err.get("message", str(e))
+            if not isinstance(err_message, str):
+                err_message = str(e)
+            return _sse_error_response(rpc_id, err_code, err_message)
         return {"jsonrpc": "2.0", "id": rpc_id, "error": err}
     except Exception as e:
         logger.exception(f"Error handling {method}: {e}")
@@ -787,7 +781,7 @@ async def json_rpc_embed_handler(
 
 
 @router.get("/{flow_id}/branches")
-async def list_branches(flow_id: str, container: ContainerDep) -> list[dict[str, Any]]:
+async def list_branches(flow_id: str, container: ContainerDep) -> list[JsonObject]:
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     config = await _get_flow_config(flow_id, container)
@@ -797,7 +791,7 @@ async def list_branches(flow_id: str, container: ContainerDep) -> list[dict[str,
 
 
 @router.get("/{flow_id}/branches/{branch_id}")
-async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> dict[str, Any]:
+async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> JsonObject:
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     config = await _get_flow_config(flow_id, container)
@@ -811,7 +805,7 @@ async def get_branch(flow_id: str, branch_id: str, container: ContainerDep) -> d
 
 
 @router.get("/{flow_id}/branches/{branch_id}/tools")
-async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep) -> list[dict[str, Any]]:
+async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep) -> list[JsonObject]:
     """Получить список tools для ветки с полной информацией."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
@@ -829,7 +823,7 @@ async def get_branch_tools(flow_id: str, branch_id: str, container: ContainerDep
 
 
 @router.get("/{flow_id}/schema")
-async def get_branch_schema(flow_id: str, container: ContainerDep) -> dict[str, Any]:
+async def get_branch_schema(flow_id: str, container: ContainerDep) -> JsonObject:
     """Получить JSON Schema для создания ветки в формате ISchema."""
     _ = container
     context = get_context()
@@ -850,13 +844,14 @@ async def create_branch(flow_id: str, request: Request, container: ContainerDep)
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
     try:
-        data = await request.json()
+        data = parse_json_object(await request.body(), "branch.create")
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    branch_id = data.get("branch_id")
-    if not branch_id:
+    branch_id_raw = data.get("branch_id")
+    if not isinstance(branch_id_raw, str) or not branch_id_raw.strip():
         raise HTTPException(status_code=400, detail="Field 'branch_id' is required")
+    branch_id = branch_id_raw.strip()
 
     try:
         result = await channel.create_branch(branch_id, data)
@@ -877,7 +872,12 @@ async def create_branch(flow_id: str, request: Request, container: ContainerDep)
 
 
 @router.put("/{flow_id}/branches/{branch_id}")
-async def update_branch(flow_id: str, branch_id: str, request: Request, container: ContainerDep) -> dict[str, Any]:
+async def update_branch(
+    flow_id: str,
+    branch_id: str,
+    request: Request,
+    container: ContainerDep,
+) -> JsonObject:
     """Обновить существующую ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
@@ -886,7 +886,7 @@ async def update_branch(flow_id: str, branch_id: str, request: Request, containe
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
     try:
-        data = await request.json()
+        data = parse_json_object(await request.body(), "branch.update")
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
@@ -909,7 +909,7 @@ async def update_branch(flow_id: str, branch_id: str, request: Request, containe
 
 
 @router.delete("/{flow_id}/branches/{branch_id}")
-async def delete_branch(flow_id: str, branch_id: str, container: ContainerDep) -> dict[str, Any]:
+async def delete_branch(flow_id: str, branch_id: str, container: ContainerDep) -> JsonObject:
     """Удалить ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))

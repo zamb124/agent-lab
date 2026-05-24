@@ -25,6 +25,7 @@ from core.logging import get_logger
 from core.state.interrupt import OAuthInterrupt
 from core.text_transforms import TextTransformService
 from core.tracing.context import get_current_trace_context
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
     from apps.flows.src.services.lara_facade import LaraFacade
     from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
     from apps.flows.src.services.schedule_service import ScheduleService
+    from core.integrations.oauth_service import OAuthService
     from core.state import ExecutionState
 
 
@@ -45,7 +47,7 @@ def get_schedule_service() -> "ScheduleService":
     return require_current_container().schedule_service
 
 
-def get_oauth_service() -> Any:
+def get_oauth_service() -> "OAuthService":
     return require_current_container().oauth_service
 
 
@@ -339,7 +341,7 @@ async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
         logger.debug("Google OAuth: credential found, user=%s, service=%s", ctx.user.user_id, service)
         return credential.access_token
 
-    flow_context: dict[str, Any] = {
+    flow_context: JsonObject = {
         "flow_id": state.session_flow_id,
         "session_id": state.session_id,
         "task_id": state.task_id,

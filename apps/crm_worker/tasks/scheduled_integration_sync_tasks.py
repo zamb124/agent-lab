@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 from apps.crm.container import get_crm_container
 from apps.crm.db.models import CRMTask
@@ -17,10 +16,11 @@ from apps.crm.scheduled_integration_constants import (
 )
 from apps.crm_worker.broker import broker
 from apps.crm_worker.tasks.daily_summary_tasks import (
-    _build_auth_token_for_company,
+    build_auth_token_for_company,
     set_crm_context,
 )
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -37,7 +37,7 @@ async def scheduled_namespace_integration_unified_sync(
     namespace: str,
     provider_id: str,
     oauth_user_id: str,
-) -> dict[str, Any]:
+) -> JsonObject:
     ns = namespace.strip()
     pid = provider_id.strip()
     uid = oauth_user_id.strip()
@@ -66,7 +66,7 @@ async def scheduled_namespace_integration_unified_sync(
             )
             skip_now = datetime.now(timezone.utc)
             skip_tid = str(uuid.uuid4())
-            await repo.create(
+            _ = await repo.create(
                 CRMTask(
                     task_id=skip_tid,
                     task_type="scheduled_namespace_integration_sync",
@@ -97,7 +97,7 @@ async def scheduled_namespace_integration_unified_sync(
 
     sync_task_id = str(uuid.uuid4())
     sync_started = datetime.now(timezone.utc)
-    await repo.create(
+    _ = await repo.create(
         CRMTask(
             task_id=sync_task_id,
             task_type="scheduled_namespace_integration_sync",
@@ -112,7 +112,7 @@ async def scheduled_namespace_integration_unified_sync(
         )
     )
 
-    auth_token = await _build_auth_token_for_company(company_id, uid)
+    auth_token = await build_auth_token_for_company(company_id, uid)
     await set_crm_context(
         company_id,
         ns,
@@ -133,14 +133,12 @@ async def scheduled_namespace_integration_unified_sync(
         )
         fields_stats = await connector.sync_custom_field_catalog(ns)
 
-        done_patch: dict[str, Any] = {
+        done_patch: JsonObject = {
             "schedule_task_id": schedule_task_id,
             "provider_id": pid,
         }
-        if isinstance(entities_stats, dict):
-            done_patch["entities_stats"] = entities_stats
-        if isinstance(fields_stats, dict):
-            done_patch["fields_stats"] = fields_stats
+        done_patch["entities_stats"] = {key: value for key, value in entities_stats.items()}
+        done_patch["fields_stats"] = {key: value for key, value in fields_stats.items()}
 
         done_at = datetime.now(timezone.utc)
         await repo.patch_progress(
@@ -155,7 +153,7 @@ async def scheduled_namespace_integration_unified_sync(
 
         logger.info(
             "scheduled_namespace_integration_unified_sync: done company=%s ns=%s provider=%s "
-            "schedule_task_id=%s entities=%s fields=%s",
+            + "schedule_task_id=%s entities=%s fields=%s",
             company_id,
             ns,
             pid,
@@ -166,8 +164,8 @@ async def scheduled_namespace_integration_unified_sync(
         return {
             "status": "completed",
             "schedule_task_id": schedule_task_id,
-            "entities_stats": entities_stats,
-            "fields_stats": fields_stats,
+            "entities_stats": done_patch["entities_stats"],
+            "fields_stats": done_patch["fields_stats"],
         }
     except Exception as exc:
         fail_at = datetime.now(timezone.utc)

@@ -80,7 +80,7 @@ async def set_crm_context(
     set_context(context)
 
 
-async def _build_auth_token_for_company(company_id: str, user_id: str | None) -> str:
+async def build_auth_token_for_company(company_id: str, user_id: str | None) -> str:
     container = get_crm_container()
     resolved_user_id = user_id
     if resolved_user_id in _WORKER_PLACEHOLDER_USER_IDS:
@@ -192,7 +192,7 @@ async def rebuild_daily_summary_task(
     """
     resolved_auth_token = auth_token
     if resolved_auth_token is None:
-        resolved_auth_token = await _build_auth_token_for_company(
+        resolved_auth_token = await build_auth_token_for_company(
             company_id=company_id, user_id=user_id
         )
     await set_crm_context(
@@ -298,7 +298,7 @@ async def rebuild_period_summary_task(
     """Пересчитывает и сохраняет period summary в Redis и S3."""
     resolved_auth_token = auth_token
     if resolved_auth_token is None:
-        resolved_auth_token = await _build_auth_token_for_company(
+        resolved_auth_token = await build_auth_token_for_company(
             company_id=company_id, user_id=user_id
         )
     await set_crm_context(

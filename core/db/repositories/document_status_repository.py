@@ -3,7 +3,6 @@
 """
 
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy import bindparam, delete, func, literal_column, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -14,6 +13,7 @@ from core.db.models.rag import VectorDocument
 from core.db.utils import get_rowcount
 from core.logging import get_logger
 from core.rag.models import DocumentProcessingStatus as DocumentStatusModel
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -42,7 +42,7 @@ class DocumentStatusRepository:
         document_name: str,
         file_size: int | None = None,
         ttl_seconds: int = 864000,
-        extra_metadata: dict[str, Any] | None = None,
+        extra_metadata: JsonObject | None = None,
     ) -> DocumentStatusModel:
         """Создаёт или сбрасывает строку статуса в pending (повторная загрузка)."""
         if int(ttl_seconds) < 0:
@@ -144,7 +144,7 @@ class DocumentStatusRepository:
         document_id: str,
         chunks: int,
         *,
-        indexing_runtime: dict[str, Any] | None = None,
+        indexing_runtime: JsonObject | None = None,
     ) -> DocumentStatusModel:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
@@ -163,8 +163,11 @@ class DocumentStatusRepository:
             row.status = "completed"
             row.completed_at = now
             row.updated_at = now
-            em = dict(row.extra_metadata or {})
-            prev_runs = int(em.get("indexing_run_count", 0))
+            em: JsonObject = dict(row.extra_metadata or {})
+            raw_prev_runs = em.get("indexing_run_count", 0)
+            if not isinstance(raw_prev_runs, int) or isinstance(raw_prev_runs, bool):
+                raise ValueError("extra_metadata.indexing_run_count должен быть целым числом")
+            prev_runs = raw_prev_runs
             em["indexing_run_count"] = prev_runs + 1
             if indexing_runtime is not None:
                 em["indexing_runtime"] = indexing_runtime

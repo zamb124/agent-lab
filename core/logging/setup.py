@@ -19,6 +19,7 @@ from typing import Any
 import structlog
 
 from core.config import get_settings
+from core.config.models import LoggingConfig
 from core.config.testing import is_testing
 from core.logging.contract import LoggingMisconfigured
 from core.logging.loki_handler import LokiHandler
@@ -132,7 +133,7 @@ def _build_foreign_pre_chain(
     ]
 
 
-def setup_logging(service_name: str, logging_config=None) -> None:
+def setup_logging(service_name: str, logging_config: LoggingConfig | None = None) -> None:
     """
     Идемпотентно настраивает логирование процесса.
 

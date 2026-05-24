@@ -19,6 +19,7 @@ from core.files.docx_template import (
 from core.files.docx_template.normalize import normalize_template_context
 from core.files.models import FileRecord, FileStatus
 from core.files.writer import FileWriteError
+from core.types import JsonObject
 
 
 def _paragraph_template_bytes(paragraph_text: str) -> bytes:
@@ -29,10 +30,16 @@ def _paragraph_template_bytes(paragraph_text: str) -> bytes:
     return buf.getvalue()
 
 
-def _file_info(tmp_path: Path, paragraph_text: str, name: str = "tpl.docx") -> dict:
+def _file_info(tmp_path: Path, paragraph_text: str, name: str = "tpl.docx") -> JsonObject:
     p = tmp_path / name
-    p.write_bytes(_paragraph_template_bytes(paragraph_text))
-    return {"name": name, "path": str(p)}
+    payload = _paragraph_template_bytes(paragraph_text)
+    p.write_bytes(payload)
+    return {
+        "original_name": name,
+        "url": str(p),
+        "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "file_size": len(payload),
+    }
 
 
 def _read_first_paragraph(docx_bytes: bytes) -> str:
@@ -111,8 +118,14 @@ async def test_non_strict_allows_missing_and_extra(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_invalid_zip_raises(tmp_path: Path) -> None:
     p = tmp_path / "bad.docx"
-    p.write_bytes(b"not-a-zip")
-    finfo = {"name": "bad.docx", "path": str(p)}
+    payload = b"not-a-zip"
+    p.write_bytes(payload)
+    finfo: JsonObject = {
+        "original_name": "bad.docx",
+        "url": str(p),
+        "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "file_size": len(payload),
+    }
     with pytest.raises(DocxTemplateInvalidError):
         await _t().fill(finfo, {"a": 1})
 
@@ -120,8 +133,14 @@ async def test_invalid_zip_raises(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_empty_template_raises(tmp_path: Path) -> None:
     p = tmp_path / "empty.docx"
-    p.write_bytes(b"")
-    finfo = {"name": "empty.docx", "path": str(p)}
+    payload = b""
+    p.write_bytes(payload)
+    finfo: JsonObject = {
+        "original_name": "empty.docx",
+        "url": str(p),
+        "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "file_size": len(payload),
+    }
     with pytest.raises(DocxTemplateInvalidError):
         await _t().fill(finfo, {})
 

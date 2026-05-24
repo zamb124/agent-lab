@@ -8,14 +8,23 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Protocol
 
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
+from core.db.repositories.namespace_repository import NamespaceRepository
 from core.models.identity_models import Namespace
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.index_profile_merge import merge_index_profile_dict_overlays
+from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchOptions
 from core.rag.rag_resource_bind import RagResourceBindParams
+from core.rag.repository import RAGRepository
+from core.types import JsonObject, require_json_object
+
+
+class _RAGResourceContainer(Protocol):
+    rag_repository: RAGRepository
+    namespace_repository: NamespaceRepository
 
 
 class RAGResource:
@@ -37,16 +46,16 @@ class RAGResource:
     def __init__(
         self,
         namespace: str,
-        container: Any,
+        container: _RAGResourceContainer,
         *,
         provider: str = RAG_IN_PROCESS_PROVIDER_ID,
         default_top_k: int = 5,
         company_id: str | None = None,
-        search_options: dict[str, Any] | None = None,
-        filters: dict[str, Any] | None = None,
-        index_profile_config: dict[str, Any] | None = None,
-    ):
-        self._container = container
+        search_options: RAGSearchOptions | None = None,
+        filters: RAGMetadataFilter | None = None,
+        index_profile_config: JsonObject | None = None,
+    ) -> None:
+        self._container: _RAGResourceContainer = container
         self._bind = RagResourceBindParams(
             namespace=namespace,
             provider=provider,
@@ -69,8 +78,8 @@ class RAGResource:
         self,
         query: str,
         top_k: int | None = None,
-        filters: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
+        filters: RAGMetadataFilter | None = None,
+    ) -> list[JsonObject]:
         """
         Поиск по документам namespace через ``RAGRepository.search_namespace``.
         """
@@ -83,26 +92,26 @@ class RAGResource:
             bind=self._bind,
         )
 
-        if not isinstance(data, dict):
-            raise ServiceClientError("rag search: ожидался JSON-объект")
         raw_results = data.get("results")
         if raw_results is None:
             raise ServiceClientError("rag search: в ответе нет поля results")
 
-        out: list[dict[str, Any]] = []
+        if not isinstance(raw_results, list):
+            raise ServiceClientError("rag search: results должен быть массивом")
+
+        out: list[JsonObject] = []
         for item in raw_results:
-            if not isinstance(item, dict):
-                raise ServiceClientError("rag search: элемент results должен быть объектом")
-            md = item.get("metadata")
+            result = require_json_object(item, "rag search result")
+            md = result.get("metadata")
             if md is None:
                 md = {}
             elif not isinstance(md, dict):
                 raise ServiceClientError("rag search: metadata должен быть объектом")
             out.append(
                 {
-                    "content": item["content"],
-                    "score": item["score"],
-                    "document_id": item["document_id"],
+                    "content": result["content"],
+                    "score": result["score"],
+                    "document_id": result["document_id"],
                     "metadata": md,
                 }
             )
@@ -112,11 +121,11 @@ class RAGResource:
         self,
         document_id: str,
         content: str,
-        metadata: dict[str, Any] | None = None,
+        metadata: RAGMetadata | None = None,
         name: str | None = None,
         *,
-        index_profile_config: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        index_profile_config: JsonObject | None = None,
+    ) -> JsonObject:
         """Загрузить текст документа в namespace."""
         repo = self._container.rag_repository
         context = get_context()

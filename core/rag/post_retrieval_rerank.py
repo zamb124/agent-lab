@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+from typing import cast as type_cast
 
 import httpx
 import tiktoken
@@ -28,6 +29,7 @@ from core.models.billing_models import UsageType
 from core.rag.models import RAGSearchResult
 from core.rag.openai_http_contracts import provider_litserve_rerank_http_url
 from core.rag_indexing_schema import IndexProfileSearchDefaults
+from core.types import JsonValue, require_json_object, require_json_value
 
 if TYPE_CHECKING:
     from core.billing.service import BillingService
@@ -38,17 +40,17 @@ logger = get_logger(__name__)
 class RerankerClientError(Exception):
     """Ошибка вызова реранкера; ``status_code`` — 422 или 503 для HTTP API."""
 
-    def __init__(self, status_code: int, detail: Any) -> None:
+    def __init__(self, status_code: int, detail: JsonValue) -> None:
         if status_code not in (422, 503):
             raise ValueError("RerankerClientError допускает только status_code 422 или 503")
-        self.status_code = status_code
-        self.detail = detail
+        self.status_code: int = status_code
+        self.detail: JsonValue = detail
         super().__init__(str(detail))
 
 
-def _response_body_as_detail(response: httpx.Response) -> Any:
+def _response_body_as_detail(response: httpx.Response) -> JsonValue:
     try:
-        return response.json()
+        return require_json_value(type_cast(JsonValue, response.json()), "reranker error response")
     except Exception:
         text = response.text
         return {"message": text[:8000] if text else ""}
@@ -69,15 +71,15 @@ class RerankerHTTPClient:
         api_key: str | None = None,
         extra_request_headers: dict[str, str] | None = None,
     ) -> None:
-        self._timeout_seconds = timeout_seconds
-        self.cost_per_1m_tokens = cost_per_1m_tokens
-        self.platform_markup = platform_markup
-        self.billing_resource_id = billing_resource_id
-        self.billing_service = billing_service
-        self.cost_origin = cost_origin
-        self.api_key = api_key
-        self.extra_request_headers = dict(extra_request_headers or {}) or None
-        self._tokenizer = tiktoken.get_encoding("cl100k_base")
+        self._timeout_seconds: float = timeout_seconds
+        self.cost_per_1m_tokens: float = cost_per_1m_tokens
+        self.platform_markup: float = platform_markup
+        self.billing_resource_id: str = billing_resource_id
+        self.billing_service: BillingService | None = billing_service
+        self.cost_origin: CostOrigin = cost_origin
+        self.api_key: str | None = api_key
+        self.extra_request_headers: dict[str, str] | None = dict(extra_request_headers or {}) or None
+        self._tokenizer: tiktoken.Encoding = tiktoken.get_encoding("cl100k_base")
 
     def count_tokens(self, query: str, passages: list[str]) -> int:
         total = len(self._tokenizer.encode(query))
@@ -113,7 +115,7 @@ class RerankerHTTPClient:
             resource_name,
             self.cost_origin,
         )
-        await billing.record_usage(
+        _ = await billing.record_usage(
             user=context.user,
             company=context.active_company,
             resource_name=resource_name,
@@ -201,8 +203,8 @@ class RerankerHTTPClient:
                 raise RerankerClientError(status_code=503, detail=detail)
             raise RerankerClientError(status_code=422, detail=detail)
 
-        data = response.json()
-        if not isinstance(data, dict) or "scores" not in data:
+        data = require_json_object(type_cast(JsonValue, response.json()), "reranker response")
+        if "scores" not in data:
             raise RerankerClientError(
                 status_code=422,
                 detail="Ответ реранкера: ожидается JSON-объект с ключом scores",

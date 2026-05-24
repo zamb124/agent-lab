@@ -6,10 +6,10 @@
 - universal функции: (None) -> input, (state, response) -> bool
 """
 
-from typing import Any
+from core.types import JsonObject
 
 
-def check_calculator_result(state: dict[str, Any], response: str) -> bool:
+def check_calculator_result(state: JsonObject, response: str) -> bool:
     """
     Проверяет что ответ калькулятора содержит число 42.
 
@@ -20,47 +20,54 @@ def check_calculator_result(state: dict[str, Any], response: str) -> bool:
     Returns:
         True если ответ содержит "42"
     """
+    _ = state
     return "42" in response
 
 
-def check_greeting(state: dict[str, Any], response: str) -> bool:
+def check_greeting(state: JsonObject, response: str) -> bool:
     """Проверяет что агент поприветствовал пользователя."""
+    _ = state
     response_lower = response.lower()
     greetings = ["привет", "здравствуй", "добро пожаловать", "рад", "hello"]
     return any(g in response_lower for g in greetings)
 
 
-def check_help_response(state: dict[str, Any], response: str) -> bool:
+def check_help_response(state: JsonObject, response: str) -> bool:
     """Проверяет что агент рассказал о своих возможностях."""
+    _ = state
     response_lower = response.lower()
     keywords = ["калькулятор", "вычисл", "помо", "могу", "умею"]
     return any(k in response_lower for k in keywords)
 
 
-def check_concise_length(state: dict[str, Any], response: str) -> bool:
+def check_concise_length(state: JsonObject, response: str) -> bool:
     """Проверяет что ответ короткий (для concise skill)."""
+    _ = state
     return len(response) <= 200
 
 
-def check_detailed_response(state: dict[str, Any], response: str) -> bool:
+def check_detailed_response(state: JsonObject, response: str) -> bool:
     """Проверяет что ответ подробный (для detailed skill)."""
+    _ = state
     return len(response) >= 200
 
 
-def check_mock_response(state: dict[str, Any], response: str) -> bool:
+def check_mock_response(state: JsonObject, response: str) -> bool:
     """Проверяет что ответ замокан."""
+    _ = state
     return "mock" in response.lower() or "замокан" in response.lower()
 
 
-def check_state_has_response(state: dict[str, Any], response: str) -> bool:
+def check_state_has_response(state: JsonObject, response: str) -> bool:
     """Проверяет что state содержит response."""
+    _ = response
     return state.get("response") is not None
 
 
 def universal_test_function(
-    state: dict[str, Any] | None = None,
+    state: JsonObject | None = None,
     response: str | None = None,
-) -> Any:
+) -> str | bool:
     """
     Универсальная функция: sender + checker в одном.
 
@@ -86,8 +93,9 @@ def universal_test_function(
     return len(response) > 5
 
 
-def check_file_processed(state: dict[str, Any], response: str) -> bool:
+def check_file_processed(state: JsonObject, response: str) -> bool:
     """Проверяет что агент обработал файл."""
+    _ = state
     keywords = ["файл", "текст", "содержит", "строк", "анализ"]
     response_lower = response.lower()
     return any(k in response_lower for k in keywords)

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
@@ -143,18 +143,18 @@ class PageLeaseManager:
         *,
         page_event_logger: PageEventLogger | None = None,
     ) -> None:
-        self._factory = context_factory
-        self._lock = asyncio.Lock()
+        self._factory: ContextFactory = context_factory
+        self._lock: asyncio.Lock = asyncio.Lock()
         self._leases: dict[int, LeaseRecord] = {}
         self._session_pages: dict[str, set[int]] = {}
-        self._allow_acquire = True
+        self._allow_acquire: bool = True
         self._draining_endpoints: set[str] = set()
         self._session_contexts: dict[str, SessionContextRecord] = {}
         # События для дебага страницы: console/pageerror/network.
         # Пишутся в artifacts как sidecar и используются для triage.
         self._console_events_by_session: dict[str, list[JsonObject]] = {}
         self._console_listeners_by_page: dict[int, PageEventListeners] = {}
-        self._page_event_logger = page_event_logger
+        self._page_event_logger: PageEventLogger | None = page_event_logger
         self._navigate_locks: dict[str, asyncio.Lock] = {}
 
     @staticmethod
@@ -167,11 +167,11 @@ class PageLeaseManager:
         url = loc.get("url")
         line = loc.get("lineNumber")
         col = loc.get("columnNumber")
-        if isinstance(url, str) and url:
+        if url:
             out["url"] = url
-        if isinstance(line, int) and line >= 0:
+        if line >= 0:
             out["line"] = line
-        if isinstance(col, int) and col >= 0:
+        if col >= 0:
             out["column"] = col
         return out
 
@@ -251,7 +251,7 @@ class PageLeaseManager:
         page.remove_listener("response", on_response)
 
     @asynccontextmanager
-    async def session_navigate_exclusive(self, session_id: str) -> AsyncIterator[None]:
+    async def session_navigate_exclusive(self, session_id: str) -> AsyncGenerator[None, None]:
         """
         Сериализация navigate (и kill_session для того же session_id) на одной сессии.
 
@@ -280,14 +280,14 @@ class PageLeaseManager:
             if pids is None or len(pids) != 1:
                 raise RuntimeError(
                     "swap_active_page_for_session: ожидалась ровно одна страница для "
-                    f"session_id={session_id}, активно {0 if pids is None else len(pids)}",
+                    + f"session_id={session_id}, активно {0 if pids is None else len(pids)}",
                 )
             old_pid = next(iter(pids))
             old_rec = self._leases.pop(old_pid, None)
             if old_rec is None:
                 raise RuntimeError("swap_active_page_for_session: lease record отсутствует")
             old_page = old_rec.page
-            self._session_pages.pop(session_id, None)
+            _ = self._session_pages.pop(session_id, None)
 
         self._detach_console_listeners(old_page)
         await self._factory.close_page(old_page)
@@ -392,12 +392,12 @@ class PageLeaseManager:
             if ctx_rec.endpoint_key != endpoint_key:
                 raise RuntimeError(
                     f"Сессия привязана к другому endpoint: session_id={session_id} "
-                    f"endpoint={ctx_rec.endpoint_key} (запрошен {endpoint_key})"
+                    + f"endpoint={ctx_rec.endpoint_key} (запрошен {endpoint_key})"
                 )
             if ctx_rec.context_signature.stable_hash() != signature.stable_hash():
                 raise RuntimeError(
                     f"Сессия привязана к другой сигнатуре контекста: session_id={session_id} "
-                    f"signature_hash={ctx_rec.context_signature.stable_hash()} (запрошен {signature.stable_hash()})"
+                    + f"signature_hash={ctx_rec.context_signature.stable_hash()} (запрошен {signature.stable_hash()})"
                 )
             ctx_rec.idle_deadline_monotonic = None
             ctx_rec.session_mode = session_mode
@@ -437,7 +437,7 @@ class PageLeaseManager:
             if sess is not None:
                 sess.discard(pid)
                 if len(sess) == 0:
-                    self._session_pages.pop(rec.session_id, None)
+                    _ = self._session_pages.pop(rec.session_id, None)
             session_mode = session_mode_override if session_mode_override is not None else rec.session_mode
             ctx_rec = self._session_contexts.get(rec.session_id)
             if ctx_rec is not None and (sess is None or len(sess) == 0):
@@ -445,7 +445,7 @@ class PageLeaseManager:
                     ctx_rec.idle_deadline_monotonic = time.monotonic() + warm_idle_sec
                 else:
                     ctx_to_close = ctx_rec.context
-                    self._session_contexts.pop(rec.session_id, None)
+                    _ = self._session_contexts.pop(rec.session_id, None)
         self._detach_console_listeners(page)
         await self._factory.close_page(page)
         if ctx_to_close is not None:
@@ -490,8 +490,8 @@ class PageLeaseManager:
                 ctx_rec = self._session_contexts.pop(session_id, None)
             if ctx_rec is not None:
                 await self._factory.close_context(ctx_rec.context)
-            self._console_events_by_session.pop(session_id, None)
-        self._navigate_locks.pop(session_id, None)
+            _ = self._console_events_by_session.pop(session_id, None)
+        _ = self._navigate_locks.pop(session_id, None)
 
     async def close_all(self) -> None:
         """
@@ -534,7 +534,7 @@ class PageLeaseManager:
                 and len(self._session_pages.get(sid, set())) == 0
             ]
             for sid, _ in to_close:
-                self._session_contexts.pop(sid, None)
+                _ = self._session_contexts.pop(sid, None)
         for _, context in to_close:
             await self._factory.close_context(context)
 
@@ -549,7 +549,7 @@ class PageLeaseManager:
                 and len(self._session_pages.get(sid, set())) == 0
             ]
             for sid, _ in to_close:
-                self._session_contexts.pop(sid, None)
+                _ = self._session_contexts.pop(sid, None)
         for _, context in to_close:
             await self._factory.close_context(context)
 
@@ -571,7 +571,7 @@ class PageLeaseManager:
             if len(pids) > 1:
                 raise RuntimeError(
                     f"Ожидалась одна страница на session_id={session_id}, "
-                    f"активно {len(pids)} (control API не выбирает неявно)",
+                    + f"активно {len(pids)} (control API не выбирает неявно)",
                 )
             pid = next(iter(pids))
             rec = self._leases.get(pid)

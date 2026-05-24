@@ -8,11 +8,33 @@ import math
 import os
 import re
 import uuid
-from typing import Literal
+from collections.abc import Sequence
+from typing import ClassVar, Literal, override
 
 import tiktoken
-from sqlalchemy import and_, case, delete, func, or_, select, text, tuple_, update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import (
+    Boolean,
+    Float,
+    Integer,
+    String,
+    and_,
+    case,
+    delete,
+    func,
+    or_,
+    select,
+    text,
+    tuple_,
+    update,
+)
+from sqlalchemy import cast as sql_cast
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.sql.elements import ColumnElement
 
 from core.config import get_settings
 from core.config.llm_openai_compat import yandex_provider_http_headers
@@ -25,7 +47,14 @@ from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.logging import get_logger
 from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.embedding_runtime import RagEmbeddingRuntime
-from core.rag.models import RAGDocument, RAGMetadata, RAGMetadataFilter, RAGNamespace, RAGSearchOptions, RAGSearchResult
+from core.rag.models import (
+    RAGDocument,
+    RAGMetadata,
+    RAGMetadataFilter,
+    RAGNamespace,
+    RAGSearchOptions,
+    RAGSearchResult,
+)
 from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
 from core.rag.rrf import reciprocal_rank_fusion
 from core.rag.services.embedding_service import EmbeddingService
@@ -46,6 +75,7 @@ _EMBEDDING_API_KEY_PLACEHOLDERS: frozenset[str] = frozenset(
 class DeterministicEmbeddingService(EmbeddingService):
     """Детерминированный embedding-сервис для тестов и локального mock-режима."""
 
+    @override
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         dim = self.get_embedding_dimension()
         embeddings: list[list[float]] = []
@@ -88,33 +118,26 @@ def _resolve_pgvector_embedding_api_key(config: RAGProviderConfig) -> str:
     settings = get_settings()
     if settings.rag.embedding.provider == "provider_litserve":
         return PROVIDER_LITSERVE_PLACEHOLDER_BEARER
-    if getattr(settings.llm, "provider", None) == "openrouter":
-        or_conf = getattr(settings.llm, "openrouter", None)
+    if settings.llm.provider == "openrouter":
+        or_conf = settings.llm.openrouter
         if or_conf is not None:
-            llm_key = _normalize_embedding_api_key(getattr(or_conf, "api_key", None))
+            llm_key = _normalize_embedding_api_key(or_conf.api_key)
             if llm_key:
                 logger.info(
-                    "pgvector: для embeddings используется llm.openrouter.api_key "
-                    "(rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)"
+                    "pgvector: для embeddings используется llm.openrouter.api_key (rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)"
                 )
                 return llm_key
-    if getattr(settings.llm, "provider", None) == "yandex":
-        yc = getattr(settings.llm, "yandex", None)
+    if settings.llm.provider == "yandex":
+        yc = settings.llm.yandex
         if yc is not None:
-            llm_key = _normalize_embedding_api_key(getattr(yc, "api_key", None))
+            llm_key = _normalize_embedding_api_key(yc.api_key)
             if llm_key:
                 logger.info(
-                    "pgvector: для embeddings используется llm.yandex.api_key "
-                    "(rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)"
+                    "pgvector: для embeddings используется llm.yandex.api_key (rag.providers.pgvector.embedding_api_key пустой или плейсхолдер)"
                 )
                 return llm_key
     raise ValueError(
-        "Нужен rag.providers.pgvector.embedding_api_key (OpenRouter sk-or-...) "
-        "или llm.openrouter.api_key при llm.provider=openrouter, "
-        "или llm.yandex.api_key при llm.provider=yandex. "
-        "При rag.embedding.provider=provider_litserve ключ из pgvector не обязателен. "
-        "Плейсхолдеры YOUR_* из conf.json не считаются ключом. "
-        "ENV: RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY, LLM__OPENROUTER__API_KEY"
+        "Нужен rag.providers.pgvector.embedding_api_key (OpenRouter sk-or-...) или llm.openrouter.api_key при llm.provider=openrouter, или llm.yandex.api_key при llm.provider=yandex. При rag.embedding.provider=provider_litserve ключ из pgvector не обязателен. Плейсхолдеры YOUR_* из conf.json не считаются ключом. ENV: RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY, LLM__OPENROUTER__API_KEY"
     )
 
 
@@ -124,13 +147,13 @@ class PgVectorProvider(BaseRAGProvider):
     Использует PostgreSQL + pgvector для хранения и поиска векторных документов.
     """
 
-    DEFAULT_CHUNK_SIZE = 1000
-    DEFAULT_CHUNK_OVERLAP = 100
+    DEFAULT_CHUNK_SIZE: ClassVar[int] = 1000
+    DEFAULT_CHUNK_OVERLAP: ClassVar[int] = 100
 
     def __init__(
         self,
         config: RAGProviderConfig,
-        embedding_config: RagEmbeddingRuntime | None = None,
+        embedding_runtime: RagEmbeddingRuntime | None = None,
     ) -> None:
         super().__init__(config)
 
@@ -141,13 +164,13 @@ class PgVectorProvider(BaseRAGProvider):
                 raise ValueError("DATABASE__RAG_URL не настроен")
             db_url = settings.database.rag_url
 
-        self._engine = create_async_engine(
+        self._engine: AsyncEngine = create_async_engine(
             db_url,
             echo=False,
             pool_size=5,
             max_overflow=10,
         )
-        self._session_factory = async_sessionmaker(
+        self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
             bind=self._engine,
             class_=AsyncSession,
             expire_on_commit=False,
@@ -157,12 +180,12 @@ class PgVectorProvider(BaseRAGProvider):
 
         timeout = config.timeout
 
-        if embedding_config is None:
+        if embedding_runtime is None:
             raise ValueError("embedding runtime обязателен для pgvector")
-        model = embedding_config.model
-        dimension = embedding_config.dimension
-        embedding_base_url = embedding_config.base_url
-        mrl_output_dimension = embedding_config.mrl_output_dimension
+        model = embedding_runtime.model
+        dimension = embedding_runtime.dimension
+        embedding_base_url = embedding_runtime.base_url
+        mrl_output_dimension = embedding_runtime.mrl_output_dimension
 
         if not model:
             raise ValueError("embedding.model обязателен в конфигурации")
@@ -175,8 +198,7 @@ class PgVectorProvider(BaseRAGProvider):
             yc = get_settings().llm.yandex
             if yc is None:
                 raise ValueError(
-                    "Embedding base_url указывает на llm.api.cloud.yandex.net: задайте блок llm.yandex "
-                    "(api_key, folder_id)."
+                    "Embedding base_url указывает на llm.api.cloud.yandex.net: задайте блок llm.yandex (api_key, folder_id)."
                 )
             embedding_extra_headers = yandex_provider_http_headers(yc)
 
@@ -189,7 +211,7 @@ class PgVectorProvider(BaseRAGProvider):
             DeterministicEmbeddingService if use_deterministic_embeddings else EmbeddingService
         )
 
-        self._embedding_service = embedding_service_cls(
+        self._embedding_service: EmbeddingService = embedding_service_cls(
             api_key=api_key,
             models=[model],
             base_url=embedding_base_url or None,
@@ -201,17 +223,19 @@ class PgVectorProvider(BaseRAGProvider):
         if use_deterministic_embeddings:
             logger.info("PgVector провайдер: mock embeddings для тестов")
 
-        self._file_reader = FileReader()
-        self._chunk_size = config.chunk_size
-        self._chunk_overlap = config.chunk_overlap
-        self._tokenizer = tiktoken.get_encoding("cl100k_base")
+        self._file_reader: FileReader = FileReader()
+        self._chunk_size: int = config.chunk_size
+        self._chunk_overlap: int = config.chunk_overlap
+        self._tokenizer: tiktoken.Encoding = tiktoken.get_encoding("cl100k_base")
 
         logger.info(f"PgVector провайдер инициализирован: model={model}, dimension={dimension}")
 
     @property
+    @override
     def provider_name(self) -> str:
         return "pgvector"
 
+    @override
     async def close(self) -> None:
         await self._engine.dispose()
 
@@ -229,7 +253,7 @@ class PgVectorProvider(BaseRAGProvider):
     def _chunk_text(self, text_content: str) -> list[str]:
         """Разбивает текст на chunks по токенам."""
         tokens = self._tokenizer.encode(text_content)
-        chunks = []
+        chunks: list[str] = []
         start = 0
         while start < len(tokens):
             end = start + self._chunk_size
@@ -265,13 +289,13 @@ class PgVectorProvider(BaseRAGProvider):
                 out.append((chunk_text, meta))
         if not out:
             raise ValueError(
-                "После FileReader нет текста для индексации (пустые страницы). "
-                f"file={read_result.file_name}"
+                f"После FileReader нет текста для индексации (пустые страницы). file={read_result.file_name}"
             )
         return out
 
     # -- Namespaces --
 
+    @override
     async def create_namespace(
         self, name: str, description: str | None = None
     ) -> RAGNamespace:
@@ -292,6 +316,7 @@ class PgVectorProvider(BaseRAGProvider):
             document_count=count,
         )
 
+    @override
     async def get_namespace(self, namespace_id: str) -> RAGNamespace | None:
         async with self._session_factory() as session:
             stmt = (
@@ -311,6 +336,7 @@ class PgVectorProvider(BaseRAGProvider):
             document_count=count,
         )
 
+    @override
     async def list_namespaces(self) -> list[RAGNamespace]:
         async with self._session_factory() as session:
             stmt = select(
@@ -318,17 +344,18 @@ class PgVectorProvider(BaseRAGProvider):
                 func.count().label("doc_count"),
             ).group_by(VectorDocument.namespace_id)
             result = await session.execute(stmt)
-            rows = result.all()
+            rows: Sequence[tuple[str, int]] = result.tuples().all()
 
         return [
             RAGNamespace(
-                namespace_id=row.namespace_id,
-                name=row.namespace_id,
-                document_count=row.doc_count,
+                namespace_id=row_namespace_id,
+                name=row_namespace_id,
+                document_count=doc_count,
             )
-            for row in rows
+            for row_namespace_id, doc_count in rows
         ]
 
+    @override
     async def delete_namespace(self, namespace_id: str) -> bool:
         async with self._session_factory() as session:
             stmt = delete(VectorDocument).where(VectorDocument.namespace_id == namespace_id)
@@ -341,6 +368,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     # -- Document Upload --
 
+    @override
     async def upload_document_from_file(
         self,
         namespace_id: str,
@@ -373,12 +401,14 @@ class PgVectorProvider(BaseRAGProvider):
             metadata=doc_metadata,
         )
 
+    @override
     async def upload_document_from_s3(
         self,
         namespace_id: str,
         s3_key: str,
         document_name: str | None = None,
         metadata: RAGMetadata | None = None,
+        *,
         upload_profile: UploadProfileBinding | None = None,
     ) -> RAGDocument:
         doc_metadata = dict(metadata) if metadata is not None else {}
@@ -411,6 +441,7 @@ class PgVectorProvider(BaseRAGProvider):
             upload_profile=upload_profile,
         )
 
+    @override
     async def upload_document_from_text(
         self,
         namespace_id: str,
@@ -491,8 +522,7 @@ class PgVectorProvider(BaseRAGProvider):
             )
         except Exception as exc:
             logger.warning(
-                f"Embedding unavailable for '{document_name}' in '{namespace_id}': {exc}. "
-                "Storing chunks without embeddings — reembed task will retry."
+                f"Embedding unavailable for '{document_name}' in '{namespace_id}': {exc}. Storing chunks without embeddings — reembed task will retry."
             )
             embeddings = [None] * len(chunks)
             embedding_model = None
@@ -576,6 +606,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     # -- Document CRUD --
 
+    @override
     async def get_document(self, namespace_id: str, document_id: str) -> RAGDocument | None:
         async with self._session_factory() as session:
             stmt = (
@@ -600,24 +631,21 @@ class PgVectorProvider(BaseRAGProvider):
             metadata=row.metadata_ or {},
         )
 
+    @override
     async def list_documents(self, namespace_id: str, limit: int = 100) -> list[RAGDocument]:
         async with self._session_factory() as session:
             stmt = (
-                select(
-                    VectorDocument.document_id,
-                    VectorDocument.document_name,
-                    VectorDocument.metadata_,
-                )
+                select(VectorDocument)
                 .where(VectorDocument.namespace_id == namespace_id)
                 .distinct(VectorDocument.document_id)
                 .limit(limit)
             )
             result = await session.execute(stmt)
-            rows = result.all()
+            rows = result.scalars().all()
 
-        docs = []
+        docs: list[RAGDocument] = []
         for row in rows:
-            meta = row.metadata_ or {}
+            meta = row.metadata_
             docs.append(
                 RAGDocument(
                     document_id=row.document_id,
@@ -633,16 +661,13 @@ class PgVectorProvider(BaseRAGProvider):
             )
         return docs
 
+    @override
     async def list_documents_with_filters(
         self, namespace_id: str, where: RAGMetadataFilter | None = None, limit: int = 100
     ) -> list[RAGDocument]:
         async with self._session_factory() as session:
             stmt = (
-                select(
-                    VectorDocument.document_id,
-                    VectorDocument.document_name,
-                    VectorDocument.metadata_,
-                )
+                select(VectorDocument)
                 .where(VectorDocument.namespace_id == namespace_id)
                 .distinct(VectorDocument.document_id)
             )
@@ -652,11 +677,11 @@ class PgVectorProvider(BaseRAGProvider):
 
             stmt = stmt.limit(limit)
             result = await session.execute(stmt)
-            rows = result.all()
+            rows = result.scalars().all()
 
-        docs = []
+        docs: list[RAGDocument] = []
         for row in rows:
-            meta = row.metadata_ or {}
+            meta = row.metadata_
             docs.append(
                 RAGDocument(
                     document_id=row.document_id,
@@ -674,44 +699,57 @@ class PgVectorProvider(BaseRAGProvider):
         logger.info(f"Найдено {len(docs)} документов с фильтрами в {namespace_id}")
         return docs
 
-    def _metadata_expr_for_scalar(self, key: str, value: JsonValue):
+    def _metadata_expr_for_scalar(
+        self,
+        key: str,
+        value: JsonValue,
+    ) -> ColumnElement[bool] | ColumnElement[int] | ColumnElement[float] | ColumnElement[str]:
+        metadata_value = VectorDocument.metadata_.op("->>")(key)
         if isinstance(value, bool):
-            return VectorDocument.metadata_[key].as_boolean()
+            return sql_cast(metadata_value, Boolean)
         if isinstance(value, int) and not isinstance(value, bool):
-            return VectorDocument.metadata_[key].as_integer()
+            return sql_cast(metadata_value, Integer)
         if isinstance(value, float):
-            return VectorDocument.metadata_[key].as_float()
-        return VectorDocument.metadata_[key].as_string()
+            return sql_cast(metadata_value, Float)
+        return sql_cast(metadata_value, String)
 
-    def _build_field_operator_expression(self, key: str, operator: str, op_value: JsonValue):
+    def _build_field_operator_expression(
+        self, key: str, operator: str, op_value: JsonValue
+    ) -> ColumnElement[bool]:
         if operator == "$eq":
             return self._metadata_expr_for_scalar(key, op_value) == op_value
         if operator == "$ne":
             return self._metadata_expr_for_scalar(key, op_value) != op_value
 
         if operator == "$in":
-            if not isinstance(op_value, (list, tuple)) or len(op_value) == 0:
+            if not isinstance(op_value, list) or len(op_value) == 0:
                 raise ValueError(
                     f"RAG filters: $in требует непустой список значений для ключа {key!r}",
                 )
-            vals = list(op_value)
+            vals = op_value
             if len(vals) == 1:
                 v0 = vals[0]
                 return self._metadata_expr_for_scalar(key, v0) == v0
-            return or_(*[self._metadata_expr_for_scalar(key, v) == v for v in vals])
+            in_expressions: list[ColumnElement[bool]] = [
+                self._metadata_expr_for_scalar(key, value) == value for value in vals
+            ]
+            return or_(*in_expressions)
         if operator == "$nin":
-            if not isinstance(op_value, (list, tuple)) or len(op_value) == 0:
+            if not isinstance(op_value, list) or len(op_value) == 0:
                 raise ValueError(
                     f"RAG filters: $nin требует непустой список значений для ключа {key!r}",
                 )
-            vals = list(op_value)
+            vals = op_value
             if len(vals) == 1:
                 v0 = vals[0]
                 return self._metadata_expr_for_scalar(key, v0) != v0
-            return and_(*[self._metadata_expr_for_scalar(key, v) != v for v in vals])
+            nin_expressions: list[ColumnElement[bool]] = [
+                self._metadata_expr_for_scalar(key, value) != value for value in vals
+            ]
+            return and_(*nin_expressions)
 
         if isinstance(op_value, int) and not isinstance(op_value, bool):
-            col_int = VectorDocument.metadata_[key].as_integer()
+            col_int = sql_cast(VectorDocument.metadata_.op("->>")(key), Integer)
             if operator == "$gt":
                 return col_int > op_value
             if operator == "$gte":
@@ -720,30 +758,51 @@ class PgVectorProvider(BaseRAGProvider):
                 return col_int < op_value
             if operator == "$lte":
                 return col_int <= op_value
-        else:
-            fv = float(op_value)
-            if operator == "$gt":
-                return VectorDocument.metadata_[key].as_float() > fv
-            if operator == "$gte":
-                return VectorDocument.metadata_[key].as_float() >= fv
-            if operator == "$lt":
-                return VectorDocument.metadata_[key].as_float() < fv
-            if operator == "$lte":
-                return VectorDocument.metadata_[key].as_float() <= fv
+        if not isinstance(op_value, (int, float)) or isinstance(op_value, bool):
+            raise ValueError(
+                f"RAG filters: {key}.{operator} поддерживает только number"
+            )
+        fv = float(op_value)
+        if operator == "$gt":
+            return self._metadata_expr_for_scalar(key, fv) > fv
+        if operator == "$gte":
+            return self._metadata_expr_for_scalar(key, fv) >= fv
+        if operator == "$lt":
+            return self._metadata_expr_for_scalar(key, fv) < fv
+        if operator == "$lte":
+            return self._metadata_expr_for_scalar(key, fv) <= fv
 
         raise ValueError(f"RAG filters: неподдерживаемый оператор {operator}")
 
-    def _build_metadata_filter_expression(self, filters: RAGMetadataFilter):
+    def _build_metadata_filter_expression(self, filters: RAGMetadataFilter) -> ColumnElement[bool]:
         validate_metadata_filters(filters)
         return self._build_metadata_filter_node(filters)
 
-    def _build_metadata_filter_node(self, node: RAGMetadataFilter):
+    def _build_metadata_filter_node(self, node: RAGMetadataFilter) -> ColumnElement[bool]:
         if "$and" in node:
-            return and_(*[self._build_metadata_filter_node(item) for item in node["$and"]])
+            and_items = node["$and"]
+            if not isinstance(and_items, list):
+                raise ValueError("RAG filters: $and должен быть массивом условий")
+            and_expressions: list[ColumnElement[bool]] = [
+                self._build_metadata_filter_node(
+                    require_json_object(item, "RAG filters $and item")
+                )
+                for item in and_items
+            ]
+            return and_(*and_expressions)
         if "$or" in node:
-            return or_(*[self._build_metadata_filter_node(item) for item in node["$or"]])
+            or_items = node["$or"]
+            if not isinstance(or_items, list):
+                raise ValueError("RAG filters: $or должен быть массивом условий")
+            or_expressions: list[ColumnElement[bool]] = [
+                self._build_metadata_filter_node(
+                    require_json_object(item, "RAG filters $or item")
+                )
+                for item in or_items
+            ]
+            return or_(*or_expressions)
 
-        expressions = []
+        expressions: list[ColumnElement[bool]] = []
         for key, value in node.items():
             if isinstance(value, dict):
                 op, op_value = next(iter(value.items()))
@@ -752,6 +811,7 @@ class PgVectorProvider(BaseRAGProvider):
             expressions.append(self._metadata_expr_for_scalar(key, value) == value)
         return and_(*expressions)
 
+    @override
     async def delete_document(self, namespace_id: str, document_id: str) -> bool:
         async with self._session_factory() as session:
             stmt = delete(VectorDocument).where(
@@ -814,23 +874,16 @@ class PgVectorProvider(BaseRAGProvider):
 
         async with self._session_factory() as session:
             result = await session.execute(stmt)
-            rows = result.all()
+            rows: Sequence[tuple[str, str, str | None, int, int | None]] = result.tuples().all()
 
-        for row in rows:
-            ns, doc_id, cid, cnt, null_chunks = (
-                row[0],
-                row[1],
-                row[2],
-                row[3],
-                row[4],
-            )
+        for ns, doc_id, cid, cnt, null_chunks in rows:
             if cid is None:
                 continue
-            key = (str(ns), str(doc_id), str(cid))
+            key = (ns, doc_id, cid)
             if key not in out:
                 continue
             null_int = int(null_chunks or 0)
-            total = int(cnt or 0)
+            total = int(cnt)
             if null_int > 0:
                 out[key] = "pending_embedding"
             elif total > 0:
@@ -871,8 +924,13 @@ class PgVectorProvider(BaseRAGProvider):
                 .limit(limit)
             )
             result = await session.execute(stmt)
-            rows = list(result.all())
-        return [(str(row[0]), str(row[1]), str(row[2])) for row in rows]
+            rows: Sequence[tuple[str, str, str | None]] = result.tuples().all()
+        stale_chunks: list[tuple[str, str, str]] = []
+        for chunk_id, content, company_id in rows:
+            if company_id is None:
+                raise ValueError("fetch_stale_chunks_for_reembed returned chunk without company_id")
+            stale_chunks.append((chunk_id, content, company_id))
+        return stale_chunks
 
     async def write_reembed_chunk_embeddings(
         self,
@@ -898,6 +956,7 @@ class PgVectorProvider(BaseRAGProvider):
             await session.commit()
         return updated
 
+    @override
     async def delete_orphan_company_chunks(self, *, limit: int) -> int:
         """
         Батчевое удаление чанков ``vector_documents`` без ``company_id``.
@@ -930,6 +989,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     # -- Search --
 
+    @override
     async def search(
         self,
         namespace_id: str,
@@ -947,6 +1007,8 @@ class PgVectorProvider(BaseRAGProvider):
         )
 
         if use_hybrid_rrf:
+            if search_options is None:
+                raise ValueError("hybrid search requires search_options")
             return await self._hybrid_search_rrf(
                 namespace_id=namespace_id,
                 query=query,
@@ -960,8 +1022,8 @@ class PgVectorProvider(BaseRAGProvider):
         query_embedding = await self._embedding_service.generate_embedding(query)
 
         async with self._session_factory() as session:
-            await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
-            distance_expr = VectorDocument.embedding.cosine_distance(query_embedding)
+            _ = await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
+            distance_expr = sql_cast(VectorDocument.embedding.op("<=>")(query_embedding), Float())
             similarity_expr = (1 - distance_expr).label("similarity")
 
             stmt = (
@@ -977,9 +1039,9 @@ class PgVectorProvider(BaseRAGProvider):
                 stmt = stmt.where(self._build_metadata_filter_expression(filters))
 
             result = await session.execute(stmt)
-            rows = result.all()
+            rows: Sequence[tuple[VectorDocument, float | None]] = result.tuples().all()
 
-        return self._build_search_results(list(rows), namespace_id)
+        return self._build_search_results(rows, namespace_id)
 
     async def _hybrid_search_rrf(
         self,
@@ -999,10 +1061,10 @@ class PgVectorProvider(BaseRAGProvider):
         per_channel = limit * 3 if per_channel_top_k is None else int(per_channel_top_k)
 
         async with self._session_factory() as session:
-            await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
+            _ = await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
 
             # Семантический канал
-            distance_expr = VectorDocument.embedding.cosine_distance(query_embedding)
+            distance_expr = sql_cast(VectorDocument.embedding.op("<=>")(query_embedding), Float())
             similarity_expr = (1 - distance_expr).label("similarity")
 
             semantic_stmt = (
@@ -1028,8 +1090,10 @@ class PgVectorProvider(BaseRAGProvider):
                 lexical_stmt = lexical_stmt.where(self._build_metadata_filter_expression(filters))
             lexical_stmt = lexical_stmt.order_by(rank_expr.desc()).limit(per_channel)
 
-            semantic_rows = (await session.execute(semantic_stmt)).all()
-            lexical_rows = (await session.execute(lexical_stmt)).all()
+            semantic_result = await session.execute(semantic_stmt)
+            semantic_rows: Sequence[tuple[str, float | None]] = semantic_result.tuples().all()
+            lexical_result = await session.execute(lexical_stmt)
+            lexical_rows: Sequence[tuple[str, float | None]] = lexical_result.tuples().all()
 
             # RRF-слияние
             semantic_ids = [row[0] for row in semantic_rows]
@@ -1069,7 +1133,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     def _build_search_results(
         self,
-        rows: list[tuple[VectorDocument, float | None]],
+        rows: Sequence[tuple[VectorDocument, float | None]],
         namespace_id: str,
     ) -> list[RAGSearchResult]:
         search_results: list[RAGSearchResult] = []

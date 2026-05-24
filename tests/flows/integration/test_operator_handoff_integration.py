@@ -77,7 +77,7 @@ async def test_hitl_node_creates_operator_task_and_operator_interrupt(
     finally:
         clear_context()
 
-    assert out["status"] == "input-required"
+    assert out["task_state"] == "input-required"
     assert out["interrupt"] is not None
     assert out["interrupt"]["body"]["kind"] == InterruptKind.OPERATOR_TASK.value
 
@@ -325,7 +325,7 @@ async def test_llm_hitl_operator_task_then_complete_resumes_and_finishes(
         context_data=ctx.model_dump(),
         channel="a2a",
     )
-    assert first["status"] == "input-required"
+    assert first["task_state"] == "input-required"
     assert first["interrupt"]["body"]["kind"] == InterruptKind.OPERATOR_TASK.value
 
     tasks_body = await client.get("/flows/api/v1/operator/tasks")
@@ -554,7 +554,7 @@ async def test_full_hitl_dialogue_single_reply_then_takeover_then_followup(
         )
     finally:
         clear_context()
-    assert first["status"] == "input-required"
+    assert first["task_state"] == "input-required"
     assert first["interrupt"]["body"]["kind"] == InterruptKind.OPERATOR_TASK.value
     assert first["interrupt"]["body"].get("handoff_mode", "single_reply") == "single_reply"
 
@@ -621,7 +621,7 @@ async def test_full_hitl_dialogue_single_reply_then_takeover_then_followup(
         )
     finally:
         clear_context()
-    assert second["status"] == "input-required"
+    assert second["task_state"] == "input-required"
     assert second["interrupt"]["body"]["handoff_mode"] == "takeover"
 
     tasks_resp2 = await client.get("/flows/api/v1/operator/tasks")
@@ -759,7 +759,7 @@ async def test_full_hitl_dialogue_single_reply_then_takeover_then_followup(
         )
     finally:
         clear_context()
-    assert followup["status"] == "completed"
+    assert followup["task_state"] == "completed"
 
     set_context(ctx)
     try:
@@ -915,7 +915,7 @@ async def test_hitl_node_single_reply_graph(
     finally:
         clear_context()
 
-    assert first["status"] == "input-required"
+    assert first["task_state"] == "input-required"
     assert first["interrupt"]["body"]["kind"] == InterruptKind.OPERATOR_TASK.value
     assert first["interrupt"]["body"].get("handoff_mode", "single_reply") == "single_reply"
 
@@ -1005,7 +1005,7 @@ async def test_hitl_node_takeover_graph(
     finally:
         clear_context()
 
-    assert first["status"] == "input-required"
+    assert first["task_state"] == "input-required"
     assert first["interrupt"]["body"]["handoff_mode"] == "takeover"
 
     tasks_resp = await client.get("/flows/api/v1/operator/tasks")
@@ -1220,7 +1220,7 @@ async def test_operator_complete_with_files_single_reply(
         context_data=ctx.model_dump(),
         channel="a2a",
     )
-    assert first["status"] == "input-required"
+    assert first["task_state"] == "input-required"
 
     tasks_resp = await client.get("/flows/api/v1/operator/tasks")
     op_task = next(
@@ -1325,9 +1325,12 @@ async def test_operator_complete_with_files_takeover_dialog_log(
     assert log[0]["file_ids"] == [fid1]
     assert log[1]["file_ids"] == [fid2]
 
+    from apps.flows.src.models.operator_schemas import OperatorDialogLogEntry
     from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
 
-    formatted = OperatorHandoffService._format_dialog_log_for_tool_result(log)
+    formatted = OperatorHandoffService._format_dialog_log_for_tool_result(
+        [OperatorDialogLogEntry.model_validate(entry) for entry in log]
+    )
     assert f"/flows/api/v1/files/download/{fid1}" in formatted
     assert f"/flows/api/v1/files/download/{fid2}" in formatted
 

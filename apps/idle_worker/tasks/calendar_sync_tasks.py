@@ -218,9 +218,9 @@ async def calendar_sync_tick(
     )
     all_creds = google_creds + yandex_creds
     integrations = [
-        _credential_to_calendar_integration(c)
+        integration
         for c in all_creds
-        if c.metadata.get("calendar_settings", {}).get("sync_enabled", True)
+        if (integration := _credential_to_calendar_integration(c)).settings.sync_enabled
     ]
     if len(integrations) > config.batch_size:
         integrations = integrations[: config.batch_size]

@@ -205,6 +205,13 @@ async def test_operator_get_task_includes_message_text_for_a2a_messages(
         a2a_task_id=a2a_tid,
         context_id=ctx_id,
         correlation_id=cor_id,
+        interrupt_snapshot={
+            "question": line,
+            "task_title": "Msg test",
+            "assignee_queue": slug,
+            "queue_id": qid,
+            "handoff_mode": "single_reply",
+        },
     )
     await container.operator_repository.insert_task(row)
 

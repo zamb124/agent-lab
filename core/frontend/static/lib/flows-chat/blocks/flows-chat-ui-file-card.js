@@ -1,5 +1,7 @@
 import { html, css } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
+import '../../components/platform-icon.js';
+import { resolveFileIconKey } from '../../utils/file-icons.js';
 
 export class FlowsChatUiFileCard extends PlatformElement {
     static properties = {
@@ -19,6 +21,9 @@ export class FlowsChatUiFileCard extends PlatformElement {
             align-items: center;
             gap: 10px;
             padding: 4px 0;
+        }
+        platform-icon[file-icon] {
+            flex: 0 0 auto;
         }
         .meta {
             flex: 1;
@@ -67,10 +72,12 @@ export class FlowsChatUiFileCard extends PlatformElement {
     }
 
     render() {
+        const label = this.name || this.file_id || 'File';
         return html`
             <div class="wrap">
+                <platform-icon file-icon name=${resolveFileIconKey(label, this.mime_type)} size="24"></platform-icon>
                 <div class="meta">
-                    <p class="name">${this.name || this.file_id || 'File'}</p>
+                    <p class="name">${label}</p>
                     ${this.mime_type ? html`<p class="mime">${this.mime_type}</p>` : ''}
                 </div>
                 ${this.file_id || this.url

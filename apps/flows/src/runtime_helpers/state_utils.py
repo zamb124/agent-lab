@@ -18,6 +18,7 @@ from apps.flows.src.utils import extract_json_from_response
 from core.errors import SafeEvalError
 from core.state import ExecutionState
 from core.state.mutation_policy import forbid_frozen_update_key
+from core.types import JsonValue
 
 UI_EVENTS_KEY = "ui_events_pending"
 JsonDict = dict[str, Any]
@@ -379,7 +380,7 @@ def ask_user(question: str) -> None:
     raise FlowInterrupt(question=question)
 
 
-def extract_json(text: str) -> Any:
+def extract_json(text: str) -> JsonValue | None:
     """
     Извлекает JSON из текста.
 

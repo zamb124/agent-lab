@@ -28,6 +28,7 @@ from core.integrations.providers.amocrm import (
     parse_amocrm_subdomain_from_referer,
 )
 from core.logging import get_logger
+from core.types import JsonObject, parse_json_object, require_json_object
 from core.utils.domain import is_allowed_integration_return_origin
 
 if TYPE_CHECKING:
@@ -133,7 +134,7 @@ class OAuthService:
         company_id: str,
         redirect_uri: str | None = None,
         return_path: str = "/",
-        flow_context: dict[str, Any] | None = None,
+        flow_context: JsonObject | None = None,
         amocrm_subdomain: str | None = None,
         return_origin: str | None = None,
         oauth_ui_locale: OAuthErrorLocale | None = None,
@@ -176,7 +177,7 @@ class OAuthService:
 
         state_token = secrets.token_urlsafe(32)
         state_key = f"{OAUTH_STATE_PREFIX}:{state_token}"
-        state_payload: dict[str, Any] = {
+        state_payload: JsonObject = {
             "provider": provider.value,
             "service": service,
             "user_id": user_id,
@@ -260,7 +261,7 @@ class OAuthService:
         state_token: str,
         code: str,
         referer: str | None = None,
-    ) -> tuple[IntegrationCredential, str, dict[str, Any] | None, str | None]:
+    ) -> tuple[IntegrationCredential, str, JsonObject | None, str | None]:
         """
         Обменивает authorization code на токены и сохраняет credential.
 
@@ -275,9 +276,7 @@ class OAuthService:
             raise ValueError("OAuth state is invalid or expired")
         await self._storage.delete(key=state_key, force_global=True)
 
-        state_payload = json.loads(raw_state)
-        if not isinstance(state_payload, dict):
-            raise ValueError("OAuth state payload is invalid")
+        state_payload = parse_json_object(raw_state, "oauth.state")
 
         provider_str = state_payload.get("provider")
         if not isinstance(provider_str, str) or provider_str == "":
@@ -299,9 +298,14 @@ class OAuthService:
         return_path = state_payload.get("return_path")
         if not isinstance(return_path, str) or not return_path.startswith("/") or return_path.startswith("//"):
             raise ValueError("OAuth state return_path is invalid")
-        scopes = state_payload.get("scopes", "")
+        scopes_raw = state_payload.get("scopes", "")
+        scopes = scopes_raw if isinstance(scopes_raw, str) else ""
         flow_context_raw = state_payload.get("flow_context")
-        flow_context = flow_context_raw if isinstance(flow_context_raw, dict) else None
+        flow_context = (
+            require_json_object(flow_context_raw, "oauth.state.flow_context")
+            if flow_context_raw is not None
+            else None
+        )
 
         amocrm_subdomain_raw = state_payload.get("amocrm_subdomain")
         amocrm_subdomain: str | None = (
@@ -368,7 +372,7 @@ class OAuthService:
         token_type = token_payload.get("token_type")
 
         now = datetime.now(timezone.utc)
-        metadata: dict[str, Any] = {}
+        metadata: JsonObject = {}
         if provider == IntegrationProvider.AMOCRM:
             if not amocrm_subdomain:
                 raise ValueError("OAuth amocrm: в state отсутствует amocrm_subdomain")

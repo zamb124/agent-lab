@@ -2,6 +2,7 @@ import { html, css, nothing, render as litRender } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import '../components/platform-icon.js';
 import { formatFileSize } from '../utils/format-file-size.js';
+import { resolveFileIconKey } from '../utils/file-icons.js';
 
 function asArray(value) {
     return Array.isArray(value) ? value : [];
@@ -1112,13 +1113,6 @@ export class FlowsChatFilesPanel extends PlatformElement {
         this._clearEditorPortal();
     }
 
-    _fileIcon(file) {
-        const originalName = asString(file.original_name).toLowerCase();
-        if (/\.(xlsx?|ods|csv)$/.test(originalName)) return 'table';
-        if (/\.(pptx?|odp)$/.test(originalName)) return 'presentation';
-        return 'file-text';
-    }
-
     _renderFile(file) {
         const key = fileKey(file);
         const canOpen = canOpenInDocuments(file);
@@ -1128,7 +1122,7 @@ export class FlowsChatFilesPanel extends PlatformElement {
         const href = fileHref(file);
         const thumb = isImageFile(file) && href.length > 0
             ? html`<img src=${href} alt="" loading="lazy">`
-            : html`<platform-icon name=${this._fileIcon(file)} size="22"></platform-icon>`;
+            : html`<platform-icon file-icon name=${resolveFileIconKey(asString(file.original_name), asString(file.content_type || file.mime_type))} size="22"></platform-icon>`;
         return html`
             <button
                 type="button"

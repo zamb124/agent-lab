@@ -30,7 +30,7 @@ from apps.flows.src.clients.mcp_client import MCPHttpClient
 from apps.flows.src.container_contracts import FlowRuntimeContainer, RuntimeFlowProtocol
 from apps.flows.src.container_state import get_current_container
 from apps.flows.src.mapping import MappingResolver
-from apps.flows.src.mock import get_mock_for_node
+from apps.flows.src.mock.resolver import get_mock_for_node
 from apps.flows.src.models import (
     NodeConfig,
     NodeLLMConfig,
@@ -790,6 +790,7 @@ class LlmNode(BaseNode):
         llm_context_source_registry = await self._resolve_llm_context_source_registry(
             config,
             state,
+            llm_context_policy,
         )
 
         self._runner = LlmNodeRunner(
@@ -950,7 +951,11 @@ class LlmNode(BaseNode):
         self,
         base: NodeConfig,
         state: ExecutionState | None,
+        policy: LLMContextProfile,
     ) -> LLMContextSourceRegistry | None:
+        if policy.mode == "off" or policy.retrieval.mode == "off":
+            return None
+
         node_resources_raw: dict[str, ResourceReferenceInput] = dict(base.resources or {})
         if not node_resources_raw:
             node_resources_raw = _config_resource_refs(self.config)

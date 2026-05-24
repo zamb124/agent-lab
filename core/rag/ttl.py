@@ -12,12 +12,13 @@
 """
 
 from collections.abc import Mapping
-from typing import Any
+
+from core.types import JsonObject, JsonValue
 
 
 def resolve_document_ttl_seconds(
     *,
-    ttl_raw: Any,
+    ttl_raw: JsonValue | None,
     default_ttl_seconds: int,
 ) -> int:
     """
@@ -56,10 +57,10 @@ def resolve_document_ttl_seconds(
 
 
 def ensure_ttl_seconds_in_metadata(
-    metadata: Mapping[str, Any],
+    metadata: Mapping[str, JsonValue],
     *,
     default_ttl_seconds: int,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Копия metadata с гарантированным ключом ``ttl_seconds`` (каноничное число).
 

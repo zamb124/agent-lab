@@ -6,7 +6,7 @@
 """
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import override
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models.base import Base
+from core.types import JsonObject
 
 
 class DocumentProcessingStatus(Base):
@@ -32,7 +33,7 @@ class DocumentProcessingStatus(Base):
     Одна строка на document_id
     """
 
-    __tablename__ = "document_processing_status"
+    __tablename__: str = "document_processing_status"
 
     document_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     task_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True, unique=True)
@@ -53,18 +54,19 @@ class DocumentProcessingStatus(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[JsonObject | None] = mapped_column(JSONB, nullable=True)
     ttl_seconds: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         server_default=text("864000"),
     )
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_document_status_task_id", "task_id"),
         Index("ix_document_status_namespace_status", "namespace_id", "status"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<DocumentProcessingStatus(document_id='{self.document_id}', status='{self.status}')>"
 
@@ -75,7 +77,7 @@ class VectorDocument(Base):
     Изоляция данных через namespace_id и company_id.
     """
 
-    __tablename__ = "vector_documents"
+    __tablename__: str = "vector_documents"
 
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
     namespace_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -83,18 +85,18 @@ class VectorDocument(Base):
     document_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     document_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    content_tsv: Mapped[Any] = mapped_column(
+    content_tsv: Mapped[str] = mapped_column(
         TSVECTOR,
         Computed("to_tsvector('simple', coalesce(content, ''))", persisted=True),
     )
-    embedding = mapped_column(Vector(1024), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(
         String(255), nullable=True, default=None, index=True,
         comment="Идентификатор модели эмбеддинга (напр. qwen/qwen3-embedding-0.6b)."
     )
     chunk_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
+    metadata_: Mapped[JsonObject] = mapped_column("metadata", JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -104,7 +106,7 @@ class VectorDocument(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_vd_namespace_company", "namespace_id", "company_id"),
         Index("ix_vd_document_id", "document_id"),
         Index(

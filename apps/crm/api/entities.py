@@ -887,7 +887,7 @@ async def voice_input(
     )
     if not isinstance(raw_data, dict):
         raise HTTPException(status_code=502, detail="Invalid voice service response")
-    data = cast(JsonObject, raw_data)
+    data = raw_data
     text_raw = data.get("text")
     provider_raw = data.get("provider")
     if not isinstance(text_raw, str) or not isinstance(provider_raw, str):

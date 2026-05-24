@@ -114,6 +114,11 @@ class CalendarIntegrationSettings(StrictBaseModel):
     notifications_enabled: bool = True
 
 
+class CalendarIntegrationCredentialMetadata(StrictBaseModel):
+    username: str | None = None
+    calendar_settings: CalendarIntegrationSettings = Field(default_factory=CalendarIntegrationSettings)
+
+
 class CalendarIntegration(StrictBaseModel):
     integration_id: str
     company_id: str

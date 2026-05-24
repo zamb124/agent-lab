@@ -66,7 +66,7 @@ export const relatedEntityCardSharedStyles = css`
         line-height: 20px;
         font-weight: 600;
         color: var(--text-primary);
-        font-family: 'Inter', var(--font-sans);
+        font-family: var(--font-sans);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

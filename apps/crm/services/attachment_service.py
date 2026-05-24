@@ -211,7 +211,7 @@ class AttachmentService:
             logger.warning(f"Attachment not found: {document_id} for {entity_id}")
             return False
 
-        await self._rag.delete_namespace_document(namespace_name, document_id)
+        _ = await self._rag.delete_namespace_document(namespace_name, document_id)
 
         entity.attachment_ids.remove(document_id)
         entity.updated_at = datetime.now(UTC)

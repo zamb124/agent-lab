@@ -3,47 +3,38 @@ API endpoints для nodes.
 """
 
 import asyncio
-from typing import Any
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import NodeConfig, ToolReference
-from apps.flows.src.models.enums import NodeType, ReactToolRole
+from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeLLMConfig
-from apps.flows.src.models.tool_reference import CallParameter
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
 from core.pagination import OffsetPage
+from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["nodes"])
-JsonDict = dict[str, Any]
-
-
-class NodeLLMConfigRequest(BaseModel):
-    """Request для LLM настроек ноды."""
-
-    model: str | None = None
-    temperature: float | None = None
-    max_tokens: int | None = None
 
 
 class NodeCreateRequest(BaseModel):
     """Запрос на создание ноды"""
 
     node_id: str
-    type: str  # llm_node, code, flow, remote_flow, external_api, mcp, channel
+    type: NodeType
     name: str
     description: str | None = None
     prompt: str | None = None
-    tools: list[Any] = Field(default_factory=list)  # str для обычных tools, dict для inline tools
-    llm: NodeLLMConfigRequest | None = None
+    tools: list[str | ToolReference] = Field(default_factory=list)
+    llm: NodeLLMConfig | None = None
     llm_context: LLMContextPatch | None = None
     llm_context_resource_key: str | None = None
-    variables: dict[str, Any] = Field(default_factory=dict)
+    variables: JsonObject = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
 
 
@@ -55,19 +46,19 @@ class NodeResponse(BaseModel):
     name: str
     description: str | None
     prompt: str | None
-    tools: list[Any]  # str для обычных tools, dict для inline tools
-    llm: dict[str, Any] | None
-    llm_context: dict[str, Any] | None = None
+    tools: list[str | JsonObject]
+    llm: JsonObject | None
+    llm_context: JsonObject | None = None
     llm_context_resource_key: str | None = None
-    variables: dict[str, Any] = Field(default_factory=dict)
+    variables: JsonObject = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
     source: str = "manual"
 
 
-def _tool_ref_to_response(tool_ref: ToolReference) -> Any:
+def _tool_ref_to_response(tool_ref: ToolReference) -> str | JsonObject:
     """Конвертирует ToolReference в формат для ответа."""
     if tool_ref.code:
-        result: JsonDict = {
+        result: JsonObject = {
             "tool_id": tool_ref.tool_id,
             "description": tool_ref.description,
             "code": tool_ref.code,
@@ -83,41 +74,21 @@ def _tool_ref_to_response(tool_ref: ToolReference) -> Any:
     return tool_ref.tool_id
 
 
-def _convert_inline_tool(tool_data: dict[str, Any]) -> ToolReference:
-    """Конвертирует inline tool dict в ToolReference."""
-    args_schema: dict[str, CallParameter] = {}
-    if "args_schema" in tool_data:
-        for k, v in tool_data["args_schema"].items():
-            args_schema[k] = CallParameter(
-                type=v.get("type", "string"),
-                description=v.get("description", ""),
-                required=v.get("required", True),
-            )
-
-    react_role_raw = tool_data.get("react_role")
-    react_role = ReactToolRole(react_role_raw) if react_role_raw else ReactToolRole.STANDARD
-
-    return ToolReference(
-        tool_id=tool_data["tool_id"],
-        description=tool_data.get("description"),
-        code=tool_data.get("code"),
-        args_schema=args_schema,
-        parameters_schema=tool_data.get("parameters_schema"),
-        react_role=react_role,
-    )
-
-
 def _node_to_response(node: NodeConfig) -> NodeResponse:
     """Конвертирует NodeConfig в NodeResponse"""
     return NodeResponse(
         node_id=node.node_id,
-        type=node.type,
+        type=node.type.value,
         name=node.name,
         description=node.description,
         prompt=node.prompt,
         tools=[_tool_ref_to_response(t) for t in node.tools],
-        llm=node.llm.model_dump() if node.llm else None,
-        llm_context=node.llm_context.model_dump(exclude_none=True) if node.llm_context else None,
+        llm=parse_json_object(node.llm.model_dump_json(exclude_none=True), "node.llm") if node.llm else None,
+        llm_context=(
+            parse_json_object(node.llm_context.model_dump_json(exclude_none=True), "node.llm_context")
+            if node.llm_context
+            else None
+        ),
         llm_context_resource_key=node.llm_context_resource_key,
         variables=node.local_variables,
         tags=node.tags,
@@ -128,8 +99,8 @@ def _node_to_response(node: NodeConfig) -> NodeResponse:
 @router.get("/", response_model=OffsetPage[NodeResponse])
 async def list_nodes(
     container: ContainerDep,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[NodeResponse]:
     nodes, total = await asyncio.gather(
         container.node_repository.list(limit=limit, offset=offset),
@@ -142,30 +113,27 @@ async def list_nodes(
 @router.post("/", response_model=NodeResponse)
 async def create_node(request: NodeCreateRequest, container: ContainerDep) -> NodeResponse:
     """Создает новую ноду"""
-    tools = []
+    tools: list[ToolReference] = []
     for tool_ref in request.tools:
-        if isinstance(tool_ref, dict):
-            tools.append(_convert_inline_tool(tool_ref))
-        else:
-            tool = await container.tool_repository.get(tool_ref)
-            if tool is None:
-                node = await container.node_repository.get(tool_ref)
-                if node is None:
-                    raise HTTPException(status_code=400, detail=f"Tool '{tool_ref}' not found")
-            tools.append(ToolReference(tool_id=tool_ref))
+        if isinstance(tool_ref, ToolReference):
+            tools.append(tool_ref)
+            continue
 
-    llm_config: NodeLLMConfig | None = None
-    if request.llm:
-        llm_config = NodeLLMConfig(**request.llm.model_dump())
+        tool = await container.tool_repository.get(tool_ref)
+        if tool is None:
+            node = await container.node_repository.get(tool_ref)
+            if node is None:
+                raise HTTPException(status_code=400, detail=f"Tool '{tool_ref}' not found")
+        tools.append(ToolReference(tool_id=tool_ref))
 
     node_config = NodeConfig(
         node_id=request.node_id,
-        type=NodeType(request.type),
+        type=request.type,
         name=request.name,
         description=request.description or "",
         prompt=request.prompt,
         tools=tools,
-        llm=llm_config,
+        llm=request.llm,
         llm_context=request.llm_context,
         llm_context_resource_key=request.llm_context_resource_key,
         local_variables=request.variables,
@@ -173,7 +141,7 @@ async def create_node(request: NodeCreateRequest, container: ContainerDep) -> No
         source="api",
     )
 
-    await container.node_repository.set(node_config)
+    _ = await container.node_repository.set(node_config)
 
     return _node_to_response(node_config)
 
@@ -197,31 +165,28 @@ async def update_node(
     existing = await container.node_repository.get(node_id)
     source = existing.source if existing else "api"
 
-    tools = []
+    tools: list[ToolReference] = []
     for tool_ref in request.tools:
-        if isinstance(tool_ref, dict):
-            tools.append(_convert_inline_tool(tool_ref))
-        else:
-            if tool_ref != node_id:
-                tool = await container.tool_repository.get(tool_ref)
-                if tool is None:
-                    node = await container.node_repository.get(tool_ref)
-                    if node is None:
-                        raise HTTPException(status_code=400, detail=f"Tool '{tool_ref}' not found")
-            tools.append(ToolReference(tool_id=tool_ref))
+        if isinstance(tool_ref, ToolReference):
+            tools.append(tool_ref)
+            continue
 
-    llm_config: NodeLLMConfig | None = None
-    if request.llm:
-        llm_config = NodeLLMConfig(**request.llm.model_dump())
+        if tool_ref != node_id:
+            tool = await container.tool_repository.get(tool_ref)
+            if tool is None:
+                node = await container.node_repository.get(tool_ref)
+                if node is None:
+                    raise HTTPException(status_code=400, detail=f"Tool '{tool_ref}' not found")
+        tools.append(ToolReference(tool_id=tool_ref))
 
     node_config = NodeConfig(
         node_id=node_id,
-        type=NodeType(request.type),
+        type=request.type,
         name=request.name,
         description=request.description or "",
         prompt=request.prompt,
         tools=tools,
-        llm=llm_config,
+        llm=request.llm,
         llm_context=request.llm_context,
         llm_context_resource_key=request.llm_context_resource_key,
         local_variables=request.variables,
@@ -229,7 +194,7 @@ async def update_node(
         source=source,
     )
 
-    await container.node_repository.set(node_config)
+    _ = await container.node_repository.set(node_config)
 
     return _node_to_response(node_config)
 

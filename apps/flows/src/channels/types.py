@@ -2,9 +2,14 @@
 Типы для каналов коммуникации.
 """
 
+from typing import TypeAlias
+
 from a2a.types import Message
 
+from core.models.context_models import Context
 from core.types import JsonObject
+
+ChannelRequestContext: TypeAlias = Context | JsonObject | None
 
 
 class PreparedTaskParams:

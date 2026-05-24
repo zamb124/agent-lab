@@ -10,9 +10,10 @@ import json
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
-from typing import Any
+from typing import override
 
 from a2a.types import (
+    AgentCard,
     Artifact,
     DataPart,
     DeleteTaskPushNotificationConfigParams,
@@ -32,10 +33,11 @@ from a2a.types import (
     TextPart,
 )
 from a2a.utils.message import get_message_text, new_agent_text_message
+from pydantic import Field
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.channels.base import BaseChannel
-from apps.flows.src.channels.types import PreparedTaskParams
+from apps.flows.src.channels.types import ChannelRequestContext, PreparedTaskParams
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.files import (
     extract_incoming_a2a_files,
@@ -54,6 +56,7 @@ from core.config.testing import is_testing
 from core.context import set_current_channel
 from core.files.file_ref import file_id_from_download_url
 from core.logging import get_logger
+from core.models import StrictBaseModel
 from core.state import ExecutionState
 from core.tasks.kicker import kiq_task_name_with_context
 from core.tasks.push_notifications import (
@@ -62,15 +65,22 @@ from core.tasks.push_notifications import (
     list_push_configs,
     set_push_config,
 )
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
+
+
+class A2AEvaluationMetadata(StrictBaseModel):
+    """Строгий контракт metadata.evaluation публичного A2A message/send."""
+
+    test_case_id: str = Field(min_length=1)
 
 
 def _text_part(text: str) -> Part:
     return Part(root=TextPart(text=text))
 
 
-def _data_part(data: dict[str, Any]) -> Part:
+def _data_part(data: JsonObject) -> Part:
     return Part(root=DataPart(data=data))
 
 
@@ -79,33 +89,45 @@ def _part_text(part: Part) -> str | None:
     return root.text if isinstance(root, TextPart) else None
 
 
-def _branch_id_from_message_metadata(metadata: dict[str, Any] | None) -> str:
+def _message_metadata(params: MessageSendParams) -> JsonObject | None:
+    if params.metadata is None:
+        return None
+    return require_json_object(params.metadata, "a2a.message.metadata")
+
+
+def _branch_id_from_message_metadata(metadata: JsonObject | None) -> str:
     if not metadata:
         return "default"
-    b = metadata.get("branch")
-    if b is not None:
-        s = str(b).strip()
-        if s:
-            return s
-    return "default"
+    branch = metadata.get("branch")
+    if branch is None:
+        return "default"
+    if not isinstance(branch, str) or not branch.strip():
+        raise ValueError("a2a.message.metadata.branch must be a non-empty string")
+    return branch.strip()
 
 
-def _get_evaluation_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
+def _get_evaluation_metadata(metadata: JsonObject | None) -> A2AEvaluationMetadata | None:
     """Извлекает параметры evaluation из metadata."""
     if not metadata:
         return None
     evaluation = metadata.get("evaluation")
-    return evaluation if isinstance(evaluation, dict) else None
+    if evaluation is None:
+        return None
+    return A2AEvaluationMetadata.model_validate(evaluation)
 
 
-def _is_async_message_send(metadata: dict[str, Any] | None) -> bool:
+def _is_async_message_send(metadata: JsonObject | None) -> bool:
     """Совместимый async-режим для A2A message/send без ожидания финального результата."""
     if not metadata:
         return False
-    raw = metadata.get("execution_mode")
-    if raw is None:
-        raw = metadata.get("mode")
-    return isinstance(raw, str) and raw.strip().lower() in {"async", "background"}
+    for key in ("execution_mode", "mode"):
+        raw = metadata.get(key)
+        if raw is None:
+            continue
+        if not isinstance(raw, str):
+            raise ValueError(f"a2a.message.metadata.{key} must be a string")
+        return raw.strip().lower() in {"async", "background"}
+    return False
 
 
 async def _build_task_from_events(
@@ -145,7 +167,7 @@ async def _build_task_from_events(
                                 response_parts.append(text)
                             else:
                                 response_parts = [text]
-        elif isinstance(event, TaskStatusUpdateEvent):
+        else:
             if event.final:
                 final_status = event.status
 
@@ -196,10 +218,10 @@ async def _build_task_from_events(
 
     # Загружаем существующую историю из state для multi-turn сценариев
     session_id = f"{flow_id}:{context_id}"
-    existing_history: list[Any] = []
+    existing_history: list[Message] = []
     if container is not None:
         state = await container.state_manager.get_state(session_id)
-        existing_history = state.get("messages", []) if state else []
+        existing_history = state.messages if state else []
 
     # Устанавливаем task_id в input_message для истории
     history_message = input_message.model_copy(update={"task_id": task_id})
@@ -209,7 +231,7 @@ async def _build_task_from_events(
         if hasattr(msg, "task_id") and not msg.task_id:
             msg.task_id = task_id
 
-    history = existing_history + [history_message]
+    history: list[Message] = [*existing_history, history_message]
 
     if response_text and final_status.state == TaskState.completed:
         agent_message = new_agent_text_message(response_text)
@@ -256,19 +278,21 @@ class A2AChannel(BaseChannel):
     Полная реализация A2A протокола через a2a-sdk.
     """
 
-    name = "a2a"
+    name: str = "a2a"
 
+    @override
     async def send_to_user(
         self,
         content: str,
         buttons: list[str] | None = None,
-        attachments: list[Any] | None = None,
+        attachments: list[JsonObject] | None = None,
     ) -> None:
         """
         Отправляет сообщение пользователю через A2A.
 
         В A2A это делается через emit событий в Redis Pub/Sub.
         """
+        _ = buttons, attachments
         if not self.context:
             logger.warning("Cannot send_to_user: no context available")
             return
@@ -286,7 +310,7 @@ class A2AChannel(BaseChannel):
             context_id=context_id,
             session_id=session_id,
             user_id=self.context.user.user_id,
-            user_groups=self._get_user_groups_from_context(self.context)
+            user_groups=self._get_user_groups_from_context(self.context),
         )
         emitter = Emitter(self.container.redis_client, exec_state)
         await emitter.emit_text(content, append=False, last_chunk=True)
@@ -317,7 +341,7 @@ class A2AChannel(BaseChannel):
                 if url:
                     raise ValueError(
                         "Вложение A2A без file_id: ожидается персист через API (S3), "
-                        "локальные url в state.files не поддерживаются."
+                        + "локальные url в state.files не поддерживаются."
                     )
 
         operator_task_id = prepared.takeover_operator_task_id
@@ -333,7 +357,7 @@ class A2AChannel(BaseChannel):
         )
         logger.info(
             "[on_message_stream] takeover user-reply routed to dialog_log, "
-            "task_id=%s, operator_task=%s",
+            + "task_id=%s, operator_task=%s",
             prepared.task_id,
             operator_task_id,
         )
@@ -347,7 +371,7 @@ class A2AChannel(BaseChannel):
             final=True,
         )
 
-    async def _persist_incoming_a2a_files(self, message: Message) -> tuple[list[dict[str, Any]], str]:
+    async def _persist_incoming_a2a_files(self, message: Message) -> tuple[list[JsonObject], str]:
         """Байты FileWithBytes -> S3 + FileRecord; FileWithUri -> canonical url в state."""
         incoming = extract_incoming_a2a_files(message)
         if not incoming:
@@ -361,7 +385,7 @@ class A2AChannel(BaseChannel):
         company_id = self.context.active_company.company_id
         user_id = self.context.user.user_id if self.context.user else None
         prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
-        files_data: list[dict[str, Any]] = []
+        files_data: list[JsonObject] = []
 
         for inc in incoming:
             if inc.data is not None:
@@ -382,7 +406,7 @@ class A2AChannel(BaseChannel):
                     raise ValueError("FileWithUri без uri")
                 if not inc.content_type or not inc.content_type.strip():
                     raise ValueError("FileWithUri.content_type обязателен для state.files")
-                item: dict[str, Any] = {
+                item: JsonObject = {
                     "original_name": inc.original_name,
                     "url": inc.uri,
                     "content_type": inc.content_type.strip(),
@@ -409,7 +433,7 @@ class A2AChannel(BaseChannel):
         return files_data, format_a2a_files_content(files_data)
 
     async def _transcribe_incoming_audio(
-        self, files_data: list[dict[str, Any]]
+        self, files_data: list[JsonObject]
     ) -> str:
         """
         Авто-STT для входящих audio-вложений (`audio/*` по mime/расширению).
@@ -429,7 +453,9 @@ class A2AChannel(BaseChannel):
             company_id=self.context.active_company.company_id,
         )
 
-    async def _prepare_a2a_params(self, params: MessageSendParams):
+    async def _prepare_a2a_params(
+        self, params: MessageSendParams, metadata: JsonObject | None = None
+    ) -> PreparedTaskParams:
         """Подготовка параметров специфичных для A2A."""
         message = params.message
         content = get_message_text(message)
@@ -447,14 +473,15 @@ class A2AChannel(BaseChannel):
             context_id=message.context_id,
             task_id=message.task_id,
             message=message,
-            metadata=params.metadata,
+            metadata=metadata if metadata is not None else _message_metadata(params),
             files_data=files_data,
         )
 
         return prepared
 
+    @override
     async def on_message_send(
-        self, params: MessageSendParams, context: Any = None
+        self, params: MessageSendParams, context: ChannelRequestContext = None
     ) -> Task | Message:
         """
         По умолчанию совместимый синхронный режим: кикает task и собирает события через collect().
@@ -473,17 +500,20 @@ class A2AChannel(BaseChannel):
         """
         set_current_channel(self)
 
-        branch_for_perm = _branch_id_from_message_metadata(params.metadata)
+        metadata = _message_metadata(params)
+        branch_for_perm = _branch_id_from_message_metadata(metadata)
         await self.check_permissions(self._get_user_groups_from_context(context), branch_for_perm)
 
         # Проверяем evaluation mode
-        eval_metadata = _get_evaluation_metadata(params.metadata)
-        if eval_metadata and eval_metadata.get("test_case_id"):
+        eval_metadata = _get_evaluation_metadata(metadata)
+        if eval_metadata is not None:
             eval_task_id = params.message.task_id or str(uuid.uuid4())
             # Собираем все события и формируем Task
             events = [
                 event
-                async for event in self._run_evaluation(params, eval_metadata, task_id=eval_task_id)
+                async for event in self._run_evaluation(
+                    params, metadata, eval_metadata, task_id=eval_task_id
+                )
             ]
             return await _build_task_from_events(
                 events=events,
@@ -495,7 +525,7 @@ class A2AChannel(BaseChannel):
             )
 
         # Обычный режим
-        prepared = await self._prepare_a2a_params(params)
+        prepared = await self._prepare_a2a_params(params, metadata)
 
         # A2A Section 3.4.3: follow-up при активном operator takeover
         if prepared.is_takeover_user_reply:
@@ -513,7 +543,7 @@ class A2AChannel(BaseChannel):
                 container=self.container,
             )
 
-        if _is_async_message_send(params.metadata):
+        if _is_async_message_send(metadata):
             await self.create_task(prepared)
             return Task(
                 id=prepared.task_id,
@@ -536,7 +566,7 @@ class A2AChannel(BaseChannel):
 
         collect_task = asyncio.create_task(collect_with_subscription())
 
-        await ready_event.wait()
+        _ = await ready_event.wait()
 
         logger.debug(f"[A2A] Subscribed to stream:{prepared.task_id}, kicking task")
         await self.create_task(prepared)
@@ -559,7 +589,8 @@ class A2AChannel(BaseChannel):
     async def _run_evaluation(
         self,
         params: MessageSendParams,
-        eval_metadata: dict[str, Any],
+        metadata: JsonObject | None,
+        eval_metadata: A2AEvaluationMetadata,
         task_id: str,
     ) -> AsyncGenerator[TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """
@@ -568,9 +599,9 @@ class A2AChannel(BaseChannel):
         A2A канал только конвертирует события сервиса в A2A формат.
         Вся логика тестирования в EvaluationService.
         """
-        test_case_id = eval_metadata["test_case_id"]
+        test_case_id = eval_metadata.test_case_id
 
-        branch_id = _branch_id_from_message_metadata(params.metadata)
+        branch_id = _branch_id_from_message_metadata(metadata)
         context_id = params.message.context_id or str(uuid.uuid4())
 
         service = self.container.evaluation_service
@@ -579,12 +610,10 @@ class A2AChannel(BaseChannel):
             async for event in service.run_test_stream(
                 self.flow_id, branch_id, test_case_id, task_id=task_id
             ):
-                event_type = event.get("type")
-
-                if event_type == "error":
+                if event["type"] == "error":
                     raise ValueError(event["message"])
 
-                elif event_type == "start":
+                elif event["type"] == "start":
                     yield TaskArtifactUpdateEvent(
                         task_id=task_id,
                         context_id=context_id,
@@ -597,7 +626,7 @@ class A2AChannel(BaseChannel):
                         last_chunk=False,
                     )
 
-                elif event_type == "user":
+                elif event["type"] == "user":
                     text = f"👤 **USER**: {event['content']}\n"
                     yield TaskArtifactUpdateEvent(
                         task_id=task_id,
@@ -611,7 +640,7 @@ class A2AChannel(BaseChannel):
                         last_chunk=False,
                     )
 
-                elif event_type == "assistant":
+                elif event["type"] == "assistant":
                     text = f"🤖 **ASSISTANT**: {event['content']}\n\n"
                     yield TaskArtifactUpdateEvent(
                         task_id=task_id,
@@ -625,14 +654,16 @@ class A2AChannel(BaseChannel):
                         last_chunk=False,
                     )
 
-                elif event_type == "result":
+                elif event["type"] == "result":
                     status_icon = "" if event["status"] == "passed" else "❌"
                     result_text = f"\n---\n{status_icon} **Результат**: {event['status'].upper()}"
                     result_text += f"\n⏱Время: {event['duration_ms']}ms"
-                    if event.get("turns_count", 0) > 0:
-                        result_text += f"\n💬 Ходов: {event['turns_count']}"
-                    if event.get("error"):
-                        result_text += f"\n⚠️ Ошибка: {event['error']}"
+                    turns_count = event["turns_count"] if "turns_count" in event else 0
+                    if turns_count > 0:
+                        result_text += f"\n💬 Ходов: {turns_count}"
+                    error = event["error"] if "error" in event else None
+                    if error:
+                        result_text += f"\n⚠️ Ошибка: {error}"
 
                     # task_id для трейсинга
                     eval_task_id = event.get("task_id")
@@ -680,8 +711,9 @@ class A2AChannel(BaseChannel):
                 final=True,
             )
 
+    @override
     async def on_message_stream(
-        self, params: MessageSendParams, context: Any = None
+        self, params: MessageSendParams, context: ChannelRequestContext = None
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """
         Streaming выполнение - yield'ит события по мере генерации через Redis Pub/Sub.
@@ -701,19 +733,22 @@ class A2AChannel(BaseChannel):
         """
         set_current_channel(self)
 
-        branch_for_perm = _branch_id_from_message_metadata(params.metadata)
+        metadata = _message_metadata(params)
+        branch_for_perm = _branch_id_from_message_metadata(metadata)
         await self.check_permissions(self._get_user_groups_from_context(context), branch_for_perm)
 
         # Проверяем evaluation mode
-        eval_metadata = _get_evaluation_metadata(params.metadata)
-        if eval_metadata and eval_metadata.get("test_case_id"):
+        eval_metadata = _get_evaluation_metadata(metadata)
+        if eval_metadata is not None:
             eval_task_id = params.message.task_id or str(uuid.uuid4())
-            async for event in self._run_evaluation(params, eval_metadata, task_id=eval_task_id):
+            async for event in self._run_evaluation(
+                params, metadata, eval_metadata, task_id=eval_task_id
+            ):
                 yield event
             return
 
         # Обычный режим
-        prepared = await self._prepare_a2a_params(params)
+        prepared = await self._prepare_a2a_params(params, metadata)
 
         # A2A Section 3.4.3: follow-up при активном operator takeover
         if prepared.is_takeover_user_reply:
@@ -734,7 +769,7 @@ class A2AChannel(BaseChannel):
         collect_task = asyncio.create_task(collect_events())
 
         logger.info("[on_message_stream] Waiting for Redis subscription to be ready...")
-        await ready_event.wait()
+        _ = await ready_event.wait()
         logger.info("[on_message_stream] Redis subscription ready, creating task...")
 
         await self.create_task(prepared)
@@ -747,8 +782,12 @@ class A2AChannel(BaseChannel):
 
         await collect_task
 
-    async def on_get_task(self, params: TaskQueryParams, context: Any = None) -> Task | None:
+    @override
+    async def on_get_task(
+        self, params: TaskQueryParams, context: ChannelRequestContext = None
+    ) -> Task | None:
         """Получение задачи по ID."""
+        _ = context
         task = await self._get_task_from_state(params.id)
 
         if task and params.history_length and task.history:
@@ -756,16 +795,20 @@ class A2AChannel(BaseChannel):
 
         return task
 
-    async def on_cancel_task(self, params: TaskIdParams, context: Any = None) -> Task | None:
+    @override
+    async def on_cancel_task(
+        self, params: TaskIdParams, context: ChannelRequestContext = None
+    ) -> Task | None:
         """Отмена задачи. Ставит Redis-ключ для остановки воркера на следующем такте."""
+        _ = context
         logger.info(f"Cancel task: {params.id}")
 
-        await self.container.redis_client.set(f"cancel:{params.id}", "1", ttl=CANCEL_KEY_TTL)
+        _ = await self.container.redis_client.set(f"cancel:{params.id}", "1", ttl=CANCEL_KEY_TTL)
 
         task = await self._cancel_task_in_state(params.id)
 
         if task:
-            await kiq_task_name_with_context(
+            _ = await kiq_task_name_with_context(
                 TASK_SEND_TASK_UPDATE,
                 idle_broker,
                 task.id,
@@ -778,47 +821,69 @@ class A2AChannel(BaseChannel):
 
         return task
 
+    @override
     async def on_resubscribe_to_task(
-        self, params: TaskIdParams, context: Any = None
+        self, params: TaskIdParams, context: ChannelRequestContext = None
     ) -> AsyncGenerator[Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent, None]:
         """Переподписка на события задачи."""
+        _ = context
         task = await self.on_get_task(TaskQueryParams(id=params.id))
         if task:
             yield task
 
+    @override
     async def on_set_task_push_notification_config(
-        self, params: TaskPushNotificationConfig, context: Any = None
+        self, params: TaskPushNotificationConfig, context: ChannelRequestContext = None
     ) -> TaskPushNotificationConfig:
         """Установка конфигурации push notification."""
+        _ = context
         data = await set_push_config(params)
         logger.info(f"Set push notification config for task: {params.task_id}")
         return dict_to_config(data)
 
+    @override
     async def on_get_task_push_notification_config(
-        self, params: GetTaskPushNotificationConfigParams, context: Any = None
+        self,
+        params: GetTaskPushNotificationConfigParams,
+        context: ChannelRequestContext = None,
     ) -> TaskPushNotificationConfig | None:
         """Получение конфигурации push notification."""
+        _ = context
         data = await get_push_config(params)
         logger.info(f"Get push notification config for task: {params.id}")
         return dict_to_config(data) if data else None
 
+    @override
     async def on_list_task_push_notification_config(
-        self, params: ListTaskPushNotificationConfigParams, context: Any = None
+        self,
+        params: ListTaskPushNotificationConfigParams,
+        context: ChannelRequestContext = None,
     ) -> list[TaskPushNotificationConfig]:
         """Список конфигураций push notification."""
+        _ = context
         configs = await list_push_configs(params)
         logger.info(f"List push notification configs for task: {params.id}, found: {len(configs)}")
         return [dict_to_config(data) for data in configs]
 
+    @override
     async def on_delete_task_push_notification_config(
-        self, params: DeleteTaskPushNotificationConfigParams, context: Any = None
+        self,
+        params: DeleteTaskPushNotificationConfigParams,
+        context: ChannelRequestContext = None,
     ) -> None:
         """Удаление конфигурации push notification."""
+        _ = context
         await delete_push_config(params)
         logger.info(
             f"Deleted push notification config: {params.push_notification_config_id} for task: {params.id}"
         )
 
-    async def on_get_authenticated_extended_card(self, params: Any, context: Any = None) -> Any:
+    @override
+    async def on_get_authenticated_extended_card(
+        self,
+        params: JsonObject,
+        context: ChannelRequestContext = None,
+    ) -> AgentCard | None:
         """Получение расширенной карточки агента."""
+        _ = params, context
         return None

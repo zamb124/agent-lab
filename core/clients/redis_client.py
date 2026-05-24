@@ -14,6 +14,7 @@ except ImportError:
     redis = None
 
 from core.logging import get_logger
+from core.types import JsonValue, require_json_value
 
 logger = get_logger(__name__)
 
@@ -198,12 +199,12 @@ class RedisClient:
             logger.warning(f"RedisClient: ошибка удаления ключей: {e}")
             return 0
 
-    async def eval(self, script: str, numkeys: int, *keys_and_args: Any) -> Any:
+    async def eval(self, script: str, numkeys: int, *keys_and_args: JsonValue) -> JsonValue:
         """Выполняет Lua-скрипт (атомарные read-modify-write на стороне Redis)."""
         if not await self._ensure_connected():
             raise RuntimeError("Redis client not connected after retries")
         client = self._require_client()
-        return await client.eval(script, numkeys, *keys_and_args)
+        return require_json_value(await client.eval(script, numkeys, *keys_and_args), "redis.eval")
 
     async def rpush(self, key: str, *values: str) -> int:
         """Добавляет значения в конец списка (RPUSH)."""

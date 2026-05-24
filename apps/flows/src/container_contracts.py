@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import TYPE_CHECKING, Protocol, TypedDict, TypeVar, cast
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Protocol, TypeAlias, TypedDict, cast
 
-from core.types import JsonArray, JsonObject, JsonValue
-
-_ContainerSource = TypeVar("_ContainerSource")
+from core.types import JsonObject, JsonValue
 
 if TYPE_CHECKING:
     from apps.flows.src.db import (
@@ -22,7 +20,6 @@ if TYPE_CHECKING:
     )
     from apps.flows.src.db.mcp_repository import MCPServerRepository
     from apps.flows.src.db.operator_repository import OperatorRepository
-    from apps.flows.src.evaluation.service import EvaluationService
     from apps.flows.src.models import (
         BranchConfig,
         FlowConfig,
@@ -32,7 +29,9 @@ if TYPE_CHECKING:
         TriggerConfig,
     )
     from apps.flows.src.models.enums import ChannelType, NodeType
+    from apps.flows.src.models.evaluation_result import EvaluationServiceStreamEvent
     from apps.flows.src.models.flow_config import Edge
+    from apps.flows.src.models.registry_contracts import RegistryFlowSchema
     from apps.flows.src.runners.remote import RemoteCodeRunner
     from apps.flows.src.services.flow_discovery import FlowDiscoveryService
     from apps.flows.src.services.lara_action_engine import LaraActionEngine
@@ -63,7 +62,11 @@ if TYPE_CHECKING:
     from core.text_transforms import TextTransformService
 
 
-def as_flow_runtime_container(container: _ContainerSource) -> FlowRuntimeContainer:
+class _FlowRuntimeContainerSource(Protocol):
+    pass
+
+
+def as_flow_runtime_container(container: _FlowRuntimeContainerSource) -> FlowRuntimeContainer:
     return cast(FlowRuntimeContainer, container)
 
 
@@ -74,18 +77,7 @@ class EffectiveFlowConfig(TypedDict):
     variables: JsonObject
 
 
-class FlowNodeRuntimeConfig(TypedDict, total=False):
-    type: str
-    code: str
-    tool_id: str
-    name: str
-    description: str
-    args_schema: JsonObject
-    parameters_schema: JsonObject
-    tools: JsonArray
-    node_id: str
-    flow_id: str
-    files: list[JsonObject]
+FlowNodeRuntimeConfig: TypeAlias = JsonObject
 
 
 class RuntimeFlowConfig(TypedDict, total=False):
@@ -152,6 +144,9 @@ class ChannelRegistryProtocol(Protocol):
 
 
 class FlowFactoryProtocol(Protocol):
+    @property
+    def container(self) -> "FlowRuntimeContainer": ...
+
     async def get_flow_config_snapshot(
         self,
         flow_id: str,
@@ -196,7 +191,19 @@ class FlowFactoryProtocol(Protocol):
 
     async def get_branches(self, flow_id: str) -> dict[str, BranchConfig]: ...
 
-    async def get_flow_schema(self, flow_id: str) -> JsonObject | None: ...
+    async def get_flow_schema(self, flow_id: str) -> RegistryFlowSchema | None: ...
+
+
+class FlowEvaluationFactoryProtocol(Protocol):
+    @property
+    def container(self) -> "FlowRuntimeContainer": ...
+
+    async def get_effective_nodes_map(
+        self,
+        flow_id: str,
+        branch_id: str,
+        config_version: str | None = None,
+    ) -> dict[str, FlowNodeRuntimeConfig]: ...
 
 
 class TriggerRegistryProtocol(Protocol):
@@ -212,6 +219,16 @@ class TriggerRegistryProtocol(Protocol):
         flow_id: str,
         trigger: TriggerConfig,
     ) -> TriggerConfig: ...
+
+
+class EvaluationServiceProtocol(Protocol):
+    def run_test_stream(
+        self,
+        flow_id: str,
+        branch_id: str,
+        test_case_id: str,
+        task_id: str | None = None,
+    ) -> AsyncIterator[EvaluationServiceStreamEvent]: ...
 
 
 class FlowRuntimeContainer(Protocol):
@@ -276,7 +293,7 @@ class FlowRuntimeContainer(Protocol):
     def file_processor(self) -> FileProcessor: ...
 
     @property
-    def evaluation_service(self) -> EvaluationService: ...
+    def evaluation_service(self) -> EvaluationServiceProtocol: ...
 
     @property
     def base_tool_class(self) -> type[BaseTool]: ...

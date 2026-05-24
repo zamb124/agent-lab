@@ -1,15 +1,11 @@
-"""
-API endpoints для метаданных платформы.
-Предоставляет информацию о типах нод, доступных моделях и т.д.
-"""
-
-from typing import Any
+"""API endpoints для метаданных платформы."""
 
 from fastapi import APIRouter
 
 from apps.flows.config import get_settings
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.exception_absorb_allow import list_exception_absorb_allow_values
+from core.types import JsonObject
 
 router = APIRouter(tags=["metadata"])
 
@@ -17,7 +13,7 @@ router = APIRouter(tags=["metadata"])
 # Категория -> упорядоченный человекочитаемый ключ для UI-сайдбара.
 # Сами типы нод и связи с runtime — в `apps/flows/src/runtime/nodes.py`
 # (NodeType enum в `apps/flows/src/models/enums.py`).
-_NODE_TYPES: list[dict[str, Any]] = [
+_NODE_TYPES: list[JsonObject] = [
     {
         "category": "core",
         "type": "llm_node",
@@ -113,20 +109,20 @@ _NODE_TYPES: list[dict[str, Any]] = [
 
 # Resource-типы для отдельного раздела «Ресурсы» в редакторе. Runtime resources
 # остаются декларативными LLM-конфигами; sandbox code использует capabilities/tools.
-_RESOURCE_TYPES: list[dict[str, Any]] = [
+_RESOURCE_TYPES: list[JsonObject] = [
     {"type": "llm",    "name": "LLM",    "icon": "bot",      "description": "LLM модель",                "color": "#ec4899"},
 ]
 
 
 @router.get("/node-types")
-async def get_node_types(container: ContainerDep) -> list[dict[str, Any]]:
+async def get_node_types(container: ContainerDep) -> list[JsonObject]:
     """Список доступных runtime-типов нод для палитры редактора."""
     _ = container
     return _NODE_TYPES
 
 
 @router.get("/resource-types")
-async def get_resource_types(container: ContainerDep) -> list[dict[str, Any]]:
+async def get_resource_types(container: ContainerDep) -> list[JsonObject]:
     """Список типов runtime resources."""
     _ = container
     return _RESOURCE_TYPES

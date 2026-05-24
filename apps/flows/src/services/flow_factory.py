@@ -3,31 +3,35 @@ FlowFactory - создание flow из БД.
 """
 
 import copy
-from collections.abc import Mapping
-from typing import Any, TypedDict, overload
+from collections.abc import Mapping, Sequence
+from typing import overload
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.container_contracts import (
+    EffectiveFlowConfig,
+    FlowNodeRuntimeConfig,
+    FlowRuntimeContainer,
+)
 from apps.flows.src.db import FlowRepository
 from apps.flows.src.models import BranchConfig, FlowConfig, ResourceMapInput, ResourceReference
 from apps.flows.src.models.enums import MergeMode
-from apps.flows.src.models.flow_config import Edge, FlowVariableConfig
+from apps.flows.src.models.flow_config import Edge
+from apps.flows.src.models.registry_contracts import (
+    RegistryBranchSchema,
+    RegistryFlowSchema,
+    RegistrySchemaEdge,
+    RegistrySchemaNode,
+    RegistrySchemaSubflow,
+)
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.bundle_node_repair import repair_effective_nodes_from_bundle
 from apps.flows.src.utils.merge import deep_merge
 from apps.flows.src.variables import VariablesService
 from core.compiler import GraphCompiler
 from core.logging import get_logger
-from core.types import JsonArray, JsonObject, JsonValue, require_json_object, require_json_value
+from core.types import JsonArray, JsonObject, JsonValue, require_json_object
 from core.variables import VarResolver
 
 logger = get_logger(__name__)
-
-class EffectiveFlowConfig(TypedDict):
-    entry: str | None
-    nodes: dict[str, dict[str, Any]]
-    edges: list[Edge]
-    variables: JsonObject
-
 
 class FlowFactory:
     """Фабрика для создания Flow из БД."""
@@ -39,10 +43,10 @@ class FlowFactory:
         graph_compiler: GraphCompiler,
         container: FlowRuntimeContainer,
     ):
-        self.flow_repository = flow_repository
-        self.variables_service = variables_service
-        self.compiler = graph_compiler
-        self.container = container
+        self.flow_repository: FlowRepository = flow_repository
+        self.variables_service: VariablesService = variables_service
+        self.compiler: GraphCompiler = graph_compiler
+        self.container: FlowRuntimeContainer = container
 
     @staticmethod
     def _resource_map_to_plain(ref_map: dict[str, ResourceReference] | None) -> ResourceMapInput:
@@ -56,12 +60,30 @@ class FlowFactory:
         return out
 
     @staticmethod
-    def _tools_from_nodes(config: FlowConfig) -> list[Any]:
-        tools: list[Any] = []
-        for node_config in (config.nodes or {}).values():
-            node_tools = node_config.get("tools", [])
-            if isinstance(node_tools, list):
-                tools.extend(node_tools)
+    def _tools_from_node_config(
+        node_config: FlowNodeRuntimeConfig,
+        field_name: str,
+    ) -> list[str | JsonObject]:
+        tools: list[str | JsonObject] = []
+        raw_tools = node_config.get("tools", [])
+        if raw_tools == []:
+            return tools
+        if not isinstance(raw_tools, list):
+            raise ValueError(f"{field_name}.tools must be a list")
+        for index, raw_tool in enumerate(raw_tools):
+            if isinstance(raw_tool, str):
+                tools.append(raw_tool)
+            elif isinstance(raw_tool, dict):
+                tools.append(require_json_object(raw_tool, f"{field_name}.tools[{index}]"))
+            else:
+                raise ValueError(f"{field_name}.tools[{index}] must be a string or object")
+        return tools
+
+    @classmethod
+    def _tools_from_nodes(cls, config: FlowConfig) -> list[str | JsonObject]:
+        tools: list[str | JsonObject] = []
+        for node_id, node_config in (config.nodes or {}).items():
+            tools.extend(cls._tools_from_node_config(node_config, f"nodes.{node_id}"))
         return tools
 
     async def get_flow_config_snapshot(
@@ -136,7 +158,7 @@ class FlowFactory:
         flow_id: str,
         branch_id: str,
         config_version: str | None = None,
-    ) -> dict[str, dict[str, Any]]:
+    ) -> dict[str, FlowNodeRuntimeConfig]:
         """Ноды графа после применения skill (для evaluation и отладки)."""
         config = await self.get_flow_config_snapshot(flow_id, config_version)
         if config is None:
@@ -194,7 +216,7 @@ class FlowFactory:
             )
 
         # Валидация графа через GraphCompiler
-        self.compiler.compile(config, branch_config=None, variables=effective["variables"])
+        _ = self.compiler.compile(config, branch_config=None, variables=effective["variables"])
 
         resolved_variables = await self._resolve_variables(effective["variables"])
 
@@ -209,7 +231,7 @@ class FlowFactory:
         ]
 
         # Полный inline конфиг
-        config_dict = config.model_dump()
+        config_dict = require_json_object(config.model_dump(mode="json"), "flow_config")
         config_dict["resolved_variables"] = resolved_variables
         config_dict["entry"] = effective["entry"]
         config_dict["nodes"] = effective["nodes"]
@@ -217,7 +239,7 @@ class FlowFactory:
 
         return await Flow.from_config(config_dict, container=self.container)
 
-    async def create_validation_flow(self, config: dict[str, Any]) -> Flow:
+    async def create_validation_flow(self, config: JsonObject) -> Flow:
         """Создаёт transient Flow из уже собранного inline config для валидатора."""
         return await Flow.from_config(config, container=self.container)
 
@@ -235,10 +257,7 @@ class FlowFactory:
         # Извлекаем значения из FlowVariableConfig объектов
         variables_dict: JsonObject = {}
         for key, value in config.variables.items():
-            if isinstance(value, FlowVariableConfig):
-                variables_dict[key] = value.value
-            else:
-                variables_dict[key] = require_json_value(value, f"variables.{key}")
+            variables_dict[key] = value.value
 
         result: EffectiveFlowConfig = {
             "entry": config.entry,
@@ -278,10 +297,7 @@ class FlowFactory:
         if branch.variables:
             branch_vars: JsonObject = {}
             for key, value in branch.variables.items():
-                if isinstance(value, FlowVariableConfig):
-                    branch_vars[key] = value.value
-                else:
-                    branch_vars[key] = require_json_value(value, f"branches.{branch_id}.variables.{key}")
+                branch_vars[key] = value.value
 
             if branch.variables_mode == MergeMode.MERGE:
                 result["variables"].update(branch_vars)
@@ -291,7 +307,9 @@ class FlowFactory:
         return result
 
     def _merge_nodes(
-        self, base_nodes: dict[str, dict[str, Any]], skill_nodes: dict[str, dict[str, Any]]
+        self,
+        base_nodes: dict[str, FlowNodeRuntimeConfig],
+        skill_nodes: dict[str, FlowNodeRuntimeConfig],
     ) -> None:
         """
         Мержит skill nodes в base nodes.
@@ -395,7 +413,7 @@ class FlowFactory:
         Returns:
             Flow
         """
-        await self.flow_repository.set(config)
+        _ = await self.flow_repository.set(config)
         logger.info(f"Flow сохранён: {config.flow_id}")
         return await self._create_flow(config, branch_id)
 
@@ -430,10 +448,10 @@ class FlowFactory:
 
     async def _get_flow_structure(
         self,
-        tools_list: list[Any],
+        tools_list: Sequence[str | JsonObject],
         max_depth: int = 3,
         visited: set[str] | None = None,
-    ) -> tuple[list[Any], list[Any]]:
+    ) -> tuple[list[str], list[RegistrySchemaSubflow]]:
         """
         Рекурсивно получает структуру flow: tools и вложенные flow (как tools).
 
@@ -451,17 +469,14 @@ class FlowFactory:
         if max_depth <= 0:
             return [], []
 
-        tools = []
-        subflows = []
+        tools: list[str] = []
+        subflows: list[RegistrySchemaSubflow] = []
 
         for t in tools_list:
-            if isinstance(t, dict):
-                raw_tool_id = t.get("tool_id")
-            else:
-                raw_tool_id = getattr(t, "tool_id", t)
-            if raw_tool_id is None:
+            raw_tool_id = t.get("tool_id") if isinstance(t, dict) else t
+            if not isinstance(raw_tool_id, str) or not raw_tool_id:
                 continue
-            tool_id = str(raw_tool_id)
+            tool_id = raw_tool_id
 
             # Защита от циклов
             if tool_id in visited:
@@ -478,19 +493,19 @@ class FlowFactory:
                 )
 
                 subflows.append(
-                    {
-                        "id": tool_id,
-                        "name": nested_flow_config.name,
-                        "tools": sub_tools[:10],
-                        "subflows": sub_subflows[:10],
-                    }
+                    RegistrySchemaSubflow(
+                        id=tool_id,
+                        name=nested_flow_config.name,
+                        tools=sub_tools[:10],
+                        subflows=sub_subflows[:10],
+                    )
                 )
             else:
                 tools.append(tool_id)
 
         return tools, subflows
 
-    async def get_flow_schema(self, flow_id: str) -> dict[str, Any] | None:
+    async def get_flow_schema(self, flow_id: str) -> RegistryFlowSchema | None:
         """
         Возвращает схему flow для всех веток (для визуализации).
 
@@ -510,64 +525,67 @@ class FlowFactory:
         else:
             branch_ids = ["default"]
 
-        branches_schema: dict[str, Any] = {}
+        branches_schema: dict[str, RegistryBranchSchema] = {}
         for branch_id in branch_ids:
             effective = self.apply_branch(config, branch_id)
 
-            # Конвертируем edges в простой формат (могут быть Edge или dict)
-            edges = []
+            edges: list[RegistrySchemaEdge] = []
             for e in effective["edges"]:
-                if isinstance(e, Edge):
-                    edge_dict: dict[str, Any] = {"from": e.from_node, "to": e.to_node}
-                    if e.condition:
-                        edge_dict["condition"] = e.condition
-                else:
-                    # dict формат
-                    edge_dict = {"from": e.get("from"), "to": e.get("to")}
-                    if e.get("condition"):
-                        edge_dict["condition"] = e["condition"]
-                edges.append(edge_dict)
+                edges.append(
+                    RegistrySchemaEdge.model_validate(
+                        {
+                            "from": e.from_node,
+                            "to": e.to_node,
+                            "condition": e.condition,
+                        }
+                    )
+                )
 
             # Упрощаем nodes для визуализации и добавляем tools / вложенные flow
-            nodes = {}
+            nodes: dict[str, RegistrySchemaNode] = {}
             for node_id, node_config in effective["nodes"].items():
-                node_info = {
-                    "type": node_config.get("type", "unknown"),
-                    "flow_id": node_config.get("flow_id"),
-                    "name": node_id,
-                    "tools": [],
-                    "subflows": [],
-                }
+                raw_node_type = node_config.get("type", "unknown")
+                raw_node_flow_id = node_config.get("flow_id")
+                node_type = raw_node_type if isinstance(raw_node_type, str) else "unknown"
+                node_flow_id = raw_node_flow_id if isinstance(raw_node_flow_id, str) else None
+                node_name = node_id
 
-                tools_list = node_config.get("tools", [])
+                tools_list = self._tools_from_node_config(node_config, f"nodes.{node_id}")
 
-                if node_config.get("flow_id"):
-                    flow_config = await self.flow_repository.get(node_config["flow_id"])
+                raw_nested_flow_id = node_config.get("flow_id")
+                if isinstance(raw_nested_flow_id, str) and raw_nested_flow_id:
+                    flow_config = await self.flow_repository.get(raw_nested_flow_id)
                     if flow_config:
-                        node_info["name"] = flow_config.name
+                        node_name = flow_config.name
                         tools_list = self._tools_from_nodes(flow_config)
 
                 tools, nested_flows = await self._get_flow_structure(tools_list, max_depth=3)
-                node_info["tools"] = tools
-                node_info["subflows"] = nested_flows
-
-                nodes[node_id] = node_info
+                nodes[node_id] = RegistrySchemaNode(
+                    type=node_type,
+                    flow_id=node_flow_id,
+                    name=node_name,
+                    tools=tools,
+                    subflows=nested_flows,
+                )
 
             branch_cfg = config.branches.get(branch_id) if config.branches else None
             branch_name = branch_cfg.name if branch_cfg else config.name
             branch_desc = branch_cfg.description if branch_cfg else (config.description or "")
+            entry = effective["entry"]
+            if entry is None:
+                raise ValueError(f"Flow '{flow_id}' branch '{branch_id}' has no entry node")
 
-            branches_schema[branch_id] = {
-                "name": branch_name,
-                "description": branch_desc,
-                "entry": effective["entry"],
-                "nodes": nodes,
-                "edges": edges,
-            }
+            branches_schema[branch_id] = RegistryBranchSchema(
+                name=branch_name,
+                description=branch_desc,
+                entry=entry,
+                nodes=nodes,
+                edges=edges,
+            )
 
-        return {
-            "flow_id": config.flow_id,
-            "name": config.name,
-            "description": config.description or "",
-            "branches": branches_schema,
-        }
+        return RegistryFlowSchema(
+            flow_id=config.flow_id,
+            name=config.name,
+            description=config.description or "",
+            branches=branches_schema,
+        )

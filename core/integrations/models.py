@@ -6,11 +6,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
 
 from pydantic import Field
 
 from core.models.base import StrictBaseModel
+from core.types import JsonObject
 
 
 class IntegrationProvider(StrEnum):
@@ -32,7 +32,7 @@ class IntegrationCredential(StrictBaseModel):
     expires_at: datetime | None = None
     scope: str | None = None
     token_type: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: JsonObject = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 

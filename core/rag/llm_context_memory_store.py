@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime
-from typing import Any
+from typing import cast as type_cast
 
 from core.context import get_context
 from core.db.repositories.namespace_repository import NamespaceRepository
@@ -13,11 +13,13 @@ from core.llm_context import (
     LLMContextMemoryEpisode,
     LLMContextMemoryRecallRequest,
     LLMContextMemoryRecord,
+    LLMContextMemoryScope,
 )
 from core.models.identity_models import Namespace
-from core.rag.models import RAGSearchResult
+from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchResult
 from core.rag.rag_resource_bind import RagResourceBindParams
 from core.rag.repository import RAGRepository
+from core.types import JsonObject, JsonValue, require_json_object
 
 _DEFAULT_NAMESPACE_PREFIX = "llm-memory"
 
@@ -109,7 +111,12 @@ def _active_company_id() -> str:
     return context.active_company.company_id
 
 
-def _episode_metadata(episode: LLMContextMemoryEpisode, company_id: str) -> dict[str, Any]:
+_MEMORY_SCOPES: frozenset[LLMContextMemoryScope] = frozenset(
+    {"off", "session", "node", "flow", "company"}
+)
+
+
+def _episode_metadata(episode: LLMContextMemoryEpisode, company_id: str) -> RAGMetadata:
     return {
         **episode.metadata,
         "company_id": company_id,
@@ -130,8 +137,8 @@ def _episode_metadata(episode: LLMContextMemoryEpisode, company_id: str) -> dict
 def _recall_filters(
     request: LLMContextMemoryRecallRequest,
     company_id: str,
-) -> dict[str, Any]:
-    filters: dict[str, Any] = {
+) -> RAGMetadataFilter:
+    filters: RAGMetadataFilter = {
         "company_id": company_id,
         "memory_scope": request.scope,
     }
@@ -151,12 +158,12 @@ def _recall_filters(
     return filters
 
 
-def _coerce_results(response: dict[str, Any]) -> list[RAGSearchResult]:
+def _coerce_results(response: JsonObject) -> list[RAGSearchResult]:
     raw_results = response.get("results")
     if not isinstance(raw_results, list):
         raise ValueError("LLM context memory expected response.results list")
     return [
-        item if isinstance(item, RAGSearchResult) else RAGSearchResult.model_validate(item)
+        RAGSearchResult.model_validate(require_json_object(item, "LLM context memory result"))
         for item in raw_results
     ]
 
@@ -166,7 +173,7 @@ def _result_to_record(result: RAGSearchResult) -> LLMContextMemoryRecord:
     return LLMContextMemoryRecord(
         memory_id=str(metadata.get("memory_id") or result.document_id),
         content=_record_content(metadata, result.content),
-        scope=metadata.get("memory_scope", "session"),
+        scope=_memory_scope(metadata.get("memory_scope")),
         score=_clamp_score(result.score),
         session_id=_optional_str(metadata.get("session_id")),
         flow_id=_optional_str(metadata.get("flow_id")),
@@ -180,21 +187,29 @@ def _result_to_record(result: RAGSearchResult) -> LLMContextMemoryRecord:
     )
 
 
-def _record_content(metadata: dict[str, Any], fallback: str) -> str:
+def _record_content(metadata: JsonObject, fallback: str) -> str:
     recall_content = metadata.get(LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY)
     if isinstance(recall_content, str) and recall_content.strip():
         return recall_content.strip()
     return fallback
 
 
-def _optional_str(value: Any) -> str | None:
+def _memory_scope(value: JsonValue | None) -> LLMContextMemoryScope:
+    if value is None:
+        return "session"
+    if isinstance(value, str) and value in _MEMORY_SCOPES:
+        return type_cast(LLMContextMemoryScope, value)
+    raise ValueError("LLM context memory metadata.memory_scope должен быть допустимым scope")
+
+
+def _optional_str(value: JsonValue | None) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
     return text or None
 
 
-def _parse_datetime(value: Any) -> datetime | None:
+def _parse_datetime(value: JsonValue | None) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
         return None
     try:
@@ -203,10 +218,17 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
-def _clamp_score(value: Any) -> float | None:
-    try:
+def _clamp_score(value: JsonValue) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
         score = float(value)
-    except (TypeError, ValueError):
+    elif isinstance(value, str):
+        try:
+            score = float(value)
+        except ValueError:
+            return None
+    else:
         return None
     return min(1.0, max(0.0, score))
 

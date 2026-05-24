@@ -99,7 +99,7 @@ async def test_rag_context_source_collects_reranked_rag_blocks() -> None:
     assert "Refunds are available" in blocks[0].content
     assert blocks[0].provenance["retriever"] == "pgvector"
     assert repository.calls[0]["limit"] == 10
-    assert repository.calls[0]["search_options"] == {
+    assert repository.calls[0]["search_options"].model_dump(exclude_none=True) == {
         "channels": {"semantic": True, "lexical": True},
         "rerank": True,
         "retrieval": True,
@@ -111,7 +111,7 @@ async def test_rag_context_source_skips_when_retrieval_is_off_or_query_empty() -
     repository = CapturingSearchRepository({"results": []})
     source = RAGLLMContextSource(
         repository=repository,
-        bind={"namespace": "kb", "company_id": "company-1"},
+        bind=RagResourceBindParams(namespace="kb", company_id="company-1"),
     )
 
     assert await source.collect(LLMContextSourceRequest(query="", policy=_profile())) == []
@@ -154,7 +154,7 @@ async def test_rag_context_source_handles_model_results_lexical_mode_and_fallbac
     )
     source = RAGLLMContextSource(
         repository=repository,
-        bind={"namespace": "kb", "company_id": "company-1"},
+        bind=RagResourceBindParams(namespace="kb", company_id="company-1"),
         name="!!!",
     )
 
@@ -163,7 +163,8 @@ async def test_rag_context_source_handles_model_results_lexical_mode_and_fallbac
     )
 
     assert source.name == "rag.source"
-    assert repository.calls[0]["search_options"]["channels"] == {
+    assert repository.calls[0]["search_options"].channels is not None
+    assert repository.calls[0]["search_options"].channels.model_dump() == {
         "semantic": False,
         "lexical": True,
     }
@@ -177,14 +178,15 @@ async def test_rag_context_source_uses_semantic_only_mode() -> None:
     repository = CapturingSearchRepository({"results": []})
     source = RAGLLMContextSource(
         repository=repository,
-        bind={"namespace": "kb", "company_id": "company-1"},
+        bind=RagResourceBindParams(namespace="kb", company_id="company-1"),
     )
 
     await source.collect(
         LLMContextSourceRequest(query="contract", policy=_profile(mode="semantic", rerank=False))
     )
 
-    assert repository.calls[0]["search_options"]["channels"] == {
+    assert repository.calls[0]["search_options"].channels is not None
+    assert repository.calls[0]["search_options"].channels.model_dump() == {
         "semantic": True,
         "lexical": False,
     }
@@ -194,7 +196,7 @@ async def test_rag_context_source_uses_semantic_only_mode() -> None:
 async def test_rag_context_source_rejects_invalid_response_shape() -> None:
     source = RAGLLMContextSource(
         repository=CapturingSearchRepository({"results": {}}),
-        bind={"namespace": "kb", "company_id": "company-1"},
+        bind=RagResourceBindParams(namespace="kb", company_id="company-1"),
     )
 
     with pytest.raises(ValueError, match="response.results"):

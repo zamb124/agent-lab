@@ -109,7 +109,7 @@ class HumanInteraction:
         timeout_ms: int,
         typing_delay_ms: int | None = None,
     ) -> None:
-        if not isinstance(text, str) or text == "":
+        if text == "":
             raise ValueError("text должен быть непустой строкой")
         if typing_delay_ms is not None and typing_delay_ms < 0:
             raise ValueError("typing_delay_ms должен быть >= 0")

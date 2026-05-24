@@ -4,13 +4,14 @@
 
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any
+from typing import ClassVar
 
 import jwt
 from pydantic import BaseModel, Field
 
 from core.config import get_settings
 from core.logging import get_logger
+from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
 class TokenType(str, Enum):
@@ -30,24 +31,24 @@ class TokenData(BaseModel):
     iat: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Время создания")
     session_id: str | None = Field(default=None, description="ID OAuth сессии (опционально)")
     email: str = Field(default="", description="Email пользователя")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Дополнительные данные")
+    metadata: JsonObject = Field(default_factory=dict, description="Дополнительные данные")
 
 class TokenService:
     """Единый сервис управления токенами"""
 
-    SESSION_EXPIRES = 86400 * 7           # 7 дней
-    API_TOKEN_EXPIRES = 86400 * 365 * 2   # 2 года
-    EMBED_SESSION_EXPIRES = 300           # 5 минут
+    SESSION_EXPIRES: ClassVar[int] = 86400 * 7           # 7 дней
+    API_TOKEN_EXPIRES: ClassVar[int] = 86400 * 365 * 2   # 2 года
+    EMBED_SESSION_EXPIRES: ClassVar[int] = 300           # 5 минут
 
-    def __init__(self):
+    def __init__(self) -> None:
         settings = get_settings()
         secret_key = settings.auth.jwt_secret_key
 
         if not secret_key:
             raise ValueError("JWT secret key не настроен в конфигурации (auth.jwt_secret_key)")
 
-        self.secret_key = secret_key
-        self.algorithm = 'HS256'
+        self.secret_key: str = secret_key
+        self.algorithm: str = "HS256"
 
     def create_token(
         self,
@@ -57,7 +58,7 @@ class TokenService:
         token_type: TokenType = TokenType.SESSION,
         expires_in: int | None = None,
         session_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: JsonObject | None = None,
         email: str = "",
     ) -> str:
         """
@@ -99,7 +100,7 @@ class TokenService:
             metadata=metadata or {},
         )
 
-        payload = token_data.model_dump()
+        payload = require_json_object(token_data.model_dump(mode="json"), "token.payload")
         payload['iat'] = int(now.timestamp())
         payload['exp'] = int(expires_at.timestamp())
         payload['token_type'] = token_data.token_type.value
@@ -144,7 +145,7 @@ class TokenService:
         company_id: str,
         roles: list[str] | None = None,
         expires_in: int = EMBED_SESSION_EXPIRES,
-        metadata: dict[str, Any] | None = None,
+        metadata: JsonObject | None = None,
     ) -> str:
         """Создает короткоживущий токен для внешнего embed-чата."""
         return self.create_token(
@@ -170,7 +171,7 @@ class TokenService:
             return None
 
         try:
-            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            decoded_payload: JsonValue = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
         except jwt.ExpiredSignatureError:
             logger.warning("JWT токен истек")
             return None
@@ -181,9 +182,7 @@ class TokenService:
             logger.warning(f"JWT токен имеет неверный формат: {e}")
             return None
 
-        payload['iat'] = datetime.fromtimestamp(payload['iat'], tz=timezone.utc)
-        payload['exp'] = datetime.fromtimestamp(payload['exp'], tz=timezone.utc)
-
+        payload = require_json_object(decoded_payload, "jwt.payload")
         token_data = TokenData.model_validate(payload)
 
         if token_data.exp < datetime.now(timezone.utc):

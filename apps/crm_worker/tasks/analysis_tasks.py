@@ -8,12 +8,12 @@ TaskIQ: анализ заметки (analyze / apply / process).
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 
 from pydantic import ValidationError
 
 import core.tracing.attributes as trace_attributes
 from apps.crm.container import get_crm_container
+from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.models.api import NoteProcessingConfig
 from apps.crm.services.crm_task_ws_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError
@@ -23,6 +23,7 @@ from apps.crm_worker.task_names import CRM_PROCESS_NOTE_TASK_NAME
 from apps.crm_worker.tasks.daily_summary_tasks import set_crm_context
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject, require_json_object
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
@@ -30,7 +31,7 @@ logger = get_logger(__name__)
 
 async def _notify_analyze_stage(
     user_id: str,
-    repo,
+    repo: TaskRepository,
     company_id: str,
     *,
     task_id: str,
@@ -75,9 +76,9 @@ async def process_note_task(
     auth_token: str | None,
     user_id: str,
     interface_language: str,
-    config_payload: dict[str, Any],
+    config_payload: JsonObject,
     mode: str,
-) -> dict[str, Any]:
+) -> JsonObject:
     """mode: 'analyze' | 'apply' | 'process'."""
     await set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
     container = get_crm_container()
@@ -149,29 +150,35 @@ async def process_note_task(
                 if await _check_cancel():
                     return {"status": "cancelled", "task_id": task_id}
                 result = await pipeline.analyze(note_id, config, progress_cb=_progress)
-                result_data = result.model_dump(mode="json")
-                entities_count = len(result_data.get("entities") or [])
-                rel_count = len(result_data.get("relationships") or [])
+                result_data = require_json_object(
+                    result.model_dump(mode="json"), "note_processing.analyze_result"
+                )
+                entities_count = len(result.entities)
+                rel_count = len(result.relationships)
             elif mode == "apply":
                 await _progress("applying", 88, "Применение черновика")
                 if await _check_cancel():
                     return {"status": "cancelled", "task_id": task_id}
                 result = await pipeline.apply(note_id, progress_cb=_progress)
-                result_data = result.model_dump(mode="json")
-                entities_count = len(result_data.get("created_entity_ids") or [])
-                rel_count = len(result_data.get("created_relationship_ids") or [])
+                result_data = require_json_object(
+                    result.model_dump(mode="json"), "note_processing.apply_result"
+                )
+                entities_count = len(result.created_entity_ids) + len(result.updated_entity_ids)
+                rel_count = len(result.created_relationship_ids)
             elif mode == "process":
                 await _progress("reading_attachments", 15, "Чтение вложений")
                 if await _check_cancel():
                     return {"status": "cancelled", "task_id": task_id}
                 result = await pipeline.process(note_id, config, progress_cb=_progress)
-                result_data = result.model_dump(mode="json")
-                entities_count = len(result_data.get("created_entity_ids") or [])
-                rel_count = len(result_data.get("created_relationship_ids") or [])
+                result_data = require_json_object(
+                    result.model_dump(mode="json"), "note_processing.process_result"
+                )
+                entities_count = len(result.created_entity_ids) + len(result.updated_entity_ids)
+                rel_count = len(result.created_relationship_ids)
             else:
                 raise ValueError(f"Unknown mode: {mode}")
     except ApplyAnalysisDraftEntityFailuresError as exc:
-        failures_payload = [
+        failures_payload: list[dict[str, str]] = [
             {
                 "draft_entity_id": did,
                 "entity_name": name if name is not None else "",

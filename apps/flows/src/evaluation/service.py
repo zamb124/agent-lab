@@ -5,15 +5,26 @@
 Поддерживает тестирование агентов и отдельных нод через TestTarget.
 """
 
+from __future__ import annotations
+
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import date, datetime, timezone
-from typing import Any
 
-from apps.flows.src.db import EvaluationRepository
+from apps.flows.src.db import EvaluationRepository, FlowRepository, NodeRepository
 from apps.flows.src.models import TestCaseConfig
 from apps.flows.src.models.enums import NodeType, TestTargetType
-from apps.flows.src.models.evaluation_result import EvaluationResult, EvaluationRunSummary
+from apps.flows.src.models.evaluation_result import (
+    EvaluationAllTestsStreamEvent,
+    EvaluationDialogMessage,
+    EvaluationResult,
+    EvaluationResultEvent,
+    EvaluationRunSummary,
+    EvaluationServiceStreamEvent,
+)
 from apps.flows.src.models.flow_config import TestTarget
+from apps.flows.src.registry.nodes import NodeRegistry
+from apps.flows.src.services.flow_factory import FlowFactory
+from apps.flows.src.tools.registry import ToolRegistry
 from core.logging import get_logger
 from core.state import ExecutionState
 
@@ -29,18 +40,18 @@ class EvaluationService:
         self,
         evaluation_repository: EvaluationRepository,
         *,
-        flow_repository: Any,
-        flow_factory: Any,
-        node_registry: Any,
-        node_repository: Any,
-        tool_registry: Any,
+        flow_repository: FlowRepository,
+        flow_factory: FlowFactory,
+        node_registry: NodeRegistry,
+        node_repository: NodeRepository,
+        tool_registry: ToolRegistry,
     ):
-        self._repository = evaluation_repository
-        self._flow_repository = flow_repository
-        self._flow_factory = flow_factory
-        self._node_registry = node_registry
-        self._node_repository = node_repository
-        self._tool_registry = tool_registry
+        self._repository: EvaluationRepository = evaluation_repository
+        self._flow_repository: FlowRepository = flow_repository
+        self._flow_factory: FlowFactory = flow_factory
+        self._node_registry: NodeRegistry = node_registry
+        self._node_repository: NodeRepository = node_repository
+        self._tool_registry: ToolRegistry = tool_registry
 
     async def get_test_cases(
         self,
@@ -64,13 +75,13 @@ class EvaluationService:
         if not flow_config or not flow_config.evaluation:
             return {}
 
-        result = {}
+        result: dict[str, TestCaseConfig] = {}
         for test_id, test_case in flow_config.evaluation.items():
             branch_ids = test_case.branch_ids
 
             if branch_ids == "*":
                 result[test_id] = test_case
-            elif isinstance(branch_ids, list) and branch_id in branch_ids:
+            elif branch_id in branch_ids:
                 result[test_id] = test_case
 
         return result
@@ -105,37 +116,37 @@ class EvaluationService:
         runner = await self._create_runner(flow_id, branch_id, run_date, iteration, test_case)
 
         # Собираем результат из стриминга
-        result_event = None
-        dialog = []
+        result_event: EvaluationResultEvent | None = None
+        dialog: list[EvaluationDialogMessage] = []
         async for event in runner.run(test_case, test_case_id):
             if event["type"] == "user":
-                dialog.append({"role": "user", "content": event["content"]})
+                dialog.append(EvaluationDialogMessage(role="user", content=event["content"]))
             elif event["type"] == "assistant":
-                dialog.append({"role": "assistant", "content": event["content"]})
+                dialog.append(EvaluationDialogMessage(role="assistant", content=event["content"]))
             elif event["type"] == "result":
                 result_event = event
 
         if not result_event:
             raise RuntimeError(f"Test {test_case_id} did not produce a result event")
 
-        saved_dialog = result_event.get("dialog", dialog)
+        saved_dialog = result_event["dialog"] if "dialog" in result_event else dialog
         result = EvaluationResult(
             flow_id=flow_id,
             branch_id=branch_id,
             run_date=run_date,
             iteration=iteration,
             test_case_id=test_case_id,
-            task_id=result_event.get("task_id"),
-            status=result_event.get("status", "error"),
-            duration_ms=result_event.get("duration_ms", 0),
-            turns_count=result_event.get("turns_count", len(saved_dialog) // 2),
+            task_id=result_event["task_id"],
+            status=result_event["status"],
+            duration_ms=result_event["duration_ms"],
+            turns_count=result_event["turns_count"] if "turns_count" in result_event else len(saved_dialog) // 2,
             dialog=saved_dialog,
-            scores=result_event.get("scores"),
-            judge_feedback=result_event.get("judge_feedback"),
-            error=result_event.get("error"),
+            scores=result_event["scores"] if "scores" in result_event else None,
+            judge_feedback=result_event["judge_feedback"] if "judge_feedback" in result_event else None,
+            error=result_event["error"] if "error" in result_event else None,
         )
 
-        await self._repository.save(result)
+        _ = await self._repository.save(result)
 
         logger.info(
             f"Test {test_case_id} completed: {result.status} (duration={result.duration_ms}ms)"
@@ -181,13 +192,13 @@ class EvaluationService:
             runner = await self._create_runner(flow_id, branch_id, run_date, iteration, test_case)
 
             # Собираем результат из стриминга
-            result_event = None
-            dialog = []
+            result_event: EvaluationResultEvent | None = None
+            dialog: list[EvaluationDialogMessage] = []
             async for event in runner.run(test_case, test_case_id):
                 if event["type"] == "user":
-                    dialog.append({"role": "user", "content": event["content"]})
+                    dialog.append(EvaluationDialogMessage(role="user", content=event["content"]))
                 elif event["type"] == "assistant":
-                    dialog.append({"role": "assistant", "content": event["content"]})
+                    dialog.append(EvaluationDialogMessage(role="assistant", content=event["content"]))
                 elif event["type"] == "result":
                     result_event = event
 
@@ -195,23 +206,23 @@ class EvaluationService:
                 summary.error_tests += 1
                 continue
 
-            saved_dialog = result_event.get("dialog", dialog)
+            saved_dialog = result_event["dialog"] if "dialog" in result_event else dialog
             result = EvaluationResult(
                 flow_id=flow_id,
                 branch_id=branch_id,
                 run_date=run_date,
                 iteration=iteration,
                 test_case_id=test_case_id,
-                task_id=result_event.get("task_id"),
-                status=result_event.get("status", "error"),
-                duration_ms=result_event.get("duration_ms", 0),
-                turns_count=result_event.get("turns_count", len(saved_dialog) // 2),
+                task_id=result_event["task_id"],
+                status=result_event["status"],
+                duration_ms=result_event["duration_ms"],
+                turns_count=result_event["turns_count"] if "turns_count" in result_event else len(saved_dialog) // 2,
                 dialog=saved_dialog,
-                scores=result_event.get("scores"),
-                judge_feedback=result_event.get("judge_feedback"),
-                error=result_event.get("error"),
+                scores=result_event["scores"] if "scores" in result_event else None,
+                judge_feedback=result_event["judge_feedback"] if "judge_feedback" in result_event else None,
+                error=result_event["error"] if "error" in result_event else None,
             )
-            await self._repository.save(result)
+            _ = await self._repository.save(result)
 
             if result.status == "passed":
                 summary.passed_tests += 1
@@ -240,7 +251,7 @@ class EvaluationService:
 
         logger.info(
             f"Evaluation completed: {summary.passed_tests}/{summary.total_tests} passed, "
-            f"status={summary.status}"
+            + f"status={summary.status}"
         )
 
         return summary
@@ -251,7 +262,7 @@ class EvaluationService:
         branch_id: str,
         test_case_id: str,
         task_id: str | None = None,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[EvaluationServiceStreamEvent]:
         """
         Запускает один тест со streaming результатов.
 
@@ -282,15 +293,15 @@ class EvaluationService:
 
         runner = await self._create_runner(flow_id, branch_id, run_date, iteration, test_case)
 
-        dialog = []
-        result_event = None
+        dialog: list[EvaluationDialogMessage] = []
+        result_event: EvaluationResultEvent | None = None
 
         async for event in runner.run(test_case, test_case_id, task_id=task_id):
             if event["type"] == "user":
-                dialog.append({"role": "user", "content": event["content"]})
+                dialog.append(EvaluationDialogMessage(role="user", content=event["content"]))
                 yield event
             elif event["type"] == "assistant":
-                dialog.append({"role": "assistant", "content": event["content"]})
+                dialog.append(EvaluationDialogMessage(role="assistant", content=event["content"]))
                 yield event
             elif event["type"] == "result":
                 result_event = event
@@ -298,29 +309,29 @@ class EvaluationService:
 
         # Сохраняем результат в БД
         if result_event:
-            saved_dialog = result_event.get("dialog", dialog)
+            saved_dialog = result_event["dialog"] if "dialog" in result_event else dialog
             result = EvaluationResult(
                 flow_id=flow_id,
                 branch_id=branch_id,
                 run_date=run_date,
                 iteration=iteration,
                 test_case_id=test_case_id,
-                task_id=result_event.get("task_id"),
-                status=result_event.get("status", "error"),
-                duration_ms=result_event.get("duration_ms", 0),
-                turns_count=result_event.get("turns_count", len(saved_dialog) // 2),
+                task_id=result_event["task_id"],
+                status=result_event["status"],
+                duration_ms=result_event["duration_ms"],
+                turns_count=result_event["turns_count"] if "turns_count" in result_event else len(saved_dialog) // 2,
                 dialog=saved_dialog,
-                scores=result_event.get("scores"),
-                judge_feedback=result_event.get("judge_feedback"),
-                error=result_event.get("error"),
+                scores=result_event["scores"] if "scores" in result_event else None,
+                judge_feedback=result_event["judge_feedback"] if "judge_feedback" in result_event else None,
+                error=result_event["error"] if "error" in result_event else None,
             )
-            await self._repository.save(result)
+            _ = await self._repository.save(result)
 
     async def run_all_tests_stream(
         self,
         flow_id: str,
         branch_id: str,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[EvaluationAllTestsStreamEvent]:
         """
         Запускает все тесты со streaming результатов.
 
@@ -359,13 +370,13 @@ class EvaluationService:
 
             runner = await self._create_runner(flow_id, branch_id, run_date, iteration, test_case)
 
-            result_event = None
-            dialog = []
+            result_event: EvaluationResultEvent | None = None
+            dialog: list[EvaluationDialogMessage] = []
             async for event in runner.run(test_case, test_case_id):
                 if event["type"] == "user":
-                    dialog.append({"role": "user", "content": event["content"]})
+                    dialog.append(EvaluationDialogMessage(role="user", content=event["content"]))
                 elif event["type"] == "assistant":
-                    dialog.append({"role": "assistant", "content": event["content"]})
+                    dialog.append(EvaluationDialogMessage(role="assistant", content=event["content"]))
                 elif event["type"] == "result":
                     result_event = event
 
@@ -379,23 +390,23 @@ class EvaluationService:
                 }
                 continue
 
-            saved_dialog = result_event.get("dialog", dialog)
+            saved_dialog = result_event["dialog"] if "dialog" in result_event else dialog
             result = EvaluationResult(
                 flow_id=flow_id,
                 branch_id=branch_id,
                 run_date=run_date,
                 iteration=iteration,
                 test_case_id=test_case_id,
-                task_id=result_event.get("task_id"),
-                status=result_event.get("status", "error"),
-                duration_ms=result_event.get("duration_ms", 0),
-                turns_count=result_event.get("turns_count", len(saved_dialog) // 2),
+                task_id=result_event["task_id"],
+                status=result_event["status"],
+                duration_ms=result_event["duration_ms"],
+                turns_count=result_event["turns_count"] if "turns_count" in result_event else len(saved_dialog) // 2,
                 dialog=saved_dialog,
-                scores=result_event.get("scores"),
-                judge_feedback=result_event.get("judge_feedback"),
-                error=result_event.get("error"),
+                scores=result_event["scores"] if "scores" in result_event else None,
+                judge_feedback=result_event["judge_feedback"] if "judge_feedback" in result_event else None,
+                error=result_event["error"] if "error" in result_event else None,
             )
-            await self._repository.save(result)
+            _ = await self._repository.save(result)
 
             if result.status == "passed":
                 passed += 1
@@ -512,7 +523,8 @@ class EvaluationService:
 
         if target.type == TestTargetType.NODE:
             callable_ = self._create_node_callable(target)
-            node_id = target.node_config.get("node_id", "inline_node") if target.node_config else "inline_node"
+            raw_node_id = target.node_config.get("node_id") if target.node_config else None
+            node_id = raw_node_id if isinstance(raw_node_id, str) and raw_node_id else "inline_node"
             return callable_, f"node:{node_id}"
 
         raise ValueError(f"Unknown target type: {target.type}")
@@ -536,13 +548,14 @@ class EvaluationService:
             raise ValueError("node_config is required for NODE target type")
 
         node_type = target.node_config.get("type")
-        if not node_type:
+        if not isinstance(node_type, str) or not node_type:
             raise ValueError("node_config must contain 'type' field")
 
         node_type_enum = NodeType(node_type)
 
         node_class = self._node_registry.get(node_type_enum)
-        node_id = target.node_config.get("node_id", "test_node")
+        raw_node_id = target.node_config.get("node_id")
+        node_id = raw_node_id if isinstance(raw_node_id, str) and raw_node_id else "test_node"
         node = node_class.from_config(node_id, target.node_config)
 
         return node.run

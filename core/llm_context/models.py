@@ -221,7 +221,7 @@ class LLMContextPatch(StrictBaseModel):
 class LLMContextConfig(StrictBaseModel):
     """Platform-level context profiles and named budgets."""
 
-    default_profile: str = Field(default="standard", min_length=1)
+    default_profile: str = Field(default="off", min_length=1)
     budgets: dict[str, LLMContextBudget] = Field(default_factory=_default_budgets)
     profiles: dict[str, LLMContextProfile] = Field(default_factory=_default_profiles)
 

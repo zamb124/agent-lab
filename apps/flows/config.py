@@ -4,10 +4,11 @@
 Расширяет BaseSettings полями, специфичными для flows и runtime.
 """
 
-from typing import Any, Self
+from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from apps.flows.src.mock.config import MockConfig
 from core.config import BaseSettings
 from core.config import get_settings as core_get_settings
 from core.config import set_settings as core_set_settings
@@ -49,28 +50,6 @@ def _default_push_config() -> PushConfig:
         vapid_public_key="BJBAqLwOEE7A7gIDCXW7vzmEwh23-ug6-1qpiuotzwROEDX_ZiVUk2BO3_eINDqXxBvxG2uRfukXVVBse167BAM",
         vapid_private_key="n6oh3YpjV9APhmtdZ-p18P4YGLtBRLATLbprkXWAldA",
         vapid_email="admin@platform.local",
-    )
-
-
-class MockConfig(BaseModel):
-    """Конфигурация глобальных моков"""
-
-    enabled: bool = Field(default=False, description="Включен ли mock режим глобально")
-    permission_groups: list[str] = Field(
-        default_factory=lambda: ["admin", "developers"],
-        description="Группы с правом использования mock через request metadata"
-    )
-    llm: dict[str, Any] | None = Field(
-        default=None, description="Mock конфигурация для LLM (default_response или очередь)"
-    )
-    tools: dict[str, Any] = Field(
-        default_factory=dict, description="Mock ответы для tools по имени"
-    )
-    flows: dict[str, Any] = Field(
-        default_factory=dict, description="Mock ответы для flows по ID"
-    )
-    nodes: dict[str, Any] = Field(
-        default_factory=dict, description="Mock данные для nodes по ID"
     )
 
 
@@ -148,7 +127,7 @@ class FlowSettings(BaseSettings):
         le=_FLOWS_WALL_TIME_HARD_MAX_SECONDS,
         description=(
             "Wall-clock лимит выполнения одного run flow (сек), если в FlowConfig.timeout не задано; "
-            "не больше flow_execution_wall_time_cap_seconds"
+            + "не больше flow_execution_wall_time_cap_seconds"
         ),
     )
     stream_heartbeat_interval_seconds: int = Field(
@@ -171,7 +150,7 @@ class FlowSettings(BaseSettings):
         if self.default_flow_timeout_seconds > self.flow_execution_wall_time_cap_seconds:
             raise ValueError(
                 "default_flow_timeout_seconds не больше flow_execution_wall_time_cap_seconds: "
-                f"{self.default_flow_timeout_seconds} > {self.flow_execution_wall_time_cap_seconds}"
+                + f"{self.default_flow_timeout_seconds} > {self.flow_execution_wall_time_cap_seconds}"
             )
         return self
 
@@ -226,20 +205,7 @@ def set_settings(new_settings: FlowSettings) -> None:
     core_set_settings(new_settings)
 
 
-def reset_settings():
+def reset_settings() -> None:
     """Сбрасывает настройки (для тестов)"""
     global _settings
     _settings = None
-
-
-class _SettingsProxy:
-    """Proxy для доступа к актуальным настройкам."""
-
-    def __getattr__(self, name):
-        return getattr(get_settings(), name)
-
-    def __repr__(self):
-        return repr(get_settings())
-
-
-settings = _SettingsProxy()

@@ -7,19 +7,25 @@ RAG Repository: in-process ``BaseRAGProvider`` и опционально HTTP-п
 
 from __future__ import annotations
 
-from typing import Any
-
 from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.logging import get_logger
 from core.rag.base_provider import BaseRAGProvider
-from core.rag.models import RAGDocument, RAGNamespace, RAGSearchResult
+from core.rag.models import (
+    RAGDocument,
+    RAGMetadata,
+    RAGMetadataFilter,
+    RAGNamespace,
+    RAGSearchOptions,
+    RAGSearchResult,
+)
 from core.rag.rag_http_namespace_search import (
     build_namespace_search_json_body,
     build_namespace_search_path,
     merge_search_request_options,
 )
 from core.rag.rag_resource_bind import RagResourceBindParams
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 COMPANY_ID_HEADER = "X-Company-Id"
@@ -38,9 +44,9 @@ class RAGRepository:
         service_client: ServiceClient | None = None,
         bind: RagResourceBindParams | None = None,
     ) -> None:
-        self._provider = provider
-        self._service_client = service_client
-        self._bind = bind
+        self._provider: BaseRAGProvider = provider
+        self._service_client: ServiceClient | None = service_client
+        self._bind: RagResourceBindParams | None = bind
 
     @property
     def provider(self) -> BaseRAGProvider:
@@ -82,9 +88,9 @@ class RAGRepository:
 
     @staticmethod
     def _merge_filters(
-        filters: dict[str, Any] | None,
+        filters: RAGMetadataFilter | None,
         bind: RagResourceBindParams | None,
-    ) -> dict[str, Any] | None:
+    ) -> RAGMetadataFilter | None:
         if bind is None or not bind.filters:
             return filters
         merged = dict(bind.filters)
@@ -105,13 +111,13 @@ class RAGRepository:
         query: str,
         namespace_id: str | None = None,
         limit: int | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: RAGMetadataFilter | None = None,
         provider: str | None = None,
         company_id: str | None = None,
-        search_options: dict[str, Any] | None = None,
+        search_options: RAGSearchOptions | None = None,
         bind: RagResourceBindParams | None = None,
         timeout: float = 30.0,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """
         ``POST /rag/api/v1/namespaces/{namespace_id}/search`` — тело как ``SearchRequest``.
 
@@ -143,14 +149,14 @@ class RAGRepository:
         )
         path = build_namespace_search_path(ns, provider=prov)
 
-        kwargs: dict[str, Any] = {"json": body, "timeout": timeout}
-        if extra_headers is not None:
-            kwargs["headers"] = extra_headers
-
-        response = await client.post("rag", path, **kwargs)
-        if not isinstance(response, dict):
-            raise ValueError("RAGRepository.search_namespace response must be JSON object")
-        return response
+        response = await client.post(
+            "rag",
+            path,
+            timeout=timeout,
+            json=body,
+            headers=extra_headers,
+        )
+        return require_json_object(response, "RAGRepository.search_namespace response")
 
     async def list_documents(
         self,
@@ -164,7 +170,7 @@ class RAGRepository:
     async def list_with_filters(
         self,
         namespace_id: str,
-        filters: dict[str, Any] | None = None,
+        filters: RAGMetadataFilter | None = None,
         limit: int = 100,
     ) -> list[RAGDocument]:
         documents = await self.provider.list_documents_with_filters(
@@ -187,7 +193,7 @@ class RAGRepository:
         namespace_id: str,
         s3_key: str,
         document_name: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: RAGMetadata | None = None,
     ) -> RAGDocument:
         document = await self.provider.upload_document_from_s3(
             namespace_id=namespace_id,
@@ -203,7 +209,7 @@ class RAGRepository:
         namespace_id: str,
         text: str,
         document_name: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: RAGMetadata | None = None,
     ) -> RAGDocument:
         document = await self.provider.upload_document_from_text(
             namespace_id=namespace_id,
@@ -233,15 +239,15 @@ class RAGRepository:
         namespace_id: str,
         query: str,
         limit: int = 5,
-        filters: dict[str, Any] | None = None,
-        **kwargs: Any,
+        filters: RAGMetadataFilter | None = None,
+        search_options: RAGSearchOptions | None = None,
     ) -> list[RAGSearchResult]:
         results = await self.provider.search(
             namespace_id=namespace_id,
             query=query,
             limit=limit,
             filters=filters,
-            **kwargs,
+            search_options=search_options,
         )
         logger.debug("Поиск '%s' в namespace %s: найдено %s результатов", query, namespace_id, len(results))
         return results
@@ -251,13 +257,15 @@ class RAGRepository:
         namespace_ids: list[str],
         query: str,
         limit: int = 5,
-        **kwargs: Any,
+        filters: RAGMetadataFilter | None = None,
+        search_options: RAGSearchOptions | None = None,
     ) -> dict[str, list[RAGSearchResult]]:
         return await self.provider.search_multiple_namespaces(
             namespace_ids=namespace_ids,
             query=query,
             limit=limit,
-            **kwargs,
+            filters=filters,
+            search_options=search_options,
         )
 
     async def create_namespace(

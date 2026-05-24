@@ -133,9 +133,9 @@ export class CRMGraphWorkspace extends PlatformElement {
                 flex-direction: column;
                 width: 100%;
                 height: 100%;
-                background: var(--crm-surface);
-                border: 1px solid var(--crm-stroke-strong);
-                border-radius: var(--radius-2xl);
+                background: var(--bg-secondary);
+                border: none;
+                border-radius: 0;
                 overflow: hidden;
             }
 
@@ -148,7 +148,7 @@ export class CRMGraphWorkspace extends PlatformElement {
                 position: relative;
                 flex: 1;
                 width: 100%;
-                min-height: 560px;
+                min-height: 0;
                 background: var(--bg-secondary);
             }
 

@@ -5,11 +5,12 @@
 """
 
 from datetime import datetime
-from typing import Any
+from typing import ClassVar, override
 
-from apps.flows.src.runtime.nodes import LlmNode
+from apps.flows.src.runtime.nodes import LlmNode, NodeInputs, NodeRunResult
 from core.logging import get_logger
 from core.state import ExecutionState
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -24,18 +25,17 @@ class CustomFlowWithLogging(LlmNode):
     - Сохранение метаданных в state
     """
 
-    name = "custom_flow_with_logging"
-    description = "Нода с расширенным логированием и метриками"
+    name: ClassVar[str] = "custom_flow_with_logging"
+    description: ClassVar[str | None] = "Нода с расширенным логированием и метриками"
 
-    async def _run_impl(
-        self, state: ExecutionState, inputs: dict[str, Any]
-    ) -> dict[str, Any]:
+    @override
+    async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
         """Выполняет ноду с логированием до и после."""
         start_time = datetime.now()
         logger.info(f"[{self.node_id}] Начало выполнения: {start_time.isoformat()}")
 
         metadata_raw = state.variables.get("__custom_metadata__")
-        metadata: dict[str, Any] = metadata_raw if isinstance(metadata_raw, dict) else {}
+        metadata: JsonObject = metadata_raw if isinstance(metadata_raw, dict) else {}
         state.variables["__custom_metadata__"] = metadata
 
         metadata["start_time"] = start_time.isoformat()
@@ -51,6 +51,8 @@ class CustomFlowWithLogging(LlmNode):
         metadata["end_time"] = end_time.isoformat()
         metadata["duration_seconds"] = duration
 
+        if isinstance(result, ExecutionState):
+            return result
         return result if isinstance(result, dict) else {"result": result}
 
 
@@ -63,12 +65,11 @@ class CustomFlowWithPreprocessing(LlmNode):
     - Контекст времени суток
     """
 
-    name = "custom_flow_with_preprocessing"
-    description = "Нода с предобработкой входных данных"
+    name: ClassVar[str] = "custom_flow_with_preprocessing"
+    description: ClassVar[str | None] = "Нода с предобработкой входных данных"
 
-    async def _run_impl(
-        self, state: ExecutionState, inputs: dict[str, Any]
-    ) -> dict[str, Any]:
+    @override
+    async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
         """Выполняет ноду с предобработкой."""
         original_content = str(inputs.get("content", ""))
         processed_content = self._preprocess(original_content)
@@ -79,6 +80,8 @@ class CustomFlowWithPreprocessing(LlmNode):
         state.variables["__original_content__"] = original_content
 
         result = await super()._run_impl(state, inputs)
+        if isinstance(result, ExecutionState):
+            return result
         return result if isinstance(result, dict) else {"result": result}
 
     def _preprocess(self, content: str) -> str:

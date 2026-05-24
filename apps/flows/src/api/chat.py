@@ -4,7 +4,6 @@ Chat API - веб-интерфейс для SSE чата с агентами.
 
 import json
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -18,6 +17,7 @@ from apps.flows.src.models.flow_config import FlowConfig
 from core.context import get_context
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -78,12 +78,10 @@ async def get_chat_interface(flow_id: str, request: Request, container: Containe
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
     branches_list = await channel.list_branches()
 
-    # Получаем email пользователя из контекста или request.state
     user_email = ""
-    if context and context.metadata:
-        user_email = context.metadata.get("email", "")
-    elif hasattr(request.state, "user") and request.state.user:
-        user_email = request.state.user.get("email", "")
+    if context is not None:
+        metadata_email = context.metadata.get("email")
+        user_email = metadata_email if isinstance(metadata_email, str) else context.user.email
 
     # Путь к шаблону
     template_dir = Path(__file__).parent.parent.parent / "static"
@@ -113,7 +111,7 @@ async def get_chat_interface(flow_id: str, request: Request, container: Containe
     return HTMLResponse(content=html_content)
 
 
-def _get_embedded_template(flow_id: str, base_url: str, branches: list[dict[str, Any]]) -> str:
+def _get_embedded_template(flow_id: str, base_url: str, branches: list[JsonObject]) -> str:
     """Возвращает встроенный HTML шаблон если файл не найден."""
     branches_json = json.dumps(branches)
     return f"""<!DOCTYPE html>

@@ -40,8 +40,8 @@ class CDPLifecycleManagerImpl:
         pool: CDPConnectionPool,
         lease_manager: PageLeaseManager,
     ) -> None:
-        self._pool = pool
-        self._lease_manager = lease_manager
+        self._pool: CDPConnectionPool = pool
+        self._lease_manager: PageLeaseManager = lease_manager
 
     async def drain(self, endpoint_key: str, timeout_sec: int) -> bool:
         if timeout_sec <= 0:

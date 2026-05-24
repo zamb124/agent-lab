@@ -9,6 +9,7 @@ from typing import Any
 from core.llm_context.memory import LLMContextMemoryEpisode, LLMContextMemoryStore
 from core.llm_context.models import LLMContextMemoryScope, LLMContextProfile
 from core.llm_context.token_counter import TiktokenTokenCounter, TokenCounter
+from core.types import JsonObject
 
 _SOURCE = "llm_context_compaction"
 LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY = "llm_context_recall_content"
@@ -82,7 +83,7 @@ def build_llm_context_memory_episode(
         return None, closed_end
 
     scope = policy.memory
-    metadata = {
+    metadata: JsonObject = {
         "cursor_start": safe_cursor,
         "cursor_end": closed_end,
         "message_count": len(closed_messages),

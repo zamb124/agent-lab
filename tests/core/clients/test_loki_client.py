@@ -84,20 +84,20 @@ class TestParseEntry:
             "service.name": "flows",
         })
         entry = _parse_entry("1700000000000000000", line, {})
-        assert entry["level"] == "info"
-        assert entry["message"] == "flow started"
-        assert entry["trace_id"] == "abc123"
-        assert entry["session_id"] == "flow1:ctx1"
-        assert "2023" in entry["timestamp"]
+        assert entry.level == "info"
+        assert entry.message == "flow started"
+        assert entry.trace_id == "abc123"
+        assert entry.session_id == "flow1:ctx1"
+        assert "2023" in entry.timestamp
 
     def test_fallback_for_non_json_line(self):
         entry = _parse_entry("1700000000000000000", "plain text log", {})
-        assert entry["message"] == "plain text log"
+        assert entry.message == "plain text log"
 
     def test_level_from_stream_when_missing_in_json(self):
         line = json.dumps({"message": "test"})
         entry = _parse_entry("1700000000000000000", line, {"level": "warn"})
-        assert entry["level"] == "warn"
+        assert entry.level == "warn"
 
 
 # ---------------------------------------------------------------------------
@@ -124,14 +124,15 @@ class TestParseLokiResponse:
     def test_returns_sorted_entries(self):
         entries = _parse_loki_response(_SAMPLE_LOKI_RESPONSE)
         assert len(entries) == 2
-        assert entries[0]["message"] == "first"
-        assert entries[1]["message"] == "second"
+        assert entries[0].message == "first"
+        assert entries[1].message == "second"
 
     def test_empty_result(self):
         assert _parse_loki_response({"data": {"result": []}}) == []
 
     def test_empty_body(self):
-        assert _parse_loki_response({}) == []
+        with pytest.raises(ValueError, match="loki.data"):
+            _parse_loki_response({})
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +145,7 @@ class TestLokiClientQueryByTraceId:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = _SAMPLE_LOKI_RESPONSE
+        mock_resp.text = json.dumps(_SAMPLE_LOKI_RESPONSE)
 
         with patch("core.clients.loki_client.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
@@ -155,7 +157,7 @@ class TestLokiClientQueryByTraceId:
             entries = await client.query_by_trace_id("t1")
 
         assert len(entries) == 2
-        assert entries[0]["message"] == "first"
+        assert entries[0].message == "first"
 
     @pytest.mark.asyncio
     async def test_loki_error_raises(self):
@@ -207,6 +209,7 @@ class TestLokiClientQueryBySessionId:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = _SAMPLE_LOKI_RESPONSE
+        mock_resp.text = json.dumps(_SAMPLE_LOKI_RESPONSE)
 
         with patch("core.clients.loki_client.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()

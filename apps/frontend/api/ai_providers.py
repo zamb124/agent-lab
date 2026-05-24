@@ -89,9 +89,28 @@ def _require_admin(request: Request) -> None:
         raise HTTPException(status_code=400, detail="Компания не выбрана")
     company = request.state.company
     user = request.state.user
-    roles = company.members.get(user.user_id, [])
-    if "owner" not in roles and "admin" not in roles:
+    roles = _current_company_roles(request)
+    if "owner" not in roles and "admin" not in roles and user.user_id != company.owner_user_id:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
+
+
+def _current_company_roles(request: Request) -> set[str]:
+    """Roles for the active company, accepting both sides of the platform membership mirror."""
+    company = request.state.company
+    user = request.state.user
+    company_id = company.company_id
+
+    roles: set[str] = set(company.members.get(user.user_id, []) or [])
+    roles.update(user.companies.get(company_id, []) or [])
+
+    token_data = getattr(request.state, "token_data", None)
+    if getattr(token_data, "company_id", None) == company_id:
+        roles.update(getattr(token_data, "roles", []) or [])
+
+    if company_id == "system" and "admin" in (getattr(user, "groups", []) or []):
+        roles.add("admin")
+
+    return roles
 
 
 def _load_aip(request: Request) -> CompanyAIProviders:
@@ -347,11 +366,19 @@ def _public_capabilities(aip: CompanyAIProviders) -> list[dict[str, Any]]:
 
 def _public_llm_context(aip: CompanyAIProviders) -> dict[str, Any]:
     settings = get_settings().llm_context
+    resolved = resolve_llm_context_policy(config=settings, company=aip.llm_context)
+    resolved_public = resolved.model_dump(mode="json")
+    resolved_public["profile"] = (
+        aip.llm_context.profile
+        if aip.llm_context is not None and aip.llm_context.profile is not None
+        else settings.default_profile
+    )
     return {
         "configured": aip.llm_context is not None,
         "config": aip.llm_context.model_dump(mode="json", exclude_none=True)
         if aip.llm_context is not None
         else {},
+        "resolved": resolved_public,
         "default_profile": settings.default_profile,
         "profiles": list(settings.profiles.keys()),
         "budgets": list(settings.budgets.keys()),

@@ -41,8 +41,6 @@ def _accept_language_from_locale(locale: str) -> str:
 
 
 def build_stealth_plan(signature: ContextSignature) -> StealthPlan:
-    if not isinstance(signature, ContextSignature):
-        raise TypeError("signature должен быть ContextSignature")
     if not signature.stealth_init_version:
         raise ValueError("stealth_init_version обязателен")
     if not signature.anti_bot_tier:

@@ -33,9 +33,9 @@ SERVICE_NAME = "code_runner_csharp"
 DOTNET_BIN_ENV = "CODE_RUNNER_DOTNET_BIN"
 CSHARP_METHOD_RE = re.compile(
     r"(?m)^\s*"
-    r"(?:(?:public|private|protected|internal|static|async|virtual|override|sealed|new|partial)\s+)*"
-    r"(?:[A-Za-z_][A-Za-z0-9_<>,\[\]\.?]*\s+)+"
-    r"([A-Za-z_][A-Za-z0-9_]*)\s*\("
+    + r"(?:(?:public|private|protected|internal|static|async|virtual|override|sealed|new|partial)\s+)*"
+    + r"(?:[A-Za-z_][A-Za-z0-9_<>,\[\]\.?]*\s+)+"
+    + r"([A-Za-z_][A-Za-z0-9_]*)\s*\("
 )
 
 
@@ -43,9 +43,9 @@ class CsharpSandboxExecutor:
     """Исполняет C# user code через cached .NET build artifact."""
 
     def __init__(self) -> None:
-        self._artifact_root = Path(tempfile.mkdtemp(prefix="code-runner-csharp-artifacts-"))
+        self._artifact_root: Path = Path(tempfile.mkdtemp(prefix="code-runner-csharp-artifacts-"))
         self._build_locks: dict[str, asyncio.Lock] = {}
-        self._build_locks_guard = asyncio.Lock()
+        self._build_locks_guard: asyncio.Lock = asyncio.Lock()
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
         if request.language != "csharp":
@@ -232,13 +232,15 @@ class CsharpSandboxExecutor:
             user_path = artifact_path / "UserCode.cs"
             sdk_path = artifact_path / "Sdk.cs"
             entrypoint_check_path = artifact_path / "EntrypointCheck.cs"
-            project_path.write_text(self._project_source(), encoding="utf-8")
-            runner_path.write_text(self._runner_source(), encoding="utf-8")
-            user_path.write_text(self._user_source(request.code), encoding="utf-8")
-            sdk_path.write_text(self._sdk_source(request), encoding="utf-8")
+            _ = project_path.write_text(self._project_source(), encoding="utf-8")
+            _ = runner_path.write_text(self._runner_source(), encoding="utf-8")
+            _ = user_path.write_text(self._user_source(request.code), encoding="utf-8")
+            _ = sdk_path.write_text(self._sdk_source(request), encoding="utf-8")
             entrypoint = request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else ""
             if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", entrypoint) is not None:
-                entrypoint_check_path.write_text(self._entrypoint_check_source(entrypoint), encoding="utf-8")
+                _ = entrypoint_check_path.write_text(
+                    self._entrypoint_check_source(entrypoint), encoding="utf-8"
+                )
             env = self._dotnet_env()
             process = await asyncio.create_subprocess_exec(
                 dotnet_bin,

@@ -6,13 +6,14 @@ LokiClient — HTTP-клиент для поиска логов в Grafana Loki.
 селектор processes, где крутится runtime flows (agents + *flows* в имени контейнера в Loki). Произвольный LogQL от внешнего клиента не принимается.
 """
 
-import json
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 import httpx
 
 from core.logging import get_logger
+from core.models import StrictBaseModel
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 
@@ -55,7 +56,37 @@ def _build_user_id_query(user_id: str) -> str:
     return f'{{{_FLOWS_SELECTOR}}} | json | user_id="{safe}"'
 
 
-def _parse_entry(ts_ns: str, line: str, stream: dict[str, str]) -> dict[str, Any]:
+class LokiLogEntry(StrictBaseModel):
+    timestamp: str
+    level: str
+    message: str
+    logger: str
+    service: str
+    trace_id: str
+    span_id: str
+    request_id: str
+    user_id: str
+    session_id: str
+    session_agent: str
+    raw: JsonObject
+
+
+def _json_string(payload: Mapping[str, JsonValue], key: str, default: str = "") -> str:
+    value = payload.get(key)
+    return value if isinstance(value, str) else default
+
+
+def _stream_labels(raw_stream: JsonValue, field_name: str) -> dict[str, str]:
+    stream_obj = require_json_object(raw_stream, field_name)
+    labels: dict[str, str] = {}
+    for key, value in stream_obj.items():
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name}.{key} must be a string")
+        labels[key] = value
+    return labels
+
+
+def _parse_entry(ts_ns: str, line: str, stream: Mapping[str, str]) -> LokiLogEntry:
     try:
         ts_iso = datetime.fromtimestamp(
             int(ts_ns) / 1_000_000_000, tz=timezone.utc
@@ -63,36 +94,53 @@ def _parse_entry(ts_ns: str, line: str, stream: dict[str, str]) -> dict[str, Any
     except (ValueError, TypeError):
         ts_iso = ts_ns
 
-    parsed: dict[str, Any] = {}
+    parsed: JsonObject
     try:
-        parsed = json.loads(line)
-    except (json.JSONDecodeError, TypeError):
+        parsed = parse_json_object(line, "loki.log_line")
+    except ValueError:
         parsed = {"message": line}
 
-    return {
-        "timestamp": ts_iso,
-        "level": parsed.get("level", stream.get("level", "")),
-        "message": parsed.get("message", parsed.get("msg", "")),
-        "logger": parsed.get("logger", ""),
-        "service": parsed.get("service.name", stream.get("service", "")),
-        "trace_id": parsed.get("trace_id", ""),
-        "span_id": parsed.get("span_id", ""),
-        "request_id": parsed.get("request_id", ""),
-        "user_id": parsed.get("user_id", ""),
-        "session_id": parsed.get("session_id", ""),
-        "session_agent": parsed.get("session_agent", ""),
-        "raw": parsed,
-    }
+    message = _json_string(parsed, "message", _json_string(parsed, "msg"))
+    return LokiLogEntry(
+        timestamp=ts_iso,
+        level=_json_string(parsed, "level", stream.get("level", "")),
+        message=message,
+        logger=_json_string(parsed, "logger"),
+        service=_json_string(parsed, "service.name", stream.get("service", "")),
+        trace_id=_json_string(parsed, "trace_id"),
+        span_id=_json_string(parsed, "span_id"),
+        request_id=_json_string(parsed, "request_id"),
+        user_id=_json_string(parsed, "user_id"),
+        session_id=_json_string(parsed, "session_id"),
+        session_agent=_json_string(parsed, "session_agent"),
+        raw=parsed,
+    )
 
 
-def _parse_loki_response(body: dict[str, Any]) -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = []
-    for stream_result in body.get("data", {}).get("result", []):
-        stream: dict[str, str] = stream_result.get("stream", {})
-        for value in stream_result.get("values", []):
-            if len(value) >= 2:
-                entries.append(_parse_entry(value[0], value[1], stream))
-    entries.sort(key=lambda e: e["timestamp"])
+def _parse_loki_response(body: JsonObject) -> list[LokiLogEntry]:
+    data = require_json_object(body.get("data"), "loki.data")
+    raw_results = data.get("result")
+    if not isinstance(raw_results, list):
+        raise ValueError("loki.data.result must be an array")
+
+    entries: list[LokiLogEntry] = []
+    for result_index, raw_stream_result in enumerate(raw_results):
+        stream_result = require_json_object(raw_stream_result, f"loki.data.result[{result_index}]")
+        stream = _stream_labels(stream_result.get("stream", {}), f"loki.data.result[{result_index}].stream")
+        raw_values = stream_result.get("values")
+        if not isinstance(raw_values, list):
+            raise ValueError(f"loki.data.result[{result_index}].values must be an array")
+        for value_index, raw_value in enumerate(raw_values):
+            if not isinstance(raw_value, list) or len(raw_value) < 2:
+                raise ValueError(f"loki.data.result[{result_index}].values[{value_index}] must be [ts, line]")
+            ts_ns = raw_value[0]
+            line = raw_value[1]
+            if not isinstance(ts_ns, str) or not isinstance(line, str):
+                raise ValueError(
+                    f"loki.data.result[{result_index}].values[{value_index}] must contain string ts and line"
+                )
+            entries.append(_parse_entry(ts_ns, line, stream))
+    entries.sort(key=lambda entry: entry.timestamp)
     return entries
 
 
@@ -110,8 +158,8 @@ class LokiClient:
     def __init__(self, base_url: str, timeout: float = 15.0) -> None:
         if not base_url:
             raise ValueError("LokiClient: base_url обязателен")
-        self._base_url = base_url.rstrip("/")
-        self._timeout = timeout
+        self._base_url: str = base_url.rstrip("/")
+        self._timeout: float = timeout
 
     async def _query_range(
         self,
@@ -119,10 +167,10 @@ class LokiClient:
         time_from: datetime | None,
         time_to: datetime | None,
         limit: int,
-    ) -> list[dict[str, Any]]:
+    ) -> list[LokiLogEntry]:
         end = time_to if time_to is not None else datetime.now(timezone.utc)
         start = time_from if time_from is not None else end - _DEFAULT_QUERY_LOOKBACK
-        params: dict[str, Any] = {
+        params: dict[str, str | int] = {
             "query": logql,
             "limit": limit,
             "direction": "forward",
@@ -142,13 +190,13 @@ class LokiClient:
                 f"Loki query_range вернул {resp.status_code}: {resp.text[:300]}"
             )
         try:
-            body = resp.json()
-        except (json.JSONDecodeError, TypeError) as exc:
+            body = parse_json_object(resp.text, "loki.query_range response")
+            return _parse_loki_response(body)
+        except ValueError as exc:
             snippet = (resp.text or "")[:300]
             raise LokiClientError(
-                f"Loki query_range ответ не JSON (HTTP {resp.status_code}): {snippet}"
+                f"Loki query_range ответ не JSON/LogQL payload (HTTP {resp.status_code}): {snippet}"
             ) from exc
-        return _parse_loki_response(body)
 
     async def query_by_trace_id(
         self,
@@ -156,7 +204,7 @@ class LokiClient:
         time_from: datetime | None = None,
         time_to: datetime | None = None,
         limit: int = 200,
-    ) -> list[dict[str, Any]]:
+    ) -> list[LokiLogEntry]:
         """Возвращает записи логов с указанным trace_id (платформенные сервисы, см. селектор)."""
         if not trace_id:
             raise ValueError("LokiClient.query_by_trace_id: trace_id обязателен")
@@ -170,7 +218,7 @@ class LokiClient:
         time_from: datetime | None = None,
         time_to: datetime | None = None,
         limit: int = 200,
-    ) -> list[dict[str, Any]]:
+    ) -> list[LokiLogEntry]:
         """Возвращает записи логов с указанным session_id из flows/flows_worker."""
         if not session_id:
             raise ValueError("LokiClient.query_by_session_id: session_id обязателен")
@@ -184,7 +232,7 @@ class LokiClient:
         time_from: datetime | None = None,
         time_to: datetime | None = None,
         limit: int = 200,
-    ) -> list[dict[str, Any]]:
+    ) -> list[LokiLogEntry]:
         """Возвращает записи логов с указанным request_id из flows/flows_worker."""
         if not request_id:
             raise ValueError("LokiClient.query_by_request_id: request_id обязателен")
@@ -198,7 +246,7 @@ class LokiClient:
         time_from: datetime | None = None,
         time_to: datetime | None = None,
         limit: int = 200,
-    ) -> list[dict[str, Any]]:
+    ) -> list[LokiLogEntry]:
         """Возвращает записи логов с указанным span_id из flows/flows_worker."""
         if not span_id:
             raise ValueError("LokiClient.query_by_span_id: span_id обязателен")
@@ -212,7 +260,7 @@ class LokiClient:
         time_from: datetime | None = None,
         time_to: datetime | None = None,
         limit: int = 200,
-    ) -> list[dict[str, Any]]:
+    ) -> list[LokiLogEntry]:
         """Возвращает записи логов с указанным user_id из flows/flows_worker."""
         if not user_id:
             raise ValueError("LokiClient.query_by_user_id: user_id обязателен")

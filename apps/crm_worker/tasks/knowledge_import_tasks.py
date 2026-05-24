@@ -82,7 +82,7 @@ def _payload_bool(data: JsonObject, key: str, *, default: bool) -> bool:
     return value
 
 
-async def _notify_task_user(
+async def notify_task_user(
     user_id: str,
     repo: TaskRepository,
     company_id: str,
@@ -198,7 +198,7 @@ async def run_knowledge_import_task(
                 progress_pct=100,
                 completed_at=datetime.now(timezone.utc),
             )
-            await _notify_task_user(
+            await notify_task_user(
                 row.user_id,
                 repo,
                 company_id,
@@ -261,7 +261,7 @@ async def run_knowledge_import_task(
                             "relationships_created_count": relationships_created,
                         },
                     )
-                    await _notify_task_user(
+                    await notify_task_user(
                         row.user_id,
                         repo,
                         company_id,
@@ -337,7 +337,7 @@ async def run_knowledge_import_task(
                                 "relationships_created_count": relationships_created,
                             },
                         )
-                        await _notify_task_user(
+                        await notify_task_user(
                             row.user_id,
                             repo,
                             company_id,
@@ -401,7 +401,7 @@ async def run_knowledge_import_task(
                 "created_relationship_ids": created_relationship_ids,
             },
         )
-        await _notify_task_user(
+        await notify_task_user(
             row.user_id,
             repo,
             company_id,
@@ -441,7 +441,7 @@ async def run_knowledge_import_task(
                 "created_relationship_ids": created_relationship_ids,
             },
         )
-        await _notify_task_user(
+        await notify_task_user(
             row.user_id,
             repo,
             company_id,

@@ -6,9 +6,10 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
 
 from pydantic import BaseModel, Field
+
+from core.types import JsonObject
 
 
 class FileStatus(str, Enum):
@@ -52,7 +53,7 @@ class FileRecord(BaseModel):
     status: FileStatus = Field(default=FileStatus.UPLOADING, description="Статус файла")
     uploaded_by: str | None = Field(default=None, description="ID пользователя который загрузил")
     company_id: str | None = Field(default=None, description="ID компании владельца файла")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Дополнительные метаданные файла")
+    metadata: JsonObject = Field(default_factory=dict, description="Дополнительные метаданные файла")
     tags: list[str] = Field(default_factory=list, description="Теги для категоризации")
     is_public: bool = Field(default=False, description="Доступен ли файл без авторизации")
     download_url: str | None = Field(

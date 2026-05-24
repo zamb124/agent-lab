@@ -11,6 +11,29 @@ const RETRIEVAL_VALUES = Object.freeze(['off', 'semantic', 'lexical', 'hybrid'])
 const COMPACTION_VALUES = Object.freeze(['off', 'auto', 'force']);
 const CACHE_VALUES = Object.freeze(['off', 'auto', 'provider_hints']);
 const BUDGET_CUSTOM_VALUE = '__custom__';
+const VALUE_LABEL_FALLBACKS = Object.freeze({
+    off: 'Disabled',
+    compact: 'Window only',
+    standard: 'Memory + retrieval',
+    agent: 'Agent',
+    window: 'Active window',
+    smart: 'Smart',
+    session: 'Session',
+    node: 'Node',
+    flow: 'Flow',
+    company: 'Company',
+    semantic: 'Semantic',
+    lexical: 'Lexical',
+    hybrid: 'Hybrid',
+    tiny: 'Tiny',
+    small: 'Small',
+    medium: 'Medium',
+    large: 'Large',
+    max: 'Maximum',
+    auto: 'Auto',
+    force: 'Always',
+    provider_hints: 'Provider hints',
+});
 const BUDGET_TOKEN_FIELDS = Object.freeze([
     'max_input_tokens',
     'active_window_tokens',
@@ -31,20 +54,30 @@ function clonePatch(value) {
     return JSON.parse(JSON.stringify(value));
 }
 
-function enumConfig(values, inheritLabel) {
+function enumConfig(values, inheritLabel, labelForValue = (value) => value) {
     const items = [{ value: '', label: inheritLabel }];
     for (const value of values) {
-        items.push({ value, label: value });
+        items.push({ value, label: labelForValue(value) });
     }
     return { values: items };
 }
 
-function budgetEnumConfig(values, inheritLabel, customLabel, includeCustom) {
-    const config = enumConfig(values, inheritLabel);
+function budgetEnumConfig(values, inheritLabel, customLabel, includeCustom, labelForValue) {
+    const config = enumConfig(values, inheritLabel, labelForValue);
     if (includeCustom) {
         config.values.push({ value: BUDGET_CUSTOM_VALUE, label: customLabel });
     }
     return config;
+}
+
+function booleanEnumConfig(inheritLabel, trueLabel, falseLabel) {
+    return {
+        values: [
+            { value: '', label: inheritLabel },
+            { value: 'true', label: trueLabel },
+            { value: 'false', label: falseLabel },
+        ],
+    };
 }
 
 function cleanObject(value) {
@@ -71,13 +104,30 @@ function budgetPatch(config) {
     return isObject(config.budget) ? { ...config.budget } : {};
 }
 
+function resolvedBudget(config) {
+    return isObject(config.budget) ? config.budget : {};
+}
+
+function resolvedRetrieval(config) {
+    return isObject(config.retrieval) ? config.retrieval : {};
+}
+
 function clampNumber(value, min, max) {
     return Math.min(max, Math.max(min, value));
+}
+
+function tokenLabel(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+    if (value >= 1000) {
+        return `${Math.round(value / 1000)}k`;
+    }
+    return String(value);
 }
 
 export class PlatformLlmContextEditor extends PlatformElement {
     static properties = {
         config: { type: Object },
+        resolved: { type: Object },
         profiles: { type: Array },
         budgets: { type: Array },
         compact: { type: Boolean, reflect: true },
@@ -145,6 +195,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
     constructor() {
         super();
         this.config = {};
+        this.resolved = {};
         this.profiles = [];
         this.budgets = [];
         this.compact = false;
@@ -211,12 +262,14 @@ export class PlatformLlmContextEditor extends PlatformElement {
 
     _onEnum(key) {
         return (e) => {
+            e.stopPropagation?.();
             const value = typeof e.detail?.value === 'string' ? e.detail.value : '';
             this._setTopLevel(key, value);
         };
     }
 
     _onBudgetPreset(e) {
+        e.stopPropagation?.();
         const value = typeof e.detail?.value === 'string' ? e.detail.value : '';
         if (value === BUDGET_CUSTOM_VALUE) {
             return;
@@ -226,6 +279,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
 
     _onRetrievalEnum(key) {
         return (e) => {
+            e.stopPropagation?.();
             const value = typeof e.detail?.value === 'string' ? e.detail.value : '';
             this._setRetrieval(key, value);
         };
@@ -233,6 +287,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
 
     _onRetrievalNumber(key) {
         return (e) => {
+            e.stopPropagation?.();
             const raw = e.detail?.value;
             let value = typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
             if (value !== null && key === 'top_k') {
@@ -247,6 +302,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
 
     _onBudgetNumber(key) {
         return (e) => {
+            e.stopPropagation?.();
             const raw = e.detail?.value;
             let value = typeof raw === 'number' && Number.isFinite(raw) ? Math.round(raw) : null;
             if (value !== null) {
@@ -258,11 +314,38 @@ export class PlatformLlmContextEditor extends PlatformElement {
         };
     }
 
-    _onRetrievalBool(key) {
+    _onRetrievalBoolEnum(key) {
         return (e) => {
-            const value = e.detail?.value === true;
+            e.stopPropagation?.();
+            const raw = typeof e.detail?.value === 'string' ? e.detail.value : '';
+            const value = raw === '' ? null : raw === 'true';
             this._setRetrieval(key, value);
         };
+    }
+
+    _effectiveLabel(inherit, value) {
+        if (value === null || value === undefined || value === '') {
+            return inherit;
+        }
+        let display = value;
+        if (typeof value === 'boolean') {
+            display = value
+                ? this.t('llm_context_editor.enabled')
+                : this.t('llm_context_editor.disabled');
+        } else if (typeof value === 'string') {
+            display = this._valueLabel(value);
+        }
+        return this.t('llm_context_editor.inherit_effective', { value: display });
+    }
+
+    _hint(key) {
+        return this.t(`llm_context_editor.${key}_hint`);
+    }
+
+    _valueLabel(value) {
+        const key = `llm_context_editor.value_${value}`;
+        const translated = this.t(key);
+        return translated === key ? (VALUE_LABEL_FALLBACKS[value] || value) : translated;
     }
 
     _clear() {
@@ -274,8 +357,19 @@ export class PlatformLlmContextEditor extends PlatformElement {
         const patch = this._patch();
         const retrieval = retrievalPatch(patch);
         const budgetPatchValue = budgetPatch(patch);
+        const resolved = isObject(this.resolved) ? this.resolved : {};
+        const effectiveBudget = resolvedBudget(resolved);
+        const effectiveRetrieval = resolvedRetrieval(resolved);
         const hasCustomBudget = isObject(patch.budget);
         const inherit = this.t('llm_context_editor.inherit');
+        const inheritProfile = this._effectiveLabel(inherit, resolved.profile);
+        const inheritMode = this._effectiveLabel(inherit, resolved.mode);
+        const inheritMemory = this._effectiveLabel(inherit, resolved.memory);
+        const inheritRetrieval = this._effectiveLabel(inherit, effectiveRetrieval.mode);
+        const inheritBudget = this._effectiveLabel(inherit, tokenLabel(effectiveBudget.max_input_tokens));
+        const inheritRerank = this._effectiveLabel(inherit, effectiveRetrieval.rerank);
+        const inheritCompaction = this._effectiveLabel(inherit, resolved.compaction);
+        const inheritCache = this._effectiveLabel(inherit, resolved.cache);
         const profile = typeof patch.profile === 'string' ? patch.profile : '';
         const mode = typeof patch.mode === 'string' ? patch.mode : '';
         const budget = typeof patch.budget === 'string'
@@ -285,7 +379,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
         const retrievalMode = typeof retrieval.mode === 'string' ? retrieval.mode : '';
         const topK = typeof retrieval.top_k === 'number' ? retrieval.top_k : null;
         const minScore = typeof retrieval.min_score === 'number' ? retrieval.min_score : null;
-        const rerank = retrieval.rerank === true;
+        const rerank = typeof retrieval.rerank === 'boolean' ? String(retrieval.rerank) : '';
         const compaction = typeof patch.compaction === 'string' ? patch.compaction : '';
         const cache = typeof patch.cache === 'string' ? patch.cache : '';
         const profileValues = Array.isArray(this.profiles) && this.profiles.length > 0
@@ -302,36 +396,41 @@ export class PlatformLlmContextEditor extends PlatformElement {
                         type="enum"
                         mode="edit"
                         .label=${this.t('llm_context_editor.profile')}
+                        .hint=${this._hint('profile')}
                         .value=${profile}
-                        .config=${enumConfig(profileValues, inherit)}
+                        .config=${enumConfig(profileValues, inheritProfile, (value) => this._valueLabel(value))}
                         @change=${this._onEnum('profile')}
                     ></platform-field>
                     <platform-field
                         type="enum"
                         mode="edit"
                         .label=${this.t('llm_context_editor.memory')}
+                        .hint=${this._hint('memory')}
                         .value=${memory}
-                        .config=${enumConfig(MEMORY_VALUES, inherit)}
+                        .config=${enumConfig(MEMORY_VALUES, inheritMemory, (value) => this._valueLabel(value))}
                         @change=${this._onEnum('memory')}
                     ></platform-field>
                     <platform-field
                         type="enum"
                         mode="edit"
                         .label=${this.t('llm_context_editor.retrieval')}
+                        .hint=${this._hint('retrieval')}
                         .value=${retrievalMode}
-                        .config=${enumConfig(RETRIEVAL_VALUES, inherit)}
+                        .config=${enumConfig(RETRIEVAL_VALUES, inheritRetrieval, (value) => this._valueLabel(value))}
                         @change=${this._onRetrievalEnum('mode')}
                     ></platform-field>
                     <platform-field
                         type="enum"
                         mode="edit"
                         .label=${this.t('llm_context_editor.budget')}
+                        .hint=${this._hint('budget')}
                         .value=${budget}
                         .config=${budgetEnumConfig(
                             budgetValues,
-                            inherit,
+                            inheritBudget,
                             this.t('llm_context_editor.custom_budget'),
                             hasCustomBudget,
+                            (value) => this._valueLabel(value),
                         )}
                         @change=${this._onBudgetPreset}
                     ></platform-field>
@@ -367,45 +466,58 @@ export class PlatformLlmContextEditor extends PlatformElement {
                                         type="enum"
                                         mode="edit"
                                         .label=${this.t('llm_context_editor.mode')}
+                                        .hint=${this._hint('mode')}
                                         .value=${mode}
-                                        .config=${enumConfig(MODE_VALUES, inherit)}
+                                        .config=${enumConfig(MODE_VALUES, inheritMode, (value) => this._valueLabel(value))}
                                         @change=${this._onEnum('mode')}
                                     ></platform-field>
                                     <platform-field
                                         type="integer"
                                         mode="edit"
                                         .label=${this.t('llm_context_editor.top_k')}
+                                        .hint=${this._hint('top_k')}
                                         .value=${topK}
+                                        .placeholder=${typeof effectiveRetrieval.top_k === 'number' ? String(effectiveRetrieval.top_k) : ''}
                                         @change=${this._onRetrievalNumber('top_k')}
                                     ></platform-field>
                                     <platform-field
                                         type="number"
                                         mode="edit"
                                         .label=${this.t('llm_context_editor.min_score')}
+                                        .hint=${this._hint('min_score')}
                                         .value=${minScore}
+                                        .placeholder=${typeof effectiveRetrieval.min_score === 'number' ? String(effectiveRetrieval.min_score) : ''}
                                         @change=${this._onRetrievalNumber('min_score')}
                                     ></platform-field>
                                     <platform-field
-                                        type="boolean"
+                                        type="enum"
                                         mode="edit"
                                         .label=${this.t('llm_context_editor.rerank')}
+                                        .hint=${this._hint('rerank')}
                                         .value=${rerank}
-                                        @change=${this._onRetrievalBool('rerank')}
+                                        .config=${booleanEnumConfig(
+                                            inheritRerank,
+                                            this.t('llm_context_editor.enabled'),
+                                            this.t('llm_context_editor.disabled'),
+                                        )}
+                                        @change=${this._onRetrievalBoolEnum('rerank')}
                                     ></platform-field>
                                     <platform-field
                                         type="enum"
                                         mode="edit"
                                         .label=${this.t('llm_context_editor.compaction')}
+                                        .hint=${this._hint('compaction')}
                                         .value=${compaction}
-                                        .config=${enumConfig(COMPACTION_VALUES, inherit)}
+                                        .config=${enumConfig(COMPACTION_VALUES, inheritCompaction, (value) => this._valueLabel(value))}
                                         @change=${this._onEnum('compaction')}
                                     ></platform-field>
                                     <platform-field
                                         type="enum"
                                         mode="edit"
                                         .label=${this.t('llm_context_editor.cache')}
+                                        .hint=${this._hint('cache')}
                                         .value=${cache}
-                                        .config=${enumConfig(CACHE_VALUES, inherit)}
+                                        .config=${enumConfig(CACHE_VALUES, inheritCache, (value) => this._valueLabel(value))}
                                         @change=${this._onEnum('cache')}
                                     ></platform-field>
                                 </div>
@@ -418,7 +530,9 @@ export class PlatformLlmContextEditor extends PlatformElement {
                                             type="integer"
                                             mode="edit"
                                             .label=${this.t(`llm_context_editor.${key}`)}
+                                            .hint=${this._hint(key)}
                                             .value=${typeof budgetPatchValue[key] === 'number' ? budgetPatchValue[key] : null}
+                                            .placeholder=${typeof effectiveBudget[key] === 'number' ? String(effectiveBudget[key]) : ''}
                                             @change=${this._onBudgetNumber(key)}
                                         ></platform-field>
                                     `)}

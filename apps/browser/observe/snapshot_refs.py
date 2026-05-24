@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Literal, NotRequired, TypedDict, TypeGuard, cast
+from typing import Literal, NotRequired, TypedDict, TypeGuard
 
 from core.types import JsonObject
 
@@ -93,7 +93,7 @@ def _iter_children(node: JsonObject) -> Iterable[JsonObject]:
     out: list[JsonObject] = []
     for c in ch:
         if isinstance(c, dict):
-            out.append(cast(JsonObject, c))
+            out.append(c)
     return out
 
 

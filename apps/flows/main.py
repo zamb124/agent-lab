@@ -8,7 +8,7 @@ from pathlib import Path
 from core.config.loader import load_merged_config
 from core.config.models import LoggingConfig
 from core.logging.setup import setup_logging
-from core.types import require_json_object
+from core.types import JsonObject, require_json_object
 
 _FLOWS_BOOTSTRAP_MERGED = load_merged_config(service_name="flows", silent=True)
 setup_logging(
@@ -31,7 +31,7 @@ from apps.flows.src.api import (  # noqa: E402
     websocket_router,
 )
 from apps.flows.src.api.v1 import api_v1_router  # noqa: E402
-from apps.flows.src.container import get_container  # noqa: E402
+from apps.flows.src.container import FlowContainer, get_container  # noqa: E402
 from apps.flows.src.middleware.embed_dynamic_cors import EmbedDynamicCorsMiddleware  # noqa: E402
 from apps.flows.src.realtime import register_flows_ws_commands  # noqa: E402
 from apps.flows.src.services.flows_loader import (  # noqa: E402
@@ -72,12 +72,41 @@ _FLOWS_DEV_CORS_ORIGIN_REGEX = (
 )
 
 
-async def on_startup(app: FastAPI, container, settings: FlowSettings):
+async def on_startup(_app: FastAPI, container: FlowContainer, settings: FlowSettings) -> None:
     """Логика при старте сервиса flows."""
     register_flows_ws_commands()
 
-    async def _flow_resume_via_taskiq(**kwargs):
-        await process_flow_task.kiq(**kwargs)
+    async def _flow_resume_via_taskiq(
+        *,
+        flow_id: str,
+        session_id: str,
+        user_id: str,
+        content: str,
+        branch_id: str,
+        channel: str,
+        task_id: str,
+        context_id: str,
+        metadata: JsonObject,
+        is_resume: bool,
+        files: list[JsonObject],
+        context_data: JsonObject,
+        trace_context: JsonObject | None,
+    ) -> None:
+        _ = await process_flow_task.kiq(
+            flow_id=flow_id,
+            session_id=session_id,
+            user_id=user_id,
+            content=content,
+            branch_id=branch_id,
+            channel=channel,
+            task_id=task_id,
+            context_id=context_id,
+            metadata=metadata,
+            is_resume=is_resume,
+            files=files,
+            context_data=context_data,
+            trace_context=trace_context,
+        )
 
     set_flow_resume_handler(_flow_resume_via_taskiq)
 
@@ -96,7 +125,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
             break
         except Exception as e:
             if attempt < max_startup_retries - 1:
-                wait = 2**attempt
+                wait = 1 << attempt
                 logger.warning(
                     f"Redis connection failed (attempt {attempt + 1}), retry in {wait}s: {e}"
                 )
@@ -139,7 +168,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
             logger.info(f"Загружено flows: {loaded_flow_ids}")
 
             try:
-                await ensure_default_mcp_servers_for_company(container=container)
+                _ = await ensure_default_mcp_servers_for_company(container=container)
                 synced = await sync_auto_mcp_servers_for_company(container=container)
                 logger.info(
                     "MCP синхронизация для system: servers=%s tools=%s",
@@ -179,7 +208,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
                 loaded_tools = await load_tools_to_db(container.tool_repository)
                 logger.info(f"Загружено tools: {loaded_tools}")
 
-                await ensure_default_mcp_servers_for_company(container=container)
+                _ = await ensure_default_mcp_servers_for_company(container=container)
                 synced = await sync_auto_mcp_servers_for_company(container=container)
                 logger.info(
                     "MCP синхронизация для system: servers=%s tools=%s",
@@ -204,7 +233,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
             finally:
                 clear_context()
 
-        run_with_log_context(
+        _ = run_with_log_context(
             _tools_and_company_init_background(),
             name="flows.tools_and_company_init_background",
             background_kind="startup",
@@ -214,8 +243,8 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
     if is_testing():
         logger.info("Пропускаем синхронизацию LLM моделей (TESTING)")
 
-        get_llm("mock-gpt-4")
-        configure_mock_llm_redis(container.redis_client)
+        _ = get_llm("mock-gpt-4")
+        _ = configure_mock_llm_redis(container.redis_client)
         logger.info("MockLLM: очередь ответов из Redis (как в TaskIQ worker)")
 
     # Telegram Dev Polling (только в development)
@@ -224,7 +253,7 @@ async def on_startup(app: FastAPI, container, settings: FlowSettings):
         logger.info("Telegram dev polling запущен")
 
 
-async def on_shutdown(app: FastAPI, container):
+async def on_shutdown(_app: FastAPI, container: FlowContainer) -> None:
     """Логика при остановке сервиса flows."""
 
     # Остановка Telegram dev polling
@@ -357,6 +386,7 @@ async def ui_spa_flows_root():
 @app.get("/flows/{flow_id}/{rest:path}", response_class=HTMLResponse)
 async def ui_spa_flow(flow_id: str, rest: str = ""):
     """SPA: flow_chat / flow_editor и вложенные client-маршруты."""
+    _ = rest
     if flow_id in ("api", "static", "ws"):
         raise HTTPException(status_code=404, detail="Not Found")
     return HTMLResponse(content=_INDEX_HTML)

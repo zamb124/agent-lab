@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models import Base
+from core.types import JsonArray, JsonObject
 
 
 def utc_now() -> datetime:
@@ -365,11 +366,11 @@ class OperatorTasks(Base):
     a2a_task_id: Mapped[str | None] = mapped_column(String(255), default=None)
     context_id: Mapped[str | None] = mapped_column(String(255), default=None)
     correlation_id: Mapped[str | None] = mapped_column(String(36), default=None, index=True)
-    interrupt_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    interrupt_snapshot: Mapped[JsonObject | None] = mapped_column(JSONB, default=None)
     claimed_by_user_id: Mapped[str | None] = mapped_column(String(255), default=None)
-    resolution_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
-    dialog_log: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, default=None)
-    context_data_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
+    resolution_payload: Mapped[JsonObject | None] = mapped_column(JSONB, default=None)
+    dialog_log: Mapped[JsonArray | None] = mapped_column(JSONB, default=None)
+    context_data_snapshot: Mapped[JsonObject | None] = mapped_column(JSONB, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now

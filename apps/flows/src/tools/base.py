@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from apps.flows.config import get_settings
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
-from apps.flows.src.mock import get_mock_for_tool
+from apps.flows.src.mock.resolver import get_mock_for_tool
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.runtime.exceptions import FlowInterrupt

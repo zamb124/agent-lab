@@ -6,34 +6,29 @@ from __future__ import annotations
 
 import json
 from io import BytesIO
-from typing import Any
 from urllib.parse import quote
 
 from core.clients.service_client import ServiceClient
+from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchOptions
 from core.rag.rag_http_namespace_search import (
     RAG_API_V1_PREFIX,
     build_namespace_search_json_body,
     build_namespace_search_path,
     merge_search_request_options,
 )
+from core.rag_indexing_schema import SearchChannelsDefaults
+from core.types import JsonObject, JsonValue, require_json_object
 
 
-def _json_object_response(value: object, *, operation: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise ValueError(f"RAG {operation} response must be dict, got {type(value).__name__}")
-    result: dict[str, Any] = {}
-    for key, item in value.items():
-        if not isinstance(key, str):
-            raise ValueError(f"RAG {operation} response contains non-string key")
-        result[key] = item
-    return result
+def _json_object_response(value: JsonValue, *, operation: str) -> JsonObject:
+    return require_json_object(value, f"RAG {operation} response")
 
 
 class RagClient:
     """HTTP-клиент к сервису rag; контекст пользователя/компании — из заголовков ServiceClient."""
 
     def __init__(self, http: ServiceClient | None = None) -> None:
-        self._http = http or ServiceClient()
+        self._http: ServiceClient = http or ServiceClient()
 
     @staticmethod
     def files_download_url_path(document_id: str) -> str:
@@ -46,11 +41,11 @@ class RagClient:
         description: str | None = None,
         *,
         provider: str | None = None,
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
+    ) -> JsonObject:
+        params: dict[str, str] = {}
         if provider is not None:
             params["provider"] = provider
-        body: dict[str, Any] = {"name": name}
+        body: JsonObject = {"name": name}
         if description is not None:
             body["description"] = description
         return _json_object_response(
@@ -69,14 +64,14 @@ class RagClient:
         text: str,
         *,
         document_name: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: RAGMetadata | None = None,
         document_id: str | None = None,
         provider: str | None = None,
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
+    ) -> JsonObject:
+        params: dict[str, str] = {}
         if provider is not None:
             params["provider"] = provider
-        body: dict[str, Any] = {"text": text}
+        body: JsonObject = {"text": text}
         if document_name is not None:
             body["document_name"] = document_name
         if metadata is not None:
@@ -100,10 +95,10 @@ class RagClient:
         *,
         filename: str,
         file_bytes: bytes,
-        metadata: dict[str, Any],
+        metadata: RAGMetadata,
         content_type: str = "application/octet-stream",
         provider: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         seg = quote(namespace_id, safe="")
         path = f"{RAG_API_V1_PREFIX}/namespaces/{seg}/documents"
         params: dict[str, str] | None = {"provider": provider} if provider is not None else None
@@ -125,13 +120,13 @@ class RagClient:
         document_id: str,
         *,
         provider: str | None = None,
-    ) -> Any:
+    ) -> JsonValue:
         seg = quote(namespace_id, safe="")
         path = f"{RAG_API_V1_PREFIX}/namespaces/{seg}/documents/{document_id}"
         params: dict[str, str] | None = {"provider": provider} if provider is not None else None
         return await self._http.delete("rag", path, params=params)
 
-    async def get_document_processing_status(self, document_id: str) -> dict[str, Any]:
+    async def get_document_processing_status(self, document_id: str) -> JsonObject:
         path = f"{RAG_API_V1_PREFIX}/documents/{document_id}/status"
         out = await self._http.get("rag", path)
         return _json_object_response(out, operation="get_document_processing_status")
@@ -139,23 +134,24 @@ class RagClient:
     def _pack_search_options(
         self,
         *,
-        channels: dict[str, Any] | None = None,
+        channels: SearchChannelsDefaults | dict[str, bool] | None = None,
         rrf_k: int | None = None,
         per_channel_top_k: int | None = None,
         rerank: bool | None = None,
         retrieval: bool | None = None,
-    ) -> dict[str, Any] | None:
-        raw: dict[str, Any] = {}
-        if channels is not None:
-            raw["channels"] = channels
-        if rrf_k is not None:
-            raw["rrf_k"] = rrf_k
-        if per_channel_top_k is not None:
-            raw["per_channel_top_k"] = per_channel_top_k
-        if rerank is not None:
-            raw["rerank"] = rerank
-        if retrieval is not None:
-            raw["retrieval"] = retrieval
+    ) -> RAGSearchOptions | None:
+        channels_model = (
+            SearchChannelsDefaults.model_validate(channels)
+            if channels is not None
+            else None
+        )
+        raw = RAGSearchOptions(
+            channels=channels_model,
+            rrf_k=rrf_k,
+            per_channel_top_k=per_channel_top_k,
+            rerank=rerank,
+            retrieval=retrieval,
+        )
         return merge_search_request_options(None, raw)
 
     async def search(
@@ -164,14 +160,14 @@ class RagClient:
         query: str,
         *,
         limit: int = 5,
-        filters: dict[str, Any] | None = None,
+        filters: RAGMetadataFilter | None = None,
         provider: str | None = None,
-        channels: dict[str, Any] | None = None,
+        channels: SearchChannelsDefaults | dict[str, bool] | None = None,
         rrf_k: int | None = None,
         per_channel_top_k: int | None = None,
         rerank: bool | None = None,
         retrieval: bool | None = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         merged_opts = self._pack_search_options(
             channels=channels,
             rrf_k=rrf_k,
@@ -198,17 +194,17 @@ class RagClient:
         *,
         limit: int = 5,
         provider: str | None = None,
-        filters: dict[str, Any] | None = None,
-        channels: dict[str, Any] | None = None,
+        filters: RAGMetadataFilter | None = None,
+        channels: SearchChannelsDefaults | dict[str, bool] | None = None,
         rrf_k: int | None = None,
         per_channel_top_k: int | None = None,
         rerank: bool | None = None,
         retrieval: bool | None = None,
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
+    ) -> JsonObject:
+        params: dict[str, str] = {}
         if provider is not None:
             params["provider"] = provider
-        body: dict[str, Any] = {
+        body: JsonObject = {
             "namespace_ids": namespace_ids,
             "query": query,
             "limit": limit,

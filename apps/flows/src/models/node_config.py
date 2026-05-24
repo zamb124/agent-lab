@@ -223,7 +223,7 @@ class NodeConfig(StrictBaseModel):
         default=None,
         description=(
             "Патч платформенного контекстного слоя для llm_node. "
-            "Для автора обычно достаточно {'profile': 'compact'|'standard'|'agent'}."
+            "Для автора обычно достаточно {'profile': 'off'|'compact'|'standard'|'agent'}."
         ),
     )
     llm_context_resource_key: str | None = Field(
