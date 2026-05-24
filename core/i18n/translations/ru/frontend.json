@@ -526,7 +526,7 @@
             "cap_llm_summarize": "LLM (суммаризация)",
             "cap_llm_summarize_help": "Дневные сводки NetWorkle, суммаризация вложений и сжатие context memory.",
             "cap_llm_format_markdown": "LLM (форматирование Markdown)",
-            "cap_llm_format_markdown_help": "Форматирование текста заметок NetWorkle в Markdown.",
+            "cap_llm_format_markdown_help": "Общее форматирование plain text в Markdown для платформенных сценариев.",
             "cap_llm_codegen": "LLM (codegen)",
             "cap_llm_codegen_help": "Генерация кода и кастомных тулов в flows.",
             "cap_llm_vision": "LLM (vision)",

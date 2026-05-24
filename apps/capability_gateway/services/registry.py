@@ -1155,13 +1155,10 @@ class CapabilityRegistry:
             "text.format_markdown": CapabilityDefinition(
                 name="text.format_markdown",
                 title="Format text as Markdown",
-                description="Форматирует plain text в Markdown через платформенный LLM/LitServe routing с billing.",
+                description="Форматирует plain text в Markdown через company capability llm_format_markdown с billing.",
                 input_schema=_schema_object(
                     properties={
                         "text": _string_schema("Исходный текст"),
-                        "provider": _string_schema("Опциональный LLM provider"),
-                        "model": _string_schema("Опциональная модель"),
-                        "max_chunk_chars": _integer_schema("Размер чанка"),
                     },
                     required=["text"],
                 ),
@@ -1976,17 +1973,9 @@ class CapabilityRegistry:
     async def _text_format_markdown(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)
         text = _required_string(request.kwargs.get("text"), "text")
-        provider = _optional_string(request.kwargs.get("provider"), "provider")
-        model = _optional_string(request.kwargs.get("model"), "model")
-        max_chunk_chars = _optional_int(request.kwargs.get("max_chunk_chars"), "max_chunk_chars")
         context = await self._context_service.build_context(request.context)
         with self._context_service.activate(context):
-            markdown = await self._text_transform_service.format_markdown(
-                text,
-                provider=provider,
-                model=model,
-                max_chunk_chars=max_chunk_chars,
-            )
+            markdown = await self._text_transform_service.format_markdown(text)
         return {"markdown": markdown}
 
     async def _voice_transcribe_audio(self, request: CapabilityCallRequest) -> JsonObject:

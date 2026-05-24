@@ -14,7 +14,7 @@ import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/fields/platform-field.js';
 
-const KIND_ENUM_VALUES = ['llm', 'embedding', 'rerank'];
+const KIND_ENUM_VALUES = ['embedding', 'rerank'];
 
 export class LitserveModelsPage extends PlatformPage {
     static i18nNamespace = 'litserve';
@@ -152,7 +152,7 @@ export class LitserveModelsPage extends PlatformPage {
 
     constructor() {
         super();
-        this._kind = 'llm';
+        this._kind = 'embedding';
         this._hfModelId = '';
         this._apiModelId = '';
         this._models = this.useResource('provider_litserve/models', { autoload: true });

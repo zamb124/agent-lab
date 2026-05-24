@@ -78,7 +78,7 @@ class CompanySettingsUpdate(BaseModel):
 class AIProvidersCapabilityUpdate(BaseModel):
     """PUT /api/settings/ai-providers/{capability}: задать override capability компании.
 
-    - ``provider`` платформенный (``openrouter|openai|bothub|yandex|provider_litserve``)
+    - ``provider`` платформенный (``openrouter|openai|bothub|yandex|humanitec_llm``)
       или ``custom:<id>``; для rerank допустимы ``inherit|none|provider_litserve|custom:<id>``;
       для voice — литералы провайдеров речи или ``custom:<id>`` (кроме VAD).
     - ``api_key`` (plaintext) шифруется на сервере; для ``custom:<id>`` не используется

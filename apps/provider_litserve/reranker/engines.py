@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 import torch
 from fastapi import HTTPException
 from FlagEmbedding import FlagLLMReranker
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from apps.provider_litserve.openai_server_contracts import (
     RerankQueryPassagesRequest,
     placeholder_rerank_scores,
 )
+from apps.provider_litserve.provider_litserve_http_schemas import RerankResponseBody
 from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve_hf_model_id
 from core.config.models import ProviderLitserveInfraConfig
 from core.logging import get_logger
+from core.types import JsonObject, JsonValue
 
 Backend = Literal["placeholder", "flagllm"]
 
@@ -26,32 +28,34 @@ def _require_cuda_when_selected(device: str) -> None:
     if not device.startswith("cuda"):
         return
     if not torch.cuda.is_available():
-        raise RuntimeError(
+        message = (
             "provider_litserve: CUDA device для реранкера недоступен (torch.cuda.is_available() == False); "
-            "нужны драйвер NVIDIA на хосте, NVIDIA Container Toolkit и resources.limits.nvidia.com/gpu в Helm-чарте (deploy/helm/agent-lab/templates/50-gpu/litserve.yaml)."
+            + "нужны драйвер NVIDIA на хосте, NVIDIA Container Toolkit и resources.limits.nvidia.com/gpu в Helm-чарте (deploy/helm/agent-lab/templates/50-gpu/litserve.yaml)."
         )
+        raise RuntimeError(message)
 
 
-def parse_rerank_body(raw: Any) -> dict[str, Any]:
-    if not isinstance(raw, dict):
+def parse_rerank_body(raw: BaseModel | JsonValue) -> RerankQueryPassagesRequest:
+    if isinstance(raw, BaseModel):
+        raw_payload = raw.model_dump(exclude_none=True)
+    else:
+        raw_payload = raw
+    if not isinstance(raw_payload, dict):
         raise HTTPException(status_code=422, detail="Тело запроса: ожидается JSON-объект")
     try:
-        b = RerankQueryPassagesRequest.model_validate(raw)
+        body = RerankQueryPassagesRequest.model_validate(raw_payload)
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.errors()) from e
-    payload: dict[str, Any] = {"query": b.query, "passages": b.passages}
-    if b.model is not None:
-        payload["model"] = b.model
-    return payload
+    return body
 
 
 class LocalRerankerEngine:
     """FlagLLMReranker или placeholder; ответ ``{scores}`` как у ``RerankerHTTPClient``."""
 
     def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
-        self._cfg = cfg
+        self._cfg: ProviderLitserveInfraConfig = cfg
         self._backend: Backend = "placeholder"
-        self._models: dict[str, Any] = {}
+        self._models: dict[str, FlagLLMReranker] = {}
         self._device: str = "cpu"
 
     def setup(self, device: str | None) -> None:
@@ -66,7 +70,7 @@ class LocalRerankerEngine:
     def allowed_model_ids(self) -> frozenset[str]:
         return allowed_api_model_ids("rerank", self._cfg)
 
-    def _ensure_model(self, hf_model_id: str) -> Any:
+    def _ensure_model(self, hf_model_id: str) -> FlagLLMReranker:
         if hf_model_id in self._models:
             return self._models[hf_model_id]
         cuda = self._device.startswith("cuda")
@@ -93,11 +97,11 @@ class LocalRerankerEngine:
         self._models[hf_model_id] = model
         return model
 
-    def rerank(self, query: str, passages: list[str], requested_model: str | None = None) -> dict[str, Any]:
+    def rerank(self, query: str, passages: list[str], requested_model: str | None = None) -> RerankResponseBody:
         canonical_model = requested_model.strip() if requested_model is not None else self._cfg.rerank_openai_model_id
         hf_model_id = resolve_hf_model_id("rerank", canonical_model, self._cfg)
         if hf_model_id is None:
-            detail: dict[str, Any] = {"reason": "unknown_rerank_model", "model": canonical_model}
+            detail: JsonObject = {"reason": "unknown_rerank_model", "model": canonical_model}
             if requested_model is not None:
                 detail["allowed"] = sorted(self.allowed_model_ids())
             raise HTTPException(
@@ -105,7 +109,7 @@ class LocalRerankerEngine:
                 detail=detail,
             )
         if not passages:
-            return {"scores": []}
+            return RerankResponseBody(scores=[])
         if len(passages) > self._cfg.max_passages:
             raise HTTPException(
                 status_code=422,
@@ -137,20 +141,17 @@ class LocalRerankerEngine:
                 )
 
         if self._backend == "placeholder":
-            return {"scores": placeholder_rerank_scores(query, passages)}
+            return RerankResponseBody(scores=placeholder_rerank_scores(query, passages))
         model = self._ensure_model(hf_model_id)
         pairs = [(query, p) for p in passages]
-        raw = model.compute_score(
+        scores = model.compute_score(
             pairs,
             batch_size=self._cfg.model_batch_size,
             max_length=self._cfg.max_length,
         )
-        if not isinstance(raw, list):
-            raw = list(raw)
-        scores = [float(s) for s in raw]
         if len(scores) != len(passages):
             raise HTTPException(
                 status_code=503,
                 detail={"reason": "scores_length_mismatch", "expected": len(passages), "got": len(scores)},
             )
-        return {"scores": scores}
+        return RerankResponseBody(scores=scores)

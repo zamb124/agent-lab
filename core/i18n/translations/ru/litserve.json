@@ -13,8 +13,7 @@
     },
     "models": {
         "title": "Реестр моделей",
-        "subtitle": "Локальные модели LitServe (LLM, embedding, rerank)",
-        "kind_llm": "LLM",
+        "subtitle": "Локальные модели LitServe (embedding, rerank)",
         "kind_embedding": "Эмбеддинги",
         "kind_rerank": "Реранк",
         "hf_model": "HuggingFace ID",

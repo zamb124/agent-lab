@@ -251,7 +251,7 @@ async def get_models_values(container: ContainerDep, provider: str | None = None
     Список доступных моделей.
 
     Args:
-        provider: Провайдер (bothub, openrouter, openai, provider_litserve).
+        provider: Провайдер (bothub, openrouter, openai, yandex, humanitec_llm).
                   Если не указан - используется текущий из конфига.
     """
 

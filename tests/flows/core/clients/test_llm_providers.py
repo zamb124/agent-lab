@@ -152,10 +152,10 @@ class TestDetectProvider:
         result = _detect_provider("https://api.openai.com/v1")
         assert result == "openai"
 
-    def test_detect_provider_provider_litserve(self):
-        """Определяет provider_litserve по локальному URL."""
+    def test_detect_provider_none_for_litserve_rag_url(self):
+        """LitServe больше не является LLM provider."""
         result = _detect_provider("http://127.0.0.1:8014/v1")
-        assert result == "provider_litserve"
+        assert result is None
 
     def test_detect_provider_yandex(self):
         result = _detect_provider("https://llm.api.cloud.yandex.net/v1")
@@ -297,29 +297,6 @@ class TestGetLLMWithCustomCredentials:
                 assert client.api_key == "sk-bothub-key"
                 # Bothub не добавляет special headers
                 assert "HTTP-Referer" not in client.default_headers
-
-    def test_get_llm_with_provider_litserve_from_settings(self):
-        """Системный provider_litserve создает LLMClient с локальным base_url."""
-        with disable_testing_mode():
-            with patch("core.clients.llm.runtime.get_settings") as mock_settings:
-                mock_settings.return_value.llm.default_model = "qwen/qwen3.5-397b-a17b"
-                mock_settings.return_value.llm.models = {}
-                mock_settings.return_value.llm.temperature = 0.2
-                mock_settings.return_value.llm.max_tokens = 4096
-                mock_settings.return_value.llm.timeout = 120.0
-                mock_settings.return_value.llm.provider = "provider_litserve"
-                mock_settings.return_value.llm.openrouter = None
-                mock_settings.return_value.llm.bothub = None
-                mock_settings.return_value.llm.openai = None
-                mock_settings.return_value.provider_litserve.resolve_openai_v1_base_url.return_value = "http://127.0.0.1:8014/v1"
-
-                client = get_llm(model_name="qwen/qwen3.5-397b-a17b")
-
-                assert isinstance(client, LLMClient)
-                assert client.base_url == "http://127.0.0.1:8014/v1"
-                assert client.api_key == "litserve-local"
-                assert client.llm_provider == "provider_litserve"
-
 
 class TestLlmNodeLLMConfig:
     """Тесты передачи LLM конфига из LlmNode."""
@@ -626,77 +603,6 @@ class TestLLMModelsServiceSchedulerIdempotency:
         scheduler_client.cancel_schedule.assert_called_once_with("existing-task")
 
 
-class TestLLMModelsServiceProviderLitserve:
-    @pytest.mark.asyncio
-    async def test_fetch_provider_litserve_models_uses_service_scoped_settings(self):
-        from apps.flows.src.db.llm_model_repository import LLMModelRepository
-        from apps.flows.src.services.llm_models_service import LLMModelsService
-
-        class _Response:
-            def raise_for_status(self):
-                return None
-
-            def json(self):
-                return {
-                    "data": [
-                        {"id": "qwen/qwen3-embedding-0.6b"},
-                        {"id": "qwen/qwen3-reranker-0.6b"},
-                    ]
-                }
-
-        class _Client:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                return None
-
-            async def get(self, url):
-                assert url == "http://127.0.0.1:8014/v1/models"
-                return _Response()
-
-        repository = MagicMock(spec=LLMModelRepository)
-        service = LLMModelsService(repository, AsyncMock())
-        settings = MagicMock()
-        settings.provider_litserve.resolve_openai_v1_base_url.return_value = (
-            "http://127.0.0.1:8014/v1"
-        )
-
-        with patch(
-            "apps.flows.src.services.llm_models_service.get_settings", return_value=settings
-        ):
-            with patch(
-                "apps.flows.src.services.llm_models_service.get_httpx_client",
-                return_value=_Client(),
-            ):
-                models = await service._fetch_provider_litserve_models()
-
-        assert models == ["qwen/qwen3-embedding-0.6b", "qwen/qwen3-reranker-0.6b"]
-
-    @pytest.mark.asyncio
-    async def test_sync_all_providers_includes_provider_litserve_without_services_attr(self):
-        from apps.flows.src.db.llm_model_repository import LLMModelRepository
-        from apps.flows.src.services.llm_models_service import LLMModelsService
-
-        repository = MagicMock(spec=LLMModelRepository)
-        service = LLMModelsService(repository, AsyncMock())
-        service.sync_models_by_provider = AsyncMock(return_value=2)
-        settings = MagicMock()
-        settings.llm.bothub = None
-        settings.llm.openrouter = None
-        settings.llm.openai = None
-        settings.llm.yandex = None
-        settings.provider_litserve.api.base_url = "http://127.0.0.1:8014/v1"
-
-        with patch(
-            "apps.flows.src.services.llm_models_service.get_settings", return_value=settings
-        ):
-            results = await service.sync_all_providers()
-
-        assert results == {"provider_litserve": 2}
-        service.sync_models_by_provider.assert_awaited_once_with("provider_litserve")
-
-
 @pytest.mark.timeout(30)
 class TestLLMModelsServiceRealAPI:
     """
@@ -978,8 +884,6 @@ class TestGetLLMYandex:
                 mock_settings.return_value.llm.openrouter = None
                 mock_settings.return_value.llm.bothub = None
                 mock_settings.return_value.llm.openai = None
-                mock_settings.return_value.provider_litserve = MagicMock()
-
                 client = get_llm(model_name="yandexgpt")
                 assert isinstance(client, LLMClient)
                 assert client.default_headers["Authorization"] == "Api-Key AQVN-key"
@@ -1003,8 +907,6 @@ class TestGetLLMYandex:
                 mock_settings.return_value.llm.openrouter = None
                 mock_settings.return_value.llm.bothub = None
                 mock_settings.return_value.llm.openai = None
-                mock_settings.return_value.provider_litserve = MagicMock()
-
                 with pytest.raises(ValueError, match="folder_id"):
                     get_llm(model_name="m")
 
@@ -1027,8 +929,6 @@ class TestGetLLMYandex:
                 mock_settings.return_value.llm.openai = MagicMock(
                     base_url="https://api.openai.com/v1"
                 )
-                mock_settings.return_value.provider_litserve = MagicMock()
-
                 client = get_llm(
                     model_name="gpt://other/yandexgpt-5.1/latest",
                     api_key="user-key",
@@ -1059,8 +959,6 @@ class TestGetLLMYandex:
                 mock_settings.return_value.llm.openai = MagicMock(
                     base_url="https://api.openai.com/v1"
                 )
-                mock_settings.return_value.provider_litserve = MagicMock()
-
                 client = cast(LLMClient, get_llm(
                     model_name="gpt://stale/yandexgpt-5.1/latest",
                     api_key="user-key",
@@ -1085,8 +983,6 @@ class TestGetLLMYandex:
                 mock_settings.return_value.llm.openai = MagicMock(
                     base_url="https://api.openai.com/v1"
                 )
-                mock_settings.return_value.provider_litserve = MagicMock()
-
                 with pytest.raises(ValueError, match="folder_id"):
                     get_llm(
                         model_name="gpt://b1/x/y",
@@ -1122,16 +1018,6 @@ class TestGetDefaultBaseUrl:
 
         result = _get_default_base_url("openai", mock_settings)
         assert result == "https://api.openai.com/v1"
-
-    def test_get_default_base_url_provider_litserve(self):
-        """Возвращает base_url для provider_litserve."""
-        mock_settings = MagicMock()
-        mock_settings.provider_litserve.resolve_openai_v1_base_url.return_value = (
-            "http://127.0.0.1:8014/v1"
-        )
-
-        result = _get_default_base_url("provider_litserve", mock_settings)
-        assert result == "http://127.0.0.1:8014/v1"
 
     def test_get_default_base_url_yandex(self):
         mock_settings = MagicMock()

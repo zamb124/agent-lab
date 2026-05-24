@@ -526,7 +526,7 @@
             "cap_llm_summarize": "LLM (summarization)",
             "cap_llm_summarize_help": "NetWorkle daily summaries, attachment summarization, and context memory compaction.",
             "cap_llm_format_markdown": "LLM (Markdown formatting)",
-            "cap_llm_format_markdown_help": "NetWorkle note Markdown formatting.",
+            "cap_llm_format_markdown_help": "Shared plain text to Markdown formatting for platform workflows.",
             "cap_llm_codegen": "LLM (codegen)",
             "cap_llm_codegen_help": "Code generation and custom tools in flows.",
             "cap_llm_vision": "LLM (vision)",

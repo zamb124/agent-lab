@@ -33,6 +33,7 @@ from core.config.models import (
     SpeechProvidersConfig,
     TasksConfig,
     TelegramConfig,
+    TextTransformsConfig,
     TracingConfig,
     WhatsAppConfig,
     WorkerConfig,
@@ -78,6 +79,7 @@ class BaseSettings(PydanticBaseSettings):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     llm_context: LLMContextConfig = Field(default_factory=LLMContextConfig)
+    text_transforms: TextTransformsConfig = Field(default_factory=TextTransformsConfig)
     provider_litserve: ProviderLitserveConfig = Field(default_factory=ProviderLitserveConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)

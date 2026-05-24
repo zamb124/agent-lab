@@ -180,11 +180,11 @@ Inline на слое — полный `config` целевого типа. **Ти
 - `output_schema_file: "schemas/bar.json"` → `output_schema` (поле `output_schema_file` удаляется);
 - `store_card_image: "assets/card.png"` → S3 (публичный объект); в `FlowConfig` сохраняется `store_card_image_url`. Строка `https://...` в `store_card_image` — готовый URL без повторной загрузки. Альтернатива: `store_card_image_url` в `flow.json`.
 
-`FlowsLoader` читает секцию `defaults.llm` из `apps/flows/registry.yaml` (мерж в `NodeLLMOverride` при загрузке из `nodes.json`); там должен быть явный `provider` (платформенный slug: `openrouter`, `openai`, `bothub`, `provider_litserve`, `yandex`).
+`FlowsLoader` читает секцию `defaults.llm` из `apps/flows/registry.yaml` (мерж в `NodeLLMOverride` при загрузке из `nodes.json`); там должен быть явный `provider` (платформенный slug: `humanitec_llm`, `openrouter`, `openai`, `bothub`, `yandex`).
 
 В JSON ноды `llm` — `llm_override` (не `llm_config`).
 
-Явная маршрутизация через платформенный провайдер в одной строке `model`: префикс `<slug>:` (первое вхождение `:`), где `slug` ∈ `openrouter` | `openai` | `bothub` | `provider_litserve` | `yandex`, затем id модели для этого шлюза (например `openrouter:openai/gpt-4o`). Узор `vendor/model` без такого префикса не трогается. Явное поле `provider` у ноды в bundle предпочтительно; при полном отсутствии сработает слияние `defaults.llm` из registry, иначе — глобальный `settings.llm.provider`. Нормализация при парсинге: `NodeLLMOverride` и `get_llm`.
+Явная маршрутизация через платформенный провайдер в одной строке `model`: префикс `<slug>:` (первое вхождение `:`), где `slug` ∈ `openrouter` | `openai` | `bothub` | `yandex`, затем id модели для этого шлюза (например `openrouter:openai/gpt-4o`). Узор `vendor/model` без такого префикса не трогается. Явное поле `provider` у ноды в bundle предпочтительно; при полном отсутствии сработает слияние `defaults.llm` из registry, иначе — глобальный `settings.llm.provider`. Нормализация при парсинге: `NodeLLMOverride` и `get_llm`.
 
 **Yandex:** при собственном `api_key` в `llm_override` или LLM-ресурсе укажите `folder_id` каталога облака (если не достаточно глобального `llm.yandex.folder_id`). Перед запросом сегмент каталога в идентификаторе вида `gpt://…` / `emb://…` приводится к этому `folder_id`, чтобы совпадал с заголовком `x-folder-id`.
 

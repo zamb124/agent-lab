@@ -38,7 +38,7 @@ def test_no_split_only_colon():
 
 @pytest.mark.parametrize(
     "slug",
-    ["openrouter", "openai", "bothub", "provider_litserve", "yandex"],
+    ["openrouter", "openai", "bothub", "yandex"],
 )
 def test_split_accepts_all_platform_slugs(slug: str):
     p, m = split_provider_prefixed_model(None, f"{slug}:x/y")

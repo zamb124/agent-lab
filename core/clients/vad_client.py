@@ -19,11 +19,11 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 import torch
-from pydantic import BaseModel, Field
 from silero_vad import get_speech_timestamps, load_silero_vad
 
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.models.voice_models import VADSegment
 
 if TYPE_CHECKING:
     from core.config.models import (
@@ -33,13 +33,6 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
-
-
-class VADSegment(BaseModel):
-    """Один сегмент с речью (в секундах относительно начала аудио)."""
-
-    start: float = Field(ge=0.0, description="Начало сегмента (с).")
-    end: float = Field(gt=0.0, description="Конец сегмента (с).")
 
 
 class BaseVADClient(ABC):

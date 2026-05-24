@@ -9,11 +9,13 @@
 
 from __future__ import annotations
 
-import struct
 import time
-from typing import Any
+from collections.abc import Mapping
+from typing import ClassVar, Protocol, TypeAlias, TypedDict
 
 import torch
+from fastapi import HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
 from silero_vad import get_speech_timestamps, load_silero_vad
 
 from apps.provider_litserve.model_registry import find_vad_entry
@@ -26,48 +28,132 @@ from core.config.models import (
     ProviderLitserveVADModelEntry,
 )
 from core.logging import get_logger
+from core.models.voice_models import VADSegment
+from core.types import JsonValue
 
 logger = get_logger(__name__)
 
+VADRawValue: TypeAlias = JsonValue | bytes | bytearray | memoryview
+VADRawBody: TypeAlias = Mapping[str, VADRawValue]
 
-def parse_vad_body(raw: Any, *, default_api_model_id: str) -> dict[str, Any]:
+
+class SileroVADModel(Protocol):
+    def reset_states(self) -> None: ...
+
+
+class SpeechTimestamp(TypedDict):
+    start: int
+    end: int
+
+
+class SpeechTimestampGetter(Protocol):
+    def __call__(
+        self,
+        audio: torch.Tensor,
+        model: SileroVADModel,
+        *,
+        sampling_rate: int,
+        threshold: float,
+    ) -> list[SpeechTimestamp]: ...
+
+
+class VADDetectionInput(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    audio_bytes: bytes
+    model: str
+    sample_rate_override: int | None = Field(default=None, gt=0)
+    threshold_override: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+def _coerce_audio_bytes(raw: VADRawValue | None) -> bytes:
+    if raw is None:
+        raise HTTPException(status_code=422, detail="VAD: поле audio (или file) обязательно")
+    if isinstance(raw, bytes):
+        audio_bytes = raw
+    elif isinstance(raw, bytearray | memoryview):
+        audio_bytes = bytes(raw)
+    elif isinstance(raw, list):
+        byte_values: list[int] = []
+        for item in raw:
+            if not isinstance(item, int) or isinstance(item, bool):
+                raise HTTPException(status_code=422, detail="VAD: audio должен быть bytes или list[int]")
+            byte_values.append(item)
+        try:
+            audio_bytes = bytes(byte_values)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="VAD: audio содержит байт вне диапазона 0..255") from exc
+    else:
+        raise HTTPException(status_code=422, detail="VAD: audio должен быть bytes или list[int]")
+    if len(audio_bytes) == 0:
+        raise HTTPException(status_code=422, detail="VAD: поле audio (или file) обязательно")
+    return audio_bytes
+
+
+def parse_vad_body(
+    raw: VADRawBody | Request,
+    *,
+    default_api_model_id: str,
+) -> VADDetectionInput:
     """Разобрать тело VAD-запроса.
 
     Поля: ``audio`` (PCM bytes) или ``file``, ``model`` (опционально, api id),
     ``sample_rate`` (опционально, переопределяет дефолт модели).
     """
-    if not isinstance(raw, dict):
-        raise ValueError("VAD: тело запроса должно быть JSON-объектом")
-    audio_bytes = raw.get("audio") or raw.get("file")
-    if not audio_bytes:
-        raise ValueError("VAD: поле audio (или file) обязательно")
-    if not isinstance(audio_bytes, bytes):
-        audio_bytes = bytes(audio_bytes)
+    if isinstance(raw, Request):
+        raise HTTPException(status_code=422, detail="VAD: LitServe должен передать подготовленное тело запроса")
 
-    requested_model = str(raw.get("model") or "").strip()
+    audio_raw = raw.get("audio")
+    if audio_raw is None:
+        audio_raw = raw.get("file")
+    audio_bytes = _coerce_audio_bytes(audio_raw)
+
+    model_raw = raw.get("model")
+    if model_raw is None:
+        requested_model = ""
+    elif isinstance(model_raw, str):
+        requested_model = model_raw.strip()
+    else:
+        raise HTTPException(status_code=422, detail="VAD: model должен быть строкой")
     if requested_model == "":
         requested_model = default_api_model_id.strip()
     if requested_model == "":
-        raise ValueError(
-            "VAD: model обязателен (либо явно, либо vad_default_api_model_id в конфиге)"
+        raise HTTPException(
+            status_code=422,
+            detail="VAD: model обязателен (либо явно, либо vad_default_api_model_id в конфиге)",
         )
 
     sample_rate_raw = raw.get("sample_rate")
-    sample_rate = int(sample_rate_raw) if sample_rate_raw is not None else None
-    return {
-        "audio_bytes": audio_bytes,
-        "model": requested_model,
-        "sample_rate_override": sample_rate,
-    }
+    if sample_rate_raw is None:
+        sample_rate_override = None
+    elif isinstance(sample_rate_raw, int) and not isinstance(sample_rate_raw, bool):
+        sample_rate_override = sample_rate_raw
+    else:
+        raise HTTPException(status_code=422, detail="VAD: sample_rate должен быть целым числом")
+
+    threshold_raw = raw.get("threshold")
+    if threshold_raw is None:
+        threshold_override = None
+    elif isinstance(threshold_raw, int | float) and not isinstance(threshold_raw, bool):
+        threshold_override = float(threshold_raw)
+    else:
+        raise HTTPException(status_code=422, detail="VAD: threshold должен быть числом")
+
+    return VADDetectionInput(
+        audio_bytes=audio_bytes,
+        model=requested_model,
+        sample_rate_override=sample_rate_override,
+        threshold_override=threshold_override,
+    )
 
 
 class LocalVADEngine:
     """VAD-инференс. Параметры (sample_rate/threshold) — из cfg.vad_models."""
 
     def __init__(self, cfg: ProviderLitserveInfraConfig) -> None:
-        self._cfg = cfg
-        self._models: dict[str, tuple[Any, Any]] = {}
-        self._device = "cpu"
+        self._cfg: ProviderLitserveInfraConfig = cfg
+        self._models: dict[str, tuple[SileroVADModel, SpeechTimestampGetter]] = {}
+        self._device: str = "cpu"
 
     def setup(self, device: str | None) -> None:
         self._device = device or "cpu"
@@ -86,7 +172,7 @@ class LocalVADEngine:
             )
         return entry
 
-    def _ensure_model(self, entry: ProviderLitserveVADModelEntry) -> tuple[Any, Any]:
+    def _ensure_model(self, entry: ProviderLitserveVADModelEntry) -> tuple[SileroVADModel, SpeechTimestampGetter]:
         if entry.api_model_id in self._models:
             return self._models[entry.api_model_id]
 
@@ -95,7 +181,8 @@ class LocalVADEngine:
         )
         started = time.monotonic()
         model = load_silero_vad()
-        self._models[entry.api_model_id] = (model, get_speech_timestamps)
+        timestamp_getter = get_speech_timestamps
+        self._models[entry.api_model_id] = (model, timestamp_getter)
         logger.info(
             "VAD-модель %s загружена за %.2fs", entry.api_model_id, time.monotonic() - started
         )
@@ -107,14 +194,15 @@ class LocalVADEngine:
         audio_bytes: bytes,
         api_model_id: str,
         sample_rate_override: int | None,
-    ) -> list[dict[str, float]]:
+        threshold_override: float | None,
+    ) -> list[VADSegment]:
         entry = self._resolve_entry(api_model_id)
         sample_rate = sample_rate_override or entry.sample_rate
         if not sample_rate:
             raise ValueError(
                 f"VAD: sample_rate не задан (ни в payload, ни в cfg.vad_models[{api_model_id}].sample_rate)"
             )
-        threshold = entry.threshold
+        threshold = threshold_override if threshold_override is not None else entry.threshold
         if threshold is None:
             raise ValueError(
                 f"VAD: threshold не задан в cfg.vad_models[{api_model_id}].threshold"
@@ -125,21 +213,22 @@ class LocalVADEngine:
         n_samples = len(audio_bytes) // 2
         if n_samples == 0:
             return []
-        samples = struct.unpack(f"<{n_samples}h", audio_bytes[: n_samples * 2])
-        floats = [s / 32768.0 for s in samples]
+        floats = [
+            int.from_bytes(audio_bytes[offset : offset + 2], "little", signed=True) / 32768.0
+            for offset in range(0, n_samples * 2, 2)
+        ]
 
-        tensor = torch.tensor(floats, dtype=torch.float32)
+        tensor = torch.Tensor(floats)
         timestamps = get_speech_ts(
             tensor,
             model,
             sampling_rate=sample_rate,
             threshold=threshold,
         )
-        result = [
-            {
-                "start": float(ts["start"]) / sample_rate,
-                "end": float(ts["end"]) / sample_rate,
-            }
+        return [
+            VADSegment(
+                start=float(ts["start"]) / sample_rate,
+                end=float(ts["end"]) / sample_rate,
+            )
             for ts in timestamps
         ]
-        return result

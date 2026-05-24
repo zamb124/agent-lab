@@ -1,8 +1,10 @@
 """
 In-process ASGI-приложение ``provider_litserve`` с явными контрактами OpenAPI.
 
-Обработчики вызывают те же ``EmbeddingLitAPI`` / ``RerankerLitAPI``, что и LitServe
-в ``main``; отличие — нет очередей воркеров (один процесс).
+Обработчики RAG вызывают те же ``EmbeddingLitAPI`` / ``RerankerLitAPI``, что и LitServe
+в ``main``; отличие — нет очередей воркеров (один процесс). Speech-модели отражаются
+в ``/v1/models`` как часть production-каталога, но in-process ASGI содержит только
+RAG endpoints.
 
 Продакшен: ``python -m apps.provider_litserve.main`` (``LitServer``).
 """
@@ -25,9 +27,6 @@ from apps.provider_litserve.provider_litserve_http_schemas import (
     OpenAIEmbeddingsResponseBody,
     RerankResponseBody,
     V1ModelsResponseBody,
-    validate_embeddings_response,
-    validate_rerank_response,
-    validate_v1_models_response,
 )
 from apps.provider_litserve.reranker.api import RerankerLitAPI
 from apps.provider_litserve.runtime_models import runtime_api_model_ids
@@ -61,16 +60,9 @@ def create_provider_litserve_asgi_app(
         ),
     )
 
-    @app.get(
-        "/v1/models",
-        response_model=V1ModelsResponseBody,
-        tags=["provider_litserve"],
-        summary="Список моделей (форма OpenRouter)",
-        response_description="Записи моделей эмбеддингов, реранка и чата.",
-    )
     def get_v1_models() -> V1ModelsResponseBody:
         created = int(time.time())
-        raw = build_provider_litserve_v1_models_response(
+        return build_provider_litserve_v1_models_response(
             embedding_openai_model_id=cfg.embedding_openai_model_id,
             embedding_model_ids=cfg.embedding_model_ids,
             embedding_hf_model_id=cfg.embedding_model_id,
@@ -80,31 +72,31 @@ def create_provider_litserve_asgi_app(
             rerank_model_ids=cfg.rerank_model_ids,
             rerank_hf_model_id=cfg.model_id,
             rerank_context_length=8192,
-            chat_model_ids=[],
             stt_model_ids=runtime_api_model_ids("stt", cfg),
             tts_model_ids=runtime_api_model_ids("tts", cfg),
             vad_model_ids=runtime_api_model_ids("vad", cfg),
             created=created,
         )
-        return validate_v1_models_response(raw)
 
-    @app.get(
+    _ = app.get(
+        "/v1/models",
+        response_model=V1ModelsResponseBody,
+        tags=["provider_litserve"],
+        summary="Список моделей (форма OpenRouter)",
+        response_description="Записи моделей эмбеддингов, реранка и речи.",
+    )(get_v1_models)
+
+    def get_health() -> PlainTextResponse:
+        return PlainTextResponse("ok", status_code=200)
+
+    _ = app.get(
         "/health",
         response_class=PlainTextResponse,
         tags=["provider_litserve"],
         summary="Проверка доступности",
         response_description="Текст ``ok`` при готовности (для in-process всегда после старта приложения).",
-    )
-    def get_health() -> PlainTextResponse:
-        return PlainTextResponse("ok", status_code=200)
+    )(get_health)
 
-    @app.post(
-        "/v1/embeddings",
-        response_model=OpenAIEmbeddingsResponseBody,
-        tags=["provider_litserve"],
-        summary="Векторизация текстов (OpenAI-совместимое тело и ответ)",
-        response_description="Поле ``model`` — канонический ``embedding_openai_model_id`` из конфигурации.",
-    )
     def post_v1_embeddings(
         body: Annotated[
             OpenAIEmbeddingsRequest,
@@ -124,18 +116,16 @@ def create_provider_litserve_asgi_app(
     ) -> OpenAIEmbeddingsResponseBody:
         batch = embed_api.decode_request(body.model_dump())
         out = embed_api.predict(batch)
-        payload = embed_api.encode_response(out)
-        if not isinstance(payload, dict):
-            raise TypeError("encode_response эмбеддингов должен возвращать dict для JSON")
-        return validate_embeddings_response(payload)
+        return embed_api.encode_response(out)
 
-    @app.post(
-        "/v1/rerank",
-        response_model=RerankResponseBody,
+    _ = app.post(
+        "/v1/embeddings",
+        response_model=OpenAIEmbeddingsResponseBody,
         tags=["provider_litserve"],
-        summary="Реранк по запросу и пассажам",
-        response_description="``scores[i]`` соответствует ``passages[i]``.",
-    )
+        summary="Векторизация текстов (OpenAI-совместимое тело и ответ)",
+        response_description="Поле ``model`` — канонический ``embedding_openai_model_id`` из конфигурации.",
+    )(post_v1_embeddings)
+
     def post_v1_rerank(
         body: Annotated[
             RerankQueryPassagesRequest,
@@ -151,9 +141,14 @@ def create_provider_litserve_asgi_app(
     ) -> RerankResponseBody:
         batch = rerank_api.decode_request(body.model_dump())
         out = rerank_api.predict(batch)
-        payload = rerank_api.encode_response(out)
-        if not isinstance(payload, dict):
-            raise TypeError("encode_response реранкера должен возвращать dict для JSON")
-        return validate_rerank_response(payload)
+        return rerank_api.encode_response(out)
+
+    _ = app.post(
+        "/v1/rerank",
+        response_model=RerankResponseBody,
+        tags=["provider_litserve"],
+        summary="Реранк по запросу и пассажам",
+        response_description="``scores[i]`` соответствует ``passages[i]``.",
+    )(post_v1_rerank)
 
     return app

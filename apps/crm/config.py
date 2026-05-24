@@ -84,8 +84,8 @@ class CRMSettings(BaseSettings):
     note_attachment_markdown_format_enabled: bool = Field(
         default=True,
         description=(
-            "Фоновое форматирование текста заметки (description) через provider_litserve "
-            "POST /v1/text/format_markdown после вставки текста из файла во вложение."
+            "Фоновое форматирование текста заметки (description) через платформенный "
+            "TextTransformService после вставки текста из файла во вложение."
         ),
     )
     note_markdown_format_service_timeout_seconds: float = Field(

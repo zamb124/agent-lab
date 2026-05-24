@@ -110,7 +110,7 @@ def get_llm(
     Args:
         model_name: Имя модели
         temperature: Температура
-        provider: Провайдер (openai, openrouter, bothub, provider_litserve, yandex,
+        provider: Провайдер (openai, openrouter, bothub, yandex,
             humanitec_llm)
         api_key: API ключ (напрямую или @var:my_key)
         base_url: Base URL провайдера (напрямую или @var:my_url)

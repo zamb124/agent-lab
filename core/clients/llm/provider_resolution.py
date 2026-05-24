@@ -92,12 +92,6 @@ def _detect_provider(base_url: str | None) -> str | None:
     """Определяет провайдера по base_url."""
     if not base_url:
         return None
-    if (
-        "provider_litserve" in base_url
-        or "localhost:8014" in base_url
-        or "127.0.0.1:8014" in base_url
-    ):
-        return "provider_litserve"
     if "openrouter.ai" in base_url:
         return "openrouter"
     if "bothub.chat" in base_url:
@@ -140,8 +134,6 @@ def _get_default_base_url(provider: str, settings: BaseSettings) -> str:
         )
     if provider == "yandex":
         return _yandex_openai_root(settings)
-    if provider == "provider_litserve":
-        return settings.provider_litserve.resolve_openai_v1_base_url()
     if provider == "custom_openai_compatible":
         raise ValueError("custom_openai_compatible LLM требует явный base_url")
     raise ValueError(f"Неизвестный LLM провайдер: {provider}")
@@ -303,8 +295,6 @@ def _resolve_llm_call_config(
         folder_id = str(provider_config.folder_id).strip()
         candidate_model = normalize_yandex_resource_model_uri(candidate_model, folder_id)
         default_headers = _yandex_auth_headers(api_key=str(provider_config.api_key), folder_id=folder_id)
-    elif resolved_provider == "provider_litserve":
-        resolved_api_key = "litserve-local"
     elif resolved_provider == "custom_openai_compatible":
         raise ValueError(
             "custom_openai_compatible LLM требует явный api_key и base_url; "

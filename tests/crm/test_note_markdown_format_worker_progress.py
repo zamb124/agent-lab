@@ -20,7 +20,7 @@ async def test_note_markdown_format_single_text_transform_call_full_body(monkeyp
     async def _noop(*_a, **_k):
         return None
 
-    monkeypatch.setattr(nmt, "_set_crm_context", _noop)
+    monkeypatch.setattr(nmt, "set_crm_context", _noop)
 
     fixed_dt = datetime(2026, 1, 10, 12, 0, 0, tzinfo=timezone.utc)
     full_text = "alpha\n\n" * 800
@@ -46,20 +46,14 @@ async def test_note_markdown_format_single_text_transform_call_full_body(monkeyp
     monkeypatch.setattr(nmt, "get_crm_container", lambda: container)
 
     settings_mock = MagicMock()
-    settings_mock.provider_litserve.infra.markdown_max_chunk_chars = 6000
+    settings_mock.text_transforms.markdown_max_chunk_chars = 6000
     monkeypatch.setattr(nmt, "get_settings", lambda: settings_mock)
 
     format_calls: list[dict[str, Any]] = []
 
     class _TextTransformService:
-        async def format_markdown(
-            self,
-            text: str,
-            *,
-            max_chunk_chars: int | None = None,
-            **_kwargs: Any,
-        ) -> str:
-            format_calls.append({"text": text, "max_chunk_chars": max_chunk_chars})
+        async def format_markdown(self, text: str) -> str:
+            format_calls.append({"text": text})
             return "# ok\n"
 
     monkeypatch.setattr(nmt, "TextTransformService", _TextTransformService)
@@ -85,7 +79,6 @@ async def test_note_markdown_format_single_text_transform_call_full_body(monkeyp
     assert result["status"] == "completed"
     assert len(format_calls) == 1
     assert format_calls[0]["text"] == full_text.strip()
-    assert format_calls[0]["max_chunk_chars"] == 6000
     assert note_ent.description == "# ok"
     assert len(broadcast_calls) == 1
     assert broadcast_calls[0]["skip_notification_center"] is False

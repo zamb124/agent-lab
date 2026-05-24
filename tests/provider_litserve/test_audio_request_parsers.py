@@ -61,16 +61,24 @@ def test_parse_stt_body_no_default_and_no_model_raises_422():
     assert exc_info.value.status_code == 422
 
 
-def test_parse_tts_body_uses_default_and_normalizes_response_format(unique_id):
+def test_parse_tts_body_uses_default_and_accepts_wav_response_format(unique_id):
     parsed = parse_tts_body(
-        {"input": "Привет, мир", "response_format": "FLAC"},
+        {"input": "Привет, мир", "response_format": "wav"},
         default_api_model_id=f"silero-tts-{unique_id}",
     )
-    assert parsed["text"] == "Привет, мир"
-    assert parsed["model"] == f"silero-tts-{unique_id}"
-    assert parsed["voice_override"] is None
-    # Неизвестный формат -> wav
-    assert parsed["response_format"] == "wav"
+    assert parsed.text == "Привет, мир"
+    assert parsed.model == f"silero-tts-{unique_id}"
+    assert parsed.voice_override is None
+    assert parsed.response_format == "wav"
+
+
+def test_parse_tts_body_unknown_response_format_raises_422(unique_id):
+    with pytest.raises(HTTPException) as exc_info:
+        parse_tts_body(
+            {"input": "Привет, мир", "response_format": "FLAC"},
+            default_api_model_id=f"silero-tts-{unique_id}",
+        )
+    assert exc_info.value.status_code == 422
 
 
 def test_parse_tts_body_normalizes_voice_to_lowercase(unique_id):
@@ -83,7 +91,7 @@ def test_parse_tts_body_normalizes_voice_to_lowercase(unique_id):
         },
         default_api_model_id=f"silero-tts-{unique_id}",
     )
-    assert parsed["voice_override"] == "baya"
+    assert parsed.voice_override == "baya"
 
 
 def test_parse_tts_body_accepts_voice_and_known_formats(unique_id):
@@ -97,15 +105,16 @@ def test_parse_tts_body_accepts_voice_and_known_formats(unique_id):
         },
         default_api_model_id=f"silero-tts-{unique_id}",
     )
-    assert parsed["voice_override"] == "baya"
-    assert parsed["response_format"] == "pcm"
+    assert parsed.voice_override == "baya"
+    assert parsed.response_format == "pcm"
 
 
 def test_parse_tts_body_empty_input_raises_value_error(unique_id):
-    with pytest.raises(ValueError, match="input"):
+    with pytest.raises(HTTPException) as exc_info:
         parse_tts_body(
             {"input": "   "}, default_api_model_id=f"silero-tts-{unique_id}"
         )
+    assert exc_info.value.status_code == 422
 
 
 def test_parse_tts_body_replaces_lone_surrogate_so_unicode_is_safe_for_tts():
@@ -114,8 +123,8 @@ def test_parse_tts_body_replaces_lone_surrogate_so_unicode_is_safe_for_tts():
         {"input": "a" + chr(0xD800) + "b"},
         default_api_model_id="silero-tts-default",
     )
-    assert parsed["text"] == "a" + "\ufffd" + "b"
-    assert chr(0xD800) not in parsed["text"]
+    assert parsed.text == "a" + "\ufffd" + "b"
+    assert chr(0xD800) not in parsed.text
 
 
 def test_parse_tts_body_strips_format_chars_control_and_keeps_newline():
@@ -124,21 +133,21 @@ def test_parse_tts_body_strips_format_chars_control_and_keeps_newline():
         {"input": text_in},
         default_api_model_id="silero-tts-default",
     )
-    assert "\u200b" not in parsed["text"]
-    assert "\n" in parsed["text"]
-    assert parsed["text"] == "xy\nz"
+    assert "\u200b" not in parsed.text
+    assert "\n" in parsed.text
+    assert parsed.text == "xy\nz"
     zwj = parse_tts_body(
         {"input": "a\u200db"},
         default_api_model_id="silero-tts-default",
     )
-    assert "\u200d" not in zwj["text"]
-    assert zwj["text"] == "ab"
+    assert "\u200d" not in zwj.text
+    assert zwj.text == "ab"
     no_null = parse_tts_body(
         {"input": "a" + chr(0) + "b"},
         default_api_model_id="silero-tts-default",
     )
-    assert chr(0) not in no_null["text"]
-    assert no_null["text"] == "ab"
+    assert chr(0) not in no_null.text
+    assert no_null.text == "ab"
 
 
 def test_parse_vad_body_default_and_explicit_sample_rate(unique_id):
@@ -147,19 +156,20 @@ def test_parse_vad_body_default_and_explicit_sample_rate(unique_id):
     parsed_default = parse_vad_body(
         {"audio": pcm}, default_api_model_id=f"silero-{unique_id}"
     )
-    assert parsed_default["model"] == f"silero-{unique_id}"
-    assert parsed_default["sample_rate_override"] is None
+    assert parsed_default.model == f"silero-{unique_id}"
+    assert parsed_default.sample_rate_override is None
 
     parsed_explicit = parse_vad_body(
         {"file": pcm, "sample_rate": 8000},
         default_api_model_id=f"silero-{unique_id}",
     )
-    assert parsed_explicit["sample_rate_override"] == 8000
+    assert parsed_explicit.sample_rate_override == 8000
 
 
 def test_parse_vad_body_missing_audio_raises_value_error(unique_id):
-    with pytest.raises(ValueError, match="audio"):
+    with pytest.raises(HTTPException) as exc_info:
         parse_vad_body({}, default_api_model_id=f"silero-{unique_id}")
+    assert exc_info.value.status_code == 422
 
 
 def test_decode_audio_to_floats_falls_back_to_raw_pcm16():

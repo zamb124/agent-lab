@@ -1,10 +1,10 @@
-"""Чанки для POST /v1/text/format_markdown."""
+"""Чанки для платформенного Markdown formatter."""
 
 from __future__ import annotations
 
 import pytest
 
-from apps.provider_litserve.markdown_format.chunking import split_text_into_markdown_chunks
+from core.text_transforms.chunking import split_text_into_markdown_chunks
 
 
 def test_split_single_chunk_under_limit() -> None:

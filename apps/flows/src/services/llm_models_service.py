@@ -13,7 +13,7 @@ from core.config.llm_openai_compat import (
     yandex_llm_openai_root_from_provider_cfg,
     yandex_provider_http_headers,
 )
-from core.http import ProxyStrategy, get_httpx_client
+from core.http import ProxyStrategy
 from core.http.client import request_with_strategy
 from core.logging import get_logger
 from core.scheduler.models import (
@@ -22,6 +22,14 @@ from core.scheduler.models import (
     PlatformScheduleFilter,
     PlatformScheduleType,
     ScheduledTaskStatus,
+)
+from core.types import (
+    JsonArray,
+    JsonObject,
+    JsonValue,
+    parse_json_object,
+    parse_json_value,
+    require_json_object,
 )
 
 logger = get_logger(__name__)
@@ -38,11 +46,81 @@ class LLMModelsService:
     """Сервис для синхронизации и получения списка LLM моделей."""
 
     def __init__(self, repository: LLMModelRepository, scheduler_client: SchedulerClient):
-        self._repository = repository
-        self._scheduler_client = scheduler_client
+        self._repository: LLMModelRepository = repository
+        self._scheduler_client: SchedulerClient = scheduler_client
         self._sync_schedule_task_id: str | None = None
         self._openrouter_free_schedule_task_id: str | None = None
         self._sync_interval_seconds: int = 60
+
+    @staticmethod
+    def _json_str(value: JsonValue) -> str | None:
+        if not isinstance(value, str):
+            return None
+        stripped = value.strip()
+        if not stripped:
+            return None
+        return stripped
+
+    @classmethod
+    def _model_id_from_object(
+        cls,
+        item: JsonObject,
+        *,
+        primary_key: str,
+        fallback_key: str | None = None,
+    ) -> str | None:
+        primary = cls._json_str(item.get(primary_key))
+        if primary is not None:
+            return primary
+        if fallback_key is None:
+            return None
+        return cls._json_str(item.get(fallback_key))
+
+    @classmethod
+    def _extract_model_ids_from_array(
+        cls,
+        items: JsonArray,
+        *,
+        provider: str,
+        primary_key: str,
+        fallback_key: str | None = None,
+    ) -> list[str]:
+        models: list[str] = []
+        for idx, raw_item in enumerate(items):
+            item = require_json_object(raw_item, f"{provider}.models[{idx}]")
+            model_id = cls._model_id_from_object(
+                item,
+                primary_key=primary_key,
+                fallback_key=fallback_key,
+            )
+            if model_id is not None:
+                models.append(model_id)
+        return models
+
+    @classmethod
+    def _extract_openai_compatible_model_ids(cls, payload: JsonObject, provider: str) -> list[str]:
+        data = payload.get("data")
+        if not isinstance(data, list):
+            raise ValueError(f"{provider} models response: data must be an array")
+        return cls._extract_model_ids_from_array(data, provider=provider, primary_key="id")
+
+    @classmethod
+    def _extract_bothub_model_ids(cls, payload: JsonValue) -> list[str]:
+        if isinstance(payload, list):
+            items = payload
+        elif isinstance(payload, dict):
+            data = payload.get("data")
+            if not isinstance(data, list):
+                raise ValueError("bothub models response: data must be an array")
+            items = data
+        else:
+            raise ValueError("bothub models response must be object or array")
+        return cls._extract_model_ids_from_array(
+            items,
+            provider="bothub",
+            primary_key="name",
+            fallback_key="id",
+        )
 
     async def _fetch_bothub_models(self) -> list[str]:
         """
@@ -71,14 +149,9 @@ class LLMModelsService:
             direct_attempts=3,
             proxy_attempts=3,
         )
-        response.raise_for_status()
-        data = response.json()
-        # BotHub возвращает список моделей с полем "name" или "id"
-        models = []
-        for item in data if isinstance(data, list) else data.get("data", []):
-            model_id = item.get("name") or item.get("id")
-            if model_id:
-                models.append(model_id)
+        _ = response.raise_for_status()
+        payload = parse_json_value(response.content, "bothub.models.response")
+        models = self._extract_bothub_model_ids(payload)
         logger.info(f"BotHub: получено {len(models)} моделей")
         return models
 
@@ -106,9 +179,9 @@ class LLMModelsService:
             direct_attempts=3,
             proxy_attempts=3,
         )
-        response.raise_for_status()
-        data = response.json()
-        models = [item["id"] for item in data.get("data", [])]
+        _ = response.raise_for_status()
+        payload = parse_json_object(response.content, "openrouter.models.response")
+        models = self._extract_openai_compatible_model_ids(payload, "openrouter")
         logger.info(f"OpenRouter: получено {len(models)} моделей")
         return models
 
@@ -133,9 +206,9 @@ class LLMModelsService:
             direct_attempts=3,
             proxy_attempts=3,
         )
-        response.raise_for_status()
-        data = response.json()
-        models = [item["id"] for item in data.get("data", [])]
+        _ = response.raise_for_status()
+        payload = parse_json_object(response.content, "openai.models.response")
+        models = self._extract_openai_compatible_model_ids(payload, "openai")
         logger.info(f"OpenAI: получено {len(models)} моделей")
         return models
 
@@ -166,26 +239,11 @@ class LLMModelsService:
             direct_attempts=3,
             proxy_attempts=3,
         )
-        response.raise_for_status()
-        data = response.json()
-        models = [item["id"] for item in data.get("data", [])]
+        _ = response.raise_for_status()
+        payload = parse_json_object(response.content, "yandex.models.response")
+        models = self._extract_openai_compatible_model_ids(payload, "yandex")
         logger.info(f"Yandex LLM: получено {len(models)} моделей")
         return models
-
-    async def _fetch_provider_litserve_models(self) -> list[str]:
-        """Запрос моделей от provider_litserve OpenAI-совместимого API."""
-        settings = get_settings()
-        provider_cfg = settings.provider_litserve
-        base_url = provider_cfg.resolve_openai_v1_base_url()
-        url = f"{base_url}/models"
-
-        async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.DIRECT_ONLY) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            data = response.json()
-            models = [item["id"] for item in data.get("data", [])]
-            logger.info(f"provider_litserve: получено {len(models)} моделей")
-            return models
 
     async def fetch_models_by_provider(self, provider: str) -> list[str]:
         """Запрос моделей от указанного провайдера."""
@@ -197,8 +255,6 @@ class LLMModelsService:
             return await self._fetch_openai_models()
         elif provider == "yandex":
             return await self._fetch_yandex_models()
-        elif provider == "provider_litserve":
-            return await self._fetch_provider_litserve_models()
         else:
             logger.warning(f"Неизвестный провайдер: {provider}")
             return []
@@ -218,7 +274,7 @@ class LLMModelsService:
 
             for model_id in model_ids:
                 model = LLMModel(model_id=model_id, provider=provider)
-                await self._repository.set(model)
+                _ = await self._repository.set(model)
 
             logger.info(f"Синхронизировано {len(model_ids)} моделей от {provider}")
             return len(model_ids)
@@ -238,7 +294,7 @@ class LLMModelsService:
     async def sync_all_providers(self) -> dict[str, int]:
         """Синхронизация моделей от ВСЕХ настроенных провайдеров."""
         settings = get_settings()
-        results = {}
+        results: dict[str, int] = {}
 
         # BotHub
         if settings.llm.bothub and settings.llm.bothub.api_key:
@@ -254,11 +310,6 @@ class LLMModelsService:
 
         if settings.llm.yandex and settings.llm.yandex.api_key and settings.llm.yandex.folder_id:
             results["yandex"] = await self.sync_models_by_provider("yandex")
-
-        # provider_litserve
-        provider_cfg = settings.provider_litserve
-        if provider_cfg.api.base_url:
-            results["provider_litserve"] = await self.sync_models_by_provider("provider_litserve")
 
         total = sum(results.values())
         logger.info(f"Синхронизировано {total} моделей от всех провайдеров: {results}")
@@ -281,8 +332,8 @@ class LLMModelsService:
         """Список реально настроенных LLM-провайдеров из conf.json.
 
         Провайдер считается настроенным, если в `settings.llm.<provider>` присутствует
-        api_key (для openai/openrouter/bothub), для yandex — ещё и непустой folder_id,
-        либо если для provider_litserve задан base_url. humanitec_llm доступен, когда
+        api_key (для openai/openrouter/bothub), для yandex — ещё и непустой folder_id.
+        humanitec_llm доступен, когда
         включён платформенный OpenRouter dynamic pool.
         """
         settings = get_settings()
@@ -306,8 +357,6 @@ class LLMModelsService:
             and str(settings.llm.yandex.folder_id).strip()
         ):
             providers.append("yandex")
-        if settings.provider_litserve.api.base_url:
-            providers.append("provider_litserve")
         return providers
 
     @staticmethod
@@ -457,7 +506,7 @@ class LLMModelsService:
         """Отменяет recurring schedule синхронизации моделей."""
         if not self._sync_schedule_task_id:
             return
-        await self._scheduler_client.cancel_schedule(self._sync_schedule_task_id)
+        _ = await self._scheduler_client.cancel_schedule(self._sync_schedule_task_id)
         logger.info(
             "Фоновая синхронизация моделей остановлена (schedule_task_id=%s)",
             self._sync_schedule_task_id,
@@ -468,7 +517,7 @@ class LLMModelsService:
         """Отменяет recurring schedule обновления Redis free-pool OpenRouter."""
         if not self._openrouter_free_schedule_task_id:
             return
-        await self._scheduler_client.cancel_schedule(self._openrouter_free_schedule_task_id)
+        _ = await self._scheduler_client.cancel_schedule(self._openrouter_free_schedule_task_id)
         logger.info(
             "OpenRouter free-pool sync остановлен (schedule_task_id=%s)",
             self._openrouter_free_schedule_task_id,

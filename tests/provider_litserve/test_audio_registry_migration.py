@@ -1,8 +1,8 @@
-"""init_registry мигрирует старую models-таблицу под аудио-kinds.
+"""init_registry мигрирует старую models-таблицу под RAG/audio-kinds.
 
 Создаём реальную SQLite-БД со старой схемой (CHECK без stt/tts/vad),
-кладём строку, вызываем init_registry, проверяем что данные не утеряны
-и новая схема разрешает stt/tts/vad.
+кладём строку, вызываем init_registry, проверяем что RAG/audio данные не утеряны
+и новая схема больше не разрешает llm.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def test_init_registry_migrates_old_check_constraint(tmp_path, unique_id):
 
     with sqlite3.connect(db_path) as conn:
         old_table = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='models_old_pre_audio'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='models_old_pre_rag_audio'"
         ).fetchone()
     assert old_table is None, "временная _old таблица должна быть удалена после миграции"
 

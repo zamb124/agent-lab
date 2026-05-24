@@ -1,6 +1,8 @@
-"""Тул: структурировать текст в Markdown (LitServe HTTP по умолчанию или ``get_llm``)."""
+"""Тул: структурировать текст в Markdown через company LLM capability."""
 
 from __future__ import annotations
+
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,33 +14,16 @@ from core.types import JsonObject
 
 
 class FormatTextMarkdownArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     text: str = Field(..., min_length=1, description="Исходный текст.")
-    provider: str | None = Field(
-        None,
-        description=(
-            "Используется только если company override для llm_format_markdown не задан. "
-            "`provider_litserve` — старый LitServe HTTP; иначе — явный LLM-провайдер."
-        ),
-    )
-    model: str | None = Field(
-        None,
-        description="Модель; для LitServe — api id локальной LLM; для OpenRouter — `openrouter:slug` или пара provider+model.",
-    )
-    max_chunk_chars: int | None = Field(
-        None,
-        ge=512,
-        le=100_000,
-        description="Размер чанка; None — из `provider_litserve.infra.markdown_max_chunk_chars`.",
-    )
 
 
 @tool(
     name="format_text_markdown",
     description=(
         "Превращает произвольный текст в аккуратный Markdown. "
-        "Провайдер и модель сначала берутся из company capability settings."
+        "Провайдер и модель берутся из company capability llm_format_markdown."
     ),
     tags=["text", "markdown"],
     args_schema=FormatTextMarkdownArgs,
@@ -47,17 +32,9 @@ class FormatTextMarkdownArgs(BaseModel):
 )
 async def format_text_markdown(
     text: str,
-    provider: str | None = None,
-    model: str | None = None,
-    max_chunk_chars: int | None = None,
     state: ExecutionState | None = None,
 ) -> JsonObject:
     del state
     svc = get_text_transform_service()
-    markdown = await svc.format_markdown(
-        text,
-        provider=provider,
-        model=model,
-        max_chunk_chars=max_chunk_chars,
-    )
+    markdown = await svc.format_markdown(text)
     return {"markdown": markdown}

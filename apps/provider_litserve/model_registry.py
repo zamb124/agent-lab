@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import ClassVar, Literal, Protocol, cast
 from uuid import uuid4
+
+from pydantic import BaseModel, ConfigDict
 
 from core.config.models import (
     ProviderLitserveInfraConfig,
@@ -17,12 +18,13 @@ from core.config.models import (
     ProviderLitserveVADModelEntry,
 )
 
-ModelKind = Literal["llm", "embedding", "rerank", "stt", "tts", "vad"]
+ModelKind = Literal["embedding", "rerank", "stt", "tts", "vad"]
 ModelStatus = Literal["pending", "downloading", "ready", "failed", "deleted"]
 
 
-@dataclass(slots=True, frozen=True)
-class RegistryModel:
+class RegistryModel(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
+
     model_id: str
     kind: ModelKind
     hf_model_id: str
@@ -36,6 +38,56 @@ class RegistryModel:
 class AudioModelEntry(Protocol):
     api_model_id: str
     hf_model_id: str
+
+
+def _row_required_str(row: sqlite3.Row, column: str) -> str:
+    value = cast(str | int | float | bytes | None, row[column])
+    if isinstance(value, str):
+        return value
+    raise TypeError(f"models.{column} must be TEXT")
+
+
+def _row_optional_str(row: sqlite3.Row, column: str) -> str | None:
+    value = cast(str | int | float | bytes | None, row[column])
+    if value is None or isinstance(value, str):
+        return value
+    raise TypeError(f"models.{column} must be TEXT or NULL")
+
+
+def _row_required_int(row: sqlite3.Row, column: str) -> int:
+    value = cast(str | int | float | bytes | None, row[column])
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"models.{column} must be INTEGER")
+    return value
+
+
+def _parse_model_kind(value: str) -> ModelKind:
+    match value:
+        case "embedding" | "rerank" | "stt" | "tts" | "vad":
+            return value
+        case _:
+            raise ValueError(f"unsupported model kind in registry: {value}")
+
+
+def _parse_model_status(value: str) -> ModelStatus:
+    match value:
+        case "pending" | "downloading" | "ready" | "failed" | "deleted":
+            return value
+        case _:
+            raise ValueError(f"unsupported model status in registry: {value}")
+
+
+def _registry_model_from_row(row: sqlite3.Row) -> RegistryModel:
+    return RegistryModel(
+        model_id=_row_required_str(row, "model_id"),
+        kind=_parse_model_kind(_row_required_str(row, "kind")),
+        hf_model_id=_row_required_str(row, "hf_model_id"),
+        api_model_id=_row_required_str(row, "api_model_id"),
+        status=_parse_model_status(_row_required_str(row, "status")),
+        error=_row_optional_str(row, "error"),
+        created_at=_row_required_str(row, "created_at"),
+        updated_at=_row_required_str(row, "updated_at"),
+    )
 
 
 def _now_iso() -> str:
@@ -131,10 +183,11 @@ def _build_audio_api_pairs_from_entries(
             f"provider_litserve {kind_label}_default_api_model_id не должен быть пустым"
         )
     if default_normalized.lower() not in seen_api_lower:
-        raise ValueError(
+        message = (
             f"provider_litserve {kind_label}_default_api_model_id={default_normalized!r} "
-            f"отсутствует в {kind_label}_models"
+            + f"отсутствует в {kind_label}_models"
         )
+        raise ValueError(message)
     return out
 
 
@@ -208,15 +261,15 @@ def _connect(cfg: ProviderLitserveInfraConfig) -> sqlite3.Connection:
     path = _db_path(cfg)
     conn = sqlite3.connect(path, timeout=30.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+    _ = conn.execute("PRAGMA journal_mode=WAL")
+    _ = conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
 _MODELS_TABLE_SQL = """
 CREATE TABLE models (
     model_id TEXT PRIMARY KEY,
-    kind TEXT NOT NULL CHECK(kind IN ('llm', 'embedding', 'rerank', 'stt', 'tts', 'vad')),
+    kind TEXT NOT NULL CHECK(kind IN ('embedding', 'rerank', 'stt', 'tts', 'vad')),
     hf_model_id TEXT NOT NULL,
     api_model_id TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL CHECK(status IN ('pending', 'downloading', 'ready', 'failed', 'deleted')),
@@ -229,36 +282,38 @@ CREATE TABLE models (
 
 def _migrate_models_table_if_needed(conn: sqlite3.Connection) -> None:
     """Idempotent: если CHECK у таблицы не покрывает новые kind'ы, пересоздать."""
-    row = conn.execute(
+    row = cast(sqlite3.Row | None, conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='models'"
-    ).fetchone()
+    ).fetchone())
     if row is None:
         return
-    current_sql = str(row["sql"] or "")
-    if all(f"'{kind}'" in current_sql for kind in ("stt", "tts", "vad")):
+    current_sql = _row_required_str(row, "sql")
+    allowed_kinds = ("embedding", "rerank", "stt", "tts", "vad")
+    if all(f"'{kind}'" in current_sql for kind in allowed_kinds) and "'llm'" not in current_sql:
         return
-    conn.execute("ALTER TABLE models RENAME TO models_old_pre_audio")
-    conn.execute(_MODELS_TABLE_SQL)
-    conn.execute(
+    _ = conn.execute("ALTER TABLE models RENAME TO models_old_pre_rag_audio")
+    _ = conn.execute(_MODELS_TABLE_SQL)
+    _ = conn.execute(
         """
         INSERT INTO models(model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at)
         SELECT model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at
-        FROM models_old_pre_audio
+        FROM models_old_pre_rag_audio
+        WHERE kind IN ('embedding', 'rerank', 'stt', 'tts', 'vad')
         """
     )
-    conn.execute("DROP TABLE models_old_pre_audio")
+    _ = conn.execute("DROP TABLE models_old_pre_rag_audio")
 
 
 def init_registry(cfg: ProviderLitserveInfraConfig) -> None:
     with _connect(cfg) as conn:
-        existing = conn.execute(
+        existing = cast(sqlite3.Row | None, conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='models'"
-        ).fetchone()
+        ).fetchone())
         if existing is None:
-            conn.execute(_MODELS_TABLE_SQL)
+            _ = conn.execute(_MODELS_TABLE_SQL)
         else:
             _migrate_models_table_if_needed(conn)
-        conn.execute(
+        _ = conn.execute(
             """
             CREATE TABLE IF NOT EXISTS model_operations (
                 operation_id TEXT PRIMARY KEY,
@@ -276,11 +331,6 @@ def init_registry(cfg: ProviderLitserveInfraConfig) -> None:
 
 def _default_seed_models(cfg: ProviderLitserveInfraConfig) -> list[tuple[ModelKind, str, str]]:
     seed_models: list[tuple[ModelKind, str, str]] = []
-
-    llm_ids = [item.strip() for item in cfg.llm_model_ids if item.strip()]
-    if not llm_ids:
-        llm_ids = [cfg.llm_model_id.strip()]
-    seed_models.extend(("llm", model_id, model_id) for model_id in llm_ids if model_id)
 
     embedding_pairs = build_embedding_api_pairs(cfg)
     seed_models.extend(
@@ -312,14 +362,16 @@ def _default_seed_models(cfg: ProviderLitserveInfraConfig) -> list[tuple[ModelKi
 
 def bootstrap_defaults_if_empty(cfg: ProviderLitserveInfraConfig) -> None:
     with _connect(cfg) as conn:
-        total = conn.execute("SELECT COUNT(*) AS total FROM models").fetchone()["total"]
-        if int(total) > 0:
+        row = cast(sqlite3.Row | None, conn.execute("SELECT COUNT(*) AS total FROM models").fetchone())
+        if row is None:
+            raise RuntimeError("model registry count query returned no row")
+        if _row_required_int(row, "total") > 0:
             return
         created_at = _now_iso()
         seed_models = _default_seed_models(cfg)
 
         for kind, hf_model_id, api_model_id in seed_models:
-            conn.execute(
+            _ = conn.execute(
                 """
                 INSERT INTO models(model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at)
                 VALUES (?, ?, ?, ?, 'ready', NULL, ?, ?)
@@ -334,16 +386,16 @@ def sync_defaults_from_config(cfg: ProviderLitserveInfraConfig) -> None:
     seed_models = _default_seed_models(cfg)
     with _connect(cfg) as conn:
         for kind, hf_model_id, api_model_id in seed_models:
-            row = conn.execute(
+            row = cast(sqlite3.Row | None, conn.execute(
                 """
                 SELECT model_id, kind, hf_model_id
                 FROM models
                 WHERE api_model_id = ?
                 """,
                 (api_model_id,),
-            ).fetchone()
+            ).fetchone())
             if row is None:
-                conn.execute(
+                _ = conn.execute(
                     """
                     INSERT INTO models(model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at)
                     VALUES (?, ?, ?, ?, 'ready', NULL, ?, ?)
@@ -351,65 +403,43 @@ def sync_defaults_from_config(cfg: ProviderLitserveInfraConfig) -> None:
                     (str(uuid4()), kind, hf_model_id, api_model_id, now, now),
                 )
                 continue
-            if row["kind"] == kind and row["hf_model_id"] == hf_model_id:
+            model_kind = _parse_model_kind(_row_required_str(row, "kind"))
+            current_hf_model_id = _row_required_str(row, "hf_model_id")
+            if model_kind == kind and current_hf_model_id == hf_model_id:
                 continue
-            conn.execute(
+            _ = conn.execute(
                 """
                 UPDATE models
                 SET kind = ?, hf_model_id = ?, status = 'ready', error = NULL, updated_at = ?
                 WHERE model_id = ?
                 """,
-                (kind, hf_model_id, now, row["model_id"]),
+                (kind, hf_model_id, now, _row_required_str(row, "model_id")),
             )
 
 
 def list_models(cfg: ProviderLitserveInfraConfig) -> list[RegistryModel]:
     with _connect(cfg) as conn:
-        rows = conn.execute(
+        rows = cast(Sequence[sqlite3.Row], conn.execute(
             """
             SELECT model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at
             FROM models
             ORDER BY created_at DESC
             """
-        ).fetchall()
-    return [
-        RegistryModel(
-            model_id=row["model_id"],
-            kind=row["kind"],
-            hf_model_id=row["hf_model_id"],
-            api_model_id=row["api_model_id"],
-            status=row["status"],
-            error=row["error"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
-        for row in rows
-    ]
+        ).fetchall())
+    return [_registry_model_from_row(row) for row in rows]
 
 
 def list_ready_active_models(cfg: ProviderLitserveInfraConfig) -> list[RegistryModel]:
     with _connect(cfg) as conn:
-        rows = conn.execute(
+        rows = cast(Sequence[sqlite3.Row], conn.execute(
             """
             SELECT model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at
             FROM models
             WHERE status = 'ready'
             ORDER BY created_at DESC
             """
-        ).fetchall()
-    return [
-        RegistryModel(
-            model_id=row["model_id"],
-            kind=row["kind"],
-            hf_model_id=row["hf_model_id"],
-            api_model_id=row["api_model_id"],
-            status=row["status"],
-            error=row["error"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
-        for row in rows
-    ]
+        ).fetchall())
+    return [_registry_model_from_row(row) for row in rows]
 
 
 def create_or_replace_model(cfg: ProviderLitserveInfraConfig, *, kind: ModelKind, hf_model_id: str, api_model_id: str) -> RegistryModel:
@@ -420,9 +450,12 @@ def create_or_replace_model(cfg: ProviderLitserveInfraConfig, *, kind: ModelKind
     now = _now_iso()
     model_id = str(uuid4())
     with _connect(cfg) as conn:
-        existing = conn.execute("SELECT model_id FROM models WHERE api_model_id = ?", (api_model_id.strip(),)).fetchone()
+        existing = cast(
+            sqlite3.Row | None,
+            conn.execute("SELECT model_id FROM models WHERE api_model_id = ?", (api_model_id.strip(),)).fetchone(),
+        )
         if existing is None:
-            conn.execute(
+            _ = conn.execute(
                 """
                 INSERT INTO models(model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at)
                 VALUES (?, ?, ?, ?, 'pending', NULL, ?, ?)
@@ -430,8 +463,8 @@ def create_or_replace_model(cfg: ProviderLitserveInfraConfig, *, kind: ModelKind
                 (model_id, kind, hf_model_id.strip(), api_model_id.strip(), now, now),
             )
         else:
-            model_id = existing["model_id"]
-            conn.execute(
+            model_id = _row_required_str(existing, "model_id")
+            _ = conn.execute(
                 """
                 UPDATE models
                 SET kind = ?, hf_model_id = ?, status = 'pending', error = NULL, updated_at = ?
@@ -439,24 +472,17 @@ def create_or_replace_model(cfg: ProviderLitserveInfraConfig, *, kind: ModelKind
                 """,
                 (kind, hf_model_id.strip(), now, model_id),
             )
-        row = conn.execute(
+        row = cast(sqlite3.Row | None, conn.execute(
             """
             SELECT model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at
             FROM models
             WHERE model_id = ?
             """,
             (model_id,),
-        ).fetchone()
-    return RegistryModel(
-        model_id=row["model_id"],
-        kind=row["kind"],
-        hf_model_id=row["hf_model_id"],
-        api_model_id=row["api_model_id"],
-        status=row["status"],
-        error=row["error"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-    )
+        ).fetchone())
+    if row is None:
+        raise RuntimeError(f"model registry write did not return model row: {model_id}")
+    return _registry_model_from_row(row)
 
 
 def mark_model_status(cfg: ProviderLitserveInfraConfig, *, model_id: str, status: ModelStatus, error: str | None = None) -> None:
@@ -476,23 +502,14 @@ def mark_model_deleted(cfg: ProviderLitserveInfraConfig, *, model_id: str) -> No
 
 def get_model(cfg: ProviderLitserveInfraConfig, *, model_id: str) -> RegistryModel:
     with _connect(cfg) as conn:
-        row = conn.execute(
+        row = cast(sqlite3.Row | None, conn.execute(
             """
             SELECT model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at
             FROM models
             WHERE model_id = ?
             """,
             (model_id,),
-        ).fetchone()
+        ).fetchone())
     if row is None:
         raise ValueError(f"model not found: {model_id}")
-    return RegistryModel(
-        model_id=row["model_id"],
-        kind=row["kind"],
-        hf_model_id=row["hf_model_id"],
-        api_model_id=row["api_model_id"],
-        status=row["status"],
-        error=row["error"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-    )
+    return _registry_model_from_row(row)

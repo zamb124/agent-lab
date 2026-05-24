@@ -13,8 +13,7 @@
     },
     "models": {
         "title": "Model registry",
-        "subtitle": "Local LitServe models (LLM, embedding, rerank)",
-        "kind_llm": "LLM",
+        "subtitle": "Local LitServe models (embedding, rerank)",
         "kind_embedding": "Embedding",
         "kind_rerank": "Rerank",
         "hf_model": "HuggingFace ID",

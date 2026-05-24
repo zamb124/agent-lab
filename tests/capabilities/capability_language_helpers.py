@@ -251,9 +251,6 @@ async def run(args, state):
     results["text.summarize"] = summary["summary"]
     markdown = await call("text.format_markdown", {
         "text": "Title\\nItem one",
-        "provider": "mock",
-        "model": "mock-gpt-4",
-        "max_chunk_chars": 512,
     })
     results["text.format_markdown"] = markdown["markdown"]
     speech = await call("voice.synthesize_speech", {
@@ -335,9 +332,6 @@ async function run(args, state) {
   results["text.summarize"] = summary.summary;
   const markdown = await call("text.format_markdown", {
     text: "Title\\nItem one",
-    provider: "mock",
-    model: "mock-gpt-4",
-    max_chunk_chars: 512,
   });
   results["text.format_markdown"] = markdown.markdown;
   const speech = await call("voice.synthesize_speech", {
@@ -514,9 +508,6 @@ func Run(args map[string]any, state map[string]any) (any, error) {
 
     markdown, err := callObj("text.format_markdown", map[string]any{
         "text": "Title\\nItem one",
-        "provider": "mock",
-        "model": "mock-gpt-4",
-        "max_chunk_chars": 512,
     })
     if err != nil {
         return nil, err
@@ -671,9 +662,6 @@ async Task<object?> Run(Dictionary<string, object?> args, Dictionary<string, obj
 
     var markdown = await CallObj("text.format_markdown", new Dictionary<string, object?> {
         ["text"] = "Title\\nItem one",
-        ["provider"] = "mock",
-        ["model"] = "mock-gpt-4",
-        ["max_chunk_chars"] = 512,
     });
     results["text.format_markdown"] = markdown["markdown"];
 

@@ -40,6 +40,7 @@ from core.models.identity_models import (
     UserStatus,
 )
 from core.models.variable_models import VariableDefinition
+from core.models.voice_models import VADSegment
 
 __all__ = [
     "StrictBaseModel",
@@ -58,6 +59,7 @@ __all__ = [
     "Language",
     "Context",
     "VariableDefinition",
+    "VADSegment",
     "CalendarProvider",
     "CalendarEventSource",
     "CalendarEventStatus",

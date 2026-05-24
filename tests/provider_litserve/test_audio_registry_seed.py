@@ -65,8 +65,9 @@ def test_init_registry_creates_models_table_with_audio_kinds(tmp_path, unique_id
         ).fetchone()
         assert sql_row is not None
         sql = sql_row[0]
-        for kind in ("llm", "embedding", "rerank", "stt", "tts", "vad"):
+        for kind in ("embedding", "rerank", "stt", "tts", "vad"):
             assert f"'{kind}'" in sql, f"kind={kind} отсутствует в CHECK"
+        assert "'llm'" not in sql
 
 
 def test_bootstrap_seeds_audio_models(tmp_path, unique_id):
@@ -105,7 +106,7 @@ def test_sync_defaults_updates_kind_when_existing_record_has_wrong_kind(
     init_registry(cfg)
     create_or_replace_model(
         cfg,
-        kind="llm",
+        kind="rerank",
         hf_model_id="x/wrong",
         api_model_id=f"gigaam-{unique_id}",
     )

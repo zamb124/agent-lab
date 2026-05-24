@@ -114,7 +114,7 @@ tools:
 
   - id: format_text_markdown
     public: true
-    description: "Преобразование текста в структурированный Markdown (LitServe или LLM)"
+    description: "Преобразование текста в структурированный Markdown через company LLM capability"
 
   - id: sandbox_codegen
     public: true

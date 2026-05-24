@@ -1130,9 +1130,24 @@ class ProviderLitserveVADModelEntry(BaseModel):
     )
 
 
+class TextTransformsConfig(BaseModel):
+    """Платформенные настройки текстовых трансформаций поверх company LLM capabilities."""
+
+    markdown_max_chunk_chars: int = Field(
+        default=6000,
+        ge=512,
+        le=100_000,
+        description="Максимум символов на чанк перед LLM-format Markdown.",
+    )
+    markdown_chunk_join: str = Field(
+        default="\n\n",
+        description="Склейка между отформатированными markdown-чанками.",
+    )
+
+
 class ProviderLitserveInfraConfig(BaseModel):
     """
-    Деплой локального OpenAI-совместимого LitServe: один HTTP-порт, воркеры эмбеддингов и реранка.
+    Деплой локального OpenAI-совместимого LitServe: один HTTP-порт, локальные не-LLM воркеры.
 
     Относится к процессу ``apps.provider_litserve.main``, не к доменному ``rag.reranker``.
     Переопределение деплоя: ``services.provider_litserve``; ENV: ``PROVIDER_LITSERVE__INFRA__*``.
@@ -1181,7 +1196,7 @@ class ProviderLitserveInfraConfig(BaseModel):
         description=(
             "Устройство только для POST /v1/rerank (FlagLLM реранкер). "
             "auto — то же, что глобальный accelerator для воркера; "
-            "cpu — принудительно CPU (разгрузка VRAM под STT/chat на малой карте)."
+            "cpu — принудительно CPU (разгрузка VRAM под STT на малой карте)."
         ),
     )
     workers_per_device: int = 1
@@ -1211,67 +1226,8 @@ class ProviderLitserveInfraConfig(BaseModel):
     embedding_model_id: str = "Qwen/Qwen3-Embedding-0.6B"
     embedding_openai_model_id: str = "qwen/qwen3-embedding-0.6b"
     rerank_openai_model_id: str = "qwen/qwen3-reranker-0.6b"
-    llm_model_id: str = "Qwen/Qwen2.5-1.5B-Instruct"
     embedding_model_ids: list[str] = Field(default_factory=list)
     rerank_model_ids: list[str] = Field(default_factory=list)
-    llm_model_ids: list[str] = Field(
-        default_factory=lambda: [
-            "Qwen/Qwen2.5-1.5B-Instruct",
-        ],
-    )
-    markdown_default_api_model_id: str = Field(
-        default="Qwen/Qwen2.5-1.5B-Instruct",
-        description=(
-            "api/HF id LLM по умолчанию для POST /v1/text/format_markdown (должен быть в llm_model_ids или реестре). "
-            "Дефолт совпадает с llm_model_id — та же локальная модель, что для чата и суммаризации через LitServe."
-        ),
-    )
-    markdown_max_chunk_chars: int = Field(
-        default=6000,
-        ge=512,
-        le=100_000,
-        description="Максимум символов на чанк перед батчевым generate.",
-    )
-    markdown_max_microbatch: int = Field(
-        default=2,
-        ge=1,
-        le=16,
-        description="Сколько чанков за один вызов model.generate (меньше — ниже пик RAM на KV-cache).",
-    )
-    markdown_max_new_tokens: int = Field(
-        default=1024,
-        ge=64,
-        le=8192,
-        description=(
-            "Лимит новых токенов на один чанк (после промпта). Фактический вызов generate использует "
-            "min(это значение, длина промпта + slack) — меньше простоя без EOS на коротких чанках."
-        ),
-    )
-    markdown_chunk_join: str = Field(
-        default="\n\n",
-        description="Склейка между отформатированными чанками в одном ответе.",
-    )
-    markdown_tokenizer_max_length: int = Field(
-        default=8192,
-        ge=512,
-        le=131072,
-        description="truncation max_length при токенизации батча промптов.",
-    )
-    markdown_format_repetition_penalty: float = Field(
-        default=1.15,
-        ge=1.0,
-        le=2.0,
-        description="repetition_penalty для POST /v1/text/format_markdown (1.0 — без штрафа).",
-    )
-    markdown_microbatch_peak_cap: int = Field(
-        default=2,
-        ge=1,
-        le=16,
-        description=(
-            "Верхняя граница эффективного microbatch для format_markdown: "
-            "min(запрошенный microbatch, этот cap). Снижает пик памяти; на GPU cap можно поднять."
-        ),
-    )
 
     stt_models: list["ProviderLitserveSTTModelEntry"] = Field(
         default_factory=lambda: [
@@ -1339,7 +1295,7 @@ class ProviderLitserveInfraConfig(BaseModel):
 
 
 class ProviderLitserveConfig(BaseModel):
-    """Локальные модели эмбеддинга/реранка: клиентский корень API (``api``) и инфраструктура LitServe (``infra``)."""
+    """Локальные не-LLM модели: клиентский корень API (``api``) и инфраструктура LitServe (``infra``)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1604,7 +1560,7 @@ class LLMConfig(BaseModel):
         default=HUMANITEC_LLM_PROVIDER,
         description=(
             "Провайдер: humanitec_llm, openai, openrouter, bothub, "
-            "provider_litserve, yandex"
+            "yandex"
         ),
     )
     default_model: str = Field(default=HUMANITEC_LLM_AUTO_MODEL)

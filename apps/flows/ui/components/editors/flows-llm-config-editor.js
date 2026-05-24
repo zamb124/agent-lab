@@ -40,7 +40,6 @@ const LLM_ROUTING_PROVIDER_SLUGS = new Set([
     'openrouter',
     'openai',
     'bothub',
-    'provider_litserve',
     'yandex',
     HUMANITEC_LLM_PROVIDER,
 ]);

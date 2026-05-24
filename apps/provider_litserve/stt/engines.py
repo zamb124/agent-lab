@@ -157,8 +157,8 @@ class WhisperASRPipeline(Protocol):
     ) -> WhisperPipelineResult: ...
 
 
-class GigaAMModelFactory(Protocol):
-    def from_pretrained(
+class GigaAMModelLoader(Protocol):
+    def __call__(
         self,
         hf_model_id: str,
         *,
@@ -168,12 +168,12 @@ class GigaAMModelFactory(Protocol):
     ) -> GigaAMModel: ...
 
 
-class CTCProcessorFactory(Protocol):
-    def from_pretrained(self, hf_model_id: str, *, revision: str | None, token: str | None) -> CTCProcessor: ...
+class CTCProcessorLoader(Protocol):
+    def __call__(self, hf_model_id: str, *, revision: str | None, token: str | None) -> CTCProcessor: ...
 
 
-class CTCModelFactory(Protocol):
-    def from_pretrained(
+class CTCModelLoader(Protocol):
+    def __call__(
         self,
         hf_model_id: str,
         *,
@@ -183,12 +183,12 @@ class CTCModelFactory(Protocol):
     ) -> CTCModel: ...
 
 
-class WhisperProcessorFactory(Protocol):
-    def from_pretrained(self, hf_model_id: str, *, revision: str | None, token: str | None) -> WhisperProcessor: ...
+class WhisperProcessorLoader(Protocol):
+    def __call__(self, hf_model_id: str, *, revision: str | None, token: str | None) -> WhisperProcessor: ...
 
 
-class WhisperModelFactory(Protocol):
-    def from_pretrained(
+class WhisperModelLoader(Protocol):
+    def __call__(
         self,
         hf_model_id: str,
         *,
@@ -367,8 +367,8 @@ class _GigaAMAdapter(_BaseSTTAdapter[GigaAMModel]):
         _require_cuda_when_selected(self._device)
         logger.info("STT gigaam: загрузка hf=%s revision=%s device=%s", hf_model_id, revision, self._device)
         started = time.monotonic()
-        model_factory = cast(GigaAMModelFactory, AutoModel)
-        model = model_factory.from_pretrained(
+        load_model = cast(GigaAMModelLoader, AutoModel.from_pretrained)
+        model = load_model(
             hf_model_id,
             revision=revision,
             trust_remote_code=True,
@@ -407,10 +407,10 @@ class _HuggingfaceCTCAdapter(_BaseSTTAdapter[CTCBundle]):
             hf_model_id, revision, self._device,
         )
         started = time.monotonic()
-        processor_factory = cast(CTCProcessorFactory, AutoProcessor)
-        model_factory = cast(CTCModelFactory, AutoModelForCTC)
-        processor = processor_factory.from_pretrained(hf_model_id, revision=revision, token=self._cfg.hf_token)
-        model = model_factory.from_pretrained(
+        load_processor = cast(CTCProcessorLoader, AutoProcessor.from_pretrained)
+        load_model = cast(CTCModelLoader, AutoModelForCTC.from_pretrained)
+        processor = load_processor(hf_model_id, revision=revision, token=self._cfg.hf_token)
+        model = load_model(
             hf_model_id,
             revision=revision,
             token=self._cfg.hf_token,
@@ -449,11 +449,11 @@ class _WhisperAdapter(_BaseSTTAdapter[WhisperASRPipeline]):
         _require_cuda_when_selected(self._device)
         logger.info("STT whisper: загрузка hf=%s revision=%s device=%s", hf_model_id, revision, self._device)
         started = time.monotonic()
-        processor_factory = cast(WhisperProcessorFactory, AutoProcessor)
-        model_factory = cast(WhisperModelFactory, AutoModelForSpeechSeq2Seq)
+        load_processor = cast(WhisperProcessorLoader, AutoProcessor.from_pretrained)
+        load_model = cast(WhisperModelLoader, AutoModelForSpeechSeq2Seq.from_pretrained)
         pipeline_factory = cast(ASRPipelineFactory, pipeline)
-        processor = processor_factory.from_pretrained(hf_model_id, revision=revision, token=self._cfg.hf_token)
-        model = model_factory.from_pretrained(
+        processor = load_processor(hf_model_id, revision=revision, token=self._cfg.hf_token)
+        model = load_model(
             hf_model_id,
             revision=revision,
             token=self._cfg.hf_token,

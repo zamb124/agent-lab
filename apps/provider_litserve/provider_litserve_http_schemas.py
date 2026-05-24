@@ -7,9 +7,11 @@ HTTP-контракты ``provider_litserve`` для OpenAPI и проверок
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from core.models.voice_models import VADSegment
 
 
 class EmbeddingDataItem(BaseModel):
@@ -36,6 +38,12 @@ class RerankResponseBody(BaseModel):
     """Ответ POST ``/v1/rerank`` (как ожидает ``RerankerHTTPClient``)."""
 
     scores: list[float] = Field(description="Релевантность каждого элемента ``passages`` в том же порядке.")
+
+
+class VADSegmentsResponseBody(BaseModel):
+    """Ответ POST ``/v1/audio/vad``."""
+
+    segments: list[VADSegment]
 
 
 class ModelArchitectureSchema(BaseModel):
@@ -73,19 +81,7 @@ class V1ModelItemSchema(BaseModel):
 
 
 class V1ModelsResponseBody(BaseModel):
-    """Ответ GET ``/v1/models`` (модели эмбеддингов, реранка и чата)."""
+    """Ответ GET ``/v1/models`` (модели эмбеддингов, реранка и речи)."""
 
     object: Literal["list"] = "list"
     data: list[V1ModelItemSchema]
-
-
-def validate_embeddings_response(payload: dict[str, Any]) -> OpenAIEmbeddingsResponseBody:
-    return OpenAIEmbeddingsResponseBody.model_validate(payload)
-
-
-def validate_rerank_response(payload: dict[str, Any]) -> RerankResponseBody:
-    return RerankResponseBody.model_validate(payload)
-
-
-def validate_v1_models_response(payload: dict[str, Any]) -> V1ModelsResponseBody:
-    return V1ModelsResponseBody.model_validate(payload)

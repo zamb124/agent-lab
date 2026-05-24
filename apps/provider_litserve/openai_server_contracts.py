@@ -6,9 +6,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict
+
+from apps.provider_litserve.provider_litserve_http_schemas import (
+    EmbeddingDataItem,
+    ModelArchitectureSchema,
+    ModelPricingSchema,
+    OpenAIEmbeddingsResponseBody,
+    TopProviderSchema,
+    V1ModelItemSchema,
+    V1ModelsResponseBody,
+)
 
 
 def _openrouter_like_model_object(
@@ -20,35 +30,34 @@ def _openrouter_like_model_object(
     context_length: int,
     output_modalities: list[str],
     input_modalities: list[str] | None = None,
-) -> dict[str, Any]:
+) -> V1ModelItemSchema:
     """Один элемент ``data[]`` для GET ``/v1/models`` (форма как у OpenRouter)."""
     ins = input_modalities if input_modalities is not None else ["text"]
     slug = model_id.replace("/", "-").lower()
-    return {
-        "id": model_id,
-        "canonical_slug": slug,
-        "name": name,
-        "created": created,
-        "description": description,
-        "context_length": context_length,
-        "architecture": {
-            "input_modalities": ins,
-            "output_modalities": output_modalities,
-        },
-        "pricing": {
-            "prompt": "0",
-            "completion": "0",
-            "request": "0",
-            "image": "0",
-        },
-        "top_provider": {
-            "name": "humanitec-rag-gateway",
-            "is_moderated": False,
-        },
-        "per_request_limits": None,
-        "object": "model",
-        "owned_by": "humanitec-rag-gateway",
-    }
+    return V1ModelItemSchema(
+        id=model_id,
+        canonical_slug=slug,
+        name=name,
+        created=created,
+        description=description,
+        context_length=context_length,
+        architecture=ModelArchitectureSchema(
+            input_modalities=ins,
+            output_modalities=output_modalities,
+        ),
+        pricing=ModelPricingSchema(
+            prompt="0",
+            completion="0",
+            request="0",
+            image="0",
+        ),
+        top_provider=TopProviderSchema(
+            name="humanitec-rag-gateway",
+            is_moderated=False,
+        ),
+        per_request_limits=None,
+        owned_by="humanitec-rag-gateway",
+    )
 
 
 def build_provider_litserve_v1_models_response(
@@ -62,14 +71,13 @@ def build_provider_litserve_v1_models_response(
     rerank_model_ids: list[str],
     rerank_hf_model_id: str,
     rerank_context_length: int,
-    chat_model_ids: list[str],
     stt_model_ids: list[str],
     tts_model_ids: list[str],
     vad_model_ids: list[str],
     created: int,
-) -> dict[str, Any]:
+) -> V1ModelsResponseBody:
     """
-    Тело GET ``/v1/models`` для провайдера: модели эмбеддингов, реранка и чата,
+    Тело GET ``/v1/models`` для провайдера: модели эмбеддингов, реранка и речи,
     те же поля верхнего уровня, что у OpenRouter ``/models``.
     """
     def _uniq(ids: list[str]) -> list[str]:
@@ -85,12 +93,11 @@ def build_provider_litserve_v1_models_response(
 
     embedding_ids = _uniq([embedding_openai_model_id, *embedding_model_ids])
     rerank_ids = _uniq([rerank_openai_model_id, *rerank_model_ids])
-    chat_ids = _uniq(chat_model_ids)
     stt_ids = _uniq(stt_model_ids)
     tts_ids = _uniq(tts_model_ids)
     vad_ids = _uniq(vad_model_ids)
 
-    data: list[dict[str, Any]] = []
+    data: list[V1ModelItemSchema] = []
 
     for emb_id in embedding_ids:
         data.append(
@@ -120,18 +127,6 @@ def build_provider_litserve_v1_models_response(
                 ),
                 created=created,
                 context_length=rerank_context_length,
-                output_modalities=["text"],
-            )
-        )
-
-    for chat_id in chat_ids:
-        data.append(
-            _openrouter_like_model_object(
-                model_id=chat_id,
-                name=chat_id,
-                description="OpenAI-compatible chat via POST /v1/chat/completions.",
-                created=created,
-                context_length=131072,
                 output_modalities=["text"],
             )
         )
@@ -182,16 +177,13 @@ def build_provider_litserve_v1_models_response(
             )
         )
 
-    return {
-        "object": "list",
-        "data": data,
-    }
+    return V1ModelsResponseBody(data=data)
 
 
 class OpenAIEmbeddingsRequest(BaseModel):
     """Тело POST ``/v1/embeddings`` (совместимо с OpenAI)."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
 
     model: str
     input: str | list[str]
@@ -200,7 +192,7 @@ class OpenAIEmbeddingsRequest(BaseModel):
 class RerankQueryPassagesRequest(BaseModel):
     """Тело POST ``/v1/rerank`` (совпадает с полезной нагрузкой ``RerankerHTTPClient``)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     model: str | None = None
     query: str
@@ -211,22 +203,20 @@ def normalize_embedding_inputs(inp: str | list[str]) -> list[str]:
     return [inp] if isinstance(inp, str) else list(inp)
 
 
-def build_openai_embeddings_response(*, model_id: str, vectors: list[list[float]]) -> dict[str, Any]:
+def build_openai_embeddings_response(*, model_id: str, vectors: list[list[float]]) -> OpenAIEmbeddingsResponseBody:
     """Ответ POST ``/v1/embeddings`` (поле ``model`` — канонический id, как в ``EmbeddingService``)."""
-    data: list[dict[str, Any]] = [
-        {
-            "object": "embedding",
-            "embedding": row,
-            "index": i,
-        }
+    data = [
+        EmbeddingDataItem(
+            embedding=row,
+            index=i,
+        )
         for i, row in enumerate(vectors)
     ]
-    return {
-        "object": "list",
-        "data": data,
-        "model": model_id,
-        "usage": {"prompt_tokens": 0, "total_tokens": 0},
-    }
+    return OpenAIEmbeddingsResponseBody(
+        data=data,
+        model=model_id,
+        usage={"prompt_tokens": 0, "total_tokens": 0},
+    )
 
 
 def placeholder_rerank_scores(query: str, passages: list[str]) -> list[float]:

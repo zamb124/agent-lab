@@ -44,7 +44,7 @@ description: "CRM (NetWorkle): entities, relationships, graph, namespaces, AI an
 
 `member`/`contact`/`company` имеют `optional_fields.aliases` (`array`) — для @-обогащения.
 
-**Подтипы заметки** (`meeting`/`call` из AI-черновика): `entity_type=note`, `entity_subtype=meeting|call` — попадают в `/crm/notes`. Push ``crm/note/updated`` может содержать ``markdown_format``: ``phase: 'started'`` при постановке TaskIQ format Markdown (UI спиннер); ``complete`` + ``chunks_done``/``chunks_total`` после ответа LitServe (один HTTP из CRM-воркера).
+**Подтипы заметки** (`meeting`/`call` из AI-черновика): `entity_type=note`, `entity_subtype=meeting|call` — попадают в `/crm/notes`. Push ``crm/note/updated`` может содержать ``markdown_format``: ``phase: 'started'`` при постановке TaskIQ format Markdown (UI спиннер); ``complete`` + ``chunks_done``/``chunks_total`` после ответа общего `TextTransformService`.
 
 **Якоря контекста** (`COMMON_NAMESPACE_ANCHOR_TYPES`, `is_context_anchor=True`): `topic`, `organization`, `project`.
 

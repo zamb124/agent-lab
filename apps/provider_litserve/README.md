@@ -1,6 +1,6 @@
-# Реранкер и эмбеддер (LitServe, OpenAI-совместимый API)
+# Локальные модели LitServe
 
-**`provider_litserve` в `conf.json`** — контур **локальных** моделей: клиенты RAG (`rag.embedding` / `rag.reranker` с **`provider: provider_litserve`**) ходят на HTTP API LitServe. Инференс выполняется во **воркерах** LitServe (отдельные процессы на эндпоинты `/v1/embeddings` и `/v1/rerank`). Облачные эмбеддинги без своего стека — **`openrouter`** из **`llm`**, не этот блок.
+**`provider_litserve` в `conf.json`** — контур **локальных не-LLM моделей**: RAG использует эмбеддер и реранкер (`rag.embedding` / `rag.reranker` с **`provider: provider_litserve`**), voice-контур использует отдельные STT/TTS/VAD endpoints. Облачные эмбеддинги без своего стека — **`openrouter`** из **`llm`**, не этот блок.
 
 Один процесс:
 
@@ -10,17 +10,18 @@
 
 **Маршруты** (один хост:порт):
 
-- **GET** `/v1/models` — список моделей в форме OpenRouter (эмбеддинги, реранк и чат-модель).
-- **POST** `/v1/chat/completions` — OpenAI-совместимый чат через встроенный `LitServe OpenAISpec` и локальную HF-модель.
+- **GET** `/v1/models` — список локальных моделей в форме OpenRouter.
 - **POST** `/v1/embeddings` — OpenAI-совместимое тело; инференс во воркерах **`EmbeddingLitAPI`** ([`embedding/api.py`](embedding/api.py), движок [`embedding/engines.py`](embedding/engines.py)).
 - **POST** `/v1/rerank` — тело `{query, passages}`; ответ `{scores}`; инференс во воркерах **`RerankerLitAPI`** ([`reranker/api.py`](reranker/api.py), движок [`reranker/engines.py`](reranker/engines.py)).
-- **POST** `/v1/text/format_markdown` — тело `{text, model?, max_chunk_chars?, max_microbatch?, max_new_tokens?, chunk_join?}`; ответ `{markdown, chunks_total, chunks_processed, model}`; инференс во воркерах **`MarkdownFormatLitAPI`** ([`markdown_format/api.py`](markdown_format/api.py), движок [`markdown_format/engines.py`](markdown_format/engines.py)). Батчевый `generate` по чанкам текста; модель — запись **`llm`** в конфиге/реестре (`markdown_default_api_model_id`).
+- **POST** `/v1/audio/transcriptions` — локальный STT для voice-контуров.
+- **POST** `/v1/audio/speech` — локальный TTS для voice-контуров.
+- **POST** `/v1/audio/vad` — локальный VAD для voice-контуров.
 
-**Память и дублирование весов LLM.** Кеш `ensure_local_causal_lm` (см. [`llm/local_causal_lm.py`](llm/local_causal_lm.py)) — **на процесс**. LitServe поднимает **отдельный** inference-воркер на каждый `LitAPI`; маршруты **`/v1/chat/completions`** и **`/v1/text/format_markdown`** обрабатываются **разными процессами**. Если оба уже вызывали один и тот же `hf_model_id`, в RAM будет **две полные копии** модели (ожидаемо). Внутри одного воркера повторные запросы переиспользуют один экземпляр. Загрузка на CUDA/MPS идёт в `float16`/`bfloat16`; лимит пика при `format_markdown` задаёт **`markdown_microbatch_peak_cap`** (см. `ProviderLitserveInfraConfig`).
+LLM-моделей и Markdown endpoint в `provider_litserve` нет. Markdown форматируется общим `TextTransformService` через company capability `llm_format_markdown` и платформенный `get_llm()`.
 
 - **GET** `/health` — встроенный LitServe: текст **`ok`** / **`not ready`** (пока воркеры не готовы).
 
-Контракты HTTP для OpenAPI и интеграционных тестов (in-process ASGI, те же `EmbeddingLitAPI` / `RerankerLitAPI`, без воркеров): [`provider_litserve_asgi.py`](provider_litserve_asgi.py), схемы ответов — [`provider_litserve_http_schemas.py`](provider_litserve_http_schemas.py); тела запросов POST — [`openai_server_contracts.py`](openai_server_contracts.py). Для чата в runtime используется встроенный `OpenAISpec` LitServe.
+Контракты HTTP для OpenAPI и интеграционных тестов (in-process ASGI, те же `EmbeddingLitAPI` / `RerankerLitAPI`, без воркеров): [`provider_litserve_asgi.py`](provider_litserve_asgi.py), схемы ответов — [`provider_litserve_http_schemas.py`](provider_litserve_http_schemas.py); тела запросов POST — [`openai_server_contracts.py`](openai_server_contracts.py).
 
 Общее: [`shared.py`](shared.py). Настройки: [`config.py`](config.py) — `get_provider_litserve_settings()` через `load_merged_config("provider_litserve")`.
 
@@ -44,15 +45,8 @@
     "embedding_model_id": "Qwen/Qwen3-Embedding-0.6B",
     "embedding_openai_model_id": "qwen/qwen3-embedding-0.6b",
     "rerank_openai_model_id": "qwen/qwen3-reranker-0.6b",
-    "llm_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
     "embedding_model_ids": [],
-    "rerank_model_ids": [],
-    "llm_model_ids": ["Qwen/Qwen2.5-1.5B-Instruct"],
-    "markdown_default_api_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
-    "markdown_max_chunk_chars": 6000,
-    "markdown_max_microbatch": 2,
-    "markdown_microbatch_peak_cap": 2,
-    "markdown_max_new_tokens": 1024
+    "rerank_model_ids": []
   }
 }
 ```
@@ -76,7 +70,7 @@
 
 Кэш моделей переживает рестарт пода — PVC `litserve-model-cache` (50Gi) на GPU-ноде, монтируется в `/root/.cache/huggingface`.
 
-Пока runtime-каталог не поднят с SQLite, идентификаторы в **GET /v1/models** строятся из той же схемы, что сид **infra**: **`llm_model_ids`** / **`llm_model_id`**, пары **embedding** / **rerank** (дефолтные `*_openai_model_id` + списки **`embedding_model_ids`**, **`rerank_model_ids`**). После загрузки воркеров — из строк реестра с `status=ready`.
+Пока runtime-каталог не поднят с SQLite, идентификаторы в **GET /v1/models** строятся из той же схемы, что сид **infra**: пары **embedding** / **rerank** (дефолтные `*_openai_model_id` + списки **`embedding_model_ids`**, **`rerank_model_ids`**). После загрузки воркеров — из строк реестра с `status=ready`.
 
 ## Сценарии
 

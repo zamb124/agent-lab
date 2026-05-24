@@ -80,9 +80,8 @@ async def format_note_description_markdown_task(
     task_id: str | None = None,
 ) -> JsonObject:
     """
-    Форматирует заметку через общий TextTransformService. По умолчанию это платформенный
-    платформенный LLM default-route с candidate/fallback логикой; явный LitServe остаётся
-    доступен на уровне TextTransformService/provider override.
+    Форматирует заметку через общий TextTransformService. Модель выбирается через
+    company capability ``llm_format_markdown`` с платформенным humanitec_llm default-route.
     """
     await set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
     container = get_crm_container()
@@ -189,13 +188,10 @@ async def format_note_description_markdown_task(
         )
         return {"status": "skipped_empty_description", "note_id": note_id}
 
-    chunk_lim = int(get_settings().provider_litserve.infra.markdown_max_chunk_chars)
+    chunk_lim = int(get_settings().text_transforms.markdown_max_chunk_chars)
     chunks_total = len(split_text_into_markdown_chunks(str(desc).strip(), chunk_lim)) or 1
     try:
-        markdown_raw = await TextTransformService().format_markdown(
-            str(desc).strip(),
-            max_chunk_chars=chunk_lim,
-        )
+        markdown_raw = await TextTransformService().format_markdown(str(desc).strip())
     except Exception as exc:
         logger.warning(
             "note_markdown_format_failed",

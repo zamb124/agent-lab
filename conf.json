@@ -246,6 +246,10 @@
     },
     "timeout": 300
   },
+  "text_transforms": {
+    "markdown_max_chunk_chars": 6000,
+    "markdown_chunk_join": "\n\n"
+  },
   "s3": {
     "enabled": true,
     "default_bucket": "shvedzilla",
@@ -505,15 +509,6 @@
           "embedding_openai_model_id": "qwen/qwen3-embedding-0.6b",
           "rerank_openai_model_id": "qwen/qwen3-reranker-0.6b",
           "embedding_model_ids": [],
-          "llm_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
-          "llm_model_ids": ["Qwen/Qwen2.5-1.5B-Instruct"],
-          "markdown_default_api_model_id": "Qwen/Qwen2.5-1.5B-Instruct",
-          "markdown_max_chunk_chars": 6000,
-          "markdown_max_microbatch": 4,
-          "markdown_max_new_tokens": 1024,
-          "markdown_chunk_join": "\n\n",
-          "markdown_format_repetition_penalty": 1.15,
-          "markdown_tokenizer_max_length": 8192,
           "sqlite_path": "./data/provider_litserve/registry.db",
           "rerank_model_ids": [],
           "use_fp16": true,
