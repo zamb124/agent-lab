@@ -2,14 +2,18 @@
 Web Push Service для отправки push-уведомлений
 """
 import json
-from typing import Any
+from typing import TypeAlias
 
 from pywebpush import WebPushException, webpush
 
 from core.logging import get_logger
 from core.push.models import PushSubscription
+from core.types import JsonObject
 
 logger = get_logger(__name__)
+
+WebPushKeys: TypeAlias = dict[str, str | bytes]
+WebPushSubscriptionInfo: TypeAlias = dict[str, str | bytes | WebPushKeys]
 
 
 class WebPushService:
@@ -21,10 +25,10 @@ class WebPushService:
         vapid_public_key: str,
         vapid_email: str
     ):
-        self.vapid_private_key = vapid_private_key
-        self.vapid_public_key = vapid_public_key
+        self.vapid_private_key: str = vapid_private_key
+        self.vapid_public_key: str = vapid_public_key
         self.vapid_claims: dict[str, str | int] = {"sub": f"mailto:{vapid_email}"}
-        self._initialized = bool(vapid_private_key and vapid_public_key)
+        self._initialized: bool = bool(vapid_private_key and vapid_public_key)
 
     @property
     def is_configured(self) -> bool:
@@ -39,7 +43,7 @@ class WebPushService:
         url: str | None = None,
         tag: str | None = None,
         priority: str = "normal",
-        data: dict[str, Any] | None = None,
+        data: JsonObject | None = None,
     ) -> bool:
         """
         Отправить push-уведомление на устройство
@@ -51,7 +55,7 @@ class WebPushService:
             logger.warning("WebPushService не настроен - пропускаем отправку")
             return False
 
-        payload = {
+        payload: JsonObject = {
             "title": title,
             "message": message,
             "url": url or "/",
@@ -61,11 +65,13 @@ class WebPushService:
         }
 
         try:
-            webpush(
-                subscription_info={
-                    "endpoint": subscription.endpoint,
-                    "keys": subscription.keys
-                },
+            keys: WebPushKeys = dict(subscription.keys)
+            subscription_info: WebPushSubscriptionInfo = {
+                "endpoint": subscription.endpoint,
+                "keys": keys,
+            }
+            _ = webpush(
+                subscription_info=subscription_info,
                 data=json.dumps(payload),
                 vapid_private_key=self.vapid_private_key,
                 vapid_claims=self.vapid_claims
@@ -94,7 +100,7 @@ class WebPushService:
         url: str | None = None,
         tag: str | None = None,
         priority: str = "normal",
-        data: dict[str, Any] | None = None,
+        data: JsonObject | None = None,
     ) -> list[str]:
         """
         Отправить push на все устройства пользователя
@@ -102,7 +108,7 @@ class WebPushService:
         Returns:
             Список endpoints с истекшими подписками (для удаления)
         """
-        expired_endpoints = []
+        expired_endpoints: list[str] = []
 
         for subscription in subscriptions:
             if subscription.endpoint.startswith("apns:"):

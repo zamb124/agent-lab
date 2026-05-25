@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TypeAlias
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from croniter import croniter
+from taskiq.abc.broker import AsyncBroker
 from taskiq.kicker import AsyncKicker
 
 from core.scheduler.models import (
@@ -19,10 +20,11 @@ from core.scheduler.models import (
     PlatformScheduleType,
     ScheduledTaskStatus,
 )
-from core.scheduler.payload import normalize_schedule_task_payload
 from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.source import get_schedule_source
 from core.tasks.kicker import build_log_labels
+
+BrokerForQueue: TypeAlias = Callable[[str], AsyncBroker]
 
 
 class SchedulerService:
@@ -32,11 +34,11 @@ class SchedulerService:
         self,
         repository: SchedulerTaskRepository,
         redis_url: str,
-        broker_for_queue: Callable[[str], Any],
+        broker_for_queue: BrokerForQueue,
     ) -> None:
-        self._repository = repository
-        self._redis_url = redis_url
-        self._broker_for_queue = broker_for_queue
+        self._repository: SchedulerTaskRepository = repository
+        self._redis_url: str = redis_url
+        self._broker_for_queue: BrokerForQueue = broker_for_queue
 
     @staticmethod
     def _status_value(status: ScheduledTaskStatus | str) -> str:
@@ -73,14 +75,12 @@ class SchedulerService:
         return task
 
     @staticmethod
-    def _interval_seconds_from_taskiq(interval: Any) -> int | None:
+    def _interval_seconds_from_taskiq(interval: int | timedelta | None) -> int | None:
         if interval is None:
             return None
         if isinstance(interval, timedelta):
             return int(interval.total_seconds())
-        if isinstance(interval, int):
-            return interval
-        raise ValueError(f"unsupported interval type from redis schedule: {type(interval)}")
+        return interval
 
     @staticmethod
     def _build_task_labels(task: PlatformScheduledTask) -> dict[str, str]:
@@ -96,7 +96,7 @@ class SchedulerService:
             raise ValueError(f"queue_name is required for scheduled task: {task.task_name}")
         labels = {"queue_name": queue_name}
         broker = self._broker_for_queue(queue_name)
-        kicker = AsyncKicker(
+        kicker: AsyncKicker[..., str] = AsyncKicker(
             task_name=task.task_name,
             broker=broker,
             labels=labels,
@@ -141,7 +141,7 @@ class SchedulerService:
             interval_seconds=request.interval_seconds,
             run_at=request.run_at,
             timezone=request.timezone,
-            payload=normalize_schedule_task_payload(request.payload),
+            payload=request.payload,
             status=ScheduledTaskStatus.PENDING,
             created_by_user_id=user_id,
             created_at=now,
@@ -222,8 +222,8 @@ class SchedulerService:
             raise ValueError(f"schedule_id is required for task {schedule_task_id}")
         source = get_schedule_source(self._redis_url)
         await source.startup()
-        await source.delete_schedule(task.schedule_id)
-        await self._repository.update_status(
+        _ = await source.delete_schedule(task.schedule_id)
+        _ = await self._repository.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.PAUSED,
@@ -237,7 +237,7 @@ class SchedulerService:
             raise ValueError(f"task status must be paused, got {self._status_value(task.status)}")
         schedule_id = await self._create_schedule(task)
         next_run_at = self._calculate_next_run_at(task)
-        await self._repository.update_status(
+        _ = await self._repository.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.PENDING,
@@ -254,8 +254,8 @@ class SchedulerService:
         if task.schedule_id:
             source = get_schedule_source(self._redis_url)
             await source.startup()
-            await source.delete_schedule(task.schedule_id)
-        await self._repository.update_status(
+            _ = await source.delete_schedule(task.schedule_id)
+        _ = await self._repository.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.CANCELLED,
@@ -273,16 +273,16 @@ class SchedulerService:
         labels = {"queue_name": queue_name}
         broker = self._broker_for_queue(queue_name)
         labels.update(build_log_labels(background_kind="sched"))
-        kicker = AsyncKicker(
+        kicker: AsyncKicker[..., str] = AsyncKicker(
             task_name=task.task_name,
             broker=broker,
             labels=labels,
         )
-        await kicker.kiq(**normalize_schedule_task_payload(task.payload))
+        _ = await kicker.kiq(**task.payload)
         next_run_at = task.next_run_at
         if task.schedule_type in (PlatformScheduleType.CRON, PlatformScheduleType.INTERVAL):
             next_run_at = self._calculate_next_run_at(task)
-        await self._repository.update_status(
+        _ = await self._repository.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=task.status,
@@ -293,7 +293,7 @@ class SchedulerService:
         return await self.get(company_id, schedule_task_id)
 
     async def mark_failed(self, company_id: str, schedule_task_id: str, error_message: str) -> None:
-        await self._repository.update_status(
+        _ = await self._repository.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.FAILED,

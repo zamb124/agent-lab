@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Protocol, cast
-
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.subdomain_repository import SubdomainRepository
 from core.db.repositories.user_repository import UserRepository
@@ -19,24 +17,13 @@ SYSTEM_ADMIN_EMAIL = "zambas124@yandex.ru"
 ADMIN_ROLE = "admin"
 
 
-class SystemBootstrapContainer(Protocol):
-    @property
-    def company_repository(self) -> CompanyRepository: ...
-
-    @property
-    def subdomain_repository(self) -> SubdomainRepository: ...
-
-    @property
-    def user_repository(self) -> UserRepository: ...
-
-
-def as_system_bootstrap_container(container: object) -> SystemBootstrapContainer:
-    return cast(SystemBootstrapContainer, container)
-
-
-async def ensure_system_company_exists(container: SystemBootstrapContainer) -> Company:
+async def ensure_system_company_exists(
+    *,
+    company_repository: CompanyRepository,
+    subdomain_repository: SubdomainRepository,
+) -> Company:
     """Гарантирует наличие system-компании в shared storage."""
-    company = await container.company_repository.get(SYSTEM_COMPANY_ID)
+    company = await company_repository.get(SYSTEM_COMPANY_ID)
     if company is None:
         company = Company(
             company_id=SYSTEM_COMPANY_ID,
@@ -44,7 +31,7 @@ async def ensure_system_company_exists(container: SystemBootstrapContainer) -> C
             subdomain=SYSTEM_COMPANY_SUBDOMAIN,
             members={},
         )
-        _ = await container.company_repository.set(company)
+        _ = await company_repository.set(company)
         logger.info("Bootstrap created system company")
 
     company_needs_update = False
@@ -53,22 +40,27 @@ async def ensure_system_company_exists(container: SystemBootstrapContainer) -> C
         company_needs_update = True
 
     if company_needs_update:
-        _ = await container.company_repository.set(company)
+        _ = await company_repository.set(company)
         logger.info("Bootstrap updated system company subdomain to %s", SYSTEM_COMPANY_SUBDOMAIN)
 
-    _ = await container.subdomain_repository.set_mapping(SYSTEM_COMPANY_SUBDOMAIN, SYSTEM_COMPANY_ID)
+    _ = await subdomain_repository.set_mapping(SYSTEM_COMPANY_SUBDOMAIN, SYSTEM_COMPANY_ID)
     return company
 
 
 async def ensure_system_admin_membership(
-    container: SystemBootstrapContainer,
     *,
+    company_repository: CompanyRepository,
+    subdomain_repository: SubdomainRepository,
+    user_repository: UserRepository,
     user_email: str = SYSTEM_ADMIN_EMAIL,
 ) -> tuple[Company, User | None]:
     """Гарантирует system-компанию и при наличии пользователя user_email — роль admin в ней."""
-    system_company = await ensure_system_company_exists(container)
+    system_company = await ensure_system_company_exists(
+        company_repository=company_repository,
+        subdomain_repository=subdomain_repository,
+    )
 
-    users = await container.user_repository.list(limit=10000)
+    users = await user_repository.list(limit=10000)
     matched_users = [user for user in users if user_email in user.emails]
     if not matched_users:
         logger.warning(
@@ -92,8 +84,8 @@ async def ensure_system_admin_membership(
         target_user.companies[system_company.company_id] = [*user_roles, ADMIN_ROLE]
 
     if company_needs_update or user_needs_update:
-        _ = await container.company_repository.set(system_company)
-        _ = await container.user_repository.set(target_user)
+        _ = await company_repository.set(system_company)
+        _ = await user_repository.set(target_user)
         logger.info(
             "Bootstrap updated: granted admin role for %s in company %s",
             user_email,

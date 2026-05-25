@@ -1,8 +1,14 @@
 ---
-description: "Runtime flows: ноды, tools, ветки (branches), FlowInterrupt, InterruptManager"
+description: "Runtime flows: durable graph execution, ноды, activities, ветки, FlowInterrupt"
 alwaysApply: false
 ---
 # Flows — краткий справочник
+
+## Durable execution invariant
+
+Flows исполняются как durable workflow runtime: `workflow_events` — источник истины, `ExecutionState` — projection, Redis — cache. Любая новая логика resume/retry/time-travel/fork строится через `durable_execution.mdc` и append-only ledger.
+
+Оркестратор графа должен быть детерминированным. LLM/tools/API/code/channel/remote-flow исполняются как durable activities; результат возвращается в граф через events и reducer.
 
 ## NodeType (9 типов)
 
@@ -94,7 +100,11 @@ output_mapping - куда пишем результат:
         "type": "flow",
         "flow_id": "self_flow",
         "branch_id": "math_branch",
-        "args_schema": {"x": {"type": "integer"}}
+        "parameters_schema": {
+            "type": "object",
+            "properties": {"x": {"type": "integer"}},
+            "required": ["x"]
+        }
     }
 
 ## Структура FlowConfig
@@ -171,7 +181,8 @@ output_mapping - куда пишем результат:
 
     state.interrupt: InterruptData          # body (union) + system (конверт)
     state.interrupt_path: List[PathItem]    # Путь к месту прерывания
-    state.nested_states: Dict[str, Data]    # Состояния вложенных вызовов (веток flow / tools)
+    state.nested_states: Dict[str, Data]    # Только activity-local nested tools, не durable FlowNode
+    state.child_workflows: Dict[str, Link]  # Durable child workflow links для FlowNode
     state.current_nodes: List[str]          # Где остановились на графе
 
 ### Сценарий 1: ask_user tool в LlmNode
@@ -193,20 +204,22 @@ output_mapping - куда пишем результат:
 
     Parent flow → FlowNode("call_child") → Child flow → CodeNode → FlowInterrupt
     
-- FlowNode - это нода на графе (type: "flow"), не tool!
+- FlowNode — нода на графе (`type: "flow"`), не tool и не inline snapshot.
+- Child flow запускается как отдельная durable workflow-сессия с собственными `workflow_events`.
+- Parent пишет `ChildWorkflowStarted` и затем `ChildWorkflowSuspended` / `ChildWorkflowCompleted` / `ChildWorkflowFailed`.
 - `current_nodes = ["call_child"]` - где остановились
 - CodeNode может бросить `raise FlowInterrupt(question="...")` 
-- Resume: `Flow.run()` видит `interrupt + content` → продолжает с `current_nodes`
-- FlowNode вызывается повторно, передаёт `state.content` (ответ) в child
+- Resume: `Flow.run()` видит `interrupt + content` → продолжает с `current_nodes`.
+- FlowNode вызывается повторно, берёт тот же `child_session_id` из typed `interrupt_path`/`child_workflows`, грузит child projection из durable runtime и передаёт `state.content` в child.
 
 ### Сценарий 4: FlowNode с LlmNode + ask_user
 
     Parent (LlmNode tool) → child_flow → LlmNode → ask_user
     
 - Комбинация сценариев 2 и 3
-- `interrupt_path` содержит путь: `[child_flow, ask_user]`
-- `nested_states["child_flow"]` хранит историю messages
-- Resume: ответ попадает как tool result в messages child → LLM child продолжает
+- `interrupt_path` содержит typed durable frame для FlowNode: `child_session_id`, `child_flow_id`, `child_flow_branch_id`
+- Child messages/history живут в child workflow projection, не в `nested_states["child_flow"]`
+- Resume: ответ попадает в child projection, затем LLM child продолжает внутри своей durable history
 
 ### Как бросить interrupt
 

@@ -9,17 +9,16 @@ from core.types import JsonObject, JsonValue
 
 if TYPE_CHECKING:
     from apps.flows.src.db import (
-        DatabaseStateRepository,
         EvaluationRepository,
         FlowRepository,
         LLMModelRepository,
         NodeRepository,
         ResourceRepository,
-        ScheduledTaskRepository,
         ToolRepository,
     )
     from apps.flows.src.db.mcp_repository import MCPServerRepository
     from apps.flows.src.db.operator_repository import OperatorRepository
+    from apps.flows.src.durable_execution import DurableWorkflowRuntime
     from apps.flows.src.models import (
         BranchConfig,
         FlowConfig,
@@ -39,7 +38,6 @@ if TYPE_CHECKING:
     from apps.flows.src.services.llm_models_service import LLMModelsService
     from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
     from apps.flows.src.services.schedule_service import ScheduleService
-    from apps.flows.src.state import StateManager
     from apps.flows.src.tools.base import BaseTool
     from apps.flows.src.variables import VariablesService
     from core.billing import BillingService
@@ -242,7 +240,7 @@ class FlowRuntimeContainer(Protocol):
     def flow_factory(self) -> FlowFactoryProtocol: ...
 
     @property
-    def state_manager(self) -> StateManager: ...
+    def workflow_runtime(self) -> DurableWorkflowRuntime: ...
 
     @property
     def variables_service(self) -> VariablesService: ...
@@ -314,12 +312,6 @@ class FlowRuntimeContainer(Protocol):
 
     @property
     def file_repository(self) -> FileRepository: ...
-
-    @property
-    def state_repository(self) -> DatabaseStateRepository: ...
-
-    @property
-    def scheduled_task_repository(self) -> ScheduledTaskRepository: ...
 
     @property
     def evaluation_repository(self) -> EvaluationRepository: ...

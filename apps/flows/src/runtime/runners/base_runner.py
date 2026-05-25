@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from a2a.types import Message, Part, Role, TextPart
 
@@ -31,6 +31,8 @@ logger = get_logger(__name__)
 
 class LlmNodeRunnerHost(Protocol):
     """Structural contract the runner needs from its owning LlmNode."""
+
+    messages_filter: Literal["all", "own"] | list[str]
 
     def get_filtered_messages(self, state: ExecutionState) -> list[Message]: ...
 

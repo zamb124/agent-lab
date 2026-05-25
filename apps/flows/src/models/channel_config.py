@@ -76,7 +76,7 @@ class ChannelNodeConfig(StrictBaseModel):
     """
 
     channel: ChannelType = Field(..., description="Тип канала")
-    action: str = Field(default="send_message", description="Действие")
+    action: str = Field(..., description="Действие")
 
     channel_config: JsonObject = Field(
         default_factory=dict,

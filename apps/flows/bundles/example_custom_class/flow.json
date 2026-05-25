@@ -1,5 +1,5 @@
 {
-  "id": "example_custom_class",
+  "flow_id": "example_custom_class",
   "name": "Пример кастомного класса react-ноды",
   "description": "Демонстрация llm_node_class для кастомной логики ноды flow",
   "tags": [
@@ -45,12 +45,12 @@
   ],
   "edges": [
     {
-      "from": "main",
-      "to": null
+      "from_node": "main",
+      "to_node": null
     },
     {
-      "from": "preprocessor",
-      "to": null
+      "from_node": "preprocessor",
+      "to_node": null
     }
   ],
   "branches": {

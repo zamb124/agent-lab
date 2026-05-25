@@ -38,7 +38,7 @@ from apps.crm_worker.task_names import (
     CRM_RUN_KNOWLEDGE_IMPORT_TASK_NAME,
     CRM_RUN_NAMESPACE_INTEGRATION_JOB_TASK_NAME,
 )
-from core.context import clear_context, get_context, set_context
+from core.context import clear_context, get_context, resolve_namespace_or_raise, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
@@ -521,7 +521,7 @@ class TaskService:
             raise ValueError(f"Заметка не найдена: {note_id}")
         if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
             raise ValueError("Ожидалась заметка (entity_type=note)")
-        namespace = note.namespace or "default"
+        namespace = resolve_namespace_or_raise(note.namespace)
         await self._assert_no_active_task(
             "note_analysis_draft_repair",
             {"note_id": note_id},
@@ -601,7 +601,7 @@ class TaskService:
         desc = note.description
         if desc is None or not str(desc).strip():
             raise ValueError("Текст заметки пуст")
-        ns = note.namespace or "default"
+        ns = resolve_namespace_or_raise(note.namespace)
         await self._assert_no_active_task(
             "note_markdown_format",
             {"note_id": note_id},

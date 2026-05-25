@@ -3,13 +3,13 @@
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query
 
 from apps.frontend.api.platform_billing import (
-    _BILLING_COMPANY_LIST_CAP,
-    _company_matches_billing_facet_query,
+    BILLING_COMPANY_LIST_CAP,
+    company_matches_billing_facet_query,
 )
 from apps.frontend.config import get_frontend_settings
 from apps.frontend.dependencies import ContainerDep
@@ -19,6 +19,7 @@ from apps.frontend.models import (
     PlatformTracingFacetsResponse,
     PlatformTracingSpanItem,
 )
+from core.context import get_context
 from core.db.repositories.company_repository import CompanyRepository
 from core.db.repositories.user_repository import UserRepository
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
@@ -35,12 +36,12 @@ if TYPE_CHECKING:
 router = APIRouter(prefix="/api/platform-tracing", tags=["platform-tracing"])
 
 
-def _require_system(request: Request) -> None:
-    user = getattr(request.state, "user", None)
-    if not user:
+def _require_system() -> None:
+    context = get_context()
+    if context is None:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
-    company = getattr(request.state, "company", None)
-    if not company or company.company_id != SYSTEM_COMPANY_ID:
+    company = context.active_company
+    if company is None or company.company_id != SYSTEM_COMPANY_ID:
         raise HTTPException(status_code=403, detail="Доступно только для компании system")
 
 
@@ -126,9 +127,9 @@ async def _resolve_company_id_query_to_exact_match(
     mapped_id = await container.subdomain_repository.get_company_id(q_lower)
     if mapped_id:
         return mapped_id
-    companies = await container.company_repository.list(limit=_BILLING_COMPANY_LIST_CAP, offset=0)
+    companies = await container.company_repository.list(limit=BILLING_COMPANY_LIST_CAP, offset=0)
     frag = q_lower
-    matched = [c for c in companies if _company_matches_billing_facet_query(c, frag)]
+    matched = [c for c in companies if company_matches_billing_facet_query(c, frag)]
     if len(matched) == 1:
         return matched[0].company_id
     return None
@@ -186,35 +187,34 @@ async def _enrich_span_items(
 
 @router.get("/facets/companies", response_model=PlatformTracingFacetItemsResponse)
 async def facet_companies(
-    request: Request,
     container: ContainerDep,
-    q: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+    q: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=ADMIN_FACETS_MAX_LIMIT)] = 20,
 ) -> PlatformTracingFacetItemsResponse:
-    _require_system(request)
+    _require_system()
     _require_tracing_db()
     frag = (q or "").strip().lower()
 
     if not frag:
         ids = await container.span_repository.admin_facet_distinct_company_ids(q=q, limit=limit)
         companies = await container.company_repository.get_many(ids) if ids else {}
-        items = []
+        span_company_items: list[PlatformTracingFacetItem] = []
         for cid in ids:
             co = companies.get(cid)
-            items.append(
+            span_company_items.append(
                 PlatformTracingFacetItem(
                     value=cid,
                     label=_company_facet_label(cid, co.name if co else None),
                 )
             )
-        return PlatformTracingFacetItemsResponse(items=items)
+        return PlatformTracingFacetItemsResponse(items=span_company_items)
 
     ids_by_span_column = await container.span_repository.admin_facet_distinct_company_ids(q=q, limit=limit)
     in_tracing = set(await container.span_repository.admin_list_distinct_company_ids_in_spans(max_ids=5000))
-    all_companies = await container.company_repository.list(limit=_BILLING_COMPANY_LIST_CAP, offset=0)
+    all_companies = await container.company_repository.list(limit=BILLING_COMPANY_LIST_CAP, offset=0)
     meta_matched = [
         c for c in all_companies
-        if c.company_id in in_tracing and _company_matches_billing_facet_query(c, frag)
+        if c.company_id in in_tracing and company_matches_billing_facet_query(c, frag)
     ]
     meta_matched.sort(key=lambda c: _tracing_company_facet_sort_key(c, frag))
 
@@ -230,28 +230,27 @@ async def facet_companies(
             ordered_ids.append(c.company_id)
 
     companies_map = await container.company_repository.get_many(ordered_ids) if ordered_ids else {}
-    items = []
+    company_items: list[PlatformTracingFacetItem] = []
     for cid in ordered_ids:
         mco = companies_map.get(cid)
-        items.append(
+        company_items.append(
             PlatformTracingFacetItem(
                 value=cid,
                 label=_company_facet_label(cid, mco.name if mco else None),
             )
         )
-    return PlatformTracingFacetItemsResponse(items=items)
+    return PlatformTracingFacetItemsResponse(items=company_items)
 
 
 @router.get("/facets/users", response_model=PlatformTracingFacetItemsResponse)
 async def facet_users(
-    request: Request,
     container: ContainerDep,
-    q: str | None = Query(default=None),
-    company_id: str | None = Query(default=None),
-    namespace: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+    q: Annotated[str | None, Query()] = None,
+    company_id: Annotated[str | None, Query()] = None,
+    namespace: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=ADMIN_FACETS_MAX_LIMIT)] = 20,
 ) -> PlatformTracingFacetItemsResponse:
-    _require_system(request)
+    _require_system()
     _require_tracing_db()
     frag = (q or "").strip().lower()
 
@@ -313,14 +312,13 @@ async def facet_users(
 
 @router.get("/facets/services", response_model=PlatformTracingFacetsResponse)
 async def facet_services(
-    request: Request,
     container: ContainerDep,
-    q: str | None = Query(default=None),
-    company_id: str | None = Query(default=None),
-    namespace: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+    q: Annotated[str | None, Query()] = None,
+    company_id: Annotated[str | None, Query()] = None,
+    namespace: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=ADMIN_FACETS_MAX_LIMIT)] = 20,
 ) -> PlatformTracingFacetsResponse:
-    _require_system(request)
+    _require_system()
     _require_tracing_db()
     items = await container.span_repository.admin_facet_distinct_service_names(
         q=q,
@@ -333,14 +331,13 @@ async def facet_services(
 
 @router.get("/facets/event-types", response_model=PlatformTracingFacetsResponse)
 async def facet_event_types(
-    request: Request,
     container: ContainerDep,
-    q: str | None = Query(default=None),
-    company_id: str | None = Query(default=None),
-    namespace: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+    q: Annotated[str | None, Query()] = None,
+    company_id: Annotated[str | None, Query()] = None,
+    namespace: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=ADMIN_FACETS_MAX_LIMIT)] = 20,
 ) -> PlatformTracingFacetsResponse:
-    _require_system(request)
+    _require_system()
     _require_tracing_db()
     items = await container.span_repository.admin_facet_distinct_event_types(
         q=q,
@@ -353,13 +350,12 @@ async def facet_event_types(
 
 @router.get("/facets/namespaces", response_model=PlatformTracingFacetsResponse)
 async def facet_namespaces(
-    request: Request,
     container: ContainerDep,
-    q: str | None = Query(default=None),
-    company_id: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+    q: Annotated[str | None, Query()] = None,
+    company_id: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=ADMIN_FACETS_MAX_LIMIT)] = 20,
 ) -> PlatformTracingFacetsResponse:
-    _require_system(request)
+    _require_system()
     _require_tracing_db()
     items = await container.span_repository.admin_facet_distinct_namespaces(
         q=q,
@@ -371,14 +367,13 @@ async def facet_namespaces(
 
 @router.get("/facets/operations", response_model=PlatformTracingFacetsResponse)
 async def facet_operations(
-    request: Request,
     container: ContainerDep,
-    q: str | None = Query(default=None),
-    company_id: str | None = Query(default=None),
-    namespace: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+    q: Annotated[str | None, Query()] = None,
+    company_id: Annotated[str | None, Query()] = None,
+    namespace: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=ADMIN_FACETS_MAX_LIMIT)] = 20,
 ) -> PlatformTracingFacetsResponse:
-    _require_system(request)
+    _require_system()
     _require_tracing_db()
     items = await container.span_repository.admin_facet_distinct_operation_names(
         q=q,
@@ -391,24 +386,23 @@ async def facet_operations(
 
 @router.get("/spans", response_model=CursorPage[PlatformTracingSpanItem])
 async def list_spans(
-    request: Request,
     container: ContainerDep,
-    service_name: str | None = Query(default=None),
-    company_id: str | None = Query(default=None),
-    user_id: str | None = Query(default=None),
-    namespace: str | None = Query(default=None),
-    from_time: datetime | None = Query(default=None),
-    to_time: datetime | None = Query(default=None),
-    company_id_query: str | None = Query(default=None),
-    user_id_query: str | None = Query(default=None),
-    operation_name_query: str | None = Query(default=None),
-    event_type_query: str | None = Query(default=None),
-    namespace_query: str | None = Query(default=None),
-    service_name_query: str | None = Query(default=None),
-    cursor: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=ADMIN_SPANS_MAX_LIMIT),
+    service_name: Annotated[str | None, Query()] = None,
+    company_id: Annotated[str | None, Query()] = None,
+    user_id: Annotated[str | None, Query()] = None,
+    namespace: Annotated[str | None, Query()] = None,
+    from_time: Annotated[datetime | None, Query()] = None,
+    to_time: Annotated[datetime | None, Query()] = None,
+    company_id_query: Annotated[str | None, Query()] = None,
+    user_id_query: Annotated[str | None, Query()] = None,
+    operation_name_query: Annotated[str | None, Query()] = None,
+    event_type_query: Annotated[str | None, Query()] = None,
+    namespace_query: Annotated[str | None, Query()] = None,
+    service_name_query: Annotated[str | None, Query()] = None,
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=ADMIN_SPANS_MAX_LIMIT)] = 50,
 ) -> CursorPage[PlatformTracingSpanItem]:
-    _require_system(request)
+    _require_system()
     _require_tracing_db()
     company_id_for_search = company_id
     company_id_query_for_search = company_id_query
@@ -454,10 +448,9 @@ async def list_spans(
 @router.get("/traces/{trace_id}")
 async def get_trace_tree(
     trace_id: str,
-    request: Request,
     container: ContainerDep,
 ) -> JsonObject:
-    _require_system(request)
+    _require_system()
     _require_tracing_db()
     spans = await container.span_repository.get_trace(trace_id)
     enriched_spans = await _enrich_span_items(spans, container.company_repository, container.user_repository)

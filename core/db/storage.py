@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from types import TracebackType
 from typing import TypedDict, cast
 
-from sqlalchemy import Column, DateTime, MetaData, String, Table, delete, select
+from sqlalchemy import Column, DateTime, MetaData, String, Table, delete, select, text
 from sqlalchemy import func as sa_func
 from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -39,6 +39,7 @@ from core.db.models import (
 from core.db.utils import get_rowcount
 from core.logging import get_logger
 from core.models.context_models import Context
+from core.types import JsonValue, parse_json_value
 
 logger = get_logger(__name__)
 
@@ -70,15 +71,13 @@ TABLE_ROUTING: Mapping[str, TableRoute] = {
 ContextGetter = Callable[[], Context | None]
 
 
-def _encode_storage_value(value: object) -> str:
+def _encode_storage_value(value: JsonValue) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value)
 
 
-def _row_key(value: object) -> str:
-    if not isinstance(value, str):
-        raise TypeError("Storage key column must be str")
+def _row_key(value: str) -> str:
     return value
 
 
@@ -86,7 +85,7 @@ class _SessionContextManager:
     """Асинхронный контекстный менеджер для сессий БД"""
 
     def __init__(self, storage: "Storage"):
-        self._storage = storage
+        self._storage: Storage = storage
         self._session: AsyncSession | None = None
 
     async def __aenter__(self) -> AsyncSession:
@@ -127,7 +126,7 @@ class Storage:
         self.db_url: str | None = db_url
         self.get_context_func: ContextGetter | None = get_context_func
         self._table_cache: dict[str, Table] = {}
-        self._metadata = MetaData()
+        self._metadata: MetaData = MetaData()
 
     def get_session(self) -> _SessionContextManager:
         """Возвращает асинхронный контекстный менеджер для сессии БД"""
@@ -224,6 +223,7 @@ class Storage:
         key: str,
         db_session: AsyncSession | None = None,
         force_global: bool = False,
+        for_update: bool = False,
     ) -> str | None:
         """
         Получает значение по ключу.
@@ -240,26 +240,77 @@ class Storage:
         table_name = self._get_table_name(key, company_id)
 
         if db_session:
-            return await self._get_with_session(final_key, table_name, db_session)
+            return await self._get_with_session(final_key, table_name, db_session, for_update=for_update)
 
         async with self.get_session() as session:
-            return await self._get_with_session(final_key, table_name, session)
+            return await self._get_with_session(final_key, table_name, session, for_update=for_update)
 
     async def _get_with_session(
         self,
         key: str,
         table_name: str,
         session: AsyncSession,
+        *,
+        for_update: bool = False,
     ) -> str | None:
         """Получает значение с использованием переданной сессии"""
         table = self._get_table(table_name)
 
-        result = await session.execute(select(table.c["value"]).where(table.c["key"] == key))
+        stmt = select(table.c["value"]).where(table.c["key"] == key)
+        if for_update:
+            stmt = stmt.with_for_update()
+        result = await session.execute(stmt)
 
         row = result.first()
         if row:
-            return _encode_storage_value(cast(object, row[0]))
+            return _encode_storage_value(cast(JsonValue, row[0]))
         return None
+
+    async def insert_once(
+        self,
+        key: str,
+        value: str,
+        ttl: int | None = None,
+        db_session: AsyncSession | None = None,
+        force_global: bool = False,
+    ) -> bool:
+        """Создаёт storage-запись только если ключ ещё не существует."""
+        final_key, company_id = self._get_company_key(key, force_global)
+        table_name = self._get_table_name(key, company_id)
+
+        if db_session is not None:
+            return await self._insert_once_with_session(final_key, value, ttl, table_name, db_session)
+
+        async with self.get_session() as session:
+            created = await self._insert_once_with_session(final_key, value, ttl, table_name, session)
+            await session.commit()
+            await session.flush()
+            return created
+
+    async def _insert_once_with_session(
+        self,
+        key: str,
+        value: str,
+        ttl: int | None,
+        table_name: str,
+        session: AsyncSession,
+    ) -> bool:
+        json_value = parse_json_value(value)
+        expired_at = None
+        if ttl is not None:
+            expired_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        table = self._get_table(table_name)
+        now = datetime.now(timezone.utc)
+        stmt = insert(table).values(
+            key=key,
+            value=json_value,
+            expired_at=expired_at,
+            created_at=now,
+            updated_at=now,
+        )
+        stmt = stmt.on_conflict_do_nothing(index_elements=["key"])
+        result = await session.execute(stmt)
+        return get_rowcount(result) > 0
 
     async def set(
         self,
@@ -303,7 +354,7 @@ class Storage:
         session: AsyncSession,
     ) -> bool:
         """Сохраняет значение с использованием переданной сессии"""
-        json_value = json.loads(value)
+        json_value = parse_json_value(value)
 
         expired_at = None
         if ttl is not None:
@@ -340,7 +391,7 @@ class Storage:
                 expired_at=stmt.excluded["expired_at"],
             ),
         )
-        await session.execute(stmt)
+        _ = await session.execute(stmt)
 
         return True
 
@@ -411,7 +462,7 @@ class Storage:
             result = await session.execute(
                 select(table.c["key"]).where(table.c["key"].like(f"{final_prefix}%")).limit(limit)
             )
-            return [_row_key(cast(object, row[0])) for row in result]
+            return [_row_key(cast(str, row[0])) for row in result]
 
     async def get_all_by_prefix(
         self, prefix: str, limit: int = 1000, force_global: bool = False
@@ -441,8 +492,8 @@ class Storage:
 
             data: dict[str, str] = {}
             for row in result:
-                key = _row_key(cast(object, row[0]))
-                data[key] = _encode_storage_value(cast(object, row[1]))
+                key = _row_key(cast(str, row[0]))
+                data[key] = _encode_storage_value(cast(JsonValue, row[1]))
 
             return data
 
@@ -477,9 +528,9 @@ class Storage:
 
             data: dict[str, str] = {}
             for row in result:
-                final_key = _row_key(cast(object, row[0]))
+                final_key = _row_key(cast(str, row[0]))
                 original_key = key_mapping.get(final_key, final_key)
-                data[original_key] = _encode_storage_value(cast(object, row[1]))
+                data[original_key] = _encode_storage_value(cast(JsonValue, row[1]))
 
             return data
 
@@ -538,6 +589,48 @@ class Storage:
             await session.flush()
             return result
 
+    async def get_all_by_prefix_and_table_with_json_eq(
+        self,
+        prefix: str,
+        table_name: str,
+        *,
+        json_field: str,
+        json_value: str,
+        limit: int = 1000,
+        offset: int = 0,
+    ) -> dict[str, str]:
+        """
+        Scan по prefix + точный фильтр по top-level JSON-полю на стороне БД.
+
+        Нужен в случаях, когда вторичный индекс по ключу не подходит (один
+        логический атрибут хранится внутри `value`, например `provider` у
+        LLMModel). Раньше caller'ы делали полный list + Python-фильтр
+        (`list(limit=10000)` + comprehension), что превращало `list_by_provider`
+        в full scan. Здесь фильтр уходит в PostgreSQL: `value->>'<field>' = ?`.
+        """
+        if offset < 0:
+            raise ValueError("offset должен быть >= 0")
+        async with self.get_session() as session:
+            table = self._get_table(table_name)
+            value_column = table.c["value"]
+            field_filter = text("value ->> :json_field = :json_value").bindparams(
+                json_field=json_field,
+                json_value=json_value,
+            )
+            result = await session.execute(
+                select(table.c["key"], value_column)
+                .where(table.c["key"].like(f"{prefix}%"))
+                .where(field_filter)
+                .order_by(table.c["updated_at"].desc())
+                .offset(offset)
+                .limit(limit)
+            )
+            data: dict[str, str] = {}
+            for row in result:
+                key = _row_key(cast(str, row[0]))
+                data[key] = _encode_storage_value(cast(JsonValue, row[1]))
+            return data
+
     async def get_all_by_prefix_and_table(
         self, prefix: str, table_name: str, limit: int = 1000, offset: int = 0
     ) -> dict[str, str]:
@@ -568,12 +661,12 @@ class Storage:
 
             data: dict[str, str] = {}
             for row in result:
-                key = _row_key(cast(object, row[0]))
-                data[key] = _encode_storage_value(cast(object, row[1]))
+                key = _row_key(cast(str, row[0]))
+                data[key] = _encode_storage_value(cast(JsonValue, row[1]))
 
             return data
 
-    async def _count_by_prefix_and_table(self, prefix: str, table_name: str) -> int:
+    async def count_by_prefix_and_table(self, prefix: str, table_name: str) -> int:
         """Считает количество записей по префиксу в таблице. Используется BaseRepository."""
         async with self.get_session() as session:
             table = self._get_table(table_name)
@@ -606,8 +699,8 @@ class Storage:
 
             data: dict[str, str] = {}
             for row in result:
-                key = _row_key(cast(object, row[0]))
-                data[key] = _encode_storage_value(cast(object, row[1]))
+                key = _row_key(cast(str, row[0]))
+                data[key] = _encode_storage_value(cast(JsonValue, row[1]))
 
             return data
 
@@ -631,4 +724,4 @@ class Storage:
             result = await session.execute(
                 select(table.c["key"]).where(table.c["key"].like(f"{prefix}%")).limit(limit)
             )
-            return [_row_key(cast(object, row[0])) for row in result]
+            return [_row_key(cast(str, row[0])) for row in result]

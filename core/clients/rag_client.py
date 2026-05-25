@@ -9,7 +9,7 @@ from io import BytesIO
 from urllib.parse import quote
 
 from core.clients.service_client import ServiceClient
-from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchOptions
+from core.rag.models import RAGIngestTextResponse, RAGMetadata, RAGMetadataFilter, RAGSearchOptions
 from core.rag.rag_http_namespace_search import (
     RAG_API_V1_PREFIX,
     build_namespace_search_json_body,
@@ -67,7 +67,7 @@ class RagClient:
         metadata: RAGMetadata | None = None,
         document_id: str | None = None,
         provider: str | None = None,
-    ) -> JsonObject:
+    ) -> RAGIngestTextResponse:
         params: dict[str, str] = {}
         if provider is not None:
             params["provider"] = provider
@@ -79,14 +79,17 @@ class RagClient:
         if document_id is not None:
             body["document_id"] = document_id
         seg = quote(namespace_id, safe="")
-        return _json_object_response(
-            await self._http.post(
-                "rag",
-                f"{RAG_API_V1_PREFIX}/namespaces/{seg}/ingest-text",
-                json=body,
-                params=params or None,
-            ),
-            operation="ingest_text",
+        response = await self._http.post(
+            "rag",
+            f"{RAG_API_V1_PREFIX}/namespaces/{seg}/ingest-text",
+            json=body,
+            params=params or None,
+        )
+        return RAGIngestTextResponse.model_validate(
+            _json_object_response(
+                response,
+                operation="ingest_text",
+            )
         )
 
     async def upload_namespace_document(

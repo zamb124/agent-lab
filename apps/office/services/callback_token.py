@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import time
-from typing import Any
 
-import jwt
+from apps.office.models.api import OnlyOfficeCallbackContextClaims
+from core.clients.onlyoffice import (
+    OnlyOfficeJwtError,
+    sign_onlyoffice_jwt_hs256,
+    verify_onlyoffice_jwt_hs256,
+)
+from core.types import require_json_object
 
 
 def encode_callback_context_token(
@@ -26,33 +31,30 @@ def encode_callback_context_token(
             raise ValueError("file_id обязателен для file callback-токена")
     else:
         raise ValueError("binding_kind должен быть document или file")
-    now = int(time.time())
-    payload: dict[str, Any] = {
-        "typ": "office_cb",
-        "binding_kind": binding_kind,
-        "binding_id": binding_id,
-        "company_id": company_id,
-        "iat": now,
-        "exp": now + ttl_seconds,
-    }
-    if namespace is not None:
-        payload["namespace"] = namespace
-    if file_id is not None:
-        payload["file_id"] = file_id
-    return jwt.encode(payload, secret, algorithm="HS256")
-
-
-def decode_callback_context_token(token: str, secret: str) -> dict[str, Any]:
-    data = jwt.decode(token, secret, algorithms=["HS256"])
-    if data.get("typ") != "office_cb":
-        raise jwt.InvalidTokenError("Неверный тип callback-токена")
-    binding_kind = data.get("binding_kind") or "document"
     if binding_kind == "document":
-        if not data.get("binding_id") or not data.get("company_id") or not data.get("namespace"):
-            raise jwt.InvalidTokenError("В document callback-токене не хватает полей")
-        return data
-    if binding_kind == "file":
-        if not data.get("binding_id") or not data.get("company_id") or not data.get("file_id"):
-            raise jwt.InvalidTokenError("В file callback-токене не хватает полей")
-        return data
-    raise jwt.InvalidTokenError("Неверный binding_kind callback-токена")
+        binding_kind_value = "document"
+    else:
+        binding_kind_value = "file"
+    now = int(time.time())
+    payload = require_json_object(
+        OnlyOfficeCallbackContextClaims(
+            typ="office_cb",
+            binding_kind=binding_kind_value,
+            binding_id=binding_id,
+            company_id=company_id,
+            iat=now,
+            exp=now + ttl_seconds,
+            namespace=namespace,
+            file_id=file_id,
+        ).model_dump(mode="json", exclude_none=True),
+        "office_cb payload",
+    )
+    return sign_onlyoffice_jwt_hs256(payload, secret)
+
+
+def decode_callback_context_token(token: str, secret: str) -> OnlyOfficeCallbackContextClaims:
+    data = verify_onlyoffice_jwt_hs256(token, secret)
+    try:
+        return OnlyOfficeCallbackContextClaims.model_validate(data)
+    except ValueError as exc:
+        raise OnlyOfficeJwtError("Некорректный callback-токен") from exc

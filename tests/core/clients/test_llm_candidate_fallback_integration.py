@@ -1,7 +1,12 @@
 """Integration coverage for LLMClient candidate fallback.
 
-These tests deliberately exercise the real httpx/OpenAI-compatible path.  The
+These tests deliberately exercise the real httpx/OpenAI-compatible path. The
 local server below is a tiny deterministic endpoint, not a patched client.
+
+Tight first-token timeouts (10–50 ms) делают тесты чувствительными к CPU
+старvation: на одном xdist-worker'е они стабильны, при параллельном запуске
+рядом с другими тяжёлыми тестами таймеры срываются. Группируем модуль на
+один worker через ``xdist_group``.
 """
 
 from __future__ import annotations
@@ -36,6 +41,8 @@ from core.config.models import (
     OpenRouterProviderConfig,
 )
 from core.llm_context import LLMContextBudget, LLMContextProfile, LLMContextRetrievalPolicy
+
+pytestmark = pytest.mark.xdist_group(name="llm_candidate_fallback")
 
 
 @dataclass(frozen=True)
@@ -218,9 +225,9 @@ def _client_for(server: _OpenAICompatibleTestServer, candidates: list[LLMCallCon
         base_url=candidates[0].base_url,
         llm_provider=candidates[0].provider,
         candidates=candidates,
-        first_token_timeout=0.05,
+        first_token_timeout=0.5,
         candidate_cooldown_seconds=0.0,
-        timeout=2.0,
+        timeout=5.0,
     )
 
 
@@ -267,7 +274,7 @@ async def test_stream_falls_back_when_primary_has_no_first_token() -> None:
             "primary-slow": lambda writer: _write_sse_text(
                 writer,
                 "too-late",
-                delay_before_first_chunk=0.2,
+                delay_before_first_chunk=2.0,
             ),
             "fallback-fast": lambda writer: _write_sse_text(writer, "fallback-ok"),
         }

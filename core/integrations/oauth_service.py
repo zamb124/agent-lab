@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import json
 import secrets
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from urllib.parse import urlencode, urlparse, urlunparse
 from uuid import uuid4
 
@@ -41,10 +42,12 @@ OAUTH_STATE_TTL = 600
 OAUTH_STATE_PREFIX = "integration_oauth_state"
 TOKEN_EXPIRY_BUFFER = timedelta(minutes=2)
 
-_oauth_credential_saved_hook: Any = None
+CredentialSavedHook = Callable[[IntegrationCredential], Awaitable[None]]
+
+_oauth_credential_saved_hook: CredentialSavedHook | None = None
 
 
-def set_oauth_credential_saved_hook(hook: Any) -> None:
+def set_oauth_credential_saved_hook(hook: CredentialSavedHook) -> None:
     """
     Опциональный async-callback после успешного upsert credential в complete_oauth.
     Сервисы (например CRM) диспатчат сохранение в реестр интеграций.
@@ -81,8 +84,8 @@ class OAuthService:
         repository: IntegrationCredentialRepository,
         storage: Storage,
     ) -> None:
-        self._repository = repository
-        self._storage = storage
+        self._repository: IntegrationCredentialRepository = repository
+        self._storage: Storage = storage
 
     def get_provider_config(
         self,
@@ -201,7 +204,7 @@ class OAuthService:
             state_payload["oauth_ui_locale"] = oauth_ui_locale
         if flow_context is not None:
             state_payload["flow_context"] = flow_context
-        await self._storage.set(
+        _ = await self._storage.set(
             key=state_key,
             value=json.dumps(state_payload),
             ttl=OAUTH_STATE_TTL,
@@ -238,21 +241,18 @@ class OAuthService:
         Нужен для HTML ошибок callback: после редиректа с внешнего OAuth-провайдера cookie language
         на приложении часто не совпадает с локалью вкладки при старте authorize.
         """
-        if not isinstance(state_token, str) or not state_token.strip():
+        if not state_token.strip():
             return None
         state_key = f"{OAUTH_STATE_PREFIX}:{state_token.strip()}"
         raw_state = await self._storage.get(key=state_key, force_global=True)
         if raw_state is None:
             return None
-        try:
-            payload = json.loads(raw_state)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(payload, dict):
-            return None
+        payload = parse_json_object(raw_state, "oauth.state.peek")
         loc = payload.get("oauth_ui_locale")
-        if loc == "ru" or loc == "en":
-            return loc
+        if loc == "ru":
+            return "ru"
+        if loc == "en":
+            return "en"
         return None
 
     async def complete_oauth(
@@ -274,7 +274,7 @@ class OAuthService:
         raw_state = await self._storage.get(key=state_key, force_global=True)
         if raw_state is None:
             raise ValueError("OAuth state is invalid or expired")
-        await self._storage.delete(key=state_key, force_global=True)
+        _ = await self._storage.delete(key=state_key, force_global=True)
 
         state_payload = parse_json_object(raw_state, "oauth.state")
 
@@ -353,8 +353,8 @@ class OAuthService:
                     provider_str, service, token_response.status_code,
                     token_response.text[:500],
                 )
-            token_response.raise_for_status()
-            token_payload = token_response.json()
+            _ = token_response.raise_for_status()
+            token_payload = parse_json_object(token_response.content, "oauth.token.response")
 
         access_token = token_payload.get("access_token")
         if not isinstance(access_token, str) or access_token == "":
@@ -439,10 +439,10 @@ class OAuthService:
         if not credential.refresh_token:
             logger.warning(
                 "OAuth refresh impossible (no refresh_token), deleting credential: "
-                "provider=%s service=%s user=%s",
+                + "provider=%s service=%s user=%s",
                 credential.provider, credential.service, credential.user_id,
             )
-            await self._repository.delete_by_user_provider_service(
+            _ = await self._repository.delete_by_user_provider_service(
                 company_id=credential.company_id,
                 user_id=credential.user_id,
                 provider=credential.provider,
@@ -450,7 +450,7 @@ class OAuthService:
             )
             raise OAuthTokenRefreshError(
                 f"Missing refresh_token: provider={credential.provider}, "
-                f"service={credential.service}, user={credential.user_id}"
+                + f"service={credential.service}, user={credential.user_id}"
             )
 
         amocrm_sub: str | None = None
@@ -489,21 +489,20 @@ class OAuthService:
                 )
 
         if response.status_code >= 400:
-            payload = {}
-            content_type = response.headers.get("content-type", "")
-            if content_type.startswith("application/json"):
-                payload = response.json()
-            oauth_error = payload.get("error") if isinstance(payload, dict) else None
-            oauth_error_desc = payload.get("error_description") if isinstance(payload, dict) else None
+            payload: JsonObject = {}
+            if response.content.lstrip().startswith(b"{"):
+                payload = parse_json_object(response.content, "oauth.refresh.error")
+            oauth_error = payload.get("error")
+            oauth_error_desc = payload.get("error_description")
 
             if oauth_error == "invalid_grant":
                 logger.warning(
                     "OAuth refresh invalid_grant, deleting credential: "
-                    "provider=%s service=%s user=%s desc=%s",
+                    + "provider=%s service=%s user=%s desc=%s",
                     credential.provider, credential.service, credential.user_id,
                     oauth_error_desc,
                 )
-                await self._repository.delete_by_user_provider_service(
+                _ = await self._repository.delete_by_user_provider_service(
                     company_id=credential.company_id,
                     user_id=credential.user_id,
                     provider=credential.provider,
@@ -512,15 +511,15 @@ class OAuthService:
                 reason = f"invalid_grant:{oauth_error_desc}" if oauth_error_desc else "invalid_grant"
                 raise OAuthTokenRefreshError(
                     f"Token refresh revoked: provider={credential.provider}, "
-                    f"service={credential.service}, user={credential.user_id}, reason={reason}"
+                    + f"service={credential.service}, user={credential.user_id}, reason={reason}"
                 )
             raise RuntimeError(
                 f"Token refresh failed: provider={credential.provider}, "
-                f"service={credential.service}, status={response.status_code}, "
-                f"error={oauth_error}, description={oauth_error_desc}"
+                + f"service={credential.service}, status={response.status_code}, "
+                + f"error={oauth_error}, description={oauth_error_desc}"
             )
 
-        token_payload = response.json()
+        token_payload = parse_json_object(response.content, "oauth.refresh.response")
         access_token = token_payload.get("access_token")
         if not isinstance(access_token, str) or access_token == "":
             raise ValueError("Token refresh response missing access_token")

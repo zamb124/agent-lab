@@ -8,6 +8,7 @@
 
 from typing import Any
 
+import httpx
 import tiktoken
 
 import core.tracing.attributes as trace_attributes
@@ -177,28 +178,27 @@ class EmbeddingService:
                         "input": texts,
                     },
                 )
-
-                if response.status_code != 200:
-                    error_text = response.text[:200]
-                    logger.warning(f"Model {model} returned {response.status_code}: {error_text}")
-                    return None
-
-                data = response.json()
-
-                if "data" not in data:
-                    logger.warning(f"Model {model} returned unexpected response: {str(data)[:200]}")
-                    return None
-
-                embeddings = [item["embedding"] for item in data["data"]]
-
-                if embeddings and not self._embedding_lengths_ok(model, len(embeddings[0])):
-                    return None
-
-                return embeddings
-
-        except Exception as e:
+        except (httpx.HTTPError, OSError) as e:
             logger.warning(f"Model {model} failed: {e}")
             return None
+
+        if response.status_code != 200:
+            error_text = response.text[:200]
+            logger.warning(f"Model {model} returned {response.status_code}: {error_text}")
+            return None
+
+        data = response.json()
+
+        if "data" not in data:
+            logger.warning(f"Model {model} returned unexpected response: {str(data)[:200]}")
+            return None
+
+        embeddings = [item["embedding"] for item in data["data"]]
+
+        if embeddings and not self._embedding_lengths_ok(model, len(embeddings[0])):
+            return None
+
+        return embeddings
 
     async def _generate_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
         """

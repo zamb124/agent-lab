@@ -52,12 +52,6 @@ def check_detailed_response(state: JsonObject, response: str) -> bool:
     return len(response) >= 200
 
 
-def check_mock_response(state: JsonObject, response: str) -> bool:
-    """Проверяет что ответ замокан."""
-    _ = state
-    return "mock" in response.lower() or "замокан" in response.lower()
-
-
 def check_state_has_response(state: JsonObject, response: str) -> bool:
     """Проверяет что state содержит response."""
     _ = response

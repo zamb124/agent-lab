@@ -89,29 +89,6 @@ function _jsonString(value) {
     return JSON.stringify(String(value));
 }
 
-function _schemaType(prop) {
-    if (!isPlainObject(prop)) {
-        return 'string';
-    }
-    const t = prop.type;
-    if (typeof t === 'string' && t.length > 0) {
-        return t;
-    }
-    if (Array.isArray(t)) {
-        const item = t.find((x) => typeof x === 'string' && x !== 'null');
-        if (item) {
-            return item;
-        }
-    }
-    if (isPlainObject(prop.properties)) {
-        return 'object';
-    }
-    if ('items' in prop) {
-        return 'array';
-    }
-    return 'string';
-}
-
 function _schemaProperties(schema) {
     if (!isPlainObject(schema) || !isPlainObject(schema.properties)) {
         return {};
@@ -125,23 +102,11 @@ function _schemaProperties(schema) {
     return out;
 }
 
-function _argsSchemaFromParametersSchema(schema) {
-    const properties = _schemaProperties(schema);
-    const requiredRaw = isPlainObject(schema) && Array.isArray(schema.required) ? schema.required : [];
-    const required = new Set(requiredRaw.filter((x) => typeof x === 'string'));
-    const out = {};
-    for (const [name, prop] of Object.entries(properties)) {
-        const item = {
-            type: _schemaType(prop),
-            description: typeof prop.description === 'string' ? prop.description : '',
-            required: required.has(name),
-        };
-        if ('default' in prop) {
-            item.default = prop.default;
-        }
-        out[name] = item;
+function _parametersSchemaObject(schema) {
+    if (isPlainObject(schema) && schema.type === 'object' && isPlainObject(schema.properties)) {
+        return schema;
     }
-    return out;
+    return { type: 'object', properties: {}, required: [] };
 }
 
 function _toolCallCode(language, toolId, parametersSchema) {
@@ -181,19 +146,13 @@ function _toolCallCode(language, toolId, parametersSchema) {
 }
 
 function _generatedToolConfig(t, language) {
-    const parametersSchema = isPlainObject(t.parameters_schema) ? t.parameters_schema : {};
+    const parametersSchema = _parametersSchemaObject(t.parameters_schema);
     const cfg = {
         tool_id: t.tool_id,
         code: _toolCallCode(language, t.tool_id, parametersSchema),
         language: normalizeFlowCodeLanguage(language),
+        parameters_schema: parametersSchema,
     };
-    const argsSchema = _argsSchemaFromParametersSchema(parametersSchema);
-    if (Object.keys(argsSchema).length > 0) {
-        cfg.args_schema = argsSchema;
-    }
-    if (Object.keys(parametersSchema).length > 0) {
-        cfg.parameters_schema = parametersSchema;
-    }
     return cfg;
 }
 
@@ -885,14 +844,14 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         });
     }
 
-    _templateArgsSchema(t, parsed) {
-        if (isPlainObject(t.args_schema)) {
-            return t.args_schema;
+    _templateParametersSchema(t, parsed) {
+        if (isPlainObject(t.parameters_schema)) {
+            return _parametersSchemaObject(t.parameters_schema);
         }
-        if (isPlainObject(parsed) && parsed.success === true && isPlainObject(parsed.args_schema)) {
-            return parsed.args_schema;
+        if (isPlainObject(parsed) && parsed.success === true && isPlainObject(parsed.parameters_schema)) {
+            return _parametersSchemaObject(parsed.parameters_schema);
         }
-        return {};
+        return { type: 'object', properties: {}, required: [] };
     }
 
     async _commitTemplate(t) {
@@ -901,7 +860,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
         }
         const fn = this.onCommit;
         const language = normalizeFlowCodeLanguage(t.language);
-        const parsed = isPlainObject(t.args_schema) || language !== 'python'
+        const parsed = isPlainObject(t.parameters_schema) || language !== 'python'
             ? null
             : await this._codeParseSignature.run({
                 code: t.code,
@@ -912,13 +871,7 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 code: t.code,
                 language,
             };
-            const argsSchema = this._templateArgsSchema(t, parsed);
-            if (Object.keys(argsSchema).length > 0) {
-                cfg.args_schema = argsSchema;
-            }
-            if (isPlainObject(t.parameters_schema)) {
-                cfg.parameters_schema = t.parameters_schema;
-            }
+            cfg.parameters_schema = this._templateParametersSchema(t, parsed);
             const nodeName = typeof t.name === 'string' && t.name.length > 0
                 ? t.name
                 : (typeof t.id === 'string' ? t.id : 'code');
@@ -940,15 +893,8 @@ export class FlowsLibraryPickerModal extends PlatformModal {
                 tool_id: t.tool_id,
                 code: t.code,
                 language: normalizeFlowCodeLanguage(t.language),
+                parameters_schema: _parametersSchemaObject(t.parameters_schema),
             };
-            if (!generated) {
-                if (t.args_schema && typeof t.args_schema === 'object') {
-                    cfg.args_schema = t.args_schema;
-                }
-                if (t.parameters_schema && typeof t.parameters_schema === 'object') {
-                    cfg.parameters_schema = t.parameters_schema;
-                }
-            }
             const nodeName = typeof t.title === 'string' && t.title.length > 0
                 ? t.title
                 : t.tool_id;

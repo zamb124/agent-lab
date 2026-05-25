@@ -6,7 +6,7 @@ import pytest
 
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.flow import Flow
-from apps.flows.src.runtime.nodes import BaseNode, CodeNode
+from apps.flows.src.runtime.nodes import BaseNode
 from core.clients.llm import LLMToolCall
 from core.errors import FlowPrematureCompletionError
 
@@ -25,18 +25,23 @@ class _InterruptNode(BaseNode):
         )
 
 
-def _bump_node_code(node_id: str) -> str:
-    return f"""
-async def run(args, state):
-    h = state.variables.get("hits")
-    if h is None:
-        h = {{}}
-    else:
-        h = dict(h)
-    h["{node_id}"] = h.get("{node_id}", 0) + 1
-    state.variables = {{**state.variables, "hits": h}}
-    return {{}}
-"""
+class _BumpNode(BaseNode):
+    async def _run_impl(self, state, inputs):
+        hits = state.variables.get("hits")
+        if hits is None:
+            hits = {}
+        else:
+            hits = dict(hits)
+        hits[self.node_id] = hits.get(self.node_id, 0) + 1
+        state.variables = {**state.variables, "hits": hits}
+        return {}
+
+
+def _bump_node(node_id: str, *, incoming_policy: str | None = None) -> _BumpNode:
+    config = {"type": "test"}
+    if incoming_policy is not None:
+        config["incoming_policy"] = incoming_policy
+    return _BumpNode(node_id, config)
 
 
 @pytest.mark.asyncio
@@ -45,17 +50,10 @@ async def test_incoming_policy_all_waits_all_predecessors(make_test_state) -> No
     0 -> 1 -> 2 -> 3 и 0 -> 3: короткая ветка не должна запускать 3 до прихода с 2.
     """
     nodes = {
-        "0": CodeNode("0", {"type": "code", "code": _bump_node_code("0")}),
-        "1": CodeNode("1", {"type": "code", "code": _bump_node_code("1")}),
-        "2": CodeNode("2", {"type": "code", "code": _bump_node_code("2")}),
-        "3": CodeNode(
-            "3",
-            {
-                "type": "code",
-                "code": _bump_node_code("3"),
-                "incoming_policy": "all",
-            },
-        ),
+        "0": _bump_node("0"),
+        "1": _bump_node("1"),
+        "2": _bump_node("2"),
+        "3": _bump_node("3", incoming_policy="all"),
     }
     flow = Flow(
         flow_id="join_all",
@@ -63,11 +61,11 @@ async def test_incoming_policy_all_waits_all_predecessors(make_test_state) -> No
         entry="0",
         nodes=nodes,
         edges=[
-            {"from": "0", "to": "1"},
-            {"from": "0", "to": "3"},
-            {"from": "1", "to": "2"},
-            {"from": "2", "to": "3"},
-            {"from": "3", "to": None},
+            {"from_node": "0", "to_node": "1"},
+            {"from_node": "0", "to_node": "3"},
+            {"from_node": "1", "to_node": "2"},
+            {"from_node": "2", "to_node": "3"},
+            {"from_node": "3", "to_node": None},
         ],
     )
     state = make_test_state()
@@ -89,10 +87,10 @@ async def test_parallel_wave_interrupt_keeps_completed_sibling_state(make_test_s
         entry="start",
         nodes=nodes,
         edges=[
-            {"from": "start", "to": "left"},
-            {"from": "start", "to": "right"},
-            {"from": "left", "to": None},
-            {"from": "right", "to": None},
+            {"from_node": "start", "to_node": "left"},
+            {"from_node": "start", "to_node": "right"},
+            {"from_node": "left", "to_node": None},
+            {"from_node": "right", "to_node": None},
         ],
     )
 
@@ -107,10 +105,10 @@ async def test_parallel_wave_interrupt_keeps_completed_sibling_state(make_test_s
 async def test_incoming_policy_any_allows_double_join_when_waves_split(make_test_state) -> None:
     """Без incoming_policy (any) нода 3 может выполниться дважды при разнесённых волнах."""
     nodes = {
-        "0": CodeNode("0", {"type": "code", "code": _bump_node_code("0")}),
-        "1": CodeNode("1", {"type": "code", "code": _bump_node_code("1")}),
-        "2": CodeNode("2", {"type": "code", "code": _bump_node_code("2")}),
-        "3": CodeNode("3", {"type": "code", "code": _bump_node_code("3")}),
+        "0": _bump_node("0"),
+        "1": _bump_node("1"),
+        "2": _bump_node("2"),
+        "3": _bump_node("3"),
     }
     flow = Flow(
         flow_id="join_any",
@@ -118,11 +116,11 @@ async def test_incoming_policy_any_allows_double_join_when_waves_split(make_test
         entry="0",
         nodes=nodes,
         edges=[
-            {"from": "0", "to": "1"},
-            {"from": "0", "to": "3"},
-            {"from": "1", "to": "2"},
-            {"from": "2", "to": "3"},
-            {"from": "3", "to": None},
+            {"from_node": "0", "to_node": "1"},
+            {"from_node": "0", "to_node": "3"},
+            {"from_node": "1", "to_node": "2"},
+            {"from_node": "2", "to_node": "3"},
+            {"from_node": "3", "to_node": None},
         ],
     )
     state = make_test_state()
@@ -140,17 +138,10 @@ async def test_premature_completion_on_incomplete_and_join(make_test_state) -> N
     Предок «2» в графе есть, но с entry недостижим.
     """
     nodes = {
-        "0": CodeNode("0", {"type": "code", "code": _bump_node_code("0")}),
-        "1": CodeNode("1", {"type": "code", "code": _bump_node_code("1")}),
-        "2": CodeNode("2", {"type": "code", "code": _bump_node_code("2")}),
-        "3": CodeNode(
-            "3",
-            {
-                "type": "code",
-                "code": _bump_node_code("3"),
-                "incoming_policy": "all",
-            },
-        ),
+        "0": _bump_node("0"),
+        "1": _bump_node("1"),
+        "2": _bump_node("2"),
+        "3": _bump_node("3", incoming_policy="all"),
     }
     flow = Flow(
         flow_id="join_stuck",
@@ -158,11 +149,11 @@ async def test_premature_completion_on_incomplete_and_join(make_test_state) -> N
         entry="0",
         nodes=nodes,
         edges=[
-            {"from": "0", "to": "1"},
-            {"from": "0", "to": "3"},
-            {"from": "2", "to": "3"},
-            {"from": "1", "to": None},
-            {"from": "3", "to": None},
+            {"from_node": "0", "to_node": "1"},
+            {"from_node": "0", "to_node": "3"},
+            {"from_node": "2", "to_node": "3"},
+            {"from_node": "1", "to_node": None},
+            {"from_node": "3", "to_node": None},
         ],
     )
     state = make_test_state()
@@ -177,9 +168,9 @@ async def test_all_conditional_outgoing_false_raises_no_conditional_match(
 ) -> None:
     """Все исходы с to!=null с условием, ни одно не выполнилось — FlowPrematureCompletionError."""
     nodes = {
-        "0": CodeNode("0", {"type": "code", "code": _bump_node_code("0")}),
-        "1": CodeNode("1", {"type": "code", "code": _bump_node_code("1")}),
-        "2": CodeNode("2", {"type": "code", "code": _bump_node_code("2")}),
+        "0": _bump_node("0"),
+        "1": _bump_node("1"),
+        "2": _bump_node("2"),
     }
     flow = Flow(
         flow_id="no_route",
@@ -187,10 +178,10 @@ async def test_all_conditional_outgoing_false_raises_no_conditional_match(
         entry="0",
         nodes=nodes,
         edges=[
-            {"from": "0", "to": "1"},
+            {"from_node": "0", "to_node": "1"},
             {
-                "from": "1",
-                "to": "2",
+                "from_node": "1",
+                "to_node": "2",
                 "condition": {
                     "type": "simple",
                     "variable": "variables.route",
@@ -198,7 +189,7 @@ async def test_all_conditional_outgoing_false_raises_no_conditional_match(
                     "value": "go",
                 },
             },
-            {"from": "2", "to": None},
+            {"from_node": "2", "to_node": None},
         ],
     )
     state = make_test_state(variables={"route": "stop"})
@@ -211,10 +202,10 @@ async def test_all_conditional_outgoing_false_raises_no_conditional_match(
 async def test_router_with_second_branch_reaches_end(make_test_state) -> None:
     """Покрытие альтернативной ветки: маршрут ведёт в 3, затем END (to: null)."""
     nodes = {
-        "0": CodeNode("0", {"type": "code", "code": _bump_node_code("0")}),
-        "1": CodeNode("1", {"type": "code", "code": _bump_node_code("1")}),
-        "2": CodeNode("2", {"type": "code", "code": _bump_node_code("2")}),
-        "3": CodeNode("3", {"type": "code", "code": _bump_node_code("3")}),
+        "0": _bump_node("0"),
+        "1": _bump_node("1"),
+        "2": _bump_node("2"),
+        "3": _bump_node("3"),
     }
     flow = Flow(
         flow_id="router_ok",
@@ -222,10 +213,10 @@ async def test_router_with_second_branch_reaches_end(make_test_state) -> None:
         entry="0",
         nodes=nodes,
         edges=[
-            {"from": "0", "to": "1"},
+            {"from_node": "0", "to_node": "1"},
             {
-                "from": "1",
-                "to": "2",
+                "from_node": "1",
+                "to_node": "2",
                 "condition": {
                     "type": "simple",
                     "variable": "variables.route",
@@ -234,8 +225,8 @@ async def test_router_with_second_branch_reaches_end(make_test_state) -> None:
                 },
             },
             {
-                "from": "1",
-                "to": "3",
+                "from_node": "1",
+                "to_node": "3",
                 "condition": {
                     "type": "simple",
                     "variable": "variables.route",
@@ -243,8 +234,8 @@ async def test_router_with_second_branch_reaches_end(make_test_state) -> None:
                     "value": "stop",
                 },
             },
-            {"from": "2", "to": None},
-            {"from": "3", "to": None},
+            {"from_node": "2", "to_node": None},
+            {"from_node": "3", "to_node": None},
         ],
     )
     state = make_test_state(variables={"route": "stop"})
@@ -259,9 +250,9 @@ async def test_router_with_second_branch_reaches_end(make_test_state) -> None:
 def test_join_required_skips_edge_with_contributes_to_join_false() -> None:
     """Ребро с contributes_to_join=false не попадает в AND-множество предков."""
     nodes = {
-        "4": CodeNode("4", {"type": "code", "code": _bump_node_code("4")}),
-        "5": CodeNode("5", {"type": "code", "code": _bump_node_code("5")}),
-        "6": CodeNode("6", {"type": "code", "code": _bump_node_code("6")}),
+        "4": _bump_node("4"),
+        "5": _bump_node("5"),
+        "6": _bump_node("6"),
     }
     flow = Flow(
         flow_id="join_req",
@@ -269,9 +260,9 @@ def test_join_required_skips_edge_with_contributes_to_join_false() -> None:
         entry="4",
         nodes=nodes,
         edges=[
-            {"from": "4", "to": "5"},
-            {"from": "6", "to": "5", "contributes_to_join": False},
-            {"from": "5", "to": None},
+            {"from_node": "4", "to_node": "5"},
+            {"from_node": "6", "to_node": "5", "contributes_to_join": False},
+            {"from_node": "5", "to_node": None},
         ],
     )
     assert flow._join_required["5"] == frozenset({"4"})
@@ -288,9 +279,9 @@ async def test_flow_validator_warns_fan_in_without_policy() -> None:
         "c": {"type": "code", "code": "def execute(a,s): return {}"},
     }
     edges = [
-        {"from": "a", "to": "c"},
-        {"from": "b", "to": "c"},
-        {"from": "c", "to": None},
+        {"from_node": "a", "to_node": "c"},
+        {"from_node": "b", "to_node": "c"},
+        {"from_node": "c", "to_node": None},
     ]
     result = await validator.validate(nodes, edges, "a", {}, flow_id="x")
     codes = {e.code for e in result.errors}
@@ -306,7 +297,7 @@ async def test_flow_validator_rejects_edge_involving_resource_node() -> None:
         "a": {"type": "code", "code": "def execute(a,s): return {}"},
         "r": {"type": "resource", "resources": {}},
     }
-    edges = [{"from": "a", "to": "r"}]
+    edges = [{"from_node": "a", "to_node": "r"}]
     result = await validator.validate(nodes, edges, "a", {}, flow_id="x")
     codes = {e.code for e in result.errors}
     assert "edge_involves_resource_node" in codes
@@ -321,6 +312,6 @@ async def test_flow_validator_no_exit_ignores_isolated_resource_node() -> None:
         "a": {"type": "code", "code": "def execute(a,s): return {}"},
         "r": {"type": "resource"},
     }
-    edges = [{"from": "a", "to": None}]
+    edges = [{"from_node": "a", "to_node": None}]
     result = await validator.validate(nodes, edges, "a", {}, flow_id="x")
     assert not any(e.code == "no_exit" for e in result.errors)

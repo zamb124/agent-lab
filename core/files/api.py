@@ -20,7 +20,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 
 from core.config import get_settings
-from core.context import get_context, require_active_company, require_context
+from core.context import require_active_company, require_context
 from core.files.audio_transcode import AudioTranscodeError
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.http_range import RangeNotSatisfiableError
@@ -39,18 +39,56 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 _DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+_UPLOAD_READ_CHUNK_BYTES = 1024 * 1024  # 1 MB
+
+async def _read_upload_with_limit(file: UploadFile, max_bytes: int) -> bytes:
+    """
+    Читает UploadFile чанками с early-abort при превышении max_bytes.
+
+    Без этого `await file.read()` тянет весь multipart-тело в RAM до
+    любой проверки размера: при 100 параллельных uploads по 500MB —
+    50GB RAM до выброса 413. Здесь же limit проверяется на каждом chunk.
+    """
+    if max_bytes <= 0:
+        raise ValueError("max_bytes должен быть больше 0")
+    parts: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_UPLOAD_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Файл превышает {max_bytes} байт.",
+            )
+        parts.append(chunk)
+    return b"".join(parts)
+
 
 def _safe_original_name(raw: str | None) -> str:
-    if not raw or not isinstance(raw, str):
+    if raw is None or raw == "":
         return "file"
     name = Path(raw).name.strip()
     return name[:255] if name and name != "." else "file"
 
 def _is_http_url(url: str) -> bool:
-    if not isinstance(url, str) or url == "":
+    if url == "":
         return False
     parsed = urlparse(url)
     return parsed.scheme in ("http", "https")
+
+
+def _ensure_file_record_access(file_record: FileRecord) -> None:
+    if file_record.is_public:
+        return
+    active_company = require_active_company()
+    if file_record.company_id is None:
+        raise HTTPException(status_code=403, detail="Нет доступа к файлу.")
+    if active_company.company_id != file_record.company_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к файлу.")
+
 
 def build_file_api_router(
     get_file_repo: Callable[[], "FileRepository"],
@@ -82,11 +120,9 @@ def build_file_api_router(
                 detail="Загрузка файлов недоступна: S3 не настроен.",
             )
 
-        data = await file.read()
+        data = await _read_upload_with_limit(file, max_upload_bytes)
         if len(data) == 0:
             raise HTTPException(status_code=400, detail="Пустой файл.")
-        if len(data) > max_upload_bytes:
-            raise HTTPException(status_code=413, detail=f"Файл превышает {max_upload_bytes} байт.")
 
         original_name = _safe_original_name(file.filename)
         guessed, _ = mimetypes.guess_type(original_name)
@@ -141,20 +177,14 @@ def build_file_api_router(
         if file_record is None:
             raise HTTPException(status_code=404, detail="Файл не найден.")
 
-        is_public = getattr(file_record, "is_public", True)
-        if not is_public:
-            ctx = get_context()
-            company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-            file_company_id = getattr(file_record, "company_id", None)
-            if company_id != file_company_id:
-                raise HTTPException(status_code=403, detail="Нет доступа к файлу.")
+        _ensure_file_record_access(file_record)
 
-        s3_bucket = getattr(file_record, "s3_bucket", None)
-        s3_key = getattr(file_record, "s3_key", None)
-        content_type = getattr(file_record, "content_type", None)
-        if isinstance(s3_bucket, str) and s3_bucket != "" and isinstance(s3_key, str) and s3_key != "":
-            if not isinstance(content_type, str) or content_type == "":
-                content_type = "application/octet-stream"
+        s3_bucket = file_record.s3_bucket
+        s3_key = file_record.s3_key
+        content_type = file_record.content_type
+        if s3_bucket != "" and s3_key != "":
+            if content_type == "":
+                raise HTTPException(status_code=500, detail="MIME тип файла не задан.")
             s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
             range_raw = request.headers.get("range")
             range_header = range_raw.strip() if isinstance(range_raw, str) else None
@@ -172,9 +202,8 @@ def build_file_api_router(
                     headers={"Content-Range": f"bytes */{exc.total_size}"},
                 )
             except ClientError as exc:
-                err = exc.response.get("Error", {}) if isinstance(exc.response, dict) else {}
-                code = err.get("Code", "")
-                status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") if isinstance(exc.response, dict) else None
+                code = exc.response["Error"]["Code"]
+                status = exc.response["ResponseMetadata"]["HTTPStatusCode"]
                 not_found = code in ("404", "NoSuchKey", "NotFound") or status == 404
                 if not_found:
                     raise HTTPException(
@@ -192,8 +221,8 @@ def build_file_api_router(
                     detail="Не удалось получить файл из хранилища.",
                 ) from exc
 
-        storage_url = getattr(file_record, "storage_url", None)
-        if not isinstance(storage_url, str) or storage_url == "":
+        storage_url = file_record.storage_url
+        if storage_url is None or storage_url == "":
             raise HTTPException(status_code=404, detail="Источник файла не задан.")
         if not _is_http_url(storage_url):
             raise HTTPException(status_code=404, detail="Источник файла не поддерживается для скачивания.")
@@ -201,9 +230,9 @@ def build_file_api_router(
         try:
             async with get_httpx_client(timeout=120.0) as client:
                 upstream_response = await client.get(storage_url)
-            upstream_response.raise_for_status()
+            _ = upstream_response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            st = exc.response.status_code if exc.response is not None else None
+            st = exc.response.status_code
             if st == 404:
                 raise HTTPException(status_code=404, detail="Файл не найден по ссылке хранения.") from exc
             logger.exception(
@@ -221,12 +250,11 @@ def build_file_api_router(
                 status_code=502,
                 detail="Не удалось получить файл по внешней ссылке.",
             ) from exc
-        upstream_content_type = upstream_response.headers.get("content-type")
-        response_content_type = (
-            upstream_content_type
-            if isinstance(upstream_content_type, str) and upstream_content_type != ""
-            else "application/octet-stream"
-        )
+        if "content-type" not in upstream_response.headers:
+            raise HTTPException(status_code=502, detail="Источник файла не вернул content-type.")
+        response_content_type = upstream_response.headers["content-type"]
+        if response_content_type == "":
+            raise HTTPException(status_code=502, detail="Источник файла вернул пустой content-type.")
         return StreamingResponse(
             content=iter([upstream_response.content]),
             media_type=response_content_type,
@@ -243,21 +271,11 @@ def build_file_api_router(
         if file_record is None:
             raise HTTPException(status_code=404, detail="Файл не найден.")
 
-        is_public = getattr(file_record, "is_public", True)
-        if not is_public:
-            ctx = get_context()
-            company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-            file_company_id = getattr(file_record, "company_id", None)
-            if company_id != file_company_id:
-                raise HTTPException(status_code=403, detail="Нет доступа к файлу.")
-
-        original_name = getattr(file_record, "original_name", None)
-        if not isinstance(original_name, str):
-            original_name = ""
+        _ensure_file_record_access(file_record)
         try:
             return await build_stored_file_text_preview(
                 file_id=file_id,
-                original_name=original_name,
+                original_name=file_record.original_name,
             )
         except FileReadError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -269,16 +287,7 @@ def build_file_api_router(
         if file_record is None:
             raise HTTPException(status_code=404, detail="Файл не найден.")
 
-        is_public = getattr(file_record, "is_public", True)
-        if not is_public:
-            ctx = get_context()
-            company_id = ctx.active_company.company_id if ctx and ctx.active_company else None
-            file_company_id = getattr(file_record, "company_id", None)
-            if company_id != file_company_id:
-                raise HTTPException(status_code=403, detail="Нет доступа к файлу.")
-
-        if isinstance(file_record, FileRecord):
-            return FileResponse.from_record(file_record)
-        raise HTTPException(status_code=404, detail="Метаданные файла недоступны.")
+        _ensure_file_record_access(file_record)
+        return FileResponse.from_record(file_record)
 
     return router

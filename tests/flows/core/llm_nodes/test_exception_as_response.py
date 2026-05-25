@@ -5,7 +5,7 @@ from typing import Any, Dict
 import pytest
 
 from apps.flows.src.models.enums import NodeType
-from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
+from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.nodes import BaseNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from core.state import ExecutionState
@@ -39,7 +39,7 @@ async def test_llm_runner_absorbs_tool_error_when_enabled() -> None:
         type=NodeType.LLM_NODE,
         name="A",
         description="",
-        llm=NodeLLMOverride(provider="mock"),
+        llm=NodeLLMConfig(provider="mock"),
         exception_as_response=True,
         exception_allow_types=[],
     )
@@ -72,7 +72,7 @@ async def test_llm_runner_raises_when_policy_off() -> None:
         type=NodeType.LLM_NODE,
         name="A",
         description="",
-        llm=NodeLLMOverride(provider="mock"),
+        llm=NodeLLMConfig(provider="mock"),
         exception_as_response=False,
     )
     runner = LlmNodeRunner(

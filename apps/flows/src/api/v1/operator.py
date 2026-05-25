@@ -83,7 +83,7 @@ def _require_operator_queue_manage_role() -> None:
 
 def _queue_to_out(row: OperatorQueues, *, i_am_member: bool = False) -> OperatorQueueOut:
     return OperatorQueueOut(
-        id=row.id,
+        queue_id=row.id,
         company_id=row.company_id,
         name=row.name,
         slug=row.slug,
@@ -273,7 +273,7 @@ async def get_operator_task(
     if not await repo.is_user_member_of_queue(task.queue_id, user_id):
         raise HTTPException(status_code=403, detail="Нет доступа к задаче")
     dialog_messages: list[JsonObject] = []
-    saved = await container.state_manager.get_state(task.session_id)
+    saved = await container.workflow_runtime.get_state(task.session_id)
     if saved is not None and saved.messages:
         for m in saved.messages:
             dialog_messages.append(_dialog_message_entry_for_api(m))

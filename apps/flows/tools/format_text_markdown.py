@@ -26,9 +26,8 @@ class FormatTextMarkdownArgs(BaseModel):
         "Провайдер и модель берутся из company capability llm_format_markdown."
     ),
     tags=["text", "markdown"],
-    args_schema=FormatTextMarkdownArgs,
+    parameters_model=FormatTextMarkdownArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
-    mock_response={"markdown": "# [mock]\n\nFormatted in tests."},
 )
 async def format_text_markdown(
     text: str,

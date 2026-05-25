@@ -8,11 +8,18 @@ TelegramTriggerHandler - обработчик Telegram Bot webhook тригге�
 """
 
 import secrets
-from typing import Any
+from typing import override
 
 from apps.flows.config import get_settings as flows_get_settings
 from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.models import TelegramTriggerConfig, TriggerConfig, TriggerStatus, TriggerType
+from apps.flows.src.models import (
+    TelegramBotApiBooleanResponse,
+    TelegramTriggerConfig,
+    TelegramUpdate,
+    TriggerConfig,
+    TriggerStatus,
+    TriggerType,
+)
 from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
 from apps.flows.src.triggers.executor import TriggerExecutor
 from apps.flows.src.triggers.handlers.base import (
@@ -24,6 +31,7 @@ from apps.flows.src.triggers.verify_draft import normalize_telegram_bot_token_fo
 from core.config import get_settings
 from core.http import ProxyStrategy, get_httpx_client
 from core.logging import get_logger
+from core.types import JsonObject, require_json_object
 from core.variables.resolver import VariableResolutionError
 
 logger = get_logger(__name__)
@@ -53,12 +61,13 @@ class TelegramTriggerHandler(BaseTriggerHandler):
     }
     """
 
-    trigger_type = TriggerType.TELEGRAM
+    trigger_type: TriggerType = TriggerType.TELEGRAM
 
-    def __init__(self, base_url: str, *, container: FlowRuntimeContainer):
+    def __init__(self, base_url: str, *, container: FlowRuntimeContainer) -> None:
         super().__init__(base_url, container=container)
-        self._executor = TriggerExecutor()
+        self._executor: TriggerExecutor = TriggerExecutor()
 
+    @override
     async def register(
         self,
         flow_id: str,
@@ -84,9 +93,10 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                 message="bot_token is required",
             )
 
-        if isinstance(bot_token, str) and bot_token.strip().startswith("@var:"):
-            bot_token = await self._resolve_variable(bot_token.strip(), flow_id, trigger.branch_id)
-        bot_token = normalize_telegram_bot_token_for_api(str(bot_token))
+        bot_token_ref = bot_token.strip()
+        if bot_token_ref.startswith("@var:"):
+            bot_token_ref = await self._resolve_variable(bot_token_ref, flow_id, trigger.branch_id)
+        bot_token = normalize_telegram_bot_token_for_api(bot_token_ref)
         if not bot_token:
             raise TriggerRegistrationError(
                 trigger_type="telegram",
@@ -139,14 +149,15 @@ class TelegramTriggerHandler(BaseTriggerHandler):
                     message=f"Telegram API error: {response.status_code} - {response.text}",
                 )
 
-            result = response.json()
+            result = TelegramBotApiBooleanResponse.model_validate_json(response.content)
 
-            if not result.get("ok"):
+            if not result.ok:
+                description = result.description or "Telegram API returned ok=false"
                 raise TriggerRegistrationError(
                     trigger_type="telegram",
                     flow_id=flow_id,
                     trigger_id=trigger.trigger_id,
-                    message=f"Telegram API returned: {result.get('description', 'Unknown error')}",
+                    message=f"Telegram API returned: {description}",
                 )
 
         # Обновляем trigger с runtime данными
@@ -159,12 +170,15 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         trigger.config["_bot_token_resolved"] = bot_token
 
         logger.info(
-            f"Telegram webhook registered: flow_id={flow_id}, "
-            f"trigger={trigger.trigger_id}, url={webhook_url}"
+            "Telegram webhook registered: flow_id=%s, trigger=%s, url=%s",
+            flow_id,
+            trigger.trigger_id,
+            webhook_url,
         )
 
         return trigger
 
+    @override
     async def unregister(
         self,
         flow_id: str,
@@ -175,56 +189,65 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         """
         self._log_unregister(flow_id, trigger.trigger_id)
 
-        config = trigger.config
-        bot_token = config.get("_bot_token_resolved") or config.get("bot_token")
+        config = TelegramTriggerConfig.model_validate(trigger.config)
+        bot_token = config.bot_token_resolved or config.bot_token
 
         if not bot_token:
-            logger.warning(
-                f"No bot_token for unregister: flow_id={flow_id}, "
-                f"trigger={trigger.trigger_id}"
+            raise TriggerRegistrationError(
+                trigger_type="telegram",
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
+                message="bot_token is required for unregister",
             )
-            return
 
-        if isinstance(bot_token, str) and bot_token.strip().startswith("@var:"):
-            bot_token = await self._resolve_variable(bot_token.strip(), flow_id, trigger.branch_id)
-        bot_token = normalize_telegram_bot_token_for_api(str(bot_token))
+        bot_token_ref = bot_token.strip()
+        if bot_token_ref.startswith("@var:"):
+            bot_token_ref = await self._resolve_variable(bot_token_ref, flow_id, trigger.branch_id)
+        bot_token = normalize_telegram_bot_token_for_api(bot_token_ref)
         if not bot_token:
-            logger.warning(
-                f"No usable bot_token for unregister: flow_id={flow_id}, "
-                f"trigger={trigger.trigger_id}"
+            raise TriggerRegistrationError(
+                trigger_type="telegram",
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
+                message="bot_token is empty after resolve",
             )
-            return
 
         api_url = f"{get_settings().telegram.api_base}/bot{bot_token}/deleteWebhook"
 
-        try:
-            async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.SMART) as client:
-                response = await client.post(api_url, json={"drop_pending_updates": True})
+        async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.SMART) as client:
+            response = await client.post(api_url, json={"drop_pending_updates": True})
 
-                if response.status_code == 200:
-                    result = response.json()
-                    if result.get("ok"):
-                        logger.info(
-                            f"Telegram webhook deleted: flow_id={flow_id}, "
-                            f"trigger={trigger.trigger_id}"
-                        )
-                    else:
-                        logger.warning(
-                            f"Telegram deleteWebhook warning: {result.get('description')}"
-                        )
-                else:
-                    logger.warning(
-                        f"Telegram deleteWebhook failed: {response.status_code}"
-                    )
-        except Exception as e:
-            logger.error(f"Error deleting Telegram webhook: {e}")
+        if response.status_code != 200:
+            raise TriggerRegistrationError(
+                trigger_type="telegram",
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
+                message=f"Telegram deleteWebhook failed: {response.status_code} - {response.text}",
+            )
 
+        result = TelegramBotApiBooleanResponse.model_validate_json(response.content)
+        if not result.ok:
+            description = result.description or "Telegram API returned ok=false"
+            raise TriggerRegistrationError(
+                trigger_type="telegram",
+                flow_id=flow_id,
+                trigger_id=trigger.trigger_id,
+                message=f"Telegram deleteWebhook warning: {description}",
+            )
+
+        logger.info(
+            "Telegram webhook deleted: flow_id=%s, trigger=%s",
+            flow_id,
+            trigger.trigger_id,
+        )
+
+    @override
     async def handle(
         self,
         flow_id: str,
         trigger_id: str,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
+        payload: JsonObject,
+    ) -> JsonObject:
         """
         Обрабатывает входящий Telegram Update.
 
@@ -245,18 +268,19 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         if not trigger.enabled:
             raise TriggerValidationError(f"Trigger is disabled: {trigger_id}")
 
-        # Валидируем payload
-        await self._validate_update(trigger, payload)
+        update = TelegramUpdate.model_validate(payload)
+        trigger_payload = update.to_payload()
+        await self._validate_update(trigger, update)
 
         exec_trigger = trigger.model_copy(deep=True)
         combined = {**dict(exec_trigger.input_mapping), **dict(exec_trigger.output_mapping)}
         if not combined:
-            exec_trigger.input_mapping = self._default_mapping_for_payload(payload)
+            exec_trigger.output_mapping = self._default_mapping_for_update(update)
 
         result = await self._executor.execute(
             flow_id=flow_id,
             trigger=exec_trigger,
-            payload=payload,
+            payload=trigger_payload,
         )
 
         return result
@@ -270,7 +294,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         raw = config.allowed_updates
         ordered: list[str] = []
         for item in raw:
-            if not isinstance(item, str) or not item.strip():
+            if not item.strip():
                 raise TriggerRegistrationError(
                     trigger_type="telegram",
                     flow_id=flow_id,
@@ -302,27 +326,39 @@ class TelegramTriggerHandler(BaseTriggerHandler):
     async def _validate_update(
         self,
         trigger: TriggerConfig,
-        payload: dict[str, Any],
+        update: TelegramUpdate,
     ) -> None:
         """Валидирует Telegram Update (message или callback_query)."""
         config = TelegramTriggerConfig.model_validate(trigger.config)
 
-        cq = payload.get("callback_query")
-        if isinstance(cq, dict) and cq:
+        cq = update.callback_query
+        if cq is not None:
             callback_from_raw = cq.get("from")
-            callback_from: dict[str, Any] = (
-                callback_from_raw if isinstance(callback_from_raw, dict) else {}
+            if callback_from_raw is None:
+                raise TriggerValidationError("Telegram callback_query.from is required")
+            callback_from = require_json_object(
+                callback_from_raw,
+                "telegram.callback_query.from",
             )
             msg_raw = cq.get("message")
-            msg: dict[str, Any] = msg_raw if isinstance(msg_raw, dict) else {}
+            if msg_raw is None:
+                raise TriggerValidationError("Telegram callback_query.message is required")
+            msg = require_json_object(msg_raw, "telegram.callback_query.message")
             callback_chat_raw = msg.get("chat")
-            callback_chat: dict[str, Any] = (
-                callback_chat_raw if isinstance(callback_chat_raw, dict) else {}
+            if callback_chat_raw is None:
+                raise TriggerValidationError("Telegram callback_query.message.chat is required")
+            callback_chat = require_json_object(
+                callback_chat_raw,
+                "telegram.callback_query.message.chat",
             )
             user_id = callback_from.get("id")
             chat_id = callback_chat.get("id")
-            data = cq.get("data")
-            data_str = data if isinstance(data, str) else ""
+            if not isinstance(user_id, int):
+                raise TriggerValidationError("Telegram callback_query.from.id must be int")
+            if not isinstance(chat_id, int):
+                raise TriggerValidationError("Telegram callback_query.message.chat.id must be int")
+            data_raw = cq.get("data")
+            data_str = data_raw if isinstance(data_raw, str) else None
 
             allowed_users = config.allowed_users
             if allowed_users and user_id not in allowed_users:
@@ -334,26 +370,36 @@ class TelegramTriggerHandler(BaseTriggerHandler):
 
             commands = config.commands
             if commands:
+                if data_str is None:
+                    raise TriggerValidationError("Telegram callback_query.data must be string")
                 matched = any(data_str.startswith(cmd) for cmd in commands)
                 if not matched:
                     raise TriggerValidationError(f"Command not matched for callback: {data_str!r}")
             return
 
-        message = payload.get("message")
-        if not isinstance(message, dict) or not message:
+        message = update.message
+        if message is None:
             raise TriggerValidationError(
                 "Telegram update must contain non-empty message or callback_query"
             )
 
         from_user_raw = message.get("from")
-        from_user: dict[str, Any] = from_user_raw if isinstance(from_user_raw, dict) else {}
+        if from_user_raw is None:
+            raise TriggerValidationError("Telegram message.from is required")
+        from_user = require_json_object(from_user_raw, "telegram.message.from")
         chat_raw = message.get("chat")
-        chat: dict[str, Any] = chat_raw if isinstance(chat_raw, dict) else {}
-        text_raw = message.get("text", "")
-        text = text_raw if isinstance(text_raw, str) else ""
+        if chat_raw is None:
+            raise TriggerValidationError("Telegram message.chat is required")
+        chat = require_json_object(chat_raw, "telegram.message.chat")
+        text_raw = message.get("text")
+        text = text_raw if isinstance(text_raw, str) else None
 
         user_id = from_user.get("id")
         chat_id = chat.get("id")
+        if not isinstance(user_id, int):
+            raise TriggerValidationError("Telegram message.from.id must be int")
+        if not isinstance(chat_id, int):
+            raise TriggerValidationError("Telegram message.chat.id must be int")
 
         allowed_users = config.allowed_users
         if allowed_users and user_id not in allowed_users:
@@ -365,14 +411,15 @@ class TelegramTriggerHandler(BaseTriggerHandler):
 
         commands = config.commands
         if commands:
+            if text is None:
+                raise TriggerValidationError("Telegram message.text must be string")
             matched = any(text.startswith(cmd) for cmd in commands)
             if not matched:
                 raise TriggerValidationError(f"Command not matched: {text}")
 
-    def _default_mapping_for_payload(self, payload: dict[str, Any]) -> dict[str, str]:
+    def _default_mapping_for_update(self, update: TelegramUpdate) -> dict[str, str]:
         """Дефолтный маппинг под тип Update."""
-        cq = payload.get("callback_query")
-        if isinstance(cq, dict) and cq:
+        if update.callback_query is not None:
             return {
                 "content": "@trigger:callback_query.data",
                 "context.chat_id": "@trigger:callback_query.message.chat.id",
@@ -422,7 +469,9 @@ class TelegramTriggerHandler(BaseTriggerHandler):
             return False
         if not received_token:
             return False
-        return secrets.compare_digest(str(expected_token), str(received_token))
+        if not isinstance(expected_token, str):
+            return False
+        return secrets.compare_digest(expected_token, received_token)
 
 
 __all__ = ["TelegramTriggerHandler"]

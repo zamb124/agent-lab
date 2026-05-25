@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, override
 
 from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import MCPServerConfig
-from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.tools.base import (
     BaseTool,
     ToolArguments,
@@ -15,10 +14,10 @@ from apps.flows.src.tools.base import (
     sanitize_tool_name,
 )
 from core.logging import get_logger
-from core.types import JsonObject, JsonValue, require_json_object
+from core.types import JsonObject, require_json_object
 
 if TYPE_CHECKING:
-    from apps.flows.src.state import ExecutionState
+    from core.state import ExecutionState
 
 logger = get_logger(__name__)
 
@@ -35,44 +34,30 @@ class MCPTool(BaseTool):
         tool_id: str,
         mcp_server_config: MCPServerConfig,
         mcp_tool_name: str,
+        *,
+        parameters_schema: JsonObject,
         description: str | None = None,
-        parameters: dict[str, CallParameter] | None = None,
-        parameters_schema: JsonObject | None = None,
         tags: list[str] | None = None,
     ):
         self.name: str = sanitize_tool_name(tool_id)
         self.description: str = description or f"MCP tool: {mcp_tool_name}"
         self._mcp_server_config: MCPServerConfig = mcp_server_config
         self._mcp_tool_name: str = mcp_tool_name
-        self._parameters: dict[str, CallParameter] = parameters or {}
-        self._parameters_schema: JsonObject | None = parameters_schema
+        self._parameters_schema: JsonObject = require_json_object(
+            parameters_schema,
+            f"MCPTool.{tool_id}.parameters_schema",
+        )
+        if self._parameters_schema.get("type") != "object" or not isinstance(
+            self._parameters_schema.get("properties"), dict
+        ):
+            raise ValueError(f"MCPTool '{tool_id}' parameters_schema must be object JSON Schema")
         self.tags: list[str] = tags or ["mcp"]
 
     @property
     @override
     def parameters(self) -> ToolParametersSchema:
         """JSON Schema параметров."""
-        if self._parameters_schema is not None:
-            return self._parameters_schema
-        if not self._parameters:
-            return {"type": "object", "properties": {}, "required": []}
-
-        properties: JsonObject = {}
-        required: list[JsonValue] = []
-
-        for param_name, param in self._parameters.items():
-            properties[param_name] = {
-                "type": param.type,
-                "description": param.description,
-            }
-            if param.required:
-                required.append(param_name)
-
-        return {
-            "type": "object",
-            "properties": properties,
-            "required": required,
-        }
+        return self._parameters_schema
 
     @override
     async def _run_impl(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
@@ -96,15 +81,11 @@ class MCPTool(BaseTool):
 
         try:
             result = await client.call_tool(self._mcp_tool_name, args)
-
-            if result.is_error:
-                return f"MCP tool error: {result.get_text()}"
-
-            return result.get_text()
-
         except MCPClientError as e:
             logger.error(f"MCP tool call failed: {e}")
             return f"MCP tool error: {e}"
-        except Exception as e:
-            logger.error(f"Unexpected error calling MCP tool: {e}")
-            return f"MCP tool error: {e}"
+
+        if result.is_error:
+            return f"MCP tool error: {result.get_text()}"
+
+        return result.get_text()

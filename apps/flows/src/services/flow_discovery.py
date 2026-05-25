@@ -3,7 +3,6 @@ FlowDiscoveryService — регистрация и health-check внешних f
 """
 
 from datetime import datetime, timezone
-from typing import Any
 from urllib.parse import urlparse
 
 from apps.flows.config import ExternalFlowConfig
@@ -11,6 +10,7 @@ from apps.flows.src.db.flow_repository import FlowRepository
 from apps.flows.src.models import ExternalAgentStatus, FlowConfig, FlowType
 from core.clients.a2a_client import A2AClient
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -24,9 +24,9 @@ class FlowDiscoveryService:
         self,
         repository: FlowRepository,
         a2a_client: A2AClient,
-    ):
-        self._repository = repository
-        self._a2a_client = a2a_client
+    ) -> None:
+        self._repository: FlowRepository = repository
+        self._a2a_client: A2AClient = a2a_client
 
     async def init_from_config(self, external_flows_config: list[ExternalFlowConfig]) -> int:
         """Регистрирует flows из конфигурации приложения."""
@@ -70,7 +70,17 @@ class FlowDiscoveryService:
         card_payload = await self._fetch_agent_card(url, headers)
 
         flow_id = self._generate_flow_id(url)
-        display_name = name or card_payload.get("name", flow_id)
+        if name is not None and name.strip():
+            display_name = name
+        else:
+            card_name = card_payload.get("name")
+            if not isinstance(card_name, str) or not card_name.strip():
+                raise ValueError("A2A agent-card.name is required")
+            display_name = card_name
+
+        card_description = card_payload.get("description")
+        if not isinstance(card_description, str):
+            raise ValueError("A2A agent-card.description is required")
 
         now = datetime.now(timezone.utc)
 
@@ -79,7 +89,7 @@ class FlowDiscoveryService:
             type=FlowType.EXTERNAL,
             url=url,
             name=display_name,
-            description=card_payload.get("description", ""),
+            description=card_description,
             headers=headers or {},
             status=ExternalAgentStatus.ACTIVE,
             last_health_check=now,
@@ -88,7 +98,7 @@ class FlowDiscoveryService:
             updated_at=now,
         )
 
-        await self._repository.set(flow_cfg)
+        _ = await self._repository.set(flow_cfg)
         logger.info(f"Registered external flow: {display_name} ({url})")
 
         return flow_cfg
@@ -151,7 +161,7 @@ class FlowDiscoveryService:
             ext_cfg.last_health_check = datetime.now(timezone.utc)
             ext_cfg.agent_card = card_payload
             ext_cfg.updated_at = datetime.now(timezone.utc)
-            await self._repository.set(ext_cfg)
+            _ = await self._repository.set(ext_cfg)
 
             logger.debug(f"External flow {flow_id} is healthy")
             return True
@@ -162,7 +172,7 @@ class FlowDiscoveryService:
             ext_cfg.status = ExternalAgentStatus.UNHEALTHY
             ext_cfg.last_health_check = datetime.now(timezone.utc)
             ext_cfg.updated_at = datetime.now(timezone.utc)
-            await self._repository.set(ext_cfg)
+            _ = await self._repository.set(ext_cfg)
 
             return False
 
@@ -170,14 +180,23 @@ class FlowDiscoveryService:
         self,
         url: str,
         headers: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """HTTP: A2A agent-card (спека A2A)."""
         return await self._a2a_client.get_agent_card(url, headers)
 
     def _generate_flow_id(self, url: str) -> str:
         """Стабильный flow_id из host:port URL."""
         parsed = urlparse(url)
-        host = parsed.hostname or "unknown"
-        port = parsed.port or 80
+        if parsed.hostname is None:
+            raise ValueError("External flow URL must include host")
+        host = parsed.hostname
+        if parsed.port is not None:
+            port = parsed.port
+        elif parsed.scheme == "https":
+            port = 443
+        elif parsed.scheme == "http":
+            port = 80
+        else:
+            raise ValueError("External flow URL scheme must be http or https")
 
         return f"{host}_{port}".replace(".", "_").replace("-", "_")

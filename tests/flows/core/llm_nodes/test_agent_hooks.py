@@ -8,7 +8,7 @@ from typing import Any, Dict
 
 import pytest
 
-from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
+from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from core.state import ExecutionState
@@ -51,7 +51,7 @@ def flow_config():
         name="Test Agent",
         description="Agent for testing hooks",
         prompt="Ты помощник. Переменная: {test_var}",
-        llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+        llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
     )
 
 

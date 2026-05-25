@@ -182,7 +182,7 @@ async def list_namespace_templates(
     """Список шаблонов namespace из БД."""
     template_repo = container.namespace_template_repository
     templates, total = await asyncio.gather(
-        template_repo.list_for_company(limit=limit, offset=offset),
+        template_repo.list_by_company(limit=limit, offset=offset),
         template_repo.count_all(),
     )
     responses: list[NamespaceTemplateResponse] = []
@@ -515,7 +515,7 @@ async def get_namespace_task_board_editor_state(
     service = container.namespace_template_service
     payload = await service.get_namespace_editability(normalized_namespace_name)
     allowed = payload["current_allowed_type_ids"]
-    types = await container.entity_type_repository.get_all_for_company(
+    types = await container.entity_type_repository.list_by_company(
         namespace=normalized_namespace_name,
         limit=500,
         offset=0,

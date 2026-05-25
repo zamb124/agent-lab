@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, TypeAlias, cast
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Literal, NotRequired, Required, TypeAlias, TypedDict, cast
 
 from pydantic import JsonValue as PydanticJsonValue
 from pydantic import TypeAdapter, ValidationError
@@ -28,6 +28,66 @@ else:
         OtelAttributeScalar | Sequence[str] | Sequence[bool] | Sequence[int] | Sequence[float]
     )
     OtelAttributes: TypeAlias = Mapping[str, OtelAttributeValue]
+
+
+class ASGIScope(TypedDict, total=False):
+    type: Required[str]
+    headers: NotRequired[list[tuple[bytes, bytes]]]
+    path: NotRequired[str]
+    scheme: NotRequired[str]
+    query_string: NotRequired[bytes]
+    subprotocols: NotRequired[list[str]]
+
+
+class ASGIWebSocketConnectMessage(TypedDict):
+    type: Literal["websocket.connect"]
+
+
+class ASGIWebSocketDisconnectMessage(TypedDict, total=False):
+    type: Required[Literal["websocket.disconnect"]]
+    code: int
+
+
+class ASGIWebSocketReceiveMessage(TypedDict, total=False):
+    type: Required[Literal["websocket.receive"]]
+    bytes: bytes | None
+    text: str | None
+
+
+ASGIReceiveMessage: TypeAlias = (
+    ASGIWebSocketConnectMessage | ASGIWebSocketDisconnectMessage | ASGIWebSocketReceiveMessage
+)
+
+
+class ASGIWebSocketAcceptMessage(TypedDict, total=False):
+    type: Required[Literal["websocket.accept"]]
+    subprotocol: str
+
+
+class ASGIWebSocketCloseMessage(TypedDict):
+    type: Literal["websocket.close"]
+    code: int
+
+
+class ASGIWebSocketSendBytesMessage(TypedDict):
+    type: Literal["websocket.send"]
+    bytes: bytes
+
+
+class ASGIWebSocketSendTextMessage(TypedDict):
+    type: Literal["websocket.send"]
+    text: str
+
+
+ASGISendMessage: TypeAlias = (
+    ASGIWebSocketAcceptMessage
+    | ASGIWebSocketCloseMessage
+    | ASGIWebSocketSendBytesMessage
+    | ASGIWebSocketSendTextMessage
+)
+ASGIReceive: TypeAlias = Callable[[], Awaitable[ASGIReceiveMessage]]
+ASGISend: TypeAlias = Callable[[ASGISendMessage], Awaitable[None]]
+ASGIApp: TypeAlias = Callable[[ASGIScope, ASGIReceive, ASGISend], Awaitable[None]]
 
 _JSON_VALUE_ADAPTER: TypeAdapter[PydanticJsonValue] = TypeAdapter(PydanticJsonValue)
 _JSON_OBJECT_ADAPTER: TypeAdapter[dict[str, PydanticJsonValue]] = TypeAdapter(dict[str, PydanticJsonValue])

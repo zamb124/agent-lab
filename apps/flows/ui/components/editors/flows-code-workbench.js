@@ -1,7 +1,7 @@
 /**
  * flows-code-workbench — общий UI редактирования inline-кода для code-ноды и code-ресурса.
  *
- * variant `node`: вкладки Код / Схема (args_schema JSON), перспектива документации `node`.
+ * variant `node`: вкладки Код / Схема (parameters_schema JSON), перспектива документации `node`.
  * variant `resource`: вкладки Код / Параметры (язык), перспектива `editor`.
  */
 
@@ -30,8 +30,8 @@ export class FlowsCodeWorkbench extends PlatformElement {
         variant: { type: String },
         code: { type: String },
         language: { type: String },
-        /** Только variant=node; объект args_schema из конфига ноды */
-        argsSchema: { type: Object },
+        /** Только variant=node; объект parameters_schema из конфига ноды */
+        parametersSchema: { type: Object },
         /** flows.code_docs: node | editor */
         documentationPerspective: { type: String },
         /** Ключи flow variables для автодополнения `variables.` / `state.variables.` */
@@ -235,7 +235,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
         this.variant = 'node';
         this.code = '';
         this.language = 'python';
-        this.argsSchema = {};
+        this.parametersSchema = { type: 'object', properties: {}, required: [] };
         this.documentationPerspective = 'node';
         this.completionVariableKeys = [];
         this.completionFlowId = '';
@@ -479,7 +479,7 @@ export class FlowsCodeWorkbench extends PlatformElement {
             const parsed = value.trim().length === 0 ? null : JSON.parse(value);
             this._schemaInvalid = false;
             this._schemaError = '';
-            this._emitWorkbench({ type: 'args_schema', args_schema: parsed });
+            this._emitWorkbench({ type: 'parameters_schema', parameters_schema: parsed });
         } catch (err) {
             this._schemaInvalid = true;
             this._schemaError = err instanceof Error ? err.message : String(err);
@@ -617,18 +617,18 @@ export class FlowsCodeWorkbench extends PlatformElement {
         `;
     }
 
-    _argsSchemaObject() {
-        const a = this.argsSchema;
+    _parametersSchemaObject() {
+        const a = this.parametersSchema;
         if (a !== null && typeof a === 'object' && !Array.isArray(a)) {
             return a;
         }
-        return {};
+        return { type: 'object', properties: {}, required: [] };
     }
 
     render() {
         const code = typeof this.code === 'string' ? this.code : '';
-        const argsSchema = this._argsSchemaObject();
-        const schemaText = JSON.stringify(argsSchema, null, 2);
+        const parametersSchema = this._parametersSchemaObject();
+        const schemaText = JSON.stringify(parametersSchema, null, 2);
         const cmLang = this._cmLanguageForCodeTab();
         const completionCtx = this._completionContextPayload();
         const varKeysEff = this._effectiveCompletionVariableKeys();

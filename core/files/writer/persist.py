@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from core.files.models import FileMetadata
+from core.files.models import FileRecord
 from core.files.processors import FileProcessor
 
 
@@ -17,7 +17,7 @@ async def write_bytes_via_processor(
     download_url_prefix: str,
     content_sha256_hex: str,
     public: bool = True,
-) -> FileMetadata:
+) -> FileRecord:
     return await file_processor.persist_uploaded_file(
         data=data,
         original_name=original_name,

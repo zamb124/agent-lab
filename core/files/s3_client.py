@@ -5,9 +5,13 @@ S3 клиент для работы с объектным хранилищем.
 ВАЖНО: БЕЗ try-except блоков - fail-fast подход.
 """
 
+from __future__ import annotations
+
 import asyncio
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from types import TracebackType
 from urllib.parse import urlparse
 
 import aioboto3
@@ -20,6 +24,23 @@ from core.files.s3_sigv4_clock import ensure_sigv4_clock_aligned_with_endpoint
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class S3ObjectMetadata:
+    content_type: str
+    content_length: int
+    last_modified: datetime
+    etag: str
+    metadata: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class S3ListedObject:
+    key: str
+    size: int
+    last_modified: datetime
+    etag: str
 
 
 class S3Client:
@@ -37,7 +58,7 @@ class S3Client:
         provider_name: str = "aws",
         track_files: bool = True,
         bucket_config_key: str | None = None,
-    ):
+    ) -> None:
         """
         Инициализация S3 клиента.
 
@@ -57,16 +78,16 @@ class S3Client:
         if not secret_access_key:
             raise ValueError("secret_access_key не может быть пустым")
 
-        self.bucket_name = bucket_name
-        self.bucket_config_key = bucket_config_key
-        self.access_key_id = access_key_id
-        self.secret_access_key = secret_access_key
-        self.region_name = region_name
-        self.endpoint_url = endpoint_url
-        self.provider_name = provider_name
-        self.track_files = track_files
-        self._session = None
-        self._client = None
+        self.bucket_name: str = bucket_name
+        self.bucket_config_key: str | None = bucket_config_key
+        self.access_key_id: str = access_key_id
+        self.secret_access_key: str = secret_access_key
+        self.region_name: str = region_name
+        self.endpoint_url: str | None = endpoint_url
+        self.provider_name: str = provider_name
+        self.track_files: bool = track_files
+        self._session: aioboto3.Session | None = None
+        self._client: aioboto3.S3ServiceClient | None = None
         self._client_lock: asyncio.Lock | None = None
         self._minio_bucket_lock: asyncio.Lock | None = None
         self._minio_ready_buckets: set[str] = set()
@@ -88,7 +109,7 @@ class S3Client:
         if self.provider_name == "minio":
             return True
         raw = self.endpoint_url
-        if not raw or not isinstance(raw, str):
+        if raw is None or raw == "":
             return False
         host = urlparse(raw.strip()).hostname
         if host is None:
@@ -96,14 +117,16 @@ class S3Client:
         return host in ("localhost", "127.0.0.1", "::1", "[::1]")
 
     def _botocore_client_config(self) -> Config | None:
-        kwargs: dict[str, Any] = {}
+        disable_http_proxy = self._s3_endpoint_should_not_use_http_proxy()
+        if self.provider_name == "vkcloud" and disable_http_proxy:
+            proxies: dict[str, str] = {}
+            return Config(signature_version="s3", proxies=proxies)
         if self.provider_name == "vkcloud":
-            kwargs["signature_version"] = "s3"
-        if self._s3_endpoint_should_not_use_http_proxy():
-            kwargs["proxies"] = {}
-        if not kwargs:
-            return None
-        return Config(**kwargs)
+            return Config(signature_version="s3")
+        if disable_http_proxy:
+            proxies = {}
+            return Config(proxies=proxies)
+        return None
 
     def _get_client_lock(self) -> asyncio.Lock:
         """Получает или создает лок для клиента"""
@@ -111,7 +134,7 @@ class S3Client:
             self._client_lock = asyncio.Lock()
         return self._client_lock
 
-    async def _get_client(self):
+    async def _get_client(self) -> aioboto3.S3ServiceClient:
         """Получает или создает S3 клиент (потокобезопасно)"""
         if self._client is None:
             lock = self._get_client_lock()
@@ -120,19 +143,25 @@ class S3Client:
                     if self._session is None:
                         self._session = aioboto3.Session()
 
-                    client_config: dict[str, Any] = {}
+                    session = self._session
                     bc = self._botocore_client_config()
-                    if bc is not None:
-                        client_config["config"] = bc
-
-                    self._client = await self._session.client(
-                        "s3",
-                        endpoint_url=self.endpoint_url,
-                        aws_access_key_id=self.access_key_id,
-                        aws_secret_access_key=self.secret_access_key,
-                        region_name=self.region_name,
-                        **client_config,
-                    ).__aenter__()
+                    if bc is None:
+                        self._client = await session.client(
+                            "s3",
+                            endpoint_url=self.endpoint_url,
+                            aws_access_key_id=self.access_key_id,
+                            aws_secret_access_key=self.secret_access_key,
+                            region_name=self.region_name,
+                        ).__aenter__()
+                    else:
+                        self._client = await session.client(
+                            "s3",
+                            endpoint_url=self.endpoint_url,
+                            aws_access_key_id=self.access_key_id,
+                            aws_secret_access_key=self.secret_access_key,
+                            region_name=self.region_name,
+                            config=bc,
+                        ).__aenter__()
 
         return self._client
 
@@ -155,8 +184,8 @@ class S3Client:
             try:
                 await client.head_bucket(Bucket=bucket)
             except ClientError as exc:
-                code = exc.response.get("Error", {}).get("Code", "")
-                status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                code = exc.response["Error"]["Code"]
+                status = exc.response["ResponseMetadata"]["HTTPStatusCode"]
                 missing = code in ("404", "NoSuchBucket") or status == 404
                 if not missing:
                     raise
@@ -164,25 +193,31 @@ class S3Client:
                     await client.create_bucket(Bucket=bucket)
                     logger.info("S3 MinIO: создан bucket %s", bucket)
                 except ClientError as create_exc:
-                    ccode = create_exc.response.get("Error", {}).get("Code", "")
+                    ccode = create_exc.response["Error"]["Code"]
                     if ccode not in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
                         raise
             self._minio_ready_buckets.add(bucket)
 
-    async def close(self):
+    async def close(self) -> None:
         """Закрывает соединения клиента"""
         lock = self._get_client_lock()
         async with lock:
-            if self._client:
-                await self._client.__aexit__(None, None, None)
+            client = self._client
+            if client is not None:
+                await client.__aexit__(None, None, None)
                 self._client = None
                 self._session = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> S3Client:
         """Асинхронный контекстный менеджер"""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Закрытие при выходе из контекста"""
         await self.close()
 
@@ -209,29 +244,31 @@ class S3Client:
         Returns:
             True если загрузка успешна
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
-        await self._ensure_minio_bucket_exists(bucket)
+        await self._ensure_minio_bucket_exists(target_bucket)
         client = await self._get_client()
 
-        extra_args = {}
-        if metadata:
+        extra_args: aioboto3.S3UploadExtraArgs = {}
+        if metadata is not None:
             extra_args["Metadata"] = metadata
-        if content_type:
+        if content_type is not None:
+            if content_type == "":
+                raise ValueError("content_type не может быть пустым")
             extra_args["ContentType"] = content_type
         if public:
             extra_args["ACL"] = "public-read"
 
         await client.upload_file(
             str(file_path),
-            bucket,
+            target_bucket,
             key,
             ExtraArgs=extra_args if extra_args else None,
         )
 
-        logger.info(f"Файл загружен в S3: {bucket}/{key}")
+        logger.info(f"Файл загружен в S3: {target_bucket}/{key}")
         return True
 
     async def upload_bytes(
@@ -257,29 +294,30 @@ class S3Client:
         Returns:
             True если загрузка успешна
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
-        await self._ensure_minio_bucket_exists(bucket)
+        await self._ensure_minio_bucket_exists(target_bucket)
         client = await self._get_client()
 
-        extra_args = {}
-        if metadata:
-            extra_args["Metadata"] = metadata
-        if content_type:
-            extra_args["ContentType"] = content_type
+        put_object_request: aioboto3.S3PutObjectRequest = {
+            "Bucket": target_bucket,
+            "Key": key,
+            "Body": data,
+        }
+        if metadata is not None:
+            put_object_request["Metadata"] = metadata
+        if content_type is not None:
+            if content_type == "":
+                raise ValueError("content_type не может быть пустым")
+            put_object_request["ContentType"] = content_type
         if public:
-            extra_args["ACL"] = "public-read"
+            put_object_request["ACL"] = "public-read"
 
-        await client.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=data,
-            **extra_args,
-        )
+        await client.put_object(**put_object_request)
 
-        logger.info(f"Данные загружены в S3: {bucket}/{key} ({len(data)} байт)")
+        logger.info(f"Данные загружены в S3: {target_bucket}/{key} ({len(data)} байт)")
         return True
 
     async def download_file(
@@ -299,15 +337,15 @@ class S3Client:
         Returns:
             True если скачивание успешно
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
         client = await self._get_client()
 
-        await client.download_file(bucket, key, str(file_path))
+        await client.download_file(target_bucket, key, str(file_path))
 
-        logger.info(f"Файл скачан из S3: {bucket}/{key} -> {file_path}")
+        logger.info(f"Файл скачан из S3: {target_bucket}/{key} -> {file_path}")
         return True
 
     async def download_bytes(
@@ -325,17 +363,34 @@ class S3Client:
         Returns:
             Данные файла
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
         client = await self._get_client()
 
-        response = await client.get_object(Bucket=bucket, Key=key)
+        response = await client.get_object(Bucket=target_bucket, Key=key)
         data = await response["Body"].read()
 
-        logger.info(f"Данные скачаны из S3: {bucket}/{key} ({len(data)} байт)")
+        logger.info(f"Данные скачаны из S3: {target_bucket}/{key} ({len(data)} байт)")
         return data
+
+    async def open_object_body(
+        self,
+        key: str,
+        bucket: str | None = None,
+        byte_range: str | None = None,
+    ) -> aioboto3.S3ObjectBody:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
+            raise ValueError("Bucket не указан")
+
+        client = await self._get_client()
+        if byte_range is None:
+            response = await client.get_object(Bucket=target_bucket, Key=key)
+        else:
+            response = await client.get_object(Bucket=target_bucket, Key=key, Range=byte_range)
+        return response["Body"]
 
     async def delete_file(
         self,
@@ -352,20 +407,16 @@ class S3Client:
         Returns:
             True если удаление успешно
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
         client = await self._get_client()
 
-        await client.delete_object(Bucket=bucket, Key=key)
+        await client.delete_object(Bucket=target_bucket, Key=key)
 
-        logger.info(f"Файл удален из S3: {bucket}/{key}")
+        logger.info(f"Файл удален из S3: {target_bucket}/{key}")
         return True
-
-    async def delete_object(self, key: str, bucket: str | None = None) -> bool:
-        """Алиас для delete_file (совместимость с тестами)"""
-        return await self.delete_file(key, bucket)
 
     async def file_exists(
         self,
@@ -382,20 +433,20 @@ class S3Client:
         Returns:
             True если файл существует
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
         client = await self._get_client()
 
-        await client.head_object(Bucket=bucket, Key=key)
+        _ = await client.head_object(Bucket=target_bucket, Key=key)
         return True
 
     async def get_object_metadata(
         self,
         key: str,
         bucket: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> S3ObjectMetadata:
         """
         Получает метаданные объекта из S3.
 
@@ -404,25 +455,23 @@ class S3Client:
             bucket: Имя bucket (если не указан, используется дефолтный)
 
         Returns:
-            Словарь с метаданными объекта
+            Метаданные объекта
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
         client = await self._get_client()
 
-        response = await client.head_object(Bucket=bucket, Key=key)
+        response = await client.head_object(Bucket=target_bucket, Key=key)
 
-        metadata = {
-            "content_type": response.get("ContentType"),
-            "content_length": response.get("ContentLength"),
-            "last_modified": response.get("LastModified"),
-            "etag": response.get("ETag", "").strip('"'),
-            "metadata": response.get("Metadata", {}),
-        }
-
-        return metadata
+        return S3ObjectMetadata(
+            content_type=response["ContentType"],
+            content_length=response["ContentLength"],
+            last_modified=response["LastModified"],
+            etag=response["ETag"].strip('"'),
+            metadata=response["Metadata"],
+        )
 
     async def get_presigned_url(
         self,
@@ -441,15 +490,16 @@ class S3Client:
         Returns:
             Временный URL
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
         client = await self._get_client()
 
+        params: aioboto3.S3ObjectRequest = {"Bucket": target_bucket, "Key": key}
         url = await client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": bucket, "Key": key},
+            Params=params,
             ExpiresIn=expiration,
         )
 
@@ -470,18 +520,13 @@ class S3Client:
         Returns:
             Публичный URL
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
         if self.endpoint_url:
-            return f"{self.endpoint_url}/{bucket}/{key}"
-        else:
-            return f"https://{bucket}.s3.{self.region_name}.amazonaws.com/{key}"
-
-    async def object_exists(self, key: str, bucket: str | None = None) -> bool:
-        """Алиас для file_exists (совместимость с тестами)"""
-        return await self.file_exists(key, bucket)
+            return f"{self.endpoint_url}/{target_bucket}/{key}"
+        return f"https://{target_bucket}.s3.{self.region_name}.amazonaws.com/{key}"
 
     async def list_objects(
         self,
@@ -489,7 +534,7 @@ class S3Client:
         max_keys: int = 1000,
         bucket: str | None = None,
         start_after: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[S3ListedObject]:
         """
         Список объектов в bucket с указанным префиксом.
 
@@ -502,31 +547,37 @@ class S3Client:
         Returns:
             Список объектов с ключами и метаданными
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
         client = await self._get_client()
 
-        list_kw: dict[str, Any] = {
-            "Bucket": bucket,
-            "Prefix": prefix,
-            "MaxKeys": max_keys,
-        }
         if start_after is not None and start_after != "":
-            list_kw["StartAfter"] = start_after
+            response = await client.list_objects_v2(
+                Bucket=target_bucket,
+                Prefix=prefix,
+                MaxKeys=max_keys,
+                StartAfter=start_after,
+            )
+        else:
+            response = await client.list_objects_v2(
+                Bucket=target_bucket,
+                Prefix=prefix,
+                MaxKeys=max_keys,
+            )
 
-        response = await client.list_objects_v2(**list_kw)
-
-        objects = []
+        objects: list[S3ListedObject] = []
         if "Contents" in response:
             for obj in response["Contents"]:
-                objects.append({
-                    "key": obj["Key"],
-                    "size": obj["Size"],
-                    "last_modified": obj["LastModified"],
-                    "etag": obj["ETag"],
-                })
+                objects.append(
+                    S3ListedObject(
+                        key=obj["Key"],
+                        size=obj["Size"],
+                        last_modified=obj["LastModified"],
+                        etag=obj["ETag"],
+                    )
+                )
 
         return objects
 
@@ -549,21 +600,23 @@ class S3Client:
         Returns:
             True если копирование успешно
         """
-        source_bucket = source_bucket or self.bucket_name
-        dest_bucket = dest_bucket or self.bucket_name
-        if not source_bucket or not dest_bucket:
+        target_source_bucket = self.bucket_name if source_bucket is None else source_bucket
+        target_dest_bucket = self.bucket_name if dest_bucket is None else dest_bucket
+        if target_source_bucket == "" or target_dest_bucket == "":
             raise ValueError("Bucket не указан")
 
         client = await self._get_client()
 
-        copy_source = {"Bucket": source_bucket, "Key": source_key}
+        copy_source: aioboto3.S3CopySource = {"Bucket": target_source_bucket, "Key": source_key}
         await client.copy_object(
             CopySource=copy_source,
-            Bucket=dest_bucket,
+            Bucket=target_dest_bucket,
             Key=dest_key,
         )
 
-        logger.info(f"Объект скопирован: {source_bucket}/{source_key} -> {dest_bucket}/{dest_key}")
+        logger.info(
+            f"Объект скопирован: {target_source_bucket}/{source_key} -> {target_dest_bucket}/{dest_key}"
+        )
         return True
 
     async def generate_presigned_url(
@@ -571,7 +624,7 @@ class S3Client:
         key: str,
         bucket: str | None = None,
         expiration: int = 3600,
-        method: str = "get_object",
+        method: aioboto3.S3PresignedMethod = "get_object",
     ) -> str:
         """
         Генерирует presigned URL с указанным методом.
@@ -585,15 +638,16 @@ class S3Client:
         Returns:
             Временный URL
         """
-        bucket = bucket or self.bucket_name
-        if not bucket:
+        target_bucket = self.bucket_name if bucket is None else bucket
+        if target_bucket == "":
             raise ValueError("Bucket не указан")
 
         client = await self._get_client()
 
+        params: aioboto3.S3ObjectRequest = {"Bucket": target_bucket, "Key": key}
         url = await client.generate_presigned_url(
             method,
-            Params={"Bucket": bucket, "Key": key},
+            Params=params,
             ExpiresIn=expiration,
         )
 
@@ -661,7 +715,9 @@ class S3ClientFactory:
             raise ValueError(f"Bucket {bucket_name} не найден в конфигурации")
 
         bucket_config = settings.s3.buckets[bucket_name]
-        real_bucket_name = bucket_config.bucket_name or bucket_name
+        real_bucket_name = bucket_config.bucket_name
+        if real_bucket_name is None or real_bucket_name == "":
+            real_bucket_name = bucket_name
         return S3ClientFactory.create_client(
             bucket_config,
             real_bucket_name,
@@ -685,51 +741,6 @@ class S3ClientFactory:
             raise ValueError("Дефолтный bucket не настроен")
 
         return S3ClientFactory.create_client_for_bucket(settings.s3.default_bucket)
-
-_default_s3_client: S3Client | None = None
-_default_s3_client_lock: asyncio.Lock | None = None
-
-def _get_lock() -> asyncio.Lock:
-    """Получает или создает лок для глобального S3 клиента"""
-    global _default_s3_client_lock
-    if _default_s3_client_lock is None:
-        _default_s3_client_lock = asyncio.Lock()
-    return _default_s3_client_lock
-
-async def get_default_s3_client() -> S3Client | None:
-    """
-    Получает дефолтный S3 клиент на основе конфигурации.
-    Потокобезопасно создает клиент при первом обращении.
-
-    Returns:
-        S3 клиент или None если не настроен
-    """
-    global _default_s3_client
-
-    if _default_s3_client is None:
-        lock = _get_lock()
-        async with lock:
-            if _default_s3_client is None:
-                settings = get_settings()
-                if settings.s3.enabled and settings.s3.default_bucket:
-                    _default_s3_client = S3ClientFactory.create_client_for_bucket(
-                        settings.s3.default_bucket
-                    )
-                    logger.info(
-                        "s3.default_client_initialized",
-                        s3_bucket=settings.s3.default_bucket,
-                    )
-                else:
-                    logger.info("s3.not_configured")
-
-    return _default_s3_client
-
-async def close_default_s3_client():
-    """Закрывает дефолтный S3 клиент"""
-    global _default_s3_client
-    if _default_s3_client:
-        await _default_s3_client.close()
-        _default_s3_client = None
 
 def build_s3_key_for_company(company_slug: str, relative_path: str) -> str:
     """

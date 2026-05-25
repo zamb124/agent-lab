@@ -21,16 +21,31 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import AsyncIterator
+from contextlib import suppress
+from typing import override
 from urllib.parse import urlparse
 
 import httpx
 import websockets
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
+from starlette.types import ASGIApp as StarletteASGIApp
+from websockets.typing import Subprotocol
 
 from core.config import get_settings
 from core.logging import get_log_context, get_logger
+from core.types import (
+    ASGIApp,
+    ASGIReceive,
+    ASGIScope,
+    ASGISend,
+    ASGIWebSocketAcceptMessage,
+    ASGIWebSocketCloseMessage,
+    ASGIWebSocketSendBytesMessage,
+    ASGIWebSocketSendTextMessage,
+)
 from core.utils.domain import is_local
 
 logger = get_logger(__name__)
@@ -192,9 +207,9 @@ def _origin_rewrite_pairs(upstream_origin: str, public_origin: str) -> tuple[tup
 
 
 class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, *, service_name: str) -> None:
+    def __init__(self, app: StarletteASGIApp, *, service_name: str) -> None:
         super().__init__(app)
-        self._service_name = service_name
+        self._service_name: str = service_name
 
     async def _forward_http(
         self,
@@ -287,7 +302,11 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
         if (
             rewrite_origin_from
             and rewrite_origin_to
-            and _should_rewrite_text_response(upstream_response.headers.get("content-type"))
+            and _should_rewrite_text_response(
+                upstream_response.headers["content-type"]
+                if "content-type" in upstream_response.headers
+                else None
+            )
         ):
             try:
                 body = await upstream_response.aread()
@@ -309,7 +328,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
         resp = upstream_response
         cli = client
 
-        async def body_iter():
+        async def body_iter() -> AsyncIterator[bytes]:
             try:
                 async for chunk in resp.aiter_bytes():
                     yield chunk
@@ -323,29 +342,31 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
             headers=out_headers,
         )
 
-    async def dispatch(self, request: Request, call_next):
+    @override
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         settings = get_settings()
         if settings.server.env not in ("development", "test"):
             return await call_next(request)
 
-        host = request.headers.get("host") or ""
-        if not is_local(host):
+        host = request.headers.get("host")
+        if host is None or host == "" or not is_local(host):
             return await call_next(request)
 
-        path = request.scope.get("path") or ""
+        path = request.url.path
         parts = [p for p in path.split("/") if p]
         if not parts:
             return await call_next(request)
 
         target = parts[0]
         if _is_onlyoffice_upstream_path(path):
-            ds_base = (settings.server.document_server_dev_upstream_url or "").strip().rstrip("/")
-            if not ds_base:
+            ds_config = settings.server.document_server_dev_upstream_url
+            if ds_config is None or ds_config.strip() == "":
                 return await call_next(request)
+            ds_base = ds_config.strip().rstrip("/")
             parsed_ds = urlparse(ds_base)
             if not parsed_ds.netloc:
                 raise RuntimeError(f"Некорректный server.document_server_dev_upstream_url: {ds_base!r}")
-            client_host = (request.headers.get("host") or "").strip() or parsed_ds.netloc
+            client_host = host.strip()
             public_origin = _public_origin_from_host(request.url.scheme, client_host)
             return await self._forward_http(
                 request,
@@ -368,7 +389,7 @@ class DevInterServiceProxyMiddleware(BaseHTTPMiddleware):
         if not parsed.netloc:
             raise RuntimeError(f"Некорректный URL сервиса {url_key} (path {target}): {base!r}")
 
-        upstream_host = (request.headers.get("host") or "").strip() or parsed.netloc
+        upstream_host = host.strip()
 
         return await self._forward_http(
             request,
@@ -401,27 +422,33 @@ class DevInterServiceWsProxyMiddleware:
     т.к. handler смонтирован только в целевом процессе.
     """
 
-    def __init__(self, app, *, service_name: str) -> None:
-        self.app = app
-        self._service_name = service_name
+    def __init__(self, app: ASGIApp, *, service_name: str) -> None:
+        self.app: ASGIApp = app
+        self._service_name: str = service_name
 
-    async def __call__(self, scope, receive, send):
-        if scope.get("type") != "websocket":
+    async def __call__(self, scope: ASGIScope, receive: ASGIReceive, send: ASGISend) -> None:
+        if scope["type"] != "websocket":
             return await self.app(scope, receive, send)
 
         settings = get_settings()
         if settings.server.env not in ("development", "test"):
             return await self.app(scope, receive, send)
 
+        headers = scope.get("headers")
+        if headers is None:
+            raise RuntimeError("ASGI websocket scope missing headers")
+
         host = ""
-        for k, v in scope.get("headers") or []:
+        for k, v in headers:
             if k.decode("latin-1").lower() == "host":
                 host = v.decode("latin-1")
                 break
         if not is_local(host):
             return await self.app(scope, receive, send)
 
-        path = scope.get("path") or ""
+        path = scope.get("path")
+        if path is None:
+            raise RuntimeError("ASGI websocket scope missing path")
         parts = [p for p in path.split("/") if p]
         if not parts:
             return await self.app(scope, receive, send)
@@ -430,15 +457,19 @@ class DevInterServiceWsProxyMiddleware:
         rewrite_origin_from: str | None = None
         rewrite_origin_to: str | None = None
         if _is_onlyoffice_upstream_path(path):
-            base = (settings.server.document_server_dev_upstream_url or "").strip().rstrip("/")
-            if not base:
+            ds_config = settings.server.document_server_dev_upstream_url
+            if ds_config is None or ds_config.strip() == "":
                 return await self.app(scope, receive, send)
+            base = ds_config.strip().rstrip("/")
             parsed_base = urlparse(base)
             if not parsed_base.netloc:
                 raise RuntimeError(f"Некорректный WebSocket upstream для path {path}: {base!r}")
             client_host = host.strip() or parsed_base.netloc
             rewrite_origin_from = f"{parsed_base.scheme}://{parsed_base.netloc}"
-            rewrite_origin_to = _public_origin_from_host(scope.get("scheme") or "ws", client_host)
+            scheme = scope.get("scheme")
+            if scheme is None:
+                raise RuntimeError("ASGI websocket scope missing scheme")
+            rewrite_origin_to = _public_origin_from_host(scheme, client_host)
         else:
             if target not in _SERVICE_PREFIXES:
                 return await self.app(scope, receive, send)
@@ -451,19 +482,25 @@ class DevInterServiceWsProxyMiddleware:
             raise RuntimeError(f"Некорректный WebSocket upstream для path {path}: {base!r}")
 
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
-        query = scope.get("query_string", b"").decode("latin-1")
+        query_string = scope.get("query_string")
+        if query_string is None:
+            raise RuntimeError("ASGI websocket scope missing query_string")
+        query = query_string.decode("latin-1")
         upstream_url = f"{ws_scheme}://{parsed.netloc}{path}"
         if query:
             upstream_url = f"{upstream_url}?{query}"
 
         forward_headers: list[tuple[str, str]] = []
-        for raw_k, raw_v in scope.get("headers") or []:
+        for raw_k, raw_v in headers:
             lk = raw_k.decode("latin-1").lower()
             if lk in _WS_HOP_BY_HOP:
                 continue
             forward_headers.append((raw_k.decode("latin-1"), raw_v.decode("latin-1")))
 
-        subprotocols = scope.get("subprotocols") or []
+        raw_subprotocols = scope.get("subprotocols")
+        subprotocols: list[Subprotocol] = []
+        if raw_subprotocols is not None:
+            subprotocols = [Subprotocol(value) for value in raw_subprotocols]
 
         try:
             upstream = await websockets.connect(
@@ -480,28 +517,40 @@ class DevInterServiceWsProxyMiddleware:
                 upstream_url=upstream_url,
                 **{"exception.type": type(exc).__name__, "exception.message": str(exc)},
             )
-            await send({"type": "websocket.close", "code": 1011})
+            upstream_failed_close_message: ASGIWebSocketCloseMessage = {
+                "type": "websocket.close",
+                "code": 1011,
+            }
+            await send(upstream_failed_close_message)
             return
 
-        accept_msg: dict[str, object] = {"type": "websocket.accept"}
         if upstream.subprotocol:
-            accept_msg["subprotocol"] = upstream.subprotocol
+            accept_msg: ASGIWebSocketAcceptMessage = {
+                "type": "websocket.accept",
+                "subprotocol": upstream.subprotocol,
+            }
+        else:
+            accept_msg = {"type": "websocket.accept"}
         await send(accept_msg)
 
         async def _client_to_upstream() -> None:
             try:
                 while True:
                     msg = await receive()
-                    mtype = msg.get("type")
-                    if mtype == "websocket.disconnect":
-                        await upstream.close(code=msg.get("code", 1000) or 1000)
-                        return
-                    if mtype != "websocket.receive":
+                    mtype = msg["type"]
+                    if mtype == "websocket.connect":
                         continue
-                    if msg.get("bytes") is not None:
-                        await upstream.send(msg["bytes"])
-                    elif msg.get("text") is not None:
-                        await upstream.send(msg["text"])
+                    if mtype == "websocket.disconnect":
+                        close_code = msg.get("code")
+                        await upstream.close(code=close_code if close_code is not None else 1000)
+                        return
+                    message_bytes = msg.get("bytes")
+                    if message_bytes is not None:
+                        await upstream.send(message_bytes)
+                    else:
+                        message_text = msg.get("text")
+                        if message_text is not None:
+                            await upstream.send(message_text)
             except websockets.ConnectionClosed:
                 return
 
@@ -509,7 +558,11 @@ class DevInterServiceWsProxyMiddleware:
             try:
                 async for frame in upstream:
                     if isinstance(frame, bytes):
-                        await send({"type": "websocket.send", "bytes": frame})
+                        bytes_message: ASGIWebSocketSendBytesMessage = {
+                            "type": "websocket.send",
+                            "bytes": frame,
+                        }
+                        await send(bytes_message)
                     else:
                         if rewrite_origin_from and rewrite_origin_to:
                             frame = _rewrite_upstream_origin_text(
@@ -517,12 +570,16 @@ class DevInterServiceWsProxyMiddleware:
                                 upstream_origin=rewrite_origin_from,
                                 public_origin=rewrite_origin_to,
                             )
-                        await send({"type": "websocket.send", "text": frame})
+                        text_message: ASGIWebSocketSendTextMessage = {
+                            "type": "websocket.send",
+                            "text": frame,
+                        }
+                        await send(text_message)
             except websockets.ConnectionClosed:
                 return
 
         try:
-            done, pending = await asyncio.wait(
+            _done, pending = await asyncio.wait(
                 {
                     asyncio.create_task(_client_to_upstream()),
                     asyncio.create_task(_upstream_to_client()),
@@ -530,18 +587,11 @@ class DevInterServiceWsProxyMiddleware:
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for task in pending:
-                task.cancel()
+                _ = task.cancel()
             for task in pending:
-                try:
+                with suppress(asyncio.CancelledError):
                     await task
-                except (asyncio.CancelledError, Exception):
-                    pass
         finally:
-            try:
-                await upstream.close()
-            except Exception:
-                pass
-            try:
-                await send({"type": "websocket.close", "code": 1000})
-            except Exception:
-                pass
+            await upstream.close()
+            normal_close_message: ASGIWebSocketCloseMessage = {"type": "websocket.close", "code": 1000}
+            await send(normal_close_message)

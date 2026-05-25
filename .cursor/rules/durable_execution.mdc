@@ -1,0 +1,331 @@
+---
+description: "Durable execution для flows: event history, deterministic reducer, snapshots, activities, time travel"
+alwaysApply: false
+---
+# Durable Execution Ledger
+
+Flows исполняются как durable workflow runtime. Источник истины — append-only event history, а не mutable `ExecutionState`.
+
+## Канон
+
+```
+workflow_events      # единственная правда истории выполнения
+workflow_snapshots   # materialized anchors для быстрого rehydrate
+workflow_instances   # head/projection текущей сессии
+execution_branches   # fork/rewind/retry branches
+activity_tasks       # LLM/tools/API/code side effects как durable activities
+Redis                # disposable cache текущей projection; можно потерять
+```
+
+`ExecutionState` — projection, полученная через deterministic reducer:
+
+```
+snapshot + events_after_snapshot -> reducer -> ExecutionState
+```
+
+Запрещено проектировать новые runtime-фичи вокруг "последнего state в Redis/БД". State mutability допустима только внутри in-memory execution step; canonical commit — только через event + reducer.
+
+## Таблицы и ответственность
+
+### `workflow_instances`
+
+Head текущей workflow-сессии:
+
+- `session_id`
+- `active_execution_branch_id`
+- `head_sequence`
+- `head_state_hash`
+- `latest_snapshot_id`
+- `status`
+- `created_at`, `updated_at`
+
+Это projection/head, не история.
+
+### `workflow_events`
+
+Append-only ordered log:
+
+- `event_id`
+- `session_id`
+- `execution_branch_id`
+- `sequence`
+- `event_type`
+- `payload`
+- `state_delta`
+- `prev_state_hash`
+- `next_state_hash`
+- `causation_id`
+- `correlation_id`
+- `schema_version`
+- `created_at`
+
+Нельзя update/delete event ради исправления истории. Исправления выражаются новыми events (`ManualStatePatchApplied`, `RewindCommitted`, `ForkCreated`, `RetryScheduled`).
+
+### `workflow_snapshots`
+
+Optimization anchor:
+
+- `snapshot_id`
+- `session_id`
+- `execution_branch_id`
+- `sequence`
+- `state_json`
+- `state_hash`
+- `schema_version`
+- `created_at`
+
+Snapshot ускоряет rehydrate, но не заменяет event history. Snapshot создаётся на `RunStarted`, terminal boundaries, каждые N events, при слишком крупной delta и перед долгими recovery boundaries.
+
+### `execution_branches`
+
+Линия выполнения для fork/rewind/retry:
+
+- `execution_branch_id`
+- `session_id`
+- `parent_execution_branch_id`
+- `base_sequence`
+- `base_state_hash`
+- `reason` (`start`, `fork`, `rewind`, `retry`, `manual_patch`)
+- `created_at`
+
+`branch_id` flow config не использовать для execution branch: это разные домены.
+
+### `FlowNode` как child workflow
+
+`FlowNode` не является локальным inline-вызовом и не имеет права скрывать внутренние
+supersteps через приватные checkpoint-bypass флаги. Вложенный flow запускается как отдельная
+durable workflow-сессия:
+
+```
+parent workflow_events:
+  ChildWorkflowStarted(node_id, child_session_id, child_execution_position)
+  ChildWorkflowSuspended | ChildWorkflowCompleted | ChildWorkflowFailed
+
+child workflow_events:
+  RunStarted
+  SuperstepStarted
+  NodeScheduled
+  ...
+```
+
+`child_session_id` детерминированно строится из parent session, parent execution branch,
+`NodeScheduled.sequence`, node_id, child flow id/branch и input hash. Resume после interrupt
+использует тот же `child_session_id` из typed `interrupt_path`/`child_workflows`, а не копию
+child state внутри parent projection. Child lifecycle events в parent — no-op lifecycle facts:
+они двигают event sequence, но не коммитят global state до `InterruptRaised` или
+`SuperstepCommitted`.
+
+### `activity_tasks` и `activity_attempts`
+
+Durable journal внешних/недетерминированных операций разделён на стабильную команду
+и попытки её исполнения.
+
+`activity_tasks` — identity/idempotency record:
+
+- `activity_id`
+- `session_id`
+- `execution_branch_id`
+- `node_id`
+- `tool_call_id`
+- `activity_type` (`llm`, `tool`, `code`, `external_api`, `mcp`, `channel`, `remote_flow`, ...)
+- `input_hash`
+- `idempotency_key`
+- `side_effect_policy` (`pure`, `idempotent`, `non_idempotent`)
+- `created_at`
+
+`activity_attempts` — lifecycle каждой попытки:
+
+- `activity_attempt_id`
+- `activity_id`
+- `session_id`
+- `execution_branch_id`
+- `attempt`
+- `status` (`scheduled`, `started`, `completed`, `failed`, `canceled`)
+- `result_json`
+- `error`
+- `lease_until`
+- `scheduled_at`, `started_at`, `completed_at`
+
+`ActivityScheduled/Started/Completed/Failed` пишутся в `workflow_events` с
+`activity_attempt_id`, чтобы replay видел не только итог, но и lease/attempt boundary.
+
+`activity_id` — глобально уникальный durable id, не локальный `tool_call_id`.
+Для runtime node activity канон:
+
+```
+{session_id}:{execution_branch_id}:node:{node_id}:{activity_type}:schedule:{NodeScheduled.sequence}:input:{input_hash}
+```
+
+`NodeScheduled.sequence` — durable command boundary. Нельзя строить activity id по
+`node_history`, in-memory call count, wall-clock или случайным значениям: в длинных
+циклах и после retry/fork это создаёт повторные side effects или ложный replay.
+
+Для tool activity `tool_call_id` хранится отдельно для UI/message correlation.
+`idempotency_key` должен совпадать с deterministic replay key и включать
+session/branch/command scope, чтобы разные execution branches не переиспользовали
+результаты друг друга случайно. Явный retry может переиспользовать activity только
+через сохранённый source command key из failed event/retry command, а не через
+глобальный поиск по node id.
+
+LLM/tools/API/code side effects не являются частью deterministic orchestrator. Они выполняются как activities; результат попадает обратно в workflow только через events.
+
+## Event types
+
+Базовый набор:
+
+- `RunStarted`
+- `UserInputApplied`
+- `SuperstepStarted`
+- `NodeScheduled`
+- `ChildWorkflowStarted`
+- `ChildWorkflowSuspended`
+- `ChildWorkflowCompleted`
+- `ChildWorkflowFailed`
+- `ActivityScheduled`
+- `ActivityStarted`
+- `ActivityCompleted`
+- `ActivityFailed`
+- `NodeWriteRecorded`
+- `NodeCompleted`
+- `NodeFailed`
+- `SuperstepCommitted`
+- `EdgeActivated`
+- `InterruptRaised`
+- `BreakpointHit`
+- `RunTerminal`
+- `ForkCreated`
+- `RewindCommitted`
+- `ManualStatePatchApplied`
+- `RetryScheduled`
+
+Event payload объясняет факт человеку. `state_delta` объясняет reducer'у, как получить следующий `ExecutionState`.
+
+## State delta
+
+Diff должен быть domain-aware, не raw JSON Patch:
+
+```json
+{
+  "messages_append": [],
+  "variables_set": {},
+  "variables_delete": [],
+  "tool_results_set": {},
+  "tool_results_delete": [],
+  "nested_states_set": {},
+  "nested_states_delete": [],
+  "child_workflows_set": {},
+  "child_workflows_delete": [],
+  "fields_set": {},
+  "fields_unset": []
+}
+```
+
+Reducer — единственное место, где delta применяется к `ExecutionState`. Никаких произвольных `save_state(dict)` как canonical commit.
+
+## Deterministic orchestrator
+
+Оркестратор:
+
+- читает projected `ExecutionState`;
+- вычисляет следующую волну/переходы детерминированно;
+- пишет events/commands;
+- не вызывает LLM/tools/network/random/time напрямую.
+
+Недетерминированное:
+
+- LLM;
+- tools;
+- external API;
+- MCP;
+- channel sends;
+- inline code с side effects;
+- code edge condition;
+- remote flow;
+- wall-clock/random.
+
+Всё это activity. Activity result коммитится через `ActivityCompleted` + `NodeWriteRecorded`/`SuperstepCommitted`.
+Code edge condition исполняется на копии state, но всё равно является durable
+activity: результат условия должен replay'иться из journal по branch/edge/state
+hash, иначе routing после replay/fork становится недетерминированным.
+
+## Parallel superstep
+
+Параллельная волна коммитится boundary-based:
+
+```
+SuperstepStarted
+NodeScheduled(A)
+NodeScheduled(B)
+ActivityCompleted(A) -> pending node write
+ActivityFailed(B)
+```
+
+Глобальный state не считается committed, пока superstep не закрыт:
+
+```
+SuperstepCommitted -> deterministic merge pending writes -> state_delta
+```
+
+Retry failed node не должен повторять уже успешные node writes/activity results, если они durable записаны и idempotency policy разрешает reuse.
+`NodeWriteRecorded` хранит pending `state_delta` конкретной ноды в payload и не меняет global projection.
+Global projection меняется только на `SuperstepCommitted`, `InterruptRaised`, `RetryScheduled`
+или другом явном boundary event. `NodeFailed.payload` обязан содержать `recover_sequence` и
+`preserved_node_writes`; эвристика `failed_sequence - 1` запрещена.
+Runner/node internals (например LLM streaming/context memory) не имеют права писать projection
+checkpoint напрямую. Их изменения входят в pending node write, а side effects пишутся как
+activities/events.
+
+## Raise recovery
+
+`raise` не resume'ится из failed dirty state. Recovery идёт через durable boundary:
+
+```
+SuperstepStarted / NodeScheduled
+ActivityFailed / NodeFailed
+RetryScheduled(recover_from_sequence=...)
+```
+
+Retry восстанавливает state через reducer на recoverable boundary и заново schedules только нужные failed activities/nodes. Failed terminal event хранит ошибку, но не является источником retry-state.
+
+## Time travel
+
+Операции:
+
+- `get_state_history(session_id)` — список событий/checkpoints/branches.
+- `load_state_at(branch_id, sequence|event_id|snapshot_id)` — rehydrate projection.
+- `fork(from_branch, sequence)` — новая execution branch, история не переписывается; branch получает snapshot-anchor state на `base_sequence`.
+- `rewind(session_id, target_branch, sequence)` — создаёт новую branch reason=`rewind`, активирует её как head и пишет `RewindCommitted`.
+- `manual_patch` — создаёт branch reason=`manual_patch`, применяет domain delta к state-at-sequence и пишет `ManualStatePatchApplied`.
+- `retry_from_failure` — создаёт branch reason=`retry`, восстанавливается на recoverable boundary до failed node/superstep и пишет `RetryScheduled`.
+
+Default для пользовательского time-travel — fork. Rewind same session — явная destructive UX-команда, но реализация всё равно append-only.
+
+Control plane обязан быть branch-aware. Любой публичный метод, который читает старый state, должен принимать `execution_branch_id` или явно использовать active branch. Нельзя восстанавливать state "по sequence" без указания branch в местах, где уже возможны forks.
+
+Append event обязан использовать optimistic concurrency:
+
+```
+expected_head_sequence + active_execution_branch_id -> append or fail
+```
+
+Если writer пришёл со stale head, он должен перечитать projection и заново построить delta. Silent overwrite/head jump запрещён.
+
+## Redis
+
+Redis хранит только cache projection:
+
+```
+key -> {session_id, execution_branch_id, head_sequence, head_state_hash, state_json}
+```
+
+Если Redis отсутствует или hash/sequence не совпадают с `workflow_instances`, state rehydrate'ится из snapshots + events.
+
+## Запреты
+
+- Запрещено считать legacy mutable DB rows или Redis canonical storage выполнения.
+- Запрещено добавлять новые runtime-checkpoints как overwrite одной mutable projection row.
+- Запрещено хранить time-travel только в tracing spans.
+- Запрещено retry после `raise` из terminal failed snapshot без recoverable boundary.
+- Запрещено повторять non-idempotent activity при replay без journal/idempotency/approve policy.
+- Запрещено делать branch/fork/rewind через копирование полной истории events. Новая branch создаёт anchor snapshot и дальше живёт собственным append-only log.
+- Запрещено исполнять activity, если в journal уже есть completed result для того же deterministic activity key/input hash.

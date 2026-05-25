@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+
+from pydantic import ValidationError
 
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
@@ -18,12 +19,13 @@ from core.docs.assistant import (
     DOCS_RAG_NAMESPACE_DESCRIPTION,
     DOCS_RAG_NAMESPACE_ID,
     DocsPage,
+    DocsRagManifest,
+    DocsRagManifestPage,
     docs_build_hash,
     load_llms_full_pages,
 )
 from core.identity.system_bootstrap import (
     SYSTEM_COMPANY_ID,
-    as_system_bootstrap_container,
     ensure_system_company_exists,
 )
 from core.logging import get_logger
@@ -67,7 +69,10 @@ def _system_user() -> User:
 
 
 async def _set_system_context(container: "FrontendContainer", *, session_id: str) -> Company:
-    company = await ensure_system_company_exists(as_system_bootstrap_container(container))
+    company = await ensure_system_company_exists(
+        company_repository=container.company_repository,
+        subdomain_repository=container.subdomain_repository,
+    )
     set_context(
         Context(
             user=_system_user(),
@@ -83,7 +88,7 @@ async def _set_system_context(container: "FrontendContainer", *, session_id: str
 
 async def ensure_docs_assistant_embed_config(container: "FrontendContainer") -> EmbedConfig:
     """Create or update the fixed public docs assistant embed in company system."""
-    await _set_system_context(container, session_id="docs_assistant_embed_bootstrap")
+    _ = await _set_system_context(container, session_id="docs_assistant_embed_bootstrap")
     try:
         repo = container.embed_config_repository
         mapping_repo = container.embed_mapping_repository
@@ -121,8 +126,8 @@ async def ensure_docs_assistant_embed_config(container: "FrontendContainer") -> 
             ),
             updated_at=now,
         )
-        await repo.set(config)
-        await mapping_repo.set(
+        _ = await repo.set(config)
+        _ = await mapping_repo.set(
             EmbedMapping(embed_id=DOCS_ASSISTANT_EMBED_ID, company_id=SYSTEM_COMPANY_ID)
         )
         logger.info(
@@ -136,26 +141,20 @@ async def ensure_docs_assistant_embed_config(container: "FrontendContainer") -> 
         clear_context()
 
 
-async def _load_manifest(container: "FrontendContainer") -> dict[str, Any]:
+async def _load_manifest(container: "FrontendContainer") -> DocsRagManifest:
     raw = await container.shared_storage.get(DOCS_MANIFEST_STORAGE_KEY)
     if raw is None:
-        return {"pages": {}}
+        return DocsRagManifest()
     try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        logger.warning("docs_assistant_manifest_invalid_json")
-        return {"pages": {}}
-    if not isinstance(parsed, dict):
-        return {"pages": {}}
-    if not isinstance(parsed.get("pages"), dict):
-        parsed["pages"] = {}
-    return parsed
+        return DocsRagManifest.model_validate_json(raw)
+    except ValidationError as exc:
+        raise ValueError("docs assistant manifest has invalid schema") from exc
 
 
-async def _save_manifest(container: "FrontendContainer", manifest: dict[str, Any]) -> None:
-    await container.shared_storage.set(
+async def _save_manifest(container: "FrontendContainer", manifest: DocsRagManifest) -> None:
+    _ = await container.shared_storage.set(
         DOCS_MANIFEST_STORAGE_KEY,
-        json.dumps(manifest, ensure_ascii=False),
+        manifest.model_dump_json(),
     )
 
 
@@ -168,7 +167,7 @@ async def _delete_document_if_present(
     if not document_id:
         return
     try:
-        await client.delete_namespace_document(namespace_id, document_id)
+        _ = await client.delete_namespace_document(namespace_id, document_id)
     except ServiceClientError:
         logger.debug(
             "docs_assistant_rag_delete_skipped",
@@ -178,48 +177,44 @@ async def _delete_document_if_present(
 
 
 async def _sync_docs_rag_index(container: "FrontendContainer", pages: list[DocsPage]) -> None:
-    await _set_system_context(container, session_id="docs_assistant_rag_bootstrap")
+    _ = await _set_system_context(container, session_id="docs_assistant_rag_bootstrap")
     try:
         client = RagClient()
-        await client.create_namespace(
+        _ = await client.create_namespace(
             DOCS_RAG_NAMESPACE_ID,
             description=DOCS_RAG_NAMESPACE_DESCRIPTION,
         )
         build_hash = docs_build_hash(pages)
         manifest = await _load_manifest(container)
-        manifest_pages = manifest.get("pages")
-        if not isinstance(manifest_pages, dict):
-            manifest_pages = {}
+        manifest_pages = dict(manifest.pages)
 
         current_ids = {page.document_id for page in pages}
         removed_ids = sorted(set(manifest_pages) - current_ids)
         for canonical_id in removed_ids:
-            previous = manifest_pages.get(canonical_id)
-            provider_id = previous.get("provider_document_id") if isinstance(previous, dict) else None
+            previous = manifest_pages[canonical_id]
             await _delete_document_if_present(
                 client,
                 namespace_id=DOCS_RAG_NAMESPACE_ID,
-                document_id=str(provider_id or canonical_id),
+                document_id=previous.provider_document_id,
             )
-            manifest_pages.pop(canonical_id, None)
+            del manifest_pages[canonical_id]
 
         indexed_count = 0
         skipped_count = 0
         for page in pages:
             previous = manifest_pages.get(page.document_id)
             if (
-                isinstance(previous, dict)
-                and previous.get("content_hash") == page.content_hash
-                and previous.get("provider_document_id")
+                previous is not None
+                and previous.content_hash == page.content_hash
+                and previous.provider_document_id
             ):
                 skipped_count += 1
                 continue
 
-            provider_id = previous.get("provider_document_id") if isinstance(previous, dict) else None
             await _delete_document_if_present(
                 client,
                 namespace_id=DOCS_RAG_NAMESPACE_ID,
-                document_id=str(provider_id) if provider_id else None,
+                document_id=previous.provider_document_id if previous is not None else None,
             )
             ingested = await client.ingest_text(
                 DOCS_RAG_NAMESPACE_ID,
@@ -228,20 +223,20 @@ async def _sync_docs_rag_index(container: "FrontendContainer", pages: list[DocsP
                 metadata=page.metadata(build_hash=build_hash),
                 document_id=page.document_id,
             )
-            manifest_pages[page.document_id] = {
-                "content_hash": page.content_hash,
-                "provider_document_id": str(ingested.get("document_id") or page.document_id),
-                "language": page.language,
-                "source_url": page.source_url,
-                "page_title": page.title,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
+            manifest_pages[page.document_id] = DocsRagManifestPage(
+                content_hash=page.content_hash,
+                provider_document_id=ingested.document_id,
+                language=page.language,
+                source_url=page.source_url,
+                page_title=page.title,
+                updated_at=datetime.now(timezone.utc),
+            )
             indexed_count += 1
 
-        manifest["build_hash"] = build_hash
-        manifest["updated_at"] = datetime.now(timezone.utc).isoformat()
-        manifest["namespace_id"] = DOCS_RAG_NAMESPACE_ID
-        manifest["pages"] = manifest_pages
+        manifest.build_hash = build_hash
+        manifest.updated_at = datetime.now(timezone.utc)
+        manifest.namespace_id = DOCS_RAG_NAMESPACE_ID
+        manifest.pages = manifest_pages
         await _save_manifest(container, manifest)
         logger.info(
             "docs_assistant_rag_synced",
@@ -260,7 +255,7 @@ async def ensure_docs_assistant_ready(
     *,
     project_root: Path,
 ) -> None:
-    await ensure_docs_assistant_embed_config(container)
+    _ = await ensure_docs_assistant_embed_config(container)
     pages = load_docs_assistant_pages(project_root)
     if not pages:
         logger.warning(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.clients.mcp_client import get_mcp_client as build_mcp_client
@@ -32,6 +32,7 @@ logger = get_logger(__name__)
 if TYPE_CHECKING:
     from apps.flows.src.clients.mcp_client import MCPClient
     from apps.flows.src.models.mcp import MCPCallResult
+    from apps.flows.src.runners.remote import RemoteCodeRunner
     from apps.flows.src.services.lara_facade import LaraFacade
     from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
     from apps.flows.src.services.schedule_service import ScheduleService
@@ -77,7 +78,7 @@ def _speech_response_format(value: str | None) -> SpeechResponseFormat | None:
 
 def get_code_runner(
     language: str = "python",
-) -> Any:
+) -> "RemoteCodeRunner":
     """Remote code runner для trusted builtins, без передачи FlowContainer в пользовательский код."""
     return require_current_container().get_code_runner(language=language)
 
@@ -100,14 +101,12 @@ async def get_mcp_client(
     timeout: float = 60.0,
 ) -> "MCPClient":
     """Вернуть MCP-клиент по `server_id` для trusted platform tool."""
-    if not isinstance(server_id, str) or server_id.strip() == "":
+    if server_id.strip() == "":
         raise ValueError("server_id обязателен")
     config = await require_current_container().mcp_server_repository.get(server_id.strip())
     if config is None:
         raise ValueError(f"MCP server not found: {server_id}")
-    variables: dict[str, Any] = {}
-    if state is not None:
-        variables = dict(getattr(state, "variables", {}) or {})
+    variables: JsonObject = state.variables if state is not None else {}
     return await build_mcp_client(
         config=config,
         variables=variables,
@@ -118,16 +117,16 @@ async def get_mcp_client(
 async def call_mcp_tool(
     server_id: str,
     tool_name: str,
-    arguments: dict[str, Any] | None = None,
+    arguments: JsonObject | None = None,
     *,
     state: "ExecutionState | None" = None,
     timeout: float = 60.0,
 ) -> "MCPCallResult":
     """Вызвать MCP tool из trusted platform tool и вернуть `MCPCallResult`."""
-    if not isinstance(tool_name, str) or tool_name.strip() == "":
+    if tool_name.strip() == "":
         raise ValueError("tool_name обязателен")
     client = await get_mcp_client(server_id, state=state, timeout=timeout)
-    return await client.call_tool(tool_name.strip(), arguments or {})
+    return await client.call_tool(tool_name.strip(), arguments if arguments is not None else {})
 
 
 async def get_file_bytes(file_id: str) -> bytes:
@@ -167,7 +166,7 @@ async def transcribe_audio(
     Returns:
         Распознанный текст.
     """
-    if not isinstance(file_id, str) or file_id.strip() == "":
+    if file_id.strip() == "":
         raise ValueError("transcribe_audio: file_id обязателен.")
 
     ctx = get_context()
@@ -188,42 +187,39 @@ async def transcribe_audio(
         model=model,
         language=language,
     )
-    stt_flow, _, _ = load_flow_speech_layers_from_context_metadata(
-        ctx.metadata if ctx else None
-    )
+    stt_flow, _, _ = load_flow_speech_layers_from_context_metadata(ctx.metadata)
     override = merge_explicit_over_flow_speech_layer(override, stt_flow)
     stt = await get_stt_client(company_id=company_id, override=override)
     result = await stt.transcribe_audio(
         audio_bytes=audio_bytes,
         file_name=record.original_name,
-        mime_type=record.content_type,
+        content_type=record.content_type,
         language=override.language,
     )
 
-    if ctx.user is not None:
-        try:
-            audio_seconds = await probe_audio_duration_seconds_from_upload(
-                data=audio_bytes, file_name=record.original_name
-            )
-        except ValueError as exc:
-                logger.warning(
-                "flows.transcribe_audio.stt_usage_skipped",
-                reason=str(exc),
-                company_id=company_id,
-                user_id=ctx.user.user_id,
-                provider=result.provider,
-                file_id=file_id.strip(),
-            )
-        else:
-            await record_stt_usage(
-                user=ctx.user,
-                company=ctx.active_company,
-                provider=result.provider,
-                audio_seconds=audio_seconds,
-                metadata={"endpoint": "flows.transcribe_audio", "file_id": file_id},
-            )
+    try:
+        audio_seconds = await probe_audio_duration_seconds_from_upload(
+            data=audio_bytes, file_name=record.original_name
+        )
+    except ValueError as exc:
+        logger.warning(
+            "flows.transcribe_audio.stt_usage_skipped",
+            reason=str(exc),
+            company_id=company_id,
+            user_id=ctx.user.user_id,
+            provider=result.provider,
+            file_id=file_id.strip(),
+        )
+    else:
+        _ = await record_stt_usage(
+            user=ctx.user,
+            company=ctx.active_company,
+            provider=result.provider,
+            audio_seconds=audio_seconds,
+            metadata={"endpoint": "flows.transcribe_audio", "file_id": file_id},
+        )
 
-    return result.text or ""
+    return result.text
 
 
 async def synthesize_speech(
@@ -257,7 +253,7 @@ async def synthesize_speech(
     Returns:
         `file_id` сохранённого аудио в `FileRepository`.
     """
-    if not isinstance(text, str) or text.strip() == "":
+    if text.strip() == "":
         raise ValueError("synthesize_speech: text обязателен.")
 
     ctx = get_context()
@@ -273,9 +269,7 @@ async def synthesize_speech(
         language=language,
         response_format=_speech_response_format(response_format),
     )
-    _, tts_flow, _ = load_flow_speech_layers_from_context_metadata(
-        ctx.metadata if ctx else None
-    )
+    _, tts_flow, _ = load_flow_speech_layers_from_context_metadata(ctx.metadata)
     override = merge_explicit_over_flow_speech_layer(override, tts_flow)
     tts = await get_tts_client(company_id=company_id, override=override)
     result = await tts.synthesize(text=text)
@@ -294,14 +288,13 @@ async def synthesize_speech(
         download_url_prefix=f"{FLOWS_PUBLIC_API_PREFIX}/files/download",
     )
 
-    if ctx.user is not None:
-        await record_tts_usage(
-            user=ctx.user,
-            company=ctx.active_company,
-            provider=result.provider,
-            char_count=len(text),
+    _ = await record_tts_usage(
+        user=ctx.user,
+        company=ctx.active_company,
+        provider=result.provider,
+        char_count=len(text),
         metadata={"endpoint": "flows.synthesize_speech", "file_id": record.file_id},
-        )
+    )
 
     return record.file_id
 
@@ -327,7 +320,7 @@ async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
     ]
 
     ctx = get_context()
-    if ctx is None or ctx.active_company is None or ctx.user is None:
+    if ctx is None or ctx.active_company is None:
         raise ValueError("Контекст с активной компанией обязателен для Google OAuth")
 
     oauth = get_oauth_service()

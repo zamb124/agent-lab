@@ -9,12 +9,13 @@ API для приглашений в компанию по ссылке.
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from apps.frontend.dependencies import ContainerDep
+from core.context import get_context
 from core.logging import get_logger
+from core.models.identity_models import Company, User
 from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.invite_tokens import (
     INVITE_EXPIRES_SECONDS,
@@ -28,9 +29,10 @@ router = APIRouter(prefix="/api/invites", tags=["invites"])
 
 VALID_ROLES = ["owner", "admin", "developer", "viewer"]
 
-def _company_subdomain_for_response(company) -> str:
+
+def _company_subdomain_for_response(company: Company) -> str:
     raw = company.subdomain
-    if raw is None or not isinstance(raw, str) or raw.strip() == "":
+    if raw is None or raw.strip() == "":
         raise HTTPException(
             status_code=403,
             detail="У компании не задан субдомен для входа.",
@@ -65,32 +67,37 @@ class PreviewInviteResponse(BaseModel):
     invited_by_user_id: str
     invited_by_name: str
 
-def _require_user(request: Request):
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    return request.state.user
 
-def _require_company(request: Request):
-    if not hasattr(request.state, "company") or not request.state.company:
+def _require_invite_user() -> User:
+    context = get_context()
+    if context is None:
+        raise HTTPException(status_code=401, detail="Необходима авторизация")
+    return context.user
+
+
+def _require_invite_company() -> Company:
+    context = get_context()
+    if context is None:
+        raise HTTPException(status_code=401, detail="Необходима авторизация")
+    company = context.active_company
+    if company is None:
         raise HTTPException(status_code=400, detail="Компания не выбрана")
-    return request.state.company
+    return company
+
 
 @router.post("/generate", response_model=GenerateInviteResponse)
 async def generate_invite(
     body: GenerateInviteRequest,
-    request: Request,
     container: ContainerDep,
-):
+) -> GenerateInviteResponse:
     """
     Генерирует одноразовую ссылку-приглашение в компанию.
     Доступно только owner/admin компании.
     """
-    user = _require_user(request)
-    company = _require_company(request)
+    user = _require_invite_user()
+    company = _require_invite_company()
 
     member_roles = company.members.get(user.user_id, [])
-    if isinstance(member_roles, str):
-        member_roles = [member_roles]
     is_owner_or_admin = "owner" in member_roles or "admin" in member_roles
     is_owner_by_company_record = company.owner_user_id == user.user_id
     if not is_owner_or_admin and not is_owner_by_company_record:
@@ -114,8 +121,10 @@ async def generate_invite(
     invite_url = await short.mint_company_invite(token, expires_at)
 
     logger.info(
-        f"Сгенерирован инвайт для компании {company.company_id}, "
-        f"роль={body.role}, инициатор={user.user_id}"
+        "Сгенерирован инвайт для компании %s, роль=%s, инициатор=%s",
+        company.company_id,
+        body.role,
+        user.user_id,
     )
 
     return GenerateInviteResponse(
@@ -128,7 +137,7 @@ async def generate_invite(
 async def preview_invite(
     body: PreviewInviteRequest,
     container: ContainerDep,
-):
+) -> PreviewInviteResponse:
     """
     Возвращает данные приглашения для экрана /join без авторизации.
     Не расходует одноразовый токен.
@@ -171,19 +180,20 @@ async def preview_invite(
         invited_by_name=inviter.name,
     )
 
-@router.post("/accept")
+@router.post("/accept", response_model=AcceptInviteResponse)
 async def accept_invite(
     body: AcceptInviteRequest,
     request: Request,
+    response: Response,
     container: ContainerDep,
-):
+) -> AcceptInviteResponse:
     """
     Принимает инвайт-токен и добавляет пользователя в компанию.
 
     Идемпотентен: если пользователь уже участник — возвращает успех
     без расхода одноразового токена.
     """
-    user = _require_user(request)
+    user = _require_invite_user()
 
     code = body.short_code.strip()
     if code == "":
@@ -212,7 +222,9 @@ async def accept_invite(
     if user.user_id in company.members:
         roles_list = list(company.members[user.user_id])
         logger.info(
-            f"Пользователь {user.user_id} уже участник компании {company.company_id}"
+            "Пользователь %s уже участник компании %s",
+            user.user_id,
+            company.company_id,
         )
         new_session_token, _ = await rebind_session_to_company(
             container=container,
@@ -221,17 +233,14 @@ async def accept_invite(
             roles=roles_list,
         )
 
-        response = JSONResponse(
-            content=AcceptInviteResponse(
-                company_id=company.company_id,
-                company_name=company.name,
-                role=roles_list,
-                already_member=True,
-                subdomain=_company_subdomain_for_response(company),
-            ).model_dump()
-        )
         attach_session_auth_cookie(response, request, new_session_token)
-        return response
+        return AcceptInviteResponse(
+            company_id=company.company_id,
+            company_name=company.name,
+            role=roles_list,
+            already_member=True,
+            subdomain=_company_subdomain_for_response(company),
+        )
 
     # Сжигаем токен атомарно
     remaining_seconds = max(
@@ -245,19 +254,21 @@ async def accept_invite(
     # Добавляем пользователя в компанию
     roles = [invite.role]
     company.members[user.user_id] = roles
-    await company_repo.set(company)
+    _ = await company_repo.set(company)
 
     user_repo = container.user_repository
     user.companies[company.company_id] = roles
     user.active_company_id = company.company_id
-    await user_repo.set(user)
+    _ = await user_repo.set(user)
 
     logger.info(
-        f"Пользователь {user.user_id} вступил в компанию {company.company_id} "
-        f"с ролью {invite.role}"
+        "Пользователь %s вступил в компанию %s с ролью %s",
+        user.user_id,
+        company.company_id,
+        invite.role,
     )
 
-    await short.delete_by_code(code)
+    _ = await short.delete_by_code(code)
 
     new_session_token, _ = await rebind_session_to_company(
         container=container,
@@ -266,14 +277,11 @@ async def accept_invite(
         roles=roles,
     )
 
-    response = JSONResponse(
-        content=AcceptInviteResponse(
-            company_id=company.company_id,
-            company_name=company.name,
-            role=roles,
-            already_member=False,
-            subdomain=_company_subdomain_for_response(company),
-        ).model_dump()
-    )
     attach_session_auth_cookie(response, request, new_session_token)
-    return response
+    return AcceptInviteResponse(
+        company_id=company.company_id,
+        company_name=company.name,
+        role=roles,
+        already_member=False,
+        subdomain=_company_subdomain_for_response(company),
+    )

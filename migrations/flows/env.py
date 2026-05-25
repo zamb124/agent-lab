@@ -1,9 +1,8 @@
 """
 Alembic env для БД сервиса flows.
 
-Таблицы: flows, flows_versions, nodes, tools, states,
-evaluation_results, scheduled_tasks, resources, stores, flow_states,
-operator_queues, operator_queue_members, operator_tasks.
+Таблицы: flows, flows_versions, nodes, tools, durable workflow ledger,
+evaluation_results, resources, operator queues/tasks.
 """
 
 import asyncio
@@ -19,20 +18,21 @@ from sqlalchemy.ext.asyncio import create_async_engine
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from apps.flows.src.db.models import (  # noqa: F401
+    ActivityTasks,
     Base,
     EvaluationResults,
+    ExecutionBranches,
     Flows,
-    FlowStates,
     FlowsVersions,
     Nodes,
     OperatorQueueMembers,
     OperatorQueues,
     OperatorTasks,
     Resources,
-    ScheduledTasks,
-    States,
-    Stores,
     Tools,
+    WorkflowEvents,
+    WorkflowInstances,
+    WorkflowSnapshots,
 )
 
 config = context.config
@@ -44,9 +44,10 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 MANAGED_TABLES = {
-    "flows", "flows_versions", "nodes", "tools", "states",
-    "evaluation_results", "scheduled_tasks", "resources",
-    "stores", "flow_states",
+    "flows", "flows_versions", "nodes", "tools",
+    "workflow_instances", "execution_branches", "workflow_events",
+    "workflow_snapshots", "activity_tasks",
+    "evaluation_results", "resources",
     "operator_queues", "operator_queue_members", "operator_tasks",
 }
 

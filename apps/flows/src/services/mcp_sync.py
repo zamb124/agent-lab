@@ -57,7 +57,7 @@ async def sync_mcp_server_tools(
     """
     variables = await _mcp_resolved_variables(container, server_config)
     client = MCPClient(server_config, variables=variables)
-    await client.initialize()
+    _ = await client.initialize()
     tools = await client.list_tools()
 
     server_id = server_config.server_id
@@ -68,7 +68,7 @@ async def sync_mcp_server_tools(
         tool_id = _mcp_tool_id(server_id, t.name)
         tool_ids.append(tool_id)
         description = t.description if (t.description and str(t.description).strip()) else f"MCP tool: {t.name}"
-        await container.tool_repository.set(
+        _ = await container.tool_repository.set(
             ToolReference(
                 tool_id=tool_id,
                 title=t.name,
@@ -83,11 +83,11 @@ async def sync_mcp_server_tools(
 
     for old_tool_id in previous_cached:
         if old_tool_id not in tool_ids:
-            await container.tool_repository.delete(old_tool_id)
+            _ = await container.tool_repository.delete(old_tool_id)
 
     server_config.cached_tools = tool_ids
     server_config.last_sync_at = datetime.now(tz=timezone.utc)
-    await container.mcp_server_repository.set(server_config)
+    _ = await container.mcp_server_repository.set(server_config)
 
     logger.info(
         "MCP server synced: server_id=%s tools=%s",
@@ -103,7 +103,7 @@ async def ensure_default_mcp_servers_for_company(*, container: FlowContainer) ->
     """
     servers = build_default_mcp_servers()
     for s in servers:
-        await container.mcp_server_repository.set(s)
+        _ = await container.mcp_server_repository.set(s)
     return servers
 
 
@@ -119,4 +119,3 @@ async def sync_auto_mcp_servers_for_company(*, container: FlowContainer) -> dict
         synced += 1
         tools_total += len(tool_ids)
     return {"servers": synced, "tools": tools_total}
-

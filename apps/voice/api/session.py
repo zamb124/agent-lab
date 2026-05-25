@@ -157,7 +157,7 @@ async def voice_session(
 
     try:
         await channel.send_media_config(
-            mime_type=tts_streamer.mime_type,
+            mime_type=tts_streamer.content_type,
             sample_rate=tts_streamer.sample_rate,
             channels=1,
         )

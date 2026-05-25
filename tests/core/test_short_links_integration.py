@@ -17,7 +17,7 @@ async def test_sync_mint_idempotent_resolve_and_delete(setup_database_before_tes
     if not shared_url:
         raise RuntimeError("DATABASE__SHARED_URL не задан")
 
-    svc = ShortLinkService(db_url=shared_url)
+    svc = ShortLinkService(repository=ShortLinkRepository(db_url=shared_url))
     link_token = uuid4().hex
     company_id = "test_company_join"
     expires_at = datetime.now(UTC) + timedelta(hours=2)
@@ -44,7 +44,7 @@ async def test_invite_mint_resolve_jwt_roundtrip(setup_database_before_tests) ->
     if not shared_url:
         raise RuntimeError("DATABASE__SHARED_URL не задан")
 
-    svc = ShortLinkService(db_url=shared_url)
+    svc = ShortLinkService(repository=ShortLinkRepository(db_url=shared_url))
     fake_jwt = "header.payload.sig"
     exp = datetime.now(UTC) + timedelta(hours=1)
     invite_url = await svc.mint_company_invite(fake_jwt, exp)

@@ -50,7 +50,7 @@ class BreakpointInterrupt(Exception):
     Исключение для остановки выполнения агента на breakpoint.
 
     Выбрасывается когда агент достигает ноды с установленным breakpoint.
-    Сохраняет snapshot state для отображения в UI.
+    Сохраняет projection snapshot для отображения в UI.
     """
 
     def __init__(

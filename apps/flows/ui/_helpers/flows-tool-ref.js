@@ -203,11 +203,10 @@ export function registryToolItemToNode(t) {
         code: typeof t.code === 'string' ? t.code : '',
         tool_id: '',
         language: normalizeFlowCodeLanguage(t.language),
-        args_schema: isPlainObject(t.args_schema) ? t.args_schema : {},
+        parameters_schema: isPlainObject(t.parameters_schema)
+            ? t.parameters_schema
+            : { type: 'object', properties: {}, required: [] },
     };
-    if (isPlainObject(t.parameters_schema)) {
-        out.parameters_schema = t.parameters_schema;
-    }
     if (typeof t.entrypoint === 'string' && t.entrypoint.length > 0) {
         out.entrypoint = t.entrypoint;
     }

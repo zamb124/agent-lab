@@ -12,12 +12,14 @@ import yaml
 
 from apps.flows.config import FlowSettings
 from apps.flows.src.container import FlowContainer
+from apps.flows.src.models.bundle_registry import FlowBundleRegistry
 from apps.flows.src.services.flows_loader import FlowsLoader
 from core.context import clear_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from core.types import require_json_object
 
 logger = get_logger(__name__)
 
@@ -26,18 +28,13 @@ def landing_public_demo_bundle_ids_from_registry(registry_path: Path) -> tuple[s
     if not registry_path.is_file():
         return ()
     with open(registry_path, "r", encoding="utf-8") as f:
-        reg = yaml.safe_load(f) or {}
-    flows = reg.get("flows") or []
-    out: list[str] = []
-    for entry in flows:
-        if not isinstance(entry, dict):
-            continue
-        if entry.get("landing_public_demo") is not True:
-            continue
-        fid = entry.get("id")
-        if isinstance(fid, str) and fid.strip():
-            out.append(fid.strip())
-    return tuple(out)
+        registry_data = require_json_object(yaml.safe_load(f) or {}, "registry.yaml")
+    registry = FlowBundleRegistry.model_validate(registry_data)
+    return tuple(
+        entry.id
+        for entry in registry.flows
+        if entry.landing_public_demo
+    )
 
 
 async def sync_landing_public_demo_flows_from_bundles(container: FlowContainer, settings: FlowSettings) -> None:
@@ -79,7 +76,7 @@ async def sync_landing_public_demo_flows_from_bundles(container: FlowContainer, 
         )
         for bundle_id in bundle_ids:
             try:
-                await loader.reload_flow_bundle(bundle_id)
+                _ = await loader.reload_flow_bundle(bundle_id)
                 logger.info(
                     "flows.landing_demo_bundle_synced",
                     bundle_id=bundle_id,

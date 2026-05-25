@@ -2,7 +2,7 @@
 Репозиторий для ResourceDefinition.
 """
 
-from typing import override
+from typing import ClassVar, override
 
 from apps.flows.src.models import ResourceDefinition
 from core.db import BaseRepository, Storage
@@ -11,8 +11,8 @@ from core.db import BaseRepository, Storage
 class ResourceRepository(BaseRepository[ResourceDefinition]):
     """Репозиторий для shared ресурсов."""
 
-    is_global: bool = False
-    owner_service: str = "flows"
+    is_global: ClassVar[bool] = False
+    owner_service: ClassVar[str] = "flows"
 
     def __init__(self, storage: Storage):
         super().__init__(storage, ResourceDefinition)

@@ -20,6 +20,7 @@ from apps.flows.src.models import (
     BranchConfig,
     DataflowInspectResult,
     Edge,
+    EdgeCondition,
     ExternalAgentStatus,
     FlowConfig,
     FlowType,
@@ -48,6 +49,7 @@ from core.context import get_context
 from core.identity.flow_preview_handoff import store_flow_preview_handoff
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.logging import get_logger
+from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
 from core.pagination import ListResponse, OffsetPage
 from core.short_links.service import require_platform_public_base_url
@@ -66,7 +68,9 @@ from core.utils.tokens import get_token_service
 logger = get_logger(__name__)
 
 _FLOW_PREVIEW_SHARE_TTL_SECONDS = 86400
-_GRAPH_NODE_MAP_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(dict[str, GraphNodeConfig])
+_GRAPH_NODE_MAP_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(
+    dict[str, GraphNodeConfig]
+)
 
 
 def _preview_share_base_urls(request: Request) -> tuple[str, str]:
@@ -76,17 +80,7 @@ def _preview_share_base_urls(request: Request) -> tuple[str, str]:
         base = require_platform_public_base_url().rstrip("/")
         return f"{base}/flows", base
 
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    scheme = (forwarded_proto or request.url.scheme or "").strip().lower()
-    if scheme not in ("http", "https"):
-        raise ValueError("_preview_share_base_urls: ожидалась схема http или https")
-
-    forwarded_host = request.headers.get("x-forwarded-host")
-    host = (forwarded_host or request.headers.get("host") or request.url.netloc or "").strip()
-    if not host:
-        raise ValueError("_preview_share_base_urls: host is required")
-
-    base = f"{scheme}://{host}".rstrip("/")
+    base = build_service_base_url(request).rstrip("/")
     return f"{base}/flows", base
 
 
@@ -149,7 +143,6 @@ def _flow_semantic_payload(flow_cfg: FlowConfig) -> JsonObject:
                 "resources",
                 "channels",
                 "store",
-                "mock",
                 "permission",
                 "timeout",
                 "max_retries",
@@ -175,7 +168,9 @@ def _build_bundle_index(flows_root: Path) -> dict[str, str]:
     try:
         registry_flows = require_json_array(registry_data.get("flows", []), "registry.flows")
     except ValueError as exc:
-        raise HTTPException(status_code=500, detail="Registry field 'flows' must be a list") from exc
+        raise HTTPException(
+            status_code=500, detail="Registry field 'flows' must be a list"
+        ) from exc
 
     flow_to_bundle: dict[str, str] = {}
     for entry in registry_flows:
@@ -184,20 +179,28 @@ def _build_bundle_index(flows_root: Path) -> dict[str, str]:
         elif isinstance(entry, dict):
             bundle_id = entry.get("id")
         else:
-            raise HTTPException(status_code=500, detail="Registry flow entry must be string or object")
+            raise HTTPException(
+                status_code=500, detail="Registry flow entry must be string or object"
+            )
         if not isinstance(bundle_id, str) or not bundle_id:
-            raise HTTPException(status_code=500, detail="Registry flow entry must include non-empty string 'id'")
+            raise HTTPException(
+                status_code=500, detail="Registry flow entry must include non-empty string 'id'"
+            )
 
         flow_path = bundles_dir / bundle_id / "flow.json"
         if not flow_path.exists():
-            raise HTTPException(status_code=500, detail=f"Bundle flow.json not found for '{bundle_id}'")
+            raise HTTPException(
+                status_code=500, detail=f"Bundle flow.json not found for '{bundle_id}'"
+            )
 
         with open(flow_path, "r", encoding="utf-8") as f:
             raw_flow = parse_json_object(f.read(), f"bundles.{bundle_id}.flow")
 
-        flow_id = raw_flow.get("flow_id") or raw_flow.get("id")
+        flow_id = raw_flow.get("flow_id")
         if not isinstance(flow_id, str) or not flow_id:
-            raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' must define non-empty flow_id")
+            raise HTTPException(
+                status_code=500, detail=f"Bundle '{bundle_id}' must define non-empty flow_id"
+            )
 
         flow_to_bundle[flow_id] = bundle_id
 
@@ -237,19 +240,27 @@ async def _get_bundle_update_flags(
 
         bundle_id = flow_to_bundle.get(flow_cfg.flow_id)
         if not bundle_id:
-            raise HTTPException(status_code=500, detail=f"Bundle mapping not found for flow '{flow_cfg.flow_id}'")
+            raise HTTPException(
+                status_code=500, detail=f"Bundle mapping not found for flow '{flow_cfg.flow_id}'"
+            )
 
         await loader.preload_nodes_to_cache(bundle_id)
         bundle_cfg = await loader.build_flow_bundle_config(bundle_id)
         if bundle_cfg is None:
-            raise HTTPException(status_code=500, detail=f"Failed to build bundle config for '{bundle_id}'")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to build bundle config for '{bundle_id}'"
+            )
 
-        flags[flow_cfg.flow_id] = _flow_semantic_payload(flow_cfg) != _flow_semantic_payload(bundle_cfg)
+        flags[flow_cfg.flow_id] = _flow_semantic_payload(flow_cfg) != _flow_semantic_payload(
+            bundle_cfg
+        )
 
     return flags
 
 
-def _generate_flow_url(flow_id: str, flow_kind: FlowType | None = None, external_url: str | None = None) -> str:
+def _generate_flow_url(
+    flow_id: str, flow_kind: FlowType | None = None, external_url: str | None = None
+) -> str:
     """Публичный URL flow (или внешний base URL для EXTERNAL)."""
     if flow_kind == FlowType.EXTERNAL and external_url:
         return external_url
@@ -262,7 +273,9 @@ def _edge_to_json(edge: Edge) -> JsonObject:
     return parse_json_object(edge.model_dump_json(by_alias=True), "edge")
 
 
-def _dataflow_edge_models(raw_edges: Sequence[JsonValue | Edge] | JsonValue | None, field_name: str) -> list[Edge]:
+def _dataflow_edge_models(
+    raw_edges: Sequence[JsonValue | Edge] | JsonValue | None, field_name: str
+) -> list[Edge]:
     if raw_edges is None:
         return []
     if not isinstance(raw_edges, list):
@@ -308,14 +321,15 @@ def _flow_variable_models(
 
 def _graph_nodes_payload(nodes: Mapping[str, GraphNodeConfig]) -> dict[str, JsonObject]:
     return {
-        node_id: parse_json_object(node.model_dump_json(by_alias=True, exclude_none=True), f"nodes.{node_id}")
+        node_id: parse_json_object(
+            node.model_dump_json(by_alias=True, exclude_none=True), f"nodes.{node_id}"
+        )
         for node_id, node in nodes.items()
     }
 
 
 async def _inline_tools_in_nodes(
-    nodes: dict[str, JsonObject],
-    container: FlowContainer
+    nodes: dict[str, JsonObject], container: FlowContainer
 ) -> dict[str, JsonObject]:
     """
     Инлайнит tools в nodes flow.
@@ -331,18 +345,17 @@ async def _inline_tools_in_nodes(
             node_config["tools"] = await inline_tools_list(tools, container)
 
         # Инлайним code для code-нод с tool_id без кода
-        if node_config.get("type") == "code" and node_config.get("tool_id") and not node_config.get("code"):
+        if (
+            node_config.get("type") == "code"
+            and node_config.get("tool_id")
+            and not node_config.get("code")
+        ):
             tool_id = node_config["tool_id"]
             if not isinstance(tool_id, str):
                 continue
             tool_ref = await container.tool_repository.get(tool_id)
             if tool_ref and tool_ref.code:
                 node_config["code"] = tool_ref.code
-                if tool_ref.args_schema:
-                    node_config["args_schema"] = {
-                        k: {"type": v.type, "description": v.description}
-                        for k, v in tool_ref.args_schema.items()
-                    }
                 if tool_ref.parameters_schema:
                     node_config["parameters_schema"] = tool_ref.parameters_schema
                 if tool_ref.description and not node_config.get("description"):
@@ -352,8 +365,7 @@ async def _inline_tools_in_nodes(
 
 
 async def inline_tools_list(
-    tools: Sequence[JsonValue],
-    container: FlowContainer
+    tools: Sequence[JsonValue], container: FlowContainer
 ) -> list[JsonValue]:
     """Инлайнит список tools."""
     inlined: list[JsonValue] = []
@@ -364,10 +376,7 @@ async def inline_tools_list(
     return inlined
 
 
-async def _inline_single_tool(
-    tool: JsonValue,
-    container: FlowContainer
-) -> JsonObject | None:
+async def _inline_single_tool(tool: JsonValue, container: FlowContainer) -> JsonObject | None:
     """Инлайнит один tool."""
     if isinstance(tool, str):
         # tool_id - достаём из библиотеки
@@ -447,6 +456,7 @@ def _flow_config_to_inline_tool(flow_cfg: FlowConfig) -> JsonObject:
         "edges": [_edge_to_json(edge) for edge in flow_cfg.edges],
     }
 
+
 router = APIRouter(tags=["flows"])
 
 
@@ -457,7 +467,7 @@ class EdgeRequest(BaseModel):
 
     from_node: str
     to_node: str | None
-    condition: str | None = None
+    condition: EdgeCondition | None = None
 
 
 class BranchRequest(BaseModel):
@@ -515,6 +525,7 @@ def _branch_request_to_config(
     existing: BranchConfig | None = None,
 ) -> BranchConfig:
     """Конвертирует BranchRequest в BranchConfig."""
+
     def _mode(
         raw: str | None,
         ex: MergeMode | None,
@@ -610,10 +621,12 @@ class FlowResponse(BaseModel):
     agent_card: JsonObject | None = None
 
     # A2A capabilities
-    capabilities: JsonObject = Field(default_factory=lambda: {
-        "streaming": True,
-        "pushNotifications": True,
-    })
+    capabilities: JsonObject = Field(
+        default_factory=lambda: {
+            "streaming": True,
+            "pushNotifications": True,
+        }
+    )
 
     # Триггеры агента
     triggers: dict[str, TriggerConfig] = Field(default_factory=dict)
@@ -728,19 +741,12 @@ async def _attach_nested_dataflow_for_editor(
             else "default"
         )
         nested_effective = container.flow_factory.apply_branch(nested_cfg, nested_branch_id)
-        nested_graph_nodes = _GRAPH_NODE_MAP_ADAPTER.validate_python(nested_effective.get("nodes") or {})
+        nested_graph_nodes = _GRAPH_NODE_MAP_ADAPTER.validate_python(
+            nested_effective.get("nodes") or {}
+        )
         nested_nodes = _graph_nodes_payload(nested_graph_nodes)
         nested_edges = _dataflow_edge_models(nested_effective.get("edges"), "nested.edges")
-        try:
-            nested_nodes = await _inline_tools_in_nodes(copy.deepcopy(nested_nodes), container)
-        except Exception as exc:
-            logger.warning(
-                "flows.dataflow.nested_inline_tools_failed",
-                flow_id=nested_flow_id,
-                branch_id=nested_branch_id,
-                node_id=node_id,
-                exception_type=type(exc).__name__,
-            )
+        nested_nodes = await _inline_tools_in_nodes(copy.deepcopy(nested_nodes), container)
         nested_nodes = await _attach_nested_dataflow_for_editor(
             nested_nodes,
             container,
@@ -753,7 +759,9 @@ async def _attach_nested_dataflow_for_editor(
                 entry=nested_effective.get("entry"),
                 nodes=_GRAPH_NODE_MAP_ADAPTER.validate_python(nested_nodes),
                 edges=nested_edges,
-                variables=_flow_variable_models(nested_effective.get("variables"), "nested.variables"),
+                variables=_flow_variable_models(
+                    nested_effective.get("variables"), "nested.variables"
+                ),
                 sample_state=None,
                 observed_runs={},
             ).model_dump_json(),
@@ -786,15 +794,7 @@ async def inspect_dataflow(
         variables = _flow_variable_models(effective.get("variables"), "flow.variables")
 
     node_payloads = _graph_nodes_payload(nodes)
-    try:
-        node_payloads = await _inline_tools_in_nodes(copy.deepcopy(node_payloads), container)
-    except Exception as exc:
-        logger.warning(
-            "flows.dataflow.inline_tools_failed",
-            flow_id=request.flow_id,
-            branch_id=request.branch_id,
-            exception_type=type(exc).__name__,
-        )
+    node_payloads = await _inline_tools_in_nodes(copy.deepcopy(node_payloads), container)
     node_payloads = await _attach_nested_dataflow_for_editor(node_payloads, container)
     nodes = _GRAPH_NODE_MAP_ADAPTER.validate_python(node_payloads)
 
@@ -920,7 +920,9 @@ async def list_flows(
                     url=f.url,
                     headers=f.headers,
                     status=f.status,
-                    last_health_check=f.last_health_check.isoformat() if f.last_health_check else None,
+                    last_health_check=f.last_health_check.isoformat()
+                    if f.last_health_check
+                    else None,
                     agent_card=f.agent_card,
                 )
             )
@@ -947,7 +949,9 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
     try:
         registry_flows = require_json_array(registry_data.get("flows", []), "registry.flows")
     except ValueError as exc:
-        raise HTTPException(status_code=500, detail="Registry field 'flows' must be a list") from exc
+        raise HTTPException(
+            status_code=500, detail="Registry field 'flows' must be a list"
+        ) from exc
 
     result: list[FlowStoreBundleResponse] = []
     for entry in registry_flows:
@@ -958,49 +962,69 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
             bundle_id = entry.get("id")
             raw_public = entry.get("public", False)
             if not isinstance(raw_public, bool):
-                raise HTTPException(status_code=500, detail="Registry flow entry field 'public' must be boolean")
+                raise HTTPException(
+                    status_code=500, detail="Registry flow entry field 'public' must be boolean"
+                )
             is_public = raw_public
         else:
-            raise HTTPException(status_code=500, detail="Registry flow entry must be string or object")
+            raise HTTPException(
+                status_code=500, detail="Registry flow entry must be string or object"
+            )
 
         if not is_public:
             continue
 
         if not isinstance(bundle_id, str) or not bundle_id:
-            raise HTTPException(status_code=500, detail="Registry flow entry must include non-empty string 'id'")
+            raise HTTPException(
+                status_code=500, detail="Registry flow entry must include non-empty string 'id'"
+            )
 
         flow_path = bundles_dir / bundle_id / "flow.json"
         if not flow_path.exists():
-            raise HTTPException(status_code=500, detail=f"Bundle flow.json not found for '{bundle_id}'")
+            raise HTTPException(
+                status_code=500, detail=f"Bundle flow.json not found for '{bundle_id}'"
+            )
 
         with open(flow_path, "r", encoding="utf-8") as f:
             raw_flow = parse_json_object(f.read(), f"bundles.{bundle_id}.flow")
 
         hidden_value = raw_flow.get("hidden", False)
         if not isinstance(hidden_value, bool):
-            raise HTTPException(status_code=500, detail=f"Field 'hidden' must be boolean in bundle '{bundle_id}'")
+            raise HTTPException(
+                status_code=500, detail=f"Field 'hidden' must be boolean in bundle '{bundle_id}'"
+            )
         if hidden_value:
             continue
 
-        flow_id = raw_flow.get("flow_id") or raw_flow.get("id")
+        flow_id = raw_flow.get("flow_id")
         if not isinstance(flow_id, str) or not flow_id:
-            raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' must define non-empty flow_id")
+            raise HTTPException(
+                status_code=500, detail=f"Bundle '{bundle_id}' must define non-empty flow_id"
+            )
 
         name = raw_flow.get("name")
         if not isinstance(name, str) or not name:
-            raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' must define non-empty name")
+            raise HTTPException(
+                status_code=500, detail=f"Bundle '{bundle_id}' must define non-empty name"
+            )
 
         description = raw_flow.get("description")
         if description is not None and not isinstance(description, str):
-            raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' field 'description' must be string")
+            raise HTTPException(
+                status_code=500, detail=f"Bundle '{bundle_id}' field 'description' must be string"
+            )
 
         raw_tags = raw_flow.get("tags", [])
         if not isinstance(raw_tags, list):
-            raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' field 'tags' must be list[str]")
+            raise HTTPException(
+                status_code=500, detail=f"Bundle '{bundle_id}' field 'tags' must be list[str]"
+            )
         tags: list[str] = []
         for tag in raw_tags:
             if not isinstance(tag, str):
-                raise HTTPException(status_code=500, detail=f"Bundle '{bundle_id}' field 'tags' must be list[str]")
+                raise HTTPException(
+                    status_code=500, detail=f"Bundle '{bundle_id}' field 'tags' must be list[str]"
+                )
             tags.append(tag)
 
         installed = await container.flow_repository.get(flow_id) is not None
@@ -1018,10 +1042,7 @@ async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreB
     return ListResponse[FlowStoreBundleResponse](items=result)
 
 
-async def _validate_tool_nodes(
-    nodes: dict[str, JsonObject],
-    container: FlowContainer
-) -> None:
+async def _validate_tool_nodes(nodes: dict[str, JsonObject], container: FlowContainer) -> None:
     """Валидирует tool_id в code-нодах при отсутствии inline code."""
     for node_config in nodes.values():
         if node_config.get("type") == "code":
@@ -1036,16 +1057,13 @@ async def _validate_tool_nodes(
                         flow_cfg = await container.flow_repository.get(tool_id)
                         if flow_cfg is None:
                             raise HTTPException(
-                                status_code=400,
-                                detail=f"Tool '{tool_id}' not found in library"
+                                status_code=400, detail=f"Tool '{tool_id}' not found in library"
                             )
 
 
 @router.post("", response_model=FlowResponse)
 @router.post("/", response_model=FlowResponse)
-async def create_flow(
-    request: FlowCreateRequest, container: ContainerDep
-) -> FlowResponse:
+async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> FlowResponse:
     """Создаёт flow."""
     variables = _flow_variable_models(request.variables, "variables")
     request_nodes = _graph_nodes_payload(request.nodes)
@@ -1072,10 +1090,7 @@ async def create_flow(
 
     if not validation_result.valid:
         errors = [e.message for e in validation_result.errors]
-        raise HTTPException(
-            status_code=400,
-            detail="; ".join(errors)
-        )
+        raise HTTPException(status_code=400, detail="; ".join(errors))
 
     branches_payload = {
         branch_id: _branch_request_to_config(branch_id, branch_req, None)
@@ -1104,7 +1119,6 @@ async def create_flow(
         branch_id: _branch_config_to_response(branch_cfg)
         for branch_id, branch_cfg in flow_config.branches.items()
     }
-
 
     return FlowResponse(
         flow_id=flow_config.flow_id,
@@ -1168,9 +1182,7 @@ async def get_flow_voice_session_query(
 
 
 @router.get("/{flow_id}", response_model=FlowResponse)
-async def get_flow(
-    flow_id: str, container: ContainerDep
-) -> FlowResponse:
+async def get_flow(flow_id: str, container: ContainerDep) -> FlowResponse:
     """Получает flow по ID."""
     try:
         flow_cfg = await container.flow_repository.get(flow_id)
@@ -1185,8 +1197,7 @@ async def get_flow(
                 except Exception as e:
                     logger.error(f"Ошибка конвертации ветки '{branch_id}': {e}", exc_info=True)
                     raise HTTPException(
-                        status_code=500,
-                        detail=f"Ошибка обработки ветки '{branch_id}': {str(e)}"
+                        status_code=500, detail=f"Ошибка обработки ветки '{branch_id}': {str(e)}"
                     )
 
         source_value = flow_cfg.source or "manual"
@@ -1260,7 +1271,9 @@ async def reload_flow_from_bundle(
 
     reloaded_cfg = await container.flow_repository.get(loaded_id)
     if reloaded_cfg is None:
-        raise HTTPException(status_code=500, detail=f"Flow '{loaded_id}' missing after reload-from-bundle")
+        raise HTTPException(
+            status_code=500, detail=f"Flow '{loaded_id}' missing after reload-from-bundle"
+        )
 
     ctx = get_context()
     if ctx and ctx.user and ctx.user.user_id:
@@ -1349,7 +1362,7 @@ async def create_flow_preview_share(
         company_id=company_id,
         name="Flow Preview Guest",
         roles=["guest"],
-        attrs={
+        attributes={
             "kind": "embed_session_guest",
             "embed_id": embed_id,
             "embed_flow_id": flow_id,
@@ -1620,9 +1633,7 @@ async def update_flow_metadata(
 
 
 @router.delete("/{flow_id}")
-async def delete_flow(
-    flow_id: str, container: ContainerDep
-) -> JsonObject:
+async def delete_flow(flow_id: str, container: ContainerDep) -> JsonObject:
     """Удаляет flow."""
     deleted = await container.flow_repository.delete(flow_id)
     if not deleted:
@@ -1640,9 +1651,7 @@ async def delete_flow(
 
 
 @router.get("/{flow_id}/versions", response_model=ListResponse[str])
-async def list_versions(
-    flow_id: str, container: ContainerDep
-) -> ListResponse[str]:
+async def list_versions(flow_id: str, container: ContainerDep) -> ListResponse[str]:
     """Список версий flow."""
     versions = await container.flow_repository.list_versions(flow_id)
     return ListResponse[str](items=versions)

@@ -56,11 +56,7 @@ class OutputActionExecutor:
                     config=channel_config,
                     variables=variables,
                 )
-                ch_label = (
-                    action.channel.value
-                    if hasattr(action.channel, "value")
-                    else str(action.channel)
-                )
+                ch_label = action.channel.value
                 logger.info(f"Output action {ch_label}:{action.action} executed")
                 results.append({"action": action.action, "result": result})
             except Exception as e:

@@ -91,7 +91,7 @@ async def test_identity_profile_source_reads_explicit_context_profile_fields() -
             user_id="u1",
             name="User",
             bio="Prefers concise technical answers.",
-            attrs={LLM_CONTEXT_PROFILE_METADATA_KEY: "User works on billing flows."},
+            attributes={LLM_CONTEXT_PROFILE_METADATA_KEY: "User works on billing flows."},
         ),
         active_company=Company(
             company_id="c1",

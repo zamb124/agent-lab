@@ -1,14 +1,18 @@
 """resolve_fcm_credentials: parsing service account JSON и push.fcm_project_id."""
 
 import json
-from types import SimpleNamespace
 
+import pytest
+
+from core.config.models import PushConfig
 from core.push.fcm_credentials import resolve_fcm_credentials
 
 
-def _settings(push: dict) -> SimpleNamespace:
-    push_ns = SimpleNamespace(**push)
-    return SimpleNamespace(push=push_ns)
+def _push_config(fcm_credentials_json: str | dict[str, str] | None, fcm_project_id: str | None) -> PushConfig:
+    return PushConfig(
+        fcm_credentials_json=fcm_credentials_json,
+        fcm_project_id=fcm_project_id,
+    )
 
 
 _SERVICE_ACCOUNT = {
@@ -21,22 +25,12 @@ _SERVICE_ACCOUNT = {
 
 
 def test_returns_none_when_credentials_missing():
-    assert (
-        resolve_fcm_credentials(
-            _settings({"fcm_credentials_json": None, "fcm_project_id": None})
-        )
-        is None
-    )
+    assert resolve_fcm_credentials(_push_config(None, None)) is None
 
 
 def test_resolves_from_dict():
-    s = _settings(
-        {
-            "fcm_credentials_json": _SERVICE_ACCOUNT,
-            "fcm_project_id": None,
-        }
-    )
-    r = resolve_fcm_credentials(s)
+    push = _push_config(_SERVICE_ACCOUNT, None)
+    r = resolve_fcm_credentials(push)
     assert r is not None
     assert r.project_id == "humanitec-app"
     assert r.client_email == _SERVICE_ACCOUNT["client_email"]
@@ -45,35 +39,20 @@ def test_resolves_from_dict():
 
 
 def test_resolves_from_json_string():
-    s = _settings(
-        {
-            "fcm_credentials_json": json.dumps(_SERVICE_ACCOUNT),
-            "fcm_project_id": None,
-        }
-    )
-    r = resolve_fcm_credentials(s)
+    push = _push_config(json.dumps(_SERVICE_ACCOUNT), None)
+    r = resolve_fcm_credentials(push)
     assert r is not None
     assert r.project_id == "humanitec-app"
 
 
 def test_push_project_id_overrides_service_account():
-    s = _settings(
-        {
-            "fcm_credentials_json": _SERVICE_ACCOUNT,
-            "fcm_project_id": "humanitec-app-override",
-        }
-    )
-    r = resolve_fcm_credentials(s)
+    push = _push_config(_SERVICE_ACCOUNT, "humanitec-app-override")
+    r = resolve_fcm_credentials(push)
     assert r is not None
     assert r.project_id == "humanitec-app-override"
 
 
-def test_returns_none_when_required_field_missing():
+def test_raises_when_required_field_missing():
     incomplete = {**_SERVICE_ACCOUNT, "client_email": ""}
-    s = _settings(
-        {
-            "fcm_credentials_json": incomplete,
-            "fcm_project_id": None,
-        }
-    )
-    assert resolve_fcm_credentials(s) is None
+    with pytest.raises(ValueError, match="client_email"):
+        resolve_fcm_credentials(_push_config(incomplete, None))

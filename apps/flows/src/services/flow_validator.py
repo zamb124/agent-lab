@@ -30,14 +30,13 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+_EDGE_ALLOWED_FIELDS = frozenset({"from_node", "to_node", "condition", "contributes_to_join"})
+
+
 def _edge_endpoint_ids(edge: JsonObject) -> tuple[str | None, str | None]:
-    """from_node/to_node или legacy from/to."""
+    """Return canonical edge endpoints."""
     fn = edge.get("from_node")
-    if fn is None:
-        fn = edge.get("from")
     tn = edge.get("to_node")
-    if tn is None:
-        tn = edge.get("to")
     if not isinstance(fn, str) or fn == "":
         fn = None
     if not isinstance(tn, str) or tn == "":
@@ -79,13 +78,15 @@ class FlowValidationResult:
         node_id: str | None = None,
         details: JsonObject | None = None,
     ) -> None:
-        self.errors.append(FlowValidationError(
-            code=code,
-            message=message,
-            severity=severity,
-            node_id=node_id,
-            details=details,
-        ))
+        self.errors.append(
+            FlowValidationError(
+                code=code,
+                message=message,
+                severity=severity,
+                node_id=node_id,
+                details=details,
+            )
+        )
         if severity == ValidationSeverity.ERROR:
             self.valid = False
 
@@ -103,7 +104,9 @@ class FlowValidator:
         self.flow_repository: FlowRepository | None = flow_repository
         self.tool_repository: ToolRepository | None = tool_repository
         self.node_repository: NodeRepository | None = node_repository
-        self.flow_builder: Callable[[JsonObject], Awaitable[Flow | RuntimeFlowProtocol]] | None = flow_builder
+        self.flow_builder: Callable[[JsonObject], Awaitable[Flow | RuntimeFlowProtocol]] | None = (
+            flow_builder
+        )
 
     async def validate(
         self,
@@ -118,7 +121,7 @@ class FlowValidator:
 
         Args:
             nodes: Словарь нод {node_id: config}
-            edges: Список edges [{from, to, condition}]
+            edges: Список edges [{from_node, to_node, condition}]
             entry: ID entry ноды
             variables: Переменные flow
             flow_id: ID flow (опционально, для контекста)
@@ -179,27 +182,41 @@ class FlowValidator:
 
         # Проверка edges
         for edge in edges:
-            from_node = edge.get("from")
-            to_node = edge.get("to")
+            extra_fields = sorted(set(edge) - _EDGE_ALLOWED_FIELDS)
+            if extra_fields:
+                result.add_error(
+                    code="edge_unknown_fields",
+                    message="Edge содержит поля вне canonical contract",
+                    details={"edge": edge, "fields": extra_fields},
+                )
+                continue
 
-            if from_node and from_node not in node_ids:
+            from_node, to_node = _edge_endpoint_ids(edge)
+
+            if not from_node:
+                result.add_error(
+                    code="edge_from_missing",
+                    message="Edge должен содержать непустой from_node",
+                    details={"edge": edge},
+                )
+            elif from_node not in node_ids:
                 result.add_error(
                     code="edge_from_not_found",
-                    message=f"Edge from '{from_node}' ссылается на несуществующую ноду",
+                    message=f"Edge from_node '{from_node}' ссылается на несуществующую ноду",
                     details={"edge": edge},
                 )
 
-            # to может быть null (конец графа)
+            # to_node может быть null (конец графа)
             if to_node and to_node not in node_ids:
                 result.add_error(
                     code="edge_to_not_found",
-                    message=f"Edge to '{to_node}' ссылается на несуществующую ноду",
+                    message=f"Edge to_node '{to_node}' ссылается на несуществующую ноду",
                     details={"edge": edge},
                 )
 
         for edge in edges:
             e_from, e_to = _edge_endpoint_ids(edge)
-            for label, nid in (("from", e_from), ("to", e_to)):
+            for label, nid in (("from_node", e_from), ("to_node", e_to)):
                 if not nid:
                     continue
                 if nid not in node_ids:
@@ -228,9 +245,7 @@ class FlowValidator:
 
         # Проверка что граф имеет выход
         execution_node_ids = {
-            nid
-            for nid in node_ids
-            if (nodes.get(nid) or {}).get("type") != "resource"
+            nid for nid in node_ids if (nodes.get(nid) or {}).get("type") != "resource"
         }
         nodes_with_outgoing: set[str] = set()
         for e in edges:
@@ -238,9 +253,7 @@ class FlowValidator:
             if ef:
                 nodes_with_outgoing.add(ef)
         terminal_nodes = execution_node_ids - nodes_with_outgoing
-        edges_to_null = [
-            e for e in edges if _edge_endpoint_ids(e)[1] is None
-        ]
+        edges_to_null = [e for e in edges if _edge_endpoint_ids(e)[1] is None]
 
         if not terminal_nodes and not edges_to_null:
             result.add_error(
@@ -734,7 +747,7 @@ class FlowValidator:
             return
         try:
             config: JsonObject = {
-                "id": flow_id or "validation_test",
+                "flow_id": flow_id or "validation_test",
                 "name": "Validation Test",
                 "entry": entry,
                 "nodes": nodes,

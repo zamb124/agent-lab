@@ -34,17 +34,18 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
     def id_field(self) -> str:
         return "type_id"
 
-    async def get_all_for_company(
+    async def list_by_company(
         self,
         include_system: bool = True,
         namespace: str | None = None,
         *,
+        company_id: str | None = None,
         limit: int = 200,
         offset: int = 0,
     ) -> list[EntityType]:
-        company_id = self._get_company_id()
+        effective_company_id = company_id if company_id is not None else self._get_company_id()
         async with self._db.session() as session:
-            stmt = select(EntityType).where(EntityType.company_id == company_id)
+            stmt = select(EntityType).where(EntityType.company_id == effective_company_id)
             if namespace is not None:
                 stmt = stmt.where(EntityType.namespace == namespace)
             if not include_system:
@@ -54,12 +55,6 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
                 .limit(limit)
                 .offset(offset)
             )
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-
-    async def list_for_company_id(self, company_id: str) -> list[EntityType]:
-        async with self._db.session() as session:
-            stmt = select(EntityType).where(EntityType.company_id == company_id)
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
@@ -105,7 +100,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         offset = 0
         items: list[EntityType] = []
         while True:
-            page = await self.get_all_for_company(
+            page = await self.list_by_company(
                 namespace=namespace,
                 limit=page_limit,
                 offset=offset,
@@ -134,6 +129,33 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def get_by_type_ids(
+        self,
+        type_ids: list[str],
+        *,
+        namespace: str,
+        company_id: str | None = None,
+    ) -> dict[str, EntityType]:
+        """
+        Batched lookup `EntityType` по списку `type_id`.
+
+        Возвращает map `type_id -> EntityType`. Отсутствующие type_id просто
+        отсутствуют в map (без raise). Раньше `suggest_service` дёргал
+        `get_by_type_id` в цикле по каждому кандидату — N+1 на каждой паре.
+        """
+        normalized = sorted({tid.strip() for tid in type_ids if tid.strip()})
+        if not normalized:
+            return {}
+        effective_company_id = company_id or self._get_company_id()
+        async with self._db.session() as session:
+            stmt = select(EntityType).where(
+                EntityType.type_id.in_(normalized),
+                EntityType.company_id == effective_company_id,
+                EntityType.namespace == namespace,
+            )
+            result = await session.execute(stmt)
+            return {row.type_id: row for row in result.scalars().all()}
+
     async def list_allowed_for_namespace(
         self,
         namespace: str,
@@ -141,7 +163,7 @@ class EntityTypeRepository(BaseCRMRepository[EntityType]):
         limit: int = 200,
         offset: int = 0,
     ) -> list[EntityType]:
-        return await self.get_all_for_company(namespace=namespace, limit=limit, offset=offset)
+        return await self.list_by_company(namespace=namespace, limit=limit, offset=offset)
 
     async def update_metadata(
         self,

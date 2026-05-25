@@ -18,7 +18,7 @@ class PlatformToolDoc(BaseModel):
     )
     description: str = ""
     tags: list[str] = Field(default_factory=list)
-    args_schema_json: str = "{}"
+    parameters_schema_json: str = "{}"
     code_mode: str | None = None
     mcp_server_id: str | None = None
     mcp_tool_name: str | None = None
@@ -87,6 +87,7 @@ class DocumentationQuery(BaseModel):
 
 class StateField(BaseModel):
     """Поле ExecutionState."""
+
     name: str
     type: str
     description: str
@@ -95,6 +96,7 @@ class StateField(BaseModel):
 
 class ModuleMethod(BaseModel):
     """Метод модуля."""
+
     name: str
     type: str  # function, class, constant, decorator
     doc: str
@@ -102,6 +104,7 @@ class ModuleMethod(BaseModel):
 
 class ModuleDoc(BaseModel):
     """Документация модуля."""
+
     name: str
     methods: list[ModuleMethod] = []
     description: str | None = None
@@ -109,6 +112,7 @@ class ModuleDoc(BaseModel):
 
 class CodeTemplate(BaseModel):
     """Шаблон кода."""
+
     id: str
     name: str
     description: str
@@ -117,12 +121,12 @@ class CodeTemplate(BaseModel):
     node_type: str = "tool"  # tool или function
     tags: list[str] | None = None
     language: str = "python"
-    args_schema: JsonObject | None = None
     parameters_schema: JsonObject | None = None
 
 
 class DocumentationResponse(BaseModel):
     """Ответ с документацией."""
+
     language: str
     perspective: str
 

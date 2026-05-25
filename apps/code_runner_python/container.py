@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from apps.code_runner_python.config import get_code_runner_python_settings
 from apps.code_runner_python.services.executor import PythonSandboxExecutor
-from core.container import BaseContainer, lazy
+from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -18,21 +18,17 @@ class CodeRunnerPythonContainer(BaseContainer):
         return PythonSandboxExecutor()
 
 
-_code_runner_python_container: CodeRunnerPythonContainer | None = None
+def _create_code_runner_python_container() -> CodeRunnerPythonContainer:
+    settings = get_code_runner_python_settings()
+    return CodeRunnerPythonContainer(
+        db_url=settings.database.shared_url,
+        shared_db_url=settings.database.shared_url,
+    )
 
 
-def get_code_runner_python_container() -> CodeRunnerPythonContainer:
-    global _code_runner_python_container
-    if _code_runner_python_container is None:
-        settings = get_code_runner_python_settings()
-        _code_runner_python_container = CodeRunnerPythonContainer(
-            db_url=settings.database.shared_url,
-            shared_db_url=settings.database.shared_url,
-        )
-        logger.info("CodeRunnerPythonContainer инициализирован")
-    return _code_runner_python_container
+_code_runner_python_registry: ContainerRegistry[CodeRunnerPythonContainer] = ContainerRegistry(
+    _create_code_runner_python_container, name="CodeRunnerPythonContainer"
+)
 
-
-def reset_code_runner_python_container() -> None:
-    global _code_runner_python_container
-    _code_runner_python_container = None
+get_code_runner_python_container = _code_runner_python_registry.get
+reset_code_runner_python_container = _code_runner_python_registry.reset

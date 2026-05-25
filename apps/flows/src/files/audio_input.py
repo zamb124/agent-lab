@@ -124,7 +124,7 @@ async def transcribe_incoming_audio_files(
         result = await stt.transcribe_audio(
             audio_bytes=audio_bytes,
             file_name=original_name,
-            mime_type=content_type,
+            content_type=content_type,
             language=merged.language,
         )
         text = (result.text or "").strip()

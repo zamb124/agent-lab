@@ -132,16 +132,24 @@ class SuggestService:
         company_id: str,
         namespace: str,
     ) -> dict[str, int]:
+        """
+        Сканирует кандидатов-дубликатов и формирует CRMSuggest.
+
+        Производительность: семантический поиск всё ещё делается на каждую
+        scan-entity (вынести в batch RAG за пределами этой задачи), но lookup
+        существующих suggests и entity_type — теперь по одному batched-запросу
+        на весь scan. До правки на 50-entity scan уходило 550+ запросов
+        (50 × (search + N × find_by_targets + N × get_by_type_id)); теперь —
+        ~52 (50 search + 1 find_by_targets_batch + 1 get_by_type_ids).
+        """
         entities, _, _ = await self._entity_repository.list_by_cursor(
             namespace=namespace,
             limit=_SUGGEST_SCAN_LIMIT,
             company_id=company_id,
         )
-        seen_pairs: set[tuple[str, str]] = set()
-        created_count = 0
-        auto_resolved_count = 0
-        skipped_existing_count = 0
 
+        seen_pairs: set[tuple[str, str]] = set()
+        pair_plan: list[tuple[CRMEntity, CRMEntity, tuple[str, str]]] = []
         for entity in entities:
             if entity.is_note:
                 continue
@@ -161,55 +169,73 @@ class SuggestService:
                     continue
                 if similarity <= _DUPLICATE_SIMILARITY_THRESHOLD:
                     continue
-
                 seen_pairs.add(pair_key)
-                target_entity_ids = list(pair_key)
-                existing = await self._repository.find_by_targets(
+                pair_plan.append((entity, candidate, pair_key))
+                break
+
+        if not pair_plan:
+            return {
+                "duplicate_created": 0,
+                "duplicate_auto_resolved": 0,
+                "duplicate_skipped_existing": 0,
+            }
+
+        existing_suggests = await self._repository.find_by_targets_batch(
+            namespace=namespace,
+            suggest_type="duplicate",
+            target_entity_ids_batches=[list(pair_key) for _, _, pair_key in pair_plan],
+            statuses=_SKIP_DUPLICATE_STATUSES,
+        )
+
+        entity_type_ids = [entity.entity_type for entity, _, _ in pair_plan]
+        entity_types_by_id = await self._entity_type_repository.get_by_type_ids(
+            entity_type_ids,
+            namespace=namespace,
+            company_id=company_id,
+        )
+
+        created_count = 0
+        auto_resolved_count = 0
+        skipped_existing_count = 0
+        for entity, candidate, pair_key in pair_plan:
+            target_entity_ids = list(pair_key)
+            existing_key = tuple(sorted(target_entity_ids))
+            if existing_suggests.get(existing_key) is not None:
+                skipped_existing_count += 1
+                continue
+
+            entity_type = entity_types_by_id.get(entity.entity_type)
+            if entity_type is None:
+                raise ValueError(
+                    f"EntityType {entity.entity_type!r} not found in namespace {namespace!r}"
+                )
+
+            merge_request = self._build_merge_request(entity, candidate)
+            merge_payload = self._as_json_object(merge_request.model_dump(mode="json"))
+            if merge_payload is None:
+                raise ValueError("EntityMergeRequest payload must be JSON object")
+
+            if entity_type.auto_resolve_suggests:
+                _ = await self._entity_service.merge_entities(merge_request)
+                _ = await self._create_suggest(
+                    company_id=company_id,
                     namespace=namespace,
                     suggest_type="duplicate",
+                    status="auto_resolved",
                     target_entity_ids=target_entity_ids,
-                    statuses=_SKIP_DUPLICATE_STATUSES,
+                    payload=merge_payload,
                 )
-                if existing is not None:
-                    skipped_existing_count += 1
-                    continue
-
-                entity_type = await self._entity_type_repository.get_by_type_id(
-                    entity.entity_type,
-                    namespace=namespace,
+                auto_resolved_count += 1
+            else:
+                _ = await self._create_suggest(
                     company_id=company_id,
+                    namespace=namespace,
+                    suggest_type="duplicate",
+                    status="pending",
+                    target_entity_ids=target_entity_ids,
+                    payload=merge_payload,
                 )
-                if entity_type is None:
-                    raise ValueError(
-                        f"EntityType {entity.entity_type!r} not found in namespace {namespace!r}"
-                    )
-
-                merge_request = self._build_merge_request(entity, candidate)
-                merge_payload = self._as_json_object(merge_request.model_dump(mode="json"))
-                if merge_payload is None:
-                    raise ValueError("EntityMergeRequest payload must be JSON object")
-                if entity_type.auto_resolve_suggests:
-                    _ = await self._entity_service.merge_entities(merge_request)
-                    _ = await self._create_suggest(
-                        company_id=company_id,
-                        namespace=namespace,
-                        suggest_type="duplicate",
-                        status="auto_resolved",
-                        target_entity_ids=target_entity_ids,
-                        payload=merge_payload,
-                    )
-                    auto_resolved_count += 1
-                else:
-                    _ = await self._create_suggest(
-                        company_id=company_id,
-                        namespace=namespace,
-                        suggest_type="duplicate",
-                        status="pending",
-                        target_entity_ids=target_entity_ids,
-                        payload=merge_payload,
-                    )
-                    created_count += 1
-                break
+                created_count += 1
 
         return {
             "duplicate_created": created_count,

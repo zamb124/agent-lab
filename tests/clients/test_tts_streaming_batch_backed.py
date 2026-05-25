@@ -36,7 +36,7 @@ async def test_batch_backed_raises_when_upstream_audio_empty() -> None:
         response_format="wav",
         sample_rate=8000,
         provider_name="empty_fixture",
-        mime_type="audio/wav",
+        content_type="audio/wav",
     )
     with pytest.raises(ValueError, match="пустой audio_bytes"):
         await streamer.synthesize_chunk("непустой текст")
@@ -61,7 +61,7 @@ async def test_batch_backed_whitespace_only_chunk_skips_http() -> None:
         response_format="wav",
         sample_rate=8000,
         provider_name="skip_ws",
-        mime_type="audio/wav",
+        content_type="audio/wav",
     )
     out = await streamer.synthesize_chunk("  \n\t ")
     assert out == b""

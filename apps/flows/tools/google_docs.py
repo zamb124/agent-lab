@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,12 +24,13 @@ from apps.flows.src.services.platform_facades import get_file_bytes, get_google_
 from apps.flows.src.tools.decorator import tool
 from core.clients.google_docs_client import GoogleDocsClient
 from core.logging import get_logger
+from core.types import JsonObject, require_json_array, require_json_object
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
 logger = get_logger(__name__)
-JsonDict = dict[str, Any]
+JsonDict = JsonObject
 
 
 def _optional_state_string(value: object) -> str | None:
@@ -112,7 +113,7 @@ _SHARE_DESCRIPTION = """
 
 
 class GDocsCreateArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     title: str = Field(..., min_length=1, description="Заголовок документа.")
     file_id: str | None = Field(
@@ -122,20 +123,20 @@ class GDocsCreateArgs(BaseModel):
 
 
 class GDocsDocumentIdArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     document_id: str = Field(..., min_length=1, description="ID документа Google Docs.")
 
 
 class GDocsAppendTextArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     document_id: str = Field(..., min_length=1, description="ID документа.")
     text: str = Field(..., min_length=1, description="Текст для добавления в конец.")
 
 
 class GDocsInsertTextArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     document_id: str = Field(..., min_length=1, description="ID документа.")
     text: str = Field(..., min_length=1, description="Текст для вставки.")
@@ -143,7 +144,7 @@ class GDocsInsertTextArgs(BaseModel):
 
 
 class GDocsFindReplaceArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     document_id: str = Field(..., min_length=1, description="ID документа.")
     find: str = Field(..., min_length=1, description="Искомый текст.")
@@ -152,7 +153,7 @@ class GDocsFindReplaceArgs(BaseModel):
 
 
 class GDocsDeleteRangeArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     document_id: str = Field(..., min_length=1, description="ID документа.")
     start_index: int = Field(..., ge=1, description="Начальный индекс (включительно).")
@@ -160,56 +161,12 @@ class GDocsDeleteRangeArgs(BaseModel):
 
 
 class GDocsShareArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     document_id: str = Field(..., min_length=1, description="ID документа.")
     email: str | None = Field(None, description="Email получателя.")
     role: str = Field("reader", description="Уровень доступа: reader, commenter, writer.")
     anyone: bool = Field(False, description="Если true — доступ всем по ссылке.")
-
-
-# ── mock ответы ──────────────────────────────────────────────────
-
-
-def _create_mock(args: JsonDict, state: Any = None) -> JsonDict:
-    return {
-        "success": True,
-        "document_id": "mock_doc_id_123",
-        "title": args.get("title", "Mock"),
-        "web_url": "https://docs.google.com/document/d/mock_doc_id_123/edit",
-    }
-
-
-def _read_mock(args: JsonDict, state: Any = None) -> JsonDict:
-    return {
-        "success": True,
-        "document_id": args.get("document_id", "mock_doc_id"),
-        "text": "Mock document content.\nSecond paragraph.",
-    }
-
-
-def _append_mock(args: JsonDict, state: Any = None) -> JsonDict:
-    return {"success": True, "document_id": args.get("document_id", "mock_doc_id")}
-
-
-def _insert_mock(args: JsonDict, state: Any = None) -> JsonDict:
-    return {"success": True, "document_id": args.get("document_id", "mock_doc_id")}
-
-
-def _find_replace_mock(args: JsonDict, state: Any = None) -> JsonDict:
-    return {
-        "success": True,
-        "document_id": args.get("document_id", "mock_doc_id"),
-        "occurrences_changed": 1,
-    }
-
-
-def _delete_range_mock(args: JsonDict, state: Any = None) -> JsonDict:
-    return {"success": True, "document_id": args.get("document_id", "mock_doc_id")}
-
-
-def _share_mock(args: JsonDict, state: Any = None) -> JsonDict:
-    return {"success": True, "document_id": args.get("document_id", "mock_doc_id")}
 
 
 def _require_state(state: ExecutionState | None) -> ExecutionState:
@@ -241,8 +198,7 @@ async def _get_docs_client(state: ExecutionState | None) -> GoogleDocsClient:
     name="gdocs_create_document",
     description=_CREATE_DESCRIPTION,
     tags=["google_docs", "documents"],
-    mock_response=_create_mock,
-    args_schema=GDocsCreateArgs,
+    parameters_model=GDocsCreateArgs,
 )
 async def gdocs_create_document(
     title: str,
@@ -253,7 +209,10 @@ async def gdocs_create_document(
 
     if file_id:
         docx_bytes = await get_file_bytes(file_id)
-        result = await client.upload_docx(title, docx_bytes)
+        result = require_json_object(
+            await client.upload_docx(title, docx_bytes),
+            "gdocs_create_document.upload_docx",
+        )
         return {
             "success": True,
             "document_id": result["id"],
@@ -261,8 +220,11 @@ async def gdocs_create_document(
             "web_url": result.get("webViewLink", ""),
         }
 
-    result = await client.create_document(title)
-    doc_id = result["documentId"]
+    result = require_json_object(
+        await client.create_document(title),
+        "gdocs_create_document.create_document",
+    )
+    doc_id = str(result["documentId"])
     return {
         "success": True,
         "document_id": doc_id,
@@ -275,8 +237,7 @@ async def gdocs_create_document(
     name="gdocs_read_document",
     description=_READ_DESCRIPTION,
     tags=["google_docs", "documents"],
-    mock_response=_read_mock,
-    args_schema=GDocsDocumentIdArgs,
+    parameters_model=GDocsDocumentIdArgs,
 )
 async def gdocs_read_document(
     document_id: str,
@@ -292,8 +253,7 @@ async def gdocs_read_document(
     name="gdocs_append_text",
     description=_APPEND_DESCRIPTION,
     tags=["google_docs", "documents"],
-    mock_response=_append_mock,
-    args_schema=GDocsAppendTextArgs,
+    parameters_model=GDocsAppendTextArgs,
 )
 async def gdocs_append_text(
     document_id: str,
@@ -302,7 +262,7 @@ async def gdocs_append_text(
 ) -> JsonDict:
     client = await _get_docs_client(state)
 
-    await client.append_text(document_id, text)
+    _ = await client.append_text(document_id, text)
     return {"success": True, "document_id": document_id}
 
 
@@ -310,8 +270,7 @@ async def gdocs_append_text(
     name="gdocs_insert_text",
     description=_INSERT_DESCRIPTION,
     tags=["google_docs", "documents"],
-    mock_response=_insert_mock,
-    args_schema=GDocsInsertTextArgs,
+    parameters_model=GDocsInsertTextArgs,
 )
 async def gdocs_insert_text(
     document_id: str,
@@ -321,7 +280,7 @@ async def gdocs_insert_text(
 ) -> JsonDict:
     client = await _get_docs_client(state)
 
-    await client.insert_text(document_id, text, index)
+    _ = await client.insert_text(document_id, text, index)
     return {"success": True, "document_id": document_id}
 
 
@@ -329,8 +288,7 @@ async def gdocs_insert_text(
     name="gdocs_find_replace",
     description=_FIND_REPLACE_DESCRIPTION,
     tags=["google_docs", "documents"],
-    mock_response=_find_replace_mock,
-    args_schema=GDocsFindReplaceArgs,
+    parameters_model=GDocsFindReplaceArgs,
 )
 async def gdocs_find_replace(
     document_id: str,
@@ -341,13 +299,22 @@ async def gdocs_find_replace(
 ) -> JsonDict:
     client = await _get_docs_client(state)
 
-    result = await client.find_and_replace(
-        document_id, find, replace, match_case=match_case
+    result = require_json_object(
+        await client.find_and_replace(document_id, find, replace, match_case=match_case),
+        "gdocs_find_replace.result",
     )
-    replies = result.get("replies", [{}])
+    replies = require_json_array(result.get("replies", []), "gdocs_find_replace.replies")
     changed = 0
     if replies:
-        changed = replies[0].get("replaceAllText", {}).get("occurrencesChanged", 0)
+        reply = require_json_object(replies[0], "gdocs_find_replace.replies[0]")
+        replace_all_text = require_json_object(
+            reply.get("replaceAllText", {}),
+            "gdocs_find_replace.replies[0].replaceAllText",
+        )
+        occurrences = replace_all_text.get("occurrencesChanged", 0)
+        if not isinstance(occurrences, int) or isinstance(occurrences, bool):
+            raise ValueError("gdocs_find_replace.occurrencesChanged must be an integer")
+        changed = occurrences
     return {
         "success": True,
         "document_id": document_id,
@@ -359,8 +326,7 @@ async def gdocs_find_replace(
     name="gdocs_delete_range",
     description=_DELETE_RANGE_DESCRIPTION,
     tags=["google_docs", "documents"],
-    mock_response=_delete_range_mock,
-    args_schema=GDocsDeleteRangeArgs,
+    parameters_model=GDocsDeleteRangeArgs,
 )
 async def gdocs_delete_range(
     document_id: str,
@@ -370,7 +336,7 @@ async def gdocs_delete_range(
 ) -> JsonDict:
     client = await _get_docs_client(state)
 
-    await client.delete_range(document_id, start_index, end_index)
+    _ = await client.delete_range(document_id, start_index, end_index)
     return {"success": True, "document_id": document_id}
 
 
@@ -378,8 +344,7 @@ async def gdocs_delete_range(
     name="gdocs_share_document",
     description=_SHARE_DESCRIPTION,
     tags=["google_docs", "documents"],
-    mock_response=_share_mock,
-    args_schema=GDocsShareArgs,
+    parameters_model=GDocsShareArgs,
 )
 async def gdocs_share_document(
     document_id: str,
@@ -391,9 +356,9 @@ async def gdocs_share_document(
     client = await _get_docs_client(state)
 
     if anyone:
-        await client.share_document_anyone(document_id, role=role)
+        _ = await client.share_document_anyone(document_id, role=role)
     elif email:
-        await client.share_document(document_id, email, role=role)
+        _ = await client.share_document(document_id, email, role=role)
     else:
         raise ValueError("Укажите email или anyone=true для выдачи доступа.")
 

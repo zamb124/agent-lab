@@ -9,7 +9,12 @@ import pytest
 from apps.sync.db.models import SyncChannel
 from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.db.repositories.message_repository import MessageRepository
-from apps.sync.models.messages import MessageContentModel, MessageContentType, TextPlainContent
+from apps.sync.models.messages import (
+    MessageContentModel,
+    MessageContentType,
+    ReactionEntry,
+    TextPlainContent,
+)
 
 
 @pytest.mark.asyncio
@@ -103,7 +108,10 @@ async def test_replace_contents_soft_delete_reactions_max_sent(
     assert len(contents) == 1
     assert contents[0].data["body"] == "b"
 
-    await message_repo.set_message_reactions(m_r, [{"user_id": "u1", "emoji": "x", "created_at": ed.isoformat()}])
+    await message_repo.set_message_reactions(
+        m_r,
+        [ReactionEntry(user_id="u1", emoji="x", created_at=ed)],
+    )
     m2 = await message_repo.get_by_id_for_company(m_r, company_id)
     assert m2 is not None
     assert len(m2.reactions) == 1

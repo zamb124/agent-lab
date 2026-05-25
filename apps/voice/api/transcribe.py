@@ -79,7 +79,7 @@ async def transcribe_audio(
     result = await stt_client.transcribe_audio(
         audio_bytes=audio_bytes,
         file_name=filename,
-        mime_type=content_type,
+        content_type=content_type,
         language=language,
     )
 

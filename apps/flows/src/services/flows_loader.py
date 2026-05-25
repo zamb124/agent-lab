@@ -3,7 +3,7 @@
 
 Читает ``apps/flows/registry.yaml``, для каждого id из секции ``flows`` подгружает
 каталог ``apps/flows/bundles/<bundle_id>/`` с ``flow.json`` и при необходимости
-``nodes.json`` (устаревшее имя файла — ``agents.json``). Резолвит tool refs через ``tool_repository``.
+``nodes.json``. Резолвит tool refs через ``tool_repository``.
 
 Конфигурация тулов по пути в репозитории: ``apps/flows/tools/``.
 """
@@ -16,25 +16,20 @@ import inspect
 import json
 import mimetypes
 import textwrap
-from collections.abc import Callable
 from pathlib import Path
 from types import FunctionType
 from typing import cast
 from urllib.parse import urlparse
 
 import yaml
-from pydantic import BaseModel
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
 from apps.flows.src.models import FlowConfig, NodeConfig, ToolReference, TriggerConfig
+from apps.flows.src.models.bundle_registry import FlowBundleRegistry
 from apps.flows.src.models.node_config import NodeLLMConfig
-from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.tools.decorator import FunctionTool
-from apps.flows.src.tools.json_schema_parameters import (
-    call_parameters_to_parameters_schema,
-    pydantic_model_to_parameters_schema,
-)
+from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.context import get_context
 from core.files.processors import get_default_file_processor
@@ -47,7 +42,6 @@ from core.types import (
     JsonValue,
     require_json_array,
     require_json_object,
-    require_json_value,
 )
 
 logger = get_logger(__name__)
@@ -84,63 +78,6 @@ _INLINE_SOURCE_BUILTIN_TOOLS = {
     "reason",
     "self_check",
 }
-
-
-def _call_parameters_from_pydantic_model(model: type[BaseModel]) -> dict[str, CallParameter]:
-    """Собирает CallParameter из JSON Schema Pydantic-модели (для tool_repository при load_tools_to_db)."""
-
-    schema = require_json_object(model.model_json_schema(), "tool args schema")
-    raw_properties = schema.get("properties")
-    properties = (
-        require_json_object(raw_properties, "tool args schema.properties")
-        if raw_properties is not None
-        else {}
-    )
-    raw_required = schema.get("required")
-    required_names: set[str] = set()
-    if isinstance(raw_required, list):
-        for item in raw_required:
-            if isinstance(item, str):
-                required_names.add(item)
-
-    def prop_type(info: JsonObject) -> str:
-        t = info.get("type")
-        if isinstance(t, list):
-            non_null = [x for x in t if x != "null"]
-            if len(non_null) == 1:
-                t = non_null[0]
-            else:
-                return "string"
-        if t == "integer":
-            return "integer"
-        if t == "number":
-            return "number"
-        if t == "boolean":
-            return "boolean"
-        if t == "array":
-            return "array"
-        if t == "object":
-            return "object"
-        any_of = info.get("anyOf")
-        if isinstance(any_of, list):
-            for br in any_of:
-                if isinstance(br, dict) and br.get("type") not in (None, "null"):
-                    return prop_type(br)
-        return "string"
-
-    out: dict[str, CallParameter] = {}
-    for name, raw in properties.items():
-        if not isinstance(raw, dict):
-            continue
-        desc = raw.get("description", "")
-        if not isinstance(desc, str):
-            desc = str(desc)
-        out[name] = CallParameter(
-            type=prop_type(raw),
-            description=desc,
-            required=name in required_names,
-        )
-    return out
 
 
 def _sandbox_safe_imports_for_function(func: FunctionType) -> list[str]:
@@ -202,11 +139,7 @@ def _function_tool_template_code(tool_instance: FunctionTool) -> str:
     source = textwrap.dedent(tool_instance.get_source_code())
     tree = ast.parse(source)
     fn_node = next(
-        (
-            node
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        ),
+        (node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))),
         None,
     )
     if fn_node is None:
@@ -237,6 +170,7 @@ class FlowsLoader:
         self.tool_repository: ToolRepository = tool_repository
         self.registry_path: Path = registry_path or (bundles_dir / "registry.yaml")
         self._registry: JsonObject = {}
+        self._bundle_registry: FlowBundleRegistry = FlowBundleRegistry()
         self._defaults: JsonObject = {}
         self._loaded_nodes: list[str] = []
         self._tools_cache: dict[str, ToolReference] = {}  # Кеш tool refs для сборки flow config
@@ -248,12 +182,13 @@ class FlowsLoader:
         if not self.registry_path.exists():
             logger.warning("Registry не найден: %s", self.registry_path)
             self._registry = {}
+            self._bundle_registry = FlowBundleRegistry()
             self._defaults = {}
             return
         with open(self.registry_path, "r", encoding="utf-8") as f:
             self._registry = require_json_object(yaml.safe_load(f) or {}, "registry.yaml")
-        raw_defaults = self._registry.get("defaults", {})
-        self._defaults = require_json_object(raw_defaults, "registry.defaults")
+        self._bundle_registry = FlowBundleRegistry.model_validate(self._registry)
+        self._defaults = self._bundle_registry.defaults
 
     async def load_all(self) -> tuple[list[str], list[str]]:
         """
@@ -272,19 +207,7 @@ class FlowsLoader:
             return [], []
 
         self.load_registry_yaml()
-        raw_registry_entries = self._registry.get("flows", [])
-        registry_entries = require_json_array(raw_registry_entries, "registry.flows")
-
-        # Если старый формат (список строк), конвертируем в новый
-        bundle_ids: list[str] = []
-        for entry in registry_entries:
-            if isinstance(entry, str):
-                bundle_ids.append(entry)
-            elif isinstance(entry, dict):
-                entry_id = entry.get("id")
-                if not isinstance(entry_id, str) or not entry_id.strip():
-                    raise ValueError("registry.flows[] object must include non-empty string id")
-                bundle_ids.append(entry_id)
+        bundle_ids = [entry.id for entry in self._bundle_registry.flows]
 
         logger.info(f"Загрузка {len(bundle_ids)} flow из registry в БД")
 
@@ -308,7 +231,9 @@ class FlowsLoader:
 
         logger.info(f"Загружено {len(loaded_flow_ids)} flow в БД: {loaded_flow_ids}")
         if failed_bundle_ids:
-            logger.warning(f"Не удалось загрузить {len(failed_bundle_ids)} bundle: {failed_bundle_ids}")
+            logger.warning(
+                f"Не удалось загрузить {len(failed_bundle_ids)} bundle: {failed_bundle_ids}"
+            )
         logger.info(f"Загружено {len(self._loaded_nodes)} nodes в БД")
         return loaded_flow_ids, self._loaded_nodes
 
@@ -317,9 +242,6 @@ class FlowsLoader:
         bundle_dir = self.bundles_dir / bundle_id
 
         nodes_path = bundle_dir / "nodes.json"
-        if not nodes_path.exists():
-            nodes_path = bundle_dir / "agents.json"
-
         if not nodes_path.exists():
             return
 
@@ -399,14 +321,23 @@ class FlowsLoader:
                 triggers[trigger_key] = TriggerConfig.model_validate(trigger_obj)
 
         store_card_image_url = await self._resolve_store_card_image_url(raw_config, bundle_dir)
+        raw_flow_id = raw_config.get("flow_id")
+        if not isinstance(raw_flow_id, str) or not raw_flow_id.strip():
+            raise ValueError("flow.json: поле flow_id обязательно и должно быть непустой строкой")
+        raw_name = raw_config.get("name")
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise ValueError("flow.json: поле name обязательно и должно быть непустой строкой")
+        raw_entry = raw_config.get("entry")
+        if not isinstance(raw_entry, str) or not raw_entry.strip():
+            raise ValueError("flow.json: поле entry обязательно и должно быть непустой строкой")
 
         return FlowConfig.model_validate(
             {
-                "flow_id": raw_config.get("flow_id") or raw_config.get("id"),
-                "name": raw_config.get("name", ""),
+                "flow_id": raw_flow_id,
+                "name": raw_name,
                 "description": raw_config.get("description", ""),
                 "tags": raw_config.get("tags", []),
-                "entry": raw_config.get("entry", "main"),
+                "entry": raw_entry,
                 "nodes": nodes,
                 "edges": edges,
                 "variables": raw_config.get("variables", {}),
@@ -443,7 +374,9 @@ class FlowsLoader:
             data = local_path.read_bytes()
             original_name = local_path.name
             guessed = mimetypes.guess_type(original_name)[0]
-            content_type = guessed if isinstance(guessed, str) and guessed else "application/octet-stream"
+            content_type = (
+                guessed if isinstance(guessed, str) and guessed else "application/octet-stream"
+            )
             processor = await get_default_file_processor()
             company_id = self._resolve_target_company_id()
             prefix = f"{FLOWS_PUBLIC_API_PREFIX}/files/download"
@@ -486,11 +419,15 @@ class FlowsLoader:
             raw_node = await self._materialize_node_files(raw_node, node_id)
 
             # Конвертируем tools в List[ToolReference]
-            tools = self._convert_tools(require_json_array(raw_node.get("tools", []), f"nodes.{node_id}.tools"))
+            tools = self._convert_tools(
+                require_json_array(raw_node.get("tools", []), f"nodes.{node_id}.tools")
+            )
 
             llm_config = None
             if "llm" in raw_node:
-                default_llm = require_json_object(self._defaults.get("llm", {}), "registry.defaults.llm")
+                default_llm = require_json_object(
+                    self._defaults.get("llm", {}), "registry.defaults.llm"
+                )
                 node_llm = require_json_object(raw_node["llm"], f"nodes.{node_id}.llm")
                 llm_data = {**default_llm, **node_llm}
                 llm_config = NodeLLMConfig.model_validate(llm_data)
@@ -593,14 +530,20 @@ class FlowsLoader:
             file_entry = entry
             original_name_value = file_entry.get("original_name")
             if not isinstance(original_name_value, str) or not original_name_value.strip():
-                raise ValueError(f"Node '{node_id}': files[{index}].original_name должен быть непустой строкой")
+                raise ValueError(
+                    f"Node '{node_id}': files[{index}].original_name должен быть непустой строкой"
+                )
             content_type = file_entry.get("content_type")
             if not isinstance(content_type, str) or not content_type.strip():
-                raise ValueError(f"Node '{node_id}': files[{index}].content_type должен быть непустой строкой")
+                raise ValueError(
+                    f"Node '{node_id}': files[{index}].content_type должен быть непустой строкой"
+                )
 
             source = self._resolve_file_source(file_entry, node_id, index)
             original_name = original_name_value.strip()
-            raw_bytes, _resolved_name = await reader.resolve_source(source, original_name, ReadOptions())
+            raw_bytes, _resolved_name = await reader.resolve_source(
+                source, original_name, ReadOptions()
+            )
             item = await processor.persist_uploaded_file_as_file_ref(
                 data=raw_bytes,
                 original_name=original_name,
@@ -622,24 +565,7 @@ class FlowsLoader:
             if isinstance(tool, str):
                 result.append(ToolReference(tool_id=tool))
             elif isinstance(tool, dict):
-                tool_data = dict(tool)
-                if "args_schema" in tool_data:
-                    args_schema = require_json_object(tool_data.pop("args_schema"), "tool.args_schema")
-                    call_parameters = {
-                        k: CallParameter(
-                            type=str(v.get("type", "string")) if isinstance(v, dict) else "string",
-                            description=str(v.get("description", "")) if isinstance(v, dict) else "",
-                            required=bool(v.get("required", True)) if isinstance(v, dict) else True,
-                        )
-                        for k, v in args_schema.items()
-                    }
-                    result.append(
-                        ToolReference.model_validate(
-                            {**tool_data, "args_schema": call_parameters}
-                        )
-                    )
-                else:
-                    result.append(ToolReference.model_validate(tool_data))
+                result.append(ToolReference.model_validate(tool))
         return result
 
     async def _load_nodes_with_prompts(
@@ -679,23 +605,15 @@ class FlowsLoader:
 
         return nodes
 
-    def _inline_prompt_from_file(
-        self, node: JsonObject, bundle_dir: Path
-    ) -> JsonObject:
+    def _inline_prompt_from_file(self, node: JsonObject, bundle_dir: Path) -> JsonObject:
         """
         Инлайнит промпт из файла.
 
-        Поддерживает два формата:
-        1. prompt: "prompts/file.md" - автодетект по расширению .md
-        2. prompt_file: "prompts/file.md" - явное указание (legacy)
-
-        После обработки prompt содержит текст, prompt_file удаляется.
+        Поддерживает только prompt: "prompts/file.md".
+        После обработки prompt содержит текст.
         """
-        # Конвертируем prompt_file в prompt (legacy поддержка)
         if "prompt_file" in node:
-            if not node.get("prompt"):
-                node["prompt"] = node["prompt_file"]
-            del node["prompt_file"]
+            raise ValueError("node.prompt_file запрещен; используйте node.prompt")
 
         prompt = node.get("prompt")
         if not prompt or not isinstance(prompt, str):
@@ -713,9 +631,7 @@ class FlowsLoader:
 
         return node
 
-    def _inline_output_schema_file(
-        self, node: JsonObject, bundle_dir: Path
-    ) -> JsonObject:
+    def _inline_output_schema_file(self, node: JsonObject, bundle_dir: Path) -> JsonObject:
         """
         Подставляет output_schema из JSON рядом с flow (как промпт из .md).
         Поле output_schema_file удаляется после загрузки.
@@ -756,7 +672,9 @@ class FlowsLoader:
             "description": cached_node.description,
             "prompt": cached_node.prompt,
             "llm": (
-                require_json_object(cached_node.llm.model_dump(mode="json"), f"nodes.{ref_node_id}.llm")
+                require_json_object(
+                    cached_node.llm.model_dump(mode="json"), f"nodes.{ref_node_id}.llm"
+                )
                 if cached_node.llm
                 else {}
             ),
@@ -766,7 +684,9 @@ class FlowsLoader:
         # Tools из cached_node (exclude_none чтобы не было code=None)
         if cached_node.tools:
             merged["tools"] = [
-                require_json_object(t.model_dump(mode="json", exclude_none=True), f"nodes.{ref_node_id}.tools[]")
+                require_json_object(
+                    t.model_dump(mode="json", exclude_none=True), f"nodes.{ref_node_id}.tools[]"
+                )
                 for t in cached_node.tools
             ]
 
@@ -802,7 +722,10 @@ class FlowsLoader:
             # Импортируем функцию по пути
             module_path, func_name = function_path.rsplit(".", 1)
             module = importlib.import_module(module_path)
-            func = cast(FunctionType, getattr(module, func_name))
+            raw_func = module.__dict__.get(func_name)
+            if not isinstance(raw_func, FunctionType):
+                raise TypeError(f"{function_path} must resolve to a Python function")
+            func = raw_func
 
             # Получаем исходный код функции
             source = inspect.getsource(func)
@@ -831,13 +754,19 @@ class FlowsLoader:
                 raise ValueError("flow.branches keys must be non-empty strings")
             branch_cfg = require_json_object(branch_payload, f"flow.branches.{branch_id}")
 
-            branch_nodes = require_json_object(branch_cfg.get("nodes", {}), f"flow.branches.{branch_id}.nodes")
+            branch_nodes = require_json_object(
+                branch_cfg.get("nodes", {}), f"flow.branches.{branch_id}.nodes"
+            )
             if branch_nodes:
                 processed_nodes: JsonObject = {}
                 for node_id, node_config in branch_nodes.items():
                     if not node_id.strip():
-                        raise ValueError(f"flow.branches.{branch_id}.nodes keys must be non-empty strings")
-                    node = require_json_object(node_config, f"flow.branches.{branch_id}.nodes.{node_id}")
+                        raise ValueError(
+                            f"flow.branches.{branch_id}.nodes keys must be non-empty strings"
+                        )
+                    node = require_json_object(
+                        node_config, f"flow.branches.{branch_id}.nodes.{node_id}"
+                    )
 
                     ref_node_id = node.get("node_id")
                     if isinstance(ref_node_id, str) and ref_node_id:
@@ -895,14 +824,7 @@ class FlowsLoader:
                         node_config["code"] = tool_ref.code
                         if tool_ref.description and not node_config.get("description"):
                             node_config["description"] = tool_ref.description
-                        if tool_ref.args_schema and not node_config.get("args_schema"):
-                            node_config["args_schema"] = {
-                                k: {"type": v.type, "description": v.description}
-                                for k, v in tool_ref.args_schema.items()
-                            }
-                        if tool_ref.parameters_schema and not node_config.get(
-                            "parameters_schema"
-                        ):
+                        if tool_ref.parameters_schema and not node_config.get("parameters_schema"):
                             node_config["parameters_schema"] = tool_ref.parameters_schema
                         logger.debug(f"Node '{node_id}': инлайнен код tool '{tool_id}'")
                     else:
@@ -913,7 +835,7 @@ class FlowsLoader:
             # Инлайним tools внутри llm_node
             inlined_tools = self._inline_tools_recursive(
                 require_json_array(node_config.get("tools", []), f"nodes.{node_id}.tools"),
-                context=f"node '{node_id}'"
+                context=f"node '{node_id}'",
             )
             node_config["tools"] = inlined_tools
 
@@ -923,9 +845,7 @@ class FlowsLoader:
 
         return nodes
 
-    def _inline_tools_recursive(
-        self, tools: JsonArray, context: str, depth: int = 0
-    ) -> JsonArray:
+    def _inline_tools_recursive(self, tools: JsonArray, context: str, depth: int = 0) -> JsonArray:
         """
         Рекурсивно резолвит список tools.
 
@@ -944,9 +864,7 @@ class FlowsLoader:
                 inlined.append(inlined_tool)
         return inlined
 
-    def _inline_single_tool(
-        self, tool: JsonValue, context: str, depth: int
-    ) -> JsonObject | None:
+    def _inline_single_tool(self, tool: JsonValue, context: str, depth: int) -> JsonObject | None:
         """
         Резолвит один tool рекурсивно.
 
@@ -957,7 +875,9 @@ class FlowsLoader:
             # Сначала ищем в tools_cache
             tool_ref = self._tools_cache.get(tool)
             if tool_ref:
-                result = require_json_object(tool_ref.model_dump(mode="json", exclude_none=True), f"{context}.tool")
+                result = require_json_object(
+                    tool_ref.model_dump(mode="json", exclude_none=True), f"{context}.tool"
+                )
                 logger.debug(f"{context}: резолвнут tool ref '{tool}'")
                 return result
 
@@ -1012,10 +932,14 @@ class FlowsLoader:
                 if node_config:
                     return self._inline_node_as_tool(node_config, context, depth)
 
-                raise ValueError(f"{context}: tool '{tool_id}' не найден ни в tools_cache ни в nodes_cache")
+                raise ValueError(
+                    f"{context}: tool '{tool_id}' не найден ни в tools_cache ни в nodes_cache"
+                )
 
             if not tool_payload.get("code") and not tool_payload.get("prompt"):
-                raise ValueError(f"{context}: inline tool требует 'type', 'code' или 'prompt': {tool_payload}")
+                raise ValueError(
+                    f"{context}: inline tool требует 'type', 'code' или 'prompt': {tool_payload}"
+                )
 
             return tool_payload
 
@@ -1037,7 +961,7 @@ class FlowsLoader:
             inlined_tools = self._inline_tools_recursive(
                 require_json_array(result["tools"], f"{context}.tools"),
                 context=f"{context} → llm_node '{node_id}'",
-                depth=depth + 1
+                depth=depth + 1,
             )
             result["tools"] = inlined_tools
 
@@ -1047,9 +971,7 @@ class FlowsLoader:
         logger.debug(f"{context}: инлайнен llm_node '{node_id}' (depth={depth})")
         return result
 
-    def _inline_node_as_tool(
-        self, node_config: NodeConfig, context: str, depth: int
-    ) -> JsonObject:
+    def _inline_node_as_tool(self, node_config: NodeConfig, context: str, depth: int) -> JsonObject:
         """
         Конвертирует NodeConfig в inline tool и рекурсивно инлайнит его tools.
         """
@@ -1084,9 +1006,7 @@ class FlowsLoader:
         # Рекурсивно инлайним tools
         if tools_list:
             inlined_tools = self._inline_tools_recursive(
-                tools_list,
-                context=f"{context} → node '{node_config.node_id}'",
-                depth=depth + 1
+                tools_list, context=f"{context} → node '{node_config.node_id}'", depth=depth + 1
             )
             result["tools"] = inlined_tools
 
@@ -1144,9 +1064,7 @@ class FlowsLoader:
         return branches
 
     async def load_all_for_company(
-        self,
-        company_id: str,
-        filter_public: bool = True
+        self, company_id: str, filter_public: bool = True
     ) -> dict[str, int]:
         """
         Универсальный метод загрузки для любой компании.
@@ -1174,29 +1092,15 @@ class FlowsLoader:
             logger.warning(f"Registry не найден: {self.registry_path}")
             return {"flows": 0, "tools": 0, "nodes": 0}
 
-        with open(self.registry_path, "r", encoding="utf-8") as f:
-            self._registry = require_json_object(yaml.safe_load(f) or {}, "registry.yaml")
-
-        self._defaults = require_json_object(self._registry.get("defaults", {}), "registry.defaults")
-        registry_flow_entries = require_json_array(self._registry.get("flows", []), "registry.flows")
+        self.load_registry_yaml()
 
         # Определяем нужно ли фильтровать
         should_filter = filter_public and company_id != "system"
 
         bundles_to_load: list[str] = []
-        for entry in registry_flow_entries:
-            if isinstance(entry, str):
-                if not should_filter:
-                    bundles_to_load.append(entry)
-            elif isinstance(entry, dict):
-                entry_id = entry.get("id")
-                if not isinstance(entry_id, str) or not entry_id.strip():
-                    raise ValueError("registry.flows[] object must include non-empty string id")
-                entry_flow_id = entry_id
-                is_public = entry.get("public") is True
-
-                if not should_filter or is_public:
-                    bundles_to_load.append(entry_flow_id)
+        for entry in self._bundle_registry.flows:
+            if not should_filter or entry.public:
+                bundles_to_load.append(entry.id)
 
         logger.info(
             f"Загрузка {len(bundles_to_load)} flow для company:{company_id} (фильтр public: {should_filter})"
@@ -1220,13 +1124,15 @@ class FlowsLoader:
 
         logger.info(f"Загружено {len(loaded_flow_ids)} flow в company:{company_id}")
         if failed_bundle_ids:
-            logger.warning(f"Не удалось загрузить {len(failed_bundle_ids)} bundle: {failed_bundle_ids}")
+            logger.warning(
+                f"Не удалось загрузить {len(failed_bundle_ids)} bundle: {failed_bundle_ids}"
+            )
 
         # Возвращаем статистику
         stats = {
             "flows": len(loaded_flow_ids),
             "tools": 0,  # TODO: если нужна отдельная загрузка tools
-            "nodes": len(self._loaded_nodes)
+            "nodes": len(self._loaded_nodes),
         }
 
         return stats
@@ -1277,7 +1183,7 @@ async def load_flows_to_db(
 
     Args:
         flow_repository: сохранение FlowConfig
-        node_repository: сохранение NodeConfig из nodes.json (или устаревшего agents.json)
+        node_repository: сохранение NodeConfig из nodes.json
         tool_repository: чтение tools для инлайнинга
         bundles_dir: корень каталога с подпапками bundle (``{bundle_id}/flow.json``).
             По умолчанию: ``apps/flows/bundles``, реестр: ``apps/flows/registry.yaml``.
@@ -1295,7 +1201,9 @@ async def load_flows_to_db(
     else:
         registry_path = None  # будет использован bundles_dir / "registry.yaml"
 
-    loader = FlowsLoader(bundles_dir, flow_repository, node_repository, tool_repository, registry_path=registry_path)
+    loader = FlowsLoader(
+        bundles_dir, flow_repository, node_repository, tool_repository, registry_path=registry_path
+    )
     return await loader.load_all()
 
 
@@ -1320,14 +1228,14 @@ async def load_tools_to_db(
     if modules is None:
         for module_path, attr_name in BUILTIN_TOOL_SPECS:
             module = importlib.import_module(module_path)
-            attr = cast(FunctionTool | None, getattr(module, attr_name, None))
+            attr = module.__dict__.get(attr_name)
             if isinstance(attr, FunctionTool):
                 tool_attrs.append((module_path, attr_name, attr))
     else:
         for module_path in modules:
             module = importlib.import_module(module_path)
             for attr_name in dir(module):
-                attr = cast(FunctionTool | None, getattr(module, attr_name, None))
+                attr = module.__dict__.get(attr_name)
                 if isinstance(attr, FunctionTool):
                     tool_attrs.append((module_path, attr_name, attr))
 
@@ -1339,32 +1247,12 @@ async def load_tools_to_db(
         if tool_id in loaded_ids:
             continue
 
-        if tool_instance.args_schema is not None:
-            args_schema_dict = _call_parameters_from_pydantic_model(tool_instance.args_schema)
-            parameters_schema_full = pydantic_model_to_parameters_schema(
-                tool_instance.args_schema
+        parameters_model = tool_instance.parameters_model
+        if parameters_model is None:
+            raise ValueError(
+                f"Tool '{tool_id}' has no parameters_model — cannot derive JSON Schema"
             )
-        else:
-            args_schema_dict = tool_instance.call_parameters
-            parameters_schema_full = (
-                call_parameters_to_parameters_schema(args_schema_dict)
-                if args_schema_dict
-                else None
-            )
-
-        # mock_response
-        mock_map: JsonObject | None = None
-        mock_response = cast(JsonValue | Callable[..., JsonValue] | None, tool_instance.mock_response)
-        if mock_response is not None:
-            if callable(mock_response):
-                mock_map = {"default_response": "callable_mock"}
-            else:
-                mock_map = {
-                    "default_response": require_json_value(
-                        mock_response,
-                        f"tools.{tool_id}.mock_response",
-                    )
-                }
+        parameters_schema_full = pydantic_model_to_parameters_schema(parameters_model)
 
         tool_ref = ToolReference(
             tool_id=tool_id,
@@ -1372,8 +1260,6 @@ async def load_tools_to_db(
             description=tool_instance.description,
             code=_function_tool_template_code(tool_instance),
             parameters_schema=parameters_schema_full,
-            args_schema=args_schema_dict,
-            mock_map=mock_map,
             tags=tool_instance.tags,
             react_role=tool_instance.react_role,
         )

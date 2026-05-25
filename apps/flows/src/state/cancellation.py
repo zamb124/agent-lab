@@ -30,6 +30,8 @@ CANCEL_KEY_TTL = 300
 class FlowCancelled(Exception):
     """Flow был отменен пользователем."""
 
+    task_id: str
+
     def __init__(self, task_id: str):
         self.task_id = task_id
         super().__init__(f"Flow cancelled: task_id={task_id}")
@@ -42,6 +44,12 @@ class CancellationToken:
     Rate-limiting нужен потому что check вызывается из inner-loop LLM-стрима
     (после каждого SSE-чанка), и без лимита это десятки GET в секунду.
     """
+
+    task_id: str
+    redis: RedisClient
+    _cancelled: bool
+    _last_check_time: float
+    _check_interval: float
 
     def __init__(
         self,
@@ -69,12 +77,12 @@ class CancellationToken:
 
     async def cancel(self) -> None:
         """Устанавливает ключ отмены в Redis."""
-        await self.redis.set(f"cancel:{self.task_id}", "1", ttl=CANCEL_KEY_TTL)
+        _ = await self.redis.set(f"cancel:{self.task_id}", "1", ttl=CANCEL_KEY_TTL)
         self._cancelled = True
 
     async def cleanup(self) -> None:
         """Удаляет ключ отмены из Redis."""
-        await self.redis.delete(f"cancel:{self.task_id}")
+        _ = await self.redis.delete(f"cancel:{self.task_id}")
 
 
 _cancellation_token_var: ContextVar[CancellationToken | None] = ContextVar(
@@ -83,7 +91,7 @@ _cancellation_token_var: ContextVar[CancellationToken | None] = ContextVar(
 
 
 def set_cancellation_token(token: CancellationToken | None) -> None:
-    _cancellation_token_var.set(token)
+    _ = _cancellation_token_var.set(token)
 
 
 def get_cancellation_token() -> CancellationToken | None:

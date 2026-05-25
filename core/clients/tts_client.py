@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 import httpx
 from pydantic import BaseModel, Field
@@ -32,6 +32,7 @@ from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject, parse_json_object
 from core.utils.text_sanitize import sanitize_text_for_speech_backend
 
 if TYPE_CHECKING:
@@ -67,10 +68,10 @@ def _sanitize_tts_voice_id(voice: str | None) -> str | None:
 
 def _tts_upstream_error_summary(response: httpx.Response) -> str:
     try:
-        data = response.json()
+        data = parse_json_object(response.content, "tts.upstream_error")
     except ValueError:
         data = None
-    if isinstance(data, dict) and "detail" in data:
+    if data is not None and "detail" in data:
         detail_obj = data["detail"]
         if isinstance(detail_obj, str):
             base = detail_obj
@@ -87,7 +88,7 @@ def _tts_upstream_error_summary(response: httpx.Response) -> str:
             base = (
                 base
                 + " — provider_litserve: лог `http_unhandled_exception` (тип исключения + traceback); "
-                "синтез: `tts_litapi.predict_failed`. Локально: `SERVER__DEBUG=true` для текста в JSON."
+                + "синтез: `tts_litapi.predict_failed`. Локально: `SERVER__DEBUG=true` для текста в JSON."
             )
         return base[:_UPSTREAM_ERROR_BODY_MAX]
     raw = response.text.strip()
@@ -103,12 +104,10 @@ class TTSLitserveHttpError(Exception):
     """Ответ провайдера ``provider_litserve`` на ``POST /v1/audio/speech`` с ``status >= 400``."""
 
     def __init__(self, *, status_code: int, detail: str, url: str) -> None:
-        self.status_code = status_code
-        self.detail = detail
-        self.url = url
-        super().__init__(
-            f"TTS litserve HTTP {status_code} for {url!r}: {detail}"
-        )
+        self.status_code: int = status_code
+        self.detail: str = detail
+        self.url: str = url
+        super().__init__(f"TTS litserve HTTP {status_code} for {url!r}: {detail}")
 
 
 class TTSResult(BaseModel):
@@ -171,13 +170,14 @@ class LitserveTTSClient(BaseTTSClient):
         if timeout <= 0:
             raise ValueError("TTS litserve timeout должен быть больше 0.")
 
-        self._base_url = base_url.rstrip("/")
-        self._model = model
-        self._default_voice = default_voice
-        self._default_format = default_response_format
-        self._default_sample_rate = default_sample_rate
-        self._timeout = timeout
+        self._base_url: str = base_url.rstrip("/")
+        self._model: str = model
+        self._default_voice: str | None = default_voice
+        self._default_format: str = default_response_format
+        self._default_sample_rate: int = default_sample_rate
+        self._timeout: float = timeout
 
+    @override
     async def synthesize(
         self,
         *,
@@ -193,13 +193,13 @@ class LitserveTTSClient(BaseTTSClient):
         chosen_format = response_format or self._default_format
         chosen_sample_rate = sample_rate or self._default_sample_rate
         if chosen_format not in _MIME_BY_FORMAT:
+            allowed_formats = ", ".join(sorted(_MIME_BY_FORMAT))
             raise ValueError(
-                f"TTS litserve: неизвестный response_format={chosen_format!r} "
-                f"(допустимые: {sorted(_MIME_BY_FORMAT)})"
+                f"TTS litserve: неизвестный response_format={chosen_format!r} (допустимые: {allowed_formats})"
             )
 
         url = f"{self._base_url}/v1/audio/speech"
-        payload: dict[str, object] = {
+        payload: JsonObject = {
             "model": self._model,
             "input": text,
             "response_format": chosen_format,
@@ -267,14 +267,15 @@ class CloudRuTTSClient(BaseTTSClient):
         if timeout <= 0:
             raise ValueError("TTS cloud_ru timeout должен быть больше 0.")
 
-        self._api_key = api_key
-        self._base_url = base_url
-        self._model = model
-        self._default_voice = default_voice
-        self._default_format = default_response_format
-        self._default_sample_rate = default_sample_rate
-        self._timeout = timeout
+        self._api_key: str = api_key
+        self._base_url: str = base_url
+        self._model: str = model
+        self._default_voice: str = default_voice
+        self._default_format: str = default_response_format
+        self._default_sample_rate: int = default_sample_rate
+        self._timeout: float = timeout
 
+    @override
     async def synthesize(
         self,
         *,
@@ -287,6 +288,8 @@ class CloudRuTTSClient(BaseTTSClient):
         if text == "":
             raise ValueError("TTS cloud_ru: пустой text.")
         chosen_voice = _sanitize_tts_voice_id(voice or self._default_voice)
+        if chosen_voice is None:
+            raise ValueError("TTS cloud_ru: voice не задан.")
         chosen_format = response_format or self._default_format
         chosen_sample_rate = sample_rate or self._default_sample_rate
         if chosen_format not in _MIME_BY_FORMAT:
@@ -294,7 +297,7 @@ class CloudRuTTSClient(BaseTTSClient):
                 f"TTS cloud_ru: неизвестный response_format={chosen_format!r}"
             )
 
-        payload = {
+        payload: JsonObject = {
             "model": self._model,
             "input": text,
             "voice": chosen_voice,
@@ -304,7 +307,7 @@ class CloudRuTTSClient(BaseTTSClient):
 
         async with get_httpx_client(timeout=self._timeout) as client:
             response = await client.post(self._base_url, json=payload, headers=headers)
-        response.raise_for_status()
+        _ = response.raise_for_status()
 
         return TTSResult(
             provider="cloud_ru",
@@ -321,9 +324,10 @@ class YandexTTSClient(BaseTTSClient):
     """Yandex SpeechKit TTS клиент (REST). Stub: не реализован."""
 
     def __init__(self, *, api_key: str | None, folder_id: str | None) -> None:
-        self._api_key = api_key
-        self._folder_id = folder_id
+        self._api_key: str | None = api_key
+        self._folder_id: str | None = folder_id
 
+    @override
     async def synthesize(
         self,
         *,
@@ -334,8 +338,8 @@ class YandexTTSClient(BaseTTSClient):
     ) -> TTSResult:
         raise NotImplementedError(
             "TTS yandex: HTTP-клиент Yandex SpeechKit ещё не реализован "
-            "(нужны ключи `voice.tts.yandex.api_key` и `folder_id`). "
-            "Используйте provider=`litserve` или `cloud_ru`."
+            + "(нужны ключи `voice.tts.yandex.api_key` и `folder_id`). "
+            + "Используйте provider=`litserve` или `cloud_ru`."
         )
 
 
@@ -345,10 +349,11 @@ class SberTTSClient(BaseTTSClient):
     def __init__(
         self, *, client_id: str | None, client_secret: str | None, scope: str
     ) -> None:
-        self._client_id = client_id
-        self._client_secret = client_secret
-        self._scope = scope
+        self._client_id: str | None = client_id
+        self._client_secret: str | None = client_secret
+        self._scope: str = scope
 
+    @override
     async def synthesize(
         self,
         *,
@@ -359,14 +364,15 @@ class SberTTSClient(BaseTTSClient):
     ) -> TTSResult:
         raise NotImplementedError(
             "TTS sber: HTTP-клиент Sber SmartSpeech ещё не реализован "
-            "(нужны ключи `voice.tts.sber.client_id` и `client_secret`). "
-            "Используйте provider=`litserve` или `cloud_ru`."
+            + "(нужны ключи `voice.tts.sber.client_id` и `client_secret`). "
+            + "Используйте provider=`litserve` или `cloud_ru`."
         )
 
 
 class MockTTSClient(BaseTTSClient):
     """TTS клиент для тестов: короткий валидный WAV (ненулевой PCM s16le mono)."""
 
+    @override
     async def synthesize(
         self,
         *,
@@ -414,12 +420,13 @@ class PronunciationAwareTTSClient(BaseTTSClient):
         default_voice: str | None = None,
         default_language: str | None = None,
     ) -> None:
-        self._delegate = delegate
-        self._pronunciation = pronunciation
-        self._provider_name = provider_name
-        self._default_voice = default_voice
-        self._default_language = default_language
+        self._delegate: BaseTTSClient = delegate
+        self._pronunciation: CompiledPronunciation = pronunciation
+        self._provider_name: str = provider_name
+        self._default_voice: str | None = default_voice
+        self._default_language: str | None = default_language
 
+    @override
     async def synthesize(
         self,
         *,
@@ -495,7 +502,7 @@ class TTSClientFactory:
             if not chosen_model:
                 raise ValueError(
                     "TTS litserve: model не задан ни в override, ни в "
-                    "`voice.tts.default_model`."
+                    + "`voice.tts.default_model`."
                 )
             return LitserveTTSClient(
                 base_url=backend.base_url,

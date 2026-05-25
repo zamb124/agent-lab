@@ -6,9 +6,10 @@ QueueAwareTaskiqScheduler и dispatch брокеров.
 """
 
 import uuid
-from typing import Any
+from typing import override
 
 from taskiq import TaskiqScheduler
+from taskiq.abc.broker import AsyncBroker
 from taskiq.abc.schedule_source import ScheduleSource
 from taskiq.exceptions import ScheduledTaskCancelledError
 from taskiq.kicker import AsyncKicker
@@ -22,7 +23,6 @@ from apps.rag_worker.broker import broker as rag_broker
 from apps.sync.realtime.broker import broker as sync_broker
 from core.logging import get_logger
 from core.logging.attributes import EVENT_TASK_SCHEDULED
-from core.scheduler.payload import normalize_schedule_task_payload
 from core.scheduler.source import get_schedule_source
 
 logger = get_logger(__name__)
@@ -35,7 +35,7 @@ _SCHEDULER_DISPATCH_BROKERS = (
     sync_broker,
 )
 
-_QUEUE_NAME_TO_BROKER: dict[str, Any] = {
+_QUEUE_NAME_TO_BROKER: dict[str, AsyncBroker] = {
     "flows_worker": flows_broker,
     "idle": idle_broker,
     "crm": crm_broker,
@@ -69,10 +69,12 @@ def require_tasks_registered_for_scheduler(
             parts.append(f"crm broker: {missing_crm}")
         if missing_rag:
             parts.append(f"rag broker: {missing_rag}")
-        raise RuntimeError(
-            "TaskIQ scheduler: не зарегистрированы задачи. Добавьте импорт модулей с @broker.task "
-            f"в apps/scheduler/scheduler.py. Отсутствуют: {'; '.join(parts)}"
+        message = (
+            "TaskIQ scheduler: не зарегистрированы задачи. "
+            + "Добавьте импорт модулей с @broker.task в apps/scheduler/scheduler.py. "
+            + f"Отсутствуют: {'; '.join(parts)}"
         )
+        raise RuntimeError(message)
     logger.info(
         "task.scheduler_registration_ok",
         flows_worker_count=len(flows_worker_task_names),
@@ -83,6 +85,7 @@ def require_tasks_registered_for_scheduler(
 
 
 class QueueAwareTaskiqScheduler(TaskiqScheduler):
+    @override
     async def on_ready(self, source: ScheduleSource, task: ScheduledTask) -> None:
         """
         TaskIQ по умолчанию шлёт kick через self.broker (flows). У RedisStreamBroker
@@ -122,9 +125,13 @@ class QueueAwareTaskiqScheduler(TaskiqScheduler):
                 trace_id=trace_id,
                 request_id=request_id,
             )
-            await (
-                AsyncKicker(task.task_name, target_broker, task.labels)
-                .with_labels(
+            kicker: AsyncKicker[..., str] = AsyncKicker(
+                task.task_name,
+                target_broker,
+                task.labels,
+            )
+            _ = await (
+                kicker.with_labels(
                     schedule_id=task.schedule_id,
                     trace_id=trace_id,
                     request_id=request_id,
@@ -132,10 +139,7 @@ class QueueAwareTaskiqScheduler(TaskiqScheduler):
                     triggered_by="scheduler",
                 )
                 .with_task_id(task_id=task.task_id)
-                .kiq(
-                    *task.args,
-                    **normalize_schedule_task_payload(task.kwargs),
-                )
+                .kiq(*task.args, **task.kwargs)
             )
             await maybe_awaitable(source.post_send(task))
 
@@ -146,9 +150,9 @@ def _resolve_queue_name(task_name: str) -> str:
         if found_task is None:
             continue
         queue_name = found_task.labels.get("queue_name")
-        if not queue_name:
+        if not isinstance(queue_name, str) or not queue_name.strip():
             raise ValueError(f"queue_name label is required for task: {task_name}")
-        return str(queue_name)
+        return queue_name.strip()
     raise ValueError(f"task is not registered in known brokers: {task_name}")
 
 

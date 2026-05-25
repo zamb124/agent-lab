@@ -45,7 +45,6 @@ import './components/editors/flows-code-editor.js';
 import './components/editors/flows-code-workbench.js';
 import './components/editors/flows-json-field-editor.js';
 import './components/editors/flows-llm-config-editor.js';
-import './components/editors/flows-llm-mocks-editor.js';
 import './components/editors/flows-state-mapping-editor.js';
 import './components/editors/flows-variable-input.js';
 import './components/editors/flows-searchable-combobox.js';
@@ -93,7 +92,6 @@ import './modals/flows-span-details-modal.js';
 import './modals/flows-logs-modal.js';
 import './modals/flows-raw-json-modal.js';
 import './modals/flows-state-modal.js';
-import './modals/flows-mocks-modal.js';
 
 // CRUD-модалки
 import './modals/flows-flow-create-modal.js';

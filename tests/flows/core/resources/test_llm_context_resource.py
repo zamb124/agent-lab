@@ -50,4 +50,5 @@ def test_rag_resource_config_is_strictly_typed() -> None:
     assert isinstance(typed, RagResourceBindParams)
     assert typed.namespace == "company-kb"
     assert typed.filters == {"collection_id": "support"}
-    assert typed.search_options == {"rerank": True}
+    assert typed.search_options is not None
+    assert typed.search_options.model_dump(mode="json", exclude_none=True) == {"rerank": True}

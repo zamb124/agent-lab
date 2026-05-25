@@ -13,22 +13,21 @@ from __future__ import annotations
 import hashlib
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable, Mapping
-from typing import TYPE_CHECKING, ClassVar, TypeAlias, override
+from collections.abc import Awaitable, Mapping
+from typing import TYPE_CHECKING, ClassVar, Protocol, TypeAlias, override
 
 from pydantic import BaseModel
 
 from apps.flows.config import get_settings
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
-from apps.flows.src.mock.resolver import get_mock_for_tool
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
 from core.auth import permission_checker
-from core.config.testing import is_testing
 from core.logging import get_logger
 from core.state import parse_interrupt_body_from_external_dict
-from core.types import JsonArray, JsonObject, JsonValue, require_json_object, require_json_value
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 
 def sanitize_tool_name(name: str) -> str:
@@ -57,50 +56,12 @@ Permission = str | list[str] | None
 ToolArguments: TypeAlias = JsonObject
 ToolResult: TypeAlias = JsonValue
 ToolFunctionResult: TypeAlias = ToolResult | Awaitable[ToolResult]
-ToolMockResponse: TypeAlias = ToolResult | Callable[..., ToolFunctionResult]
 ToolParametersSchema: TypeAlias = JsonObject
 OpenAIToolSchema: TypeAlias = JsonObject
 
 
-def _external_api_flat_args_schema_to_parameters_schema(
-    schema: Mapping[str, JsonValue],
-) -> ToolParametersSchema:
-    """Плоский {name: {type, description, default?}} -> JSON Schema параметров tool."""
-    properties: JsonObject = {}
-    required: JsonArray = []
-
-    for name, raw_meta in schema.items():
-        if not isinstance(raw_meta, dict):
-            raise ValueError(
-                f"ExternalAPITool args_schema['{name}'] must be a dict, got {type(raw_meta).__name__}"
-            )
-        meta = require_json_object(raw_meta, f"ExternalAPITool args_schema.{name}")
-        raw_type = meta.get("type", "string")
-        if not isinstance(raw_type, str):
-            raise ValueError(f"ExternalAPITool args_schema['{name}'].type must be a string")
-        if raw_type not in {"string", "integer", "number", "boolean", "array", "object"}:
-            raise ValueError(
-                f"ExternalAPITool args_schema['{name}'].type has unsupported value: {raw_type}"
-            )
-        raw_description = meta.get("description", "")
-        if not isinstance(raw_description, str):
-            raise ValueError(
-                f"ExternalAPITool args_schema['{name}'].description must be a string"
-            )
-
-        entry: JsonObject = {"type": raw_type, "description": raw_description}
-        if "default" in meta:
-            entry["default"] = meta["default"]
-        else:
-            required.append(name)
-        properties[name] = entry
-
-    return {"type": "object", "properties": properties, "required": required}
-
-
-def is_test_mode() -> bool:
-    """Проверяет запущены ли тесты."""
-    return is_testing()
+class ToolContainerRef(Protocol):
+    pass
 
 
 class BaseTool(ABC):
@@ -108,13 +69,8 @@ class BaseTool(ABC):
     Базовый класс для всех инструментов.
 
     Определение параметров:
-        - args_schema: Pydantic модель для автогенерации схемы (рекомендуется)
-        - parameters: Dict для ручного задания схемы (для тулов из поля code в конфиге)
-
-    Mock режим:
-        - Определить mock_response для простых случаев
-        - Или переопределить execute_mock() для сложной логики
-        - В тестах (TESTING=true) вызывается execute_mock()
+        - parameters_model: Pydantic модель для автогенерации JSON Schema
+        - parameters: JSON Schema для ручного задания схемы в наследниках
 
     Permissions:
         - permission: группы с доступом к tool
@@ -129,13 +85,12 @@ class BaseTool(ABC):
 
     name: str = "base_tool"
     description: str = "Базовый инструмент"
-    args_schema: type[BaseModel] | None = None
+    parameters_model: type[BaseModel] | None = None
     permission: Permission = None
     tags: list[str] = []  # Группы/категории: misc, math, docs, api, validation
     react_role: ReactToolRole = ReactToolRole.STANDARD
-
-    # Mock ответ для тестов (переопределить в наследниках)
-    mock_response: ToolMockResponse | None = "mock_result"
+    container: ToolContainerRef | None = None
+    is_nested_flow_tool: bool = False
 
     def get_tags(self) -> list[str]:
         """Возвращает теги/группы тула."""
@@ -143,19 +98,10 @@ class BaseTool(ABC):
 
     @property
     def parameters(self) -> ToolParametersSchema:
-        """Генерирует JSON схему из args_schema или возвращает пустую."""
-        if self.args_schema:
-            schema = require_json_object(
-                self.args_schema.model_json_schema(),
-                f"{self.__class__.__name__}.args_schema",
-            )
-            _ = schema.pop("title", None)
-            return schema
+        """Генерирует JSON Schema из parameters_model или возвращает пустой объект."""
+        if self.parameters_model:
+            return pydantic_model_to_parameters_schema(self.parameters_model)
         return {"type": "object", "properties": {}, "required": []}
-
-    def _has_custom_mock(self) -> bool:
-        """Проверяет переопределён ли execute_mock в наследнике."""
-        return type(self).execute_mock is not BaseTool.execute_mock
 
     def _get_user_groups_from_state(self, state: "ExecutionState") -> list[str]:
         """
@@ -213,7 +159,7 @@ class BaseTool(ABC):
         Единственная точка входа для выполнения tool.
 
         Наследники переопределяют этот метод.
-        Для стандартных проверок (permissions, mock) вызывайте _check_before_run().
+        Для стандартных проверок permissions вызывайте _check_before_run().
 
         Args:
             args: Аргументы вызова
@@ -235,24 +181,16 @@ class BaseTool(ABC):
         self, args: ToolArguments, state: "ExecutionState"
     ) -> ToolResult | None:
         """
-        Проверки перед выполнением: permissions, mock.
+        Проверки перед выполнением: permissions.
 
         Returns:
-            Результат если нужно вернуть (permission error, mock), None если продолжить
+            Результат если нужно вернуть permission error, None если продолжить
         """
+        _ = args
         permission_error = self._check_permission(state)
         if permission_error:
             logger.warning(f"Tool {self.name}: permission denied")
             return permission_error
-
-        mock_result = get_mock_for_tool(state, self.name)
-        if mock_result is not None:
-            logger.debug(f"Tool {self.name}: using mock from state")
-            return require_json_value(mock_result, f"mock.tools.{self.name}")
-
-        if is_test_mode() and self._has_custom_mock():
-            logger.debug(f"Tool {self.name}: mock mode (TESTING env)")
-            return await self.execute_mock(args, state)
 
         return None
 
@@ -271,23 +209,6 @@ class BaseTool(ABC):
             Результат выполнения
         """
         pass
-
-    async def execute_mock(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
-        """
-        Mock выполнение для тестов.
-
-        Args:
-            args: Аргументы вызова
-            state: ExecutionState агента
-
-        Returns:
-            Mock результат
-        """
-        _ = args
-        _ = state
-        if callable(self.mock_response):
-            raise TypeError("BaseTool mock_response must be a JSON value")
-        return require_json_value(self.mock_response, f"tool.{self.name}.mock_response")
 
     def to_openai_schema(self) -> OpenAIToolSchema:
         """
@@ -316,7 +237,7 @@ class ExternalAPITool(BaseTool):
     Инструмент для вызова внешнего HTTP API.
 
     Используется в основном в тестах; конфиг узла задаёт URL, headers, body_template (@state:, @var:).
-    Схема аргументов для LLM — через args_schema родителя (по умолчанию без полей в properties).
+    Схема аргументов для LLM — через canonical parameters_schema.
     """
 
     def __init__(
@@ -334,7 +255,7 @@ class ExternalAPITool(BaseTool):
         tags: list[str] | None = None,
         react_role: ReactToolRole = ReactToolRole.STANDARD,
         *,
-        flat_args_schema: JsonObject | None = None,
+        parameters_schema: JsonObject,
     ):
         self.api_id: str = api_id
         self.name: str = api_id
@@ -348,11 +269,15 @@ class ExternalAPITool(BaseTool):
         self._body_template: str = body_template
         self._timeout: float = timeout
         self._response_mapping: dict[str, str] = response_mapping or {}
-        self._parameters_schema: ToolParametersSchema = (
-            _external_api_flat_args_schema_to_parameters_schema(flat_args_schema)
-            if flat_args_schema
-            else {"type": "object", "properties": {}, "required": []}
+        schema_obj = require_json_object(
+            parameters_schema,
+            f"ExternalAPITool.{api_id}.parameters_schema",
         )
+        if schema_obj.get("type") != "object" or not isinstance(schema_obj.get("properties"), dict):
+            raise ValueError(
+                f"ExternalAPITool '{api_id}' parameters_schema must be object JSON Schema"
+            )
+        self._parameters_schema: ToolParametersSchema = schema_obj
 
     @property
     @override
@@ -404,8 +329,3 @@ class ExternalAPITool(BaseTool):
                 )
 
         return require_json_value(data, f"external_api.{self.api_id}.data")
-
-    @override
-    async def execute_mock(self, args: ToolArguments, state: "ExecutionState") -> ToolResult:
-        """Mock - возвращает пустой успешный ответ."""
-        return {"status": "completed", "data": {}}

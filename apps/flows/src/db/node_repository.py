@@ -2,7 +2,7 @@
 Репозиторий для NodeConfig.
 """
 
-from typing import override
+from typing import ClassVar, override
 
 from apps.flows.src.models import NodeConfig
 from core.db import BaseRepository, Storage
@@ -11,8 +11,8 @@ from core.db import BaseRepository, Storage
 class NodeRepository(BaseRepository[NodeConfig]):
     """Репозиторий для работы с нодами всех типов"""
 
-    is_global: bool = False
-    owner_service: str = "flows"
+    is_global: ClassVar[bool] = False
+    owner_service: ClassVar[str] = "flows"
 
     def __init__(self, storage: Storage):
         super().__init__(storage, NodeConfig)

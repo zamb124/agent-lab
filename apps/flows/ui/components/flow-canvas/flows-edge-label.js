@@ -5,11 +5,9 @@
  * `flows-flow-canvas`, которая уже посчитала midpoint ребра. Click по
  * подписи открывает настройки ребра (модалка условия; onOpen).
  *
- * `condition` может быть:
- *   - строкой legacy-выражения (`route == 'order'`);
- *   - объектом `{type: 'simple', variable, operator, value}`;
- *   - legacy-объектом `{type: 'python', code}`;
- *   - объектом `{type: 'code', language, code}`.
+ * `condition` может быть canonical typed object:
+ *   - `{type: 'simple', variable, operator, value}`;
+ *   - `{type: 'code', language, code}`.
  */
 
 import { svg } from 'lit';
@@ -29,7 +27,6 @@ function quoteValue(value) {
 
 export function formatEdgeCondition(condition) {
     if (condition === null || condition === undefined) return '';
-    if (typeof condition === 'string') return condition;
     if (typeof condition !== 'object') return '';
     const type = condition.type;
     if (type === 'simple') {
@@ -38,9 +35,6 @@ export function formatEdgeCondition(condition) {
         const value = quoteValue(condition.value);
         if (variable.length === 0) return '';
         return `${variable} ${operator} ${value}`;
-    }
-    if (type === 'python') {
-        return 'check(state)';
     }
     if (type === 'code') {
         const label = flowCodeLanguageShortLabel(condition.language);

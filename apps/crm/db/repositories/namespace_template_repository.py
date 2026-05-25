@@ -22,7 +22,7 @@ class NamespaceTemplateRepository(BaseCRMRepository[NamespaceTemplate]):
     def id_field(self) -> str:
         return "template_key"
 
-    async def list_for_company(
+    async def list_by_company(
         self,
         company_id: str | None = None,
         *,

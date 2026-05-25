@@ -10,7 +10,15 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from core.integrations.mcp import MCPToolInfo
 from core.types import JsonObject
+
+__all__ = [
+    "MCPCallResult",
+    "MCPServerConfig",
+    "MCPToolInfo",
+    "MCPTransportType",
+]
 
 
 class MCPTransportType(str, Enum):
@@ -60,24 +68,6 @@ class MCPServerConfig(BaseModel):
         description="Время последней синхронизации"
     )
     description: str | None = Field(default=None, description="Описание сервера")
-
-
-class MCPToolInfo(BaseModel):
-    """
-    Информация о tool с MCP сервера.
-
-    Используется при синхронизации для создания ToolReference.
-    """
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", populate_by_name=True)
-
-    name: str = Field(..., description="Имя tool на MCP сервере")
-    description: str | None = Field(default=None, description="Описание tool")
-    input_schema: JsonObject | None = Field(
-        default=None,
-        alias="inputSchema",
-        description="JSON Schema параметров"
-    )
 
 
 class MCPCallResult(BaseModel):

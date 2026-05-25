@@ -6,16 +6,14 @@
  *   - useResource('flows/chat') — currentContextId/currentTaskId/streaming, сообщения;
  *   - useOp('flows/chat_send') / useOp('flows/chat_cancel') — SSE A2A
  *     (`POST /flows/api/v1/{flow_id}` с `message/stream` / `tasks/cancel`);
- *   - useSlice('flows/execution_ui') — persistContext и mock-ответы для LLM.
+ *   - useSlice('flows/execution_ui') — persistContext.
  *
  * Вкладка Chat: лента `chat-message` из `flows/chat` (тот же bucket, что и SSE).
  * Разворот — кнопка в шапке: `position: fixed` + `nextModalLayerZIndex()`, иначе z-index
  * не выходит из `canvas-host` и панель свойств (`flows-floating-panel`, до 25100) перекрывает.
  * Снизу — `--flows-exec-fab-gutter`, чтобы поле ввода не заезжало на FAB embed-ассистента.
- * Кнопки State / Tracing / Mocks открывают модалки `flows.state`, `flows.tracing`,
- * `flows.mocks`. «Сбросить чат» вызывает `flows/chat` `resetSession` (и `tasks/cancel` при
- * активном стриме). Mocks редактируются модалкой через slice — их payload идёт
- * в `params.metadata.mock` команды `flows/chat_send`.
+ * Кнопки State / Tracing открывают модалки `flows.state`, `flows.tracing`.
+ * «Сбросить чат» вызывает `flows/chat` `resetSession` (и `tasks/cancel` при активном стриме).
  * Голосовой режим (микрофон у поля ввода): та же связка voice WS + A2A, что на странице чата,
  * через `apps/flows/ui/_helpers/flow-voice-session.js`.
  */
@@ -1055,17 +1053,6 @@ export class FlowsExecutionPanel extends PlatformElement {
             if (Array.isArray(bps) && bps.length > 0) {
                 metadata.breakpoints = bps;
             }
-            if (Array.isArray(ui.mockResponses) && ui.mockResponses.length > 0) {
-                metadata.mock = {
-                    enabled: true,
-                    llm: ui.mockResponses.map((m) => ({
-                        type: 'text',
-                        content: m.response,
-                        match: m.match,
-                    })),
-                };
-            }
-
             const params = { message: a2aMessage };
             if (Object.keys(metadata).length > 0) {
                 params.metadata = metadata;
@@ -1283,10 +1270,6 @@ export class FlowsExecutionPanel extends PlatformElement {
         }
         this.openModal('flows.logs', props);
     }
-    _openMocks() {
-        this.openModal('flows.mocks', {});
-    }
-
     /**
      * Новая сессия чата: остановка текущей задачи при необходимости и сброс контекста.
      */
@@ -1356,17 +1339,6 @@ export class FlowsExecutionPanel extends PlatformElement {
                 const bps = preview && preview.breakpoints;
                 if (Array.isArray(bps) && bps.length > 0) {
                     meta.breakpoints = bps;
-                }
-                const ui = this._ui.value;
-                if (ui && Array.isArray(ui.mockResponses) && ui.mockResponses.length > 0) {
-                    meta.mock = {
-                        enabled: true,
-                        llm: ui.mockResponses.map((m) => ({
-                            type: 'text',
-                            content: m.response,
-                            match: m.match,
-                        })),
-                    };
                 }
                 const keysCount = Object.keys(meta).length;
                 if (keysCount === 0) return {};
@@ -1672,12 +1644,6 @@ export class FlowsExecutionPanel extends PlatformElement {
                                     @click=${() => { void this._onResetChat(); }}
                                 >${this.t('execution_panel.reset_chat')}</glass-button>
                             ` : nothing}
-                            <glass-button
-                                variant="secondary"
-                                size="sm"
-                                title=${this.t('execution_panel.mocks_title')}
-                                @click=${this._openMocks}
-                            >${this.t('execution_panel.mocks_title')}</glass-button>
                         </div>
                     `
                     : nothing}

@@ -17,14 +17,14 @@ logger = get_logger(__name__)
 
 
 def _trigger_type_str(trigger_type: TriggerType) -> str:
-    return trigger_type.value if hasattr(trigger_type, "value") else str(trigger_type)
+    return trigger_type.value
 
 
 class TriggerReregisterUnsupportedError(Exception):
     """Нет handler для типа триггера — внешняя перерегистрация не применима."""
 
     def __init__(self, trigger_type: TriggerType) -> None:
-        self.trigger_type = trigger_type
+        self.trigger_type: TriggerType = trigger_type
         super().__init__(
             f"No trigger handler for type {_trigger_type_str(trigger_type)}; reregister not supported"
         )
@@ -52,8 +52,8 @@ class TriggerRegistry:
         Args:
             base_url: Базовый URL сервиса для webhook URLs
         """
-        self.base_url = base_url
-        self.container = container
+        self.base_url: str = base_url
+        self.container: FlowRuntimeContainer = container
         self._handlers: dict[TriggerType, BaseTriggerHandler] = {}
 
     def register_handler(
@@ -181,7 +181,7 @@ class TriggerRegistry:
             flow_id: ID агента
             config: Конфигурация агента
         """
-        for trigger_id, trigger in config.triggers.items():
+        for trigger in config.triggers.values():
             if trigger.status == TriggerStatus.ACTIVE:
                 await self._unregister_trigger(flow_id, trigger)
 
@@ -220,12 +220,12 @@ class TriggerRegistry:
         """
         handler = self.get_handler(trigger.type)
 
-        trigger_type_str = trigger.type.value if hasattr(trigger.type, 'value') else str(trigger.type)
+        trigger_type_str = trigger.type.value
 
         if handler is None:
             logger.warning(
                 f"No handler for trigger type {trigger_type_str}, "
-                f"flow_id={flow_id}, trigger={trigger.trigger_id}"
+                + f"flow_id={flow_id}, trigger={trigger.trigger_id}"
             )
             trigger.status = TriggerStatus.ERROR
             trigger.last_error = f"No handler for type {trigger_type_str}"
@@ -235,13 +235,13 @@ class TriggerRegistry:
             updated_trigger = await handler.register(flow_id, trigger)
             logger.info(
                 f"Trigger registered: flow_id={flow_id}, "
-                f"trigger={trigger.trigger_id}, type={trigger_type_str}"
+                + f"trigger={trigger.trigger_id}, type={trigger_type_str}"
             )
             return updated_trigger
         except Exception as e:
             logger.error(
                 f"Failed to register trigger: flow_id={flow_id}, "
-                f"trigger={trigger.trigger_id}, error={e}"
+                + f"trigger={trigger.trigger_id}, error={e}"
             )
             trigger.status = TriggerStatus.ERROR
             trigger.last_error = str(e)
@@ -260,12 +260,12 @@ class TriggerRegistry:
             trigger: Конфигурация триггера
         """
         handler = self.get_handler(trigger.type)
-        trigger_type_str = trigger.type.value if hasattr(trigger.type, 'value') else str(trigger.type)
+        trigger_type_str = trigger.type.value
 
         if handler is None:
             logger.warning(
                 f"No handler for trigger type {trigger_type_str}, "
-                f"cannot unregister: flow_id={flow_id}, trigger={trigger.trigger_id}"
+                + f"cannot unregister: flow_id={flow_id}, trigger={trigger.trigger_id}"
             )
             return
 
@@ -273,12 +273,12 @@ class TriggerRegistry:
             await handler.unregister(flow_id, trigger)
             logger.info(
                 f"Trigger unregistered: flow_id={flow_id}, "
-                f"trigger={trigger.trigger_id}, type={trigger_type_str}"
+                + f"trigger={trigger.trigger_id}, type={trigger_type_str}"
             )
         except Exception as e:
             logger.error(
                 f"Failed to unregister trigger: flow_id={flow_id}, "
-                f"trigger={trigger.trigger_id}, error={e}"
+                + f"trigger={trigger.trigger_id}, error={e}"
             )
 
     def _trigger_changed(

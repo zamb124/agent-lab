@@ -29,7 +29,7 @@ from apps.flows.src.runtime_helpers.state_utils import push_ui_event
 from apps.flows.src.services.platform_facades import get_lara_facade
 from apps.flows.src.tools.decorator import tool
 from core.clients.service_client import ServiceClient, ServiceClientError
-from core.context import get_context
+from core.context import resolve_namespace_or_raise
 from core.pagination import CursorPage, OffsetPage
 from core.types import (
     JsonObject,
@@ -45,27 +45,7 @@ if TYPE_CHECKING:
 
 
 def _require_context_namespace() -> str:
-    ctx = get_context()
-    if ctx is None:
-        raise RuntimeError("Context is not set")
-    return ctx.active_namespace or "default"
-
-
-def _analyze_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = args
-    _ = state
-    return json.dumps(
-        {
-            "success": True,
-            "blocks": [
-                {
-                    "type": "text",
-                    "text": "Mock: анализ завершён.",
-                }
-            ],
-        },
-        ensure_ascii=False,
-    )
+    return resolve_namespace_or_raise()
 
 
 class CrmSearchEntitiesArgs(BaseModel):
@@ -364,117 +344,6 @@ def _compact_entity_hit(raw: EntityResponse) -> JsonObject:
     }
 
 
-def _crm_search_entities_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = args
-    _ = state
-    return json.dumps(
-        {
-            "success": True,
-            "hits": [
-                {
-                    "entity_id": "ent_mock_1",
-                    "name": "Mock hit",
-                    "entity_type": "contact",
-                    "entity_subtype": None,
-                    "description": None,
-                    "namespace": "default",
-                }
-            ],
-            "blocks": [{"type": "text", "text": "Mock: найдено 1 сущность."}],
-        },
-        ensure_ascii=False,
-    )
-
-
-def _crm_create_note_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = state
-    raw_name = args.get("name")
-    name = raw_name if isinstance(raw_name, str) else ""
-    return json.dumps(
-        {
-            "success": True,
-            "entity_id": "note_mock_1",
-            "entity": {"entity_id": "note_mock_1", "name": name, "entity_type": "note"},
-            "blocks": [{"type": "card", "title": name or "Note", "subtitle": "created (mock)"}],
-        },
-        ensure_ascii=False,
-    )
-
-
-def _crm_create_note_and_analyze_mock(
-    args: JsonObject,
-    state: "ExecutionState | None" = None,
-) -> str:
-    _ = args
-    _ = state
-    return json.dumps(
-        {
-            "success": True,
-            "entity_id": "note_mock_combo",
-            "analyze": {"entities": []},
-            "blocks": [{"type": "text", "text": "Mock: заметка создана и анализ выполнен."}],
-        },
-        ensure_ascii=False,
-    )
-
-
-def _push_embed_blocks_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = state
-    blocks_json = args.get("blocks_json")
-    return blocks_json if isinstance(blocks_json, str) else "[]"
-
-
-def _flows_read_context_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = state
-    flow_id = args.get("flow_id")
-    branch_id = args.get("branch_id")
-    node_id = args.get("node_id")
-    return json.dumps(
-        {
-            "success": True,
-            "flow_id": flow_id if isinstance(flow_id, str) else "flow_mock",
-            "branch_id": branch_id if isinstance(branch_id, str) else "base",
-            "node_id": node_id if isinstance(node_id, str) else None,
-            "blocks": [{"type": "text", "text": "Mock: контекст flow получен."}],
-        },
-        ensure_ascii=False,
-    )
-
-
-def _flows_patch_node_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = state
-    flow_id = args.get("flow_id")
-    branch_id = args.get("branch_id")
-    node_id = args.get("node_id")
-    mode = args.get("mode")
-    return json.dumps(
-        {
-            "success": True,
-            "flow_id": flow_id if isinstance(flow_id, str) else "flow_mock",
-            "branch_id": branch_id if isinstance(branch_id, str) else "base",
-            "node_id": node_id if isinstance(node_id, str) else "main",
-            "mode": mode if isinstance(mode, str) else "apply",
-            "blocks": [{"type": "text", "text": "Mock: patch ноды обработан."}],
-        },
-        ensure_ascii=False,
-    )
-
-
-def _flows_patch_flow_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = state
-    flow_id = args.get("flow_id")
-    mode = args.get("mode")
-    return json.dumps(
-        {
-            "success": True,
-            "flow_id": flow_id if isinstance(flow_id, str) else "flow_mock",
-            "mode": mode if isinstance(mode, str) else "apply",
-            "blocks": [{"type": "text", "text": "Mock: patch flow обработан."}],
-        },
-        ensure_ascii=False,
-    )
-
-
 @tool(
     name="crm_search_entities",
     description=(
@@ -483,8 +352,7 @@ def _flows_patch_flow_mock(args: JsonObject, state: "ExecutionState | None" = No
         "Ответ — JSON: успех, список совпадений и блоки для чата."
     ),
     tags=["crm", "lara", "search"],
-    args_schema=CrmSearchEntitiesArgs,
-    mock_response=_crm_search_entities_mock,
+    parameters_model=CrmSearchEntitiesArgs,
 )
 async def crm_search_entities(
     query: str | None = None,
@@ -572,8 +440,7 @@ async def crm_search_entities(
         "Возвращает JSON: entity, blocks (карточка для чата)."
     ),
     tags=["crm", "lara", "notes"],
-    args_schema=CrmCreateNoteArgs,
-    mock_response=_crm_create_note_mock,
+    parameters_model=CrmCreateNoteArgs,
 )
 async def crm_create_note(
     name: str | None = None,
@@ -708,8 +575,7 @@ async def crm_create_note(
         "Передай name, description. Опционально note_date (YYYY-MM-DD), extract_entity_types, mentioned_entity_ids, namespace."
     ),
     tags=["crm", "lara", "notes", "ai"],
-    args_schema=CrmCreateNoteAndAnalyzeArgs,
-    mock_response=_crm_create_note_and_analyze_mock,
+    parameters_model=CrmCreateNoteAndAnalyzeArgs,
 )
 async def crm_create_note_and_analyze(
     name: str,
@@ -800,8 +666,7 @@ async def crm_create_note_and_analyze(
         "Возвращает JSON с кратким summary и blocks для чата."
     ),
     tags=["crm", "lara", "ai"],
-    args_schema=CrmAnalyzeNoteTextArgs,
-    mock_response=_analyze_mock,
+    parameters_model=CrmAnalyzeNoteTextArgs,
 )
 async def crm_analyze_note_text(
     note_id: str,
@@ -986,8 +851,7 @@ async def crm_analyze_note_text(
         "с полем type: card | table | actions | file_card | text и полями схемы."
     ),
     tags=["lara", "ui"],
-    args_schema=PushEmbedBlocksArgs,
-    mock_response=_push_embed_blocks_mock,
+    parameters_model=PushEmbedBlocksArgs,
 )
 async def push_embed_blocks(blocks_json: str, *, state: "ExecutionState") -> str:
     _ = state
@@ -1002,8 +866,7 @@ async def push_embed_blocks(blocks_json: str, *, state: "ExecutionState") -> str
         "конфиг ноды и метаданные для принятия решения."
     ),
     tags=["flows", "lara", "query"],
-    args_schema=FlowsReadContextArgs,
-    mock_response=_flows_read_context_mock,
+    parameters_model=FlowsReadContextArgs,
 )
 async def flows_read_context(
     flow_id: str,
@@ -1082,8 +945,7 @@ async def flows_read_context(
         "Возвращает node_before/node_after и ui_events; сам tool не сохраняет flow."
     ),
     tags=["flows", "lara", "mutation"],
-    args_schema=FlowsPatchNodeArgs,
-    mock_response=_flows_patch_node_mock,
+    parameters_model=FlowsPatchNodeArgs,
 )
 async def flows_patch_node(
     flow_id: str | None = None,
@@ -1255,8 +1117,7 @@ async def flows_patch_node(
         "Возвращает flow_before/flow_after и ui_events; сам tool не сохраняет flow."
     ),
     tags=["flows", "lara", "mutation"],
-    args_schema=FlowsPatchFlowArgs,
-    mock_response=_flows_patch_flow_mock,
+    parameters_model=FlowsPatchFlowArgs,
 )
 async def flows_patch_flow(
     flow_id: str | None = None,
@@ -1434,50 +1295,6 @@ class CrmDailySummaryArgs(BaseModel):
     force_rebuild: bool = False
 
 
-def _crm_get_entity_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = state
-    entity_id = args.get("entity_id")
-    return json.dumps(
-        {
-            "success": True,
-            "entity": {"entity_id": entity_id, "name": "Mock", "entity_type": "note"},
-        },
-        ensure_ascii=False,
-    )
-
-
-def _crm_create_entity_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = state
-    return json.dumps(
-        {"success": True, "entity": {"entity_id": "mock-e1", "name": args.get("name")}},
-        ensure_ascii=False,
-    )
-
-
-def _crm_create_relationship_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = args
-    _ = state
-    return json.dumps({"success": True, "relationship_id": "rel-mock"}, ensure_ascii=False)
-
-
-def _crm_list_entity_types_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = args
-    _ = state
-    return json.dumps(
-        {"success": True, "items": [{"type_id": "note"}], "blocks": [{"type": "text", "text": "mock"}]},
-        ensure_ascii=False,
-    )
-
-
-def _crm_daily_summary_mock(args: JsonObject, state: "ExecutionState | None" = None) -> str:
-    _ = args
-    _ = state
-    return json.dumps(
-        {"success": True, "summary": "mock", "blocks": [{"type": "text", "text": "mock"}]},
-        ensure_ascii=False,
-    )
-
-
 @tool(
     name="crm_get_entity",
     description=(
@@ -1485,8 +1302,7 @@ def _crm_daily_summary_mock(args: JsonObject, state: "ExecutionState | None" = N
         "Возвращает JSON и card-блок для чата."
     ),
     tags=["crm", "lara"],
-    args_schema=CrmGetEntityArgs,
-    mock_response=_crm_get_entity_mock,
+    parameters_model=CrmGetEntityArgs,
 )
 async def crm_get_entity(entity_id: str, *, state: "ExecutionState") -> str:
     _ = state
@@ -1520,8 +1336,7 @@ async def crm_get_entity(entity_id: str, *, state: "ExecutionState") -> str:
         "namespace берётся из active_namespace если не указан. Для confirm-first заметок используй crm_create_note."
     ),
     tags=["crm", "lara", "mutation"],
-    args_schema=CrmCreateEntityArgs,
-    mock_response=_crm_create_entity_mock,
+    parameters_model=CrmCreateEntityArgs,
 )
 async def crm_create_entity(
     entity_type: str,
@@ -1569,8 +1384,7 @@ async def crm_create_entity(
         "Создаёт связь (POST /crm/api/v1/relationships между source и target)."
     ),
     tags=["crm", "lara", "mutation", "graph"],
-    args_schema=CrmCreateRelationshipArgs,
-    mock_response=_crm_create_relationship_mock,
+    parameters_model=CrmCreateRelationshipArgs,
 )
 async def crm_create_relationship(
     source_entity_id: str,
@@ -1623,8 +1437,7 @@ async def crm_create_relationship(
     name="crm_list_entity_types",
     description=("Каталог типов для namespace (GET /crm/api/v1/entity-types?namespace=)."),
     tags=["crm", "lara"],
-    args_schema=CrmListEntityTypesArgs,
-    mock_response=_crm_list_entity_types_mock,
+    parameters_model=CrmListEntityTypesArgs,
 )
 async def crm_list_entity_types(
     namespace: str | None = None,
@@ -1676,8 +1489,7 @@ async def crm_list_entity_types(
         "Сводка заметок за день (POST /crm/api/v1/entities/daily-summary, date YYYY-MM-DD)."
     ),
     tags=["crm", "lara", "summaries"],
-    args_schema=CrmDailySummaryArgs,
-    mock_response=_crm_daily_summary_mock,
+    parameters_model=CrmDailySummaryArgs,
 )
 async def crm_daily_summary(
     date: str,

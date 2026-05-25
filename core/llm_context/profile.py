@@ -34,7 +34,7 @@ def build_identity_llm_context_profile_block(context: Context | None) -> LLMCont
     if user is not None:
         if user.bio and user.bio.strip():
             sections.append(("User bio", user.bio.strip()))
-        user_profile = _metadata_profile(getattr(user, "attrs", None))
+        user_profile = _metadata_profile(user.attributes)
         if user_profile:
             sections.append(("User profile", user_profile))
 

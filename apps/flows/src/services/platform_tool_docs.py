@@ -7,19 +7,12 @@
 from __future__ import annotations
 
 import json
-from enum import Enum
 
 from apps.flows.src.container import FlowContainer
 from core.context import get_context
 from core.docs.models import PlatformToolDoc
 
 _MAX_CODE_PREVIEW_CHARS = 4000
-
-
-def _code_mode_str(value: object) -> str:
-    if isinstance(value, Enum):
-        return value.value
-    return str(value)
 
 
 async def collect_platform_tool_docs(container: FlowContainer) -> list[PlatformToolDoc]:
@@ -37,9 +30,9 @@ async def collect_platform_tool_docs(container: FlowContainer) -> list[PlatformT
         refs = await container.tool_repository.list(limit=5000)
         for ref in refs:
             effective = ref.effective_parameters_schema()
-            args_json = json.dumps(effective, ensure_ascii=False, indent=2)
+            parameters_json = json.dumps(effective, ensure_ascii=False, indent=2)
             code_preview: str | None = None
-            if ref.code and isinstance(ref.code, str) and ref.code.strip():
+            if ref.code and ref.code.strip():
                 raw = ref.code.strip()
                 if len(raw) > _MAX_CODE_PREVIEW_CHARS:
                     code_preview = raw[:_MAX_CODE_PREVIEW_CHARS] + "\n# ... обрезано"
@@ -51,8 +44,8 @@ async def collect_platform_tool_docs(container: FlowContainer) -> list[PlatformT
                 source="database",
                 description=(ref.description or "").strip(),
                 tags=list(ref.tags or []),
-                args_schema_json=args_json,
-                code_mode=_code_mode_str(ref.code_mode),
+                parameters_schema_json=parameters_json,
+                code_mode=ref.code_mode,
                 mcp_server_id=ref.mcp_server_id,
                 mcp_tool_name=ref.mcp_tool_name,
                 code_preview=code_preview,
@@ -61,17 +54,17 @@ async def collect_platform_tool_docs(container: FlowContainer) -> list[PlatformT
     for name, tool in registry.list_all().items():
         if name in merged:
             continue
-        if not getattr(type(tool), "listed_in_platform_tool_docs", True):
+        if not tool.listed_in_platform_tool_docs:
             continue
         schema = tool.parameters
-        args_json = json.dumps(schema, ensure_ascii=False, indent=2)
+        parameters_json = json.dumps(schema, ensure_ascii=False, indent=2)
         merged[name] = PlatformToolDoc(
             tool_id=name,
             display_name=name,
             source="registry_only",
             description=(tool.description or "").strip(),
             tags=list(tool.get_tags()),
-            args_schema_json=args_json,
+            parameters_schema_json=parameters_json,
         )
 
     return sorted(merged.values(), key=lambda x: x.tool_id)

@@ -1,24 +1,34 @@
 """record_llm_response: кастомный billing_resource_name."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 import pytest
+from opentelemetry.sdk.trace import Span as SDKSpan
 
 import core.tracing.attributes as attr
+from core.tracing.provider import ensure_tracer_provider
 from core.tracing.tracer import PlatformTracer, _llm_operation_name
+from core.types import OtelAttributeValue
 
 
-class SpanProbe:
-    def __init__(self, attributes: dict | None = None) -> None:
-        self.attributes = attributes or {}
-        self.payloads: list[dict] = []
-        self.attribute_calls: list[tuple[str, object]] = []
+@contextmanager
+def sdk_span(attributes: dict[str, OtelAttributeValue] | None = None) -> Iterator[SDKSpan]:
+    otel_tracer = ensure_tracer_provider("test").get_tracer("test")
+    with otel_tracer.start_as_current_span(
+        "test.llm",
+        attributes=attributes,
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
+        assert isinstance(span, SDKSpan)
+        yield span
 
-    def set_attributes(self, attributes: dict) -> None:
-        self.payloads.append(dict(attributes))
-        self.attributes.update(attributes)
 
-    def set_attribute(self, key: str, value: object) -> None:
-        self.attribute_calls.append((key, value))
-        self.attributes[key] = value
+def span_attr(span: SDKSpan, key: str) -> OtelAttributeValue | None:
+    span_attrs = span.attributes
+    assert span_attrs is not None
+    return span_attrs.get(key)
 
 
 @pytest.fixture
@@ -27,74 +37,73 @@ def tracer() -> PlatformTracer:
 
 
 def test_record_llm_response_default_billing_uses_model(tracer: PlatformTracer) -> None:
-    span = SpanProbe({attr.ATTR_LLM_MODEL: "my-model"})
+    with sdk_span({attr.ATTR_LLM_MODEL: "my-model"}) as span:
+        tracer.record_llm_response(span, 1, 2, False, 1.0)
 
-    tracer.record_llm_response(span, 1, 2, False, 1.0)
-    billing = span.payloads[-1]
-    assert billing[attr.ATTR_BILLING_RESOURCE_NAME] == "llm:my-model"
+        assert span_attr(span, attr.ATTR_BILLING_RESOURCE_NAME) == "llm:my-model"
 
 
 def test_record_llm_response_billing_resource_name_override(tracer: PlatformTracer) -> None:
-    span = SpanProbe({attr.ATTR_LLM_MODEL: "ignored"})
+    with sdk_span({attr.ATTR_LLM_MODEL: "ignored"}) as span:
+        tracer.record_llm_response(
+            span, 1, 2, False, 1.0, billing_resource_name="llm:byok"
+        )
 
-    tracer.record_llm_response(
-        span, 1, 2, False, 1.0, billing_resource_name="llm:byok"
-    )
-    billing = span.payloads[-1]
-    assert billing[attr.ATTR_BILLING_RESOURCE_NAME] == "llm:byok"
+        assert span_attr(span, attr.ATTR_BILLING_RESOURCE_NAME) == "llm:byok"
 
 
 def test_record_llm_response_updates_span_model_and_source(tracer: PlatformTracer) -> None:
-    span = SpanProbe({attr.ATTR_LLM_MODEL: "auto"})
+    with sdk_span({attr.ATTR_LLM_MODEL: "auto"}) as span:
+        tracer.record_llm_response(
+            span,
+            10,
+            5,
+            False,
+            1.0,
+            llm_provider="openrouter",
+            llm_model="qwen/qwen3-coder:free",
+            candidate_source="openrouter_free",
+        )
 
-    tracer.record_llm_response(
-        span,
-        10,
-        5,
-        False,
-        1.0,
-        llm_provider="openrouter",
-        llm_model="qwen/qwen3-coder:free",
-        candidate_source="openrouter_free",
-    )
-
-    assert (attr.ATTR_LLM_MODEL, "qwen/qwen3-coder:free") in span.attribute_calls
-    assert (attr.ATTR_LLM_PROVIDER, "openrouter") in span.attribute_calls
-    assert (attr.ATTR_LLM_CANDIDATE_SOURCE, "openrouter_free") in span.attribute_calls
-    billing = span.payloads[-1]
-    assert billing[attr.ATTR_BILLING_RESOURCE_NAME] == "llm:qwen/qwen3-coder:free"
+        assert span_attr(span, attr.ATTR_LLM_MODEL) == "qwen/qwen3-coder:free"
+        assert span_attr(span, attr.ATTR_LLM_PROVIDER) == "openrouter"
+        assert span_attr(span, attr.ATTR_LLM_CANDIDATE_SOURCE) == "openrouter_free"
+        assert (
+            span_attr(span, attr.ATTR_BILLING_RESOURCE_NAME)
+            == "llm:qwen/qwen3-coder:free"
+        )
 
 
 def test_record_llm_response_writes_context_layer_observability(tracer: PlatformTracer) -> None:
-    span = SpanProbe({attr.ATTR_LLM_MODEL: "model"})
-
-    tracer.record_llm_response(
-        span,
-        10,
-        5,
-        False,
-        1.0,
-        llm_context={
-            "usage": {
-                "max_input_tokens": 32,
-                "model_context_length": 32,
-                "total_input_tokens": 18,
+    with sdk_span({attr.ATTR_LLM_MODEL: "model"}) as span:
+        tracer.record_llm_response(
+            span,
+            10,
+            5,
+            False,
+            1.0,
+            llm_context={
+                "usage": {
+                    "max_input_tokens": 32,
+                    "model_context_length": 32,
+                    "total_input_tokens": 18,
+                },
+                "selected_blocks": [{"kind": "memory", "stable_key": "m1"}],
+                "dropped_blocks": [{"kind": "rag", "stable_key": "r1"}],
             },
-            "selected_blocks": [{"kind": "memory", "stable_key": "m1"}],
-            "dropped_blocks": [{"kind": "rag", "stable_key": "r1"}],
-        },
-    )
+        )
 
-    assert span.attributes[attr.ATTR_LLM_CONTEXT_ENABLED] is True
-    assert span.attributes[attr.ATTR_LLM_CONTEXT_MAX_INPUT_TOKENS] == 32
-    assert span.attributes[attr.ATTR_LLM_CONTEXT_MODEL_CONTEXT_LENGTH] == 32
-    assert span.attributes[attr.ATTR_LLM_CONTEXT_TOTAL_INPUT_TOKENS] == 18
-    assert span.attributes[attr.ATTR_LLM_CONTEXT_SELECTED_BLOCKS_COUNT] == 1
-    assert span.attributes[attr.ATTR_LLM_CONTEXT_DROPPED_BLOCKS_COUNT] == 1
-    assert '"stable_key": "m1"' in span.attributes[attr.ATTR_LLM_CONTEXT]
+        assert span_attr(span, attr.ATTR_LLM_CONTEXT_ENABLED) is True
+        assert span_attr(span, attr.ATTR_LLM_CONTEXT_MAX_INPUT_TOKENS) == 32
+        assert span_attr(span, attr.ATTR_LLM_CONTEXT_MODEL_CONTEXT_LENGTH) == 32
+        assert span_attr(span, attr.ATTR_LLM_CONTEXT_TOTAL_INPUT_TOKENS) == 18
+        assert span_attr(span, attr.ATTR_LLM_CONTEXT_SELECTED_BLOCKS_COUNT) == 1
+        assert span_attr(span, attr.ATTR_LLM_CONTEXT_DROPPED_BLOCKS_COUNT) == 1
+        context = span_attr(span, attr.ATTR_LLM_CONTEXT)
+        assert isinstance(context, str)
+        assert '"stable_key": "m1"' in context
 
 
 def test_llm_operation_name_uses_resolved_span_model() -> None:
-    span = SpanProbe({attr.ATTR_LLM_MODEL: "qwen/qwen3-coder:free"})
-
-    assert _llm_operation_name(span, "auto") == "llm.qwen/qwen3-coder:free"
+    with sdk_span({attr.ATTR_LLM_MODEL: "qwen/qwen3-coder:free"}) as span:
+        assert _llm_operation_name(span, "auto") == "llm.qwen/qwen3-coder:free"

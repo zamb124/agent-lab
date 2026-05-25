@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 
 from fastapi.responses import HTMLResponse
 
+from core.types import JsonValue
+
 
 def build_company_access_error_html(
     status_code: int,
@@ -96,7 +98,7 @@ def build_company_access_error_response(
     )
 
 
-def http_exception_detail_to_str(detail) -> str:
+def http_exception_detail_to_str(detail: JsonValue) -> str:
     if isinstance(detail, str):
         return detail
     return str(detail)

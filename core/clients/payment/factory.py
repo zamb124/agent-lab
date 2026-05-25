@@ -5,29 +5,35 @@
 АДАПТИРОВАНО: убраны try-except блоки
 """
 
-from typing import Any
+from typing import TypeAlias
 
-from core.clients.payment.base_provider import BasePaymentProvider
 from core.clients.payment.yoomoney_provider import (
+    YOOMONEY_API_URL,
     YooMoneyConfig,
     YooMoneyProvider,
     load_access_token,
     save_access_token,
 )
-from core.clients.payment.yukassa_provider import YuKassaConfig, YuKassaProvider
+from core.clients.payment.yukassa_provider import YUKASSA_API_URL, YuKassaConfig, YuKassaProvider
 from core.config import get_settings
 from core.config.models import PaymentProviderConfigEntry
+from core.db.storage import Storage
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
+
+PaymentProvider: TypeAlias = YooMoneyProvider | YuKassaProvider
+
+
 class PaymentProviderFactory:
     """Фабрика для управления платежными провайдерами"""
 
-    _providers: dict[str, BasePaymentProvider] = {}
+    _providers: dict[str, PaymentProvider] = {}
     _configs: dict[str, PaymentProviderConfigEntry] = {}
 
     @classmethod
-    def initialize(cls):
+    def initialize(cls) -> None:
         """
         Инициализация всех провайдеров из конфигурации.
         Вызывается при старте приложения.
@@ -49,7 +55,7 @@ class PaymentProviderFactory:
                 logger.info(f"Платежный провайдер {provider_name} отключен")
                 continue
 
-            provider = cls._create_provider(provider_name, config_obj)
+            provider = cls._create_provider(config_obj)
             cls._providers[provider_name] = provider
 
             logger.info(
@@ -64,32 +70,60 @@ class PaymentProviderFactory:
     @classmethod
     def _create_config_object(cls, config_entry: PaymentProviderConfigEntry) -> YooMoneyConfig | YuKassaConfig:
         """Создает объект конфигурации из словаря или Pydantic-модели"""
-        config_dict = config_entry.model_dump(exclude_none=True)
+        if config_entry.provider_type == "yoomoney":
+            account_number = config_entry.account_number
+            notification_secret = config_entry.notification_secret
+            quickpay_url = config_entry.quickpay_url
+            api_url = config_entry.api_url if config_entry.api_url is not None else YOOMONEY_API_URL
+            if account_number is None or account_number.strip() == "":
+                raise ValueError("account_number обязателен для YooMoney")
+            if notification_secret is None or notification_secret.strip() == "":
+                raise ValueError("notification_secret обязателен для YooMoney")
+            if quickpay_url.strip() == "":
+                raise ValueError("quickpay_url обязателен для YooMoney")
+            if api_url.strip() == "":
+                raise ValueError("api_url обязателен для YooMoney")
+            return YooMoneyConfig(
+                provider_type="yoomoney",
+                enabled=config_entry.enabled,
+                account_number=account_number,
+                notification_secret=notification_secret,
+                quickpay_url=quickpay_url,
+                client_id=config_entry.client_id,
+                client_secret=config_entry.client_secret,
+                access_token=config_entry.access_token,
+                api_url=api_url,
+            )
 
-        provider_type = config_dict.get("provider_type")
-
-        if not provider_type:
-            raise ValueError("provider_type не указан в конфигурации")
-
-        if provider_type == "yoomoney":
-            return YooMoneyConfig(**config_dict)
-        elif provider_type == "yukassa":
-            return YuKassaConfig(**config_dict)
-        else:
-            raise ValueError(f"Неизвестный тип провайдера: {provider_type}")
+        shop_id = config_entry.shop_id
+        secret_key = config_entry.secret_key
+        api_url = config_entry.api_url if config_entry.api_url is not None else YUKASSA_API_URL
+        if shop_id is None or shop_id.strip() == "":
+            raise ValueError("shop_id обязателен для ЮKassa")
+        if secret_key is None or secret_key.strip() == "":
+            raise ValueError("secret_key обязателен для ЮKassa")
+        if api_url.strip() == "":
+            raise ValueError("api_url обязателен для ЮKassa")
+        return YuKassaConfig(
+            provider_type="yukassa",
+            enabled=config_entry.enabled,
+            shop_id=shop_id,
+            secret_key=secret_key,
+            api_url=api_url,
+        )
 
     @classmethod
-    def _create_provider(cls, provider_name: str, config: YooMoneyConfig | YuKassaConfig) -> BasePaymentProvider:
+    def _create_provider(
+        cls, config: YooMoneyConfig | YuKassaConfig
+    ) -> PaymentProvider:
         """Создает экземпляр провайдера по типу"""
 
         if isinstance(config, YooMoneyConfig):
             return YooMoneyProvider(config)
-        if isinstance(config, YuKassaConfig):
-            return YuKassaProvider(config)
-        raise ValueError(f"Неизвестный тип провайдера: {config.provider_type}")
+        return YuKassaProvider(config)
 
     @classmethod
-    def get_provider(cls, provider_name: str) -> BasePaymentProvider | None:
+    def get_provider(cls, provider_name: str) -> PaymentProvider | None:
         """Получает провайдер по имени"""
         provider = cls._providers.get(provider_name)
         if not provider:
@@ -97,12 +131,12 @@ class PaymentProviderFactory:
         return provider
 
     @classmethod
-    def get_available_providers(cls) -> dict[str, BasePaymentProvider]:
+    def get_available_providers(cls) -> dict[str, PaymentProvider]:
         """Возвращает все доступные провайдеры"""
         return cls._providers.copy()
 
     @classmethod
-    def get_default_provider(cls) -> BasePaymentProvider | None:
+    def get_default_provider(cls) -> PaymentProvider | None:
         """Возвращает дефолтный провайдер"""
         settings = get_settings()
 
@@ -117,7 +151,7 @@ class PaymentProviderFactory:
         return None
 
     @classmethod
-    def list_providers(cls) -> list[dict[str, object]]:
+    def list_providers(cls) -> list[JsonObject]:
         """Возвращает список доступных провайдеров с метаданными"""
         return [
             {
@@ -129,9 +163,9 @@ class PaymentProviderFactory:
         ]
 
     @classmethod
-    async def seed_access_tokens(cls, storage) -> None:
+    async def seed_access_tokens(cls, storage: Storage) -> None:
         """Загружает access_token из конфига в storage, если в storage пусто."""
-        for name, provider in cls._providers.items():
+        for provider in cls._providers.values():
             if not isinstance(provider, YooMoneyProvider):
                 continue
             if not provider.config.access_token:
@@ -139,32 +173,8 @@ class PaymentProviderFactory:
             existing = await load_access_token(storage)
             if existing:
                 logger.info("YooMoney access_token уже есть в storage (истекает %s)", existing.expires_at)
-                provider._access_token = existing.token
+                provider.set_access_token(existing.token)
                 continue
             token_data = await save_access_token(storage, provider.config.access_token)
-            provider._access_token = provider.config.access_token
+            provider.set_access_token(provider.config.access_token)
             logger.info("YooMoney access_token загружен из конфига в storage (истекает %s)", token_data.expires_at)
-
-    @classmethod
-    def get_provider_for_company(cls, company: Any) -> BasePaymentProvider | None:
-        """
-        Получает провайдер для компании.
-
-        Если у компании указан payment_provider - возвращает его.
-        Иначе возвращает дефолтный провайдер.
-
-        Args:
-            company: Объект Company с атрибутом payment_provider (опционально)
-
-        Returns:
-            Провайдер для компании или None если провайдеров нет
-        """
-        if not cls._providers:
-            return None
-
-        if hasattr(company, 'payment_provider') and company.payment_provider:
-            provider = cls.get_provider(company.payment_provider)
-            if provider:
-                return provider
-
-        return cls.get_default_provider()

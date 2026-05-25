@@ -7,8 +7,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from apps.flows.config import get_settings
-from apps.flows.src.container import get_container
 from apps.idle_worker.broker import broker as idle_broker
+from apps.idle_worker.container import get_container
 from core.billing.settlement_rules import SettlementRulesDocument
 from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.context import Context, set_context

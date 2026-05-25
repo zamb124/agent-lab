@@ -118,8 +118,10 @@ class User(BaseModel):
     ui_preferences: JsonObject = Field(
         default_factory=dict, title="UI настройки", description="Настройки интерфейса пользователя"
     )
-    attrs: JsonObject = Field(
-        default_factory=dict, title="Атрибуты", description="Дополнительные service-specific данные"
+    attributes: JsonObject = Field(
+        default_factory=dict,
+        title="Атрибуты",
+        description="Дополнительные service-specific данные",
     )
     password_hash: str | None = Field(
         default=None,
@@ -347,11 +349,14 @@ class AuthCodeCache(BaseModel):
 
 
 class BoardStage(BaseModel):
-    """Стадия канбана задач: id хранится в attributes.status у CRMEntity с entity_type=task."""
+    """Стадия канбана задач.
+
+    Значение хранится в attributes.status у CRMEntity с entity_type=task.
+    """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    id: str = Field(
+    stage_id: str = Field(
         min_length=1,
         pattern=r"^[a-z][a-z0-9_]*$",
         description="Стабильный идентификатор стадии (snake_case)",
@@ -369,18 +374,21 @@ class TaskBoardPreset(BaseModel):
 
     @model_validator(mode="after")
     def _unique_stage_ids(self) -> "TaskBoardPreset":
-        ids = [s.id for s in self.stages]
+        ids = [s.stage_id for s in self.stages]
         if len(ids) != len(set(ids)):
             raise ValueError("TaskBoardPreset: повторяющиеся id стадий")
         return self
 
 
 class SidebarNavEntry(BaseModel):
-    """Элемент дерева бокового меню пространства (NetWorkle). Лист: задан route_key. Группа: непустой children."""
+    """Элемент дерева бокового меню пространства (NetWorkle).
+
+    Лист: задан ``route_key``. Группа: непустой ``children``.
+    """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=1, description="Стабильный id для active state и редактора")
+    nav_id: str = Field(min_length=1, description="Стабильный id для active state и редактора")
     label: str = Field(description="Подпись пункта")
     icon: str | None = Field(default=None, description="Имя иконки platform-icon")
     route_key: str | None = Field(default=None, description="Ключ маршрута SPA (лист)")

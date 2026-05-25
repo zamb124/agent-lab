@@ -132,7 +132,7 @@ async def _run_rag_search(
     name="pravo_catalog_search",
     description=_PRAVO_CATALOG_SEARCH_DESCRIPTION,
     tags=["law", "rag", "knowledge", "external"],
-    args_schema=PravoCatalogSearchArgs,
+    parameters_model=PravoCatalogSearchArgs,
 )
 async def pravo_catalog_search(keyword: str, page: int = 1) -> JsonDict:
     try:
@@ -163,7 +163,7 @@ async def pravo_catalog_search(keyword: str, page: int = 1) -> JsonDict:
     name="pravo_document_rag_search",
     description=_PRAVO_DOCUMENT_RAG_SEARCH_DESCRIPTION,
     tags=["law", "rag", "knowledge", "external"],
-    args_schema=PravoDocumentRagSearchArgs,
+    parameters_model=PravoDocumentRagSearchArgs,
 )
 async def pravo_document_rag_search(
     namespace_id: str,

@@ -5,7 +5,7 @@ Tools для управления scheduled tasks.
 """
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,6 +14,7 @@ from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.scheduling_ids import extract_ids_from_state
 from core.scheduler.models import ContentType
 from core.state import ExecutionState
+from core.types import JsonObject
 
 
 def _extract_ids_from_state(state: ExecutionState) -> tuple[str, str, str]:
@@ -23,7 +24,7 @@ def _extract_ids_from_state(state: ExecutionState) -> tuple[str, str, str]:
 class _ScheduledTaskContentArgs(BaseModel):
     """Общие поля для создания задачи с полезной нагрузкой message или tool_call."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     content_type: Literal["message", "tool_call"] = Field(
         ...,
@@ -34,7 +35,7 @@ class _ScheduledTaskContentArgs(BaseModel):
         min_length=1,
         description="При message — текст сообщения; при tool_call — имя тула (tool_id).",
     )
-    tool_args: dict[str, Any] | None = Field(
+    tool_args: JsonObject | None = Field(
         None,
         description="Аргументы для tool_call (объект JSON); для message обычно не передаётся.",
     )
@@ -69,7 +70,7 @@ class ScheduleOneTimeArgs(_ScheduledTaskContentArgs):
 
 
 class CancelScheduledTaskArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     schedule_task_id: str = Field(
         ...,
@@ -81,20 +82,20 @@ class CancelScheduledTaskArgs(BaseModel):
 class ListScheduledTasksArgs(BaseModel):
     """Список задач берётся из state.session_id; отдельных аргументов нет."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
 
 @tool(
     name="schedule_cron_task",
     description="Создает периодическую задачу по cron расписанию. Примеры cron: '0 10 * * *' (каждый день в 10:00), '*/5 * * * *' (каждые 5 минут), '0 9 * * 1' (каждый понедельник в 9:00)",
     tags=["scheduling"],
-    args_schema=ScheduleCronArgs,
+    parameters_model=ScheduleCronArgs,
 )
 async def schedule_cron_task(
     cron: str,
     content_type: str,
     content: str,
-    tool_args: dict[str, Any] | None = None,
+    tool_args: JsonObject | None = None,
     description: str | None = None,
     *,
     state: ExecutionState,
@@ -135,13 +136,13 @@ async def schedule_cron_task(
     name="schedule_interval_task",
     description="Создает периодическую задачу с интервалом в минутах",
     tags=["scheduling"],
-    args_schema=ScheduleIntervalArgs,
+    parameters_model=ScheduleIntervalArgs,
 )
 async def schedule_interval_task(
     interval_minutes: int,
     content_type: str,
     content: str,
-    tool_args: dict[str, Any] | None = None,
+    tool_args: JsonObject | None = None,
     description: str | None = None,
     *,
     state: ExecutionState,
@@ -185,13 +186,13 @@ async def schedule_interval_task(
     name="schedule_one_time_task",
     description="Создает одноразовую задачу на конкретное время. Формат времени: ISO 8601 (например '2025-01-15T10:00:00')",
     tags=["scheduling"],
-    args_schema=ScheduleOneTimeArgs,
+    parameters_model=ScheduleOneTimeArgs,
 )
 async def schedule_one_time_task(
     run_at: str,
     content_type: str,
     content: str,
-    tool_args: dict[str, Any] | None = None,
+    tool_args: JsonObject | None = None,
     description: str | None = None,
     *,
     state: ExecutionState,
@@ -233,7 +234,7 @@ async def schedule_one_time_task(
     name="list_scheduled_tasks",
     description="Показывает список запланированных задач текущей сессии",
     tags=["scheduling"],
-    args_schema=ListScheduledTasksArgs,
+    parameters_model=ListScheduledTasksArgs,
 )
 async def list_scheduled_tasks(
     *,
@@ -257,9 +258,9 @@ async def list_scheduled_tasks(
     lines = ["Запланированные задачи:"]
     for task in tasks:
         schedule_info = ""
-        schedule_type = task.schedule_type if isinstance(task.schedule_type, str) else task.schedule_type.value
-        content_type = task.content_type if isinstance(task.content_type, str) else task.content_type.value
-        status = task.status if isinstance(task.status, str) else task.status.value
+        schedule_type = task.schedule_type
+        content_type = task.content_type
+        status = task.status
 
         if schedule_type == "cron":
             schedule_info = f"cron: {task.cron}"
@@ -282,7 +283,7 @@ async def list_scheduled_tasks(
     name="cancel_scheduled_task",
     description="Отменяет запланированную задачу по её ID",
     tags=["scheduling"],
-    args_schema=CancelScheduledTaskArgs,
+    parameters_model=CancelScheduledTaskArgs,
 )
 async def cancel_scheduled_task(
     schedule_task_id: str,

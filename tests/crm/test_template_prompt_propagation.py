@@ -400,7 +400,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
 
         repo = crm_container.relationship_type_repository
-        all_types = await repo.get_all_for_company(include_system=True, limit=1000)
+        all_types = await repo.list_by_company(include_system=True, limit=1000)
         mentions_row = next((t for t in all_types if t.type_id == "mentions"), None)
         assert mentions_row is not None, "у компании system должен быть тип mentions"
         original_prompt = mentions_row.prompt

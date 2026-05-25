@@ -200,8 +200,8 @@ async def _emit_browser_preview_mcp_event(
 
     event_type = _event_type_for_phase(tool_name, phase)
     state = ctx.state
-    task_id = str(getattr(state, "task_id", "") or "")
-    context_id = str(getattr(state, "context_id", "") or "")
+    task_id = state.task_id
+    context_id = state.context_id
     session_id = _session_id_from(tool_name, arguments, result)
     result_json = _mcp_result_json(result)
 

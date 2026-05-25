@@ -14,10 +14,11 @@ from core.db.models.platform import Usage
 from core.db.storage import Storage
 from core.logging import get_logger
 from core.models.billing_models import UsageRecord
-from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, _admin_ilike, _facet_query_fragment
+from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, _admin_ilike, facet_query_fragment
 
 logger = get_logger(__name__)
 ADMIN_USAGE_MAX_LIMIT = 5000
+
 
 class UsageRepository(BaseRepository[UsageRecord]):
     """
@@ -114,7 +115,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         col = Usage.value["usage_type"].astext
-        frag = _facet_query_fragment(q)
+        frag = facet_query_fragment(q)
         async with self._storage.get_session() as session:
             stmt = select(col).where(col.isnot(None)).where(col != "")
             if frag is not None:
@@ -132,7 +133,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
         col = Usage.value["resource_name"].astext
-        frag = _facet_query_fragment(q)
+        frag = facet_query_fragment(q)
         async with self._storage.get_session() as session:
             stmt = select(col).where(col.isnot(None)).where(col != "")
             if frag is not None:

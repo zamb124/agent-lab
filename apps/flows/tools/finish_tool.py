@@ -24,7 +24,7 @@ class FinishArgs(BaseModel):
     description="Завершает выполнение и возвращает финальный ответ пользователю",
     tags=["misc"],
     react_role=ReactToolRole.EXIT,
-    args_schema=FinishArgs,
+    parameters_model=FinishArgs,
 )
 async def finish(answer: str, *, state: "ExecutionState") -> str:
     return answer

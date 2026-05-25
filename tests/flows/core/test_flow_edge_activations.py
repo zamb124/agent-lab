@@ -5,16 +5,13 @@
 import pytest
 
 from apps.flows.src.runtime.flow import Flow
-from apps.flows.src.runtime.nodes import CodeNode
+from apps.flows.src.runtime.nodes import ResourceNode
 from apps.flows.src.streaming import BaseEmitter
 from core.state import ExecutionState
 
 
-def _trivial_code(node_id: str) -> str:
-    return f"""
-async def run(args, state):
-    return {{"k": "{node_id}"}}
-"""
+def _pass_node(node_id: str) -> ResourceNode:
+    return ResourceNode(node_id, {"type": "resource"})
 
 
 @pytest.mark.asyncio
@@ -23,12 +20,12 @@ async def test_flow_emits_edge_executed_linear(
 ) -> None:
     """После ноды A одно ребро A->B, одно edge_executed."""
     nodes = {
-        "a": CodeNode("a", {"type": "code", "code": _trivial_code("a")}),
-        "b": CodeNode("b", {"type": "code", "code": _trivial_code("b")}),
+        "a": _pass_node("a"),
+        "b": _pass_node("b"),
     }
     edges = [
-        {"from": "a", "to": "b"},
-        {"from": "b", "to": None},
+        {"from_node": "a", "to_node": "b"},
+        {"from_node": "b", "to_node": None},
     ]
     flow = Flow(
         flow_id=f"linear_{unique_id}",
@@ -61,15 +58,15 @@ async def test_flow_emits_two_edges_parallel(
 ) -> None:
     """Два безусловных исходящих из одной ноды — два edge_executed."""
     nodes = {
-        "a": CodeNode("a", {"type": "code", "code": _trivial_code("a")}),
-        "b": CodeNode("b", {"type": "code", "code": _trivial_code("b")}),
-        "c": CodeNode("c", {"type": "code", "code": _trivial_code("c")}),
+        "a": _pass_node("a"),
+        "b": _pass_node("b"),
+        "c": _pass_node("c"),
     }
     edges = [
-        {"from": "a", "to": "b"},
-        {"from": "a", "to": "c"},
-        {"from": "b", "to": None},
-        {"from": "c", "to": None},
+        {"from_node": "a", "to_node": "b"},
+        {"from_node": "a", "to_node": "c"},
+        {"from_node": "b", "to_node": None},
+        {"from_node": "c", "to_node": None},
     ]
     flow = Flow(
         flow_id=f"par_{unique_id}",
@@ -104,24 +101,23 @@ async def test_flow_emits_both_edges_on_and_join(
     0->1, 0->3, 1->2, 2->3; node 3 incoming_policy all — при открытии join два ребра к 3.
     """
     nodes = {
-        "0": CodeNode("0", {"type": "code", "code": _trivial_code("0")}),
-        "1": CodeNode("1", {"type": "code", "code": _trivial_code("1")}),
-        "2": CodeNode("2", {"type": "code", "code": _trivial_code("2")}),
-        "3": CodeNode(
+        "0": _pass_node("0"),
+        "1": _pass_node("1"),
+        "2": _pass_node("2"),
+        "3": ResourceNode(
             "3",
             {
-                "type": "code",
-                "code": _trivial_code("3"),
+                "type": "resource",
                 "incoming_policy": "all",
             },
         ),
     }
     edges = [
-        {"from": "0", "to": "1"},
-        {"from": "0", "to": "3"},
-        {"from": "1", "to": "2"},
-        {"from": "2", "to": "3"},
-        {"from": "3", "to": None},
+        {"from_node": "0", "to_node": "1"},
+        {"from_node": "0", "to_node": "3"},
+        {"from_node": "1", "to_node": "2"},
+        {"from_node": "2", "to_node": "3"},
+        {"from_node": "3", "to_node": None},
     ]
     flow = Flow(
         flow_id=f"join_{unique_id}",
@@ -147,4 +143,3 @@ async def test_flow_emits_both_edges_on_and_join(
     to3_from_2 = [c for c in calls if c[1] == "2" and c[2] == "3"]
     assert len(to3_from_0) == 1, f"0->3 once, {calls!r}"
     assert len(to3_from_2) == 1, f"2->3 once, {calls!r}"
-

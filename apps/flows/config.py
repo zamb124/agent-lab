@@ -8,7 +8,6 @@ from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
-from apps.flows.src.mock.config import MockConfig
 from core.config import BaseSettings
 from core.config import get_settings as core_get_settings
 from core.config import set_settings as core_set_settings
@@ -67,7 +66,6 @@ class FlowSettings(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     s3: S3Config = Field(default_factory=S3Config)
     external_flows: ExternalFlowsConfig = Field(default_factory=ExternalFlowsConfig)
-    mock: MockConfig = Field(default_factory=MockConfig)
     push: PushConfig = Field(default_factory=_default_push_config)
 
     cors_allow_origins: list[str] = Field(

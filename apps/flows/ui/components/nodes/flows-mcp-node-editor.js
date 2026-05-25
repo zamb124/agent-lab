@@ -13,7 +13,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import './flows-base-node-editor.js';
 import '../editors/flows-json-field-editor.js';
-import '../editors/flows-args-schema-form.js';
+import '../editors/flows-parameters-schema-form.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/platform-icon.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
@@ -385,9 +385,6 @@ export class FlowsMcpNodeEditor extends PlatformElement {
 
     _toolSchema(tool) {
         if (!tool || typeof tool !== 'object') return null;
-        if (tool.args_schema && typeof tool.args_schema === 'object' && Object.keys(tool.args_schema).length > 0) {
-            return tool.args_schema;
-        }
         if (tool.parameters_schema && typeof tool.parameters_schema === 'object'
             && tool.parameters_schema.properties && typeof tool.parameters_schema.properties === 'object') {
             return tool.parameters_schema.properties;
@@ -474,11 +471,11 @@ export class FlowsMcpNodeEditor extends PlatformElement {
                     ${schema ? html`
                         <details>
                             <summary>${this.t('mcp_node_editor.args_preview')}</summary>
-                            <flows-args-schema-form
+                            <flows-parameters-schema-form
                                 .schema=${schema}
                                 .values=${{}}
                                 ?readonly=${true}
-                            ></flows-args-schema-form>
+                            ></flows-parameters-schema-form>
                         </details>
                     ` : ''}
                     <details>

@@ -149,9 +149,11 @@ config = await get_container().flow_repository.get(flow_id)
 
 Хардкодить конфигурацию в Python — запрещено: бизнес-логика живёт в JSON-конфигах flows в БД.
 
-## Graph-based execution
+## Graph-based durable execution
 
-Выполнение — граф нод. `apps/flows/src/runtime/flow.py::Flow` обходит граф по рёбрам. Прерывание и запрос данных у пользователя — `FlowInterrupt`. Персистентность между запросами — `apps/flows/src/state/persistence.py::StateManager`. Детали — **`flows_logic.mdc`**, **`execution_state.mdc`**.
+Выполнение flows — graph-based durable workflow runtime. Граф нод обходится детерминированным оркестратором, а источник истины выполнения — append-only `workflow_events` + reducer. `ExecutionState` является projection, Redis — cache projection, snapshots — ускорение rehydrate. Runtime storage для выполнения не строится вокруг mutable row overwrite; новые изменения фиксируются только событиями ledger.
+
+Детали — **`durable_execution.mdc`**, **`flows_logic.mdc`**, **`execution_state.mdc`**.
 
 ## LLM, мультимодал, NanoBanana
 

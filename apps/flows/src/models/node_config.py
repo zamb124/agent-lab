@@ -7,10 +7,9 @@ Zero-Guess Architecture:
 - Input/Output схемы для валидации data flow
 """
 
-from collections.abc import Mapping
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar, Literal, cast
+from typing import ClassVar, Literal
 
 from pydantic import AliasChoices, ConfigDict, Field, RootModel, field_validator, model_validator
 
@@ -29,7 +28,7 @@ from .enums import ChannelType, NodeType
 from .exception_absorb_allow import ExceptionAbsorbAllowName
 from .external_api import HTTPMethod, ResponseSchema, ResponseType
 from .resource import ResourceReference
-from .tool_reference import CallParameter, ToolReference
+from .tool_reference import ToolReference
 
 
 def _parse_config_int(value: JsonValue, field_name: str) -> int:
@@ -44,9 +43,7 @@ def _parse_config_int(value: JsonValue, field_name: str) -> int:
         try:
             return int(stripped, 10)
         except ValueError as exc:
-            raise ValueError(
-                f"{field_name}: ожидается целое число, получено {value!r}"
-            ) from exc
+            raise ValueError(f"{field_name}: ожидается целое число, получено {value!r}") from exc
     raise ValueError(f"{field_name}: ожидается целое число, получено {type(value).__name__}")
 
 
@@ -72,23 +69,21 @@ class ReactConfig(StrictBaseModel):
 
     loop_mode: ReactLoopMode = Field(
         default=ReactLoopMode.AUTO,
-        description="Режим выхода: auto (текст = финал) или explicit (только через exit_tool)"
+        description="Режим выхода: auto (текст = финал) или explicit (только через exit_tool)",
     )
     exit_tool: str = Field(
-        default="finish",
-        description="Tool который завершает цикл в режиме explicit"
+        default="finish", description="Tool который завершает цикл в режиме explicit"
     )
     max_iterations: int = Field(
-        default=10,
-        description="Максимум итераций перед принудительным выходом"
+        default=10, description="Максимум итераций перед принудительным выходом"
     )
     strict: bool = Field(
         default=True,
-        description="Строгий режим: True = reminder при тексте без exit_tool, False = текст автозавершает"
+        description="Строгий режим: True = reminder при тексте без exit_tool, False = текст автозавершает",
     )
     reminder_message: str | None = Field(
         default=None,
-        description="Кастомный reminder. По умолчанию: 'Ты не вызвал tool X для завершения...'"
+        description="Кастомный reminder. По умолчанию: 'Ты не вызвал tool X для завершения...'",
     )
 
 
@@ -116,9 +111,6 @@ class NodeLLMConfig(LLMCallConfig):
         v: list[LLMCallConfig] | None,
     ) -> list[LLMCallConfig] | None:
         return validate_fallback_model_configs(v)
-
-
-NodeLLMOverride = NodeLLMConfig
 
 
 class NodeInputMapping(RootModel[dict[str, JsonValue]]):
@@ -213,9 +205,7 @@ class NodeConfig(StrictBaseModel):
 
     # Для llm_node
     prompt: str | None = Field(default=None, description="Системный промпт")
-    tools: list[ToolReference] = Field(
-        default_factory=list, description="Список инструментов"
-    )
+    tools: list[ToolReference] = Field(default_factory=list, description="Список инструментов")
     llm: NodeLLMConfig | None = Field(
         default=None,
         description="LLM настройки ноды (если None - из global config)",
@@ -278,9 +268,7 @@ class NodeConfig(StrictBaseModel):
             return "all"
         if isinstance(v, str):
             if v not in ("all", "own"):
-                raise ValueError(
-                    f"messages_filter: ожидается 'all' или 'own', получено {v!r}"
-                )
+                raise ValueError(f"messages_filter: ожидается 'all' или 'own', получено {v!r}")
             return v
         if isinstance(v, list):
             if not v:
@@ -301,17 +289,21 @@ class NodeConfig(StrictBaseModel):
         default_factory=NodeInputMapping,
         description="Маппинг входов ноды: target -> @state:path, @var:path или JSON-константа",
     )
-    save_to_messages: bool = Field(default=False, description="Добавлять результат ноды в state.messages")
-    message_field: str | None = Field(default=None, description="Поле результата для записи в messages")
+    save_to_messages: bool = Field(
+        default=False, description="Добавлять результат ноды в state.messages"
+    )
+    message_field: str | None = Field(
+        default=None, description="Поле результата для записи в messages"
+    )
 
     # Structured Output (взаимоисключающе с tools; использует output_schema как контракт ответа)
     structured_output: bool = Field(
         default=False,
-        description="Режим structured output вместо tools (response_format json_schema)"
+        description="Режим structured output вместо tools (response_format json_schema)",
     )
     output_mapping: dict[str, str] | None = Field(
         default=None,
-        description="Маппинг полей JSON -> state fields. Если None - поля записываются напрямую"
+        description="Маппинг полей JSON -> state fields. Если None - поля записываются напрямую",
     )
 
     # Для code-ноды (inline)
@@ -320,44 +312,43 @@ class NodeConfig(StrictBaseModel):
     entrypoint: str | None = Field(default=None, description="Имя entrypoint-функции")
     tool_id: str | None = Field(default=None, description="Ссылка на tool/library id для code-ноды")
     function: str | None = Field(default=None, description="Bundle-функция до инлайна в code")
-    args_schema: dict[str, CallParameter] = Field(
-        default_factory=dict,
-        description="JSON Schema аргументов code-ноды в legacy плоском формате",
-    )
     parameters_schema: JsonObject | None = Field(
         default=None,
         description="Полная JSON Schema параметров code-ноды/tool",
     )
-    output_key: str | None = Field(default=None, description="Legacy ключ результата ноды")
+    output_key: str | None = Field(default=None, description="Ключ результата ноды")
     llm_node_class: str | None = Field(default=None, description="Кастомный класс llm_node")
 
     # Для вложенных и удалённых flow
     flow_id: str | None = Field(default=None, description="ID вложенного или внешнего flow")
     branch_id: str = Field(default="default", description="ID ветки вложенного или внешнего flow")
-    config: JsonObject | None = Field(default=None, description="Вложенный legacy config блока flow-ноды")
+    config: JsonObject | None = Field(default=None, description="Вложенный config блока flow-ноды")
 
     # Для remote_flow / external_api / mcp
     url: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("url", "agent_url"),
         description="URL remote_flow или external_api",
     )
     method: HTTPMethod | None = Field(default=None, description="HTTP метод external_api")
     headers: dict[str, str] = Field(default_factory=dict, description="HTTP headers")
-    request_content_type: str | None = Field(default=None, description="Content-Type запроса external_api")
+    request_content_type: str | None = Field(
+        default=None, description="Content-Type запроса external_api"
+    )
     response_type: ResponseType | None = Field(default=None, description="Тип ответа external_api")
-    response_schema: ResponseSchema | None = Field(default=None, description="Схема ответа external_api")
+    response_schema: ResponseSchema | None = Field(
+        default=None, description="Схема ответа external_api"
+    )
     timeout: float | None = Field(default=None, description="Таймаут external_api в секундах")
     body_template: str | None = Field(default=None, description="JSON body template external_api")
-    state_mapping: dict[str, str] = Field(default_factory=dict, description="Маппинг ответа в state")
+    state_mapping: dict[str, str] = Field(
+        default_factory=dict, description="Маппинг ответа в state"
+    )
     server_id: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("server_id", "mcp_server"),
         description="MCP server id",
     )
     tool_name: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("tool_name", "mcp_tool"),
         description="MCP tool name",
     )
 
@@ -369,7 +360,7 @@ class NodeConfig(StrictBaseModel):
     # Декларативные LLM resources ноды
     resources: dict[str, ResourceReference] = Field(
         default_factory=dict,
-        description="LLM resources for llm_resource_key/resource islands. Sandbox code uses capabilities instead."
+        description="LLM resources for llm_resource_key/resource islands. Sandbox code uses capabilities instead.",
     )
 
     files: list[FileRef] = Field(
@@ -412,8 +403,7 @@ class NodeConfig(StrictBaseModel):
 
     # Контроль доступа для UI
     public_fields: list[str] | None = Field(
-        default=None,
-        description="Поля доступные для редактирования в UI. None = все поля доступны"
+        default=None, description="Поля доступные для редактирования в UI. None = все поля доступны"
     )
 
     exception_as_response: bool = Field(
@@ -475,20 +465,6 @@ class NodeConfig(StrictBaseModel):
             )
         return iv
 
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize_legacy_llm_override(cls, data: JsonValue) -> JsonValue:
-        if not isinstance(data, dict):
-            return data
-        raw = cast(Mapping[str, JsonValue], data)
-        if "llm_override" not in raw:
-            return dict(raw)
-        out: JsonObject = dict(raw)
-        legacy_llm = out.pop("llm_override", None)
-        if legacy_llm not in (None, {}):
-            out["llm"] = legacy_llm
-        return out
-
     @model_validator(mode="after")
     def validate_resource_node_excludes_agent_surface(self) -> "NodeConfig":
         if self.type != NodeType.RESOURCE:
@@ -530,11 +506,17 @@ class GraphNodeConfig(StrictBaseModel):
     pos_y: float | None = Field(default=None, description="Y-координата ноды на canvas редактора")
 
     prompt: str | None = Field(default=None, description="Системный промпт llm_node")
-    tools: list[ToolReference | JsonObject | str] = Field(default_factory=list, description="Tools llm_node")
+    tools: list[ToolReference | JsonObject | str] = Field(
+        default_factory=list, description="Tools llm_node"
+    )
     llm: NodeLLMConfig | None = Field(default=None, description="LLM настройки ноды")
     llm_context: LLMContextPatch | None = Field(default=None, description="Патч контекстного слоя")
-    llm_context_resource_key: str | None = Field(default=None, description="Ключ LLM context resource")
-    llm_capability: LLMCapability | None = Field(default=None, description="Декларативная LLM capability")
+    llm_context_resource_key: str | None = Field(
+        default=None, description="Ключ LLM context resource"
+    )
+    llm_capability: LLMCapability | None = Field(
+        default=None, description="Декларативная LLM capability"
+    )
     react: ReactConfig | None = Field(default=None, description="Конфигурация ReAct")
     messages_filter: Literal["all", "own"] | list[str] = Field(default="all")
     incoming_policy: Literal["any", "all"] = Field(default="any")
@@ -548,7 +530,6 @@ class GraphNodeConfig(StrictBaseModel):
     entrypoint: str | None = Field(default=None)
     tool_id: str | None = Field(default=None)
     function: str | None = Field(default=None)
-    args_schema: dict[str, CallParameter] = Field(default_factory=dict)
     parameters_schema: JsonObject | None = Field(default=None)
     output_key: str | None = Field(default=None)
     llm_node_class: str | None = Field(default=None)
@@ -557,10 +538,7 @@ class GraphNodeConfig(StrictBaseModel):
     branch_id: str = Field(default="default")
     config: JsonObject | None = Field(default=None)
 
-    url: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("url", "agent_url"),
-    )
+    url: str | None = Field(default=None)
     method: HTTPMethod | None = Field(default=None)
     headers: dict[str, str] = Field(default_factory=dict)
     request_content_type: str | None = Field(default=None)
@@ -569,14 +547,8 @@ class GraphNodeConfig(StrictBaseModel):
     timeout: float | None = Field(default=None)
     body_template: str | None = Field(default=None)
     state_mapping: dict[str, str] = Field(default_factory=dict)
-    server_id: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("server_id", "mcp_server"),
-    )
-    tool_name: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("tool_name", "mcp_tool"),
-    )
+    server_id: str | None = Field(default=None)
+    tool_name: str | None = Field(default=None)
 
     channel: ChannelType | None = Field(default=None)
     action: str | None = Field(default=None)

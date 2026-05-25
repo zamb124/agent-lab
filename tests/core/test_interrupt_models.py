@@ -1,4 +1,4 @@
-"""Модели InterruptData: union, миграция legacy, parse внешнего dict."""
+"""Модели InterruptData: strict union, strict envelope, parse external dict."""
 
 import pytest
 from pydantic import ValidationError
@@ -21,11 +21,11 @@ def test_user_message_interrupt_question() -> None:
     assert b.question == "hi"
 
 
-def test_interrupt_data_legacy_question_context() -> None:
+def test_interrupt_data_requires_typed_envelope() -> None:
     ir = InterruptData.model_validate(
         {
-            "question": "Name?",
-            "context": {"task_id": "t1", "path": [{"type": "tool", "id": "ask_user"}]},
+            "body": {"kind": "user_message", "question": "Name?"},
+            "system": {"task_id": "t1", "path": [{"type": "tool", "id": "ask_user"}]},
         }
     )
     assert ir.body.kind == InterruptKind.USER_MESSAGE
@@ -38,11 +38,13 @@ def test_interrupt_data_legacy_question_context() -> None:
 
 def test_interrupt_data_rejects_unknown_shape() -> None:
     with pytest.raises(ValidationError):
-        InterruptData.model_validate({"foo": 1})
+        _ = InterruptData.model_validate({"foo": 1})
 
 
-def test_parse_external_legacy_question_only() -> None:
-    b = parse_interrupt_body_from_external_dict({"question": "Need input"})
+def test_parse_external_user_message_requires_kind() -> None:
+    b = parse_interrupt_body_from_external_dict(
+        {"kind": "user_message", "question": "Need input"}
+    )
     assert isinstance(b, UserMessageInterrupt)
     assert b.question == "Need input"
 
@@ -61,8 +63,8 @@ def test_parse_external_operator_task() -> None:
 
 
 def test_parse_external_empty_question_rejected() -> None:
-    with pytest.raises(ValueError):
-        parse_interrupt_body_from_external_dict({})
+    with pytest.raises(ValueError, match="kind"):
+        _ = parse_interrupt_body_from_external_dict({"question": "Need input"})
 
 
 def test_flow_interrupt_question_or_body() -> None:
@@ -77,9 +79,9 @@ def test_flow_interrupt_question_or_body() -> None:
     )
     assert e2.body.kind == InterruptKind.OPERATOR_TASK
     with pytest.raises(ValueError):
-        FlowInterrupt()
+        _ = FlowInterrupt()
     with pytest.raises(ValueError):
-        FlowInterrupt(question="", body=None)
+        _ = FlowInterrupt(question="", body=None)
 
 
 def test_interrupt_to_response_dict_roundtrip() -> None:
@@ -88,7 +90,7 @@ def test_interrupt_to_response_dict_roundtrip() -> None:
         system=InterruptSystemContext(task_id="t"),
     )
     payload = interrupt_to_response_dict(ir)
-    assert payload["question"] == "q"
+    assert "question" not in payload
     restored = InterruptData.model_validate(payload)
     assert restored.question == "q"
 

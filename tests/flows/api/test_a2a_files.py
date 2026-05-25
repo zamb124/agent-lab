@@ -101,9 +101,9 @@ class TestA2AFilesHandling:
         data = resp.json()
         assert "result" in data, f"Expected result, got: {data}"
 
-        state_manager = get_container().state_manager
+        workflow_runtime = get_container().workflow_runtime
         session_id = f"{flow_id}:{context_id}"
-        state = await state_manager.get_state(session_id)
+        state = await workflow_runtime.get_state(session_id)
 
         assert state is not None, "State should exist after message"
         assert "files" in state, "State should have files"
@@ -178,7 +178,7 @@ class TestA2AFilesHandling:
         )
 
         assert resp.status_code == 200
-        state = await get_container().state_manager.get_state(f"{flow_id}:{context_id}")
+        state = await get_container().workflow_runtime.get_state(f"{flow_id}:{context_id}")
         assert state is not None
         assert len(state["files"]) == 1
         file_info = state["files"][0]
@@ -220,9 +220,9 @@ class TestA2AFilesHandling:
         data = resp.json()
         assert "result" in data, f"Expected result, got: {data}"
 
-        state_manager = get_container().state_manager
+        workflow_runtime = get_container().workflow_runtime
         session_id = f"{flow_id}:{context_id}"
-        state = await state_manager.get_state(session_id)
+        state = await workflow_runtime.get_state(session_id)
 
         assert state is not None
         content = state.get("content", "")
@@ -281,9 +281,9 @@ class TestA2AFilesHandling:
         data = resp.json()
         assert "result" in data
 
-        state_manager = get_container().state_manager
+        workflow_runtime = get_container().workflow_runtime
         session_id = f"{flow_id}:{context_id}"
-        state = await state_manager.get_state(session_id)
+        state = await workflow_runtime.get_state(session_id)
 
         assert state is not None
         assert len(state["files"]) == 2, f"Should have 2 files, got: {state['files']}"
@@ -325,9 +325,9 @@ class TestA2AFilesHandling:
         data = resp.json()
         assert "result" in data
 
-        state_manager = get_container().state_manager
+        workflow_runtime = get_container().workflow_runtime
         session_id = f"{flow_id}:{context_id}"
-        state = await state_manager.get_state(session_id)
+        state = await workflow_runtime.get_state(session_id)
 
         assert state is not None
         assert state.get("files", []) == [], "Files should be empty list"

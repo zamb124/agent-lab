@@ -5,12 +5,13 @@
 
 import json
 import uuid
-from typing import Any
+from collections.abc import Awaitable, Callable
 
 from a2a.types import (
     DeleteTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigParams,
     ListTaskPushNotificationConfigParams,
+    PushNotificationConfig,
     TaskPushNotificationConfig,
 )
 
@@ -18,6 +19,7 @@ from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.types import JsonArray, JsonObject, parse_json_array, parse_json_object
 
 REDIS_PREFIX = "push_notification:"
 REDIS_TTL = 86400 * 7  # 7 days
@@ -25,6 +27,7 @@ REDIS_TTL = 86400 * 7  # 7 days
 logger = get_logger(__name__)
 # Singleton-экземпляр redis_client для core-задач
 _redis_client: RedisClient | None = None
+
 
 def _get_redis() -> RedisClient:
     """Получает или создает изолированный RedisClient для push уведомлений."""
@@ -34,45 +37,71 @@ def _get_redis() -> RedisClient:
         _redis_client = RedisClient(settings.database.redis_url)
     return _redis_client
 
-async def set_push_config(params: TaskPushNotificationConfig) -> dict[str, Any]:
+
+def _config_to_json(config: TaskPushNotificationConfig) -> str:
+    return config.model_dump_json(by_alias=True)
+
+
+def _config_from_json(data: str) -> TaskPushNotificationConfig:
+    return TaskPushNotificationConfig.model_validate(
+        parse_json_object(data, "TaskPushNotificationConfig")
+    )
+
+
+def _config_id_list_from_json(data: str) -> list[str]:
+    config_ids: JsonArray = parse_json_array(data, "push notification config ids")
+    result: list[str] = []
+    for config_id in config_ids:
+        if not isinstance(config_id, str):
+            raise ValueError("push notification config ids must be strings")
+        result.append(config_id)
+    return result
+
+
+def _config_id_list_to_json(config_ids: list[str]) -> str:
+    return json.dumps(config_ids)
+
+
+async def _load_config_ids(redis: RedisClient, task_id: str) -> list[str]:
+    existing = await redis.get(f"{REDIS_PREFIX}{task_id}:configs")
+    if existing is None:
+        return []
+    return _config_id_list_from_json(existing)
+
+
+async def set_push_config(params: TaskPushNotificationConfig) -> TaskPushNotificationConfig:
     """Сохраняет конфигурацию push notification."""
     redis = _get_redis()
 
     task_id = params.task_id
     push_config = params.push_notification_config
-    config_id = push_config.id or str(uuid.uuid4())
-
-    auth_data = None
-    if push_config.authentication:
-        auth_data = {
-            "credentials": push_config.authentication.credentials,
-            "schemes": push_config.authentication.schemes or [],
-        }
-
-    data = {
-        "taskId": task_id,
-        "pushNotificationConfig": {
-            "id": config_id,
-            "url": push_config.url,
-            "token": push_config.token,
-            "authentication": auth_data,
-        },
-    }
+    config_id = push_config.id if push_config.id is not None else str(uuid.uuid4())
+    stored_config = TaskPushNotificationConfig(
+        task_id=task_id,
+        push_notification_config=PushNotificationConfig(
+            authentication=push_config.authentication,
+            id=config_id,
+            token=push_config.token,
+            url=push_config.url,
+        ),
+    )
 
     key = f"{REDIS_PREFIX}{task_id}:{config_id}"
-    await redis.set(key, json.dumps(data), ttl=REDIS_TTL)
+    _ = await redis.set(key, _config_to_json(stored_config), ttl=REDIS_TTL)
 
     configs_key = f"{REDIS_PREFIX}{task_id}:configs"
-    existing = await redis.get(configs_key)
-    config_ids = json.loads(existing) if existing else []
+    config_ids = await _load_config_ids(redis, task_id)
     if config_id not in config_ids:
         config_ids.append(config_id)
-        await redis.set(configs_key, json.dumps(config_ids), ttl=REDIS_TTL)
+        _ = await redis.set(configs_key, _config_id_list_to_json(config_ids), ttl=REDIS_TTL)
 
     logger.info(f"Push config saved: task={task_id}, config={config_id}")
-    return data
+    return stored_config
 
-async def get_push_config(params: GetTaskPushNotificationConfigParams) -> dict[str, Any] | None:
+
+async def get_push_config(
+    params: GetTaskPushNotificationConfigParams,
+) -> TaskPushNotificationConfig | None:
     """Получает конфигурацию push notification."""
     redis = _get_redis()
     task_id = params.id
@@ -81,42 +110,36 @@ async def get_push_config(params: GetTaskPushNotificationConfigParams) -> dict[s
     if config_id:
         key = f"{REDIS_PREFIX}{task_id}:{config_id}"
         data = await redis.get(key)
-        return json.loads(data) if data else None
+        return _config_from_json(data) if data is not None else None
 
-    configs_key = f"{REDIS_PREFIX}{task_id}:configs"
-    existing = await redis.get(configs_key)
-    if not existing:
-        return None
-
-    config_ids = json.loads(existing)
+    config_ids = await _load_config_ids(redis, task_id)
     if not config_ids:
         return None
 
     key = f"{REDIS_PREFIX}{task_id}:{config_ids[0]}"
     data = await redis.get(key)
-    return json.loads(data) if data else None
+    return _config_from_json(data) if data is not None else None
 
-async def list_push_configs(params: ListTaskPushNotificationConfigParams) -> list[dict[str, Any]]:
+
+async def list_push_configs(params: ListTaskPushNotificationConfigParams) -> list[TaskPushNotificationConfig]:
     """Список конфигураций для задачи."""
     redis = _get_redis()
     task_id = params.id
 
-    configs_key = f"{REDIS_PREFIX}{task_id}:configs"
-    existing = await redis.get(configs_key)
-
-    if not existing:
+    config_ids = await _load_config_ids(redis, task_id)
+    if not config_ids:
         return []
 
-    config_ids = json.loads(existing)
-    result = []
+    result: list[TaskPushNotificationConfig] = []
 
     for cid in config_ids:
         key = f"{REDIS_PREFIX}{task_id}:{cid}"
         data = await redis.get(key)
-        if data:
-            result.append(json.loads(data))
+        if data is not None:
+            result.append(_config_from_json(data))
 
     return result
+
 
 async def delete_push_config(params: DeleteTaskPushNotificationConfigParams) -> None:
     """Удаляет конфигурацию push notification."""
@@ -125,24 +148,25 @@ async def delete_push_config(params: DeleteTaskPushNotificationConfigParams) -> 
     config_id = params.push_notification_config_id
 
     key = f"{REDIS_PREFIX}{task_id}:{config_id}"
-    await redis.delete(key)
+    _ = await redis.delete(key)
 
     configs_key = f"{REDIS_PREFIX}{task_id}:configs"
     existing = await redis.get(configs_key)
-    if existing:
-        config_ids = json.loads(existing)
+    if existing is not None:
+        config_ids = _config_id_list_from_json(existing)
         if config_id in config_ids:
             config_ids.remove(config_id)
-            await redis.set(configs_key, json.dumps(config_ids), ttl=REDIS_TTL)
+            _ = await redis.set(configs_key, _config_id_list_to_json(config_ids), ttl=REDIS_TTL)
 
     logger.info(f"Push config deleted: task={task_id}, config={config_id}")
 
+
 async def send_webhook(
     url: str,
-    payload: dict[str, Any],
+    payload: JsonObject,
     token: str | None = None,
     credentials: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Отправляет webhook."""
     headers = {"Content-Type": "application/json"}
 
@@ -160,8 +184,17 @@ async def send_webhook(
         logger.info(f"Push notification sent to {url}")
         return {"success": True, "status_code": response.status_code}
 
+
 async def process_send_task_update(
-    task_id: str, context_id: str, state: str, message: str | None, is_final: bool, webhook_trigger_func
+    task_id: str,
+    context_id: str,
+    state: str,
+    message: str | None,
+    is_final: bool,
+    webhook_trigger_func: Callable[
+        [str, JsonObject, str | None, str | None],
+        Awaitable[None],
+    ],
 ) -> None:
     """Отправляет уведомление всем подписчикам задачи.
     `webhook_trigger_func` - это kiq-вызов, чтобы мы могли ретраить webhooks средствами брокера через worker."""
@@ -171,30 +204,30 @@ async def process_send_task_update(
     if not configs:
         return
 
-    payload = {
+    status: JsonObject = {
+        "state": state,
+        "message": None,
+    }
+    if message is not None:
+        status["message"] = {
+            "role": "agent",
+            "parts": [{"kind": "text", "text": message}],
+        }
+
+    payload: JsonObject = {
         "jsonrpc": "2.0",
         "method": "tasks/pushNotification",
         "params": {
             "taskId": task_id,
             "contextId": context_id,
-            "status": {
-                "state": state,
-                "message": {"role": "agent", "parts": [{"kind": "text", "text": message or ""}]}
-                if message
-                else None,
-            },
+            "status": status,
             "final": is_final,
         },
     }
 
-    for config_data in configs:
-        push_config = config_data.get("pushNotificationConfig", {})
-        url = push_config.get("url")
-        if not url:
-            continue
+    for config in configs:
+        push_config = config.push_notification_config
+        auth = push_config.authentication
+        credentials = auth.credentials if auth is not None else None
 
-        token = push_config.get("token")
-        auth = push_config.get("authentication", {})
-        credentials = auth.get("credentials") if auth else None
-
-        await webhook_trigger_func(url, payload, token, credentials)
+        await webhook_trigger_func(push_config.url, payload, push_config.token, credentials)

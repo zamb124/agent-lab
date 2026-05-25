@@ -2,22 +2,29 @@
 API для управления документами RAG.
 """
 
-import json
-from typing import Any
+from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from apps.rag.config import get_rag_settings
-from apps.rag_worker.tasks.indexing_tasks import index_rag_document_s3_task
+from apps.rag_worker.broker import broker as rag_worker_broker
 from core.context import require_active_company, require_context
 from core.files.models import FileResponse
 from core.files.processors import FileProcessor
 from core.logging import get_logger
+from core.models import StrictBaseModel
 from core.pagination import OffsetPage
 from core.rag.factory import get_rag_provider
-from core.rag.models import RAGDocument
+from core.rag.models import (
+    DocumentProcessingStatus,
+    RAGDocument,
+    RAGIngestTextResponse,
+    RAGMetadata,
+)
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
+from core.tasks.kicker import kiq_task_name_with_context
+from core.types import JsonObject, parse_json_object
 
 from ..dependencies import ContainerDep
 from .namespace_access import (
@@ -34,37 +41,27 @@ router = APIRouter(tags=["documents"])
 # DocumentListResponse is replaced by OffsetPage[RAGDocument]
 
 
-class DocumentUploadResponse(BaseModel):
+class DocumentUploadResponse(StrictBaseModel):
     document_id: str
     task_id: str
     status: str
     file: FileResponse
 
 
-class IngestTextRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class IngestTextRequest(StrictBaseModel):
     text: str = Field(..., min_length=1)
     document_name: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: RAGMetadata = Field(default_factory=dict)
     document_id: str | None = None
 
 
-class IngestTextResponse(BaseModel):
-    document_id: str
-    document_name: str
-    namespace_id: str
-    status: str
-    provider: str
-
-
-@router.post("/namespaces/{namespace_id}/ingest-text", response_model=IngestTextResponse)
+@router.post("/namespaces/{namespace_id}/ingest-text", response_model=RAGIngestTextResponse)
 async def ingest_text(
     namespace_id: str,
     request: IngestTextRequest,
     container: ContainerDep,
-    provider: str | None = Query(None),
-) -> IngestTextResponse:
+    provider: Annotated[str | None, Query()] = None,
+) -> RAGIngestTextResponse:
     """
     Синхронная индексация произвольного текста в namespace (без файла и S3).
     Namespace должен существовать в репозитории текущей компании.
@@ -77,7 +74,7 @@ async def ingest_text(
     company_id = require_active_company().company_id
     user_id = context.user.user_id
 
-    merged_meta: dict[str, Any] = dict(request.metadata)
+    merged_meta: RAGMetadata = dict(request.metadata)
     merged_meta["company_id"] = company_id
     merged_meta["uploaded_by_user_id"] = user_id
     if request.document_id:
@@ -102,7 +99,7 @@ async def ingest_text(
         metadata=merged_meta,
     )
 
-    return IngestTextResponse(
+    return RAGIngestTextResponse(
         document_id=doc.document_id,
         document_name=doc.name,
         namespace_id=namespace_id,
@@ -115,9 +112,9 @@ async def ingest_text(
 async def list_documents(
     namespace_id: str,
     container: ContainerDep,
-    offset: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    provider: str | None = Query(None),
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    provider: Annotated[str | None, Query()] = None,
 ) -> OffsetPage[RAGDocument]:
     """Список документов в namespace (completed + in-progress)."""
     settings = get_rag_settings()
@@ -160,9 +157,9 @@ async def list_documents(
 async def upload_document(
     namespace_id: str,
     container: ContainerDep,
-    file: UploadFile = File(...),
-    metadata: str = Form(default="{}"),
-    provider: str | None = Query(None),
+    file: Annotated[UploadFile, File()],
+    metadata: Annotated[str, Form()] = "{}",
+    provider: Annotated[str | None, Query()] = None,
 ) -> DocumentUploadResponse:
     """
     Принимает документ, сохраняет через FileProcessor (FileRecord в shared DB),
@@ -172,7 +169,7 @@ async def upload_document(
     if not settings.s3.enabled or not settings.s3.default_bucket:
         raise HTTPException(status_code=503, detail="S3 не настроен.")
 
-    metadata_dict: dict[str, Any] = json.loads(metadata) if metadata else {}
+    metadata_dict: RAGMetadata = parse_json_object(metadata, "metadata") if metadata else {}
     file_data = await file.read()
 
     context = require_context()
@@ -203,11 +200,14 @@ async def upload_document(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    ttl_sec = int(metadata_dict["ttl_seconds"])
+    ttl_raw = metadata_dict["ttl_seconds"]
+    if not isinstance(ttl_raw, int) or isinstance(ttl_raw, bool):
+        raise RuntimeError("ensure_ttl_seconds_in_metadata returned non-integer ttl_seconds")
+    ttl_sec = ttl_raw
 
     task_id_placeholder = f"pending_{document_id}"
     status_repo = container.document_status_repository
-    await status_repo.create_status(
+    _ = await status_repo.create_status(
         document_id=document_id,
         task_id=task_id_placeholder,
         namespace_id=namespace_id,
@@ -217,15 +217,18 @@ async def upload_document(
         extra_metadata={},
     )
 
-    task = await index_rag_document_s3_task.kiq(
+    task = await kiq_task_name_with_context(
+        "rag.index_document_s3",
+        rag_worker_broker,
         company_id=company_id,
         namespace_id=namespace_id,
         s3_key=file_record.s3_key,
         document_name=file.filename or "document",
         metadata=dict(metadata_dict),
+        provider=provider,
     )
 
-    await status_repo.finalize_enqueued_indexing_task(document_id, task.task_id)
+    _ = await status_repo.finalize_enqueued_indexing_task(document_id, task.task_id)
 
     logger.info(
         f"Документ принят: doc_id={document_id}, task_id={task.task_id}, s3_key={file_record.s3_key}"
@@ -243,8 +246,8 @@ async def delete_document(
     namespace_id: str,
     document_id: str,
     container: ContainerDep,
-    provider: str | None = Query(None),
-):
+    provider: Annotated[str | None, Query()] = None,
+) -> JsonObject:
     """Удаляет документ из S3, shared DB и векторного индекса."""
     status_repo = container.document_status_repository
     status = await status_repo.get_by_document_id(document_id)
@@ -252,10 +255,10 @@ async def delete_document(
     file_record = await container.file_repository.get(document_id)
     if file_record is not None:
         processor = FileProcessor(file_repository=container.file_repository)
-        await processor.delete_file(document_id)
+        _ = await processor.delete_file(document_id)
 
     if status is not None:
-        await status_repo.delete_by_document_id(document_id)
+        _ = await status_repo.delete_by_document_id(document_id)
 
     settings = get_rag_settings()
     rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
@@ -272,7 +275,7 @@ async def delete_document(
 async def get_document_status(
     document_id: str,
     container: ContainerDep,
-):
+) -> DocumentProcessingStatus:
     """Статус обработки документа."""
     status_repo = container.document_status_repository
     status = await status_repo.get_by_document_id(document_id)

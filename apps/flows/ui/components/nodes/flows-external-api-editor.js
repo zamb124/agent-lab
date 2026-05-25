@@ -5,7 +5,7 @@
  * Данные в запрос: через input_mapping (общий маппинг как у всех нод): ключи входа подставляются в {имя}
  * в URL и мержатся в JSON body после body_template.
  * Шаблоны — @state: / @var: в строках заголовков и body_template.
- * Для ноды как тула у LLM — args_schema задайте через общий редактор ноды (/workbench), когда нужно.
+ * Для ноды как тула у LLM — parameters_schema задайте через общий редактор ноды (/workbench), когда нужно.
  */
 
 import { html, css } from 'lit';

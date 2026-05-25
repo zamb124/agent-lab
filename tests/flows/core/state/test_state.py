@@ -1,7 +1,6 @@
-"""
-Тесты для StateManager.
-State содержит A2A типы (Message).
-"""
+"""Тесты durable workflow projection для ExecutionState."""
+
+from __future__ import annotations
 
 import uuid
 
@@ -9,30 +8,56 @@ import pytest
 from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.container import get_container
-from apps.flows.src.state import StateManager
+from apps.flows.src.durable_execution import (
+    NodeFailedPayload,
+    RunStartedPayload,
+    SuperstepCommittedPayload,
+    SuperstepStartedPayload,
+    UserInputAppliedPayload,
+    WorkflowEventType,
+    create_initial_state,
+)
+from apps.flows.src.durable_execution.manager import DurableWorkflowRuntime
 from core.state import ExecutionState
 
 
 def _msg(text: str, role: Role = Role.user) -> Message:
-    """Создаёт A2A Message для тестов."""
     return Message(
-        messageId=str(uuid.uuid4()),
+        message_id=str(uuid.uuid4()),
         role=role,
         parts=[Part(root=TextPart(text=text))],
     )
 
 
-class TestStateManager:
-    """Тесты StateManager."""
+def _user_input_payload(state: ExecutionState) -> UserInputAppliedPayload:
+    return UserInputAppliedPayload(
+        task_id=state.task_id,
+        context_id=state.context_id,
+        is_resume=False,
+    )
 
-    def test_execution_state_rejects_deprecated_terminal_field_names(self):
-        with pytest.raises(ValueError, match="deprecated field names"):
-            ExecutionState(
-                task_id="test-task",
-                context_id="test-context",
-                user_id="test-user",
-                session_id="test-flow:test-context",
-                terminal_status="completed",
+
+def _manual_superstep_payload(step: str) -> SuperstepCommittedPayload:
+    return SuperstepCommittedPayload(completed_nodes=[step], next_nodes=[])
+
+
+@pytest.fixture
+def workflow_runtime(app: object) -> DurableWorkflowRuntime:
+    _ = app
+    return get_container().workflow_runtime
+
+
+class TestDurableWorkflowProjection:
+    def test_execution_state_rejects_forbidden_terminal_field_names(self):
+        with pytest.raises(ValueError, match="system field names"):
+            _ = ExecutionState.model_validate(
+                {
+                    "task_id": "test-task",
+                    "context_id": "test-context",
+                    "user_id": "test-user",
+                    "session_id": "test-flow:test-context",
+                    "terminal_status": "completed",
+                }
             )
 
         state = ExecutionState(
@@ -41,310 +66,297 @@ class TestStateManager:
             user_id="test-user",
             session_id="test-flow:test-context",
         )
-        with pytest.raises(ValueError, match="deprecated field name"):
+        with pytest.raises(ValueError, match="system field name"):
             state.terminal_error = "failed"
 
-    @pytest.fixture
-    def state_manager(self, app) -> StateManager:
-        """Production StateManager с реальными Redis и БД."""
-        container = get_container()
-        return container.state_manager
-
     @pytest.mark.asyncio
-    async def test_get_state_returns_none_for_new_session(self, state_manager: StateManager):
-        """get_state возвращает None для новой сессии."""
-        state = await state_manager.get_state("new_session_123")
-
+    async def test_get_state_returns_none_for_new_session(
+        self,
+        workflow_runtime: DurableWorkflowRuntime,
+    ):
+        state = await workflow_runtime.get_state(f"new_session:{uuid.uuid4().hex}")
         assert state is None
 
     @pytest.mark.asyncio
-    async def test_save_and_get_state(self, state_manager: StateManager):
-        """Сохранение и получение state с A2A Message."""
-        from core.state import ExecutionState
-
-        session_id = f"test_save_get_state_{uuid.uuid4().hex[:8]}"
-
-        user_msg = _msg("Hello", Role.user)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
+    async def test_save_and_get_projection_with_a2a_messages(
+        self,
+        workflow_runtime: DurableWorkflowRuntime,
+    ):
+        session_id = f"test_save_get_state:{uuid.uuid4().hex}"
+        state = create_initial_state(
+            task_id=f"task-{uuid.uuid4().hex}",
+            context_id=session_id.split(":", 1)[1],
             user_id="test-user",
-            session_id="test-agent:test-context",
-            messages=[user_msg],
-            variables={"key": "value"},
-            custom_field=123
+            session_id=session_id,
         )
+        state.messages = [_msg("Hello", Role.user)]
+        state.variables = {"key": "value"}
 
-        await state_manager.save_state(session_id, state)
-        loaded = await state_manager.get_state(session_id)
+        _ = await workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.user_input_applied,
+            payload=_user_input_payload(state),
+            snapshot=True,
+        )
+        loaded = await workflow_runtime.get_state(session_id)
 
-        # messages содержат A2A Message объекты
+        assert loaded is not None
         assert len(loaded.messages) == 1
         assert isinstance(loaded.messages[0], Message)
         assert loaded.messages[0].role == Role.user
-        assert loaded.messages[0].parts[0].root.text == "Hello"
-
+        root = loaded.messages[0].parts[0].root
+        assert isinstance(root, TextPart)
+        assert root.text == "Hello"
         assert loaded.variables == {"key": "value"}
-        assert loaded.custom_field == 123
-
-        # Cleanup
-        await state_manager.delete_state(session_id)
 
     @pytest.mark.asyncio
-    async def test_delete_state(self, state_manager: StateManager):
-        """Удаление state."""
-        from core.state import ExecutionState
-
-        session_id = f"test_delete_state_{uuid.uuid4().hex[:8]}"
-
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            data="test"
-        )
-        await state_manager.save_state(session_id, state)
-        await state_manager.delete_state(session_id)
-
-        # После удаления должен быть None
-        state = await state_manager.get_state(session_id)
-        assert state is None
-
-    def test_add_message(self, state_manager: StateManager):
-        """Добавление A2A Message в state."""
-        from core.state import ExecutionState
-
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context"
-        )
-
-        msg1 = _msg("Hello!", Role.user)
-        msg2 = _msg("Hi there!", Role.agent)
-        state_manager.add_message(state, msg1)
-        state_manager.add_message(state, msg2)
-
-        assert len(state.messages) == 2
-        assert state.messages[0].role == Role.user
-        assert state.messages[0].parts[0].root.text == "Hello!"
-        assert state.messages[1].role == Role.agent
-        assert state.messages[1].parts[0].root.text == "Hi there!"
-
-    def test_add_user_message(self, state_manager: StateManager):
-        """add_user_message создаёт Message с role=user."""
-        from core.state import ExecutionState
-
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context"
-        )
-
-        state_manager.add_user_message(state, "User message")
-
-        assert len(state.messages) == 1
-        assert state.messages[0].role == Role.user
-        assert state.messages[0].parts[0].root.text == "User message"
-
-    def test_add_agent_message(self, state_manager: StateManager):
-        """add_agent_message создаёт Message с role=agent."""
-        from core.state import ExecutionState
-
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context"
-        )
-
-        state_manager.add_agent_message(state, "Agent response")
-
-        assert len(state.messages) == 1
-        assert state.messages[0].role == Role.agent
-        assert state.messages[0].parts[0].root.text == "Agent response"
-
-    def test_add_message_creates_messages_list(self, state_manager: StateManager):
-        """add_message создаёт messages если его нет."""
-        from core.state import ExecutionState
-
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context"
-        )
-
-        state_manager.add_user_message(state, "Test")
-
-        assert len(state.messages) == 1
-
-    @pytest.mark.asyncio
-    async def test_get_messages(self, state_manager: StateManager):
-        """Получение списка A2A Message."""
-        from core.state import ExecutionState
-
-        msg1 = _msg("Hello", Role.user)
-        msg2 = _msg("Hi", Role.agent)
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            messages=[msg1, msg2]
-        )
-
-        messages = await state_manager.get_messages(state)
-
-        assert len(messages) == 2
-        assert messages[0].role == Role.user
-        assert messages[1].role == Role.agent
-
-    @pytest.mark.asyncio
-    async def test_get_messages_empty(self, state_manager: StateManager):
-        """get_messages для пустого state."""
-        from core.state import ExecutionState
-
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context"
-        )
-
-        messages = await state_manager.get_messages(state)
-
-        assert messages == []
-
-    @pytest.mark.asyncio
-    async def test_state_persistence(self, state_manager: StateManager):
-        """State сохраняется между вызовами."""
-        from core.state import ExecutionState
-
-        session_id = f"test_persistence_{uuid.uuid4().hex[:8]}"
-
-        # Первый вызов - создаём state
-        state1 = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context"
-        )
-        state_manager.add_user_message(state1, "Message 1")
-        await state_manager.save_state(session_id, state1)
-
-        # Второй вызов - загружаем и добавляем
-        state2 = await state_manager.get_state(session_id)
-        state_manager.add_user_message(state2, "Message 2")
-        await state_manager.save_state(session_id, state2)
-
-        # Проверяем
-        final_state = await state_manager.get_state(session_id)
-        assert len(final_state.messages) == 2
-        assert final_state.messages[0].parts[0].root.text == "Message 1"
-        assert final_state.messages[1].parts[0].root.text == "Message 2"
-
-        # Cleanup
-        await state_manager.delete_state(session_id)
-
-
-class TestRedisBackedStateManager:
-    """Проверки production lifecycle: real Redis для hot state, real DB для terminal."""
-
-    @pytest.mark.asyncio
-    async def test_intermediate_state_is_stored_in_real_redis_only(self, app):
-        container = get_container()
-        manager = container.state_manager
-        repo = container.state_repository
-        session_id = f"redis_hot_flow:{uuid.uuid4().hex}"
-        state = ExecutionState(
+    async def test_history_and_load_state_at_sequence(
+        self,
+        workflow_runtime: DurableWorkflowRuntime,
+    ):
+        session_id = f"history_flow:{uuid.uuid4().hex}"
+        state = create_initial_state(
             task_id=f"task-{uuid.uuid4().hex}",
             context_id=session_id.split(":", 1)[1],
             user_id="test-user",
             session_id=session_id,
-            content="draft",
+            content="first",
+        )
+        state.variables = {"step": 1}
+
+        _ = await workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.user_input_applied,
+            payload=_user_input_payload(state),
+            snapshot=True,
+        )
+        state.content = "second"
+        state.variables["step"] = 2
+        _ = await workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.superstep_committed,
+            payload=_manual_superstep_payload("step-2"),
         )
 
-        try:
-            await manager.save_state(session_id, state)
+        history, total = await workflow_runtime.get_state_history(session_id)
+        state_at_first = await workflow_runtime.load_state_at_sequence(session_id, 1)
+        state_at_second = await workflow_runtime.load_state_at_sequence(session_id, 2)
 
-            assert await repo.get(session_id) is None
-            assert await container.redis_client.get(manager._state_key(session_id)) is not None
+        assert total == 2
+        assert [event.sequence for event in history] == [1, 2]
+        assert state_at_first is not None
+        assert state_at_first.content == "first"
+        assert state_at_first.variables == {"step": 1}
+        assert state_at_second is not None
+        assert state_at_second.content == "second"
+        assert state_at_second.variables == {"step": 2}
 
-            loaded = await manager.get_state(session_id)
-            assert loaded is not None
-            assert loaded.content == "draft"
-            assert (
-                await manager.resolve_session_id_by_flow_and_identifier(
-                    "redis_hot_flow", state.task_id
-                )
-                == session_id
+    @pytest.mark.asyncio
+    async def test_fork_rewind_and_manual_patch_are_branch_based(
+        self,
+        workflow_runtime: DurableWorkflowRuntime,
+    ):
+        session_id = f"time_travel_flow:{uuid.uuid4().hex}"
+        state = create_initial_state(
+            task_id=f"task-{uuid.uuid4().hex}",
+            context_id=session_id.split(":", 1)[1],
+            user_id="test-user",
+            session_id=session_id,
+            content="first",
+        )
+        state.variables = {"step": 1}
+
+        _ = await workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.user_input_applied,
+            payload=_user_input_payload(state),
+            snapshot=True,
+        )
+        state.content = "second"
+        state.variables = {"step": 2}
+        _ = await workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.superstep_committed,
+            payload=_manual_superstep_payload("step-2"),
+        )
+
+        fork = await workflow_runtime.fork_state_at_sequence(session_id, 1)
+        fork_state = await workflow_runtime.load_state_at_sequence(
+            session_id,
+            fork.sequence,
+            execution_branch_id=fork.execution_branch_id,
+        )
+        active_before_rewind = await workflow_runtime.get_state(session_id)
+
+        assert fork_state is not None
+        assert fork_state.content == "first"
+        assert active_before_rewind is not None
+        assert active_before_rewind.content == "second"
+
+        rewind = await workflow_runtime.rewind_to_sequence(session_id, 1)
+        rewound = await workflow_runtime.get_state(session_id)
+        assert rewound is not None
+        assert rewound.content == "first"
+
+        patched = ExecutionState.model_validate(
+            rewound.model_dump(mode="json", exclude_none=False)
+        )
+        patched.content = "patched"
+        patch = await workflow_runtime.patch_state_at_sequence(
+            session_id,
+            rewind.sequence,
+            patched,
+        )
+        patched_loaded = await workflow_runtime.get_state(session_id)
+        branches = await workflow_runtime.list_branches(session_id)
+
+        assert patched_loaded is not None
+        assert patched_loaded.content == "patched"
+        assert patch.reason.value == "manual_patch"
+        assert len(branches) == 4
+        assert sum(1 for branch in branches if branch.is_active) == 1
+
+    @pytest.mark.asyncio
+    async def test_retry_from_failure_restores_failed_node_boundary(
+        self,
+        workflow_runtime: DurableWorkflowRuntime,
+    ):
+        session_id = f"retry_flow:{uuid.uuid4().hex}"
+        state = create_initial_state(
+            task_id=f"task-{uuid.uuid4().hex}",
+            context_id=session_id.split(":", 1)[1],
+            user_id="test-user",
+            session_id=session_id,
+            content="start",
+        )
+        state.current_nodes = ["n1"]
+
+        _ = await workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.superstep_started,
+            payload=SuperstepStartedPayload(current_nodes=["n1"]),
+            snapshot=True,
+        )
+        _ = await workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.node_failed,
+            payload=NodeFailedPayload(
+                failed_nodes=["n1"],
+                current_nodes=["n1"],
+                error="boom",
+                recover_sequence=1,
+                preserved_node_writes=[],
+            ),
+        )
+
+        retry = await workflow_runtime.retry_from_failure(session_id)
+        retried = await workflow_runtime.get_state(session_id)
+        history, _ = await workflow_runtime.get_state_history(session_id)
+
+        assert retry.reason.value == "retry"
+        assert retried is not None
+        assert retried.current_nodes == ["n1"]
+        assert history[-1].event_type is WorkflowEventType.retry_scheduled
+
+    @pytest.mark.asyncio
+    async def test_projection_rehydrates_after_cache_delete(
+        self,
+        workflow_runtime: DurableWorkflowRuntime,
+    ):
+        session_id = f"rehydrate_flow:{uuid.uuid4().hex}"
+        state = create_initial_state(
+            task_id=f"task-{uuid.uuid4().hex}",
+            context_id=session_id.split(":", 1)[1],
+            user_id="test-user",
+            session_id=session_id,
+            content="cached",
+        )
+
+        _ = await workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.state_projection_committed,
+            snapshot=True,
+        )
+        assert await workflow_runtime.delete_state(session_id) is True
+
+        loaded = await workflow_runtime.get_state(session_id)
+        assert loaded is not None
+        assert loaded.content == "cached"
+
+    @pytest.mark.asyncio
+    async def test_terminal_event_updates_projection(
+        self,
+        workflow_runtime: DurableWorkflowRuntime,
+    ):
+        session_id = f"terminal_flow:{uuid.uuid4().hex}"
+        state = create_initial_state(
+            task_id=f"task-{uuid.uuid4().hex}",
+            context_id=session_id.split(":", 1)[1],
+            user_id="test-user",
+            session_id=session_id,
+        )
+        state.response = "done"
+
+        _ = await workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.run_started,
+            payload=RunStartedPayload(),
+            snapshot=True,
+        )
+        _ = await workflow_runtime.save_terminal_state(session_id, state, "completed")
+
+        loaded = await workflow_runtime.get_state(session_id)
+        history, total = await workflow_runtime.get_state_history(session_id)
+
+        assert loaded is not None
+        assert loaded.terminal_task_state == "completed"
+        assert loaded.response == "done"
+        assert total == 2
+        assert history[-1].event_type is WorkflowEventType.run_terminal
+
+    @pytest.mark.asyncio
+    async def test_resolve_session_by_task_or_context(
+        self,
+        workflow_runtime: DurableWorkflowRuntime,
+    ):
+        session_id = f"resolve_flow:{uuid.uuid4().hex}"
+        context_id = session_id.split(":", 1)[1]
+        task_id = f"task-{uuid.uuid4().hex}"
+        state = create_initial_state(
+            task_id=task_id,
+            context_id=context_id,
+            user_id="test-user",
+            session_id=session_id,
+        )
+
+        _ = await workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=WorkflowEventType.user_input_applied,
+            payload=_user_input_payload(state),
+            snapshot=True,
+        )
+
+        assert (
+            await workflow_runtime.resolve_session_id_by_flow_and_identifier(
+                "resolve_flow",
+                task_id,
             )
-            assert (
-                await manager.resolve_session_id_by_flow_and_identifier(
-                    "redis_hot_flow", state.context_id
-                )
-                == session_id
+            == session_id
+        )
+        assert (
+            await workflow_runtime.resolve_session_id_by_flow_and_identifier(
+                "resolve_flow",
+                context_id,
             )
-        finally:
-            await manager.delete_state(session_id)
-
-    @pytest.mark.asyncio
-    async def test_terminal_state_is_stored_in_db_and_clears_real_redis(self, app):
-        container = get_container()
-        manager = container.state_manager
-        repo = container.state_repository
-        session_id = f"redis_terminal_flow:{uuid.uuid4().hex}"
-        state = ExecutionState(
-            task_id=f"task-{uuid.uuid4().hex}",
-            context_id=session_id.split(":", 1)[1],
-            user_id="test-user",
-            session_id=session_id,
-            response="done",
+            == session_id
         )
-
-        try:
-            await manager.save_state(session_id, state)
-            task_key, context_key = manager._index_keys(state)
-
-            await manager.save_terminal_state(session_id, state, "completed")
-
-            assert await container.redis_client.get(manager._state_key(session_id)) is None
-            assert await container.redis_client.get(task_key) is None
-            assert await container.redis_client.get(context_key) is None
-
-            persisted = await repo.get(session_id)
-            assert persisted is not None
-            assert persisted.terminal_task_state == "completed"
-
-            loaded = await manager.get_state(session_id)
-            assert loaded is not None
-            assert loaded.terminal_task_state == "completed"
-            assert loaded.response == "done"
-        finally:
-            await manager.delete_state(session_id)
-
-    @pytest.mark.asyncio
-    async def test_db_fallback_ignores_non_terminal_snapshot_when_real_redis_is_empty(self, app):
-        container = get_container()
-        manager = container.state_manager
-        repo = container.state_repository
-        session_id = f"redis_stale_db_flow:{uuid.uuid4().hex}"
-        state = ExecutionState(
-            task_id=f"task-{uuid.uuid4().hex}",
-            context_id=session_id.split(":", 1)[1],
-            user_id="test-user",
-            session_id=session_id,
-            content="old-db-checkpoint",
-        )
-
-        try:
-            await repo.set(session_id, state)
-
-            assert await container.redis_client.get(manager._state_key(session_id)) is None
-            assert await manager.get_state(session_id) is None
-        finally:
-            await manager.delete_state(session_id)

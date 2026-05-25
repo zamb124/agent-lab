@@ -45,7 +45,7 @@ def is_llm_resource_island_dict(
     if not isinstance(nr, dict) or len(nr) != 1:
         return False
     resources = require_json_object(nr, "resource_node.resources")
-    (bind_key, ref_raw), = resources.items()
+    ((bind_key, ref_raw),) = resources.items()
     ref = ResourceReference.model_validate(ref_raw) if isinstance(ref_raw, dict) else None
     inline_t = ref.type if ref is not None else None
     if inline_t is not None:
@@ -78,29 +78,17 @@ def llm_resource_island_node_ids(
 ) -> set[str]:
     if not nodes:
         return set()
-    return {
-        nid
-        for nid, n in nodes.items()
-        if is_llm_resource_island_dict(n, merged_resources)
-    }
+    return {nid for nid, n in nodes.items() if is_llm_resource_island_dict(n, merged_resources)}
 
 
-def _edge_pair(edge: Edge | JsonObject) -> tuple[str, str | None]:
-    if isinstance(edge, Edge):
-        return edge.from_node, edge.to_node
-    fn = edge.get("from_node") if edge.get("from_node") is not None else edge.get("from")
-    tn = edge.get("to_node") if "to_node" in edge else edge.get("to")
-    if not isinstance(fn, str) or not fn.strip():
-        return "", None
-    if tn is not None and (not isinstance(tn, str) or not tn.strip()):
-        return fn.strip(), None
-    return fn.strip(), tn if isinstance(tn, str) else None
+def _edge_pair(edge: Edge) -> tuple[str, str | None]:
+    return edge.from_node, edge.to_node
 
 
 def validate_llm_resource_islands_in_graph(
     *,
     nodes: Mapping[str, JsonObject] | None,
-    edges: Sequence[Edge | JsonObject] | None,
+    edges: Sequence[Edge] | None,
     flow_resources: Mapping[str, ResourceReferenceInput],
     skill_resources: Mapping[str, ResourceReferenceInput] | None,
     entry: str | None,
@@ -123,17 +111,11 @@ def validate_llm_resource_islands_in_graph(
     for e in edges or ():
         fn, tn = _edge_pair(e)
         if fn in island_ids:
-            raise ValueError(
-                f"ребро с LLM resource island запрещено: исходная нода '{fn}'"
-            )
+            raise ValueError(f"ребро с LLM resource island запрещено: исходная нода '{fn}'")
         if tn is not None and tn in island_ids:
-            raise ValueError(
-                f"ребро с LLM resource island запрещено: целевая нода '{tn}'"
-            )
+            raise ValueError(f"ребро с LLM resource island запрещено: целевая нода '{tn}'")
     if entry is not None and entry.strip() and entry in island_ids:
-        raise ValueError(
-            f"entry не может быть LLM resource island: '{entry}'"
-        )
+        raise ValueError(f"entry не может быть LLM resource island: '{entry}'")
 
 
 def _resource_ref_plain(ref_raw: ResourceReferenceInput) -> ResourceReference:
@@ -163,9 +145,7 @@ def _patch_llm_dict_into_bucket(
         "resource_node.llm.patch",
     )
     patch_dict: JsonObject = {
-        k: v
-        for k, v in ov_dump.items()
-        if k in allowed and k != "llm_resource_key"
+        k: v for k, v in ov_dump.items() if k in allowed and k != "llm_resource_key"
     }
     if not patch_dict:
         return
@@ -217,7 +197,7 @@ def overlay_llm_resource_islands_on_resource_maps(
         nr = n.get("resources")
         if not isinstance(nr, dict) or len(nr) != 1:
             continue
-        (bind_key, _), = nr.items()
+        ((bind_key, _),) = nr.items()
         llm_raw = n.get("llm")
         if bind_key in (sr or {}):
             assert sr is not None

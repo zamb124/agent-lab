@@ -16,7 +16,7 @@ from core.billing.service import (
     company_resource_prices_storage_key,
     company_settlement_rules_storage_key,
 )
-from core.models.billing_models import UsageType
+from core.models.billing_models import DEFAULT_TARIFF_PRICES, UsageType
 from core.models.identity_models import Company
 
 pytestmark = pytest.mark.xdist_group("billing_global_resource_base_prices_json")
@@ -27,23 +27,13 @@ def _minimal_base_prices() -> dict:
 
 
 @pytest.mark.asyncio
-async def test_billing_service_init_requires_repositories() -> None:
-    with pytest.raises(ValueError, match="company_repository"):
-        BillingService(
-            None,  # type: ignore[arg-type]
-            object(),  # type: ignore[arg-type]
-            object(),  # type: ignore[arg-type]
-            resource_base_prices=_minimal_base_prices(),
-        )
-
-
-@pytest.mark.asyncio
 async def test_billing_service_init_requires_resource_base_prices() -> None:
     with pytest.raises(ValueError, match="resource_base_prices"):
         BillingService(
             object(),  # type: ignore[arg-type]
             object(),  # type: ignore[arg-type]
             object(),  # type: ignore[arg-type]
+            tariff_prices=DEFAULT_TARIFF_PRICES,
             resource_base_prices=None,  # type: ignore[arg-type]
         )
 
@@ -174,7 +164,7 @@ async def test_get_effective_resource_base_prices_invalid_global_json_raises(
         force_global=True,
     )
     try:
-        with pytest.raises(json.JSONDecodeError):
+        with pytest.raises(ValueError, match="must be a JSON object"):
             await billing.get_effective_resource_base_prices()
     finally:
         await frontend_container.shared_storage.delete("billing:resource_base_prices_json", force_global=True)
@@ -189,7 +179,7 @@ async def test_get_effective_resource_base_prices_for_company_invalid_override_r
     key = company_resource_prices_storage_key(cid)
     await frontend_container.shared_storage.set(key, "[]", force_global=True)
     try:
-        with pytest.raises(ValueError, match="объектом"):
+        with pytest.raises(ValueError, match="must be a JSON object"):
             await billing.get_effective_resource_base_prices_for_company(cid)
     finally:
         await frontend_container.shared_storage.delete(key, force_global=True)

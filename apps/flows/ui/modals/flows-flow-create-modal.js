@@ -66,7 +66,7 @@ const FLOW_PRESETS = Object.freeze([
                     config: { ...getBlankCodeNodeConfig(), code: 'async def run(args, state):\n    return state\n' },
                 },
             },
-            edges: [{ from: 'start', to: 'end' }],
+            edges: [{ from_node: 'start', to_node: 'end' }],
             variables: {}, tags: ['preset:graph'], branches: {}, triggers: {}, resources: {},
         }),
     },

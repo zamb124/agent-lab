@@ -43,7 +43,7 @@ async def list_sessions(
     Returns:
         Список сессий с пагинацией
     """
-    sessions, total = await container.state_repository.search_sessions(
+    sessions, total = await container.workflow_runtime.search_sessions(
         user_id=user_id,
         flow_id=flow_id,
         branch_id=branch_id,
@@ -76,7 +76,7 @@ async def delete_session(
     Returns:
         Результат удаления
     """
-    deleted = await container.state_repository.delete(session_id)
+    deleted = await container.workflow_runtime.delete_state(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"success": True, "session_id": session_id}

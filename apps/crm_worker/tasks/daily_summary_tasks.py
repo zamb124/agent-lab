@@ -5,7 +5,6 @@ TaskIQ задачи пересчета Daily Summary для CRM.
 from __future__ import annotations
 
 import uuid
-from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING
@@ -414,8 +413,28 @@ async def reconcile_daily_summary_task(
     container = get_crm_container()
     since_date = date.today() - timedelta(days=days_back)
 
+    company_ids_stmt = (
+        select(CRMEntity.company_id)
+        .distinct()
+        .where(
+            and_(
+                CRMEntity.entity_type == "note",
+                CRMEntity.note_date.is_not(None),
+                CRMEntity.note_date >= since_date,
+            )
+        )
+        .order_by(CRMEntity.company_id)
+    )
     async with container.crm_db.session() as session:
-        stmt = (
+        raw_company_ids: Sequence[tuple[str]] = (
+            await session.execute(company_ids_stmt)
+        ).tuples().all()
+        distinct_company_ids: list[str] = [row[0] for row in raw_company_ids if row[0]]
+
+    enqueued_count = 0
+    total_rows_processed = 0
+    for cid in distinct_company_ids:
+        company_stmt = (
             select(
                 CRMEntity.company_id,
                 CRMEntity.namespace,
@@ -427,26 +446,21 @@ async def reconcile_daily_summary_task(
                     CRMEntity.entity_type == "note",
                     CRMEntity.note_date.is_not(None),
                     CRMEntity.note_date >= since_date,
+                    CRMEntity.company_id == cid,
                 )
             )
         )
-        raw_rows: Sequence[tuple[str, str, date | None]] = (
-            await session.execute(stmt)
-        ).tuples().all()
-        rows = [
-            (row_company_id, row_namespace, row_note_date)
-            for row_company_id, row_namespace, row_note_date in raw_rows
-            if row_note_date is not None
-        ]
+        async with container.crm_db.session() as session:
+            raw_company_rows: Sequence[tuple[str, str, date | None]] = (
+                await session.execute(company_stmt)
+            ).tuples().all()
+            company_rows: list[tuple[str, str, date]] = [
+                (row_company_id, row_namespace, row_note_date)
+                for row_company_id, row_namespace, row_note_date in raw_company_rows
+                if row_note_date is not None
+            ]
 
-    by_company: dict[str, list[tuple[str, str, date]]] = defaultdict(list)
-    for row in rows:
-        row_company_id, _, _ = row
-        by_company[row_company_id].append(row)
-
-    enqueued_count = 0
-    for cid in sorted(by_company.keys()):
-        company_rows = by_company[cid]
+        total_rows_processed += len(company_rows)
         tick_id = str(uuid.uuid4())
         tick_started = datetime.now(timezone.utc)
         _ = await container.task_repository.create(
@@ -489,10 +503,16 @@ async def reconcile_daily_summary_task(
         )
         enqueued_count += enqueued_company
 
-    logger.info(f"CRM daily summary reconcile finished: rows={len(rows)}, enqueued={enqueued_count}, days_back={days_back}, companies={len(by_company)}")
+    logger.info(
+        "crm.daily_summary.reconcile_finished",
+        rows=total_rows_processed,
+        enqueued=enqueued_count,
+        days_back=days_back,
+        companies=len(distinct_company_ids),
+    )
     return {
-        "rows": len(rows),
+        "rows": total_rows_processed,
         "enqueued": enqueued_count,
         "days_back": days_back,
-        "companies": len(by_company),
+        "companies": len(distinct_company_ids),
     }

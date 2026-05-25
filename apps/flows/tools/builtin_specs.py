@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 from functools import lru_cache
 
+from apps.flows.src.tools.base import BaseTool
+
 BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.math_tools", "calculator"),
     ("apps.flows.tools.files", "create_file"),
@@ -67,9 +69,13 @@ def builtin_tool_ids() -> frozenset[str]:
     """Return canonical ids reserved for trusted platform tools."""
     ids: list[str] = []
     for module_name, attr_name in BUILTIN_TOOL_SPECS:
-        tool = getattr(importlib.import_module(module_name), attr_name)
-        raw_name = getattr(tool, "name", None)
-        ids.append(raw_name if isinstance(raw_name, str) and raw_name else attr_name)
+        module = importlib.import_module(module_name)
+        raw_tool = module.__dict__.get(attr_name)
+        if not isinstance(raw_tool, BaseTool):
+            raise TypeError(
+                f"Builtin tool {module_name}.{attr_name} must be a BaseTool instance"
+            )
+        ids.append(raw_tool.name if raw_tool.name else attr_name)
     return frozenset(ids)
 
 

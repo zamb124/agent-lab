@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Self
+from typing import ClassVar, Literal, Self
 from urllib.parse import urlparse
 
 from pydantic import (
@@ -18,11 +18,16 @@ from pydantic import (
 )
 
 from core.config.openai_v1_base_url import normalize_openai_v1_base_url
+from core.llm_model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
+from core.models.billing_models import DEFAULT_TARIFF_PRICES
 from core.rag_indexing_schema import IndexProfileConfig
+from core.types import JsonObject, JsonValue
 from core.utils.tts_input_steps import TTS_INPUT_STEP_IDS
 
-HUMANITEC_LLM_PROVIDER = "humanitec_llm"
-HUMANITEC_LLM_AUTO_MODEL = "auto"
+__all__ = [
+    "HUMANITEC_LLM_AUTO_MODEL",
+    "HUMANITEC_LLM_PROVIDER",
+]
 
 
 class DemoAuthConfig(BaseModel):
@@ -105,6 +110,28 @@ class DatabaseConfig(BaseModel):
         description="PostgreSQL platform_tracing (spans); отдельно от shared",
     )
     redis_url: str = "redis://localhost:8099"
+    statement_timeout_ms: int = Field(
+        default=30_000,
+        description=(
+            "PostgreSQL statement_timeout по умолчанию (мс). 0 — без ограничения. "
+            "Защищает от зависших запросов, исчерпывающих pool. Worker-задачи могут "
+            "поднимать лимит per-session через core.db.session_timeouts."
+        ),
+        ge=0,
+    )
+    lock_timeout_ms: int = Field(
+        default=10_000,
+        description="PostgreSQL lock_timeout (мс). 0 — без ограничения.",
+        ge=0,
+    )
+    idle_in_transaction_session_timeout_ms: int = Field(
+        default=60_000,
+        description=(
+            "PostgreSQL idle_in_transaction_session_timeout (мс). 0 — без ограничения. "
+            "Защищает от висящих транзакций, удерживающих локи."
+        ),
+        ge=0,
+    )
 
 
 class LoggingConfig(BaseModel):
@@ -255,7 +282,7 @@ class ServerConfig(BaseModel):
     )
 
     # Порты по умолчанию для каждого сервиса
-    _default_ports: dict[str, int] = {
+    _default_ports: ClassVar[dict[str, int]] = {
         "flows": 8001,
         "frontend": 8002,
         "crm": 8003,
@@ -283,15 +310,49 @@ class ServerConfig(BaseModel):
         if service is None:
             return f"http://localhost:{self.port}"
 
-        url_attr = f"{service}_service_url"
-        url = getattr(self, url_attr, None)
-        if url:
-            return url
+        url = self._configured_service_url(service)
+        if url is not None and url.strip():
+            return url.strip()
 
-        default_port = self._default_ports.get(service, 8001)
+        default_port = self._default_ports[service]
         if service == "provider_litserve":
             return f"http://127.0.0.1:{default_port}"
         return f"http://localhost:{default_port}"
+
+    def _configured_service_url(self, service: str) -> str | None:
+        match service:
+            case "flows":
+                return self.flows_service_url
+            case "frontend":
+                return self.frontend_service_url
+            case "crm":
+                return self.crm_service_url
+            case "rag":
+                return self.rag_service_url
+            case "sync":
+                return self.sync_service_url
+            case "scheduler":
+                return self.scheduler_service_url
+            case "office":
+                return self.office_service_url
+            case "browser":
+                return self.browser_service_url
+            case "provider_litserve":
+                return self.provider_litserve_service_url
+            case "voice":
+                return self.voice_service_url
+            case "capability_gateway":
+                return self.capability_gateway_service_url
+            case "code_runner_python":
+                return self.code_runner_python_service_url
+            case "code_runner_node":
+                return self.code_runner_node_service_url
+            case "code_runner_go":
+                return self.code_runner_go_service_url
+            case "code_runner_csharp":
+                return self.code_runner_csharp_service_url
+            case _:
+                raise ValueError(f"Unknown service: {service}")
 
     def get_flows_service_url(self) -> str:
         """URL сервиса flows."""
@@ -368,7 +429,7 @@ class CloudRuSTTConfig(BaseModel):
 class LitserveSpeechBackendConfig(BaseModel):
     """HTTP-настройки backend `provider-litserve` для STT/TTS/VAD."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = True
     base_url: str = Field(
@@ -392,7 +453,7 @@ class LitserveSpeechBackendConfig(BaseModel):
 class CloudRuTTSBackendConfig(BaseModel):
     """Cloud.ru TTS backend (OpenAI-совместимый /v1/audio/speech)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = False
     api_key: str | None = None
@@ -407,7 +468,7 @@ class CloudRuTTSBackendConfig(BaseModel):
 class YandexSTTBackendConfig(BaseModel):
     """Yandex SpeechKit STT (REST). Stub до получения ключей."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = False
     api_key: str | None = None
@@ -420,7 +481,7 @@ class YandexSTTBackendConfig(BaseModel):
 class YandexTTSBackendConfig(BaseModel):
     """Yandex SpeechKit TTS (REST). Stub до получения ключей."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = False
     api_key: str | None = None
@@ -435,7 +496,7 @@ class YandexTTSBackendConfig(BaseModel):
 class SberSTTBackendConfig(BaseModel):
     """Sber SmartSpeech STT (REST). Stub до получения ключей."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = False
     client_id: str | None = None
@@ -450,7 +511,7 @@ class SberSTTBackendConfig(BaseModel):
 class SberTTSBackendConfig(BaseModel):
     """Sber SmartSpeech TTS (REST). Stub до получения ключей."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = False
     client_id: str | None = None
@@ -467,7 +528,7 @@ class SberTTSBackendConfig(BaseModel):
 class LocalSileroVADBackendConfig(BaseModel):
     """Локальный Silero VAD (in-process, без HTTP к provider-litserve)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = True
     hf_model_id: str = "snakers4/silero-vad"
@@ -485,7 +546,7 @@ class STTProvidersConfig(BaseModel):
     `SpeechOverride`.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: Literal["litserve", "cloud_ru", "yandex", "sber", "mock"] = "litserve"
     default_model: str | None = Field(
@@ -530,7 +591,7 @@ class STTProvidersConfig(BaseModel):
 class TTSPronunciationConfig(BaseModel):
     """Настройки TTS pronunciation shaping."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     ssml_subset_enabled: bool = False
 
@@ -538,7 +599,7 @@ class TTSPronunciationConfig(BaseModel):
 class TTSProvidersConfig(BaseModel):
     """Унифицированный конфиг TTS для voice/flows/eval."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: Literal["litserve", "cloud_ru", "yandex", "sber", "mock"] = "litserve"
     default_model: str | None = Field(
@@ -550,6 +611,7 @@ class TTSProvidersConfig(BaseModel):
     default_sample_rate: int = Field(default=24000, gt=0)
     chunk_max_chars: int = Field(default=100, ge=1)
     lookahead_tokens: int = Field(default=20, ge=0)
+    pronunciation_seed_enabled: bool = True
     pronunciation: TTSPronunciationConfig = Field(default_factory=TTSPronunciationConfig)
     litserve: LitserveSpeechBackendConfig = Field(default_factory=LitserveSpeechBackendConfig)
     cloud_ru: CloudRuTTSBackendConfig = Field(default_factory=CloudRuTTSBackendConfig)
@@ -566,7 +628,7 @@ class VADProvidersConfig(BaseModel):
     подтверждение длительностью + pre-roll буфер для STT.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: Literal["litserve", "silero_local", "mock"] = "silero_local"
     default_model: str | None = None
@@ -632,7 +694,7 @@ class VoiceDiagnosticsConfig(BaseModel):
     уходит в STT-провайдер, после resampling и FIR-фильтра.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     uplink_dump_dir: str | None = Field(
         default=None,
@@ -658,7 +720,7 @@ class SpeechProvidersConfig(BaseModel):
     get_vad_client(*, company_id, override)`.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     stt: STTProvidersConfig = Field(default_factory=STTProvidersConfig)
     tts: TTSProvidersConfig = Field(default_factory=TTSProvidersConfig)
@@ -687,7 +749,7 @@ class NanoBananaConfig(BaseModel):
     """Конфигурация image generation."""
 
     enabled: bool = False
-    model_name: str = HUMANITEC_LLM_AUTO_MODEL
+    model: str = HUMANITEC_LLM_AUTO_MODEL
     timeout: int = 60
 
 
@@ -743,7 +805,7 @@ class ProxyConfig(BaseModel):
 class PaymentProviderConfigEntry(BaseModel):
     """Конфигурация одного платежного провайдера (для env-override через Pydantic)"""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider_type: Literal["yoomoney", "yukassa"]
     enabled: bool = True
@@ -776,7 +838,7 @@ class PaymentProvidersConfig(BaseModel):
 class EmbeddingApiConfig(BaseModel):
     """Эмбеддинг: ``model``, ``dimension``, ``base_url`` в форме OpenAI/OpenRouter (единый блок для всех провайдеров)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     model: str = "qwen/qwen3-embedding-0.6b"
     dimension: int = 1024
@@ -786,32 +848,20 @@ class EmbeddingApiConfig(BaseModel):
     mrl_output_dimension: int | None = Field(
         default=None,
         gt=0,
-        description="MRL-усечение: если задано, вектор обрезается до первых N измерений "
-        "и L2-нормализуется перед сохранением. Совпадение с dimension — плотный вектор без паддинга.",
+        description=(
+            "MRL-усечение: если задано, вектор обрезается до первых N измерений "
+            + "и L2-нормализуется перед сохранением. Совпадение с dimension — плотный вектор без паддинга."
+        ),
     )
 
 
 class EmbeddingConfig(BaseModel):
     """Конфигурация embedding: ``provider`` и вложенный блок ``api`` (``model``, ``dimension``, опционально ``base_url``)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: Literal["openrouter", "provider_litserve"] = "provider_litserve"
     api: EmbeddingApiConfig = Field(default_factory=EmbeddingApiConfig)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _lift_flat_api_fields_into_api(cls, data: Any) -> Any:
-        """Плоские ``model`` / ``dimension`` / ``base_url`` на уровне ``embedding`` -> ``api`` (обратная совместимость с merge JSON)."""
-        if not isinstance(data, dict):
-            return data
-        api: dict[str, Any] = dict(data.get("api") or {})
-        for k in ("model", "dimension", "base_url", "mrl_output_dimension"):
-            if k in data:
-                api[k] = data.pop(k)
-        data["api"] = api
-        return data
-
 
 class RAGProviderConfig(BaseModel):
     """Конфигурация одного RAG провайдера"""
@@ -839,7 +889,7 @@ class RAGProviderConfig(BaseModel):
     chunk_size: int = 1000
     chunk_overlap: int = 100
 
-    extra_params: dict[str, Any] = Field(default_factory=dict)
+    extra_params: JsonObject = Field(default_factory=dict)
 
 
 class RerankerApiRuntimeConfig(BaseModel):
@@ -849,7 +899,7 @@ class RerankerApiRuntimeConfig(BaseModel):
     При ``provider=provider_litserve`` URL по умолчанию строится из ``provider_litserve.api.base_url`` + ``/rerank``.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     base_url: str | None = None
     timeout_seconds: float = 60.0
@@ -858,38 +908,19 @@ class RerankerApiRuntimeConfig(BaseModel):
 class RerankerRuntimeConfig(BaseModel):
     """Реранкер: ``provider`` + ``api``."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: Literal["none", "provider_litserve"] = "provider_litserve"
-    api: RerankerApiRuntimeConfig | None = None
+    api: RerankerApiRuntimeConfig | None = Field(default_factory=RerankerApiRuntimeConfig)
     # Биллинг (как у embedding в pgvector): оценка по tiktoken, запись через BillingService
     cost_per_1m_tokens: float = 5.0
     platform_markup: float = 1.1
     billing_model_id: str = "rerank"
 
-    @model_validator(mode="before")
-    @classmethod
-    def _merge_reranker_api(cls, data: Any) -> Any:
-        """Плоские ``base_url`` / ``timeout_seconds`` и вложенный ``api``."""
-        if not isinstance(data, dict):
-            return data
-        api: dict[str, Any] = {}
-        if isinstance(data.get("api"), dict):
-            api.update(data["api"])
-        flat_base = data.pop("base_url", None)
-        flat_timeout = data.pop("timeout_seconds", None)
-        if flat_base is not None:
-            api["base_url"] = flat_base
-        if flat_timeout is not None:
-            api["timeout_seconds"] = float(flat_timeout)
-        if api:
-            data["api"] = api
-        return data
-
     @model_validator(mode="after")
-    def _ensure_api_object_for_provider_litserve(self) -> "RerankerRuntimeConfig":
+    def _require_api_object_for_provider_litserve(self) -> Self:
         if self.provider == "provider_litserve" and self.api is None:
-            object.__setattr__(self, "api", RerankerApiRuntimeConfig())
+            raise ValueError("rag.reranker.api обязателен для provider_litserve")
         return self
 
     @property
@@ -911,7 +942,7 @@ class RerankerRuntimeConfig(BaseModel):
 class ProviderLitserveApiConfig(BaseModel):
     """OpenAI-совместимый корень (как ``llm.openrouter.base_url``): ``…/v1`` для embeddings, rerank, models."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     base_url: str | None = None
 
@@ -919,7 +950,7 @@ class ProviderLitserveApiConfig(BaseModel):
 class ProviderLitserveSTTModelEntry(BaseModel):
     """Описание одной STT-модели провайдера (api id ↔ HF id + параметры весов)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     api_model_id: str = Field(
         description="OpenAI-совместимый id модели (используется в payload поля model).",
@@ -957,7 +988,7 @@ SILERO_V5_RU_SPEAKERS_BY_BUNDLE: dict[str, frozenset[str]] = {
 class ProviderLitserveTTSModelEntry(BaseModel):
     """Описание одной TTS-модели (api id ↔ HF id + параметры синтеза по умолчанию)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     api_model_id: str
     hf_model_id: str
@@ -1003,7 +1034,7 @@ class ProviderLitserveTTSModelEntry(BaseModel):
 
     @field_validator("voice", mode="before")
     @classmethod
-    def trim_lower_voice_optional(cls, v: Any) -> str | None:
+    def trim_lower_voice_optional(cls, v: JsonValue) -> str | None:
         if v is None:
             return None
         if not isinstance(v, str):
@@ -1015,7 +1046,7 @@ class ProviderLitserveTTSModelEntry(BaseModel):
 
     @field_validator("silero_bundle", mode="before")
     @classmethod
-    def normalize_silero_bundle(cls, v: Any) -> str:
+    def normalize_silero_bundle(cls, v: JsonValue) -> str:
         if not isinstance(v, str):
             raise ValueError(f"TTS silero_bundle: ожидалась str, получено {type(v).__name__}")
         s = v.strip().lower()
@@ -1028,7 +1059,7 @@ class ProviderLitserveTTSModelEntry(BaseModel):
 
     @field_validator("synthesis_locale", mode="before")
     @classmethod
-    def synthesis_locale_iso639(cls, v: Any) -> str | None:
+    def synthesis_locale_iso639(cls, v: JsonValue) -> str | None:
         if v is None:
             return None
         if not isinstance(v, str):
@@ -1045,14 +1076,12 @@ class ProviderLitserveTTSModelEntry(BaseModel):
 
     @field_validator("tts_input_steps", mode="before")
     @classmethod
-    def normalize_tts_input_steps(cls, v: Any) -> tuple[str, ...]:
+    def normalize_tts_input_steps(cls, v: JsonValue) -> tuple[str, ...]:
         if v is None:
             return ("silero_ru_latin_to_cyrillic",)
         if isinstance(v, str):
             raise ValueError("tts_input_steps: ожидался tuple или list имён шагов, не str")
-        if isinstance(v, list):
-            v = tuple(v)
-        if not isinstance(v, tuple):
+        if not isinstance(v, list | tuple):
             raise ValueError(
                 f"tts_input_steps: ожидался tuple или list, получено {type(v).__name__}"
             )
@@ -1088,8 +1117,11 @@ class ProviderLitserveTTSModelEntry(BaseModel):
         if self.voice not in allowed:
             opts = ", ".join(sorted(allowed))
             raise ValueError(
-                f"TTS voice={self.voice!r} недопустим для silero_bundle={self.silero_bundle!r}; "
-                f"допустимы: {opts}"
+                "TTS voice={!r} недопустим для silero_bundle={!r}; допустимы: {}".format(
+                    self.voice,
+                    self.silero_bundle,
+                    opts,
+                )
             )
         return self
 
@@ -1107,7 +1139,7 @@ class ProviderLitserveTTSModelEntry(BaseModel):
 class ProviderLitserveVADModelEntry(BaseModel):
     """Описание одной VAD-модели (api id ↔ HF id + параметры детекции)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     api_model_id: str
     hf_model_id: str
@@ -1153,25 +1185,7 @@ class ProviderLitserveInfraConfig(BaseModel):
     Переопределение деплоя: ``services.provider_litserve``; ENV: ``PROVIDER_LITSERVE__INFRA__*``.
     """
 
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _migrate_legacy_default_audio_api_model_keys(cls, data: Any) -> Any:
-        """DEPRECATED ключи вида ``default_*_api_model_id`` (дубль ENV на кластере)."""
-        if not isinstance(data, dict):
-            return data
-        for legacy, canonical in (
-            ("default_stt_api_model_id", "stt_default_api_model_id"),
-            ("default_tts_api_model_id", "tts_default_api_model_id"),
-            ("default_vad_api_model_id", "vad_default_api_model_id"),
-        ):
-            if legacy not in data:
-                continue
-            legacy_val = data.pop(legacy)
-            if canonical not in data:
-                data[canonical] = legacy_val
-        return data
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     backend: Literal["placeholder", "flagllm"] = "flagllm"
     host: str = "0.0.0.0"
@@ -1297,7 +1311,7 @@ class ProviderLitserveInfraConfig(BaseModel):
 class ProviderLitserveConfig(BaseModel):
     """Локальные не-LLM модели: клиентский корень API (``api``) и инфраструктура LitServe (``infra``)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     api: ProviderLitserveApiConfig = Field(default_factory=ProviderLitserveApiConfig)
     infra: ProviderLitserveInfraConfig = Field(default_factory=ProviderLitserveInfraConfig)
@@ -1318,7 +1332,7 @@ class RagTtlConfig(BaseModel):
     Джобы планируются процессом ``scheduler``, исполняются в очереди ``rag``.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     cleanup_enabled: bool = True
     default_ttl_seconds: int = Field(
@@ -1547,8 +1561,7 @@ class OpenRouterFreePoolConfig(BaseModel):
     def _ttl_covers_refresh_interval(self) -> Self:
         if self.cache_ttl_seconds <= self.refresh_interval_seconds:
             raise ValueError(
-                "llm.openrouter_free_pool.cache_ttl_seconds должен быть больше "
-                "refresh_interval_seconds"
+                "llm.openrouter_free_pool.cache_ttl_seconds должен быть больше refresh_interval_seconds"
             )
         return self
 
@@ -1735,7 +1748,7 @@ class PushConfig(BaseModel):
     apns_private_key: str | None = None
     apns_bundle_id: str | None = None
     apns_use_sandbox: bool = False
-    fcm_credentials_json: Any | None = None
+    fcm_credentials_json: str | JsonObject | None = None
     fcm_project_id: str | None = None
 
 
@@ -1837,6 +1850,11 @@ class BillingSpanSettlementConfig(BaseModel):
     )
 
 
+def default_billing_tariff_prices() -> dict[str, dict[str, dict[str, float]]]:
+    """Базовый каталог тарифных множителей: TariffPlan → category → resource → multiplier."""
+    return {plan.value: tree for plan, tree in DEFAULT_TARIFF_PRICES.items()}
+
+
 class BillingConfig(BaseModel):
     """Тарификация: базовые цены из конфига + override через API system; settlement по трейсам."""
 
@@ -1851,6 +1869,14 @@ class BillingConfig(BaseModel):
     resource_base_prices: dict[str, dict[str, float]] = Field(
         default_factory=default_billing_resource_base_prices,
         description="Дерево category → resource → цена в руб./единицу списания; merge с storage override.",
+    )
+    tariff_prices: dict[str, dict[str, dict[str, float]]] = Field(
+        default_factory=default_billing_tariff_prices,
+        description=(
+            "TariffPlan (str-значение) → category → resource → множитель. "
+            "Перебивает дефолт из DEFAULT_TARIFF_PRICES; должен быть явно задан в проде "
+            "(прайс одной компании ≠ прайс другой)."
+        ),
     )
     usd_to_rub_rate: float = Field(
         default=85.0,

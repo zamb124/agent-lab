@@ -93,6 +93,11 @@ _pronunciation_platform_cache: tuple[float, CompiledPronunciation] | None = None
 _pronunciation_company_cache: dict[str, tuple[float, CompiledPronunciation]] = {}
 
 
+_voice_provider_repo: CompanyVoiceProviderRepository | None = None
+_platform_pronunciation_repo: PlatformPronunciationRuleRepository | None = None
+_company_pronunciation_repo: CompanyPronunciationRuleRepository | None = None
+
+
 @dataclass(frozen=True)
 class _CompanyOverrideRow:
     """In-memory представление одной строки `company_voice_providers`."""
@@ -154,14 +159,24 @@ def _coerce_company_voice_secrets(raw: object | None) -> dict[str, str] | None:
 
 
 def _get_repo() -> CompanyVoiceProviderRepository:
-    settings = get_settings()
-    db_url = settings.database.shared_url
-    if not db_url:
-        raise ValueError(
-            "voice_resolver: settings.database.shared_url не задан — "
-            "невозможно прочитать company_voice_providers."
-        )
-    return CompanyVoiceProviderRepository(db_url=db_url)
+    """
+    Singleton-репозиторий per-process.
+
+    Раньше создавался на каждый вызов resolver-функции, что приводило к
+    лишним SQLAlchemy engine'ам на каждый STT/TTS request. Теперь один
+    экземпляр на процесс; сброс — `reset_voice_resolver_for_tests()`.
+    """
+    global _voice_provider_repo
+    if _voice_provider_repo is None:
+        settings = get_settings()
+        db_url = settings.database.shared_url
+        if not db_url:
+            raise ValueError(
+                "voice_resolver: settings.database.shared_url не задан — "
+                "невозможно прочитать company_voice_providers."
+            )
+        _voice_provider_repo = CompanyVoiceProviderRepository(db_url=db_url)
+    return _voice_provider_repo
 
 
 async def _load_company_override(
@@ -210,11 +225,15 @@ def invalidate_platform_pronunciation_cache() -> None:
 
 
 def reset_voice_resolver_for_tests() -> None:
-    """Полная очистка in-memory кэша. Только для тестов."""
+    """Полная очистка in-memory кэша и singleton-репозиториев. Только для тестов."""
     global _pronunciation_platform_cache
+    global _voice_provider_repo, _platform_pronunciation_repo, _company_pronunciation_repo
     _company_cache.clear()
     _pronunciation_company_cache.clear()
     _pronunciation_platform_cache = None
+    _voice_provider_repo = None
+    _platform_pronunciation_repo = None
+    _company_pronunciation_repo = None
 
 
 def _validate_company_id(company_id: str) -> None:
@@ -463,17 +482,24 @@ async def get_stt_client(
 
 
 def _get_pronunciation_repo() -> tuple[PlatformPronunciationRuleRepository, CompanyPronunciationRuleRepository]:
-    settings = get_settings()
-    db_url = settings.database.shared_url
-    if not db_url:
-        raise ValueError(
-            "voice_resolver: settings.database.shared_url не задан — "
-            "невозможно прочитать pronunciation_rules."
-        )
-    return (
-        PlatformPronunciationRuleRepository(db_url=db_url),
-        CompanyPronunciationRuleRepository(db_url=db_url),
-    )
+    """
+    Singleton-репозитории per-process.
+
+    Аналогично `_get_repo()`: один экземпляр каждого репозитория на процесс,
+    сброс — `reset_voice_resolver_for_tests()`.
+    """
+    global _platform_pronunciation_repo, _company_pronunciation_repo
+    if _platform_pronunciation_repo is None or _company_pronunciation_repo is None:
+        settings = get_settings()
+        db_url = settings.database.shared_url
+        if not db_url:
+            raise ValueError(
+                "voice_resolver: settings.database.shared_url не задан — "
+                "невозможно прочитать pronunciation_rules."
+            )
+        _platform_pronunciation_repo = PlatformPronunciationRuleRepository(db_url=db_url)
+        _company_pronunciation_repo = CompanyPronunciationRuleRepository(db_url=db_url)
+    return _platform_pronunciation_repo, _company_pronunciation_repo
 
 
 def _pronunciation_rule_kind(value: str) -> PronunciationRuleKind:
@@ -803,7 +829,7 @@ async def get_tts_streamer(
             f"voice_resolver.get_tts_streamer: неизвестный response_format={response_format!r} "
             f"(допустимые: {sorted(_TTS_MIME_BY_FORMAT)})"
         )
-    mime_type = _TTS_MIME_BY_FORMAT[response_format]
+    content_type = _TTS_MIME_BY_FORMAT[response_format]
 
     tts_client = await get_tts_client(company_id=company_id, override=override)
     return BatchBackedTTSStreamer(
@@ -811,7 +837,7 @@ async def get_tts_streamer(
         response_format=response_format,
         sample_rate=sample_rate,
         provider_name=provider_name,
-        mime_type=mime_type,
+        content_type=content_type,
     )
 
 

@@ -9,6 +9,7 @@ TASK_SEND_TASK_UPDATE = "send_task_update"
 TASK_SEND_TASK_COMPLETED = "send_task_completed"
 TASK_SEND_TASK_FAILED = "send_task_failed"
 TASK_SEND_TASK_INPUT_REQUIRED = "send_task_input_required"
+TASK_INIT_NEW_COMPANY = "company_init_new_company"
 
 __all__ = [
     "TASK_PUSH_CONFIG_SET",
@@ -20,4 +21,5 @@ __all__ = [
     "TASK_SEND_TASK_COMPLETED",
     "TASK_SEND_TASK_FAILED",
     "TASK_SEND_TASK_INPUT_REQUIRED",
+    "TASK_INIT_NEW_COMPANY",
 ]

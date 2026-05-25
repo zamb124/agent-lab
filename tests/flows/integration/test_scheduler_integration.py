@@ -15,10 +15,11 @@
 """
 
 import datetime
-
 import pytest
+from apps.flows.src.models.scheduled_task_payload import FlowScheduledTaskPayload
 
 pytestmark = pytest.mark.real_taskiq
+_TEST_COMPANY_ID = "system"
 
 
 @pytest.fixture(autouse=True)
@@ -36,11 +37,9 @@ class TestScheduleService:
         from core.scheduler.models import ContentType
 
         service = container.schedule_service
-
         run_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=1)
         flow_id = f"test_agent_{unique_id}"
         session_id = f"{flow_id}:{unique_id}"
-
         task = await service.schedule_one_time_task(
             flow_id=flow_id,
             session_id=session_id,
@@ -50,19 +49,18 @@ class TestScheduleService:
             content="Test reminder",
             description="Test one-time task",
         )
-
         assert task.schedule_task_id is not None
         assert task.schedule_type == "one_time"
         assert task.content_type == "message"
         assert task.content == "Test reminder"
         assert task.status == "pending"
-
-        # Проверяем что сохранено в БД
-        saved_task = await container.scheduled_task_repository.get_by_schedule_task_id(
-            task.schedule_task_id
+        saved_task = await container.scheduler_task_repository.get(
+            company_id=_TEST_COMPANY_ID, schedule_task_id=task.schedule_task_id
         )
         assert saved_task is not None
-        assert saved_task.content == "Test reminder"
+        assert (
+            FlowScheduledTaskPayload.model_validate(saved_task.payload).content == "Test reminder"
+        )
 
     @pytest.mark.asyncio
     async def test_schedule_cron_task_creates_in_db(self, app, container, unique_id):
@@ -72,23 +70,20 @@ class TestScheduleService:
         service = container.schedule_service
         flow_id = f"test_agent_{unique_id}"
         session_id = f"{flow_id}:{unique_id}"
-
         task = await service.schedule_cron_task(
             flow_id=flow_id,
             session_id=session_id,
             user_id=f"test-user-{unique_id}",
-            cron="0 9 * * *",  # Каждый день в 9:00
+            cron="0 9 * * *",
             content_type=ContentType.MESSAGE,
             content="Daily reminder",
             description="Daily morning task",
         )
-
         assert task.schedule_task_id is not None
         assert task.schedule_type == "cron"
         assert task.cron == "0 9 * * *"
-
-        saved_task = await container.scheduled_task_repository.get_by_schedule_task_id(
-            task.schedule_task_id
+        saved_task = await container.scheduler_task_repository.get(
+            company_id=_TEST_COMPANY_ID, schedule_task_id=task.schedule_task_id
         )
         assert saved_task is not None
         assert saved_task.cron == "0 9 * * *"
@@ -101,7 +96,6 @@ class TestScheduleService:
         service = container.schedule_service
         flow_id = f"test_agent_{unique_id}"
         session_id = f"{flow_id}:{unique_id}"
-
         task = await service.schedule_interval_task(
             flow_id=flow_id,
             session_id=session_id,
@@ -111,16 +105,14 @@ class TestScheduleService:
             content="Drink water",
             description="Hydration reminder",
         )
-
         assert task.schedule_task_id is not None
         assert task.schedule_type == "interval"
         assert task.interval_minutes == 30
-
-        saved_task = await container.scheduled_task_repository.get_by_schedule_task_id(
-            task.schedule_task_id
+        saved_task = await container.scheduler_task_repository.get(
+            company_id=_TEST_COMPANY_ID, schedule_task_id=task.schedule_task_id
         )
         assert saved_task is not None
-        assert saved_task.interval_minutes == 30
+        assert saved_task.interval_seconds == 30 * 60
 
     @pytest.mark.asyncio
     async def test_list_tasks_returns_session_tasks(self, app, container, unique_id):
@@ -130,8 +122,6 @@ class TestScheduleService:
         service = container.schedule_service
         flow_id = f"test_agent_{unique_id}"
         session_id = f"{flow_id}:{unique_id}"
-
-        # Создаем несколько задач
         await service.schedule_one_time_task(
             flow_id=flow_id,
             session_id=session_id,
@@ -140,7 +130,6 @@ class TestScheduleService:
             content_type=ContentType.MESSAGE,
             content="Task 1",
         )
-
         await service.schedule_cron_task(
             flow_id=flow_id,
             session_id=session_id,
@@ -149,9 +138,7 @@ class TestScheduleService:
             content_type=ContentType.MESSAGE,
             content="Task 2",
         )
-
         tasks = await service.list_tasks(session_id=session_id)
-
         assert len(tasks) >= 2
         contents = [t.content for t in tasks]
         assert "Task 1" in contents
@@ -165,7 +152,6 @@ class TestScheduleService:
         service = container.schedule_service
         flow_id = f"test_agent_{unique_id}"
         session_id = f"{flow_id}:{unique_id}"
-
         task = await service.schedule_one_time_task(
             flow_id=flow_id,
             session_id=session_id,
@@ -174,23 +160,19 @@ class TestScheduleService:
             content_type=ContentType.MESSAGE,
             content="To be cancelled",
         )
-
         success = await service.cancel_task(task.schedule_task_id)
-
         assert success is True
-
-        cancelled_task = await container.scheduled_task_repository.get_by_schedule_task_id(
-            task.schedule_task_id
+        cancelled_task = await container.scheduler_task_repository.get(
+            company_id=_TEST_COMPANY_ID, schedule_task_id=task.schedule_task_id
         )
-        assert cancelled_task.status == "cancelled"
+        assert cancelled_task is not None
+        assert cancelled_task.status.value == "cancelled"
 
     @pytest.mark.asyncio
     async def test_cancel_nonexistent_task_returns_false(self, app, container):
         """cancel_task возвращает False для несуществующей задачи."""
         service = container.schedule_service
-
         success = await service.cancel_task("nonexistent-task-id")
-
         assert success is False
 
 
@@ -203,7 +185,6 @@ class TestSchedulingTools:
         from core.state import ExecutionState
 
         def _make(unique_id: str, session_suffix: str = ""):
-            # session_id в формате flow_id:context_id для правильного извлечения flow_id
             flow_id = f"test_agent_{unique_id}"
             context_id = f"{session_suffix}_{unique_id}" if session_suffix else unique_id
             session_id = f"{flow_id}:{context_id}"
@@ -214,6 +195,7 @@ class TestSchedulingTools:
                 session_id=session_id,
                 user_id=f"test-user-{unique_id}",
             )
+
         return _make
 
     @pytest.mark.asyncio
@@ -221,9 +203,7 @@ class TestSchedulingTools:
         """Tool schedule_one_time_task создает задачу."""
         tool = await container.tool_registry.create_tool({"tool_id": "schedule_one_time_task"})
         state = make_state(unique_id)
-
         run_at = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=2)).isoformat()
-
         result = await tool.run(
             {
                 "run_at": run_at,
@@ -233,7 +213,6 @@ class TestSchedulingTools:
             },
             state,
         )
-
         assert "Одноразовая задача создана" in result
         assert len(state.scheduled_tasks) == 1
         assert state.scheduled_tasks[0]["content"] == "Tool test reminder"
@@ -243,7 +222,6 @@ class TestSchedulingTools:
         """Tool schedule_cron_task создает периодическую задачу."""
         tool = await container.tool_registry.create_tool({"tool_id": "schedule_cron_task"})
         state = make_state(unique_id)
-
         result = await tool.run(
             {
                 "cron": "0 8 * * 1-5",
@@ -253,7 +231,6 @@ class TestSchedulingTools:
             },
             state,
         )
-
         assert "Периодическая задача создана" in result
         assert "0 8 * * 1-5" in result
         assert len(state.scheduled_tasks) == 1
@@ -263,16 +240,9 @@ class TestSchedulingTools:
         """Tool schedule_interval_task создает интервальную задачу."""
         tool = await container.tool_registry.create_tool({"tool_id": "schedule_interval_task"})
         state = make_state(unique_id)
-
         result = await tool.run(
-            {
-                "interval_minutes": 60,
-                "content_type": "message",
-                "content": "Hourly check",
-            },
-            state,
+            {"interval_minutes": 60, "content_type": "message", "content": "Hourly check"}, state
         )
-
         assert "Периодическая задача создана" in result
         assert "60" in result
         assert len(state.scheduled_tasks) == 1
@@ -280,48 +250,35 @@ class TestSchedulingTools:
     @pytest.mark.asyncio
     async def test_list_scheduled_tasks_tool(self, app, container, unique_id, make_state):
         """Tool list_scheduled_tasks показывает задачи."""
-        schedule_tool = await container.tool_registry.create_tool({"tool_id": "schedule_one_time_task"})
+        schedule_tool = await container.tool_registry.create_tool(
+            {"tool_id": "schedule_one_time_task"}
+        )
         list_tool = await container.tool_registry.create_tool({"tool_id": "list_scheduled_tasks"})
-
         state = make_state(unique_id, "list")
-
         run_at = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=3)).isoformat()
         await schedule_tool.run(
-            {
-                "run_at": run_at,
-                "content_type": "message",
-                "content": "List test task",
-            },
-            state,
+            {"run_at": run_at, "content_type": "message", "content": "List test task"}, state
         )
-
         result = await list_tool.run({}, state)
-
         assert "Запланированные задачи" in result
         assert "List test task" in result
 
     @pytest.mark.asyncio
     async def test_cancel_scheduled_task_tool(self, app, container, unique_id, make_state):
         """Tool cancel_scheduled_task отменяет задачу."""
-        schedule_tool = await container.tool_registry.create_tool({"tool_id": "schedule_one_time_task"})
-        cancel_tool = await container.tool_registry.create_tool({"tool_id": "cancel_scheduled_task"})
-
+        schedule_tool = await container.tool_registry.create_tool(
+            {"tool_id": "schedule_one_time_task"}
+        )
+        cancel_tool = await container.tool_registry.create_tool(
+            {"tool_id": "cancel_scheduled_task"}
+        )
         state = make_state(unique_id, "cancel")
-
         run_at = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=4)).isoformat()
         await schedule_tool.run(
-            {
-                "run_at": run_at,
-                "content_type": "message",
-                "content": "To cancel via tool",
-            },
-            state,
+            {"run_at": run_at, "content_type": "message", "content": "To cancel via tool"}, state
         )
-
         schedule_task_id = state.scheduled_tasks[0]["schedule_task_id"]
-
         result = await cancel_tool.run({"schedule_task_id": schedule_task_id}, state)
-
         assert "отменена" in result
         assert len(state.scheduled_tasks) == 0
 
@@ -330,9 +287,7 @@ class TestSchedulingTools:
         """Можно запланировать вызов tool."""
         tool = await container.tool_registry.create_tool({"tool_id": "schedule_one_time_task"})
         state = make_state(unique_id)
-
         run_at = (datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=5)).isoformat()
-
         result = await tool.run(
             {
                 "run_at": run_at,
@@ -343,7 +298,6 @@ class TestSchedulingTools:
             },
             state,
         )
-
         assert "Одноразовая задача создана" in result
         task_data = state.scheduled_tasks[0]
         assert task_data["content_type"] == "tool_call"
@@ -355,13 +309,14 @@ class TestScheduledTaskExecution:
     """Тесты выполнения scheduled tasks через worker."""
 
     @pytest.mark.asyncio
-    async def test_one_time_task_executes_at_scheduled_time(self, app, container, unique_id, mock_llm_redis):
+    async def test_one_time_task_executes_at_scheduled_time(
+        self, app, container, unique_id, mock_llm_redis
+    ):
         """Одноразовая задача выполняется когда время пришло."""
         from apps.flows.src.models import FlowConfig
         from apps.flows.src.tasks.scheduled_tasks import execute_scheduled_task
         from core.scheduler.models import ContentType, ScheduledTaskStatus
 
-        # Создаем простой агент
         flow_id = f"scheduler_test_agent_{unique_id}"
         flow_config = FlowConfig(
             flow_id=flow_id,
@@ -371,16 +326,13 @@ class TestScheduledTaskExecution:
                 "main": {
                     "type": "code",
                     "code": "async def run(args, state):\n    state['response'] = f\"Received: {state.get('content', '')}\"\n    return state",
-                },
+                }
             },
-            edges=[{"from": "main", "to": None}],
+            edges=[{"from_node": "main", "to_node": None}],
         )
         await container.flow_repository.set(flow_config)
-
-        # Создаем scheduled task
         service = container.schedule_service
         session_id = f"{flow_id}:{unique_id}"
-
         user_id = f"test-user-{unique_id}"
         task = await service.schedule_one_time_task(
             flow_id=flow_id,
@@ -390,24 +342,21 @@ class TestScheduledTaskExecution:
             content_type=ContentType.MESSAGE,
             content="Scheduled message test",
         )
-
-        # Симулируем выполнение scheduled task (как это делает scheduler)
         result = await execute_scheduled_task(
             schedule_task_id=task.schedule_task_id,
             flow_id=flow_id,
             session_id=session_id,
             user_id=user_id,
-            task_type="message",
-            payload={"content": "Scheduled message test"},
+            content_type=ContentType.MESSAGE.value,
+            content="Scheduled message test",
+            company_id="system",
         )
-
         assert result["status"] == "completed"
         assert "Scheduled message test" in result["response"]
-
-        # Проверяем что статус обновился
-        updated_task = await container.scheduled_task_repository.get_by_schedule_task_id(
-            task.schedule_task_id
+        updated_task = await container.scheduler_task_repository.get(
+            company_id="system", schedule_task_id=task.schedule_task_id
         )
+        assert updated_task is not None
         assert updated_task.status == ScheduledTaskStatus.EXECUTED
 
     @pytest.mark.asyncio
@@ -419,7 +368,6 @@ class TestScheduledTaskExecution:
         service = container.schedule_service
         flow_id = f"test_agent_{unique_id}"
         session_id = f"{flow_id}:{unique_id}"
-
         user_id = f"test-user-{unique_id}"
         task = await service.schedule_one_time_task(
             flow_id=flow_id,
@@ -430,17 +378,15 @@ class TestScheduledTaskExecution:
             content="calculator",
             tool_args={"expression": "10+5"},
         )
-
         result = await execute_scheduled_task(
             schedule_task_id=task.schedule_task_id,
             flow_id=flow_id,
             session_id=session_id,
             user_id=user_id,
-            task_type="tool_call",
-            payload={"content": "calculator", "tool_args": {"expression": "10+5"}},
+            content_type=ContentType.TOOL_CALL.value,
+            content="calculator",
+            tool_args={"expression": "10+5"},
+            company_id="system",
         )
-
         assert result["tool"] == "calculator"
         assert "15" in str(result["result"])
-
-

@@ -14,7 +14,7 @@ from datetime import datetime
 
 import pytest
 
-from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
+from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from core.context import Context, User, clear_context, set_context
 from core.state import ExecutionState
@@ -29,7 +29,7 @@ def flow_config():
         name="Test Agent",
         description="Agent for testing prompt resolution",
         prompt="",
-        llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+        llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
     )
 
 

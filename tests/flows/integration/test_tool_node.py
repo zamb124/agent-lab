@@ -5,7 +5,6 @@
 """
 
 import pytest
-
 from apps.flows.src.models import Edge
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import CodeNode, create_node
@@ -21,7 +20,6 @@ def make_state(**kwargs) -> ExecutionState:
         "session_id": "test-agent:test-context",
     }
     defaults.update(kwargs)
-    # Если передан context_id, но не session_id, создаем session_id из context_id
     if "context_id" in kwargs and "session_id" not in kwargs:
         defaults["session_id"] = f"test-agent:{kwargs['context_id']}"
     return ExecutionState(**defaults)
@@ -33,51 +31,25 @@ class TestCodeNodeInAgent:
     @pytest.mark.asyncio
     async def test_flow_with_inline_tool_node(self):
         """Agent с inline CodeNode."""
-        prepare_code = """
-async def run(args, state):
-    state.value = 10
-    state.multiplier = 3
-    return state
-"""
-        prepare_node = CodeNode(
-            node_id="prepare",
-            config={"code": prepare_code},
+        prepare_code = "\nasync def run(args, state):\n    state.value = 10\n    state.multiplier = 3\n    return state\n"
+        prepare_node = CodeNode(node_id="prepare", config={"code": prepare_code})
+        multiply_code = (
+            "\nasync def run(args, state):\n    return {'result': args['x'] * args['factor']}\n"
         )
-
-        multiply_code = """
-async def run(args, state):
-    return {'result': args['x'] * args['factor']}
-"""
         tool_node = CodeNode(
             node_id="multiply",
             config={
                 "code": multiply_code,
-                "input_mapping": {
-                    "x": "@state:value",
-                    "factor": "@state:multiplier",
-                }
+                "input_mapping": {"x": "@state:value", "factor": "@state:multiplier"},
             },
         )
-
-        format_code = """
-async def run(args, state):
-    state.response = f"Результат: {state.result}"
-    return state
-"""
-        format_node = CodeNode(
-            node_id="format",
-            config={"code": format_code},
-        )
-
+        format_code = '\nasync def run(args, state):\n    state.response = f"Результат: {state.result}"\n    return state\n'
+        format_node = CodeNode(node_id="format", config={"code": format_code})
         flow = Flow(
             flow_id="test_flow",
             name="Test Agent",
             entry="prepare",
-            nodes={
-                "prepare": prepare_node,
-                "multiply": tool_node,
-                "format": format_node,
-            },
+            nodes={"prepare": prepare_node, "multiply": tool_node, "format": format_node},
             edges=[
                 Edge(from_node="prepare", to_node="multiply"),
                 Edge(from_node="multiply", to_node="format"),
@@ -85,38 +57,30 @@ async def run(args, state):
             ],
             variables={},
         )
-
         from core.state import ExecutionState
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            content="test"
+            content="test",
         )
         result = await flow.run(state)
-
         assert result.result == 30
         assert result.response == "Результат: 30"
 
     @pytest.mark.asyncio
     async def test_flow_with_tool_node_and_variables(self):
         """Agent с CodeNode и переменными из variables."""
-        greet_code = """
-async def run(args, state):
-    return {'greeting': f"Добро пожаловать в {args['company']}, {args['name']}!"}
-"""
+        greet_code = "\nasync def run(args, state):\n    return {'greeting': f\"Добро пожаловать в {args['company']}, {args['name']}!\"}\n"
         tool_node = CodeNode(
             node_id="greet",
             config={
                 "code": greet_code,
-                "input_mapping": {
-                    "company": "@var:company_name",
-                    "name": "@state:user_name",
-                }
+                "input_mapping": {"company": "@var:company_name", "name": "@state:user_name"},
             },
         )
-
         flow = Flow(
             flow_id="greet_flow",
             name="Greet Agent",
@@ -125,66 +89,37 @@ async def run(args, state):
             edges=[Edge(from_node="greet", to_node=None)],
             variables={"company_name": "Platform Corp"},
         )
-
         from core.state import ExecutionState
+
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            user_name="Алексей"
+            user_name="Алексей",
         )
         result = await flow.run(state)
-
         assert result.greeting == "Добро пожаловать в Platform Corp, Алексей!"
 
     @pytest.mark.asyncio
     async def test_flow_with_conditional_tool_node(self):
         """Agent с условным переходом к CodeNode."""
-        classifier_code = """
-async def run(args, state):
-    content = state.content or ""
-    state.needs_calc = "=" in content
-    state.expr = content.replace("=", "").strip()
-    return state
-"""
-        classifier_node = CodeNode(
-            node_id="classifier",
-            config={"code": classifier_code},
-        )
-
-        calc_code = """
-async def run(args, state):
-    parts = args['expr'].split('+')
-    return {'calc_result': sum(int(p.strip()) for p in parts)}
-"""
+        classifier_code = '\nasync def run(args, state):\n    content = state.content or ""\n    state.needs_calc = "=" in content\n    state.expr = content.replace("=", "").strip()\n    return state\n'
+        classifier_node = CodeNode(node_id="classifier", config={"code": classifier_code})
+        calc_code = "\nasync def run(args, state):\n    parts = args['expr'].split('+')\n    return {'calc_result': sum(int(p.strip()) for p in parts)}\n"
         calc_node = CodeNode(
             node_id="calculate",
-            config={
-                "code": calc_code,
-                "input_mapping": {"expr": "@state:expr"}
-            },
+            config={"code": calc_code, "input_mapping": {"expr": "@state:expr"}},
         )
-
-        skip_code = """
-async def run(args, state):
-    state.calc_result = "N/A"
-    return state
-"""
-        skip_node = CodeNode(
-            node_id="skip",
-            config={"code": skip_code},
+        skip_code = (
+            '\nasync def run(args, state):\n    state.calc_result = "N/A"\n    return state\n'
         )
-
+        skip_node = CodeNode(node_id="skip", config={"code": skip_code})
         flow = Flow(
             flow_id="conditional_flow",
             name="Conditional Agent",
             entry="classifier",
-            nodes={
-                "classifier": classifier_node,
-                "calculate": calc_node,
-                "skip": skip_node,
-            },
+            nodes={"classifier": classifier_node, "calculate": calc_node, "skip": skip_node},
             edges=[
                 Edge(from_node="classifier", to_node="calculate", condition="needs_calc == True"),
                 Edge(from_node="classifier", to_node="skip", condition="needs_calc == False"),
@@ -193,25 +128,21 @@ async def run(args, state):
             ],
             variables={},
         )
-
-        # Тест с вычислением (2 + 3 = 5, без умножения - простой парсер)
         state1 = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            content="2 + 3 ="
+            content="2 + 3 =",
         )
         result1 = await flow.run(state1)
         assert result1["calc_result"] == 5
-
-        # Тест без вычисления
         state2 = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            content="просто текст"
+            content="просто текст",
         )
         result2 = await flow.run(state2)
         assert result2["calc_result"] == "N/A"
@@ -226,24 +157,24 @@ class TestCodeNodeFromConfig:
         config = {
             "type": "code",
             "code": "async def run(args, state):\n    return {'squared': args['a'] ** 2}",
-            "args_schema": {
-                "a": {"type": "integer", "description": "Число для возведения в квадрат"},
+            "parameters_schema": {
+                "type": "object",
+                "properties": {
+                    "a": {"type": "integer", "description": "Число для возведения в квадрат"}
+                },
+                "required": ["a"],
             },
             "input_mapping": {"a": 7},
         }
-
         node = await create_node("square_node", config)
-
         assert isinstance(node, CodeNode)
         assert node.node_id == "square_node"
-
         result = await node.run(make_state())
         assert result.squared == 49
 
     @pytest.mark.asyncio
     async def test_flow_from_config_with_tool_node(self):
         """Agent из конфига с CodeNode."""
-        # Flow.from_config принимает dict, не FlowConfig
         flow_config = {
             "id": "config_flow",
             "name": "Config Agent",
@@ -260,21 +191,19 @@ class TestCodeNodeFromConfig:
                 },
                 "finish": {
                     "type": "code",
-                    "code": "async def run(args, state):\n    state.response = f\"Processed: {state.processed}\"\n    return state",
+                    "code": 'async def run(args, state):\n    state.response = f"Processed: {state.processed}"\n    return state',
                 },
             },
             "edges": [
-                {"from": "prepare", "to": "process"},
-                {"from": "process", "to": "finish"},
-                {"from": "finish", "to": None},
+                {"from_node": "prepare", "to_node": "process"},
+                {"from_node": "process", "to_node": "finish"},
+                {"from_node": "finish", "to_node": None},
             ],
             "variables": {},
         }
-
         flow = await Flow.from_config(flow_config)
         state = make_state(content="start")
         result = await flow.run(state)
-
         assert result["processed"] == 50
         assert result["response"] == "Processed: 50"
 
@@ -285,21 +214,14 @@ class TestCodeNodeWithSkillVariables:
     @pytest.mark.asyncio
     async def test_tool_node_uses_skill_variables(self):
         """CodeNode использует переменные из текущего skill."""
-        format_code = """
-async def run(args, state):
-    return {'formatted_id': f"{args['prefix']}{args['id']}"}
-"""
+        format_code = "\nasync def run(args, state):\n    return {'formatted_id': f\"{args['prefix']}{args['id']}\"}\n"
         tool_node = CodeNode(
             node_id="format",
             config={
                 "code": format_code,
-                "input_mapping": {
-                    "prefix": "@var:prefix",
-                    "id": "@state:entity_id",
-                }
+                "input_mapping": {"prefix": "@var:prefix", "id": "@state:entity_id"},
             },
         )
-
         flow = Flow(
             flow_id="skill_flow",
             name="Skill Agent",
@@ -308,17 +230,12 @@ async def run(args, state):
             edges=[Edge(from_node="format", to_node=None)],
             variables={"prefix": "ORDER-"},
         )
-
         state = make_state(entity_id="12345")
         result = await flow.run(state)
-
         assert result.formatted_id == "ORDER-12345"
-
-        # Теперь с другими переменными (как будто другой skill)
         flow.variables = {"prefix": "TICKET-"}
         state2 = make_state(entity_id="67890")
         result2 = await flow.run(state2)
-
         assert result2.formatted_id == "TICKET-67890"
 
 
@@ -328,48 +245,25 @@ class TestCodeNodeChaining:
     @pytest.mark.asyncio
     async def test_chain_of_tool_nodes(self):
         """Цепочка CodeNode передает данные через state."""
-        double_code = """
-async def run(args, state):
-    return {'doubled': args['x'] * 2}
-"""
-        add_code = """
-async def run(args, state):
-    return {'final': args['a'] + args['b']}
-"""
+        double_code = "\nasync def run(args, state):\n    return {'doubled': args['x'] * 2}\n"
+        add_code = "\nasync def run(args, state):\n    return {'final': args['a'] + args['b']}\n"
         node1 = CodeNode(
-            node_id="step1",
-            config={
-                "code": double_code,
-                "input_mapping": {"x": "@state:input"}
-            },
+            node_id="step1", config={"code": double_code, "input_mapping": {"x": "@state:input"}}
         )
-
         node2 = CodeNode(
             node_id="step2",
-            config={
-                "code": add_code,
-                "input_mapping": {
-                    "a": "@state:doubled",
-                    "b": "@var:bonus",
-                }
-            },
+            config={"code": add_code, "input_mapping": {"a": "@state:doubled", "b": "@var:bonus"}},
         )
-
         flow = Flow(
             flow_id="chain_flow",
             name="Chain Agent",
             entry="step1",
             nodes={"step1": node1, "step2": node2},
-            edges=[
-                Edge(from_node="step1", to_node="step2"),
-                Edge(from_node="step2", to_node=None),
-            ],
+            edges=[Edge(from_node="step1", to_node="step2"), Edge(from_node="step2", to_node=None)],
             variables={"bonus": 100},
         )
-
         state = make_state(input=25)
         result = await flow.run(state)
-
         assert result["doubled"] == 50
         assert result["final"] == 150
 
@@ -388,40 +282,30 @@ class TestCodeNodeDynamicDataAgent:
         Цепочка CodeNode с @state:, @var: и константами.
         """
         init_code = "async def run(args, state):\n    return {'base_value': args['initial']}"
-        multiply_code = "async def run(args, state):\n    return {'multiplied': args['value'] * args['factor']}"
-        add_const_code = "async def run(args, state):\n    return {'added': args['value'] + args['const']}"
-        final_code = "async def run(args, state):\n    return {'final_result': args['current'] + args['original'] + args['bonus']}"
-
-        node1 = CodeNode(
-            node_id="init_node",
-            config={
-                "code": init_code,
-                "input_mapping": {"initial": 10}
-            },
+        multiply_code = (
+            "async def run(args, state):\n    return {'multiplied': args['value'] * args['factor']}"
         )
-
+        add_const_code = (
+            "async def run(args, state):\n    return {'added': args['value'] + args['const']}"
+        )
+        final_code = "async def run(args, state):\n    return {'final_result': args['current'] + args['original'] + args['bonus']}"
+        node1 = CodeNode(
+            node_id="init_node", config={"code": init_code, "input_mapping": {"initial": 10}}
+        )
         node2 = CodeNode(
             node_id="multiply_node",
             config={
                 "code": multiply_code,
-                "input_mapping": {
-                    "value": "@state:base_value",
-                    "factor": "@var:multiplier",
-                }
+                "input_mapping": {"value": "@state:base_value", "factor": "@var:multiplier"},
             },
         )
-
         node3 = CodeNode(
             node_id="add_node",
             config={
                 "code": add_const_code,
-                "input_mapping": {
-                    "value": "@state:multiplied",
-                    "const": 50,
-                }
+                "input_mapping": {"value": "@state:multiplied", "const": 50},
             },
         )
-
         node4 = CodeNode(
             node_id="final_node",
             config={
@@ -430,10 +314,9 @@ class TestCodeNodeDynamicDataAgent:
                     "current": "@state:added",
                     "original": "@state:base_value",
                     "bonus": "@var:bonus",
-                }
+                },
             },
         )
-
         flow = Flow(
             flow_id="dynamic_flow",
             name="Dynamic Data Agent",
@@ -450,15 +333,10 @@ class TestCodeNodeDynamicDataAgent:
                 Edge(from_node="add_node", to_node="final_node"),
                 Edge(from_node="final_node", to_node=None),
             ],
-            variables={
-                "multiplier": 3,
-                "bonus": 5,
-            },
+            variables={"multiplier": 3, "bonus": 5},
         )
-
         state = make_state(content="start")
         result = await flow.run(state)
-
         assert result.base_value == 10
         assert result.multiplied == 30
         assert result.added == 80
@@ -467,33 +345,23 @@ class TestCodeNodeDynamicDataAgent:
     @pytest.mark.asyncio
     async def test_dynamic_nested_state_modification(self):
         """Тест с вложенными структурами в state."""
-        setup_code = """async def run(args, state):
-    return {'user': {'data': {'score': args['initial_score'], 'name': args['name']}}}"""
+        setup_code = "async def run(args, state):\n    return {'user': {'data': {'score': args['initial_score'], 'name': args['name']}}}"
         boost_code = "async def run(args, state):\n    return {'boosted_score': args['score'] + args['boost']}"
         format_code = "async def run(args, state):\n    return {'formatted_result': f\"{args['prefix']}{args['name']}: {args['final_score']}\"}"
-
         node1 = CodeNode(
             node_id="setup_node",
             config={
                 "code": setup_code,
-                "input_mapping": {
-                    "initial_score": 100,
-                    "name": "@var:player_name",
-                }
+                "input_mapping": {"initial_score": 100, "name": "@var:player_name"},
             },
         )
-
         node2 = CodeNode(
             node_id="boost_node",
             config={
                 "code": boost_code,
-                "input_mapping": {
-                    "score": "@state:user.data.score",
-                    "boost": "@var:boost_amount",
-                }
+                "input_mapping": {"score": "@state:user.data.score", "boost": "@var:boost_amount"},
             },
         )
-
         node3 = CodeNode(
             node_id="format_node",
             config={
@@ -502,33 +370,23 @@ class TestCodeNodeDynamicDataAgent:
                     "prefix": "Player ",
                     "name": "@state:user.data.name",
                     "final_score": "@state:boosted_score",
-                }
+                },
             },
         )
-
         flow = Flow(
             flow_id="nested_flow",
             name="Nested State Agent",
             entry="setup_node",
-            nodes={
-                "setup_node": node1,
-                "boost_node": node2,
-                "format_node": node3,
-            },
+            nodes={"setup_node": node1, "boost_node": node2, "format_node": node3},
             edges=[
                 Edge(from_node="setup_node", to_node="boost_node"),
                 Edge(from_node="boost_node", to_node="format_node"),
                 Edge(from_node="format_node", to_node=None),
             ],
-            variables={
-                "player_name": "Alice",
-                "boost_amount": 50,
-            },
+            variables={"player_name": "Alice", "boost_amount": 50},
         )
-
         state = make_state(content="start")
         result = await flow.run(state)
-
         assert result.user["data"]["score"] == 100
         assert result.user["data"]["name"] == "Alice"
         assert result.boosted_score == 150
@@ -541,23 +399,14 @@ class TestCodeNodeDynamicDataAgent:
         transform_code = "async def run(args, state):\n    return {'transformed_data': [item.strip().upper() for item in args['data']['items']]}"
         validate_code = "async def run(args, state):\n    return {'is_valid': len(args['items']) >= args['min_count']}"
         save_code = "async def run(args, state):\n    return {'saved_result': {'items': args['items'], 'valid': args['is_valid'], 'source': args['source']}}"
-
         node1 = CodeNode(
             node_id="extract_node",
-            config={
-                "code": extract_code,
-                "input_mapping": {"raw": "@state:raw_input"}
-            },
+            config={"code": extract_code, "input_mapping": {"raw": "@state:raw_input"}},
         )
-
         node2 = CodeNode(
             node_id="transform_node",
-            config={
-                "code": transform_code,
-                "input_mapping": {"data": "@state:extracted_data"}
-            },
+            config={"code": transform_code, "input_mapping": {"data": "@state:extracted_data"}},
         )
-
         node3 = CodeNode(
             node_id="validate_node",
             config={
@@ -565,10 +414,9 @@ class TestCodeNodeDynamicDataAgent:
                 "input_mapping": {
                     "items": "@state:transformed_data",
                     "min_count": "@var:min_items",
-                }
+                },
             },
         )
-
         node4 = CodeNode(
             node_id="save_node",
             config={
@@ -577,10 +425,9 @@ class TestCodeNodeDynamicDataAgent:
                     "items": "@state:transformed_data",
                     "is_valid": "@state:is_valid",
                     "source": "api",
-                }
+                },
             },
         )
-
         flow = Flow(
             flow_id="pipeline_flow",
             name="Data Pipeline Agent",
@@ -599,11 +446,8 @@ class TestCodeNodeDynamicDataAgent:
             ],
             variables={"min_items": 2},
         )
-
         state = make_state(raw_input="apple, banana, cherry")
         result = await flow.run(state)
-
-        # Проверяем весь pipeline
         assert result["extracted_data"]["count"] == 3
         assert result["transformed_data"] == ["APPLE", "BANANA", "CHERRY"]
         assert result["is_valid"] is True
@@ -614,52 +458,26 @@ class TestCodeNodeDynamicDataAgent:
     @pytest.mark.asyncio
     async def test_mixed_function_and_tool_nodes_data_flow(self):
         """Тест смешанного flow: CodeNode передают данные друг другу."""
-        init_code = """
-async def run(args, state):
-    state.x_value = 7
-    state.y_value = 8
-    return state
-"""
+        init_code = "\nasync def run(args, state):\n    state.x_value = 7\n    state.y_value = 8\n    return state\n"
         multiply_code = "async def run(args, state):\n    return {'product': args['x'] * args['y']}"
-        process_code = """
-async def run(args, state):
-    state.processed_value = state.product + 100
-    return state
-"""
+        process_code = "\nasync def run(args, state):\n    state.processed_value = state.product + 100\n    return state\n"
         finalize_code = "async def run(args, state):\n    return {'final_message': f\"Result: {args['value']} (bonus: {args['bonus']})\"}"
-
-        init_func = CodeNode(
-            node_id="init_func",
-            config={"code": init_code},
-        )
-
+        init_func = CodeNode(node_id="init_func", config={"code": init_code})
         tool_node1 = CodeNode(
             node_id="multiply_node",
             config={
                 "code": multiply_code,
-                "input_mapping": {
-                    "x": "@state:x_value",
-                    "y": "@state:y_value",
-                }
+                "input_mapping": {"x": "@state:x_value", "y": "@state:y_value"},
             },
         )
-
-        process_func = CodeNode(
-            node_id="process_func",
-            config={"code": process_code},
-        )
-
+        process_func = CodeNode(node_id="process_func", config={"code": process_code})
         tool_node2 = CodeNode(
             node_id="finalize_node",
             config={
                 "code": finalize_code,
-                "input_mapping": {
-                    "value": "@state:processed_value",
-                    "bonus": "@var:bonus_text",
-                }
+                "input_mapping": {"value": "@state:processed_value", "bonus": "@var:bonus_text"},
             },
         )
-
         flow = Flow(
             flow_id="mixed_flow",
             name="Mixed Nodes Agent",
@@ -678,13 +496,10 @@ async def run(args, state):
             ],
             variables={"bonus_text": "+VIP"},
         )
-
         state = make_state(content="start")
         result = await flow.run(state)
-
         assert result.x_value == 7
         assert result.y_value == 8
         assert result.product == 56
         assert result.processed_value == 156
         assert result.final_message == "Result: 156 (bonus: +VIP)"
-

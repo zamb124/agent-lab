@@ -5,12 +5,13 @@ from __future__ import annotations
 import csv
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Any
 
 from docx import Document
 from openpyxl import load_workbook
 from openpyxl.cell.cell import Cell
 from openpyxl.utils.cell import coordinate_to_tuple
+
+from apps.office.models.api import SpreadsheetCellValue
 
 
 class DocumentMutationError(ValueError):
@@ -71,7 +72,7 @@ def _mutate_docx_replace(data: bytes, find: str, replace: str, *, match_case: bo
 def _mutate_docx_append(data: bytes, text: str) -> bytes:
     doc = Document(BytesIO(data))
     for line in text.splitlines() or [""]:
-        doc.add_paragraph(line)
+        _ = doc.add_paragraph(line)
     out = BytesIO()
     doc.save(out)
     return out.getvalue()
@@ -131,7 +132,7 @@ def update_spreadsheet_cells(
     data: bytes,
     original_name: str,
     sheet: str | None,
-    cells: dict[str, Any],
+    cells: dict[str, SpreadsheetCellValue],
 ) -> bytes:
     if not cells:
         raise DocumentMutationError("cells must not be empty")

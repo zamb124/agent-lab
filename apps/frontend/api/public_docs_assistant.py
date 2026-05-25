@@ -111,7 +111,7 @@ async def issue_public_docs_assistant_session(
         company_id=SYSTEM_COMPANY_ID,
         name="Documentation Guest",
         roles=["guest"],
-        attrs={
+        attributes={
             "kind": "embed_session_guest",
             "embed_id": embed_id,
             "embed_flow_id": config.flow_id,

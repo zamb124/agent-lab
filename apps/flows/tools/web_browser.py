@@ -131,7 +131,7 @@ class BrowserPageSnapshotArgs(BaseModel):
     name="browser_duckduckgo_links",
     description=_BROWSER_DUCKDUCKGO_LINKS_DESCRIPTION,
     tags=["browser", "mcp", "search", "web"],
-    args_schema=BrowserDuckduckgoLinksArgs,
+    parameters_model=BrowserDuckduckgoLinksArgs,
 )
 async def browser_duckduckgo_links(
     query: str,
@@ -152,7 +152,7 @@ async def browser_duckduckgo_links(
     name="browser_duckduckgo_links_batch",
     description=_BROWSER_DUCKDUCKGO_LINKS_BATCH_DESCRIPTION,
     tags=["browser", "mcp", "search", "web"],
-    args_schema=BrowserDuckduckgoLinksBatchArgs,
+    parameters_model=BrowserDuckduckgoLinksBatchArgs,
 )
 async def browser_duckduckgo_links_batch(
     queries: list[str],
@@ -173,7 +173,7 @@ async def browser_duckduckgo_links_batch(
     name="browser_page_markdown",
     description=_BROWSER_PAGE_MARKDOWN_DESCRIPTION,
     tags=["browser", "mcp", "web", "files"],
-    args_schema=BrowserPageMarkdownArgs,
+    parameters_model=BrowserPageMarkdownArgs,
 )
 async def browser_page_markdown(
     url: str,
@@ -199,7 +199,7 @@ async def browser_page_markdown(
     name="browser_page_snapshot",
     description=_BROWSER_PAGE_SNAPSHOT_DESCRIPTION,
     tags=["browser", "mcp", "web", "files"],
-    args_schema=BrowserPageSnapshotArgs,
+    parameters_model=BrowserPageSnapshotArgs,
 )
 async def browser_page_snapshot(
     url: str,

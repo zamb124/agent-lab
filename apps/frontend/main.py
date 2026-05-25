@@ -47,7 +47,7 @@ from apps.frontend.api.team import router as team_router
 from apps.frontend.api.voice_providers_catalog import router as voice_providers_catalog_router
 from apps.frontend.api.yoomoney_oauth import router as yoomoney_oauth_router
 from apps.frontend.config import FrontendSettings, get_frontend_settings
-from apps.frontend.container import get_frontend_container
+from apps.frontend.container import FrontendContainer, get_frontend_container
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.services.docs_assistant_bootstrap import schedule_docs_assistant_bootstrap
 from apps.frontend.services.flow_preview_guest_html import (
@@ -67,6 +67,7 @@ from core.identity.flow_preview_handoff import (
 )
 from core.identity.system_bootstrap import ensure_system_admin_membership
 from core.logging import get_logger
+from core.middleware.auth.company_resolver import build_service_base_url
 from core.middleware.static_core_module_cors import StaticCoreModuleCorsMiddleware
 from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
 
@@ -213,9 +214,9 @@ def _build_llms_txt(base_url: str) -> str:
         f"- Service health endpoint (technical): {base_url}/health\n"
     )
 
-async def _seed_platform_pronunciation_rules(container) -> None:
+async def _seed_platform_pronunciation_rules(container: FrontendContainer) -> None:
     """Засевает платформенные правила произношения при первом старте (идемпотентно)."""
-    if not getattr(get_settings().voice.tts, "pronunciation_seed_enabled", True):
+    if not get_settings().voice.tts.pronunciation_seed_enabled:
         return
     repo = container.platform_pronunciation_rule_repository
     existing = await repo.list_all()
@@ -243,11 +244,20 @@ async def _seed_platform_pronunciation_rules(container) -> None:
     logger.info("frontend.pronunciation_seed_applied")
 
 
-async def on_startup(app: FastAPI, container, settings: FrontendSettings) -> None:
+async def on_startup(app: FastAPI, container: FrontendContainer, settings: FrontendSettings) -> None:
+    _ = settings
     if is_testing():
         return
-    await ensure_system_admin_membership(container)
-    await ensure_demo_company_and_user(container)
+    _ = await ensure_system_admin_membership(
+        company_repository=container.company_repository,
+        subdomain_repository=container.subdomain_repository,
+        user_repository=container.user_repository,
+    )
+    await ensure_demo_company_and_user(
+        company_repository=container.company_repository,
+        user_repository=container.user_repository,
+        subdomain_repository=container.subdomain_repository,
+    )
     await _seed_platform_pronunciation_rules(container)
     n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()
     logger.info("Биллинг: правила settlement проверены/записаны для компаний: %s", n)
@@ -446,17 +456,10 @@ async def flow_preview_guest_page(request: Request, container: ContainerDep, h: 
     else:
         interface_locale = interface_locale.strip()
 
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    scheme = (forwarded_proto or request.url.scheme or "").strip().lower()
-    if scheme not in ("http", "https"):
-        raise ValueError("flow_preview_guest_page: ожидалась схема http или https")
-    forwarded_host = request.headers.get("x-forwarded-host")
-    host = (forwarded_host or request.headers.get("host") or request.url.netloc or "").strip()
-    if not host:
-        raise ValueError("flow_preview_guest_page: host is required")
+    base = build_service_base_url(request)
     # Только same-origin `/static/core/...`: страница на нашем домене; CDN-скрипт может быть иной сборки
     # и ломать нативный ESM (bare `@platform/*` без import map).
-    script_url = f"{scheme}://{host}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
+    script_url = f"{base}/static/core/lib/embed-chat/humanitec-embed-autoload.js"
 
     html_out = build_flow_preview_guest_html(
         script_url=script_url,

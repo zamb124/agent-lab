@@ -3,7 +3,6 @@ TaskIQ задачи для инициализации компаний и system
 """
 
 from pathlib import Path
-from typing import Any
 
 from apps.flows.src.container import get_container
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
@@ -18,6 +17,7 @@ from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -32,7 +32,7 @@ async def init_company_resources(
     company_id: str,
     company_name: str = "",
     subdomain: str = ""
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Универсальная задача инициализации ресурсов для компании.
 
@@ -88,7 +88,7 @@ async def init_company_resources(
         logger.info(f"Загружено {len(loaded_tools)} tools для {company_id}")
 
         try:
-            await ensure_default_mcp_servers_for_company(container=container)
+            _ = await ensure_default_mcp_servers_for_company(container=container)
             synced = await sync_auto_mcp_servers_for_company(container=container)
             logger.info(
                 "MCP синхронизация для %s: servers=%s tools=%s",
@@ -125,8 +125,12 @@ async def init_company_resources(
         stats["tools"] = len(loaded_tools)
 
         logger.info(
-            f"{action} завершено для {company_id}: "
-            f"flows={stats['flows']}, tools={stats['tools']}, nodes={stats['nodes']}"
+            "%s завершено для %s: flows=%s, tools=%s, nodes=%s",
+            action,
+            company_id,
+            stats["flows"],
+            stats["tools"],
+            stats["nodes"],
         )
 
         return {

@@ -23,8 +23,7 @@
  * Tools и Structured Output взаимоисключающи: если включён Structured Output,
  * tools и react-секция не отображаются.
  *
- * Все поля — top-level свойства NodeConfig. Никаких parameters_schema/mocks
- * (их нет в модели — это поля ToolReference / get_mock_for_node).
+ * Все поля — top-level свойства NodeConfig. Никаких parameters_schema.
  */
 
 import { html, css, nothing } from 'lit';
@@ -110,7 +109,7 @@ function _mcpToolRefFromPicker(toolId, item) {
         code_mode: 'mcp_tool',
     };
     if (isPlainObject(item)) {
-        for (const key of ['name', 'title', 'description', 'parameters_schema', 'args_schema', 'tags', 'react_role']) {
+        for (const key of ['name', 'title', 'description', 'parameters_schema', 'tags', 'react_role']) {
             if (item[key] !== undefined && item[key] !== null) {
                 ref[key] = item[key];
             }

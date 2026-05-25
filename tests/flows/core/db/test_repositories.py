@@ -8,12 +8,14 @@
 import pytest
 
 from apps.flows.src.container import get_container
+from apps.flows.src.durable_execution import WorkflowEventType
 from apps.flows.src.models import (
     CodeMode,
     FlowConfig,
     NodeConfig,
     ToolReference,
 )
+from apps.flows.src.models.enums import NodeType
 from core.db.repositories import Variable
 from core.state import ExecutionState
 
@@ -29,7 +31,7 @@ class TestNodeRepository:
 
         node = NodeConfig(
             node_id="test_node_repo",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Test Node",
             description="For testing",
             prompt="Test prompt",
@@ -62,7 +64,7 @@ class TestNodeRepository:
 
         node = NodeConfig(
             node_id="node_to_delete",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Delete Me",
         )
         await repo.set(node)
@@ -127,7 +129,6 @@ class TestToolRepository:
             tool_id="test_tool_repo",
             title="Test Tool",
             description="For testing",
-            type="function",
             code_mode=CodeMode.INLINE_CODE,
             code="async def run(args, state):\n    return args.get('x', 0) + 1",
         )
@@ -185,14 +186,14 @@ class TestVariableRepository:
         await repo.delete("var2")
 
 
-class TestStateRepository:
-    """Тесты StateRepository."""
+class TestDurableWorkflowRuntime:
+    """Тесты durable projection read/write."""
 
     @pytest.mark.asyncio
     async def test_set_and_get_state(self, app):
         """Сохранение и получение state."""
         container = get_container()
-        repo = container.state_repository
+        runtime = container.workflow_runtime
 
         state = ExecutionState(
             task_id="test-task",
@@ -201,23 +202,24 @@ class TestStateRepository:
             session_id="test-agent:test-context",
             content="test",
             messages=[],
-            node="main"
         )
         from a2a.types import Message, Part, Role, TextPart
         message = Message(
-            messageId="test-msg",
+            message_id="test-msg",
             role=Role.user,
             parts=[Part(root=TextPart(text="Hello"))],
-            taskId="test-task"
+            task_id="test-task"
         )
         state.messages.append(message)
 
-        await repo.set("test_state_session", state.model_dump())
-        loaded = await repo.get("test_state_session")
+        await runtime.save_state(
+            state.session_id,
+            state,
+            event_type=WorkflowEventType.state_projection_committed,
+            snapshot=True,
+        )
+        loaded = await runtime.get_state(state.session_id)
 
         assert loaded is not None
-        assert loaded["content"] == "test"
-        assert len(loaded.get("messages", [])) == 1
-
-        await repo.delete("test_state_session")
-
+        assert loaded.content == "test"
+        assert len(loaded.messages) == 1

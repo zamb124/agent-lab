@@ -130,13 +130,13 @@ async def test_access_request_notification_flow(crm_client, unique_id, auth_head
         }, headers=auth_headers_system)
 
         assert request_resp.status_code == 200
-        request_id = request_resp.json()["request_id"]
+        access_request_id = request_resp.json()["access_request_id"]
 
         event = await _recv_event_by_type(ws_owner, expected_type, timeout=5)
         payload = event["payload"]
         assert payload["title"] == "Новый запрос доступа"
         assert entity_id in payload["data"]["entity_id"]
-        assert payload["data"]["request_id"] == request_id
+        assert payload["data"]["access_request_id"] == access_request_id
 
 
 @pytest.mark.asyncio

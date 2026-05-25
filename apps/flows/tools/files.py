@@ -5,7 +5,6 @@ read_file — чтение вложений; create_file — FileWriter() + crea
 """
 
 import re
-from pathlib import Path
 from typing import ClassVar, Literal
 from urllib.parse import quote
 
@@ -16,11 +15,10 @@ from apps.flows.src.runtime_helpers.state_utils import find_file, push_ui_event
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.service_client import NAMESPACE_HEADER, ServiceClient, ServiceClientError
-from core.context import get_context
+from core.context import resolve_namespace_or_raise
 from core.files.file_ref import FileRef
 from core.files.models import FileResponse
 from core.files.reader import FileReader, FileReadError
-from core.files.reader.models import FileReadKind, FileReadResult, ReadPage
 from core.files.writer import FileWriteError, FileWriter
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
@@ -31,11 +29,7 @@ OFFICE_MIME_RE = r"(pdf|word|excel|spreadsheet|presentation|powerpoint|officedoc
 
 
 def _context_namespace() -> str:
-    ctx = get_context()
-    if ctx is None:
-        raise RuntimeError("Context is not set")
-    ns = (ctx.active_namespace or "default").strip()
-    return ns or "default"
+    return resolve_namespace_or_raise()
 
 
 def _is_office_file(item: FileRef) -> bool:
@@ -139,50 +133,6 @@ file_size, checksum (если есть), is_public.
 """.strip()
 
 
-def _read_file_mock(args: JsonDict, state: ExecutionState | None = None) -> JsonDict:
-    file_name_arg = args.get("file_name")
-    if file_name_arg is not None and not isinstance(file_name_arg, str):
-        raise ValueError("read_file.file_name must be a string")
-    if state is not None:
-        files = state.files
-        if not files:
-            return {"success": False, "error": "Нет файлов для чтения"}
-        finfo = find_file(files, file_name_arg)
-        if finfo is None:
-            return {
-                "success": False,
-                "error": f"Файл не найден. Доступные: {[file_ref.original_name for file_ref in files]}",
-            }
-        url = finfo.url
-        if url is not None and not url.startswith(("http://", "https://")) and not Path(url).exists():
-            return {"success": False, "error": f"Файл не найден: {url}"}
-        res = FileReadResult(
-            file_name=finfo.original_name,
-            content_type=finfo.content_type,
-            detected_kind=FileReadKind.TEXT,
-            page_count=1,
-            pages=[ReadPage(index=0, text="Mock read_file content", assets=[], label=None)],
-            warnings=[],
-            source_file_id=finfo.file_id,
-        )
-        return {
-            "success": True,
-            **require_json_object(res.model_dump(mode="json"), "read_file.mock_result"),
-        }
-    res = FileReadResult(
-        file_name=file_name_arg if file_name_arg is not None else "mock",
-        content_type="text/plain",
-        detected_kind=FileReadKind.TEXT,
-        page_count=1,
-        pages=[ReadPage(index=0, text="Mock read_file without state", assets=[], label=None)],
-        warnings=[],
-    )
-    return {
-        "success": True,
-        **require_json_object(res.model_dump(mode="json"), "read_file.mock_result"),
-    }
-
-
 class ReadFileArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -227,8 +177,7 @@ class CreateFileArgs(BaseModel):
         "vision_prompt — для картинок: инструкция vision-модели."
     ),
     tags=["files", "ocr", "document"],
-    mock_response=_read_file_mock,
-    args_schema=ReadFileArgs,
+    parameters_model=ReadFileArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def read_file(
@@ -269,29 +218,11 @@ async def read_file(
     }
 
 
-def _create_file_mock(args: JsonDict, state: ExecutionState | None = None) -> JsonDict:
-    _ = state
-    original_name = args["original_name"]
-    if not isinstance(original_name, str) or not original_name.strip():
-        raise ValueError("create_file.original_name must be a non-empty string")
-    return {
-        "success": True,
-        "file_id": "file_mockcreate01",
-        "original_name": original_name,
-        "content_type": "text/plain",
-        "file_size": 1,
-        "url": "/flows/api/v1/files/download/file_mockcreate01",
-        "checksum": None,
-        "is_public": True,
-    }
-
-
 @tool(
     name="create_file",
     description=_CREATE_FILE_TOOL_DESCRIPTION,
     tags=["files", "storage"],
-    mock_response=_create_file_mock,
-    args_schema=CreateFileArgs,
+    parameters_model=CreateFileArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def create_file(

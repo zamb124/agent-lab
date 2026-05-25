@@ -2,23 +2,33 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-_UNSET_MARKER = object()
+from typing import ClassVar, Final, TypeIs
 
 
-def unset_secrets_sentinel() -> object:
+class UnsetSecretsSentinel:
+    """Маркер отсутствующего поля secrets в PATCH/PUT."""
+
+    __slots__: ClassVar[tuple[str, ...]] = ()
+
+
+SecretsPatchValue = dict[str, str] | None | UnsetSecretsSentinel
+
+_UNSET_MARKER = UnsetSecretsSentinel()
+UNSET_SECRETS: Final[UnsetSecretsSentinel] = _UNSET_MARKER
+
+
+def unset_secrets_sentinel() -> UnsetSecretsSentinel:
     """Маркер: поле secrets в теле PUT не передано — колонка не меняется."""
     return _UNSET_MARKER
 
 
-def is_unset_sentinel(obj: object) -> bool:
-    return obj is _UNSET_MARKER
+def is_unset_sentinel(value: SecretsPatchValue) -> TypeIs[UnsetSecretsSentinel]:
+    return value is _UNSET_MARKER
 
 
 def merge_secrets(
     *,
-    existing: dict[str, Any] | None,
+    existing: dict[str, str] | None,
     patch: dict[str, str | None] | None,
     allowed_keys: frozenset[str],
 ) -> dict[str, str]:
@@ -33,15 +43,13 @@ def merge_secrets(
     base: dict[str, str] = {}
     if existing:
         for k, v in existing.items():
-            if k in allowed_keys and isinstance(v, str) and v != "":
+            if k in allowed_keys and v != "":
                 base[k] = v
     changed = patch or {}
     for k in allowed_keys.intersection(changed.keys()):
         v = changed[k]
         if v is None or v == "":
-            base.pop(k, None)
-        elif isinstance(v, str):
-            base[k] = v
+            _ = base.pop(k, None)
         else:
-            raise ValueError(f"secrets[{k}] ожидалась строка или null, получено: {type(v).__name__}")
+            base[k] = v
     return base

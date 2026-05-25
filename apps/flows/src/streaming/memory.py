@@ -5,7 +5,7 @@ In-memory реализации Emitter и Subscriber.
 """
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import override
 
 from core.state import ExecutionState
 
@@ -25,12 +25,14 @@ class InMemoryEmitter(BaseEmitter):
         >>> print(emitter.events)  # [TaskArtifactUpdateEvent(...)]
     """
 
+    _events: list[StreamEvent]
+
     def __init__(self, state: ExecutionState):
         super().__init__(state)
-        self._events: list[Any] = []
+        self._events = []
 
     @property
-    def events(self) -> list[Any]:
+    def events(self) -> list[StreamEvent]:
         """Возвращает все опубликованные события."""
         return self._events
 
@@ -38,7 +40,8 @@ class InMemoryEmitter(BaseEmitter):
         """Очищает список событий."""
         self._events.clear()
 
-    async def _publish(self, event: Any) -> None:
+    @override
+    async def _publish(self, event: StreamEvent) -> None:
         """Сохраняет событие в список."""
         self._events.append(event)
 
@@ -50,9 +53,12 @@ class InMemorySubscriber(BaseSubscriber):
     Используется для тестов и внешних агентов.
     """
 
+    _emitter: InMemoryEmitter
+
     def __init__(self, emitter: InMemoryEmitter):
         self._emitter = emitter
 
+    @override
     async def subscribe(
         self,
         task_id: str,
@@ -64,4 +70,3 @@ class InMemorySubscriber(BaseSubscriber):
 
 
 __all__ = ["InMemoryEmitter", "InMemorySubscriber"]
-

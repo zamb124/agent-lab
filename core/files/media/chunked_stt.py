@@ -1,5 +1,6 @@
 """Чанкование аудио через ffmpeg и STT-транскрипция с автоматическим разбиением."""
 
+import asyncio
 import subprocess
 import tempfile
 from pathlib import Path
@@ -15,14 +16,17 @@ from core.files.models import AudioTranscriptionStatus
 from core.logging import get_logger
 
 logger = get_logger(__name__)
-def _normalize_mime_type(raw_mime_type: str | None) -> str | None:
-    if raw_mime_type is None:
-        return None
-    if raw_mime_type == "":
-        return None
-    return raw_mime_type.split(";", 1)[0].strip().lower()
 
-def audio_needs_mp3_upload_for_stt(*, file_name: str, mime_type: str) -> bool:
+
+def _normalize_content_type(raw_content_type: str | None) -> str | None:
+    if raw_content_type is None:
+        return None
+    if raw_content_type == "":
+        return None
+    return raw_content_type.split(";", 1)[0].strip().lower()
+
+
+def audio_needs_mp3_upload_for_stt(*, file_name: str, content_type: str) -> bool:
     """Контейнеры вроде M4A/MP4: cloud.ru STT в multipart часто отвечает Format not recognised.
 
     Для них сначала гоняем байты через ffmpeg в MP3 (как при чанковании).
@@ -30,21 +34,22 @@ def audio_needs_mp3_upload_for_stt(*, file_name: str, mime_type: str) -> bool:
     suffix = Path(file_name).suffix.lower().lstrip(".")
     if suffix in ("m4a", "mp4", "mov", "3gp"):
         return True
-    normalized_mime_type = _normalize_mime_type(mime_type)
-    if normalized_mime_type is None:
+    normalized_content_type = _normalize_content_type(content_type)
+    if normalized_content_type is None:
         return False
-    return normalized_mime_type in (
+    return normalized_content_type in (
         "audio/mp4",
         "audio/x-m4a",
         "video/mp4",
         "video/quicktime",
     )
 
+
 def normalize_audio_to_mp3_for_stt(
     *,
     audio_bytes: bytes,
     file_name: str,
-    mime_type: str,
+    content_type: str,
     chunk_bitrate_kbps: int,
     chunk_sample_rate_hz: int,
     chunk_channels: int,
@@ -59,7 +64,7 @@ def normalize_audio_to_mp3_for_stt(
     if chunk_channels <= 0:
         raise ValueError("chunk_channels должен быть больше 0.")
 
-    input_extension = _audio_input_extension(file_name=file_name, mime_type=mime_type)
+    input_extension = _audio_input_extension(file_name=file_name, content_type=content_type)
     file_stem = Path(file_name).stem
     if file_stem == "":
         file_stem = "recording"
@@ -103,25 +108,27 @@ def normalize_audio_to_mp3_for_stt(
             raise ValueError("Нормализация STT дала пустой MP3.")
         return mp3_bytes, out_file_name
 
-def _audio_input_extension(file_name: str, mime_type: str) -> str:
+
+def _audio_input_extension(file_name: str, content_type: str) -> str:
     if file_name == "":
         raise ValueError("file_name не может быть пустым.")
-    if mime_type == "":
-        raise ValueError("mime_type не может быть пустым.")
+    if content_type == "":
+        raise ValueError("content_type не может быть пустым.")
     suffix = Path(file_name).suffix.lower().lstrip(".")
     if suffix != "":
         return suffix
-    normalized_mime_type = _normalize_mime_type(mime_type)
-    if normalized_mime_type is None:
+    normalized_content_type = _normalize_content_type(content_type)
+    if normalized_content_type is None:
         return "bin"
-    if "/" not in normalized_mime_type:
+    if "/" not in normalized_content_type:
         return "bin"
-    subtype = normalized_mime_type.split("/", 1)[1]
+    subtype = normalized_content_type.split("/", 1)[1]
     subtype_map = {
         "x-m4a": "m4a",
         "mpeg": "mp3",
     }
     return subtype_map.get(subtype, subtype)
+
 
 def validate_stt_result_text(
     *,
@@ -140,6 +147,7 @@ def validate_stt_result_text(
         raise ValueError(f"STT вернул пустую транскрипцию для job_id={job_id}. context={context}")
     return transcript_text
 
+
 def is_stt_format_not_recognized_error(error: Exception) -> bool:
     """Определяет, является ли ошибка STT ошибкой формата (нужно перекодирование)."""
     message = str(error).lower()
@@ -149,11 +157,12 @@ def is_stt_format_not_recognized_error(error: Exception) -> bool:
         or "error opening <_io.bytesio object>" in message
     )
 
+
 def split_audio_for_stt_chunks(
     *,
     audio_bytes: bytes,
     file_name: str,
-    mime_type: str,
+    content_type: str,
     max_upload_bytes: int,
     chunk_duration_seconds: int,
     chunk_bitrate_kbps: int,
@@ -163,7 +172,7 @@ def split_audio_for_stt_chunks(
     """Разбивает аудиофайл на чанки через ffmpeg для порционной STT-транскрипции.
 
     Returns:
-        Список кортежей (file_name, bytes, mime_type) по одному на чанк.
+        Список кортежей (file_name, bytes, content_type) по одному на чанк.
     """
     if not audio_bytes:
         raise ValueError("audio_bytes не может быть пустым.")
@@ -178,7 +187,7 @@ def split_audio_for_stt_chunks(
     if chunk_channels <= 0:
         raise ValueError("chunk_channels должен быть больше 0.")
 
-    input_extension = _audio_input_extension(file_name=file_name, mime_type=mime_type)
+    input_extension = _audio_input_extension(file_name=file_name, content_type=content_type)
     file_stem = Path(file_name).stem
     if file_stem == "":
         file_stem = "recording"
@@ -242,13 +251,14 @@ def split_audio_for_stt_chunks(
         raise ValueError("Не удалось сформировать чанки для STT.")
     return chunks
 
+
 async def transcribe_audio_with_chunking(
     *,
     job_id: str,
     company_id: str,
     audio_bytes: bytes,
     file_name: str,
-    mime_type: str,
+    content_type: str,
     language: str | None = None,
     speech_override: SpeechOverride | None = None,
     stt_client: BaseSTTClient | None = None,
@@ -263,7 +273,7 @@ async def transcribe_audio_with_chunking(
         company_id: идентификатор компании для tier-резолва STT
         audio_bytes: байты аудиофайла
         file_name: имя файла
-        mime_type: MIME-тип
+        content_type: платформенный MIME-тип файла (``audio/wav`` и т.п.)
         language: язык (если None — см. tier-резолв и media_transcriber.default_language)
         speech_override: необязательный per-call override провайдера/модели
         stt_client: инъекция клиента для тестов (если None — ``get_stt_client``)
@@ -294,7 +304,7 @@ async def transcribe_audio_with_chunking(
     async def _single_shot(
         payload_bytes: bytes,
         payload_name: str,
-        payload_mime: str,
+        payload_content_type: str,
         *,
         context: str,
     ) -> str:
@@ -302,7 +312,7 @@ async def transcribe_audio_with_chunking(
         transcript_result = await stt_client.transcribe_audio(
             audio_bytes=payload_bytes,
             file_name=payload_name,
-            mime_type=payload_mime,
+            content_type=payload_content_type,
             language=language,
         )
         last_provider = transcript_result.provider
@@ -313,11 +323,12 @@ async def transcribe_audio_with_chunking(
         )
 
     if not should_chunk_first:
-        if audio_needs_mp3_upload_for_stt(file_name=file_name, mime_type=mime_type):
-            norm_bytes, norm_name = normalize_audio_to_mp3_for_stt(
+        if audio_needs_mp3_upload_for_stt(file_name=file_name, content_type=content_type):
+            norm_bytes, norm_name = await asyncio.to_thread(
+                normalize_audio_to_mp3_for_stt,
                 audio_bytes=audio_bytes,
                 file_name=file_name,
-                mime_type=mime_type,
+                content_type=content_type,
                 chunk_bitrate_kbps=chunk_bitrate_kbps,
                 chunk_sample_rate_hz=chunk_sample_rate_hz,
                 chunk_channels=chunk_channels,
@@ -356,7 +367,7 @@ async def transcribe_audio_with_chunking(
                 text = await _single_shot(
                     audio_bytes,
                     file_name,
-                    mime_type,
+                    content_type,
                     context="single_request",
                 )
                 return text, last_provider
@@ -374,17 +385,18 @@ async def transcribe_audio_with_chunking(
                     raise
                 logger.warning(
                     "STT single request returned format error; switching to chunked mode: "
-                    "job_id=%s file=%s mime=%s error=%s",
+                    "job_id=%s file=%s content_type=%s error=%s",
                     job_id,
                     file_name,
-                    mime_type,
+                    content_type,
                     str(exc),
                 )
 
-    chunks = split_audio_for_stt_chunks(
+    chunks = await asyncio.to_thread(
+        split_audio_for_stt_chunks,
         audio_bytes=audio_bytes,
         file_name=file_name,
-        mime_type=mime_type,
+        content_type=content_type,
         max_upload_bytes=max_upload_bytes,
         chunk_duration_seconds=chunk_duration_seconds,
         chunk_bitrate_kbps=chunk_bitrate_kbps,
@@ -392,11 +404,11 @@ async def transcribe_audio_with_chunking(
         chunk_channels=chunk_channels,
     )
     chunk_texts: list[str] = []
-    for index, (chunk_file_name, chunk_bytes, chunk_mime_type) in enumerate(chunks, start=1):
+    for index, (chunk_file_name, chunk_bytes, chunk_content_type) in enumerate(chunks, start=1):
         transcript_result = await stt_client.transcribe_audio(
             audio_bytes=chunk_bytes,
             file_name=chunk_file_name,
-            mime_type=chunk_mime_type,
+            content_type=chunk_content_type,
             language=language,
         )
         last_provider = transcript_result.provider

@@ -4,8 +4,12 @@
 
 import fnmatch
 from dataclasses import dataclass
+from typing import Literal
 
 from starlette.requests import Request
+
+RouteContextType = Literal["frontend", "api", "webhook", "anonymous", "a2a", "session"]
+WebhookPlatform = Literal["telegram", "whatsapp"]
 
 # Префиксы, для которых нельзя подменять ответ SPA (API и служебные пути)
 SPA_FALLBACK_EXCLUDED_PREFIXES: tuple[str, ...] = (
@@ -78,8 +82,8 @@ class RouteRule:
     pattern: str
     skip: bool = False
     auth_required: bool = True
-    context_type: str = "frontend"
-    channel: str | None = None
+    context_type: RouteContextType = "frontend"
+    channel: WebhookPlatform | None = None
 
 
 SKIP_PATHS = [
@@ -501,9 +505,9 @@ class RouteMatcher:
         self,
         rules: list[RouteRule] | None = None,
         skip_paths: list[str] | None = None,
-    ):
-        self.rules = rules or ROUTE_RULES
-        self.skip_paths = skip_paths or SKIP_PATHS
+    ) -> None:
+        self.rules: list[RouteRule] = rules or ROUTE_RULES
+        self.skip_paths: list[str] = skip_paths or SKIP_PATHS
 
     def should_skip(self, path: str) -> bool:
         """Проверяет, нужно ли пропустить middleware для пути"""

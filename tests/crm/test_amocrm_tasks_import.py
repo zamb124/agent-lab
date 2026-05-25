@@ -32,7 +32,10 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
     )
     set_context(ctx)
     try:
-        await ensure_system_company_exists(crm_container)
+        await ensure_system_company_exists(
+            company_repository=crm_container.company_repository,
+            subdomain_repository=crm_container.subdomain_repository,
+        )
         _, _ = await upsert_canonical_by_external_ref(
             entity_repo=crm_container.entity_repository,
             namespace=ns,

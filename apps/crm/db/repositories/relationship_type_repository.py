@@ -28,26 +28,21 @@ class RelationshipTypeRepository(BaseCRMRepository[RelationshipType]):
     def id_field(self) -> str:
         return "type_id"
 
-    async def get_all_for_company(
+    async def list_by_company(
         self,
         include_system: bool = True,
         *,
+        company_id: str | None = None,
         limit: int = 200,
         offset: int = 0,
     ) -> list[RelationshipType]:
-        """Типы связей, доступные для компании (только строки с company_id из контекста)."""
-        company_id = self._get_company_id()
+        """Типы связей, доступные для компании. ``company_id`` по умолчанию из контекста."""
+        effective_company_id = company_id if company_id is not None else self._get_company_id()
         async with self._db.session() as session:
-            cond = [RelationshipType.company_id == company_id]
+            cond = [RelationshipType.company_id == effective_company_id]
             if not include_system:
                 cond.append(RelationshipType.is_system.is_(False))
             stmt = select(RelationshipType).where(and_(*cond)).limit(limit).offset(offset)
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-
-    async def list_for_company_id(self, company_id: str) -> list[RelationshipType]:
-        async with self._db.session() as session:
-            stmt = select(RelationshipType).where(RelationshipType.company_id == company_id)
             result = await session.execute(stmt)
             return list(result.scalars().all())
 

@@ -1,5 +1,5 @@
 {
-  "id": "browser_agent",
+  "flow_id": "browser_agent",
   "name": "Browser agent (interactive, MCP browser control)",
   "description": "Интерактивный агент управления браузером через MCP Browser Runtime. Хранит browser_session_id в state для multi-turn управления: create_session один раз, дальше navigate/observe/click/fill по snapshot refs, по команде закрывает сессию.",
   "tags": [
@@ -16,7 +16,7 @@
   "nodes": {
     "ensure_browser_session_state": {
       "type": "code",
-      "code": "from __future__ import annotations\n\nfrom typing import Any\n\n\nasync def run(state: Any):\n    # Multi-turn state: browser_session_id живёт в state между сообщениями.\n    sid = state.get(\"browser_session_id\")\n    if sid is None:\n        state[\"browser_session_id\"] = \"\"\n    elif not isinstance(sid, str):\n        raise ValueError(\"browser_agent: state.browser_session_id должен быть строкой\")\n\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars.setdefault(\"browser_interaction_profile\", \"human\")\n    merged_vars.setdefault(\"browser_anti_bot_tier\", \"black\")\n    state.variables = merged_vars\n    return state\n"
+      "code": "from __future__ import annotations\n\nfrom typing import Any\n\n\nasync def run(state: Any):\n    # Multi-turn state: browser_session_id живёт в state между сообщениями.\n    sid = state.get(\"browser_session_id\")\n    if sid is None:\n        state[\"browser_session_id\"] = \"\"\n    elif not isinstance(sid, str):\n        raise ValueError(\"browser_agent: state.browser_session_id должен быть строкой\")\n\n    merged_vars = dict(state.variables or {})\n    merged_vars.setdefault(\"browser_interaction_profile\", \"human\")\n    merged_vars.setdefault(\"browser_anti_bot_tier\", \"black\")\n    state.variables = merged_vars\n    return state\n"
     },
     "browser_control": {
       "type": "llm_node",
@@ -64,12 +64,12 @@
   },
   "edges": [
     {
-      "from": "ensure_browser_session_state",
-      "to": "browser_control"
+      "from_node": "ensure_browser_session_state",
+      "to_node": "browser_control"
     },
     {
-      "from": "browser_control",
-      "to": null
+      "from_node": "browser_control",
+      "to_node": null
     }
   ],
   "variables": {}

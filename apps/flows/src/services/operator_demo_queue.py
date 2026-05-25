@@ -10,7 +10,7 @@ EXAMPLE_HITL_SLUG = "example_hitl"
 async def ensure_example_hitl_queue(repository: OperatorRepository, company_id: str) -> None:
     if await repository.get_queue_by_slug(company_id, EXAMPLE_HITL_SLUG) is not None:
         return
-    await repository.create_queue(
+    _ = await repository.create_queue(
         company_id=company_id,
         name="Demo HITL (example_hitl)",
         slug=EXAMPLE_HITL_SLUG,

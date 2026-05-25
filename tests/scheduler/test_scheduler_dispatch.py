@@ -1,4 +1,4 @@
-"""Scheduler dispatch compatibility coverage."""
+"""Scheduler dispatch coverage."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def _scheduled_task(kwargs: dict[str, Any]) -> ScheduledTask:
 
 
 @pytest.mark.asyncio
-async def test_dispatch_normalizes_legacy_scheduler_task_id_kwarg(
+async def test_dispatch_forwards_canonical_schedule_task_kwargs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
@@ -69,7 +69,7 @@ async def test_dispatch_normalizes_legacy_scheduler_task_id_kwarg(
         source,
         _scheduled_task(
             {
-                "scheduler_task_id": "legacy-schedule-id",
+                "schedule_task_id": "schedule-id",
                 "company_id": "system",
             }
         ),
@@ -79,7 +79,7 @@ async def test_dispatch_normalizes_legacy_scheduler_task_id_kwarg(
     assert captured["task_id"] == "taskiq-message-1"
     assert captured["args"] == ()
     assert captured["kwargs"] == {
-        "schedule_task_id": "legacy-schedule-id",
+        "schedule_task_id": "schedule-id",
         "company_id": "system",
     }
     assert source.pre_sent == ["redis-schedule-1"]
@@ -87,7 +87,7 @@ async def test_dispatch_normalizes_legacy_scheduler_task_id_kwarg(
 
 
 @pytest.mark.asyncio
-async def test_dispatch_drops_legacy_scheduler_task_id_when_canonical_exists(
+async def test_dispatch_does_not_rewrite_task_kwargs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
@@ -114,10 +114,13 @@ async def test_dispatch_drops_legacy_scheduler_task_id_when_canonical_exists(
         source,
         _scheduled_task(
             {
-                "scheduler_task_id": "legacy-schedule-id",
                 "schedule_task_id": "canonical-schedule-id",
+                "company_id": "system",
             }
         ),
     )
 
-    assert captured["kwargs"] == {"schedule_task_id": "canonical-schedule-id"}
+    assert captured["kwargs"] == {
+        "schedule_task_id": "canonical-schedule-id",
+        "company_id": "system",
+    }

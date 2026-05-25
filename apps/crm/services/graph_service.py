@@ -684,7 +684,7 @@ class GraphService:
 
     async def _build_direction_map(self) -> _RelationshipDirectionMap:
         """Строит карту направленности для быстрого доступа."""
-        relationship_types = await self._relationship_type_repo.get_all_for_company(
+        relationship_types = await self._relationship_type_repo.list_by_company(
             include_system=True
         )
 

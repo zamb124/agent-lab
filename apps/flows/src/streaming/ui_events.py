@@ -12,9 +12,9 @@ async def emit_pending_ui_events(emitter: BaseEmitter, state: ExecutionState) ->
 
     for event in events:
         await emitter.emit_ui_event(
-            event_type=event.type,
+            event_type=event.event_type,
             payload=event.payload,
-            event_id=event.id,
+            event_id=event.event_id,
             version=event.version,
             timestamp=event.timestamp,
             source=event.source,

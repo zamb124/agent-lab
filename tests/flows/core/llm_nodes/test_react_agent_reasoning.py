@@ -8,11 +8,14 @@ Reason tool добавляется при сборке агента (FlowsLoader
 Тесты проверяют что reason tool корректно работает если он в списке tools.
 """
 
+from typing import cast
+
 import pytest
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import NodeConfig
-from apps.flows.src.models.enums import ReactToolRole
-from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.models.enums import NodeType, ReactToolRole
+from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.tools.agent_session_tools import reason
@@ -36,15 +39,26 @@ class _BillingService:
         _ = company_id, user_id, operation_code, notification_service
 
 
-class _NoopStateManager:
-    async def save_state(self, session_id: str, state: ExecutionState) -> bool:
-        _ = session_id, state
+class _NoopWorkflowRuntime:
+    async def save_state(self, session_id: str, state: ExecutionState, **kwargs: object) -> bool:
+        _ = session_id, state, kwargs
+        return True
+
+    async def record_activity_scheduled(self, **kwargs: object) -> None:
+        _ = kwargs
+
+    async def record_activity_completed(self, **kwargs: object) -> bool:
+        _ = kwargs
         return True
 
 
 class _RuntimeContainer:
     billing_service = _BillingService()
-    state_manager = _NoopStateManager()
+    workflow_runtime = _NoopWorkflowRuntime()
+
+
+def _runtime_container() -> FlowRuntimeContainer:
+    return cast(FlowRuntimeContainer, _RuntimeContainer())
 
 
 async def run_agent_to_completion(runner, input_data, state):
@@ -63,11 +77,11 @@ class TestReasonToolInTools:
         """Конфиг агента с reason tool в списке."""
         return NodeConfig(
             node_id="reasoning_agent",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Reasoning Agent",
             description="Agent with reason tool",
             prompt="You are a helpful assistant.",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
         )
 
     @pytest.fixture
@@ -75,11 +89,11 @@ class TestReasonToolInTools:
         """Конфиг агента без reason tool."""
         return NodeConfig(
             node_id="simple_agent",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Simple Agent",
             description="Agent without reasoning",
             prompt="You are a helpful assistant.",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
         )
 
     def test_reason_tool_available_when_added(self, agent_config_with_reason):
@@ -127,10 +141,10 @@ class TestReasonToolExecution:
         """Конфиг агента с reason tool."""
         return NodeConfig(
             node_id="reasoning_emitter",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Reasoning Emitter",
             prompt="You are a helpful assistant.",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
         )
 
     @pytest.fixture
@@ -141,7 +155,7 @@ class TestReasonToolExecution:
             tools=[reason, calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=_RuntimeContainer(),
+            container=_runtime_container(),
         )
 
     @pytest.mark.asyncio
@@ -194,10 +208,10 @@ class TestAgentWithoutReasonWorks:
         """Обычный конфиг без reason."""
         return NodeConfig(
             node_id="normal_agent",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Normal Agent",
             prompt="You are a helpful assistant.",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
         )
 
     @pytest.fixture
@@ -208,7 +222,7 @@ class TestAgentWithoutReasonWorks:
             tools=[calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=_RuntimeContainer(),
+            container=_runtime_container(),
         )
 
     @pytest.mark.asyncio

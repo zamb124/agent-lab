@@ -16,6 +16,7 @@ import re
 import time
 import uuid
 from pathlib import Path
+from types import FrameType, FunctionType, MethodType, ModuleType, TracebackType
 from typing import TypedDict, cast
 
 from fastapi import APIRouter, HTTPException, Response
@@ -25,8 +26,19 @@ from apps.flows.src.api.v1.flows import inline_tools_list
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.durable_execution import (
+    NodeCompletedPayload,
+    NodeScheduledPayload,
+    NodeWriteRecordedPayload,
+    RunStartedPayload,
+    SuperstepStartedPayload,
+    WorkflowEventType,
+    build_state_delta,
+    create_initial_state,
+)
+from apps.flows.src.models.node_config import NodeConfig
 from apps.flows.src.runtime.nodes import create_node
-from apps.flows.src.state import collect_flow_node_files, create_initial_state
+from apps.flows.src.state import collect_flow_node_files
 from core.capabilities import (
     CAPABILITY_LANGUAGE_SET,
     CapabilityDocumentation,
@@ -57,6 +69,9 @@ from core.types import (
 
 router = APIRouter(tags=["code"])
 logger = get_logger(__name__)
+type SourceObject = (
+    ModuleType | type[object] | MethodType | FunctionType | TracebackType | FrameType
+)
 
 CAPABILITY_DOCUMENTATION_PATH = "/capability-gateway/api/v1/capabilities/documentation"
 CODE_RUNNER_SERVICE_BY_LANGUAGE = {
@@ -172,13 +187,19 @@ def _execution_state_fields() -> list[StateField]:
         StateField(name="messages", type="array", description="Conversation message history."),
         StateField(name="variables", type="object", description="Resolved flow variables."),
         StateField(name="files", type="array", description="Attached files available to the flow."),
-        StateField(name="triggers", type="object", description="Trigger runtime payloads by trigger id."),
+        StateField(
+            name="triggers", type="object", description="Trigger runtime payloads by trigger id."
+        ),
         StateField(name="tool_results", type="object", description="Results produced by tools."),
         StateField(name="node_history", type="object", description="Runtime node call history."),
-        StateField(name="current_nodes", type="array", description="Current graph nodes being executed."),
+        StateField(
+            name="current_nodes", type="array", description="Current graph nodes being executed."
+        ),
         StateField(name="branch_id", type="string", description="Current flow branch id."),
         StateField(name="session_id", type="string", description="Runtime session id."),
-        StateField(name="flow_config_version", type="string", description="Flow config version snapshot."),
+        StateField(
+            name="flow_config_version", type="string", description="Flow config version snapshot."
+        ),
     ]
 
 
@@ -215,22 +236,6 @@ def _exported_method_name(raw: str) -> str:
     return name
 
 
-def _schema_type(value: JsonObject) -> str:
-    raw_type = value.get("type")
-    if isinstance(raw_type, list):
-        raw_type = next(
-            (item for item in raw_type if isinstance(item, str) and item != "null"),
-            None,
-        )
-    if isinstance(raw_type, str) and raw_type:
-        return raw_type
-    if isinstance(value.get("properties"), dict):
-        return "object"
-    if "items" in value:
-        return "array"
-    return "string"
-
-
 def _schema_properties(parameters_schema: JsonObject | None) -> dict[str, JsonObject]:
     if parameters_schema is None:
         return {}
@@ -244,31 +249,6 @@ def _schema_properties(parameters_schema: JsonObject | None) -> dict[str, JsonOb
     }
 
 
-def _args_schema_from_parameters_schema(parameters_schema: JsonObject | None) -> JsonObject:
-    properties = _schema_properties(parameters_schema)
-    if not properties:
-        return {}
-    required_raw = parameters_schema.get("required") if parameters_schema is not None else None
-    required: set[str] = set()
-    if required_raw is not None:
-        required = {
-            item
-            for item in require_json_array(required_raw, "parameters_schema.required")
-            if isinstance(item, str)
-        }
-    args_schema: JsonObject = {}
-    for name, prop in properties.items():
-        item: JsonObject = {
-            "type": _schema_type(prop),
-            "description": prop.get("description") if isinstance(prop.get("description"), str) else "",
-            "required": name in required,
-        }
-        if "default" in prop:
-            item["default"] = copy.deepcopy(prop["default"])
-        args_schema[name] = item
-    return args_schema
-
-
 def _tool_arg_entries(parameters_schema: JsonObject | None) -> list[str]:
     return list(_schema_properties(parameters_schema).keys())
 
@@ -277,42 +257,37 @@ def _json_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def _tool_call_code(language: CapabilityLanguage, tool_id: str, parameters_schema: JsonObject | None) -> str:
+def _tool_call_code(
+    language: CapabilityLanguage, tool_id: str, parameters_schema: JsonObject | None
+) -> str:
     method = _sdk_method_name(tool_id)
     exported = _exported_method_name(method)
     arg_names = _tool_arg_entries(parameters_schema)
     if language == "python":
-        if arg_names and all(name.isidentifier() and not keyword.iskeyword(name) for name in arg_names):
-            kwargs = ",\n".join(
-                f"        {name}=args[{name!r}]"
-                for name in arg_names
-            )
+        if arg_names and all(
+            name.isidentifier() and not keyword.iskeyword(name) for name in arg_names
+        ):
+            kwargs = ",\n".join(f"        {name}=args[{name!r}]" for name in arg_names)
             return (
                 "async def run(args, state):\n"
                 f"    result = await tools.{method}(\n{kwargs},\n    )\n"
-                "    return {\"result\": result}\n"
+                '    return {"result": result}\n'
             )
         if arg_names:
-            entries = ",\n".join(
-                f"        {name!r}: args[{name!r}],"
-                for name in arg_names
-            )
+            entries = ",\n".join(f"        {name!r}: args[{name!r}]," for name in arg_names)
             return (
                 "async def run(args, state):\n"
                 f"    result = await tools.call({tool_id!r}, **{{\n{entries}\n    }})\n"
-                "    return {\"result\": result}\n"
+                '    return {"result": result}\n'
             )
         return (
             "async def run(args, state):\n"
             f"    result = await tools.{method}()\n"
-            "    return {\"result\": result}\n"
+            '    return {"result": result}\n'
         )
     if language in {"javascript", "typescript"}:
         if arg_names:
-            entries = ",\n".join(
-                f"    {name!r}: args[{name!r}],"
-                for name in arg_names
-            )
+            entries = ",\n".join(f"    {name!r}: args[{name!r}]," for name in arg_names)
             payload = f"{{\n{entries}\n  }}"
         else:
             payload = "{}"
@@ -325,8 +300,7 @@ def _tool_call_code(language: CapabilityLanguage, tool_id: str, parameters_schem
     if language == "go":
         if arg_names:
             entries = "\n".join(
-                f"        {_json_string(name)}: args[{_json_string(name)}],"
-                for name in arg_names
+                f"        {_json_string(name)}: args[{_json_string(name)}]," for name in arg_names
             )
             payload = f"map[string]any{{\n{entries}\n    }}"
         else:
@@ -338,13 +312,12 @@ def _tool_call_code(language: CapabilityLanguage, tool_id: str, parameters_schem
             "    if err != nil {\n"
             "        return nil, err\n"
             "    }\n"
-            "    return map[string]any{\"result\": result}, nil\n"
+            '    return map[string]any{"result": result}, nil\n'
             "}\n"
         )
     if arg_names:
         entries = "\n".join(
-            f"        [{_json_string(name)}] = args[{_json_string(name)}],"
-            for name in arg_names
+            f"        [{_json_string(name)}] = args[{_json_string(name)}]," for name in arg_names
         )
         payload = f"new Dictionary<string, object?> {{\n{entries}\n    }}"
     else:
@@ -355,34 +328,35 @@ def _tool_call_code(language: CapabilityLanguage, tool_id: str, parameters_schem
         "async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)\n"
         "{\n"
         f"    var result = await tools.{exported}({payload});\n"
-        "    return new Dictionary<string, object?> { [\"result\"] = result };\n"
+        '    return new Dictionary<string, object?> { ["result"] = result };\n'
         "}\n"
     )
 
 
-def _platform_tool_templates(container: FlowContainer, language: CapabilityLanguage) -> list[CodeTemplate]:
+def _platform_tool_templates(
+    container: FlowContainer, language: CapabilityLanguage
+) -> list[CodeTemplate]:
     registry = container.tool_registry
     registry.register_builtin_tools()
     templates: list[CodeTemplate] = []
     for tool_id, tool in sorted(registry.list_all().items(), key=lambda item: item[0]):
-        if not getattr(type(tool), "listed_in_platform_tool_docs", True):
+        if not type(tool).listed_in_platform_tool_docs:
             continue
         parameters_schema = require_json_object(
             copy.deepcopy(tool.parameters),
             f"tool.{tool_id}.parameters",
         )
-        tags = list(tool.get_tags()) if callable(getattr(tool, "get_tags", None)) else ["misc"]
+        tags = list(tool.get_tags())
         templates.append(
             CodeTemplate(
                 id=f"{language}-tool-{tool_id}",
-                name=str(getattr(tool, "name", tool_id)),
-                description=str(getattr(tool, "description", "")),
+                name=tool.name,
+                description=tool.description,
                 code=_tool_call_code(language, tool_id, parameters_schema),
                 category="platform_tools",
                 node_type="code",
                 tags=["tool", *tags],
                 language=language,
-                args_schema=_args_schema_from_parameters_schema(parameters_schema),
                 parameters_schema=parameters_schema,
             )
         )
@@ -393,9 +367,9 @@ def _capability_templates(language: CapabilityLanguage) -> list[CodeTemplate]:
     snippets = {
         "python": (
             "async def run(args, state):\n"
-            "    calc = await tools.calculator(expression=args[\"expression\"])\n"
-            "    state[\"calculation\"] = calc\n"
-            "    return {\"calculation\": calc}\n"
+            '    calc = await tools.calculator(expression=args["expression"])\n'
+            '    state["calculation"] = calc\n'
+            '    return {"calculation": calc}\n'
         ),
         "javascript": (
             "async function run(args, state) {\n"
@@ -414,12 +388,12 @@ def _capability_templates(language: CapabilityLanguage) -> list[CodeTemplate]:
         "go": (
             "package main\n\n"
             "func run(args map[string]any, state map[string]any) (any, error) {\n"
-            "    calc, err := tools.Calculator(map[string]any{\"expression\": args[\"expression\"]})\n"
+            '    calc, err := tools.Calculator(map[string]any{"expression": args["expression"]})\n'
             "    if err != nil {\n"
             "        return nil, err\n"
             "    }\n"
-            "    state[\"calculation\"] = calc\n"
-            "    return map[string]any{\"calculation\": calc}, nil\n"
+            '    state["calculation"] = calc\n'
+            '    return map[string]any{"calculation": calc}, nil\n'
             "}\n"
         ),
         "csharp": (
@@ -427,9 +401,9 @@ def _capability_templates(language: CapabilityLanguage) -> list[CodeTemplate]:
             "using System.Threading.Tasks;\n\n"
             "async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)\n"
             "{\n"
-            "    var calc = await tools.Calculator(new Dictionary<string, object?> { [\"expression\"] = args[\"expression\"] });\n"
-            "    state[\"calculation\"] = calc;\n"
-            "    return new Dictionary<string, object?> { [\"calculation\"] = calc };\n"
+            '    var calc = await tools.Calculator(new Dictionary<string, object?> { ["expression"] = args["expression"] });\n'
+            '    state["calculation"] = calc;\n'
+            '    return new Dictionary<string, object?> { ["calculation"] = calc };\n'
             "}\n"
         ),
     }
@@ -503,6 +477,7 @@ def _infer_entrypoint(language: CapabilityLanguage, code: str) -> str | None:
 
 class CodeCompletionsResponse(BaseModel):
     """Данные для autocomplete в редакторе кода"""
+
     modules: list[str]
     globals: list[GlobalVariable]
     builtins: list[str]
@@ -576,6 +551,7 @@ async def get_code_documentation(
 
 class TemplatesResponse(BaseModel):
     """Список шаблонов кода"""
+
     templates: list[CodeTemplate]
 
 
@@ -660,6 +636,7 @@ async def get_editor_state(
 
 class SourceResponse(BaseModel):
     """Исходный код"""
+
     path: str
     source: str | None
     error: str | None = None
@@ -681,6 +658,7 @@ async def get_function_source(container: ContainerDep, function_path: str) -> So
 
 class FlowFunctionInfo(BaseModel):
     """Функция из модуля ``bundles.<flow_id>.functions``."""
+
     name: str
     path: str
     doc: str | None = None
@@ -688,6 +666,7 @@ class FlowFunctionInfo(BaseModel):
 
 class FlowFunctionsResponse(BaseModel):
     """Список функций из bundle flow (``functions.py``)."""
+
     flow_id: str
     functions: list[FlowFunctionInfo]
     error: str | None = None
@@ -700,11 +679,7 @@ async def get_flow_functions(container: ContainerDep, flow_id: str) -> FlowFunct
     """
     _ = container
     if not flow_id:
-        return FlowFunctionsResponse(
-            flow_id=flow_id,
-            functions=[],
-            error="flow_id is required"
-        )
+        return FlowFunctionsResponse(flow_id=flow_id, functions=[], error="flow_id is required")
 
     try:
         module_path = f"apps.flows.bundles.{flow_id}.functions"
@@ -724,33 +699,28 @@ async def get_flow_functions(container: ContainerDep, flow_id: str) -> FlowFunct
                 continue
             if node.name.startswith("_"):
                 continue
-            functions.append(FlowFunctionInfo(
-                name=node.name,
-                path=f"{module_path}.{node.name}",
-                doc=ast.get_docstring(node),
-            ))
+            functions.append(
+                FlowFunctionInfo(
+                    name=node.name,
+                    path=f"{module_path}.{node.name}",
+                    doc=ast.get_docstring(node),
+                )
+            )
 
         return FlowFunctionsResponse(
-            flow_id=flow_id,
-            functions=sorted(functions, key=lambda f: f.name)
+            flow_id=flow_id, functions=sorted(functions, key=lambda f: f.name)
         )
     except ModuleNotFoundError:
         return FlowFunctionsResponse(
             flow_id=flow_id,
             functions=[],
-            error=f"Module apps.flows.bundles.{flow_id}.functions not found"
+            error=f"Module apps.flows.bundles.{flow_id}.functions not found",
         )
     except (OSError, SyntaxError) as e:
         return FlowFunctionsResponse(
             flow_id=flow_id,
             functions=[],
             error=str(e),
-        )
-    except Exception as e:
-        return FlowFunctionsResponse(
-            flow_id=flow_id,
-            functions=[],
-            error=str(e)
         )
 
 
@@ -780,20 +750,16 @@ def _get_source_by_path(path: str) -> SourceResponse:
     try:
         parts = path.split(".")
         if len(parts) < 2:
-            return SourceResponse(
-                path=path,
-                source=None,
-                error="Invalid path format"
-            )
+            return SourceResponse(path=path, source=None, error="Invalid path format")
 
-        obj = None
+        obj: SourceObject | None = None
         for i in range(len(parts) - 1, 0, -1):
             module_path = ".".join(parts[:i])
             try:
                 module = importlib.import_module(module_path)
                 obj = module
                 for attr_name in parts[i:]:
-                    obj = getattr(obj, attr_name, None)
+                    obj = _source_object_child(obj, attr_name)
                     if obj is None:
                         break
                 if obj is not None:
@@ -802,43 +768,36 @@ def _get_source_by_path(path: str) -> SourceResponse:
                 continue
 
         if obj is None:
-            return SourceResponse(
-                path=path,
-                source=None,
-                error=f"Object not found: {path}"
-            )
+            return SourceResponse(path=path, source=None, error=f"Object not found: {path}")
 
         source = inspect.getsource(obj)
-        return SourceResponse(
-            path=path,
-            source=source
-        )
+        return SourceResponse(path=path, source=source)
     except ModuleNotFoundError:
-        return SourceResponse(
-            path=path,
-            source=None,
-            error="Module not found"
-        )
+        return SourceResponse(path=path, source=None, error="Module not found")
     except OSError:
-        return SourceResponse(
-            path=path,
-            source=None,
-            error="Source code not available"
-        )
+        return SourceResponse(path=path, source=None, error="Source code not available")
     except TypeError:
-        return SourceResponse(
-            path=path,
-            source=None,
-            error="Cannot get source for built-in"
-        )
+        return SourceResponse(path=path, source=None, error="Cannot get source for built-in")
+
+
+def _source_object_child(obj: SourceObject, attr_name: str) -> SourceObject | None:
+    namespace = cast(dict[str, object], vars(obj))
+    raw_attr = namespace.get(attr_name)
+    if isinstance(raw_attr, (ModuleType, FunctionType, MethodType, TracebackType, FrameType)):
+        return raw_attr
+    if isinstance(raw_attr, type):
+        return raw_attr
+    return None
 
 
 # ============================================================================
 # Валидация и выполнение кода
 # ============================================================================
 
+
 class ValidateRequest(BaseModel):
     """Запрос на валидацию кода"""
+
     code: str
     node_type: str | None = "code"
     kind: str | None = None
@@ -850,6 +809,7 @@ class ValidateRequest(BaseModel):
 
 class ValidateResponse(BaseModel):
     """Результат валидации"""
+
     valid: bool
     error: str | None = None
     warnings: list[str] = []
@@ -860,12 +820,14 @@ class ValidateResponse(BaseModel):
 
 class ParseSignatureRequest(BaseModel):
     """Запрос на парсинг сигнатуры функции"""
+
     code: str
     func_name: str | None = None
 
 
 class ParameterInfo(BaseModel):
     """Информация о параметре функции"""
+
     type: str
     description: str = ""
     default: JsonValue = None
@@ -874,10 +836,11 @@ class ParameterInfo(BaseModel):
 
 class ParseSignatureResponse(BaseModel):
     """Результат парсинга сигнатуры"""
+
     success: bool
     func_name: str | None = None
     parameters: dict[str, ParameterInfo] = {}
-    args_schema: JsonObject | None = None
+    parameters_schema: JsonObject | None = None
     error: str | None = None
 
 
@@ -927,9 +890,7 @@ def _parse_function_signature(code: str, func_name: str | None = None) -> Parsed
     """
     tree = ast.parse(code)
     top_level_funcs: list[ast.FunctionDef | ast.AsyncFunctionDef] = [
-        node
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     ]
     if func_name:
         candidates = [node for node in top_level_funcs if node.name == func_name]
@@ -994,9 +955,11 @@ def _parse_function_signature(code: str, func_name: str | None = None) -> Parsed
 
 
 @router.post("/parse-signature", response_model=ParseSignatureResponse)
-async def parse_signature(container: ContainerDep, request: ParseSignatureRequest) -> ParseSignatureResponse:
+async def parse_signature(
+    container: ContainerDep, request: ParseSignatureRequest
+) -> ParseSignatureResponse:
     """
-    Парсит сигнатуру функции и генерирует args_schema.
+    Парсит сигнатуру функции и генерирует parameters_schema.
     """
     _ = container
     if not request.code or not request.code.strip():
@@ -1005,16 +968,18 @@ async def parse_signature(container: ContainerDep, request: ParseSignatureReques
     try:
         result = _parse_function_signature(request.code, request.func_name)
 
-        args_schema: JsonObject = {}
+        properties: JsonObject = {}
+        required: list[JsonValue] = []
         for param_name, param_info in result["parameters"].items():
             schema_item: JsonObject = {
                 "type": param_info["type"],
                 "description": f"Параметр {param_name}",
-                "required": bool(param_info["required"]),
             }
             if param_info["has_json_default"]:
                 schema_item["default"] = param_info["default"]
-            args_schema[param_name] = schema_item
+            if bool(param_info["required"]):
+                required.append(param_name)
+            properties[param_name] = schema_item
 
         parameters = {
             name: ParameterInfo(
@@ -1030,15 +995,17 @@ async def parse_signature(container: ContainerDep, request: ParseSignatureReques
             success=True,
             func_name=result["func_name"],
             parameters=parameters,
-            args_schema=args_schema,
+            parameters_schema={
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
         )
 
     except SyntaxError as e:
         return ParseSignatureResponse(success=False, error=f"Синтаксическая ошибка: {e}")
     except ValueError as e:
         return ParseSignatureResponse(success=False, error=str(e))
-    except Exception as e:
-        return ParseSignatureResponse(success=False, error=f"Ошибка парсинга: {e}")
 
 
 def _require_execute_node_type(node_type: str) -> str:
@@ -1048,7 +1015,11 @@ def _require_execute_node_type(node_type: str) -> str:
 
 
 def _require_validation_kind(request: ValidateRequest) -> CodeExecutionKind:
-    raw = request.kind if isinstance(request.kind, str) and request.kind.strip() else request.node_type
+    raw = (
+        request.kind
+        if isinstance(request.kind, str) and request.kind.strip()
+        else request.node_type
+    )
     raw_kind = raw.strip() if isinstance(raw, str) and raw.strip() else "code"
     if raw_kind in ("tool", "function", "resource"):
         return "tool"
@@ -1059,6 +1030,7 @@ def _require_validation_kind(request: ValidateRequest) -> CodeExecutionKind:
 
 class ExecuteRequest(BaseModel):
     """Запрос на выполнение ноды."""
+
     node_type: str = "code"
     node_config: JsonObject = Field(default_factory=dict)
     code: str | None = None
@@ -1070,6 +1042,7 @@ class ExecuteRequest(BaseModel):
 
 class DiffItem(BaseModel):
     """Элемент diff"""
+
     path: str
     old_value: JsonValue
     new_value: JsonValue
@@ -1078,6 +1051,7 @@ class DiffItem(BaseModel):
 
 class ExecuteResponse(BaseModel):
     """Результат выполнения"""
+
     success: bool
     input_state: JsonObject | None = None
     output_state: JsonObject | None = None
@@ -1091,15 +1065,35 @@ def _compute_diff(old: JsonObject, new: JsonObject, path: str = "") -> list[Diff
     """Вычисляет diff между двумя state."""
     diff_items: list[DiffItem] = []
     SKIP_KEYS = {
-        "task_id", "context_id", "user_id", "session_id",
-        "messages", "prompt_history", "node_history", "nested_states",
-        "current_nodes", "branch_id", "flow_config_version", "user_groups",
-        "interrupt_path", "tool_results", "triggers", "files",
-        "breakpoints", "scheduled_tasks", "reasoning_history",
-        "pending_reasoning", "breakpoint_hit", "breakpoint_state", "interrupt",
-        "join_arrived_preds", "hitl_handoff_correlation_id",
-        "flow_deadline_monotonic", "flow_timeout_effective_seconds",
-        "terminal_task_state", "terminal_task_error",
+        "task_id",
+        "context_id",
+        "user_id",
+        "session_id",
+        "messages",
+        "prompt_history",
+        "node_history",
+        "nested_states",
+        "current_nodes",
+        "branch_id",
+        "flow_config_version",
+        "user_groups",
+        "interrupt_path",
+        "tool_results",
+        "triggers",
+        "files",
+        "breakpoints",
+        "scheduled_tasks",
+        "reasoning_history",
+        "pending_reasoning",
+        "breakpoint_hit",
+        "breakpoint_state",
+        "interrupt",
+        "join_arrived_preds",
+        "hitl_handoff_correlation_id",
+        "flow_deadline_monotonic",
+        "flow_timeout_effective_seconds",
+        "terminal_task_state",
+        "terminal_task_error",
         "llm_context_memory_cursor",
     }
     all_keys = set(old.keys()) | set(new.keys())
@@ -1113,19 +1107,15 @@ def _compute_diff(old: JsonObject, new: JsonObject, path: str = "") -> list[Diff
         new_val = new.get(key)
 
         if key not in old:
-            diff_items.append(DiffItem(
-                path=current_path,
-                old_value=None,
-                new_value=new_val,
-                change_type="added"
-            ))
+            diff_items.append(
+                DiffItem(path=current_path, old_value=None, new_value=new_val, change_type="added")
+            )
         elif key not in new:
-            diff_items.append(DiffItem(
-                path=current_path,
-                old_value=old_val,
-                new_value=None,
-                change_type="removed"
-            ))
+            diff_items.append(
+                DiffItem(
+                    path=current_path, old_value=old_val, new_value=None, change_type="removed"
+                )
+            )
         elif isinstance(old_val, dict) and isinstance(new_val, dict):
             diff_items.extend(
                 _compute_diff(
@@ -1135,12 +1125,11 @@ def _compute_diff(old: JsonObject, new: JsonObject, path: str = "") -> list[Diff
                 )
             )
         elif old_val != new_val:
-            diff_items.append(DiffItem(
-                path=current_path,
-                old_value=old_val,
-                new_value=new_val,
-                change_type="changed"
-            ))
+            diff_items.append(
+                DiffItem(
+                    path=current_path, old_value=old_val, new_value=new_val, change_type="changed"
+                )
+            )
 
     return diff_items
 
@@ -1175,9 +1164,7 @@ async def _merge_execute_state_with_flow(
     req_files: list[FileRef] = []
     if raw_files is not None:
         req_files = [
-            FileRef.model_validate(
-                require_json_object(item, f"execute.state.files[{index}]")
-            )
+            FileRef.model_validate(require_json_object(item, f"execute.state.files[{index}]"))
             for index, item in enumerate(require_json_array(raw_files, "execute.state.files"))
         ]
     seen: set[tuple[str | None, str | None, str]] = set()
@@ -1188,10 +1175,7 @@ async def _merge_execute_state_with_flow(
         file_key = (file_item.file_id, file_item.url, file_item.original_name)
         if file_key not in seen:
             extra.append(file_item)
-    input_state["files"] = [
-        file_item.to_json_object()
-        for file_item in [*from_graph, *extra]
-    ]
+    input_state["files"] = [file_item.to_json_object() for file_item in [*from_graph, *extra]]
     request_variables_raw = input_state.get("variables")
     request_variables = (
         require_json_object(request_variables_raw, "execute.state.variables")
@@ -1215,7 +1199,11 @@ async def validate_code(container: ContainerDep, request: ValidateRequest) -> Va
     code = request.code
     validation_kind = _require_validation_kind(request)
     capability_language = _require_capability_language(request.language)
-    entrypoint = request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else None
+    entrypoint = (
+        request.entrypoint.strip()
+        if isinstance(request.entrypoint, str) and request.entrypoint.strip()
+        else None
+    )
     entrypoint_for_validation = entrypoint
     warnings: list[str] = []
 
@@ -1223,8 +1211,13 @@ async def validate_code(container: ContainerDep, request: ValidateRequest) -> Va
         return ValidateResponse(valid=False, error="Код пустой")
     if entrypoint_for_validation is None:
         entrypoint_for_validation = _infer_entrypoint(capability_language, code)
-    if entrypoint_for_validation is not None and not _valid_entrypoint_name(capability_language, entrypoint_for_validation):
-        return ValidateResponse(valid=False, error=f"Invalid {capability_language} entrypoint name: {entrypoint_for_validation!r}")
+    if entrypoint_for_validation is not None and not _valid_entrypoint_name(
+        capability_language, entrypoint_for_validation
+    ):
+        return ValidateResponse(
+            valid=False,
+            error=f"Invalid {capability_language} entrypoint name: {entrypoint_for_validation!r}",
+        )
 
     runner = container.get_code_runner(capability_language)
     try:
@@ -1308,13 +1301,15 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
             "tool_results": {},
             "execution_exceptions": [],
             "nested_states": {},
+            "child_workflows": {},
             "reasoning_history": [],
             "breakpoints": {},
             "scheduled_tasks": [],
             "prompt_history": [],
+            "ui_events_pending": [],
+            "llm_context_memory_cursor": {},
             "content": None,
             "response": None,
-            "mock": None,
             "pending_reasoning": None,
             "breakpoint_hit": None,
             "breakpoint_state": None,
@@ -1331,16 +1326,12 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
         raw_branch_id = input_state_normalized.get("branch_id")
         if raw_branch_id is not None and not isinstance(raw_branch_id, str):
             raise ValueError("execute.state.branch_id must be a string")
-        resolved_skill_id = (
-            request.branch_id
-            or raw_branch_id
-            or "default"
-        )
+        resolved_branch_id = request.branch_id or raw_branch_id or "default"
         if resolved_flow_id and resolved_flow_id not in ("", "test-flow"):
             await _merge_execute_state_with_flow(
                 input_state_normalized,
                 flow_id=resolved_flow_id,
-                branch_id=resolved_skill_id,
+                branch_id=resolved_branch_id,
                 container=container,
             )
 
@@ -1357,7 +1348,7 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
             input_state=input_state_raw,
             output_state=output_state,
             diff=diff,
-            duration_ms=duration_ms
+            duration_ms=duration_ms,
         )
 
     except CodeExecutionRuntimeError as e:
@@ -1382,7 +1373,7 @@ async def execute_code(container: ContainerDep, request: ExecuteRequest) -> Exec
             input_state=input_state_raw,
             error=f"Ошибка выполнения: {e}",
             error_payload=error_payload,
-            duration_ms=duration_ms
+            duration_ms=duration_ms,
         )
 
 
@@ -1421,9 +1412,6 @@ def _validate_node_config(config: JsonObject) -> None:
 async def _build_node_config(request: ExecuteRequest) -> JsonObject:
     """Строит node_config из ExecuteRequest."""
     config = require_json_object(copy.deepcopy(request.node_config), "execute.node_config")
-    legacy_llm = config.pop("llm_override", None)
-    if isinstance(legacy_llm, dict) and legacy_llm:
-        config["llm"] = require_json_object(legacy_llm, "execute.node_config.llm_override")
     if request.code is not None and "code" not in config:
         config["code"] = request.code
     config["type"] = _require_execute_node_type(str(request.node_type))
@@ -1431,6 +1419,8 @@ async def _build_node_config(request: ExecuteRequest) -> JsonObject:
         config["entrypoint"] = request.entrypoint
 
     _validate_node_config(config)
+    validation_config: JsonObject = {**config, "node_id": "test_node"}
+    _ = NodeConfig.model_validate(validation_config)
 
     return config
 
@@ -1466,7 +1456,61 @@ async def _execute_node(
         container=as_flow_runtime_container(container),
     )
     state = ExecutionState.model_validate(state_data)
+    node_type = node_config.get("type")
+    if not isinstance(node_type, str) or not node_type:
+        raise ValueError("execute.node_config.type must be a non-empty string")
+    state.current_nodes = ["test_node"]
+
+    runtime = container.workflow_runtime
+    base_event = await runtime.record_state_event(
+        state.session_id,
+        state,
+        event_type=WorkflowEventType.run_started,
+        payload=RunStartedPayload(
+            flow_id=flow_id,
+            branch_id=state.branch_id,
+            task_id=state.task_id,
+            flow_config_version=state.flow_config_version,
+        ),
+    )
+    superstep_event = await runtime.record_state_event(
+        state.session_id,
+        state,
+        event_type=WorkflowEventType.superstep_started,
+        payload=SuperstepStartedPayload(current_nodes=["test_node"]),
+    )
+    scheduled_event = await runtime.record_state_event(
+        state.session_id,
+        state,
+        event_type=WorkflowEventType.node_scheduled,
+        payload=NodeScheduledPayload(
+            node_id="test_node",
+            node_type=node_type,
+            current_nodes=["test_node"],
+        ),
+    )
+    state.attach_durable_node_context(
+        execution_branch_id=scheduled_event.execution_branch_id or base_event.execution_branch_id,
+        node_schedule_sequence=scheduled_event.sequence,
+        superstep_sequence=superstep_event.sequence,
+    )
     result_state = await node.run(state)
+    _ = await runtime.record_state_event(
+        result_state.session_id,
+        result_state,
+        event_type=WorkflowEventType.node_write_recorded,
+        payload=NodeWriteRecordedPayload(
+            node_id="test_node",
+            node_type=node_type,
+            state_delta=build_state_delta(state, result_state),
+        ),
+    )
+    _ = await runtime.record_state_event(
+        result_state.session_id,
+        result_state,
+        event_type=WorkflowEventType.node_completed,
+        payload=NodeCompletedPayload(node_id="test_node", node_type=node_type),
+    )
     return require_json_object(
         result_state.model_dump(mode="json", exclude_none=False),
         "execute.output_state",

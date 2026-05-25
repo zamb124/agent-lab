@@ -9,10 +9,9 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import Field
 
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models import CallParameter, FlowConfig, ToolReference
+from apps.flows.src.models import FlowConfig, ToolReference
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.tools.base import BaseTool
-from apps.flows.src.tools.json_schema_parameters import call_parameters_to_parameters_schema
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.pagination import OffsetPage
@@ -32,8 +31,7 @@ class ToolCreateRequest(StrictBaseModel):
     code: str | None = None
     language: str = "python"
     entrypoint: str | None = None
-    args_schema: dict[str, CallParameter] | None = None
-    parameters_schema: JsonObject | None = None
+    parameters_schema: JsonObject
     tags: list[str] | None = None
     react_role: str | None = None
 
@@ -47,7 +45,6 @@ class ToolResponse(StrictBaseModel):
     code: str | None = None
     language: str = "python"
     entrypoint: str | None = None
-    args_schema: dict[str, CallParameter] | None = None
     parameters_schema: JsonObject | None = None
     tags: list[str] = Field(default_factory=list)
     permission: str | list[str] | None = None
@@ -69,7 +66,6 @@ def _tool_response_from_reference(t: ToolReference) -> ToolResponse:
         code=t.code,
         language=t.language,
         entrypoint=t.entrypoint,
-        args_schema=t.args_schema if t.args_schema else None,
         parameters_schema=t.parameters_schema,
         tags=t.tags or ["misc"],
         permission=t.permission,
@@ -89,7 +85,6 @@ def _tool_response_from_registry_tool(tool: BaseTool) -> ToolResponse:
         code=None,
         language="python",
         entrypoint=None,
-        args_schema=None,
         parameters_schema=tool.parameters,
         tags=tool.get_tags(),
         permission=tool.permission,
@@ -168,7 +163,7 @@ async def list_all_tools_and_flows(
     for flow_row in flows_list:
         items.append(_flow_response(flow_row))
 
-    page = items[offset:offset + limit]
+    page = items[offset : offset + limit]
     return OffsetPage[ToolResponse](
         items=page,
         total=tools_count + flows_count + registry_only_count,
@@ -177,38 +172,8 @@ async def list_all_tools_and_flows(
     )
 
 
-class DraftParametersSchemaRequest(StrictBaseModel):
-    """Черновик JSON Schema для LLM из legacy args_schema (CallParameter)."""
-
-    args_schema: dict[str, CallParameter]
-
-
-class DraftParametersSchemaResponse(StrictBaseModel):
-    parameters_schema: JsonObject
-
-
-@router.post(
-    "/draft-parameters-schema",
-    response_model=DraftParametersSchemaResponse,
-)
-async def draft_parameters_schema(
-    container: ContainerDep,
-    request: DraftParametersSchemaRequest,
-) -> DraftParametersSchemaResponse:
-    _ = container
-    if not request.args_schema:
-        raise HTTPException(
-            status_code=422,
-            detail="args_schema must not be empty",
-        )
-    parameters_schema = call_parameters_to_parameters_schema(request.args_schema)
-    return DraftParametersSchemaResponse(parameters_schema=parameters_schema)
-
-
 @router.get("/{tool_id}", response_model=ToolResponse)
-async def get_tool(
-    tool_id: str, container: ContainerDep
-) -> ToolResponse:
+async def get_tool(tool_id: str, container: ContainerDep) -> ToolResponse:
     """Получает tool по ID; при отсутствии в репозитории — flow с тем же id."""
     tool = await container.tool_repository.get(tool_id)
     if tool is not None:
@@ -219,7 +184,6 @@ async def get_tool(
             code=tool.code,
             language=tool.language,
             entrypoint=tool.entrypoint,
-            args_schema=tool.args_schema if tool.args_schema else None,
             parameters_schema=tool.parameters_schema,
             tags=tool.tags or ["misc"],
             permission=tool.permission,
@@ -243,21 +207,13 @@ async def get_tool(
 
 
 @router.post("/", response_model=ToolResponse)
-async def create_tool(
-    request: ToolCreateRequest, container: ContainerDep
-) -> ToolResponse:
+async def create_tool(request: ToolCreateRequest, container: ContainerDep) -> ToolResponse:
     """Создает новый tool"""
-    args_schema = request.args_schema or {}
-
-    react_role = (
-        ReactToolRole(request.react_role)
-        if request.react_role
-        else ReactToolRole.STANDARD
-    )
+    react_role = ReactToolRole(request.react_role) if request.react_role else ReactToolRole.STANDARD
 
     ps = request.parameters_schema
-    raw_properties = ps.get("properties") if ps is not None else None
-    if ps is not None and (ps.get("type") != "object" or not isinstance(raw_properties, dict)):
+    raw_properties = ps.get("properties")
+    if ps.get("type") != "object" or not isinstance(raw_properties, dict):
         raise HTTPException(
             status_code=422,
             detail="parameters_schema must be JSON Schema object with type: object and properties",
@@ -269,9 +225,10 @@ async def create_tool(
         description=request.description,
         code=request.code,
         language=request.language,
-        entrypoint=request.entrypoint.strip() if request.entrypoint and request.entrypoint.strip() else None,
+        entrypoint=request.entrypoint.strip()
+        if request.entrypoint and request.entrypoint.strip()
+        else None,
         parameters_schema=ps,
-        args_schema=args_schema,
         tags=request.tags or [],
         react_role=react_role,
     )
@@ -285,7 +242,6 @@ async def create_tool(
         code=ref.code,
         language=ref.language,
         entrypoint=ref.entrypoint,
-        args_schema=ref.args_schema if ref.args_schema else None,
         parameters_schema=ref.parameters_schema,
         tags=ref.tags,
         react_role=ref.react_role.value,
@@ -293,9 +249,7 @@ async def create_tool(
 
 
 @router.delete("/{tool_id}")
-async def delete_tool(
-    tool_id: str, container: ContainerDep
-) -> dict[str, str]:
+async def delete_tool(tool_id: str, container: ContainerDep) -> dict[str, str]:
     """Удаляет tool"""
     deleted = await container.tool_repository.delete(tool_id)
     if not deleted:

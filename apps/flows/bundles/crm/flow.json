@@ -1,5 +1,5 @@
 {
-  "id": "crm",
+  "flow_id": "crm",
   "name": "CRM AI Flow",
   "description": "Единый flow для CRM: skills (анализ, резюмирование и др.)",
   "version": "1.0.0",

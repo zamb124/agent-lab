@@ -10,11 +10,16 @@ user/company/session/namespace при успешной авторизации; �
 
 import hashlib
 from datetime import datetime, timedelta, timezone
+from typing import cast, override
 
-from fastapi import HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import Response
+from starlette.types import ASGIApp
 
+from core.app_state import PlatformAppState
+from core.container import BaseContainer
 from core.context import clear_context, set_context
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.logging import bind_log_context, get_logger
@@ -25,6 +30,7 @@ from core.logging.attributes import (
     LOG_SESSION_ID,
     LOG_USER_ID,
 )
+from core.models.context_models import Context
 from core.models.identity_models import Company, User, UserStatus
 from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.domain import extract_subdomain
@@ -38,6 +44,7 @@ from .company_resolver import CompanyResolver
 from .context_factory import ContextFactory
 from .platform_handlers import get_platform_handler
 from .route_config import (
+    RouteContextType,
     RouteMatcher,
     RouteRule,
     browser_request_accepts_company_access_error_html,
@@ -58,23 +65,33 @@ class CompanyCreationRequired(Exception):
 class AuthMiddleware(BaseHTTPMiddleware):
     """Middleware для создания контекста запроса"""
 
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
-        self.route_matcher = RouteMatcher()
+        self.route_matcher: RouteMatcher = RouteMatcher()
 
-    def _get_container(self, request: Request):
-        return request.app.state.container
+    def _app_state(self, request: Request) -> PlatformAppState:
+        app = cast(FastAPI, request.app)
+        if not hasattr(app.state, "container") or not hasattr(app.state, "settings"):
+            raise RuntimeError("Platform app state is not configured")
+        return cast(PlatformAppState, cast(object, app.state))
+
+    def _get_container(self, request: Request) -> BaseContainer:
+        return self._app_state(request).container
 
     def _trace_id_from_state(self, request: Request) -> str:
         trace_id = getattr(request.state, "trace_id", None)
-        if not isinstance(trace_id, str) or not trace_id.strip():
-            raise RuntimeError(
-                "AuthMiddleware: request.state.trace_id отсутствует. "
-                "Проверьте, что AccessLogMiddleware подключён внешним слоем."
+        if not isinstance(trace_id, str):
+            message = (
+                "AuthMiddleware: request.state.trace_id отсутствует. Проверьте, что "
+                + "AccessLogMiddleware подключён внешним слоем."
             )
+            raise RuntimeError(message)
+        if not trace_id.strip():
+            raise RuntimeError("AuthMiddleware: request.state.trace_id пуст")
         return trace_id
 
-    async def dispatch(self, request: Request, call_next):
+    @override
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
         trace_id = self._trace_id_from_state(request)
 
@@ -120,9 +137,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
             # Сохраняем token_data для эндпоинтов типа /auth/me
             token_data, _ = await self._extract_token(request, container)
-            session_td = getattr(request.state, "session_token_data", None)
-            if session_td is not None:
-                token_data = session_td
+            session_token_data = getattr(request.state, "session_token_data", None)
+            if isinstance(session_token_data, TokenData):
+                token_data = session_token_data
 
             set_context(context)
             request.state.context = context
@@ -132,9 +149,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.state.user_companies = context.user_companies
             request.state.token_data = token_data
 
-            log_fields: dict[str, str | None] = {}
-            if context.user is not None:
-                log_fields[LOG_USER_ID] = context.user.user_id
+            log_fields: dict[str, str | None] = {LOG_USER_ID: context.user.user_id}
             if context.active_company is not None:
                 log_fields[LOG_COMPANY_ID] = context.active_company.company_id
                 if context.active_company.subdomain:
@@ -159,9 +174,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     )
 
             response = await call_next(request)
-            reissue = getattr(request.state, "reissue_auth_token", None)
-            if reissue is not None:
-                attach_session_auth_cookie(response, request, reissue)
+            reissue_auth_token = getattr(request.state, "reissue_auth_token", None)
+            if isinstance(reissue_auth_token, str) and reissue_auth_token:
+                attach_session_auth_cookie(response, request, reissue_auth_token)
             return response
 
         except CompanyCreationRequired:
@@ -184,11 +199,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self,
         request: Request,
         rule: RouteRule,
-        container,
+        container: BaseContainer,
         company_resolver: CompanyResolver,
         context_factory: ContextFactory,
         trace_id: str,
-    ):
+    ) -> Context:
         """Создает контекст на основе правила маршрутизации"""
 
         if self._auth_disabled_auto_context_allowed(request, rule):
@@ -215,8 +230,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
             token_data, auth_token = await self._extract_token(request, container)
             user = await self._get_user(container, token_data) if token_data else None
             return await context_factory.create(
-                request, "anonymous", company, user, token_data,
-                auth_token=auth_token, trace_id=trace_id
+                request,
+                "anonymous",
+                company,
+                user,
+                token_data,
+                auth_token=auth_token,
+                trace_id=trace_id,
             )
 
         # Авторизованный контекст
@@ -256,7 +276,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if not self.route_matcher.allows_deleting_company(request.url.path):
                 raise HTTPException(
                     status_code=403,
-                    detail="Компания удаляется. Пожалуйста, выберите другую компанию."
+                    detail="Компания удаляется. Пожалуйста, выберите другую компанию.",
                 )
 
         # Проверка доступа пользователя к компании (для frontend)
@@ -295,49 +315,54 @@ class AuthMiddleware(BaseHTTPMiddleware):
             await self._sync_active_company(container, user, company)
 
         return await context_factory.create(
-            request, rule.context_type, company, user, token_data,
+            request,
+            rule.context_type,
+            company,
+            user,
+            token_data,
             platform=rule.channel,  # channel используется как platform для webhook
             auth_token=auth_token,
-            trace_id=trace_id
+            trace_id=trace_id,
         )
 
     def _auth_disabled_auto_context_allowed(self, request: Request, rule: RouteRule) -> bool:
-        settings = getattr(request.app.state, "settings", None)
-        auth = getattr(settings, "auth", None)
-        server = getattr(settings, "server", None)
-        if not auth or getattr(auth, "enabled", True):
+        settings = self._app_state(request).settings
+        auth = settings.auth
+        if auth.enabled:
             return False
-        if not getattr(auth, "dev_auto_context_enabled", False):
+        if not auth.dev_auto_context_enabled:
             return False
-        if getattr(settings, "testing", False):
+        if settings.testing:
             return False
-        if getattr(server, "env", "production") == "production":
+        if settings.server.env == "production":
             return False
         return rule.auth_required
 
     async def _create_auth_disabled_auto_context(
         self,
         request: Request,
-        container,
+        container: BaseContainer,
         context_factory: ContextFactory,
         trace_id: str,
-        context_type: str,
-    ):
-        settings = request.app.state.settings
+        context_type: RouteContextType,
+    ) -> Context:
+        settings = self._app_state(request).settings
         auth = settings.auth
-        company_id = auth.dev_auto_company_id or "system"
+        company_id = auth.dev_auto_company_id
         company = await container.company_repository.get(company_id)
         if company is None:
             company = Company(
                 company_id=company_id,
-                name=auth.dev_auto_company_name or company_id,
+                name=auth.dev_auto_company_name,
                 subdomain=None,
                 owner_user_id=auth.dev_auto_user_id,
                 members={auth.dev_auto_user_id: ["admin"]},
             )
-            await container.company_repository.set(company)
+            _ = await container.company_repository.set(company)
 
-        groups = list(dict.fromkeys(auth.dev_auto_groups or ["admin", "developers"]))
+        groups = list(dict.fromkeys(auth.dev_auto_groups))
+        if not groups:
+            raise RuntimeError("auth.dev_auto_groups must be non-empty")
         user = User(
             user_id=auth.dev_auto_user_id,
             name="Dev Auto User",
@@ -353,8 +378,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             company_id=company.company_id,
             name=user.name,
             roles=groups,
-            attrs={"kind": "dev_auto_user"},
-            email=user.emails[0] if user.emails else None,
+            attributes={"kind": "dev_auto_user"},
+            email=user.emails[0],
         )
         logger.warning(
             "auth.disabled_auto_context",
@@ -377,17 +402,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self,
         request: Request,
         rule: RouteRule,
-        container,
+        container: BaseContainer,
         context_factory: ContextFactory,
         trace_id: str,
-    ):
+    ) -> Context:
         """Обрабатывает webhook запросы"""
         platform = rule.channel
         if platform is None:
             raise HTTPException(status_code=400, detail="Webhook platform is not configured")
         handler = get_platform_handler(platform, container)
-        if not handler:
-            raise HTTPException(status_code=400, detail=f"Unknown platform: {platform}")
 
         company = await handler.extract_company_from_webhook_path(request.url.path, platform)
 
@@ -412,7 +435,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def _extract_token(
         self,
         request: Request,
-        container,
+        container: BaseContainer,
     ) -> tuple[TokenData | None, str | None]:
         """
         Извлекает и валидирует токен из запроса.
@@ -480,7 +503,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def _build_api_key_token_data(
         self,
         *,
-        container,
+        container: BaseContainer,
         raw_token: str,
         path: str,
     ) -> TokenData | None:
@@ -514,7 +537,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             },
         )
 
-    async def _get_user(self, container, token_data: TokenData) -> User | None:
+    async def _get_user(self, container: BaseContainer, token_data: TokenData) -> User | None:
         """Получает пользователя по данным токена"""
         user = await container.user_repository.get(token_data.user_id)
         if user is None and token_data.token_type == TokenType.EMBED_SESSION:
@@ -524,7 +547,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 company_id=token_data.company_id,
                 name="Embed Guest",
                 roles=["guest"],
-                attrs={
+                attributes={
                     "kind": "embed_session_guest",
                     "token_expires_at": token_data.exp.isoformat(),
                     "embed_id": token_data.metadata.get("embed_id"),
@@ -537,7 +560,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             logger.debug("auth.user_loaded", user_id=token_data.user_id)
         return user
 
-    async def _sync_active_company(self, container, user: User, company):
+    async def _sync_active_company(
+        self, container: BaseContainer, user: User, company: Company
+    ) -> None:
         """Синхронизирует активную компанию пользователя"""
         if user.active_company_id != company.company_id:
             logger.info(
@@ -546,4 +571,4 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 company_id=company.company_id,
             )
             user.active_company_id = company.company_id
-            await container.user_repository.set(user)
+            _ = await container.user_repository.set(user)

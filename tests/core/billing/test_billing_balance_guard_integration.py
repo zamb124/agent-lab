@@ -9,6 +9,7 @@ import pytest
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.billing.service import BALANCE_BLOCK_OPERATION_LLM, BillingService
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.models.billing_models import DEFAULT_TARIFF_PRICES
 from core.models.identity_models import Company
 
 
@@ -40,6 +41,7 @@ async def test_require_balance_zero_blocks(
         frontend_container.company_repository,
         frontend_container.user_repository,
         frontend_container.usage_repository,
+        tariff_prices=DEFAULT_TARIFF_PRICES,
         resource_base_prices=_minimal_base_prices(),
         shared_storage=None,
         balance_enforcement_enabled=True,
@@ -62,6 +64,7 @@ async def test_require_balance_system_exempt(frontend_container) -> None:
         frontend_container.company_repository,
         frontend_container.user_repository,
         frontend_container.usage_repository,
+        tariff_prices=DEFAULT_TARIFF_PRICES,
         resource_base_prices=_minimal_base_prices(),
         shared_storage=None,
         balance_enforcement_enabled=True,
@@ -90,6 +93,7 @@ async def test_require_balance_disabled_noop(frontend_container, unique_id, syst
         frontend_container.company_repository,
         frontend_container.user_repository,
         frontend_container.usage_repository,
+        tariff_prices=DEFAULT_TARIFF_PRICES,
         resource_base_prices=_minimal_base_prices(),
         shared_storage=None,
         balance_enforcement_enabled=False,

@@ -37,15 +37,19 @@ export function getBlankExternalApiNodeConfig() {
             Authorization: 'Bearer @var:secrets.example_token',
         },
         body_template: JSON.stringify(bodyTemplateObject, null, 2),
-        args_schema: {
-            item_id: {
-                type: 'string',
-                description: 'Подставляется в URL как {item_id}, если нода вызывается как tool.',
+        parameters_schema: {
+            type: 'object',
+            properties: {
+                item_id: {
+                    type: 'string',
+                    description: 'Подставляется в URL как {item_id}, если нода вызывается как tool.',
+                },
+                dry_run: {
+                    type: 'boolean',
+                    description: 'Пример поля: перенесите в body_template или отдельное поле входа при необходимости.',
+                },
             },
-            dry_run: {
-                type: 'boolean',
-                description: 'Пример поля: перенесите в body_template или отдельное поле входа при необходимости.',
-            },
+            required: ['item_id'],
         },
         input_mapping: {
             item_id: '@state:context.item_id',

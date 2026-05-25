@@ -1,5 +1,5 @@
 {
-  "id": "example_external",
+  "flow_id": "example_external",
   "name": "Пример внешнего flow",
   "description": "Демонстрация интеграции с внешним (docker) flow по A2A с авторизацией через @var",
   "tags": [
@@ -29,8 +29,8 @@
   ],
   "edges": [
     {
-      "from": "cat_facts",
-      "to": null
+      "from_node": "cat_facts",
+      "to_node": null
     }
   ]
 }

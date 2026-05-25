@@ -23,6 +23,14 @@ from a2a.types import (
 )
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.durable_execution import (
+    ExecutionStateDelta,
+    SideEffectPolicy,
+    WorkflowEventType,
+    apply_state_delta,
+    build_state_delta,
+    hash_state_json,
+)
 from apps.flows.src.models import NodeConfig, ReactLoopMode
 from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.runtime.a2a_messages import (
@@ -43,13 +51,12 @@ from apps.flows.src.runtime.effective_llm_config import (
 )
 from apps.flows.src.runtime.exception_policy import should_absorb_exception
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from apps.flows.src.runtime.llm_context_memory import (
-    prune_state_messages_to_memory_cursor_for_runtime,
-    schedule_state_messages_to_memory_for_runtime,
-)
-from apps.flows.src.runtime.llm_override_params import (
+from apps.flows.src.runtime.llm_config_params import (
     client_kwargs_from_llm_config,
     split_llm_config_for_client,
+)
+from apps.flows.src.runtime.llm_context_memory import (
+    schedule_state_messages_to_memory_for_runtime,
 )
 from apps.flows.src.runtime.tool_call_context import active_tool_call_context
 from apps.flows.src.state.cancellation import (
@@ -129,6 +136,17 @@ def _get_tool_calls_metadata(metadata: JsonObject, field_name: str) -> list[LLMT
     return tool_calls
 
 
+def _copy_state_projection(target: ExecutionState, source: ExecutionState) -> None:
+    data = source.model_dump(mode="python", exclude_none=False)
+    for field_name in ExecutionState.model_fields:
+        if field_name in data:
+            target[field_name] = data[field_name]
+    extras = require_json_object(source.__pydantic_extra__ or {}, "state.extra")
+    for key, value in extras.items():
+        if key not in FROZEN_STATE_FIELDS:
+            target[key] = value
+
+
 class LlmNodeRunner(BaseLlmNodeRunner):
     """
     Runner для LLM-нод (ReAct цикл).
@@ -162,26 +180,24 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         self.llm_context_source_registry: LLMContextSourceRegistry | None = llm_context_source_registry
         if container is not None:
             for tool in self.tools:
-                if hasattr(tool, "container") and getattr(tool, "container", None) is None:
-                    setattr(tool, "container", container)
+                if tool.container is None:
+                    tool.container = container
 
-    async def _checkpoint_state(self, state: ExecutionState) -> None:
-        if self.container is None:
-            return
-        if getattr(state, "_skip_hot_state_checkpoint", False):
-            return
-        _ = await self.container.state_manager.save_state(state.session_id, state)
+    async def _checkpoint_state(
+        self,
+        state: ExecutionState,
+        *,
+        event_type: WorkflowEventType = WorkflowEventType.state_projection_committed,
+        payload: JsonObject | None = None,
+    ) -> None:
+        _ = state
+        _ = event_type
+        _ = payload
+        return
 
     def _schedule_context_memory_window_close(self, state: ExecutionState) -> None:
-        if self.container is None or self.llm_context_policy is None:
+        if self.container is None or not self._context_memory_writes_enabled():
             return
-        if getattr(state, "_skip_hot_state_checkpoint", False):
-            return
-
-        async def after_memory_write() -> None:
-            if self._context_memory_uses_full_state_messages():
-                _ = prune_state_messages_to_memory_cursor_for_runtime(state)
-            await self._checkpoint_state(state)
 
         _ = schedule_state_messages_to_memory_for_runtime(
             store=self.container.llm_context_memory_store,
@@ -190,13 +206,21 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             policy=self.llm_context_policy,
             messages=self._messages_for_llm_context(state),
             summarize_episode=self._summarize_context_memory_episode,
-            after_write=after_memory_write,
+        )
+
+    def _context_memory_writes_enabled(self) -> bool:
+        policy = self.llm_context_policy
+        return (
+            policy is not None
+            and policy.mode != "off"
+            and policy.memory != "off"
+            and policy.compaction != "off"
         )
 
     def _context_memory_uses_full_state_messages(self) -> bool:
         if self.llm_node is None:
             return True
-        return getattr(self.llm_node, "messages_filter", "all") == "all"
+        return self.llm_node.messages_filter == "all"
 
     async def _summarize_context_memory_episode(self, text: str) -> str:
         if self.container is None:
@@ -326,6 +350,18 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             result.append(require_json_object(msg.model_dump(mode="json"), "llm.message"))
         return result
 
+    async def _active_execution_branch_id(self, state: ExecutionState) -> str:
+        if self.container is None:
+            raise RuntimeError("Durable activity branch requires FlowContainer")
+        position = await self.container.workflow_runtime.get_active_execution_position(
+            state.session_id
+        )
+        if position is None:
+            raise RuntimeError(
+                f"Workflow instance is required before scheduling LLM activity: {state.session_id!r}"
+            )
+        return position.execution_branch_id
+
     def _get_react_config(self) -> tuple[ReactLoopMode, str, int, bool, str | None]:
         """Возвращает конфигурацию ReAct цикла."""
         if self.node_config and self.node_config.react:
@@ -393,8 +429,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             return
 
         next_call = interrupt_path[0]
-        call_type = next_call.type
-        call_id = next_call.id
+        call_type = next_call.node_type
+        call_id = next_call.node_id
         tool_call = next_call.tool_call
 
         if tool_call is None:
@@ -433,7 +469,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 InterruptManager.clear_interrupt_path(state)
             except FlowInterrupt as e:
                 InterruptManager.apply_interrupt(
-                    state, e.body, tool_call, getattr(e, "correlation_id", None)
+                    state, e.body, tool_call, e.correlation_id
                 )
                 await self._checkpoint_state(state)
                 raise
@@ -615,7 +651,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             effective_llm=effective_llm,
                             allow_platform_paid_fallback=allow_platform_paid_fallback,
                         )
-                        llm_provider = getattr(llm, "llm_provider", None)
+                        llm_provider = llm.llm_provider
                         billing_res = effective_llm.billing_resource_name
 
                         async with tracer.llm_call_span(
@@ -638,6 +674,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                     task_id,
                                     response_format,
                                     state,
+                                    iteration=iteration,
                                 ):
                                     should_yield = True
 
@@ -876,8 +913,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         InterruptManager.push_interrupt_path(
                                             state,
                                             InterruptPathItem(
-                                                type="tool",
-                                                id=interrupted_tc.name,
+                                                node_type="tool",
+                                                node_id=interrupted_tc.name,
                                                 tool_call=interrupted_tc,
                                             ),
                                         )
@@ -886,7 +923,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         state,
                                         e.body,
                                         interrupted_tc,
-                                        getattr(e, "correlation_id", None),
+                                        e.correlation_id,
                                     )
                                 await self._checkpoint_state(state)
                                 raise
@@ -898,7 +935,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         cast(JsonValue, json.loads(content)),
                                         "llm.structured_output",
                                     )
-                                    setattr(state, "structured_output_result", parsed_output)
+                                    state.set_structured_output_result(parsed_output)
                                     final_response = content
                                     parsed_output_keys: list[str] = (
                                         list(parsed_output.keys())
@@ -988,7 +1025,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                         payload={
                             "node_id": sid,
                             "max_iterations": max_iterations,
-                            "loop_mode": getattr(loop_mode, "value", str(loop_mode)),
+                            "loop_mode": loop_mode.value,
                         },
                     )
             except FlowInterrupt:
@@ -1029,6 +1066,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         task_id: str,
         response_format: JsonObject | None,
         state: ExecutionState,
+        *,
+        iteration: int,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Вызывает LLM — ТОЛЬКО STREAM.
 
@@ -1044,6 +1083,47 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
 
         for attempt in range(1, self.MAX_STREAM_IDLE_RETRIES + 2):  # +2: 1 original + N retries
+            activity_id = (
+                f"{state.session_id}:node:{self._source_node_id()}:"
+                + f"llm:iteration:{iteration}:attempt:{attempt}"
+            )
+            if self.container is not None:
+                input_payload = require_json_object(
+                    {
+                        "node_id": self._source_node_id(),
+                        "iteration": iteration,
+                        "attempt": attempt,
+                        "messages": self._messages_to_dict(messages),
+                        "tools": [
+                            require_json_object(tool, "llm.tool_schema")
+                            for tool in tools or []
+                        ],
+                        "response_format": response_format,
+                        "max_tokens": max_tok,
+                    },
+                    "llm.activity_input",
+                )
+                branch_id = await self._active_execution_branch_id(state)
+                activity_id = (
+                    f"{state.session_id}:{branch_id}:node:{self._source_node_id()}:"
+                    + f"llm:iteration:{iteration}:attempt:{attempt}:"
+                    + f"input:{hash_state_json(input_payload)}"
+                )
+                scheduled_result = await self.container.workflow_runtime.record_activity_scheduled(
+                    session_id=state.session_id,
+                    activity_id=activity_id,
+                    activity_type="llm",
+                    input_payload=input_payload,
+                    node_id=self._source_node_id(),
+                    idempotency_key=activity_id,
+                    side_effect_policy=SideEffectPolicy.idempotent,
+                )
+                if scheduled_result is None:
+                    started = await self.container.workflow_runtime.record_activity_started(
+                        activity_id=activity_id,
+                    )
+                    if not started:
+                        raise RuntimeError(f"Failed to mark LLM activity as started: {activity_id!r}")
             try:
                 async for event in llm.stream(
                     messages=messages,
@@ -1058,11 +1138,32 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 ):
                     await check_cancellation(state)
                     yield event
+                if self.container is not None:
+                    completed = await self.container.workflow_runtime.record_activity_completed(
+                        activity_id=activity_id,
+                        result_json={"completed": True},
+                    )
+                    if not completed:
+                        raise RuntimeError(f"Failed to mark LLM activity as completed: {activity_id!r}")
                 return  # Стрим завершился нормально
             except LLMStreamUserCancelledError:
+                if self.container is not None:
+                    completed = await self.container.workflow_runtime.record_activity_completed(
+                        activity_id=activity_id,
+                        error="LLMStreamUserCancelledError",
+                    )
+                    if not completed:
+                        raise RuntimeError(f"Failed to mark LLM activity as failed: {activity_id!r}")
                 tok = get_cancellation_token()
                 raise FlowCancelled(tok.task_id if tok is not None else task_id)
             except LLMStreamIdleTimeoutError as e:
+                if self.container is not None:
+                    completed = await self.container.workflow_runtime.record_activity_completed(
+                        activity_id=activity_id,
+                        error=str(e),
+                    )
+                    if not completed:
+                        raise RuntimeError(f"Failed to mark LLM activity as failed: {activity_id!r}")
                 if attempt <= self.MAX_STREAM_IDLE_RETRIES:
                     logger.warning(
                         "LLM stream idle timeout (attempt %d/%d), retrying: "
@@ -1168,9 +1269,32 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     merged_vars.update(state_copy.variables)
                     state.variables = merged_vars
                     continue
-                value = getattr(state_copy, field, None)
-                if value is not None:
-                    setattr(state, field, value)
+                if field == "content":
+                    value = state_copy.content
+                    if value is not None:
+                        state.content = value
+                    continue
+                if field == "response":
+                    value = state_copy.response
+                    if value is not None:
+                        state.response = value
+                    continue
+                if field == "result":
+                    value = state_copy.result
+                    if value is not None:
+                        state.result = value
+                    continue
+                if field == "validation":
+                    value = state_copy.validation
+                    if value is not None:
+                        state.validation = value
+                    continue
+                if field == "files":
+                    files = state_copy.files
+                    if files:
+                        state.files = files
+                    continue
+                raise ValueError(f"Unsupported tool parallel merge field: {field}")
 
             extra_src = require_json_object(
                 state_copy.__pydantic_extra__ or {},
@@ -1180,7 +1304,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 if ek in FROZEN_STATE_FIELDS:
                     continue
                 if ev is not None:
-                    setattr(state, ek, ev)
+                    state[ek] = ev
 
             tool_results.extend(result)
 
@@ -1227,12 +1351,86 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             raise ToolExecutionError(tool_name, not_found)
         tool_name = tool.name
 
-        nested_flow_tool = hasattr(tool, "flow_id")
+        nested_flow_tool = tool.is_nested_flow_tool
+        input_payload = require_json_object(
+            {
+                "tool_name": tool_name,
+                "arguments": require_json_object(tool_args, "tool_args"),
+            },
+            "activity.input_payload",
+        )
+        activity_id = f"{state.session_id}:tool:{tool_call_id}"
+        if self.container is not None:
+            branch_id = await self._active_execution_branch_id(state)
+            activity_id = (
+                f"{state.session_id}:{branch_id}:node:{self._source_node_id()}:"
+                + f"tool:{tool_call_id}:input:{hash_state_json(input_payload)}"
+            )
+        idempotency_key = activity_id
+        if self.container is not None:
+            runtime = self.container.workflow_runtime
+            completed = await runtime.get_completed_activity_result(
+                session_id=state.session_id,
+                activity_id=activity_id,
+                idempotency_key=idempotency_key,
+                input_payload=input_payload,
+            )
+            if completed is not None:
+                delta_raw = completed.get("state_delta")
+                if isinstance(delta_raw, dict):
+                    replayed_state = apply_state_delta(
+                        state,
+                        ExecutionStateDelta.model_validate(delta_raw),
+                    )
+                    _copy_state_projection(state, replayed_state)
+                result_text = str(completed.get("result", ""))
+                logger.info(
+                    "tool.activity_replayed",
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                )
+                return [
+                    {
+                        "tool_call_id": tool_call_id,
+                        "content": result_text,
+                    }
+                ]
+
+            scheduled_result = await runtime.record_activity_scheduled(
+                session_id=state.session_id,
+                activity_id=activity_id,
+                activity_type="tool",
+                input_payload=input_payload,
+                node_id=self._source_node_id(),
+                tool_call_id=tool_call_id,
+                idempotency_key=idempotency_key,
+                side_effect_policy=SideEffectPolicy.non_idempotent,
+            )
+            if scheduled_result is not None:
+                delta_raw = scheduled_result.get("state_delta")
+                if isinstance(delta_raw, dict):
+                    replayed_state = apply_state_delta(
+                        state,
+                        ExecutionStateDelta.model_validate(delta_raw),
+                    )
+                    _copy_state_projection(state, replayed_state)
+                return [
+                    {
+                        "tool_call_id": tool_call_id,
+                        "content": str(scheduled_result.get("result", "")),
+                    }
+                ]
+            started = await runtime.record_activity_started(activity_id=activity_id)
+            if not started:
+                raise RuntimeError(f"Failed to mark tool activity as started: {activity_id!r}")
 
         async with tracer.tool_call_span(
             tool_name, tool_call_id, tool_args, nested_flow_tool, trace_ctx=trace_ctx
         ) as tool_span:
             tool_start = time.time()
+            before_tool_state = ExecutionState.model_validate(
+                state.model_dump(mode="python", exclude_none=False)
+            )
 
             logger.info(f"Выполняю tool: {tool_name}")
             try:
@@ -1248,6 +1446,20 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 tool_duration = (time.time() - tool_start) * 1000
                 tracer.record_tool_result(tool_span, result, tool_duration)
                 tracer.record_state_snapshot(tool_span, state)
+                if self.container is not None:
+                    state_delta = build_state_delta(before_tool_state, state)
+                    completed = await self.container.workflow_runtime.record_activity_completed(
+                        activity_id=activity_id,
+                        result_json={
+                            "result": str(result),
+                            "state_delta": state_delta.model_dump(
+                                mode="json",
+                                exclude_none=False,
+                            ),
+                        },
+                    )
+                    if not completed:
+                        raise RuntimeError(f"Failed to mark tool activity as completed: {activity_id!r}")
 
                 return [
                     {
@@ -1256,11 +1468,25 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     }
                 ]
             except FlowInterrupt:
+                if self.container is not None:
+                    completed = await self.container.workflow_runtime.record_activity_completed(
+                        activity_id=activity_id,
+                        error="FlowInterrupt",
+                    )
+                    if not completed:
+                        raise RuntimeError(f"Failed to mark tool activity as failed: {activity_id!r}")
                 raise
             except Exception as e:
                 tool_duration = (time.time() - tool_start) * 1000
                 tracer.record_tool_result(tool_span, None, tool_duration, error=str(e))
                 logger.error(f"Tool {tool_name} failed: {e}")
+                if self.container is not None:
+                    completed = await self.container.workflow_runtime.record_activity_completed(
+                        activity_id=activity_id,
+                        error=str(e),
+                    )
+                    if not completed:
+                        raise RuntimeError(f"Failed to mark tool activity as failed: {activity_id!r}")
                 enabled, allow_types = self._exception_policy_from_node_config()
                 if should_absorb_exception(e, enabled=enabled, allow_types=allow_types):
                     self._record_tool_exception(

@@ -6,12 +6,12 @@ BaseTriggerHandler - абстрактный базовый класс для о�
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 from apps.flows.config import get_settings
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import TriggerConfig, TriggerType
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -28,13 +28,13 @@ class BaseTriggerHandler(ABC):
 
     trigger_type: TriggerType
 
-    def __init__(self, base_url: str, *, container: FlowRuntimeContainer):
+    def __init__(self, base_url: str, *, container: FlowRuntimeContainer) -> None:
         """
         Args:
             base_url: Базовый URL сервиса для формирования webhook URL
         """
-        self.base_url = base_url
-        self.container = container
+        self.base_url: str = base_url
+        self.container: FlowRuntimeContainer = container
 
     @abstractmethod
     async def register(
@@ -62,7 +62,7 @@ class BaseTriggerHandler(ABC):
         Raises:
             TriggerRegistrationError: При ошибке регистрации
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def unregister(
@@ -83,15 +83,15 @@ class BaseTriggerHandler(ABC):
             flow_id: ID агента
             trigger: Конфигурация триггера
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def handle(
         self,
         flow_id: str,
         trigger_id: str,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
+        payload: JsonObject,
+    ) -> JsonObject:
         """
         Обрабатывает входящее событие триггера.
 
@@ -107,7 +107,7 @@ class BaseTriggerHandler(ABC):
         Returns:
             Результат выполнения агента
         """
-        pass
+        raise NotImplementedError
 
     def generate_webhook_url(self, flow_id: str, trigger_id: str) -> str:
         """
@@ -127,35 +127,42 @@ class BaseTriggerHandler(ABC):
     def _log_register(self, flow_id: str, trigger_id: str) -> None:
         """Логирует регистрацию триггера."""
         logger.info(
-            f"Registering {self.trigger_type.value} trigger: "
-            f"flow_id={flow_id}, trigger={trigger_id}"
+            "Registering %s trigger: flow_id=%s, trigger=%s",
+            self.trigger_type.value,
+            flow_id,
+            trigger_id,
         )
 
     def _log_unregister(self, flow_id: str, trigger_id: str) -> None:
         """Логирует снятие триггера."""
         logger.info(
-            f"Unregistering {self.trigger_type.value} trigger: "
-            f"flow_id={flow_id}, trigger={trigger_id}"
+            "Unregistering %s trigger: flow_id=%s, trigger=%s",
+            self.trigger_type.value,
+            flow_id,
+            trigger_id,
         )
 
 
 class TriggerRegistrationError(Exception):
     """Ошибка регистрации триггера."""
 
-    def __init__(self, trigger_type: str, flow_id: str, trigger_id: str, message: str):
-        self.trigger_type = trigger_type
-        self.flow_id = flow_id
-        self.trigger_id = trigger_id
-        super().__init__(
-            f"Failed to register {trigger_type} trigger "
-            f"(flow_id={flow_id}, trigger={trigger_id}): {message}"
+    def __init__(self, trigger_type: str, flow_id: str, trigger_id: str, message: str) -> None:
+        self.trigger_type: str = trigger_type
+        self.flow_id: str = flow_id
+        self.trigger_id: str = trigger_id
+        error_message = "Failed to register {} trigger (flow_id={}, trigger={}): {}".format(
+            trigger_type,
+            flow_id,
+            trigger_id,
+            message,
         )
+        super().__init__(error_message)
 
 
 class TriggerValidationError(Exception):
     """Ошибка валидации входящего запроса триггера."""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str) -> None:
         super().__init__(message)
 
 

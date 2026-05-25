@@ -69,7 +69,7 @@ async def _list_entity_types_offset_page(
     offset: int,
 ) -> OffsetPage[EntityTypeResponse]:
     types, total = await asyncio.gather(
-        repo.get_all_for_company(namespace=namespace, limit=limit, offset=offset),
+        repo.list_by_company(namespace=namespace, limit=limit, offset=offset),
         repo.count_all_for_company(namespace=namespace),
     )
     if not types:
@@ -81,7 +81,7 @@ async def _list_entity_types_offset_page(
         )
     parent_maps = await _parent_maps_for_types(repo, types)
     if await _backfill_missing_colors(types, repo):
-        types = await repo.get_all_for_company(
+        types = await repo.list_by_company(
             namespace=namespace,
             limit=limit,
             offset=offset,

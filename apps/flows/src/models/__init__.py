@@ -60,7 +60,9 @@ from .flow_config import (
     BranchConfig,
     CheckConfig,
     CheckType,
+    CodeEdgeCondition,
     Edge,
+    EdgeCondition,
     ExternalAgentStatus,
     FlowConfig,
     FlowType,
@@ -68,6 +70,7 @@ from .flow_config import (
     InputConfig,
     InputType,
     Permission,
+    SimpleEdgeCondition,
     TestCaseConfig,
     TestTarget,
     TestTurn,
@@ -85,7 +88,6 @@ from .node_config import (
     NodeConfig,
     NodeInputMapping,
     NodeLLMConfig,
-    NodeLLMOverride,
     ReactConfig,
     ReactLoopMode,
 )
@@ -98,13 +100,17 @@ from .resource import (
     ResourceReferenceInput,
     ResourceType,
 )
+from .scheduled_task_payload import FlowScheduledTaskPayload
 from .session_config import SessionConfig
-from .tool_reference import CallParameter, ToolReference
+from .tool_reference import ToolReference
 from .trigger_config import (
     CronTriggerConfig,
     EmailTriggerConfig,
     RedisTriggerConfig,
+    TelegramBotApiBooleanResponse,
+    TelegramGetUpdatesResponse,
     TelegramTriggerConfig,
+    TelegramUpdate,
     TriggerConfig,
     WebhookTriggerConfig,
 )
@@ -113,11 +119,11 @@ LLMConfig = NodeLLMConfig
 
 __all__ = [
     "FlowType",
-    "CallParameter",
     "ChannelNodeConfig",
     "ChannelType",
     "CheckConfig",
     "CheckType",
+    "CodeEdgeCondition",
     "CodeMode",
     "ReactToolRole",
     "CronTriggerConfig",
@@ -138,6 +144,7 @@ __all__ = [
     "DataflowStateDescriptor",
     "DataflowStatus",
     "Edge",
+    "EdgeCondition",
     "EmailTriggerConfig",
     "EvaluationResult",
     "EvaluationAllTestsStreamEvent",
@@ -170,7 +177,6 @@ __all__ = [
     "NodeConfig",
     "NodeInputMapping",
     "NodeLLMConfig",
-    "NodeLLMOverride",
     "LLMConfig",
     "LLMModel",
     "MergeMode",
@@ -182,14 +188,19 @@ __all__ = [
     "ResponseSchema",
     "ResponseStatus",
     "ResponseType",
+    "SimpleEdgeCondition",
     "FlowSpeechSettings",
     "FlowSpeechSttBlock",
     "FlowSpeechTtsBlock",
+    "FlowScheduledTaskPayload",
     "FlowSpeechVadBlock",
     "SessionConfig",
     "SessionStatus",
     "BranchConfig",
+    "TelegramBotApiBooleanResponse",
+    "TelegramGetUpdatesResponse",
     "TelegramTriggerConfig",
+    "TelegramUpdate",
     "TestCaseConfig",
     "TestTarget",
     "TestTargetType",

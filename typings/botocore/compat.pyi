@@ -1,0 +1,3 @@
+from datetime import datetime
+
+def get_current_datetime(remove_tzinfo: bool = ...) -> datetime: ...

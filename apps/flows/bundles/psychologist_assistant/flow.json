@@ -1,5 +1,5 @@
 {
-  "id": "psychologist_assistant",
+  "flow_id": "psychologist_assistant",
   "name": "Ассистент Лары Швед",
   "description": "Эмпатичный ассистент психолога Лары Швед с поиском по базе знаний (rag_search)",
   "version": "1.0.0",
@@ -47,13 +47,19 @@
           "type": "code",
           "title": "Поиск в базе знаний",
           "description": "Поиск информации по психологии, техникам самопомощи и справочных материалов",
-          "args_schema": {
-            "query": {
-              "type": "string",
-              "description": "Поисковый запрос для базы знаний"
-            }
-          },
-          "code": "async def run(args, state):\n    query = args.get('query')\n    if not query:\n        return 'Пожалуйста, укажите поисковый запрос.'\n    raw = await rag_search(\n        namespace_id='psychology',\n        collection_id='default',\n        query=query,\n        limit=3,\n    )\n    if not raw.get('success'):\n        return str(raw.get('error', 'Ошибка поиска'))\n    results = raw.get('results') or []\n    if not results:\n        return 'В психологической базе знаний ничего не найдено по данному запросу.'\n    output = []\n    for res in results:\n        name = res.get('document_name') or res.get('document_id', '')\n        output.append(f\"--- {name} ---\\n{res.get('content', '')}\")\n    return '\\n\\n'.join(output)"
+          "code": "async def run(args, state):\n    query = args.get('query')\n    if not isinstance(query, str) or query.strip() == '':\n        return 'Пожалуйста, укажите поисковый запрос.'\n    raw = await tools.rag_search(\n        namespace_id='psychology',\n        collection_id='default',\n        query=query.strip(),\n        limit=3,\n    )\n    if raw.get('success') is not True:\n        return str(raw.get('error', 'Ошибка поиска'))\n    results = raw.get('results') or []\n    if not results:\n        return 'В психологической базе знаний ничего не найдено по данному запросу.'\n    output = []\n    for res in results:\n        name = res.get('document_name') or res.get('document_id', '')\n        output.append(f\"--- {name} ---\\n{res.get('content', '')}\")\n    return '\\n\\n'.join(output)",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Поисковый запрос для базы знаний"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
         }
       ],
       "output_key": "response"
@@ -81,24 +87,24 @@
   },
   "edges": [
     {
-      "from": "tg_fmt_in",
-      "to": "tg_send_in"
+      "from_node": "tg_fmt_in",
+      "to_node": "tg_send_in"
     },
     {
-      "from": "tg_send_in",
-      "to": "main"
+      "from_node": "tg_send_in",
+      "to_node": "main"
     },
     {
-      "from": "main",
-      "to": "tg_fmt_out"
+      "from_node": "main",
+      "to_node": "tg_fmt_out"
     },
     {
-      "from": "tg_fmt_out",
-      "to": "tg_send_out"
+      "from_node": "tg_fmt_out",
+      "to_node": "tg_send_out"
     },
     {
-      "from": "tg_send_out",
-      "to": null
+      "from_node": "tg_send_out",
+      "to_node": null
     }
   ],
   "variables": {

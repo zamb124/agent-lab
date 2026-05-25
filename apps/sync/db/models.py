@@ -7,7 +7,7 @@ SQLAlchemy модели для Sync Service.
 """
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import override
 
 from sqlalchemy import (
     BigInteger,
@@ -37,7 +37,7 @@ class SyncChannel(Base):
     оставлены оверрайды для редких случаев точечной настройки.
     """
 
-    __tablename__ = "sync_channels"
+    __tablename__: str = "sync_channels"
 
     channel_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -54,11 +54,12 @@ class SyncChannel(Base):
     transcribe_voice_messages: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     speech_to_chat_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_sync_channels_company", "company_id"),
         Index("ix_sync_channels_company_namespace", "company_id", "namespace"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncChannel(channel_id='{self.channel_id}', type='{self.type}', company='{self.company_id}')>"
 
@@ -66,7 +67,7 @@ class SyncChannel(Base):
 class SyncChannelMember(Base):
     """Участники каналов (роль: owner/admin/member/viewer)."""
 
-    __tablename__ = "sync_channel_members"
+    __tablename__: str = "sync_channel_members"
 
     channel_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("sync_channels.channel_id", ondelete="CASCADE"),
@@ -86,10 +87,11 @@ class SyncChannelMember(Base):
         nullable=False,
     )
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_sync_channel_members_company", "company_id"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncChannelMember(channel='{self.channel_id}', user='{self.user_id}', role='{self.role}')>"
 
@@ -97,7 +99,7 @@ class SyncChannelMember(Base):
 class SyncThread(Base):
     """Треды (ветки обсуждения) от корневого сообщения."""
 
-    __tablename__ = "sync_threads"
+    __tablename__: str = "sync_threads"
 
     thread_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -111,11 +113,12 @@ class SyncThread(Base):
     )
     created_by_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_sync_threads_company", "company_id"),
         Index("ix_sync_threads_channel", "channel_id"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncThread(thread_id='{self.thread_id}', channel='{self.channel_id}')>"
 
@@ -123,7 +126,7 @@ class SyncThread(Base):
 class SyncMessage(Base):
     """Сообщения в каналах и тредах."""
 
-    __tablename__ = "sync_messages"
+    __tablename__: str = "sync_messages"
 
     message_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -148,7 +151,7 @@ class SyncMessage(Base):
     forwarded_from_channel_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     forwarded_from_channel_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_sync_messages_company", "company_id"),
         Index("ix_sync_messages_channel", "channel_id"),
         Index("ix_sync_messages_thread", "thread_id"),
@@ -157,6 +160,7 @@ class SyncMessage(Base):
         Index("ix_sync_messages_channel_call", "channel_id", "call_id"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncMessage(message_id='{self.message_id}', channel='{self.channel_id}')>"
 
@@ -164,7 +168,7 @@ class SyncMessage(Base):
 class SyncMessageContent(Base):
     """Полиморфный контент сообщений (text/plain, code/block, git/reference, ...)."""
 
-    __tablename__ = "sync_message_contents"
+    __tablename__: str = "sync_message_contents"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     message_id: Mapped[str] = mapped_column(
@@ -172,12 +176,13 @@ class SyncMessageContent(Base):
     )
     type: Mapped[str] = mapped_column(String(64), nullable=False)
     order: Mapped[int] = mapped_column(Integer, nullable=False)
-    data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    data: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_sync_message_contents_message", "message_id"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncMessageContent(id={self.id}, message='{self.message_id}', type='{self.type}')>"
 
@@ -185,7 +190,7 @@ class SyncMessageContent(Base):
 class SyncMessageFile(Base):
     """Связь файлов с сообщениями."""
 
-    __tablename__ = "sync_message_files"
+    __tablename__: str = "sync_message_files"
 
     message_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("sync_messages.message_id", ondelete="CASCADE"),
@@ -197,6 +202,7 @@ class SyncMessageFile(Base):
     )
     role: Mapped[str] = mapped_column(String(32), nullable=False)
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncMessageFile(message='{self.message_id}', file='{self.file_id}')>"
 
@@ -204,7 +210,7 @@ class SyncMessageFile(Base):
 class SyncFile(Base):
     """Загруженные файлы (метаданные)."""
 
-    __tablename__ = "sync_files"
+    __tablename__: str = "sync_files"
 
     file_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -217,10 +223,11 @@ class SyncFile(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_sync_files_company", "company_id"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncFile(file_id='{self.file_id}', name='{self.original_name}')>"
 
@@ -228,7 +235,7 @@ class SyncFile(Base):
 class SyncGitResourceRef(Base):
     """Нормализованные Git-ресурсы (repo, MR, PR, commit, file)."""
 
-    __tablename__ = "sync_git_resource_refs"
+    __tablename__: str = "sync_git_resource_refs"
 
     git_ref_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -237,13 +244,14 @@ class SyncGitResourceRef(Base):
     project_key: Mapped[str] = mapped_column(String(255), nullable=False)
     external_id: Mapped[str] = mapped_column(String(255), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
-    extra: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    extra: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_sync_git_refs_company", "company_id"),
         Index("ix_sync_git_refs_provider_kind", "provider", "kind"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncGitResourceRef(git_ref_id='{self.git_ref_id}', provider='{self.provider}', kind='{self.kind}')>"
 
@@ -256,7 +264,7 @@ class SyncCall(Base):
     status: "ringing" → "active" → "ended".
     """
 
-    __tablename__ = "sync_calls"
+    __tablename__: str = "sync_calls"
 
     call_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -274,12 +282,13 @@ class SyncCall(Base):
     )
     created_by_user_id: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_sync_calls_company", "company_id"),
         Index("ix_sync_calls_channel", "channel_id"),
         Index("ix_sync_calls_status", "status"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncCall(call_id='{self.call_id}', mode='{self.mode}', status='{self.status}')>"
 
@@ -287,7 +296,7 @@ class SyncCall(Base):
 class SyncCallSpeechEgressTrack(Base):
     """LiveKit track composite egress для «речи в ленту» (один egress на микрофонный трек)."""
 
-    __tablename__ = "sync_call_speech_egress_tracks"
+    __tablename__: str = "sync_call_speech_egress_tracks"
 
     row_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     call_id: Mapped[str] = mapped_column(
@@ -307,10 +316,11 @@ class SyncCallSpeechEgressTrack(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
-    __table_args__ = (
+    __table_args__: tuple[UniqueConstraint, ...] = (
         UniqueConstraint("call_id", "track_sid", name="uq_sync_call_speech_track"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncCallSpeechEgressTrack(call='{self.call_id}', egress='{self.egress_id}')>"
 
@@ -321,7 +331,7 @@ class SyncCallParticipant(Base):
     status: "invited" → "joined" / "declined" / "left".
     """
 
-    __tablename__ = "sync_call_participants"
+    __tablename__: str = "sync_call_participants"
 
     call_participant_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     call_id: Mapped[str] = mapped_column(
@@ -332,12 +342,13 @@ class SyncCallParticipant(Base):
     joined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (
+    __table_args__: tuple[Index | UniqueConstraint, ...] = (
         Index("ix_sync_call_participants_call", "call_id"),
         Index("ix_sync_call_participants_user", "user_id"),
         UniqueConstraint("call_id", "user_id", name="uq_sync_call_participant"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncCallParticipant(call_id='{self.call_id}', user_id='{self.user_id}', status='{self.status}')>"
 
@@ -349,7 +360,7 @@ class SyncCallLink(Base):
     Звонок всегда создаётся в режиме SFU — P2P для гостей не поддерживается.
     """
 
-    __tablename__ = "sync_call_links"
+    __tablename__: str = "sync_call_links"
 
     link_token: Mapped[str] = mapped_column(String(64), primary_key=True)
     channel_id: Mapped[str] = mapped_column(
@@ -379,13 +390,14 @@ class SyncCallLink(Base):
         default=False,
     )
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_sync_call_links_channel", "channel_id"),
         Index("ix_sync_call_links_company", "company_id"),
         Index("ix_sync_call_links_expires", "expires_at"),
         Index("ix_sync_call_links_calendar_event_id", "calendar_event_id"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncCallLink(token='{self.link_token}', channel='{self.channel_id}')>"
 
@@ -393,7 +405,7 @@ class SyncCallLink(Base):
 class SyncCallRecording(Base):
     """Серверная запись звонка."""
 
-    __tablename__ = "sync_call_recordings"
+    __tablename__: str = "sync_call_recordings"
 
     recording_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     call_id: Mapped[str] = mapped_column(
@@ -417,7 +429,7 @@ class SyncCallRecording(Base):
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_sync_call_recordings_company", "company_id"),
         Index("ix_sync_call_recordings_call", "call_id"),
         Index("ix_sync_call_recordings_channel", "channel_id"),
@@ -425,5 +437,6 @@ class SyncCallRecording(Base):
         Index("ix_sync_call_recordings_company_namespace", "company_id", "namespace"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<SyncCallRecording(recording_id='{self.recording_id}', call_id='{self.call_id}', status='{self.status}')>"

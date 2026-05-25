@@ -13,7 +13,11 @@ from typing import Literal
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from core.db.company_voice_provider_secrets import is_unset_sentinel, unset_secrets_sentinel
+from core.db.company_voice_provider_secrets import (
+    UNSET_SECRETS,
+    SecretsPatchValue,
+    is_unset_sentinel,
+)
 from core.db.database import get_session_factory
 from core.db.models.platform import CompanyVoiceProvider
 from core.db.utils import get_rowcount
@@ -27,7 +31,7 @@ class CompanyVoiceProviderRepository:
     def __init__(self, db_url: str) -> None:
         if db_url == "":
             raise ValueError("CompanyVoiceProviderRepository: db_url не может быть пустым.")
-        self._db_url = db_url
+        self._db_url: str = db_url
 
     async def get(self, *, company_id: str, kind: VoiceKind) -> CompanyVoiceProvider | None:
         if company_id == "":
@@ -66,7 +70,7 @@ class CompanyVoiceProviderRepository:
         sample_rate: int | None = None,
         threshold: float | None = None,
         response_format: str | None = None,
-        secrets: dict[str, str] | None | object = unset_secrets_sentinel(),
+        secrets: SecretsPatchValue = UNSET_SECRETS,
     ) -> CompanyVoiceProvider:
         if company_id == "":
             raise ValueError("company_id не может быть пустым.")
@@ -85,26 +89,22 @@ class CompanyVoiceProviderRepository:
             secrets_value: dict[str, str] | None
             if is_unset_sentinel(secrets):
                 secrets_value = (
-                    dict(existing.secrets) if existing and existing.secrets else None  # type: ignore[arg-type]
+                    dict(existing.secrets) if existing and existing.secrets else None
                 )
                 if secrets_value is not None:
                     normalized: dict[str, str] = {}
                     for kk, vv in secrets_value.items():
-                        if isinstance(vv, str) and vv != "":
+                        if vv != "":
                             normalized[kk] = vv
                     secrets_value = normalized if normalized else None
             elif secrets is None:
                 secrets_value = None
-            elif isinstance(secrets, dict):
+            else:
                 secrets_value = {
-                    kk: vv for kk, vv in secrets.items() if isinstance(vv, str) and vv != ""
+                    kk: vv for kk, vv in secrets.items() if vv != ""
                 }
                 if not secrets_value:
                     secrets_value = None
-            else:
-                raise ValueError(
-                    "company_voice_providers.upsert: secrets ожидали sentinel, dict или None"
-                )
 
             values = {
                 "company_id": company_id,
@@ -134,7 +134,7 @@ class CompanyVoiceProviderRepository:
                     "updated_at": now,
                 },
             )
-            await session.execute(stmt)
+            _ = await session.execute(stmt)
             await session.commit()
 
             result = await session.execute(
@@ -145,9 +145,12 @@ class CompanyVoiceProviderRepository:
             )
             row = result.scalar_one_or_none()
             if row is None:
-                raise RuntimeError(
+                message = (
                     "company_voice_providers upsert не вернул запись после вставки "
-                    f"(company_id={company_id!r}, kind={kind!r})"
+                    + f"(company_id={company_id!r}, kind={kind!r})"
+                )
+                raise RuntimeError(
+                    message
                 )
             return row
 

@@ -17,6 +17,7 @@ from apps.flows.src.models.flow_config import FlowConfig
 from core.context import get_context
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger
+from core.middleware.auth.company_resolver import build_service_base_url
 from core.types import JsonObject
 
 logger = get_logger(__name__)
@@ -30,33 +31,7 @@ async def _get_flow_config(flow_id: str, container: FlowContainer) -> FlowConfig
 
 
 def _get_base_url(request: Request) -> str:
-    """Получает базовый URL из request."""
-    # Приоритет X-Forwarded-Proto над request.url.scheme
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    if forwarded_proto:
-        scheme = forwarded_proto.lower()
-    else:
-        # Если заголовка нет, но запрос идет через SSL порт, используем https
-        scheme = request.url.scheme
-
-    # Используем X-Forwarded-Host, который содержит host:port от Nginx
-    forwarded_host = request.headers.get("x-forwarded-host")
-    if forwarded_host:
-        host = forwarded_host
-    else:
-        host = request.headers.get("host") or request.url.netloc
-        # Если host не содержит порт, добавляем порт
-        if ":" not in host:
-            if request.url.port:
-                host = f"{host}:{request.url.port}"
-            elif scheme == "https":
-                host = f"{host}:443"
-            elif scheme == "http":
-                host = f"{host}:80"
-
-    base_url = f"{scheme}://{host}"
-    logger.info(f"Base URL: {base_url}, X-Forwarded-Proto: {forwarded_proto}, X-Forwarded-Host: {forwarded_host}, request.url.scheme: {request.url.scheme}, request.headers: {dict(request.headers)}")
-    return base_url
+    return build_service_base_url(request, include_default_port=True)
 
 
 @router.get("/{flow_id}/chat")

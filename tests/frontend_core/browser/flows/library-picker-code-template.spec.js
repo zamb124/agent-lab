@@ -42,7 +42,7 @@ describe('flows library picker code templates', () => {
         fixtureCleanup();
     });
 
-    it('commits catalog code template with inferred args_schema', async () => {
+    it('commits catalog code template with inferred parameters_schema', async () => {
         window.fetch = async (url, options) => {
             const href = String(url);
             if (href.endsWith('/flows/api/v1/code/parse-signature')) {
@@ -53,18 +53,20 @@ describe('flows library picker code templates', () => {
                     success: true,
                     func_name: 'run',
                     parameters: {},
-                    args_schema: {
-                        url: {
-                            type: 'string',
-                            description: 'Параметр url',
-                            required: true,
+                    parameters_schema: {
+                        type: 'object',
+                        properties: {
+                            url: {
+                                type: 'string',
+                                description: 'Параметр url',
+                            },
+                            data: {
+                                type: 'object',
+                                description: 'Параметр data',
+                                default: null,
+                            },
                         },
-                        data: {
-                            type: 'object',
-                            description: 'Параметр data',
-                            required: false,
-                            default: null,
-                        },
+                        required: ['url'],
                     },
                 });
             }
@@ -86,11 +88,10 @@ describe('flows library picker code templates', () => {
         });
         await aTimeout(0);
 
-        expect(committed.config.args_schema.url.type).to.equal('string');
-        expect(committed.config.args_schema.url.required).to.equal(true);
-        expect(committed.config.args_schema.data.type).to.equal('object');
-        expect(committed.config.args_schema.data.required).to.equal(false);
-        expect(committed.config.args_schema.data.default).to.equal(null);
+        expect(committed.config.parameters_schema.properties.url.type).to.equal('string');
+        expect(committed.config.parameters_schema.required).to.deep.equal(['url']);
+        expect(committed.config.parameters_schema.properties.data.type).to.equal('object');
+        expect(committed.config.parameters_schema.properties.data.default).to.equal(null);
     });
 
     it('commits non-python catalog template without python signature parsing', async () => {
@@ -115,7 +116,7 @@ describe('flows library picker code templates', () => {
 
         expect(committed.config.language).to.equal('typescript');
         expect(committed.config.code).to.include('async function run');
-        expect(committed.config.args_schema).to.equal(undefined);
+        expect(committed.config.parameters_schema).to.deep.equal({ type: 'object', properties: {}, required: [] });
     });
 
     it('creates inline tool with selected language and JSON Schema parameters', async () => {
@@ -194,6 +195,6 @@ describe('flows library picker code templates', () => {
         expect(committed.config.language).to.equal('javascript');
         expect(committed.config.tool_id).to.equal('browser_page_markdown');
         expect(committed.config.code).to.include('await tools.browser_page_markdown');
-        expect(committed.config.args_schema.url.required).to.equal(true);
+        expect(committed.config.parameters_schema.required).to.include('url');
     });
 });

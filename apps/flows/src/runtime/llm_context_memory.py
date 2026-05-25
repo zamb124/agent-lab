@@ -141,7 +141,7 @@ def prune_state_messages_to_memory_cursor_for_runtime(state: ExecutionState) -> 
     Physically drop the message prefix already closed by every memory cursor.
 
     Cursor values are indexes into ``state.messages``. After pruning the shared prefix, all
-    cursors are rebased to the shorter hot state.
+    cursors are rebased to the shorter runtime projection.
     """
     messages = list(state.messages)
     if len(messages) <= 1:

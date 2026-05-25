@@ -9,8 +9,9 @@ from core.models import FlexibleBaseModel
 from core.types import JsonObject
 
 
-class ScheduleType(str, Enum):
-    """Тип расписания задачи."""
+class PlatformScheduleType(str, Enum):
+    """Тип расписания в платформенном API."""
+
     CRON = "cron"
     INTERVAL = "interval"
     ONE_TIME = "one_time"
@@ -40,7 +41,7 @@ class ScheduledTaskInfo(FlexibleBaseModel):
     session_id: str = Field(..., description="ID сессии")
     user_id: str = Field(..., description="ID пользователя")
 
-    schedule_type: ScheduleType = Field(..., description="Тип расписания")
+    schedule_type: PlatformScheduleType = Field(..., description="Тип расписания")
     content_type: ContentType = Field(..., description="Тип контента")
 
     # Конфигурация расписания
@@ -58,14 +59,6 @@ class ScheduledTaskInfo(FlexibleBaseModel):
     executed_at: datetime | None = Field(default=None)
     next_run: datetime | None = Field(default=None, description="Следующий запуск")
     error_message: str | None = Field(default=None, description="Сообщение об ошибке при FAILED")
-
-
-class PlatformScheduleType(str, Enum):
-    """Тип расписания в платформенном API."""
-
-    CRON = "cron"
-    INTERVAL = "interval"
-    ONE_TIME = "one_time"
 
 
 class PlatformScheduleCreateRequest(FlexibleBaseModel):
@@ -169,7 +162,6 @@ class PlatformRedisScheduleSnapshot(FlexibleBaseModel):
 
 
 __all__ = [
-    "ScheduleType",
     "ContentType",
     "ScheduledTaskStatus",
     "ScheduledTaskInfo",

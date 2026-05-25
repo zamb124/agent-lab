@@ -22,6 +22,42 @@ from core.config import get_settings
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _build_asyncpg_server_settings() -> dict[str, str]:
+    """
+    Собирает server_settings для asyncpg-драйвера: statement_timeout,
+    lock_timeout, idle_in_transaction_session_timeout (значения 0 — пропускаются).
+
+    PostgreSQL понимает значения как миллисекунды, переданные строкой.
+    """
+    db = get_settings().database
+    server_settings: dict[str, str] = {}
+    if db.statement_timeout_ms > 0:
+        server_settings["statement_timeout"] = str(db.statement_timeout_ms)
+    if db.lock_timeout_ms > 0:
+        server_settings["lock_timeout"] = str(db.lock_timeout_ms)
+    if db.idle_in_transaction_session_timeout_ms > 0:
+        server_settings["idle_in_transaction_session_timeout"] = str(
+            db.idle_in_transaction_session_timeout_ms
+        )
+    return server_settings
+
+
+def _build_connect_args(db_url: str) -> dict[str, object]:
+    """
+    Готовит connect_args для create_async_engine.
+
+    server_settings поддерживается только asyncpg-драйвером SQLAlchemy.
+    Для других драйверов возвращает пустой словарь — таймауты придётся
+    задавать на уровне БД (ALTER ROLE / SET) или через postgres URL options.
+    """
+    if "+asyncpg" not in db_url:
+        return {}
+    server_settings = _build_asyncpg_server_settings()
+    if not server_settings:
+        return {}
+    return {"server_settings": server_settings}
 def _require_shared_db_url() -> str:
     settings = get_settings()
     u = settings.database.shared_url
@@ -61,6 +97,7 @@ async def get_engine(db_url: str | None = None) -> AsyncEngine:
     logger.debug(f"Создаем engine для event loop {loop_id}, db_url={db_url[:50]}...")
 
     is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
+    connect_args = _build_connect_args(db_url)
 
     if is_testing:
         # В тестах используем маленький пул чтобы не превысить max_connections PostgreSQL
@@ -72,6 +109,7 @@ async def get_engine(db_url: str | None = None) -> AsyncEngine:
             max_overflow=3,
             pool_pre_ping=True,
             pool_recycle=300,
+            connect_args=connect_args,
         )
         logger.debug(f"Engine создан с маленьким пулом для тестов (loop {loop_id})")
     else:
@@ -82,6 +120,7 @@ async def get_engine(db_url: str | None = None) -> AsyncEngine:
             pool_recycle=3600,
             pool_size=5,
             max_overflow=10,
+            connect_args=connect_args,
         )
         logger.debug(f"Engine создан (loop {loop_id})")
 

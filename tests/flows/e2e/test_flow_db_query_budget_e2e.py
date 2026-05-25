@@ -7,24 +7,16 @@ E2E-бюджет SQL-запросов при выполнении flow.
 """
 
 from __future__ import annotations
-
 import uuid
 from dataclasses import dataclass
 from typing import Any
-
 import pytest
 from filelock import FileLock
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from apps.flows.config import get_settings
 
-pytestmark = [
-    pytest.mark.e2e,
-    pytest.mark.real_taskiq,
-    pytest.mark.timeout(120, func_only=True),
-]
-
+pytestmark = [pytest.mark.e2e, pytest.mark.real_taskiq, pytest.mark.timeout(120, func_only=True)]
 _PG_STAT_LOCK = "/tmp/platform_pg_stat_statements_flow_budget.lock"
 
 
@@ -60,12 +52,9 @@ async def _ensure_pg_stat_statements(db_url: str) -> None:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_stat_statements"))
             try:
                 await conn.execute(text("SELECT 1 FROM pg_stat_statements LIMIT 1"))
-            except Exception as exc:  # pragma: no cover - depends on local docker state
+            except Exception as exc:
                 raise AssertionError(
-                    "pg_stat_statements is not loaded in test PostgreSQL. "
-                    "Restart postgres-test after docker-compose-test.yaml update; "
-                    "this E2E must not be skipped. "
-                    f"(original error: {exc})"
+                    f"pg_stat_statements is not loaded in test PostgreSQL. Restart postgres-test after docker-compose-test.yaml update; this E2E must not be skipped. (original error: {exc})"
                 ) from exc
     finally:
         await engine.dispose()
@@ -87,14 +76,7 @@ async def _collect_statement_stats(db_url: str, database: str) -> list[Statement
             rows = (
                 await conn.execute(
                     text(
-                        """
-                        SELECT query, calls, rows, total_exec_time
-                        FROM pg_stat_statements
-                        WHERE dbid = (
-                            SELECT oid FROM pg_database WHERE datname = current_database()
-                        )
-                        ORDER BY calls DESC, total_exec_time DESC
-                        """
+                        "\n                        SELECT query, calls, rows, total_exec_time\n                        FROM pg_stat_statements\n                        WHERE dbid = (\n                            SELECT oid FROM pg_database WHERE datname = current_database()\n                        )\n                        ORDER BY calls DESC, total_exec_time DESC\n                        "
                     )
                 )
             ).mappings()
@@ -119,17 +101,19 @@ async def _collect_statement_stats(db_url: str, database: str) -> list[Statement
 
 def _calls_matching(stats: list[StatementStat], *needles: str) -> int:
     return sum(
-        stat.calls
-        for stat in stats
-        if all(needle.lower() in stat.query.lower() for needle in needles)
+        (
+            stat.calls
+            for stat in stats
+            if all((needle.lower() in stat.query.lower() for needle in needles))
+        )
     )
 
 
-def _state_write_calls(stats: list[StatementStat]) -> int:
+def _workflow_event_write_calls(stats: list[StatementStat]) -> int:
     total = 0
     for stat in stats:
         normalized = " ".join(stat.query.split()).lower()
-        if "insert into states" in normalized or normalized.startswith("update states "):
+        if "insert into workflow_events" in normalized:
             total += stat.calls
     return total
 
@@ -158,8 +142,7 @@ def _format_top(stats: list[StatementStat], limit: int = 15) -> str:
         if len(query) > 220:
             query = query[:217] + "..."
         lines.append(
-            f"{stat.database}: calls={stat.calls}, rows={stat.rows}, "
-            f"time_ms={stat.total_exec_time_ms:.2f}, query={query}"
+            f"{stat.database}: calls={stat.calls}, rows={stat.rows}, time_ms={stat.total_exec_time_ms:.2f}, query={query}"
         )
     return "\n".join(lines)
 
@@ -189,10 +172,10 @@ async def _create_parallel_llm_flow(client, flow_id: str) -> None:
                 },
             },
             "edges": [
-                {"from": "entry_llm", "to": "left_llm"},
-                {"from": "entry_llm", "to": "right_llm"},
-                {"from": "left_llm", "to": None},
-                {"from": "right_llm", "to": None},
+                {"from_node": "entry_llm", "to_node": "left_llm"},
+                {"from_node": "entry_llm", "to_node": "right_llm"},
+                {"from_node": "left_llm", "to_node": None},
+                {"from_node": "right_llm", "to_node": None},
             ],
         },
     )
@@ -214,18 +197,12 @@ async def _execute_flow_once(client, flow_id: str, context_id: str) -> dict[str,
 
 
 @pytest.mark.asyncio
-async def test_parallel_llm_flow_db_query_budget(
-    client,
-    container,
-    mock_llm_redis,
-    unique_id,
-):
+async def test_parallel_llm_flow_db_query_budget(client, container, mock_llm_redis, unique_id):
     """
     Проверяет SQL budget выполнения flow с параллельной волной LLM-нод.
 
-    Цель регрессионная: промежуточный ExecutionState должен жить в Redis, поэтому
-    в PostgreSQL на выполнение допускается только terminal snapshot, а не
-    запись state после каждой ноды/LLM-итерации.
+    Цель регрессионная: выполнение пишет append-only ledger, а Redis остаётся
+    только cache projection. История должна быть восстановима через workflow runtime.
     """
     settings = get_settings()
     db_urls = {
@@ -235,7 +212,6 @@ async def test_parallel_llm_flow_db_query_budget(
     flow_id = f"e2e_db_budget_{unique_id}"
     context_id = f"ctx-{unique_id}"
     session_id = f"{flow_id}:{context_id}"
-
     await _create_parallel_llm_flow(client, flow_id)
     await mock_llm_redis(
         [
@@ -244,57 +220,42 @@ async def test_parallel_llm_flow_db_query_budget(
             {"type": "text", "content": "right result"},
         ]
     )
-
     try:
         with FileLock(_PG_STAT_LOCK, timeout=420):
             for db_url in db_urls.values():
                 await _ensure_pg_stat_statements(str(db_url))
             await _reset_pg_stat_statements(str(db_urls["platform_agents"]))
-
             task = await _execute_flow_once(client, flow_id, context_id)
-
             stats: list[StatementStat] = []
             for database, db_url in db_urls.items():
                 stats.extend(await _collect_statement_stats(str(db_url), database))
-
         assert task["status"]["state"] == "completed"
-
-        hot_state = await container.redis_client.get(container.state_manager._state_key(session_id))
-        assert hot_state is None
-
-        persisted_state = await container.state_repository.get(session_id)
+        persisted_state = await container.workflow_runtime.get_state(session_id)
         assert persisted_state is not None
         assert persisted_state.terminal_task_state == "completed"
-
+        (history, total_history) = await container.workflow_runtime.get_state_history(session_id)
+        assert total_history >= 1
+        assert history[-1]["event_type"] == "RunTerminal"
         app_stats = _application_stats(stats)
         agents_stats = [stat for stat in app_stats if stat.database == "platform_agents"]
         shared_stats = [stat for stat in app_stats if stat.database == "platform_shared"]
         top = _format_top(stats)
-
-        agents_total_calls = sum(stat.calls for stat in agents_stats)
-        shared_total_calls = sum(stat.calls for stat in shared_stats)
-        state_select_calls = _calls_matching(agents_stats, "select", "states")
-        state_write_calls = _state_write_calls(agents_stats)
+        agents_total_calls = sum((stat.calls for stat in agents_stats))
+        shared_total_calls = sum((stat.calls for stat in shared_stats))
+        workflow_event_writes = _workflow_event_write_calls(agents_stats)
         shared_storage_calls = _calls_matching(shared_stats, "select", "storage")
-
-        assert state_write_calls == 1, (
-            "ExecutionState должен записываться в PostgreSQL только на terminal snapshot; "
-            "new/intermediate state и параллельные волны должны жить в Redis. "
-            f"got {state_write_calls} states writes.\n{top}"
+        assert workflow_event_writes >= 1, (
+            f"Flow execution должен писать durable workflow_events.\n{top}"
         )
-        assert state_select_calls <= 3, (
-            f"Слишком много SELECT из states во время выполнения flow: {state_select_calls}.\n{top}"
-        )
-        assert agents_total_calls <= 12, (
+        assert agents_total_calls <= 40, (
             f"Слишком много прикладных SQL в platform_agents: {agents_total_calls}.\n{top}"
         )
         assert shared_storage_calls <= 2, (
-            f"Слишком много shared storage SELECT во время A2A flow execution: "
-            f"{shared_storage_calls}.\n{top}"
+            f"Слишком много shared storage SELECT во время A2A flow execution: {shared_storage_calls}.\n{top}"
         )
         assert shared_total_calls <= 4, (
             f"Слишком много прикладных SQL в platform_shared: {shared_total_calls}.\n{top}"
         )
     finally:
-        await container.state_manager.delete_state(session_id)
+        await container.workflow_runtime.delete_state(session_id)
         await client.delete(f"/flows/api/v1/flows/{flow_id}")

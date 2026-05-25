@@ -10,6 +10,7 @@ from uuid import UUID
 
 from apps.flows.src.db.models import OperatorTasks
 from apps.flows.src.db.operator_repository import OperatorRepository
+from apps.flows.src.durable_execution import create_initial_state
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.operator_schemas import (
     OperatorDialogLogEntry,
@@ -19,7 +20,6 @@ from apps.flows.src.models.operator_schemas import (
     OperatorTaskStatus,
 )
 from apps.flows.src.services.operator_tasks_broadcast import publish_operator_tasks_refresh
-from apps.flows.src.state.persistence import create_initial_state
 from apps.flows.src.streaming.emitter import Emitter
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows_worker.broker import broker as flows_broker
@@ -82,7 +82,7 @@ def operator_task_to_out(
 ) -> OperatorTaskOut:
     handoff_title, handoff_preview = operator_task_handoff_texts(task)
     return OperatorTaskOut(
-        id=task.id,
+        operator_task_id=task.id,
         company_id=task.company_id,
         queue_id=task.queue_id,
         status=OperatorTaskStatus(task.status),

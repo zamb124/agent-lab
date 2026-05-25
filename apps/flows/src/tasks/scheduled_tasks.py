@@ -4,21 +4,20 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
 
 from apps.flows.config import get_settings
 from apps.flows.src.channels.types import PreparedTaskParams
-from apps.flows.src.container import get_container
+from apps.flows.src.container import FlowContainer, get_container
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_SCHEDULED
+from apps.flows.src.tools.base import ToolArguments
 from apps.flows_worker.broker import broker
-from apps.scheduler.container import get_scheduler_container
 from core.context import Context, set_context
 from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.scheduler import get_schedule_source
-from core.scheduler.models import ScheduledTaskStatus
+from core.scheduler.models import ContentType, PlatformScheduleType, ScheduledTaskStatus
 from core.state import ExecutionState
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, require_json_object, require_json_value
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
@@ -30,10 +29,12 @@ async def execute_scheduled_task(
     flow_id: str,
     session_id: str,
     user_id: str,
-    task_type: str,
-    payload: dict[str, Any],
+    content_type: str,
+    content: str,
+    tool_args: ToolArguments | None = None,
+    description: str | None = None,
     company_id: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Выполняет scheduled task.
 
@@ -48,35 +49,40 @@ async def execute_scheduled_task(
         flow_id: ID flow
         session_id: ID сессии
         user_id: ID пользователя
-        task_type: Тип ("message" или "tool_call")
-        payload: Данные задачи (content, tool_args)
+        content_type: Тип ("message" или "tool_call")
+        content: Сообщение или имя tool
+        tool_args: Аргументы для tool_call
+        description: Описание задачи
 
     Returns:
         Результат выполнения
     """
-    logger.info("Executing scheduled task: schedule_task_id=%s, type=%s", schedule_task_id, task_type)
+    logger.info(
+        "Executing scheduled task: schedule_task_id=%s, content_type=%s, description=%s",
+        schedule_task_id,
+        content_type,
+        description,
+    )
+    task_content_type = ContentType(content_type)
 
     container = get_container()
-    scheduled_task_repo = container.scheduled_task_repository
 
-    # Получаем задачу из БД
-    task_info = await scheduled_task_repo.get_by_schedule_task_id(schedule_task_id)
-
-    # Извлекаем flow_id из session_id если не передан (формат: flow_id:context_id)
     effective_flow_id = flow_id
-    if not effective_flow_id and session_id and ":" in session_id:
-        effective_flow_id = session_id.split(":")[0]
+    if not effective_flow_id:
+        raise ValueError("flow_id is required for scheduled task")
+    if company_id is None:
+        raise ValueError("company_id is required for scheduled task")
 
-    content = payload.get("content", "")
-    tool_args = payload.get("tool_args")
+    scheduler_repo = container.scheduler_task_repository
 
-    effective_company_id = company_id or "system"
-
-    scheduler_repo = get_scheduler_container().scheduler_task_repository
+    # Source of truth — платформенная таблица scheduler_tasks (shared БД).
+    task_info = await scheduler_repo.get(
+        company_id=company_id, schedule_task_id=schedule_task_id
+    )
 
     context = Context(
         user=User(user_id=user_id, name="Scheduler"),
-        active_company=Company(company_id=effective_company_id, name=effective_company_id),
+        active_company=Company(company_id=company_id, name=company_id),
         session_id=session_id,
         flow_id=effective_flow_id,
         channel="scheduler",
@@ -84,45 +90,33 @@ async def execute_scheduled_task(
     set_context(context)
 
     try:
-        if task_type == "message":
+        if task_content_type == ContentType.MESSAGE:
             result = await _execute_message_task(
                 container=container,
                 flow_id=effective_flow_id,
                 session_id=session_id,
                 user_id=user_id,
                 content=content,
-                context=context,
             )
-        elif task_type == "tool_call":
+        elif task_content_type == ContentType.TOOL_CALL:
+            if tool_args is None:
+                raise ValueError("tool_args is required for scheduled tool_call")
             result = await _execute_tool_call_task(
                 container=container,
-                flow_id=effective_flow_id,
                 session_id=session_id,
                 user_id=user_id,
                 tool_name=content,
-                tool_args=tool_args or {},
-                context=context,
+                tool_args=tool_args,
             )
         else:
-            raise ValueError(f"Unknown task_type: {task_type}")
-
-        # Успех - обновляем статус для one-time tasks
-        if task_info:
-            schedule_type = task_info.schedule_type if isinstance(task_info.schedule_type, str) else task_info.schedule_type.value
-            if schedule_type == "one_time":
-                await scheduled_task_repo.update_status(
-                    schedule_task_id,
-                    ScheduledTaskStatus.EXECUTED
-                )
+            raise ValueError(f"Unknown content_type: {content_type}")
 
         logger.info("Scheduled task executed: schedule_task_id=%s", schedule_task_id)
         scheduler_status = ScheduledTaskStatus.PENDING
-        if task_info:
-            schedule_type = task_info.schedule_type if isinstance(task_info.schedule_type, str) else task_info.schedule_type.value
-            if schedule_type == "one_time":
-                scheduler_status = ScheduledTaskStatus.EXECUTED
-        await scheduler_repo.update_status(
-            company_id=effective_company_id,
+        if task_info and task_info.schedule_type == PlatformScheduleType.ONE_TIME:
+            scheduler_status = ScheduledTaskStatus.EXECUTED
+        _ = await scheduler_repo.update_status(
+            company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=scheduler_status,
             last_run_at=datetime.now(timezone.utc),
@@ -132,42 +126,32 @@ async def execute_scheduled_task(
 
     except Exception as e:
         logger.error("Scheduled task failed: schedule_task_id=%s, error=%s", schedule_task_id, e)
-
-        # Помечаем как FAILED
-        await scheduled_task_repo.update_status(
-            schedule_task_id,
-            ScheduledTaskStatus.FAILED,
-            error_message=str(e),
-        )
-        await scheduler_repo.update_status(
-            company_id=effective_company_id,
+        _ = await scheduler_repo.update_status(
+            company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.FAILED,
             error_message=str(e),
         )
 
-        # Удаляем schedule из Redis чтобы не повторялась
         if task_info and task_info.schedule_id:
             try:
                 settings = get_settings()
                 source = get_schedule_source(settings.database.redis_url)
                 await source.startup()
-                await source.delete_schedule(task_info.schedule_id)
+                _ = await source.delete_schedule(task_info.schedule_id)
                 logger.info(f"Deleted failed schedule from Redis: {task_info.schedule_id}")
             except Exception as del_error:
                 logger.warning(f"Failed to delete schedule from Redis: {del_error}")
 
-        # Пробрасываем ошибку дальше (TaskIQ пометит task как failed)
         raise
 
 
 async def _execute_message_task(
-    container,
+    container: FlowContainer,
     flow_id: str,
     session_id: str,
     user_id: str,
     content: str,
-    context: Context,
 ) -> JsonObject:
     """Выполняет message task - отправляет сообщение агенту."""
     channel_instance = container.get_channel("a2a", flow_id)
@@ -217,14 +201,12 @@ async def _execute_message_task(
 
 
 async def _execute_tool_call_task(
-    container,
-    flow_id: str,
+    container: FlowContainer,
     session_id: str,
     user_id: str,
     tool_name: str,
-    tool_args: dict[str, Any],
-    context: Context,
-) -> dict[str, Any]:
+    tool_args: ToolArguments,
+) -> JsonObject:
     """Выполняет tool_call task — только инлайн-тулы из tool_repository."""
     tool = await container.tool_registry.create_tool({"tool_id": tool_name})
 
@@ -240,5 +222,5 @@ async def _execute_tool_call_task(
     return {
         "tool": tool_name,
         "args": tool_args,
-        "result": result,
+        "result": require_json_value(result, "scheduled.tool_call.result"),
     }

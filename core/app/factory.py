@@ -268,7 +268,7 @@ def create_service_app(
                 )
                 logger.info("ApnsPushService инициализирован")
 
-            fcm = resolve_fcm_credentials(settings)
+            fcm = resolve_fcm_credentials(settings.push)
             if fcm:
                 init_fcm_push_service(
                     project_id=fcm.project_id,

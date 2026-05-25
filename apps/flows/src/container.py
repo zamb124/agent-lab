@@ -14,7 +14,6 @@ from apps.flows.src.container_state import (
     set_current_container,
 )
 from apps.flows.src.db import (
-    DatabaseStateRepository,
     EvaluationRepository,
     FlowRepository,
     LLMModelRepository,
@@ -24,7 +23,10 @@ from apps.flows.src.db import (
 )
 from apps.flows.src.db.mcp_repository import MCPServerRepository
 from apps.flows.src.db.operator_repository import OperatorRepository
-from apps.flows.src.db.scheduled_task_repository import ScheduledTaskRepository
+from apps.flows.src.durable_execution import (
+    DurableWorkflowRepository,
+    DurableWorkflowRuntime,
+)
 from apps.flows.src.evaluation.service import EvaluationService
 from apps.flows.src.models import TriggerType
 from apps.flows.src.registry.nodes import NodeRegistry, create_default_node_registry
@@ -37,14 +39,12 @@ from apps.flows.src.services.llm_models_service import LLMModelsService
 from apps.flows.src.services.operator_handoff_service import OperatorHandoffService
 from apps.flows.src.services.resource_loader import ResourceLoader
 from apps.flows.src.services.schedule_service import ScheduleService
-from apps.flows.src.state import StateManager
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from apps.flows.src.tools.registry import ToolRegistry
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 from apps.flows.src.triggers.registry import TriggerRegistry
 from apps.flows.src.variables import VariablesService
-from apps.scheduler.container import get_scheduler_container
 from core.capabilities import CAPABILITY_LANGUAGE_SET
 from core.clients.a2a_client import A2AClient
 from core.clients.loki_client import LokiClient
@@ -56,6 +56,7 @@ from core.container import BaseContainer, lazy
 from core.db.repositories.embed_config_repository import EmbedConfigRepository
 from core.db.repositories.embed_mapping_repository import EmbedMappingRepository
 from core.logging import get_logger
+from core.scheduler import SchedulerTaskRepository
 
 if TYPE_CHECKING:
     from apps.flows.src.channels.a2a import A2AChannel
@@ -87,13 +88,13 @@ class FlowContainer(BaseContainer):
         return ToolRepository(storage=self.storage)
 
     @lazy
-    def state_repository(self) -> DatabaseStateRepository:
-        return DatabaseStateRepository(storage=self.storage)
+    def durable_workflow_repository(self) -> DurableWorkflowRepository:
+        return DurableWorkflowRepository(storage=self.storage)
 
     @lazy
-    def state_manager(self) -> StateManager:
-        return StateManager(
-            state_repository=self.state_repository,
+    def workflow_runtime(self) -> DurableWorkflowRuntime:
+        return DurableWorkflowRuntime(
+            repository=self.durable_workflow_repository,
             redis_client=self.redis_client,
         )
 
@@ -111,8 +112,18 @@ class FlowContainer(BaseContainer):
     # push_subscription_repository наследуется из BaseContainer (core/push/)
 
     @lazy
-    def scheduled_task_repository(self) -> ScheduledTaskRepository:
-        return ScheduledTaskRepository(storage=self.storage)
+    def scheduler_task_repository(self) -> SchedulerTaskRepository:
+        """
+        Платформенный scheduler repository (shared БД).
+
+        Живёт в core/scheduler/. Используется TaskIQ-задачами flows для
+        обновления статуса выполнения scheduled tasks без import-зависимости
+        от apps/scheduler/container.
+        """
+        settings = get_settings()
+        if not settings.database.shared_url:
+            raise ValueError("database.shared_url обязателен для scheduler_task_repository")
+        return SchedulerTaskRepository(db_url=settings.database.shared_url)
 
     @lazy
     def mcp_server_repository(self) -> MCPServerRepository:
@@ -155,13 +166,9 @@ class FlowContainer(BaseContainer):
 
     @lazy
     def schedule_service(self) -> ScheduleService:
-        scheduler_service = None
-        if is_testing():
-            scheduler_service = get_scheduler_container().scheduler_service
         return ScheduleService(
             scheduler_client=self.scheduler_client,
-            scheduler_service=scheduler_service,
-            scheduled_task_repository=self.scheduled_task_repository,
+            scheduler_service=None,
         )
 
     @lazy

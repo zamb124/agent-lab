@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from typing import Protocol
 
 from core.auth.utils import hash_password
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
 from core.context import clear_context, set_context
+from core.db.repositories.company_repository import CompanyRepository
+from core.db.repositories.subdomain_repository import SubdomainRepository
+from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
@@ -20,38 +22,16 @@ logger = get_logger(__name__)
 DEMO_OWNER_ROLES = ["owner", "admin"]
 
 
-class _CompanyRepository(Protocol):
-    async def get(self, entity_id: str) -> Company | None:
-        ...
-
-    async def set(self, entity: Company) -> bool:
-        ...
-
-
-class _UserRepository(Protocol):
-    async def list(self, *, limit: int, offset: int = 0) -> list[User]:
-        ...
-
-    async def set(self, entity: User) -> bool:
-        ...
-
-
-class _SubdomainRepository(Protocol):
-    async def set_mapping(self, subdomain: str, company_id: str) -> bool:
-        ...
-
-
-class DemoBootstrapContainer(Protocol):
-    company_repository: _CompanyRepository
-    user_repository: _UserRepository
-    subdomain_repository: _SubdomainRepository
-
-
 def _normalize_email(value: str) -> str:
     return value.strip().lower()
 
 
-async def ensure_demo_company_and_user(container: DemoBootstrapContainer) -> None:
+async def ensure_demo_company_and_user(
+    *,
+    company_repository: CompanyRepository,
+    user_repository: UserRepository,
+    subdomain_repository: SubdomainRepository,
+) -> None:
     """
     Создаёт или обновляет компанию и пользователя из settings.auth.demo.
     Не вызывать при login_enabled=False.
@@ -68,16 +48,12 @@ async def ensure_demo_company_and_user(container: DemoBootstrapContainer) -> Non
             "auth.demo.login_enabled=true, но пароль пустой: задайте AUTH__DEMO__PASSWORD"
         )
 
-    company_repo = container.company_repository
-    user_repo = container.user_repository
-    subdomain_repo = container.subdomain_repository
-
     email_norm = _normalize_email(demo.email)
     company_id = demo.company_id
     subdomain = demo.subdomain
     company_name = demo.company_name
 
-    company = await company_repo.get(company_id)
+    company = await company_repository.get(company_id)
     if company is None:
         company = Company(
             company_id=company_id,
@@ -101,7 +77,7 @@ async def ensure_demo_company_and_user(container: DemoBootstrapContainer) -> Non
         if updated:
             logger.info("Demo bootstrap: обновлены поля компании %s", company_id)
 
-    users = await user_repo.list(limit=10000)
+    users = await user_repository.list(limit=10000)
     matched = [
         u
         for u in users
@@ -145,9 +121,9 @@ async def ensure_demo_company_and_user(container: DemoBootstrapContainer) -> Non
     merged_member = list(dict.fromkeys([*member_roles, *DEMO_OWNER_ROLES]))
     company.members[user.user_id] = merged_member
 
-    await company_repo.set(company)
-    await subdomain_repo.set_mapping(subdomain, company_id)
-    await user_repo.set(user)
+    _ = await company_repository.set(company)
+    _ = await subdomain_repository.set_mapping(subdomain, company_id)
+    _ = await user_repository.set(user)
 
     roles = user.companies.get(company_id, [])
     auth_token = get_token_service().create_token(

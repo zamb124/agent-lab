@@ -1,10 +1,13 @@
 """DI контейнер для RAG Service."""
 
 
+from typing import override
+
 from apps.rag.config import get_rag_settings
-from core.container import BaseContainer, lazy
+from core.container import BaseContainer, ContainerRegistry, lazy
 from core.db.repositories.document_status_repository import DocumentStatusRepository
 from core.logging import get_logger
+from core.rag.base_provider import BaseRAGProvider
 from core.rag.factory import get_rag_provider
 
 logger = get_logger(__name__)
@@ -14,40 +17,30 @@ class RAGContainer(BaseContainer):
     """DI контейнер сервиса RAG."""
 
     @lazy
-    def document_status_repository(self):
+    def document_status_repository(self) -> DocumentStatusRepository:
         """Получает репозиторий статусов документов"""
         return DocumentStatusRepository(self.required_db_url)
 
     @property
-    def rag_provider(self):
+    @override
+    def rag_provider(self) -> BaseRAGProvider:
         """Активный RAG-провайдер (``rag.default_provider``)."""
         settings = get_rag_settings()
         return get_rag_provider(settings=settings)
 
 
-_container: RAGContainer | None = None
+def _create_rag_container() -> RAGContainer:
+    settings = get_rag_settings()
+    return RAGContainer(
+        db_url=settings.database.rag_url,
+        shared_db_url=settings.database.shared_url,
+    )
 
 
-def get_rag_container() -> RAGContainer:
-    """Получает контейнер (создает при первом вызове)"""
-    global _container
-    if _container is None:
-        settings = get_rag_settings()
-        _container = RAGContainer(
-            db_url=settings.database.rag_url,
-            shared_db_url=settings.database.shared_url
-        )
-        logger.info("RAGContainer создан")
-    return _container
+_rag_registry: ContainerRegistry[RAGContainer] = ContainerRegistry(
+    _create_rag_container, name="RAGContainer"
+)
 
-
-def set_rag_container(container: RAGContainer) -> None:
-    """Устанавливает контейнер (для тестов)"""
-    global _container
-    _container = container
-
-
-def reset_rag_container() -> None:
-    """Сбрасывает контейнер"""
-    global _container
-    _container = None
+get_rag_container = _rag_registry.get
+set_rag_container = _rag_registry.set
+reset_rag_container = _rag_registry.reset

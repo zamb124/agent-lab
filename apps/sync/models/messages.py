@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -13,6 +13,7 @@ from core.files.models import (
     AudioAttachmentContent,
     VideoAttachmentContent,
 )
+from core.types import JsonValue
 
 # Один текстовый блок text/plain — как лимит одного сообщения в Telegram (4096).
 SYNC_MESSAGE_TEXT_MAX_CHARS = 4096
@@ -97,7 +98,7 @@ class CustomToolResponseContent(BaseModel):
     """Ответ внешнего инструмента или AI-агента."""
 
     tool_name: str = Field(description="Имя инструмента, сформировавшего ответ.")
-    response_data: dict[str, Any] = Field(
+    response_data: dict[str, JsonValue] = Field(
         description="Произвольные данные ответа инструмента.",
     )
 
@@ -283,11 +284,3 @@ class MessageRow(BaseModel):
     edited_at: datetime | None = Field(default=None, description="Время редактирования.")
 
 
-class MessageContentRow(BaseModel):
-    """Строка контента сообщения в базе данных."""
-
-    id: int = Field(description="Идентификатор строки контента.")
-    message_id: str = Field(description="Идентификатор сообщения.")
-    type: str = Field(description="Тип блока контента.")
-    order: int = Field(description="Порядок блока.")
-    data: dict[str, Any] = Field(description="JSON-данные блока.")

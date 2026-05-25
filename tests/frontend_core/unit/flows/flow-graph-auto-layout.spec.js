@@ -30,8 +30,8 @@ describe('flow-graph-auto-layout', () => {
                 c: { type: 'code', name: 'C' },
             },
             edges: [
-                { from: 'a', to: 'b' },
-                { from: 'b', to: 'c' },
+                { from_node: 'a', to_node: 'b' },
+                { from_node: 'b', to_node: 'c' },
             ],
             entry: 'a',
         };
@@ -51,8 +51,8 @@ describe('flow-graph-auto-layout', () => {
                 c: { type: 'code' },
             },
             edges: [
-                { from: 'r', to: 'b' },
-                { from: 'r', to: 'c' },
+                { from_node: 'r', to_node: 'b' },
+                { from_node: 'r', to_node: 'c' },
             ],
             entry: 'r',
         };
@@ -72,8 +72,8 @@ describe('flow-graph-auto-layout', () => {
                 u: { type: 'code' },
             },
             edges: [
-                { from: 'a', to: 'b' },
-                { from: 'a', to: null },
+                { from_node: 'a', to_node: 'b' },
+                { from_node: 'a', to_node: null },
             ],
             entry: 'a',
         };
@@ -88,8 +88,8 @@ describe('flow-graph-auto-layout', () => {
         const inData = {
             nodes: { a: { type: 'code' }, b: { type: 'code' } },
             edges: [
-                { from: 'a', to: 'b' },
-                { from: 'b', to: 'a' },
+                { from_node: 'a', to_node: 'b' },
+                { from_node: 'b', to_node: 'a' },
             ],
             entry: 'a',
         };

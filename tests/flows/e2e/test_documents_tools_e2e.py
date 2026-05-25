@@ -1,22 +1,16 @@
 """E2E coverage for flow document tools over real flows, Office BFF and files storage."""
 
 from __future__ import annotations
-
 import asyncio
 import base64
 import uuid
 from io import BytesIO
 from typing import Any, cast
-
 import pytest
 from docx import Document
 from openpyxl import Workbook, load_workbook
 
-pytestmark = [
-    pytest.mark.real_taskiq,
-    pytest.mark.timeout(180, func_only=True),
-]
-
+pytestmark = [pytest.mark.real_taskiq, pytest.mark.timeout(180, func_only=True)]
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -39,7 +33,7 @@ def _docx_text(data: bytes) -> str:
     parts = [p.text for p in doc.paragraphs]
     for table in doc.tables:
         for row in table.rows:
-            parts.extend(cell.text for cell in row.cells)
+            parts.extend((cell.text for cell in row.cells))
     return "\n".join(parts)
 
 
@@ -86,7 +80,7 @@ async def _create_flow(flows_client_http, headers: dict[str, str], flow_id: str)
                     ],
                 }
             },
-            "edges": [{"from": "main", "to": None}],
+            "edges": [{"from_node": "main", "to_node": None}],
         },
     )
     assert response.status_code == 200, response.text
@@ -149,19 +143,16 @@ def _file_document(item: dict[str, Any]) -> dict[str, Any] | None:
 
 
 async def _state_file(
-    container,
-    *,
-    flow_id: str,
-    context_id: str,
-    file_name: str,
-    require_document: bool = False,
+    container, *, flow_id: str, context_id: str, file_name: str, require_document: bool = False
 ) -> dict[str, Any]:
     session_id = f"{flow_id}:{context_id}"
     fallback: dict[str, Any] | None = None
     for _ in range(30):
-        state = await container.state_manager.get_state(session_id)
+        state = await container.workflow_runtime.get_state(session_id)
         if state:
-            files_raw = state.get("files") if isinstance(state, dict) else getattr(state, "files", [])
+            files_raw = (
+                state.get("files") if isinstance(state, dict) else getattr(state, "files", [])
+            )
             files = files_raw if isinstance(files_raw, list) else []
             matches = [
                 cast(dict[str, Any], item)
@@ -176,15 +167,14 @@ async def _state_file(
                 if not require_document:
                     return fallback
         await asyncio.sleep(0.1)
-    if fallback is not None and not require_document:
+    if fallback is not None and (not require_document):
         return fallback
     raise AssertionError(f"File {file_name!r} was not persisted in state {session_id!r}")
 
 
 async def _download_flow_file(flows_client_http, headers: dict[str, str], file_id: str) -> bytes:
     response = await flows_client_http.get(
-        f"/flows/api/v1/files/download/{file_id}",
-        headers=headers,
+        f"/flows/api/v1/files/download/{file_id}", headers=headers
     )
     assert response.status_code == 200, response.text
     return response.content
@@ -205,7 +195,6 @@ async def test_agent_edits_uploaded_docx_with_documents_tools(
     flow_id = f"documents_docx_{unique_id}"
     context_id = f"ctx-docx-{uuid.uuid4().hex}"
     file_name = f"agent-doc-{unique_id}.docx"
-
     await mock_llm_redis(
         [
             {
@@ -236,7 +225,6 @@ async def test_agent_edits_uploaded_docx_with_documents_tools(
             {"type": "text", "content": "Document updated."},
         ]
     )
-
     await _create_flow(flows_client_http, headers, flow_id)
     try:
         await _send_file_message(
@@ -248,7 +236,6 @@ async def test_agent_edits_uploaded_docx_with_documents_tools(
             mime_type=DOCX_MIME,
             file_bytes=_docx_bytes("Before ORIGINAL_TOKEN", "Second paragraph"),
         )
-
         file_item = await _state_file(
             container,
             flow_id=flow_id,
@@ -261,7 +248,6 @@ async def test_agent_edits_uploaded_docx_with_documents_tools(
         assert document["file_id"] == file_item["file_id"]
         assert document["catalog_id"] == catalog_id
         assert document["editor_url"].startswith("/documents/embed/edit/")
-
         stored = await _download_flow_file(flows_client_http, headers, file_item["file_id"])
         text = _docx_text(stored)
         assert "UPDATED_TOKEN" in text
@@ -286,7 +272,6 @@ async def test_agent_updates_uploaded_xlsx_with_documents_tool(
     flow_id = f"documents_xlsx_{unique_id}"
     context_id = f"ctx-xlsx-{uuid.uuid4().hex}"
     file_name = f"agent-sheet-{unique_id}.xlsx"
-
     await mock_llm_redis(
         [
             {
@@ -307,7 +292,6 @@ async def test_agent_updates_uploaded_xlsx_with_documents_tool(
             {"type": "text", "content": "Spreadsheet updated."},
         ]
     )
-
     await _create_flow(flows_client_http, headers, flow_id)
     try:
         await _send_file_message(
@@ -319,7 +303,6 @@ async def test_agent_updates_uploaded_xlsx_with_documents_tool(
             mime_type=XLSX_MIME,
             file_bytes=_xlsx_bytes(),
         )
-
         file_item = await _state_file(
             container,
             flow_id=flow_id,
@@ -332,7 +315,6 @@ async def test_agent_updates_uploaded_xlsx_with_documents_tool(
         assert document["file_id"] == file_item["file_id"]
         assert document["catalog_id"] == catalog_id
         assert document["editor_url"].startswith("/documents/embed/edit/")
-
         stored = await _download_flow_file(flows_client_http, headers, file_item["file_id"])
         wb = load_workbook(BytesIO(stored))
         ws = wb["Sheet1"]

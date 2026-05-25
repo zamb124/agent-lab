@@ -2006,7 +2006,7 @@ class CapabilityRegistry:
             result = await stt.transcribe_audio(
                 audio_bytes=audio_bytes,
                 file_name=record.original_name,
-                mime_type=record.content_type,
+                content_type=record.content_type,
                 language=language,
             )
 

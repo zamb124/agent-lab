@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 from core.clients.stt_client import STTTranscriptionResult
+from core.types import JsonObject
 
 
 class BaseVADProvider(ABC):
@@ -35,7 +35,7 @@ class BaseSTTProvider(ABC):
     """
 
     @abstractmethod
-    async def init(self, config: Any | None = None) -> None:
+    async def init(self, config: JsonObject | None = None) -> None:
         """Инициализировать соединение / загрузить модель."""
 
     @abstractmethod
@@ -60,6 +60,7 @@ class BaseSTTProvider(ABC):
         Реализация в ``StreamingSTTProvider`` запускает batch-распознавание
         текущего PCM, не очищая буфер.
         """
+        _ = min_buffer_bytes
         return None
 
     async def close(self) -> None:
@@ -70,7 +71,7 @@ class BaseTTSProvider(ABC):
     """Синтез речи (Text-to-Speech)."""
 
     @abstractmethod
-    async def init(self, config: Any | None = None) -> None:
+    async def init(self, config: JsonObject | None = None) -> None:
         """Загрузить модель синтезатора."""
 
     @abstractmethod

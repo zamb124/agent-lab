@@ -44,6 +44,24 @@ class ApnsPushService:
         self._base_url = APNS_SANDBOX_HOST if use_sandbox else APNS_PROD_HOST
         self._jwt_token: str | None = None
         self._jwt_expires_at: float = 0.0
+        # HTTP/2 клиент на жизнь сервиса: APNs построен на HTTP/2 c
+        # multiplexing'ом запросов в одно подключение — single TLS handshake
+        # per device-batch критичен для пропускной способности push.
+        self._http_client: httpx.AsyncClient | None = None
+
+    def _get_http_client(self) -> httpx.AsyncClient:
+        client = self._http_client
+        if client is None:
+            client = httpx.AsyncClient(http2=True, timeout=30.0)
+            self._http_client = client
+        return client
+
+    async def aclose(self) -> None:
+        """Закрывает удерживаемый HTTP/2 клиент."""
+        client = self._http_client
+        if client is not None:
+            await client.aclose()
+            self._http_client = None
 
     @property
     def is_configured(self) -> bool:
@@ -96,18 +114,17 @@ class ApnsPushService:
 
         req_url = f"{self._base_url}/3/device/{token}"
         bearer = self._ensure_jwt()
-        async with httpx.AsyncClient(http2=True, timeout=30.0) as client:
-            response = await client.post(
-                req_url,
-                headers={
-                    "authorization": f"bearer {bearer}",
-                    "apns-topic": self._bundle_id,
-                    "apns-push-type": "alert",
-                    "apns-priority": "10",
-                    "content-type": "application/json",
-                },
-                json=apns_body,
-            )
+        response = await self._get_http_client().post(
+            req_url,
+            headers={
+                "authorization": f"bearer {bearer}",
+                "apns-topic": self._bundle_id,
+                "apns-push-type": "alert",
+                "apns-priority": "10",
+                "content-type": "application/json",
+            },
+            json=apns_body,
+        )
 
         if response.status_code == 200:
             return True, False

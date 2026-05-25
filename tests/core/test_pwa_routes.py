@@ -42,8 +42,9 @@ def test_sw_js(pwa_client: TestClient) -> None:
     assert response.headers["content-type"].startswith("application/javascript")
     assert response.headers.get("service-worker-allowed") == "/"
     assert "no-store" in response.headers.get("cache-control", "").lower()
-    assert b"humanitec-static-v5" in response.content
-    assert b"humanitec-dynamic-v5" in response.content
+    assert b"humanitec-static-" in response.content
+    assert b"humanitec-dynamic-" in response.content
+    assert b"CACHE_SCHEMA_VERSION" in response.content
 
 
 def test_offline_html(pwa_client: TestClient) -> None:

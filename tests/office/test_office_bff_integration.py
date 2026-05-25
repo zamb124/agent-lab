@@ -301,8 +301,8 @@ async def test_office_editor_config_download_roundtrip(office_client, auth_heade
     qs = parse_qs(parsed.query)
     token = qs["token"][0]
     dl_claims = decode_download_token(token, secret)
-    assert dl_claims["binding_id"] == binding_id
-    assert dl_claims["file_id"] == cr.json()["file_id"]
+    assert dl_claims.binding_id == binding_id
+    assert dl_claims.file_id == cr.json()["file_id"]
     path = parsed.path
     dlr = await office_client.get(f"{path}?token={quote(token, safe='')}")
     assert dlr.status_code == 200

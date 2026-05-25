@@ -47,6 +47,24 @@ class FcmPushService:
         self._send_url = f"{FCM_HOST}/v1/projects/{project_id}/messages:send"
         self._access_token: str | None = None
         self._access_token_expires_at: float = 0.0
+        # Переиспользуемый async HTTP-клиент: FCM поддерживает keepalive,
+        # и для push-нагрузки это критично — иначе на каждый алерт идёт
+        # полный TLS-handshake к fcm.googleapis.com.
+        self._http_client: httpx.AsyncClient | None = None
+
+    def _get_http_client(self) -> httpx.AsyncClient:
+        client = self._http_client
+        if client is None:
+            client = httpx.AsyncClient(timeout=30.0)
+            self._http_client = client
+        return client
+
+    async def aclose(self) -> None:
+        """Закрывает удерживаемый HTTP-клиент."""
+        client = self._http_client
+        if client is not None:
+            await client.aclose()
+            self._http_client = None
 
     @property
     def is_configured(self) -> bool:
@@ -75,15 +93,14 @@ class FcmPushService:
         except PyJWTError as e:
             raise ValueError(f"FCM: не удалось подписать JWT: {e}") from e
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                self._token_uri,
-                data={
-                    "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-                    "assertion": assertion,
-                },
-                headers={"content-type": "application/x-www-form-urlencoded"},
-            )
+        response = await self._get_http_client().post(
+            self._token_uri,
+            data={
+                "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                "assertion": assertion,
+            },
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
         if response.status_code != 200:
             raise ValueError(
                 f"FCM: получение access_token провалилось status={response.status_code} body={response.text[:300]}"
@@ -142,15 +159,14 @@ class FcmPushService:
             message["data"] = data_payload
 
         access_token = await self._ensure_access_token()
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                self._send_url,
-                headers={
-                    "authorization": f"Bearer {access_token}",
-                    "content-type": "application/json",
-                },
-                json={"message": message},
-            )
+        response = await self._get_http_client().post(
+            self._send_url,
+            headers={
+                "authorization": f"Bearer {access_token}",
+                "content-type": "application/json",
+            },
+            json={"message": message},
+        )
 
         if response.status_code == 200:
             return True, False

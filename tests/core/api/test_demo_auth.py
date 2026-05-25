@@ -67,7 +67,11 @@ class TestDemoAuth:
             from apps.frontend.container import get_frontend_container
 
             container = get_frontend_container()
-            await ensure_demo_company_and_user(container)
+            await ensure_demo_company_and_user(
+                company_repository=container.company_repository,
+                user_repository=container.user_repository,
+                subdomain_repository=container.subdomain_repository,
+            )
 
             response = await frontend_client.post(
                 "/frontend/api/auth/login/demo",

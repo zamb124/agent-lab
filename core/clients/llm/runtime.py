@@ -56,7 +56,7 @@ from core.config import get_settings
 from core.config.base import BaseSettings
 from core.config.testing import is_testing as _is_testing
 from core.logging import get_logger
-from core.types import JsonObject, require_json_array, require_json_object
+from core.types import JsonObject
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -316,27 +316,7 @@ def get_llm_for_state(
     extra_request_body: JsonObject | None = None,
     extra_request_headers: dict[str, str] | None = None,
 ) -> LLMClient | MockLLM:
-    """Создает LLM клиент с учётом mock конфига из state."""
-    if state:
-        mock_config = state.mock
-        mock_responses: list[MockLLMQueuedResponse] | None = None
-        if mock_config and mock_config.get("enabled"):
-            raw_llm_responses = mock_config.get("llm")
-            if raw_llm_responses is not None:
-                mock_responses = []
-                for response in require_json_array(raw_llm_responses, "state.mock.llm"):
-                    if isinstance(response, str):
-                        mock_responses.append(response)
-                    elif isinstance(response, dict):
-                        mock_responses.append(require_json_object(response, "state.mock.llm[]"))
-                    else:
-                        raise ValueError("state.mock.llm[] must be a string or JSON object")
-        if mock_responses:
-            mock_model = model_name if model_name is not None else "mock-gpt-4"
-            mock = MockLLM(model_name=mock_model)
-            _ = mock.configure(response_queue=mock_responses)
-            return mock
-
+    """Создает LLM клиент, резолвя @var значения через ExecutionState."""
     return get_llm(
         model_name=model_name,
         temperature=temperature,

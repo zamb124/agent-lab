@@ -68,7 +68,7 @@ async def execute_tool(
                 tool_state,
                 e.body,
                 e.tool_call,
-                getattr(e, "correlation_id", None),
+                e.correlation_id,
             )
             packed = tool_state.interrupt
             if packed is None:

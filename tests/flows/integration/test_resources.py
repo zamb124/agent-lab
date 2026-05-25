@@ -5,9 +5,7 @@ MockLLM — где нужен LLM.
 """
 
 import uuid
-
 import pytest
-
 from apps.flows.src.models import ResourceDefinition, ResourceReference
 from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
 from apps.flows.src.runtime.nodes import CodeNode, LlmNode
@@ -46,38 +44,19 @@ class TestCodeResourceWithCodeNode:
             "type": "code",
             "config": {
                 "language": "python",
-                "code": """
-def format_phone(phone):
-    digits = ''.join(c for c in phone if c.isdigit())
-    return f'+7 ({digits[1:4]}) {digits[4:7]}-{digits[7:9]}-{digits[9:11]}'
-
-def validate_email(email):
-    return '@' in email and '.' in email.split('@')[1]
-"""
-            }
+                "code": "\ndef format_phone(phone):\n    digits = ''.join(c for c in phone if c.isdigit())\n    return f'+7 ({digits[1:4]}) {digits[4:7]}-{digits[7:9]}-{digits[9:11]}'\n\ndef validate_email(email):\n    return '@' in email and '.' in email.split('@')[1]\n",
+            },
         }
-
         node = CodeNode(
             node_id="phone_formatter",
             config={
-                "code": """
-async def run(args, state):
-    formatted = helpers.format_phone(state.phone)
-    is_valid = helpers.validate_email(state.email)
-    state.formatted_phone = formatted
-    state.email_valid = is_valid
-    return {'phone': formatted, 'valid': is_valid}
-""",
-                "resources": {
-                    "helpers": ResourceReference.model_validate(code_resource)
-                }
+                "code": "\nasync def run(args, state):\n    formatted = helpers.format_phone(state.phone)\n    is_valid = helpers.validate_email(state.email)\n    state.formatted_phone = formatted\n    state.email_valid = is_valid\n    return {'phone': formatted, 'valid': is_valid}\n",
+                "resources": {"helpers": ResourceReference.model_validate(code_resource)},
             },
             container=container,
         )
-
         state = make_state(phone="89161234567", email="test@example.com")
         result = await node.run(state)
-
         assert result.formatted_phone == "+7 (916) 123-45-67"
         assert result.email_valid is True
 
@@ -90,47 +69,19 @@ async def run(args, state):
             "type": "code",
             "config": {
                 "language": "python",
-                "code": """
-class Calculator:
-    @staticmethod
-    def add(a, b):
-        return a + b
-
-    @staticmethod
-    def multiply(a, b):
-        return a * b
-
-class StringHelper:
-    @staticmethod
-    def reverse(s):
-        return s[::-1]
-"""
-            }
+                "code": "\nclass Calculator:\n    @staticmethod\n    def add(a, b):\n        return a + b\n\n    @staticmethod\n    def multiply(a, b):\n        return a * b\n\nclass StringHelper:\n    @staticmethod\n    def reverse(s):\n        return s[::-1]\n",
+            },
         }
-
         node = CodeNode(
             node_id="calculator",
             config={
-                "code": """
-async def run(args, state):
-    result = utils.Calculator.add(10, 5)
-    product = utils.Calculator.multiply(result, 2)
-    reversed_name = utils.StringHelper.reverse(state.name)
-    state.sum_result = result
-    state.product_result = product
-    state.reversed_name = reversed_name
-    return {'sum': result, 'product': product, 'reversed': reversed_name}
-""",
-                "resources": {
-                    "utils": ResourceReference.model_validate(code_resource)
-                }
+                "code": "\nasync def run(args, state):\n    result = utils.Calculator.add(10, 5)\n    product = utils.Calculator.multiply(result, 2)\n    reversed_name = utils.StringHelper.reverse(state.name)\n    state.sum_result = result\n    state.product_result = product\n    state.reversed_name = reversed_name\n    return {'sum': result, 'product': product, 'reversed': reversed_name}\n",
+                "resources": {"utils": ResourceReference.model_validate(code_resource)},
             },
             container=container,
         )
-
         state = make_state(name="Hello")
         result = await node.run(state)
-
         assert result.sum_result == 15
         assert result.product_result == 30
         assert result.reversed_name == "olleH"
@@ -144,59 +95,29 @@ async def run(args, state):
             "type": "code",
             "config": {
                 "language": "python",
-                "code": """
-def is_positive(n):
-    return n > 0
-
-def is_even(n):
-    return n % 2 == 0
-"""
-            }
+                "code": "\ndef is_positive(n):\n    return n > 0\n\ndef is_even(n):\n    return n % 2 == 0\n",
+            },
         }
-
         formatters = {
             "type": "code",
             "config": {
                 "language": "python",
-                "code": """
-def to_currency(n):
-    return f'${n:,.2f}'
-
-def to_percent(n):
-    return f'{n * 100:.1f}%'
-"""
-            }
+                "code": "\ndef to_currency(n):\n    return f'${n:,.2f}'\n\ndef to_percent(n):\n    return f'{n * 100:.1f}%'\n",
+            },
         }
-
         node = CodeNode(
             node_id="multi_resource",
             config={
-                "code": """
-async def run(args, state):
-    num = state.number
-    is_pos = validators.is_positive(num)
-    is_even = validators.is_even(num)
-    currency = formatters.to_currency(num)
-    percent = formatters.to_percent(num / 100)
-
-    state.is_positive = is_pos
-    state.is_even = is_even
-    state.currency = currency
-    state.percent = percent
-
-    return {'positive': is_pos, 'even': is_even, 'currency': currency}
-""",
+                "code": "\nasync def run(args, state):\n    num = state.number\n    is_pos = validators.is_positive(num)\n    is_even = validators.is_even(num)\n    currency = formatters.to_currency(num)\n    percent = formatters.to_percent(num / 100)\n\n    state.is_positive = is_pos\n    state.is_even = is_even\n    state.currency = currency\n    state.percent = percent\n\n    return {'positive': is_pos, 'even': is_even, 'currency': currency}\n",
                 "resources": {
                     "validators": ResourceReference.model_validate(validators),
                     "formatters": ResourceReference.model_validate(formatters),
-                }
+                },
             },
             container=container,
         )
-
         state = make_state(number=42)
         result = await node.run(state)
-
         assert result.is_positive is True
         assert result.is_even is True
         assert result.currency == "$42.00"
@@ -217,53 +138,41 @@ class TestCodeResourceWithLlmNode:
             "type": "code",
             "config": {
                 "language": "python",
-                "code": """
-def calculate_discount(price, percent):
-    return price * (1 - percent / 100)
-
-def format_price(price):
-    return f'${price:.2f}'
-"""
-            }
+                "code": "\ndef calculate_discount(price, percent):\n    return price * (1 - percent / 100)\n\ndef format_price(price):\n    return f'${price:.2f}'\n",
+            },
         }
-
         tool = {
             "tool_id": "apply_discount",
             "type": "code",
             "description": "Applies discount to price",
-            "args_schema": {
-                "price": {"type": "number"},
-                "discount": {"type": "number"}
+            "parameters_schema": {
+                "type": "object",
+                "properties": {"price": {"type": "number"}, "discount": {"type": "number"}},
+                "required": ["price", "discount"],
             },
-            "code": """
-async def run(args, state):
-    discounted = pricing.calculate_discount(args['price'], args['discount'])
-    formatted = pricing.format_price(discounted)
-    state.final_price = formatted
-    return {'price': formatted}
-"""
+            "code": "\nasync def run(args, state):\n    discounted = pricing.calculate_discount(args['price'], args['discount'])\n    formatted = pricing.format_price(discounted)\n    state.final_price = formatted\n    return {'price': formatted}\n",
         }
-
-        mock_llm_with_queue([
-            {"type": "tool_call", "tool": "apply_discount", "args": {"price": 100, "discount": 20}},
-            {"type": "text", "content": "Price calculated"},
-        ])
-
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "apply_discount",
+                    "args": {"price": 100, "discount": 20},
+                },
+                {"type": "text", "content": "Price calculated"},
+            ]
+        )
         llm_node = LlmNode(
             node_id="pricing_agent",
             config={
                 "prompt": "Calculate prices",
                 "tools": [tool],
-                "resources": {
-                    "pricing": ResourceReference.model_validate(code_resource)
-                }
+                "resources": {"pricing": ResourceReference.model_validate(code_resource)},
             },
             container=container,
         )
-
         state = make_state(content="Apply 20% discount to $100")
         result = await llm_node.run(state)
-
         assert result.final_price == "$80.00"
 
 
@@ -278,36 +187,21 @@ class TestCombinedResourcesWithNodes:
             "type": "code",
             "config": {
                 "language": "python",
-                "code": """
-def format_fact(fact, source):
-    return f'[{source}] {fact}'
-"""
-            }
+                "code": "\ndef format_fact(fact, source):\n    return f'[{source}] {fact}'\n",
+            },
         }
         suffix = {
             "type": "code",
-            "config": {
-                "language": "python",
-                "code": """
-def suffix(s):
-    return s + ' END'
-"""
-            }
+            "config": {"language": "python", "code": "\ndef suffix(s):\n    return s + ' END'\n"},
         }
         node = CodeNode(
             node_id="combined_node",
             config={
-                "code": """
-async def run(args, state):
-    formatted = utils.format_fact('hello', 'src')
-    state.formatted = formatted
-    state.suffixed = extra.suffix(formatted)
-    return {'success': True}
-""",
+                "code": "\nasync def run(args, state):\n    formatted = utils.format_fact('hello', 'src')\n    state.formatted = formatted\n    state.suffixed = extra.suffix(formatted)\n    return {'success': True}\n",
                 "resources": {
                     "utils": ResourceReference.model_validate(fmt),
                     "extra": ResourceReference.model_validate(suffix),
-                }
+                },
             },
             container=container,
         )
@@ -329,34 +223,18 @@ class TestResourceInheritance:
         """
         code_resource = {
             "type": "code",
-            "config": {
-                "language": "python",
-                "code": """
-def double(n):
-    return n * 2
-"""
-            }
+            "config": {"language": "python", "code": "\ndef double(n):\n    return n * 2\n"},
         }
-
         node = CodeNode(
             node_id="inheritor",
             config={
-                "code": """
-async def run(args, state):
-    result = math_utils.double(state.value)
-    state.doubled = result
-    return {'result': result}
-""",
-                "resources": {
-                    "math_utils": ResourceReference.model_validate(code_resource)
-                }
+                "code": "\nasync def run(args, state):\n    result = math_utils.double(state.value)\n    state.doubled = result\n    return {'result': result}\n",
+                "resources": {"math_utils": ResourceReference.model_validate(code_resource)},
             },
             container=container,
         )
-
         state = make_state(value=21)
         result = await node.run(state)
-
         assert result.doubled == 42
 
     @pytest.mark.asyncio
@@ -364,45 +242,22 @@ async def run(args, state):
         """
         Ресурс ноды переопределяет ресурс агента с тем же именем.
         """
-
         node_resource = {
             "type": "code",
-            "config": {
-                "language": "python",
-                "code": """
-def process(x):
-    return x * 10
-"""
-            }
+            "config": {"language": "python", "code": "\ndef process(x):\n    return x * 10\n"},
         }
-
-        # Нода использует свой ресурс, а не agent-level
         node = CodeNode(
             node_id="override_test",
             config={
-                "code": """
-async def run(args, state):
-    result = helper.process(state.input)
-    state.output = result
-    return {'result': result}
-""",
-                "resources": {
-                    "helper": ResourceReference.model_validate(node_resource)
-                }
+                "code": "\nasync def run(args, state):\n    result = helper.process(state.input)\n    state.output = result\n    return {'result': result}\n",
+                "resources": {"helper": ResourceReference.model_validate(node_resource)},
             },
             container=container,
         )
-
         state = make_state(input=5)
         result = await node.run(state)
-
-        # Должен использоваться node_resource (x * 10), а не agent_resource (x + 10)
         assert result.output == 50
 
-
-# =============================================================================
-# FILES-ресурс
-# =============================================================================
 
 class TestFILESResource:
     """
@@ -428,116 +283,72 @@ class TestFILESResource:
         """
         FILES resource: запись и чтение файла.
         """
-        files_resource = {
-            "type": "files",
-            "config": {
-                **self.MINIO_CONFIG,
-                "prefix": unique_prefix
-            }
-        }
-
-        # Записываем файл
+        files_resource = {"type": "files", "config": {**self.MINIO_CONFIG, "prefix": unique_prefix}}
         write_node = CodeNode(
             node_id="write_file",
             config={
-                "code": """
-async def run(args, state):
-    path = await storage.write('test.txt', 'Hello from resource test!')
-    state.file_path = path
-    return {'path': path}
-""",
-                "resources": {
-                    "storage": ResourceReference.model_validate(files_resource)
-                }
+                "code": "\nasync def run(args, state):\n    path = await storage.write('test.txt', 'Hello from resource test!')\n    state.file_path = path\n    return {'path': path}\n",
+                "resources": {"storage": ResourceReference.model_validate(files_resource)},
             },
             container=container,
         )
-
         state = make_state()
         await write_node.run(state)
-
-        # Читаем файл
         read_node = CodeNode(
             node_id="read_file",
             config={
-                "code": """
-async def run(args, state):
-    content = await storage.read('test.txt')
-    state.file_content = content
-    return {'content': content}
-""",
-                "resources": {
-                    "storage": ResourceReference.model_validate(files_resource)
-                }
+                "code": "\nasync def run(args, state):\n    content = await storage.read('test.txt')\n    state.file_content = content\n    return {'content': content}\n",
+                "resources": {"storage": ResourceReference.model_validate(files_resource)},
             },
             container=container,
         )
-
         state2 = make_state()
         read_result = await read_node.run(state2)
-
-        assert read_result.file_content == 'Hello from resource test!'
+        assert read_result.file_content == "Hello from resource test!"
 
     @pytest.mark.asyncio
-    async def test_files_resource_in_react_tool(self, mock_llm_with_queue, unique_prefix, container):
+    async def test_files_resource_in_react_tool(
+        self, mock_llm_with_queue, unique_prefix, container
+    ):
         """
         FILES resource доступен в inline tool LlmNode.
         """
-        files_resource = {
-            "type": "files",
-            "config": {
-                **self.MINIO_CONFIG,
-                "prefix": unique_prefix
-            }
-        }
-
+        files_resource = {"type": "files", "config": {**self.MINIO_CONFIG, "prefix": unique_prefix}}
         tool = {
             "tool_id": "save_note",
             "type": "code",
             "description": "Saves a note to storage",
-            "args_schema": {
-                "filename": {"type": "string"},
-                "content": {"type": "string"}
+            "parameters_schema": {
+                "type": "object",
+                "properties": {"filename": {"type": "string"}, "content": {"type": "string"}},
+                "required": ["filename", "content"],
             },
-            "code": """
-async def run(args, state):
-    path = await storage.write(args['filename'], args['content'])
-    state.saved_path = path
-    return {'path': path}
-"""
+            "code": "\nasync def run(args, state):\n    path = await storage.write(args['filename'], args['content'])\n    state.saved_path = path\n    return {'path': path}\n",
         }
-
-        mock_llm_with_queue([
-            {"type": "tool_call", "tool": "save_note", "args": {"filename": "note.txt", "content": "Important note"}},
-            {"type": "text", "content": "Note saved"},
-        ])
-
+        mock_llm_with_queue(
+            [
+                {
+                    "type": "tool_call",
+                    "tool": "save_note",
+                    "args": {"filename": "note.txt", "content": "Important note"},
+                },
+                {"type": "text", "content": "Note saved"},
+            ]
+        )
         llm_node = LlmNode(
             node_id="notes_agent",
             config={
                 "prompt": "Save notes",
                 "tools": [tool],
-                "resources": {
-                    "storage": ResourceReference.model_validate(files_resource)
-                }
+                "resources": {"storage": ResourceReference.model_validate(files_resource)},
             },
             container=container,
         )
-
         state = make_state(content="Save a note")
         result = await llm_node.run(state)
-
         assert result.saved_path is not None
         assert "note.txt" in result.saved_path
 
-
-# =============================================================================
-# CACHE-ресурс
-# =============================================================================
-
-# =============================================================================
-# LLM Resource (с MockLLM)
-# =============================================================================
 
 class TestLLMResource:
     """
@@ -551,34 +362,17 @@ class TestLLMResource:
         """
         LLM resource: генерация текста по промпту.
         """
-        llm_resource = {
-            "type": "llm",
-            "config": {
-                "provider": "mock",
-                "model": "mock-gpt-4"
-            }
-        }
-
+        llm_resource = {"type": "llm", "config": {"provider": "mock", "model": "mock-gpt-4"}}
         node = CodeNode(
             node_id="llm_complete",
             config={
-                "code": """
-async def run(args, state):
-    response = await gpt.complete('Say hello in French')
-    state.response = response
-    return {'response': response}
-""",
-                "resources": {
-                    "gpt": ResourceReference.model_validate(llm_resource)
-                }
+                "code": "\nasync def run(args, state):\n    response = await gpt.complete('Say hello in French')\n    state.response = response\n    return {'response': response}\n",
+                "resources": {"gpt": ResourceReference.model_validate(llm_resource)},
             },
             container=container,
         )
-
         state = make_state()
         result = await node.run(state)
-
-        # MockLLM возвращает "Test response"
         assert result.response is not None
         assert len(result.response) > 0
 
@@ -587,38 +381,17 @@ async def run(args, state):
         """
         LLM resource: чат с историей сообщений.
         """
-        llm_resource = {
-            "type": "llm",
-            "config": {
-                "provider": "mock",
-                "model": "mock-gpt-4"
-            }
-        }
-
+        llm_resource = {"type": "llm", "config": {"provider": "mock", "model": "mock-gpt-4"}}
         node = CodeNode(
             node_id="llm_chat",
             config={
-                "code": """
-async def run(args, state):
-    messages = [
-        {'role': 'user', 'content': 'Hi!'},
-        {'role': 'assistant', 'content': 'Hello!'},
-        {'role': 'user', 'content': 'How are you?'}
-    ]
-    response = await gpt.chat(messages)
-    state.chat_response = response
-    return {'response': response}
-""",
-                "resources": {
-                    "gpt": ResourceReference.model_validate(llm_resource)
-                }
+                "code": "\nasync def run(args, state):\n    messages = [\n        {'role': 'user', 'content': 'Hi!'},\n        {'role': 'assistant', 'content': 'Hello!'},\n        {'role': 'user', 'content': 'How are you?'}\n    ]\n    response = await gpt.chat(messages)\n    state.chat_response = response\n    return {'response': response}\n",
+                "resources": {"gpt": ResourceReference.model_validate(llm_resource)},
             },
             container=container,
         )
-
         state = make_state()
         result = await node.run(state)
-
         assert result.chat_response is not None
 
     @pytest.mark.asyncio
@@ -626,55 +399,37 @@ async def run(args, state):
         """
         LLM resource доступен в inline tool LlmNode.
         """
-        llm_resource = {
-            "type": "llm",
-            "config": {
-                "provider": "mock",
-                "model": "mock-gpt-4"
-            }
-        }
-
+        llm_resource = {"type": "llm", "config": {"provider": "mock", "model": "mock-gpt-4"}}
         tool = {
             "tool_id": "summarize",
             "type": "code",
             "description": "Summarizes text",
-            "args_schema": {
-                "text": {"type": "string"}
+            "parameters_schema": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
             },
-            "code": """
-async def run(args, state):
-    summary = await gpt.complete(f"Summarize: {args['text']}")
-    state.summary = summary
-    return {'summary': summary}
-"""
+            "code": "\nasync def run(args, state):\n    summary = await gpt.complete(f\"Summarize: {args['text']}\")\n    state.summary = summary\n    return {'summary': summary}\n",
         }
-
-        mock_llm_with_queue([
-            {"type": "tool_call", "tool": "summarize", "args": {"text": "Long text here"}},
-            {"type": "text", "content": "Summarized"},
-        ])
-
+        mock_llm_with_queue(
+            [
+                {"type": "tool_call", "tool": "summarize", "args": {"text": "Long text here"}},
+                {"type": "text", "content": "Summarized"},
+            ]
+        )
         llm_node = LlmNode(
             node_id="summarizer",
             config={
                 "prompt": "Summarize texts",
                 "tools": [tool],
-                "resources": {
-                    "gpt": ResourceReference.model_validate(llm_resource)
-                }
+                "resources": {"gpt": ResourceReference.model_validate(llm_resource)},
             },
             container=container,
         )
-
         state = make_state(content="Summarize this text")
         result = await llm_node.run(state)
-
         assert result.summary is not None
 
-
-# =============================================================================
-# Resource Hierarchy: agent -> skill -> node
-# =============================================================================
 
 class TestResourceHierarchy:
     """
@@ -683,10 +438,7 @@ class TestResourceHierarchy:
 
     @staticmethod
     def _stub_entry_node() -> dict:
-        return {
-            "type": "code",
-            "code": "async def run(args, state):\n    return {}\n",
-        }
+        return {"type": "code", "code": "async def run(args, state):\n    return {}\n"}
 
     @pytest.mark.asyncio
     async def test_agent_level_resources_in_llm_tool(self, mock_llm_with_queue, app, container):
@@ -695,33 +447,25 @@ class TestResourceHierarchy:
         """
         code_resource = {
             "type": "code",
-            "config": {
-                "language": "python",
-                "code": """
-def double(x):
-    return x * 2
-"""
-            }
+            "config": {"language": "python", "code": "\ndef double(x):\n    return x * 2\n"},
         }
-
         tool = {
             "tool_id": "calc",
             "type": "code",
             "description": "Doubles a number",
-            "args_schema": {"n": {"type": "number"}},
-            "code": """
-async def run(args, state):
-    result = math.double(args['n'])
-    state.result = result
-    return {'result': result}
-"""
+            "parameters_schema": {
+                "type": "object",
+                "properties": {"n": {"type": "number"}},
+                "required": ["n"],
+            },
+            "code": "\nasync def run(args, state):\n    result = math.double(args['n'])\n    state.result = result\n    return {'result': result}\n",
         }
-
-        mock_llm_with_queue([
-            {"type": "tool_call", "tool": "calc", "args": {"n": 21}},
-            {"type": "text", "content": "Done"},
-        ])
-
+        mock_llm_with_queue(
+            [
+                {"type": "tool_call", "tool": "calc", "args": {"n": 21}},
+                {"type": "text", "content": "Done"},
+            ]
+        )
         flow_id = "test_res_hierarchy_llm"
         fc = FlowConfig(
             flow_id=flow_id,
@@ -732,33 +476,21 @@ async def run(args, state):
             resources={"arith": ResourceReference.model_validate(code_resource)},
         )
         await container.flow_repository.set(fc)
-
         tool_with_arith = {
             **tool,
-            "code": """
-async def run(args, state):
-    result = arith.double(args['n'])
-    state.result = result
-    return {'result': result}
-""",
+            "code": "\nasync def run(args, state):\n    result = arith.double(args['n'])\n    state.result = result\n    return {'result': result}\n",
         }
-
         llm_node = LlmNode(
             node_id="calc_node",
-            config={
-                "prompt": "Calculate",
-                "tools": [tool_with_arith],
-            },
+            config={"prompt": "Calculate", "tools": [tool_with_arith]},
             container=container,
         )
-
         state = make_state(
             content="Double 21",
             session_id=f"{flow_id}:test-context",
             flow_config_version=fc.version,
         )
         result = await llm_node.run(state)
-
         assert result.result == 42
 
     @pytest.mark.asyncio
@@ -768,15 +500,8 @@ async def run(args, state):
         """
         skill_resource = {
             "type": "code",
-            "config": {
-                "language": "python",
-                "code": """
-def triple(x):
-    return x * 3
-"""
-            }
+            "config": {"language": "python", "code": "\ndef triple(x):\n    return x * 3\n"},
         }
-
         flow_id = "test_res_hierarchy_skill"
         fc = FlowConfig(
             flow_id=flow_id,
@@ -792,20 +517,13 @@ def triple(x):
             },
         )
         await container.flow_repository.set(fc)
-
         node = CodeNode(
             node_id="triple_node",
             config={
-                "code": """
-async def run(args, state):
-    result = math.triple(state.input)
-    state.output = result
-    return {'result': result}
-""",
+                "code": "\nasync def run(args, state):\n    result = math.triple(state.input)\n    state.output = result\n    return {'result': result}\n"
             },
             container=container,
         )
-
         state = make_state(
             input=10,
             branch_id="math_skill",
@@ -813,7 +531,6 @@ async def run(args, state):
             flow_config_version=fc.version,
         )
         result = await node.run(state)
-
         assert result.output == 30
 
     @pytest.mark.asyncio
@@ -825,24 +542,16 @@ async def run(args, state):
             "type": "code",
             "config": {
                 "language": "python",
-                "code": """
-def compute(x):
-    return x + 1  # Agent: добавляет 1
-"""
-            }
+                "code": "\ndef compute(x):\n    return x + 1  # Agent: добавляет 1\n",
+            },
         }
-
         skill_resource = {
             "type": "code",
             "config": {
                 "language": "python",
-                "code": """
-def compute(x):
-    return x + 100  # Skill: добавляет 100
-"""
-            }
+                "code": "\ndef compute(x):\n    return x + 100  # Skill: добавляет 100\n",
+            },
         }
-
         flow_id = "test_res_hierarchy_override"
         fc = FlowConfig(
             flow_id=flow_id,
@@ -859,20 +568,13 @@ def compute(x):
             },
         )
         await container.flow_repository.set(fc)
-
         node = CodeNode(
             node_id="compute_node",
             config={
-                "code": """
-async def run(args, state):
-    result = helper.compute(state.input)
-    state.output = result
-    return {'result': result}
-""",
+                "code": "\nasync def run(args, state):\n    result = helper.compute(state.input)\n    state.output = result\n    return {'result': result}\n"
             },
             container=container,
         )
-
         state = make_state(
             input=5,
             branch_id="premium",
@@ -880,8 +582,6 @@ async def run(args, state):
             flow_config_version=fc.version,
         )
         result = await node.run(state)
-
-        # Должен использоваться skill resource: 5 + 100 = 105
         assert result.output == 105
 
     @pytest.mark.asyncio
@@ -889,38 +589,23 @@ async def run(args, state):
         """
         Node resource переопределяет skill resource.
         """
-
         node_resource = {
             "type": "code",
             "config": {
                 "language": "python",
-                "code": """
-def transform(x):
-    return x * 1000  # Node: умножает на 1000
-"""
-            }
+                "code": "\ndef transform(x):\n    return x * 1000  # Node: умножает на 1000\n",
+            },
         }
-
         node = CodeNode(
             node_id="transform_node",
             config={
-                "code": """
-async def run(args, state):
-    result = utils.transform(state.input)
-    state.output = result
-    return {'result': result}
-""",
-                "resources": {
-                    "utils": ResourceReference.model_validate(node_resource)
-                }
+                "code": "\nasync def run(args, state):\n    result = utils.transform(state.input)\n    state.output = result\n    return {'result': result}\n",
+                "resources": {"utils": ResourceReference.model_validate(node_resource)},
             },
             container=container,
         )
-
         state = make_state(input=7)
         result = await node.run(state)
-
-        # Node resource: 7 * 1000 = 7000
         assert result.output == 7000
 
     @pytest.mark.asyncio
@@ -929,47 +614,22 @@ async def run(args, state):
         Полная иерархия: agent -> skill -> node.
         Разные ресурсы на каждом уровне.
         """
-
-
         node_resource = {
             "type": "code",
-            "config": {
-                "language": "python",
-                "code": """
-def from_node():
-    return 'NODE'
-"""
-            }
+            "config": {"language": "python", "code": "\ndef from_node():\n    return 'NODE'\n"},
         }
-
-        # Ресурсы flow/skill берутся из БД по session_flow_id и flow_config_version
-        # Здесь мы проверяем что node resource работает
         node = CodeNode(
             node_id="hierarchy_test",
             config={
-                "code": """
-async def run(args, state):
-    # Node resource всегда доступен
-    node_val = node_utils.from_node()
-    state.node_val = node_val
-    return {'node': node_val}
-""",
-                "resources": {
-                    "node_utils": ResourceReference.model_validate(node_resource)
-                }
+                "code": "\nasync def run(args, state):\n    # Node resource всегда доступен\n    node_val = node_utils.from_node()\n    state.node_val = node_val\n    return {'node': node_val}\n",
+                "resources": {"node_utils": ResourceReference.model_validate(node_resource)},
             },
             container=container,
         )
-
         state = make_state()
         result = await node.run(state)
-
         assert result.node_val == "NODE"
 
-
-# =============================================================================
-# Shared Resources из БД
-# =============================================================================
 
 class TestSharedResources:
     """
@@ -981,7 +641,6 @@ class TestSharedResources:
         """
         Resource загружается из БД по resource_id.
         """
-        # Создаём shared resource в БД
         shared_resource = ResourceDefinition(
             resource_id=f"shared_utils_{uuid.uuid4().hex[:8]}",
             type="code",
@@ -989,43 +648,25 @@ class TestSharedResources:
             description="Shared utility functions",
             config={
                 "language": "python",
-                "code": """
-def shared_hello():
-    return 'Hello from shared resource!'
-"""
+                "code": "\ndef shared_hello():\n    return 'Hello from shared resource!'\n",
             },
         )
-
         await container.resource_repository.set(shared_resource)
-
-        # Используем через resource_id
-        resource_ref = {
-            "resource_id": shared_resource.resource_id
-        }
-
+        resource_ref = {"resource_id": shared_resource.resource_id}
         node = CodeNode(
             node_id="use_shared",
             config={
-                "code": """
-async def run(args, state):
-    greeting = shared.shared_hello()
-    state.greeting = greeting
-    return {'greeting': greeting}
-""",
-                "resources": {
-                    "shared": ResourceReference.model_validate(resource_ref)
-                }
+                "code": "\nasync def run(args, state):\n    greeting = shared.shared_hello()\n    state.greeting = greeting\n    return {'greeting': greeting}\n",
+                "resources": {"shared": ResourceReference.model_validate(resource_ref)},
             },
             container=container,
         )
-
         state = make_state()
         result = await node.run(state)
-
         assert result.greeting == "Hello from shared resource!"
 
     @pytest.mark.asyncio
-    async def test_shared_resource_with_override(self, container, mock_llm):
+    async def test_shared_resource_with_patch(self, container, mock_llm):
         """
         Shared LLM resource с patch temperature (config merge).
         """
@@ -1034,35 +675,18 @@ async def run(args, state):
             type="llm",
             name="Shared mock LLM",
             description="Base LLM",
-            config={
-                "provider": "mock",
-                "model": "mock-gpt-4",
-                "temperature": 0.1,
-            },
+            config={"provider": "mock", "model": "mock-gpt-4", "temperature": 0.1},
         )
         await container.resource_repository.set(shared_resource)
-
-        resource_ref = {
-            "resource_id": shared_resource.resource_id,
-            "config": {"temperature": 0.99},
-        }
-
+        resource_ref = {"resource_id": shared_resource.resource_id, "config": {"temperature": 0.99}}
         node = CodeNode(
-            node_id="use_shared_llm_override",
+            node_id="use_shared_llm_patch",
             config={
-                "code": """
-async def run(args, state):
-    text = await gpt.complete('ping')
-    state.out = text
-    return {'out': text}
-""",
-                "resources": {
-                    "gpt": ResourceReference.model_validate(resource_ref)
-                },
+                "code": "\nasync def run(args, state):\n    text = await gpt.complete('ping')\n    state.out = text\n    return {'out': text}\n",
+                "resources": {"gpt": ResourceReference.model_validate(resource_ref)},
             },
             container=container,
         )
-
         state = make_state()
         result = await node.run(state)
         assert result.out is not None

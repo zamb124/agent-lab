@@ -189,7 +189,7 @@ async def test_operator_get_task_includes_message_text_for_a2a_messages(
         session_id=session_id,
         messages=[user_msg],
     )
-    await container.state_manager.save_state(session_id, state)
+    await container.workflow_runtime.save_state(session_id, state)
 
     op_task_id = str(uuid.uuid4())
     cor_id = str(uuid.uuid4())

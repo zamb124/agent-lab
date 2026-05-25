@@ -208,8 +208,8 @@ async def _audio_segment_entries_from_s3_prefix(
         start_after=start_after_key,
     )
     entries: list[tuple[str, str, int, str]] = []
-    for obj in sorted(listed, key=lambda x: x["key"]):
-        key = obj["key"]
+    for obj in sorted(listed, key=lambda item: item.key):
+        key = obj.key
         lower = key.lower()
         if lower.endswith(".m3u8"):
             continue
@@ -219,7 +219,7 @@ async def _audio_segment_entries_from_s3_prefix(
         if name == "":
             continue
         url = client.get_public_url(key)
-        entries.append((url, name, int(obj["size"]), key))
+        entries.append((url, name, obj.size, key))
     return entries
 
 

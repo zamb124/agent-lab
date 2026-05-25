@@ -114,19 +114,12 @@ export function getNodeByIdOrNull(branchData, nodeId) {
     return isPlainObject(node) ? node : null;
 }
 
-/**
- * Возвращает endpoints ребра в каноничном виде. Поддерживает legacy-схему
- * with `from`/`to` и новую `from_node`/`to_node`.
- */
 export function getEdgeEndpoints(edge) {
-    if (!isPlainObject(edge)) return { from: '', to: '' };
-    const from = isNonEmptyString(edge.from_node)
-        ? edge.from_node
-        : (isNonEmptyString(edge.from) ? edge.from : '');
-    const to = isNonEmptyString(edge.to_node)
-        ? edge.to_node
-        : (isNonEmptyString(edge.to) ? edge.to : '');
-    return { from, to };
+    if (!isPlainObject(edge)) return { from_node: '', to_node: '' };
+    return {
+        from_node: isNonEmptyString(edge.from_node) ? edge.from_node : '',
+        to_node: isNonEmptyString(edge.to_node) ? edge.to_node : '',
+    };
 }
 
 /**
@@ -288,8 +281,8 @@ export function buildFlowPublishBody(state) {
             }
         }
         const ownEdges = asArray(data.edges).filter((edge) => {
-            const { from, to } = getEdgeEndpoints(edge);
-            const key = `${from}->${to}`;
+            const { from_node, to_node } = getEdgeEndpoints(edge);
+            const key = `${from_node}->${to_node}`;
             return !inheritedEdgeKeys.includes(key);
         });
         body.branches = {

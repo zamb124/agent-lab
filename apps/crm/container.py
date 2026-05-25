@@ -40,7 +40,7 @@ from apps.crm.services.task_service import TaskService
 from apps.crm.services.user_person_service import UserPersonService
 from core.clients.a2a_client import A2AClient
 from core.config import get_settings
-from core.container import BaseContainer, lazy
+from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -296,40 +296,23 @@ class CRMContainer(BaseContainer):
         )
 
 
-# === Глобальный контейнер ===
-
-_crm_container: CRMContainer | None = None
-
-
-def get_crm_container() -> CRMContainer:
-    """Получает контейнер (создает при первом вызове)"""
-    global _crm_container
-    if _crm_container is None:
-        settings = get_crm_settings()
-
-        if not settings.database.crm_url:
-            raise ValueError("database.crm_url не задан")
-        if not settings.database.shared_url:
-            raise ValueError("database.shared_url не задан")
-
-        _crm_container = CRMContainer(
-            db_url=settings.database.crm_url,
-            shared_db_url=settings.database.shared_url,
-        )
-        logger.info(f"CRMContainer инициализирован с БД: {settings.database.crm_url[:50]}...")
-    return _crm_container
+def _create_crm_container() -> CRMContainer:
+    settings = get_crm_settings()
+    if not settings.database.crm_url:
+        raise ValueError("database.crm_url не задан")
+    if not settings.database.shared_url:
+        raise ValueError("database.shared_url не задан")
+    return CRMContainer(
+        db_url=settings.database.crm_url,
+        shared_db_url=settings.database.shared_url,
+    )
 
 
-def set_crm_container(container: CRMContainer):
-    """Устанавливает контейнер (для тестов)"""
-    global _crm_container
-    _crm_container = container
+_crm_registry: ContainerRegistry[CRMContainer] = ContainerRegistry(
+    _create_crm_container, name="CRMContainer"
+)
 
-
-def reset_crm_container():
-    """Сбрасывает контейнер (для тестов)"""
-    global _crm_container
-    _crm_container = None
-
-
-get_container = get_crm_container
+get_crm_container = _crm_registry.get
+set_crm_container = _crm_registry.set
+reset_crm_container = _crm_registry.reset
+get_container = _crm_registry.get

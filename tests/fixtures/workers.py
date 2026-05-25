@@ -827,6 +827,58 @@ class SessionServerManager:
         _lock_timeout_sec = max(300, int(startup_wait) + 180)
         self.lock = FileLock(self.lock_file, timeout=_lock_timeout_sec)
 
+    def _build_server_env(self) -> Dict[str, str]:
+        server_env: Dict[str, str] = {**os.environ, **self.env, "PYTHONUNBUFFERED": "1"}
+        server_env.pop("PYTEST_XDIST_WORKER", None)
+        server_env.pop("PYTEST_XDIST_WORKER_COUNT", None)
+        return server_env
+
+    def _server_env_signature(self) -> str:
+        try:
+            test_infra_epoch = _TEST_INFRA_EPOCH_FILE.read_text(
+                encoding="utf-8"
+            ).strip()
+        except OSError:
+            test_infra_epoch = ""
+
+        signature_parts = [
+            f"APP_PATH={self.app_path}",
+            f"HOST={self.host}",
+            f"PORT={self.port}",
+            f"TEST_INFRA_EPOCH={test_infra_epoch}",
+        ]
+        for key in sorted(self.env):
+            signature_parts.append(f"{key}={self.env[key]}")
+        payload = "\n".join(signature_parts)
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    def _server_envsig_path(self) -> Path:
+        return self.pid_path.with_name(self.pid_path.name + ".envsig")
+
+    def _clear_server_markers(self) -> None:
+        self.pid_path.unlink(missing_ok=True)
+        self.ref_count_path.unlink(missing_ok=True)
+        self._server_envsig_path().unlink(missing_ok=True)
+
+    def _process_command_matches_server(self, pid: int) -> bool:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        command = result.stdout.strip()
+        return result.returncode == 0 and "uvicorn" in command and self.app_path in command
+
+    def _invalidate_existing_server(self, existing_pid: int, reason: str) -> None:
+        print(
+            f"⚠️  {self.name} server PID {existing_pid}: {reason}; "
+            "останавливаем stale процесс и очищаем markers."
+        )
+        _terminate_process_group_or_pid(existing_pid)
+        self._clear_server_markers()
+        self._cleanup_old_processes()
+
     def _cleanup_old_processes(self):
         """Убивает старые процессы сервера перед запуском."""
         print(f"🧹 Очистка старых {self.name} server процессов...")
@@ -873,18 +925,28 @@ class SessionServerManager:
             try:
                 existing_pid = int(self.pid_path.read_text().strip())
                 os.kill(existing_pid, 0)
+                if not self._process_command_matches_server(existing_pid):
+                    self._invalidate_existing_server(existing_pid, "команда процесса не совпадает")
+                    return False
+                try:
+                    on_disk_sig = self._server_envsig_path().read_text(
+                        encoding="utf-8"
+                    ).strip()
+                except OSError:
+                    self._invalidate_existing_server(existing_pid, "нет env signature")
+                    return False
+                if on_disk_sig != self._server_env_signature():
+                    self._invalidate_existing_server(existing_pid, "env signature устарела")
+                    return False
                 if not self._wait_for_port(timeout=0.5):
-                    self.pid_path.unlink(missing_ok=True)
-                    self.ref_count_path.unlink(missing_ok=True)
+                    self._invalidate_existing_server(existing_pid, "процесс жив, но порт не слушается")
                     return False
                 if self.readiness_path is not None and not self._wait_for_readiness(timeout=2.0):
-                    self.pid_path.unlink(missing_ok=True)
-                    self.ref_count_path.unlink(missing_ok=True)
+                    self._invalidate_existing_server(existing_pid, "readiness check не прошел")
                     return False
                 return True
             except (OSError, ValueError):
-                self.pid_path.unlink(missing_ok=True)
-                self.ref_count_path.unlink(missing_ok=True)
+                self._clear_server_markers()
         return False
 
     def _wait_for_port(
@@ -928,12 +990,9 @@ class SessionServerManager:
                 return False
             try:
                 with urlopen(url, timeout=1.0) as response:
-                    if 200 <= response.status < 500:
+                    if 200 <= response.status < 300:
                         return True
-            except HTTPError as exc:
-                if 400 <= exc.code < 500:
-                    return True
-            except (URLError, TimeoutError, OSError):
+            except (HTTPError, URLError, TimeoutError, OSError):
                 pass
             time.sleep(0.1)
         return False
@@ -999,9 +1058,7 @@ class SessionServerManager:
             "--log-level", "error"
         ]
 
-        full_env = {**os.environ, **self.env, "PYTHONUNBUFFERED": "1"}
-        full_env.pop("PYTEST_XDIST_WORKER", None)
-        full_env.pop("PYTEST_XDIST_WORKER_COUNT", None)
+        full_env = self._build_server_env()
 
         server_process = subprocess.Popen(
             command,
@@ -1072,6 +1129,7 @@ class SessionServerManager:
             )
 
         self.pid_path.write_text(str(server_process.pid))
+        self._server_envsig_path().write_text(self._server_env_signature(), encoding="utf-8")
         print(f"✅ {self.name} server started (PID: {server_process.pid}, port: {self.port})")
 
         return server_process
@@ -1082,7 +1140,7 @@ class SessionServerManager:
 
         _terminate_process_group_or_pid(pid, graceful_timeout=0.3)
 
-        self.pid_path.unlink(missing_ok=True)
+        self._clear_server_markers()
         self._wait_port_free(timeout=3.0)
         print(f"✅ {self.name} server stopped (PID: {pid})")
 

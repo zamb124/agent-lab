@@ -21,6 +21,7 @@ from apps.crm.services.file_text_reader import load_text_and_name_from_stored_fi
 from apps.crm.services.note_attachment_description import (
     strip_auto_merged_attachment_blocks_from_note_description,
 )
+from core.context import resolve_namespace_or_raise
 
 ProgressCb = Callable[[str, int, str], Awaitable[None]]
 
@@ -104,7 +105,7 @@ class NoteProcessingService:
         )
         if progress_cb:
             await progress_cb("preparing", 50, "Подготовка анализа")
-        namespace = note.namespace or "default"
+        namespace = resolve_namespace_or_raise(note.namespace)
 
         req = AIAnalyzeRequest(
             text=text,

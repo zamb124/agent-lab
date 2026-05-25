@@ -37,7 +37,7 @@ from core.types import (
 if TYPE_CHECKING:
     from core.state import ExecutionState
 from .context import TraceContext
-from .provider import is_tracing_enabled
+from .provider import ensure_tracer_provider
 
 if TYPE_CHECKING:
     from .repository import SpanRepository
@@ -151,7 +151,7 @@ class PlatformTracer:
     """
 
     def __init__(self, service_name: str = "platform"):
-        self._otel_tracer: Tracer = trace.get_tracer(service_name)
+        self._otel_tracer: Tracer = ensure_tracer_provider(service_name).get_tracer(service_name)
         self._service_name: str = service_name
 
     def _generate_ids(self) -> tuple[str, str]:
@@ -171,7 +171,7 @@ class PlatformTracer:
     ) -> None:
         """Сохраняет span в PostgreSQL."""
         if _span_repository is None:
-            logger.warning(f"SpanRepository not set, span '{operation_name}' not saved")
+            logger.debug("tracing.span_not_persisted", operation_name=operation_name)
             return
 
         end_time = datetime.now(timezone.utc)
@@ -344,10 +344,6 @@ class PlatformTracer:
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для HTTP запроса (message/send, message/stream)."""
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes["http.method"] = method
@@ -375,10 +371,6 @@ class PlatformTracer:
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для выполнения flow."""
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_FLOW_ID] = flow_id
@@ -414,10 +406,6 @@ class PlatformTracer:
         context manager'ы PlatformTracer получают parent_span_id и общий trace_id (дерево OTEL).
         Колонки event_type / resource_type / resource_id — выборки «журнал по сущности».
         """
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_RESOURCE_TYPE] = resource_type
@@ -454,10 +442,6 @@ class PlatformTracer:
         Универсальный span значимой операции сервиса (RAG, Sync, CRM, …).
         operation_name: стабильный идентификатор вида service.area.action.
         """
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         if event_type:
@@ -492,10 +476,6 @@ class PlatformTracer:
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для выполнения ноды."""
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_NODE_ID] = node_id
@@ -527,10 +507,6 @@ class PlatformTracer:
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span на весь ReAct-цикл llm_node (LLM + tools)."""
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_LLM_NODE_LABEL] = node_label
@@ -564,10 +540,6 @@ class PlatformTracer:
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для одной итерации ReAct цикла."""
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_REACT_ITERATION] = iteration
@@ -600,10 +572,6 @@ class PlatformTracer:
         llm_provider: str | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для вызова LLM."""
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_LLM_MODEL] = model
@@ -777,10 +745,6 @@ class PlatformTracer:
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для вызова tool."""
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_TOOL_NAME] = tool_name
@@ -825,7 +789,7 @@ class PlatformTracer:
             span.set_attribute(attr.ATTR_TOOL_ERROR, error)
 
     def record_state_snapshot(self, span: Span, state: "ExecutionState") -> None:
-        """Записывает snapshot state в span."""
+        """Записывает projection snapshot в span."""
         # Конвертируем ExecutionState в dict для JSON сериализации
         state_dict = require_json_object(
             state.model_dump(mode="json", exclude_none=False),
@@ -848,10 +812,6 @@ class PlatformTracer:
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для interrupt (ask_user)."""
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_INTERRUPT_QUESTION] = question[:200]
@@ -882,10 +842,6 @@ class PlatformTracer:
         trace_ctx: TraceContext | None = None,
     ) -> AsyncGenerator[Span, None]:
         """Span для сборки системного промпта."""
-        if not is_tracing_enabled():
-            yield trace.get_current_span()
-            return
-
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
         attributes[attr.ATTR_PROMPT_NODE_ID] = node_id

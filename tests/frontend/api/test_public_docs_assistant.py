@@ -104,9 +104,9 @@ async def test_public_docs_assistant_session_mints_token(
     assert guest.active_company_id == SYSTEM_COMPANY_ID
     assert guest.companies[SYSTEM_COMPANY_ID] == ["guest"]
     assert "guest" in guest.groups
-    assert guest.attrs["runtime_identity"] is True
-    assert guest.attrs["kind"] == "embed_session_guest"
-    assert guest.attrs["embed_id"] == DOCS_ASSISTANT_EMBED_ID
+    assert guest.attributes["runtime_identity"] is True
+    assert guest.attributes["kind"] == "embed_session_guest"
+    assert guest.attributes["embed_id"] == DOCS_ASSISTANT_EMBED_ID
 
 
 @pytest.mark.asyncio

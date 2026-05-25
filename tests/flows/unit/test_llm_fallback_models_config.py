@@ -90,40 +90,32 @@ def test_runtime_candidate_metadata_is_not_dumped_into_authoring_config() -> Non
     assert "default_headers" not in dumped["fallback_models"][0]
 
 
-def test_legacy_llm_override_input_is_dumped_as_llm_only() -> None:
-    node = NodeConfig.model_validate(
-        {
-            "node_id": "main",
-            "type": NodeType.LLM_NODE,
-            "name": "Main",
-            "description": "",
-            "llm": {"provider": "openrouter", "model": "old-model"},
-            "llm_override": {"provider": "humanitec_llm", "model": "auto"},
-        }
-    )
-
-    dumped = node.model_dump(mode="json", exclude_none=True)
-
-    assert node.llm is not None
-    assert node.llm.provider == "humanitec_llm"
-    assert dumped["llm"]["provider"] == "humanitec_llm"
-    assert "llm_override" not in dumped
+def test_node_config_rejects_unknown_llm_extra_field() -> None:
+    with pytest.raises(ValidationError):
+        NodeConfig.model_validate(
+            {
+                "node_id": "main",
+                "type": NodeType.LLM_NODE,
+                "name": "Main",
+                "description": "",
+                "llm": {"provider": "openrouter", "model": "old-model"},
+                "unknown_llm_config": {"provider": "humanitec_llm", "model": "auto"},
+            }
+        )
 
 
 @pytest.mark.asyncio
-async def test_execute_request_normalizes_legacy_llm_override_to_llm() -> None:
-    config = await _build_node_config(
-        ExecuteRequest(
-            node_type="llm_node",
-            node_config={
-                "prompt": "test",
-                "tools": [],
-                "llm": {"provider": "openrouter", "model": "old-model"},
-                "llm_override": {"provider": "humanitec_llm", "model": "auto"},
-            },
-            state={},
+async def test_execute_request_rejects_unknown_llm_extra_field() -> None:
+    with pytest.raises(ValidationError):
+        await _build_node_config(
+            ExecuteRequest(
+                node_type="llm_node",
+                node_config={
+                    "prompt": "test",
+                    "tools": [],
+                    "llm": {"provider": "openrouter", "model": "old-model"},
+                    "unknown_llm_config": {"provider": "humanitec_llm", "model": "auto"},
+                },
+                state={},
+            )
         )
-    )
-
-    assert config["llm"]["provider"] == "humanitec_llm"
-    assert "llm_override" not in config

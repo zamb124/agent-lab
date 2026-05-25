@@ -4,15 +4,15 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from apps.flows.src.tools.decorator import tool
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
-
-JsonDict = dict[str, Any]
+from core.models import StrictBaseModel
+from core.rag.models import RAGMetadata, RAGMetadataFilter
+from core.rag_indexing_schema import SearchChannelsDefaults
+from core.types import JsonObject
 
 _RAG_CREATE_NAMESPACE_DESCRIPTION = """
 Регистрирует новое пространство имён (namespace) для документов RAG в текущей компании.
@@ -63,9 +63,7 @@ _RAG_SEARCH_DESCRIPTION = """
 """.strip()
 
 
-class RagCreateNamespaceArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
+class RagCreateNamespaceArgs(StrictBaseModel):
     name: str = Field(..., min_length=1, description="Имя нового namespace внутри компании.")
     description: str | None = Field(
         None,
@@ -73,9 +71,7 @@ class RagCreateNamespaceArgs(BaseModel):
     )
 
 
-class RagAddTextArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
+class RagAddTextArgs(StrictBaseModel):
     namespace_id: str = Field(..., min_length=1, description="Имя существующего namespace.")
     collection_id: str = Field(
         ...,
@@ -84,7 +80,7 @@ class RagAddTextArgs(BaseModel):
     )
     text: str = Field(..., min_length=1, description="Текст для индексации.")
     document_name: str | None = Field(None, description="Имя документа; опционально.")
-    metadata: dict[str, Any] | None = Field(
+    metadata: RAGMetadata | None = Field(
         None,
         description="Метаданные документа (объект JSON); опционально.",
     )
@@ -94,9 +90,7 @@ class RagAddTextArgs(BaseModel):
     )
 
 
-class RagSearchArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
+class RagSearchArgs(StrictBaseModel):
     namespace_id: str = Field(
         ...,
         min_length=1,
@@ -113,8 +107,8 @@ class RagSearchArgs(BaseModel):
         description="Запрос естественным языком по смыслу фрагментов в этом namespace.",
     )
     limit: int = Field(5, ge=1, le=100)
-    filters: dict[str, Any] | None = Field(None, description="Фильтры по metadata; опционально.")
-    channels: dict[str, Any] | None = Field(
+    filters: RAGMetadataFilter | None = Field(None, description="Фильтры по metadata; опционально.")
+    channels: SearchChannelsDefaults | None = Field(
         None,
         description="Каналы гибридного поиска (semantic/lexical); как у REST SearchRequest.",
     )
@@ -138,12 +132,12 @@ class RagSearchArgs(BaseModel):
     name="rag_create_namespace",
     description=_RAG_CREATE_NAMESPACE_DESCRIPTION,
     tags=["rag", "knowledge"],
-    args_schema=RagCreateNamespaceArgs,
+    parameters_model=RagCreateNamespaceArgs,
 )
 async def rag_create_namespace(
     name: str,
     description: str | None = None,
-) -> JsonDict:
+) -> JsonObject:
     client = RagClient()
     try:
         raw = await client.create_namespace(name, description)
@@ -156,17 +150,17 @@ async def rag_create_namespace(
     name="rag_add_text",
     description=_RAG_ADD_TEXT_DESCRIPTION,
     tags=["rag", "knowledge"],
-    args_schema=RagAddTextArgs,
+    parameters_model=RagAddTextArgs,
 )
 async def rag_add_text(
     namespace_id: str,
     collection_id: str,
     text: str,
     document_name: str | None = None,
-    metadata: dict[str, Any] | None = None,
+    metadata: RAGMetadata | None = None,
     document_id: str | None = None,
-) -> JsonDict:
-    merged_meta: dict[str, Any] = dict(metadata) if metadata is not None else {}
+) -> JsonObject:
+    merged_meta: RAGMetadata = dict(metadata) if metadata is not None else {}
     if "collection_id" in merged_meta and merged_meta["collection_id"] != collection_id:
         raise ValueError(
             "metadata.collection_id не совпадает с аргументом collection_id",
@@ -183,28 +177,35 @@ async def rag_add_text(
         )
     except ServiceClientError as exc:
         return {"success": False, "error": str(exc)}
-    return {"success": True, **raw}
+    return {
+        "success": True,
+        "document_id": raw.document_id,
+        "document_name": raw.document_name,
+        "namespace_id": raw.namespace_id,
+        "status": raw.status,
+        "provider": raw.provider,
+    }
 
 
 @tool(
     name="rag_search",
     description=_RAG_SEARCH_DESCRIPTION,
     tags=["rag", "knowledge"],
-    args_schema=RagSearchArgs,
+    parameters_model=RagSearchArgs,
 )
 async def rag_search(
     namespace_id: str,
     collection_id: str,
     query: str,
     limit: int = 5,
-    filters: dict[str, Any] | None = None,
-    channels: dict[str, Any] | None = None,
+    filters: RAGMetadataFilter | None = None,
+    channels: SearchChannelsDefaults | None = None,
     rrf_k: int | None = None,
     per_channel_top_k: int | None = None,
     rerank: bool | None = None,
     retrieval: bool | None = None,
-) -> JsonDict:
-    merged_filters: dict[str, Any] = dict(filters) if filters is not None else {}
+) -> JsonObject:
+    merged_filters: RAGMetadataFilter = dict(filters) if filters is not None else {}
     if "collection_id" in merged_filters and merged_filters["collection_id"] != collection_id:
         raise ValueError(
             "filters.collection_id не совпадает с аргументом collection_id",

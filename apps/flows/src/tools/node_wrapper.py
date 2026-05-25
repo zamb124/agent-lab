@@ -15,10 +15,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar, cast, override
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.mock.resolver import get_mock_for_flow
 from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import NodeType
-from apps.flows.src.models.tool_reference import CallParameter
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.nodes import (
     ChannelNode,
@@ -35,14 +33,14 @@ from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.base import (
     BaseTool,
     ToolArguments,
+    ToolContainerRef,
     ToolParametersSchema,
     ToolResult,
     sanitize_tool_name,
 )
-from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
 from core.logging import get_logger
 from core.state import ExecutionState, InterruptPathItem
-from core.types import JsonObject, JsonValue, require_json_value
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 if TYPE_CHECKING:
     from apps.flows.src.runtime.nodes import BaseNode
@@ -81,12 +79,15 @@ class NodeAsToolWrapper(BaseTool):
     Args записываются в state, нода берет их через input_mapping.
     """
 
-    _DEFAULT_LLM_TOOL_ARGS_SCHEMA: ClassVar[dict[str, CallParameter]] = {
-        "request": CallParameter(
-            type="string",
-            description="Запрос к субагенту",
-            required=True,
-        )
+    _DEFAULT_LLM_TOOL_PARAMETERS_SCHEMA: ClassVar[JsonObject] = {
+        "type": "object",
+        "properties": {
+            "request": {
+                "type": "string",
+                "description": "Запрос к субагенту",
+            }
+        },
+        "required": ["request"],
     }
 
     def __init__(
@@ -95,30 +96,37 @@ class NodeAsToolWrapper(BaseTool):
         *,
         container: FlowRuntimeContainer | None = None,
     ):
-        self.node_config: NodeConfig = node_config if isinstance(
-            node_config, NodeConfig
-        ) else NodeConfig.model_validate(node_config)
+        self.node_config: NodeConfig = (
+            node_config
+            if isinstance(node_config, NodeConfig)
+            else NodeConfig.model_validate(node_config)
+        )
         self.name: str = sanitize_tool_name(self.node_config.node_id)
-        self.description: str = self.node_config.description or f"Вызов ноды {self.node_config.name}"
+        self.description: str = (
+            self.node_config.description or f"Вызов ноды {self.node_config.name}"
+        )
         self.tags: list[str] = self.node_config.tags or [self.node_config.type.value]
+        self.is_nested_flow_tool: bool = self.node_config.type == NodeType.FLOW
         self._node: BaseNode | None = None
         self._bound_node: BaseNode | None = None
-        self.container: FlowRuntimeContainer | None = container
+        self.container: ToolContainerRef | None = container
 
     @property
     @override
     def parameters(self) -> ToolParametersSchema:
-        args_schema = (
-            self.node_config.args_schema
-            if self.node_config.args_schema
-            else self._DEFAULT_LLM_TOOL_ARGS_SCHEMA
-            if self.node_config.type == NodeType.LLM_NODE
-            else None
+        if self.node_config.parameters_schema is None:
+            raise ValueError(
+                f"Node-as-tool '{self.node_config.node_id}' requires parameters_schema"
+            )
+        schema = require_json_object(
+            self.node_config.parameters_schema,
+            f"node.{self.node_config.node_id}.parameters_schema",
         )
-        return resolve_tool_parameters_schema(
-            parameters_schema=self.node_config.parameters_schema,
-            args_schema=args_schema,
-        )
+        if schema.get("type") != "object" or not isinstance(schema.get("properties"), dict):
+            raise ValueError(
+                f"Node-as-tool '{self.node_config.node_id}' parameters_schema must be object JSON Schema"
+            )
+        return schema
 
     @classmethod
     def from_base_node(
@@ -137,7 +145,7 @@ class NodeAsToolWrapper(BaseTool):
                 type=node_type,
                 name=tool_name or node.node_id,
                 description=tool_description or node.description or f"Вызов ноды {node.node_id}",
-                args_schema=cls._DEFAULT_LLM_TOOL_ARGS_SCHEMA,
+                parameters_schema=cls._DEFAULT_LLM_TOOL_PARAMETERS_SCHEMA,
             )
         )
         wrapper._bound_node = node
@@ -159,7 +167,7 @@ class NodeAsToolWrapper(BaseTool):
             self._node = await create_node(
                 self.node_config.node_id,
                 node_dict,
-                container=self.container,
+                container=cast(FlowRuntimeContainer | None, self.container),
             )
 
         return self._node
@@ -172,11 +180,6 @@ class NodeAsToolWrapper(BaseTool):
         node_id = self.node_config.node_id
         node_type = self.node_config.type
 
-        mock_result = get_mock_for_flow(state, node_id)
-        if mock_result is not None:
-            logger.info(f"[wrapper:{node_id}] mock response")
-            return mock_result
-
         node = await self._get_node()
         logger.info(f"[wrapper:{node_id}] run with args: {list(args.keys())}")
 
@@ -186,17 +189,13 @@ class NodeAsToolWrapper(BaseTool):
 
         # Для остальных нод - простой вызов
         for key, value in args.items():
-            setattr(state, key, value)
+            state[key] = value
 
         result = await node.execute(state)
         return self._extract_response(result)
 
     async def _run_llm_node(
-        self,
-        node: BaseNode,
-        node_id: str,
-        args: ToolArguments,
-        parent_state: ExecutionState
+        self, node: BaseNode, node_id: str, args: ToolArguments, parent_state: ExecutionState
     ) -> ToolResult:
         """
         Выполняет llm_node с изолированным state.
@@ -208,7 +207,6 @@ class NodeAsToolWrapper(BaseTool):
         if is_resume:
             # Resume: загружаем сохраненный state субагента
             nested_state = InterruptManager.load_nested_state(parent_state, node_id)
-            object.__setattr__(nested_state, "_skip_hot_state_checkpoint", True)
             # Передаем ответ пользователя
             nested_state.content = parent_state.content
             # Передаем оставшийся путь interrupt (без первого элемента)
@@ -245,10 +243,10 @@ class NodeAsToolWrapper(BaseTool):
             InterruptManager.push_interrupt_path(
                 parent_state,
                 InterruptPathItem(
-                    type=NodeType.LLM_NODE.value,
-                    id=node_id,
-                    tool_call=None
-                )
+                    node_type=NodeType.LLM_NODE.value,
+                    node_id=node_id,
+                    tool_call=None,
+                ),
             )
 
             logger.info(f"[wrapper:{node_id}] interrupt: {e.question[:50]}...")
@@ -280,11 +278,10 @@ class NodeAsToolWrapper(BaseTool):
             branch_id=parent_state.branch_id,
             flow_config_version=parent_state.flow_config_version,
         )
-        object.__setattr__(nested_state, "_skip_hot_state_checkpoint", True)
 
         # Записываем args в nested_state
         for key, value in args.items():
-            setattr(nested_state, key, value)
+            nested_state[key] = value
 
         return nested_state
 
@@ -301,7 +298,7 @@ class NodeAsToolWrapper(BaseTool):
         extra = nested_state.json_extra()
         if extra:
             for key, value in extra.items():
-                setattr(parent_state, key, value)
+                parent_state[key] = value
 
     def _extract_response(self, result: ExecutionState | JsonValue) -> ToolResult:
         """Извлекает response из результата."""

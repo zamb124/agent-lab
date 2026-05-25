@@ -175,7 +175,7 @@ class TestProcessAgentTask:
                     "code": "async def run(args, state):\n    state['response'] = 'Initialized'\n    return state",
                 }
             },
-            edges=[{"from": "main", "to": None}],
+            edges=[{"from_node": "main", "to_node": None}],
         )
         await container.flow_repository.set(flow_config)
 
@@ -217,10 +217,9 @@ class TestProcessAgentTask:
 
         assert result["task_state"] == "completed"
         set_context(mock_context)
-        persisted = await container.state_repository.get(session_id)
+        persisted = await container.workflow_runtime.get_state(session_id)
         assert persisted is not None
         assert persisted.terminal_task_state == "completed"
-        assert await container.redis_client.get(container.state_manager._state_key(session_id)) is None
 
     @pytest.mark.asyncio
     async def test_process_flow_task_raises_on_unknown_flow(self, app, container, unique_id, mock_context):
@@ -238,16 +237,15 @@ class TestProcessAgentTask:
             )
 
         set_context(mock_context)
-        persisted = await container.state_repository.get(session_id)
+        persisted = await container.workflow_runtime.get_state(session_id)
         assert persisted is not None
         assert persisted.terminal_task_state == "failed"
-        assert await container.redis_client.get(container.state_manager._state_key(session_id)) is None
 
     @pytest.mark.asyncio
     async def test_process_flow_task_persists_failed_terminal_state(
         self, app, container, unique_id, mock_context
     ):
-        """При падении runtime terminal failed сохраняется в БД, hot state удаляется из Redis."""
+        """При падении runtime фиксируется terminal failed event."""
         from apps.flows.src.models import FlowConfig
 
         flow_id = f"failed_terminal_flow_{unique_id}"
@@ -262,7 +260,7 @@ class TestProcessAgentTask:
                     "config": {},
                 }
             },
-            edges=[{"from": "main", "to": None}],
+            edges=[{"from_node": "main", "to_node": None}],
         )
         await container.flow_repository.set(flow_config)
         mock_context.session_id = session_id
@@ -280,14 +278,13 @@ class TestProcessAgentTask:
                 )
 
             set_context(mock_context)
-            persisted = await container.state_repository.get(session_id)
+            persisted = await container.workflow_runtime.get_state(session_id)
             assert persisted is not None
             assert persisted.terminal_task_state == "failed"
             assert "flow_id required" in (persisted.terminal_task_error or "")
-            assert await container.redis_client.get(container.state_manager._state_key(session_id)) is None
         finally:
             set_context(mock_context)
-            await container.state_manager.delete_state(session_id)
+            await container.workflow_runtime.delete_state(session_id)
             await container.flow_repository.delete(flow_id)
 
 
@@ -299,6 +296,7 @@ class TestProcessAgentTaskResume:
         """Создает flow и state для тестов resume."""
         from apps.flows.src.container import get_container
         from apps.flows.src.models import FlowConfig
+        from core.state.interrupt import InterruptData, InterruptSystemContext, UserMessageInterrupt
 
         flow_config = FlowConfig(
             flow_id="interrupt_test_flow",
@@ -310,13 +308,13 @@ class TestProcessAgentTaskResume:
                     "code": "async def run(args, state):\n    state['response'] = 'Resumed'\n    return state",
                 }
             },
-            edges=[{"from": "main", "to": None}],
+            edges=[{"from_node": "main", "to_node": None}],
         )
         await container.flow_repository.set(flow_config)
 
         session_id = f"interrupt_test_flow:interrupt-session-{unique_id}"
-        state_manager = get_container().state_manager
-        await state_manager.save_state(
+        workflow_runtime = get_container().workflow_runtime
+        await workflow_runtime.save_state(
             session_id,
             {
                 "task_id": "test-task",
@@ -324,7 +322,13 @@ class TestProcessAgentTaskResume:
                 "user_id": "test-user",
                 "session_id": session_id,
                 "current_node": "main",
-                "interrupt": {"question": "What is your name?"},
+                "interrupt": InterruptData(
+                    body=UserMessageInterrupt(question="What is your name?"),
+                    system=InterruptSystemContext(
+                        task_id="test-task",
+                        context_id="test-context",
+                    ),
+                ).model_dump(mode="json"),
                 "branch_id": "default",
                 "content": "Hello",
             },
@@ -394,7 +398,7 @@ class TestProcessFlowTaskSequentialLlmNodes:
                     "tools": [],
                 },
             },
-            edges=[{"from": "first", "to": "second"}],
+            edges=[{"from_node": "first", "to_node": "second"}],
         )
         await container.flow_repository.set(flow_config)
         return flow_id
@@ -429,7 +433,7 @@ class TestProcessFlowTaskSequentialLlmNodes:
         assert result["response"] == "SECOND_OK"
 
         set_context(mock_context)
-        saved = await container.state_manager.get_state(session_id)
+        saved = await container.workflow_runtime.get_state(session_id)
         assert saved is not None
         assert "first" in saved.node_history
         assert "second" in saved.node_history
@@ -601,7 +605,7 @@ async def run(args, state):
         assert result["tool_id"] == "test_ask_user"
         assert result["result"] is None
         assert "interrupt" in result
-        assert result["interrupt"]["question"] == "What is your name?"
+        assert result["interrupt"]["body"]["question"] == "What is your name?"
 
     @pytest.mark.asyncio
     async def test_execute_tool_complex_expression(self, app, calculator_config):

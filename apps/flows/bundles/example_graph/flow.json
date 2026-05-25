@@ -1,5 +1,5 @@
 {
-  "id": "example_graph",
+  "flow_id": "example_graph",
   "name": "Пример графового flow",
   "description": "Skills (merge/replace), маршрутизация code→ветки; HITL: ветка operator → hitl_node single_reply (очередь example_hitl), ветка takeover → hitl_node takeover (полный перехват диалога). Напишите «оператор» или «перехват»/«takeover».",
   "tags": [
@@ -173,80 +173,120 @@
   },
   "edges": [
     {
-      "from": "classifier",
-      "to": "order_processor",
-      "condition": "route == 'order'"
+      "from_node": "classifier",
+      "to_node": "order_processor",
+      "condition": {
+        "type": "simple",
+        "variable": "route",
+        "operator": "==",
+        "value": "order"
+      }
     },
     {
-      "from": "classifier",
-      "to": "complaint_processor",
-      "condition": "route == 'complaint'"
+      "from_node": "classifier",
+      "to_node": "complaint_processor",
+      "condition": {
+        "type": "simple",
+        "variable": "route",
+        "operator": "==",
+        "value": "complaint"
+      }
     },
     {
-      "from": "classifier",
-      "to": "general_processor",
-      "condition": "route == 'general'"
+      "from_node": "classifier",
+      "to_node": "general_processor",
+      "condition": {
+        "type": "simple",
+        "variable": "route",
+        "operator": "==",
+        "value": "general"
+      }
     },
     {
-      "from": "classifier",
-      "to": "prepare_user_data",
-      "condition": "route == 'general'"
+      "from_node": "classifier",
+      "to_node": "prepare_user_data",
+      "condition": {
+        "type": "simple",
+        "variable": "route",
+        "operator": "==",
+        "value": "general"
+      }
     },
     {
-      "from": "classifier",
-      "to": "cat_fact_api",
-      "condition": "route == 'cat'"
+      "from_node": "classifier",
+      "to_node": "cat_fact_api",
+      "condition": {
+        "type": "simple",
+        "variable": "route",
+        "operator": "==",
+        "value": "cat"
+      }
     },
     {
-      "from": "classifier",
-      "to": "greeting_node",
-      "condition": "route == 'greeting'"
+      "from_node": "classifier",
+      "to_node": "greeting_node",
+      "condition": {
+        "type": "simple",
+        "variable": "route",
+        "operator": "==",
+        "value": "greeting"
+      }
     },
     {
-      "from": "classifier",
-      "to": "hitl_queue_demo",
-      "condition": "route == 'operator'"
+      "from_node": "classifier",
+      "to_node": "hitl_queue_demo",
+      "condition": {
+        "type": "simple",
+        "variable": "route",
+        "operator": "==",
+        "value": "operator"
+      }
     },
     {
-      "from": "classifier",
-      "to": "hitl_takeover_demo",
-      "condition": "route == 'takeover'"
+      "from_node": "classifier",
+      "to_node": "hitl_takeover_demo",
+      "condition": {
+        "type": "simple",
+        "variable": "route",
+        "operator": "==",
+        "value": "takeover"
+      }
     },
     {
-      "from": "hitl_queue_demo",
-      "to": "formatter"
+      "from_node": "hitl_queue_demo",
+      "to_node": "formatter"
     },
     {
-      "from": "hitl_takeover_demo",
-      "to": "formatter"
+      "from_node": "hitl_takeover_demo",
+      "to_node": "formatter"
     },
     {
-      "from": "order_processor",
-      "to": "formatter"
+      "from_node": "order_processor",
+      "to_node": "formatter"
     },
     {
-      "from": "complaint_processor",
-      "to": "formatter"
+      "from_node": "complaint_processor",
+      "to_node": "formatter"
     },
     {
-      "from": "general_processor",
-      "to": "formatter"
+      "from_node": "general_processor",
+      "to_node": "formatter"
     },
     {
-      "from": "prepare_user_data",
-      "to": "general_processor"
+      "from_node": "prepare_user_data",
+      "to_node": "general_processor"
     },
     {
-      "from": "cat_fact_api",
-      "to": "formatter"
+      "from_node": "cat_fact_api",
+      "to_node": "formatter"
     },
     {
-      "from": "greeting_node",
-      "to": "formatter"
+      "from_node": "greeting_node",
+      "to_node": "formatter"
     },
     {
-      "from": "formatter",
-      "to": null
+      "from_node": "formatter",
+      "to_node": null
     }
   ],
   "variables": {
@@ -295,80 +335,120 @@
       "nodes_mode": "merge",
       "edges": [
         {
-          "from": "classifier",
-          "to": "order_processor",
-          "condition": "route == 'order'"
+          "from_node": "classifier",
+          "to_node": "order_processor",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "order"
+          }
         },
         {
-          "from": "classifier",
-          "to": "complaint_processor",
-          "condition": "route == 'complaint'"
+          "from_node": "classifier",
+          "to_node": "complaint_processor",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "complaint"
+          }
         },
         {
-          "from": "classifier",
-          "to": "general_processor",
-          "condition": "route == 'general'"
+          "from_node": "classifier",
+          "to_node": "general_processor",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "general"
+          }
         },
         {
-          "from": "classifier",
-          "to": "prepare_user_data",
-          "condition": "route == 'general'"
+          "from_node": "classifier",
+          "to_node": "prepare_user_data",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "general"
+          }
         },
         {
-          "from": "classifier",
-          "to": "cat_fact_api",
-          "condition": "route == 'cat'"
+          "from_node": "classifier",
+          "to_node": "cat_fact_api",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "cat"
+          }
         },
         {
-          "from": "classifier",
-          "to": "greeting_node",
-          "condition": "route == 'greeting'"
+          "from_node": "classifier",
+          "to_node": "greeting_node",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "greeting"
+          }
         },
         {
-          "from": "classifier",
-          "to": "hitl_queue_demo",
-          "condition": "route == 'operator'"
+          "from_node": "classifier",
+          "to_node": "hitl_queue_demo",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "operator"
+          }
         },
         {
-          "from": "classifier",
-          "to": "hitl_takeover_demo",
-          "condition": "route == 'takeover'"
+          "from_node": "classifier",
+          "to_node": "hitl_takeover_demo",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "takeover"
+          }
         },
         {
-          "from": "cat_fact_api",
-          "to": "formatter"
+          "from_node": "cat_fact_api",
+          "to_node": "formatter"
         },
         {
-          "from": "greeting_node",
-          "to": "formatter"
+          "from_node": "greeting_node",
+          "to_node": "formatter"
         },
         {
-          "from": "hitl_queue_demo",
-          "to": "formatter"
+          "from_node": "hitl_queue_demo",
+          "to_node": "formatter"
         },
         {
-          "from": "hitl_takeover_demo",
-          "to": "formatter"
+          "from_node": "hitl_takeover_demo",
+          "to_node": "formatter"
         },
         {
-          "from": "formatter",
-          "to": null
+          "from_node": "formatter",
+          "to_node": null
         },
         {
-          "from": "order_processor",
-          "to": null
+          "from_node": "order_processor",
+          "to_node": null
         },
         {
-          "from": "complaint_processor",
-          "to": null
+          "from_node": "complaint_processor",
+          "to_node": null
         },
         {
-          "from": "general_processor",
-          "to": null
+          "from_node": "general_processor",
+          "to_node": null
         },
         {
-          "from": "prepare_user_data",
-          "to": "general_processor"
+          "from_node": "prepare_user_data",
+          "to_node": "general_processor"
         }
       ],
       "edges_mode": "replace",
@@ -406,35 +486,50 @@
       "nodes_mode": "merge",
       "edges": [
         {
-          "from": "classifier",
-          "to": "order_processor",
-          "condition": "route == 'order'"
+          "from_node": "classifier",
+          "to_node": "order_processor",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "order"
+          }
         },
         {
-          "from": "classifier",
-          "to": "general_processor",
-          "condition": "route == 'general'"
+          "from_node": "classifier",
+          "to_node": "general_processor",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "general"
+          }
         },
         {
-          "from": "classifier",
-          "to": "hitl_queue_demo",
-          "condition": "route == 'operator'"
+          "from_node": "classifier",
+          "to_node": "hitl_queue_demo",
+          "condition": {
+            "type": "simple",
+            "variable": "route",
+            "operator": "==",
+            "value": "operator"
+          }
         },
         {
-          "from": "hitl_queue_demo",
-          "to": "formatter"
+          "from_node": "hitl_queue_demo",
+          "to_node": "formatter"
         },
         {
-          "from": "order_processor",
-          "to": "formatter"
+          "from_node": "order_processor",
+          "to_node": "formatter"
         },
         {
-          "from": "general_processor",
-          "to": "formatter"
+          "from_node": "general_processor",
+          "to_node": "formatter"
         },
         {
-          "from": "formatter",
-          "to": null
+          "from_node": "formatter",
+          "to_node": null
         }
       ],
       "edges_mode": "replace",

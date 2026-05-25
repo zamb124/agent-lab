@@ -11,13 +11,9 @@
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.models import Edge, FlowConfig
-from apps.flows.src.models.external_api import (
-    ExternalAPIConfig,
-    HTTPMethod,
-)
+from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.runtime.nodes import ExternalAPINode, create_node
 from apps.flows.src.tools.base import ExternalAPITool
 from core.state import ExecutionState
@@ -39,8 +35,7 @@ class TestExternalAPIClient:
     async def test_simple_post_request(self, asgi_api_client):
         """Простой POST запрос."""
         response = await asgi_api_client.post(
-            "/echo",
-            json={"message": "Hello", "uppercase": False}
+            "/echo", json={"message": "Hello", "uppercase": False}
         )
         assert response.status_code == 200
         data = response.json()
@@ -51,8 +46,7 @@ class TestExternalAPIClient:
     async def test_echo_uppercase(self, asgi_api_client):
         """Echo с uppercase."""
         response = await asgi_api_client.post(
-            "/echo",
-            json={"message": "hello world", "uppercase": True}
+            "/echo", json={"message": "hello world", "uppercase": True}
         )
         assert response.status_code == 200
         data = response.json()
@@ -62,8 +56,7 @@ class TestExternalAPIClient:
     async def test_calculator_add(self, asgi_api_client):
         """Калькулятор - сложение."""
         response = await asgi_api_client.post(
-            "/calculate",
-            json={"a": 10, "b": 5, "operation": "add"}
+            "/calculate", json={"a": 10, "b": 5, "operation": "add"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -73,8 +66,7 @@ class TestExternalAPIClient:
     async def test_calculator_divide_by_zero(self, asgi_api_client):
         """Калькулятор - деление на ноль."""
         response = await asgi_api_client.post(
-            "/calculate",
-            json={"a": 10, "b": 0, "operation": "divide"}
+            "/calculate", json={"a": 10, "b": 0, "operation": "divide"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -84,10 +76,7 @@ class TestExternalAPIClient:
     @pytest.mark.asyncio
     async def test_interrupt_response(self, asgi_api_client):
         """Ответ с interrupt."""
-        response = await asgi_api_client.post(
-            "/ask-clarification",
-            json={"message": "short"}
-        )
+        response = await asgi_api_client.post("/ask-clarification", json={"message": "short"})
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "waiting_input"
@@ -105,15 +94,10 @@ class TestExternalAPIClientWithConfig:
 
         async def mock_request(*args, **kwargs):
             return httpx.Response(
-                200,
-                json={
-                    "status": "completed",
-                    "data": {"result": "test message"}
-                }
+                200, json={"status": "completed", "data": {"result": "test message"}}
             )
 
         monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
-
         config = ExternalAPIConfig(
             api_id="echo",
             name="Echo API",
@@ -121,20 +105,9 @@ class TestExternalAPIClientWithConfig:
             method=HTTPMethod.POST,
             body_template="{}",
         )
-
         client = ExternalAPIClient()
-        state = ExecutionState(
-            task_id="t",
-            context_id="c",
-            user_id="u",
-            session_id="s:s",
-        )
-        result = await client.call(
-            config,
-            {"message": "test message"},
-            state=state,
-        )
-
+        state = ExecutionState(task_id="t", context_id="c", user_id="u", session_id="s:s")
+        result = await client.call(config, {"message": "test message"}, state=state)
         assert result["status"] == "completed"
         assert result["data"]["result"] == "test message"
 
@@ -142,15 +115,10 @@ class TestExternalAPIClientWithConfig:
     async def test_var_resolution_in_url(self):
         """Резолвинг @var: в URL."""
         client = ExternalAPIClient()
-
         url = "@var:base_url/api/test"
         variables = {"base_url": "http://example.com"}
         state = ExecutionState(
-            task_id="t",
-            context_id="c",
-            user_id="u",
-            session_id="f:c",
-            variables=variables,
+            task_id="t", context_id="c", user_id="u", session_id="f:c", variables=variables
         )
         resolved = client._resolve_url(url, {}, variables, state)
         assert resolved == "http://example.com/api/test"
@@ -159,14 +127,12 @@ class TestExternalAPIClientWithConfig:
     async def test_var_resolution_in_headers(self):
         """Резолвинг @var: в headers."""
         client = ExternalAPIClient()
-
         config = ExternalAPIConfig(
             api_id="test",
             name="Test",
             url="http://test",
             headers={"Authorization": "@var:api_token"},
         )
-
         state = ExecutionState(
             task_id="t",
             context_id="c",
@@ -175,7 +141,6 @@ class TestExternalAPIClientWithConfig:
             variables={"api_token": "Bearer secret123"},
         )
         headers = client._build_headers(config, state.variables, state)
-
         assert headers["Authorization"] == "Bearer secret123"
 
 
@@ -192,7 +157,6 @@ class TestExternalAPINode:
             "method": "POST",
             "body_template": '{"message": "@state:message"}',
         }
-
         node = await create_node("echo_node", node_config)
         assert isinstance(node, ExternalAPINode)
         assert node.node_id == "echo_node"
@@ -206,34 +170,27 @@ class TestExternalAPINode:
             url = kwargs.get("url", args[1] if len(args) > 1 else "")
             if "/echo" in str(url):
                 return httpx.Response(
-                    200,
-                    json={
-                        "status": "completed",
-                        "data": {"result": "Hello from API"}
-                    }
+                    200, json={"status": "completed", "data": {"result": "Hello from API"}}
                 )
             raise httpx.RequestError("Unknown URL")
 
         monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
-
         node = ExternalAPINode(
             node_id="echo_node",
             config={
                 "url": "http://test/echo",
                 "method": "POST",
                 "body_template": '{"message": "@state:message"}',
-            }
+            },
         )
-
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            message="Hello"
+            message="Hello",
         )
         result = await node.run(state)
-
         assert result["api_status"] == "completed"
         assert result["api_response"]["result"] == "Hello from API"
 
@@ -244,24 +201,14 @@ class TestExternalAPINode:
 
         async def mock_request(self, *args, **kwargs):
             return httpx.Response(
-                200,
-                json={
-                    "status": "waiting_input",
-                    "interrupt": {"question": "Need more info"}
-                }
+                200, json={"status": "waiting_input", "interrupt": {"question": "Need more info"}}
             )
 
         monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
-
         node = ExternalAPINode(
             node_id="clarify_node",
-            config={
-                "url": "http://test/clarify",
-                "method": "POST",
-                "body_template": "{}",
-            }
+            config={"url": "http://test/clarify", "method": "POST", "body_template": "{}"},
         )
-
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -269,7 +216,6 @@ class TestExternalAPINode:
             session_id="test-agent:test-context",
         )
         result = await node.run(state)
-
         assert result.interrupt is not None
         assert result.interrupt.question == "Need more info"
 
@@ -282,31 +228,25 @@ class TestExternalAPINode:
 
         async def mock_request(self, *args, **kwargs):
             captured_headers.update(kwargs.get("headers", {}))
-            return httpx.Response(
-                200,
-                json={"status": "completed", "data": {"ok": True}}
-            )
+            return httpx.Response(200, json={"status": "completed", "data": {"ok": True}})
 
         monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
-
         node = ExternalAPINode(
             node_id="auth_node",
             config={
                 "url": "http://test/auth",
                 "method": "POST",
                 "headers": {"Authorization": "@var:auth_token"},
-            }
+            },
         )
-
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
-            variables={"auth_token": "Bearer secret123"}
+            variables={"auth_token": "Bearer secret123"},
         )
         await node.run(state)
-
         assert captured_headers.get("Authorization") == "Bearer secret123"
 
 
@@ -321,11 +261,12 @@ class TestExternalAPITool:
             url="http://test/echo",
             method="POST",
             description="Echo API tool",
-            flat_args_schema={
-                "message": {"type": "string", "description": "Message to echo"},
+            parameters_schema={
+                "type": "object",
+                "properties": {"message": {"type": "string", "description": "Message to echo"}},
+                "required": ["message"],
             },
         )
-
         assert tool.name == "echo_tool"
         assert "message" in tool.parameters["properties"]
         assert "message" in tool.parameters["required"]
@@ -337,31 +278,26 @@ class TestExternalAPITool:
 
         async def mock_request(self, *args, **kwargs):
             return httpx.Response(
-                200,
-                json={
-                    "status": "completed",
-                    "data": {"result": "processed"}
-                }
+                200, json={"status": "completed", "data": {"result": "processed"}}
             )
 
         monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
-
         tool = ExternalAPITool(
             api_id="process_tool",
             url="http://test/process",
             method="POST",
-            flat_args_schema={
-                "input": {"type": "string"},
+            parameters_schema={
+                "type": "object",
+                "properties": {"input": {"type": "string"}},
+                "required": ["input"],
             },
         )
-
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        # Вызываем _run_impl напрямую чтобы обойти test mode mock
         result = await tool._run_impl({"input": "test data"}, state)
         assert result["result"] == "processed"
 
@@ -372,14 +308,16 @@ class TestExternalAPITool:
             api_id="calc_tool",
             url="http://test/calc",
             description="Calculator tool",
-            flat_args_schema={
-                "a": {"type": "number", "description": "First number"},
-                "b": {"type": "number", "description": "Second number"},
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "a": {"type": "number", "description": "First number"},
+                    "b": {"type": "number", "description": "Second number"},
+                },
+                "required": ["a", "b"],
             },
         )
-
         schema = tool.to_openai_schema()
-
         assert schema["type"] == "function"
         assert schema["function"]["name"] == "calc_tool"
         assert "a" in schema["function"]["parameters"]["properties"]
@@ -397,28 +335,20 @@ class TestExternalAPITool:
                 200,
                 json={
                     "status": "completed",
-                    "data": {
-                        "calculation_result": 42,
-                        "details": "some info"
-                    }
-                }
+                    "data": {"calculation_result": 42, "details": "some info"},
+                },
             )
 
         monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
-
         tool = ExternalAPITool(
-            api_id="calc",
-            url="http://test/calc",
-            response_mapping={"calculation_result": "answer"}
+            api_id="calc", url="http://test/calc", response_mapping={"calculation_result": "answer"}
         )
-
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        # Вызываем _run_impl напрямую чтобы обойти test mode mock
         result = await tool._run_impl({}, state)
         assert result == {"answer": 42}
 
@@ -430,22 +360,13 @@ class TestFlowWithExternalAPI:
     async def test_flow_with_external_api_node(self, app, monkeypatch):
         """Agent с ExternalAPINode."""
         import httpx
-
         from apps.flows.src.container import get_container
 
         async def mock_request(self, *args, **kwargs):
-            return httpx.Response(
-                200,
-                json={
-                    "status": "completed",
-                    "data": {"processed": True}
-                }
-            )
+            return httpx.Response(200, json={"status": "completed", "data": {"processed": True}})
 
         monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
-
         container = get_container()
-
         flow_config = FlowConfig(
             flow_id="external_api_flow",
             name="External API Agent",
@@ -458,11 +379,9 @@ class TestFlowWithExternalAPI:
                     "body_template": "{}",
                 }
             },
-            edges=[Edge(from_node="api_call", to_node=None)]
+            edges=[Edge(from_node="api_call", to_node=None)],
         )
-
         await container.flow_repository.set(flow_config)
-
         flow = await container.flow_factory.get_flow("external_api_flow")
         state = ExecutionState(
             task_id="test-task",
@@ -471,7 +390,5 @@ class TestFlowWithExternalAPI:
             session_id="test-agent:test-context",
         )
         result = await flow.run(state)
-
         assert result["api_status"] == "completed"
         assert result["api_response"]["processed"] is True
-

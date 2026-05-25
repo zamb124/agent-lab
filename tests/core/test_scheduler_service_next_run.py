@@ -346,7 +346,7 @@ async def test_run_now_adds_required_logging_labels(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
-async def test_run_now_normalizes_legacy_scheduler_task_id_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_now_forwards_canonical_schedule_task_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     task = PlatformScheduledTask(
         schedule_task_id="task-run-now",
         company_id="system",
@@ -359,7 +359,7 @@ async def test_run_now_normalizes_legacy_scheduler_task_id_payload(monkeypatch: 
         interval_seconds=60,
         run_at=None,
         timezone="UTC",
-        payload={"scheduler_task_id": "legacy-task-run-now", "company_id": "system"},
+        payload={"schedule_task_id": "task-run-now", "company_id": "system"},
         status=ScheduledTaskStatus.PENDING,
         created_by_user_id=None,
         created_at=datetime.now(timezone.utc),
@@ -397,6 +397,6 @@ async def test_run_now_normalizes_legacy_scheduler_task_id_payload(monkeypatch: 
     await service.run_now(company_id="system", schedule_task_id="task-run-now")
 
     assert captured_kwargs == {
-        "schedule_task_id": "legacy-task-run-now",
+        "schedule_task_id": "task-run-now",
         "company_id": "system",
     }

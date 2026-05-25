@@ -13,25 +13,16 @@ import importlib
 from collections.abc import Sequence
 from typing import Protocol, TypeAlias, cast
 
-from pydantic import BaseModel
-
-from apps.browser.api.mcp import (
-    ToolCloseSessionArgs,
-    ToolCreateSessionArgs,
-    ToolNavigateArgs,
-    ToolObserveArgs,
-)
 from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import NodeConfig, ToolReference
 from apps.flows.src.models.enums import CodeMode, NodeType
-from apps.flows.src.models.mcp import MCPServerConfig
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.mcp_wrapper import MCPTool
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS, builtin_tool_ids
 from core.capabilities.source_sanitize import strip_forbidden_platform_import_lines
 from core.logging import get_logger
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -46,41 +37,6 @@ class NodeToolWrapperFactory(Protocol):
         *,
         container: FlowRuntimeContainer | None = None,
     ) -> BaseTool: ...
-
-
-def _browser_runtime_mcp_tool_parameters_schema(
-    server_config: MCPServerConfig,
-    mcp_tool_name: str,
-) -> JsonObject | None:
-    """
-    JSON Schema аргументов MCP tools Browser Runtime для подсказки LLM.
-
-    Применяется только если URL MCP указывает на HTTP-эндпоинт browser-сервиса.
-    """
-    if "/browser/" not in (server_config.url or ""):
-        return None
-
-    model_by_name: dict[str, type[BaseModel]] = {
-        "browser_create_session": ToolCreateSessionArgs,
-        "browser_navigate": ToolNavigateArgs,
-        "browser_observe": ToolObserveArgs,
-        "browser_close_session": ToolCloseSessionArgs,
-    }
-    model = model_by_name.get(mcp_tool_name)
-    if model is None:
-        return None
-    schema = require_json_object(model.model_json_schema(), f"{mcp_tool_name}.parameters_schema")
-    _ = schema.pop("title", None)
-    if mcp_tool_name == "browser_navigate":
-        raw_properties = schema.get("properties")
-        properties = require_json_object(raw_properties, f"{mcp_tool_name}.properties")
-        wait_policy = properties.get("wait_policy")
-        if isinstance(wait_policy, dict):
-            wait_policy["description"] = (
-                "Строка: domcontentloaded, networkidle либо selector:<css>. "
-                "Не используй load и не передавай объект {\"event\": ...}."
-            )
-    return schema
 
 
 class ToolRegistry:
@@ -131,10 +87,15 @@ class ToolRegistry:
         if self._initialized:
             return
 
-        builtin_tools = [
-            cast(BaseTool, getattr(importlib.import_module(module_name), attr_name))
-            for module_name, attr_name in BUILTIN_TOOL_SPECS
-        ]
+        builtin_tools: list[BaseTool] = []
+        for module_name, attr_name in BUILTIN_TOOL_SPECS:
+            module = importlib.import_module(module_name)
+            raw_tool = module.__dict__.get(attr_name)
+            if not isinstance(raw_tool, BaseTool):
+                raise TypeError(
+                    f"Builtin tool {module_name}.{attr_name} must be a BaseTool instance"
+                )
+            builtin_tools.append(raw_tool)
 
         for tool in builtin_tools:
             self.register(tool)
@@ -174,25 +135,32 @@ class ToolRegistry:
 
         Исполнение кода идёт через CodeTool/remote runner, если в ref или
         tool_repository есть непустое поле ``code``. Builtin ids из
-        ``BUILTIN_TOOL_SPECS`` — только seed/fallback: после загрузки в БД они
-        ведут себя как обычные editable code tools.
+        ``BUILTIN_TOOL_SPECS`` — bootstrap seed для загрузки в БД.
 
         Порядок веток:
         1. ``code_mode=mcp_tool`` → MCPTool
         2. ``tool_id`` без ``code``/``prompt`` (не ``mcp:``), тип не нода-as-tool → template из ``tool_repository``
         3. Поле ``type`` (flow / llm_node / …) или ``prompt`` → NodeAsToolWrapper
         4. Непустой ``code`` → CodeTool.
-        5. ``tool_id`` из builtin ids без DB/inline code → процессный fallback FunctionTool
+        5. ``tool_id`` из builtin ids без DB/inline code → процессный FunctionTool
         6. ``type=code`` без кода → NodeAsToolWrapper
         7. иначе ValueError
         """
         if isinstance(tool_ref, NodeConfig):
             return self._create_node_as_tool(tool_ref)
 
-        if isinstance(tool_ref, dict) and self._is_node_as_tool_payload(tool_ref):
-            return self._create_node_as_tool(NodeConfig.model_validate(tool_ref))
+        if isinstance(tool_ref, dict):
+            raw_code_mode = tool_ref.get("code_mode")
+            if raw_code_mode == CodeMode.MCP_TOOL.value:
+                return await self._create_mcp_tool(ToolReference.model_validate(tool_ref))
+            if self._is_node_as_tool_payload(tool_ref):
+                return self._create_node_as_tool(NodeConfig.model_validate(tool_ref))
 
-        ref = tool_ref if isinstance(tool_ref, ToolReference) else ToolReference.model_validate(tool_ref)
+        ref = (
+            tool_ref
+            if isinstance(tool_ref, ToolReference)
+            else ToolReference.model_validate(tool_ref)
+        )
 
         if ref.code_mode == CodeMode.MCP_TOOL:
             return await self._create_mcp_tool(ref)
@@ -200,11 +168,7 @@ class ToolRegistry:
         tid = ref.tool_id
         has_inline_code = bool(ref.code and ref.code.strip())
 
-        if (
-            tid
-            and not has_inline_code
-            and not tid.startswith("mcp:")
-        ):
+        if tid and not has_inline_code and not tid.startswith("mcp:"):
             container = self.container
             if container is None:
                 raise RuntimeError(f"Tool '{tid}' requires FlowContainer to load tool template")
@@ -221,9 +185,7 @@ class ToolRegistry:
             ref = ToolReference.model_validate({**stored_payload, **override_payload})
             has_inline_code = bool(ref.code and ref.code.strip())
             if not has_inline_code:
-                raise ValueError(
-                    f"Tool '{tid}': шаблон в tool_repository без непустого поля code"
-                )
+                raise ValueError(f"Tool '{tid}': шаблон в tool_repository без непустого поля code")
 
         if has_inline_code:
             return self._create_code_tool_from_config(ref)
@@ -247,9 +209,7 @@ class ToolRegistry:
             )
         return await self.materialize(tool_ref)
 
-    async def create_tools(
-        self, tool_refs: Sequence[str | ToolMaterializeInput]
-    ) -> list[BaseTool]:
+    async def create_tools(self, tool_refs: Sequence[str | ToolMaterializeInput]) -> list[BaseTool]:
         """
         Создает список tools из конфигов (CodeTool / нода как tool).
 
@@ -279,7 +239,7 @@ class ToolRegistry:
             config: {
                 "tool_id": "my_tool",
                 "description": "...",
-                "args_schema": {"param": {"type": "string", "description": "..."}},
+                "parameters_schema": {"type": "object", "properties": {...}, "required": [...]},
                 "code": "def run(args, state): ..."
             }
 
@@ -316,7 +276,7 @@ class ToolRegistry:
             config: {
                 "tool_id": "mcp:server:tool",
                 "description": "...",
-                "args_schema": {...},
+                "parameters_schema": {"type": "object", "properties": {...}, "required": [...]},
                 "mcp_server_id": "server_id",
                 "mcp_tool_name": "tool_name"
             }
@@ -340,22 +300,13 @@ class ToolRegistry:
         if not server_config:
             raise ValueError(f"MCP server '{mcp_server_id}' not found")
 
-        parameters_schema: JsonObject | None = None
-        if config.parameters_schema is not None and config.parameters_schema.get("type") == "object":
-            parameters_schema = config.parameters_schema
-        if parameters_schema is None:
-            parameters_schema = _browser_runtime_mcp_tool_parameters_schema(
-                server_config, mcp_tool_name
-            )
-
-        parameters = config.args_schema if config.args_schema and parameters_schema is None else None
+        parameters_schema = config.effective_parameters_schema()
 
         tool = MCPTool(
             tool_id=tool_id,
             mcp_server_config=server_config,
             mcp_tool_name=mcp_tool_name,
             description=config.description,
-            parameters=parameters,
             parameters_schema=parameters_schema,
             tags=config.tags,
         )
@@ -380,7 +331,9 @@ class ToolRegistry:
             NodeAsToolWrapper
         """
         if self._node_tool_wrapper_cls is None:
-            raise RuntimeError("ToolRegistry requires node_tool_wrapper_cls for node-as-tool configs")
+            raise RuntimeError(
+                "ToolRegistry requires node_tool_wrapper_cls for node-as-tool configs"
+            )
 
         return self._node_tool_wrapper_cls(
             node_config=config,

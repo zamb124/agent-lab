@@ -11,9 +11,9 @@ from apps.crm.types import JsonObject
 
 
 class SidebarItemConfig(BaseModel):
-    """Конфигурация элемента sidebar"""
+    """Конфигурация элемента sidebar."""
 
-    id: str = Field(title="ID элемента")
+    item_id: str = Field(title="ID элемента меню")
     visible: bool = Field(default=True, title="Видимость")
     order: int = Field(default=0, title="Порядок отображения")
 

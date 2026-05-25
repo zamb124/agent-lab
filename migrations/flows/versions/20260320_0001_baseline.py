@@ -75,20 +75,6 @@ def upgrade() -> None:
     op.create_index("ix_tools_expired_at", "tools", ["expired_at"])
 
     op.create_table(
-        "states",
-        sa.Column("key", sa.String(), primary_key=True, nullable=False),
-        sa.Column("value", postgresql.JSONB(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("expired_at", sa.DateTime(timezone=True), nullable=True),
-        sa.UniqueConstraint("key", name="uq_states_key"),
-    )
-    op.create_index("ix_states_key", "states", ["key"])
-    op.create_index("ix_states_key_prefix", "states", ["key"])
-    op.create_index("ix_states_updated_at", "states", ["updated_at"])
-    op.create_index("ix_states_expired_at", "states", ["expired_at"])
-
-    op.create_table(
         "resources",
         sa.Column("key", sa.String(), primary_key=True, nullable=False),
         sa.Column("value", postgresql.JSONB(), nullable=False),
@@ -152,36 +138,11 @@ def upgrade() -> None:
     op.create_index("ix_scheduled_tasks_status", "scheduled_tasks", ["status"])
     op.create_index("ix_scheduled_tasks_next_run", "scheduled_tasks", ["next_run"])
 
-    op.create_table(
-        "stores",
-        sa.Column("store_id", sa.String(255), primary_key=True, nullable=False),
-        sa.Column("store_data", postgresql.JSONB(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.create_index("ix_stores_store_id", "stores", ["store_id"])
-    op.create_index("ix_stores_updated_at", "stores", ["updated_at"])
-
-    op.create_table(
-        "flow_states",
-        sa.Column("session_id", sa.String(255), primary_key=True, nullable=False),
-        sa.Column("store_id", sa.String(255), nullable=False),
-        sa.Column("state_data", postgresql.JSONB(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.create_index("ix_flow_states_session_id", "flow_states", ["session_id"])
-    op.create_index("ix_flow_states_store_id", "flow_states", ["store_id"])
-    op.create_index("ix_flow_states_updated_at", "flow_states", ["updated_at"])
-
 
 def downgrade() -> None:
-    op.drop_table("flow_states")
-    op.drop_table("stores")
     op.drop_table("scheduled_tasks")
     op.drop_table("evaluation_results")
     op.drop_table("resources")
-    op.drop_table("states")
     op.drop_table("tools")
     op.drop_table("nodes")
     op.drop_table("flows_versions")

@@ -7,12 +7,13 @@ ResourceLoader - универсальный загрузчик ресурсов.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
 from apps.flows.src.models import FlowConfig, NodeConfig
 from core.errors import ResourceNotFoundError
 from core.logging import get_logger
+from core.types import parse_json_object
 from core.urn import extract_resource_id
 
 if TYPE_CHECKING:
@@ -34,6 +35,12 @@ class ResourceLoader:
     3. Никаких угадываний - явные ошибки
     4. Поддержка URN и обычных ID
     """
+
+    node_registry: NodeRegistry
+    tool_registry: ToolRegistry
+    flow_repository: FlowRepository
+    node_repository: NodeRepository
+    tool_repository: ToolRepository
 
     def __init__(
         self,
@@ -122,7 +129,7 @@ class ResourceLoader:
 
         return await self.tool_registry.create_tool(config)
 
-    async def _instantiate_node(self, node_class: type[Any], config: NodeConfig) -> BaseNode:
+    async def _instantiate_node(self, node_class: type[BaseNode], config: NodeConfig) -> BaseNode:
         """
         Создаёт экземпляр ноды из класса и конфига.
 
@@ -133,7 +140,8 @@ class ResourceLoader:
         Returns:
             BaseNode экземпляр
         """
-        return node_class.from_config(config.node_id, config.model_dump())
+        node_config = parse_json_object(config.model_dump_json(), "NodeConfig")
+        return node_class.from_config(config.node_id, node_config)
 
 
 __all__ = ["ResourceLoader"]

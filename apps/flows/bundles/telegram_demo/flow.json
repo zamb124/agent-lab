@@ -26,17 +26,24 @@
           "channel_config": {
             "bot_token": "@var:bot_token_1"
           },
-          "args_schema": {
-            "chat_id": {
-              "type": "string"
-            },
-            "text": {
-              "type": "string"
-            }
-          },
           "input_mapping": {
             "recipient": "@state:triggers.tg_react.context.chat_id",
             "text": "@state:text"
+          },
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "chat_id": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "chat_id",
+              "text"
+            ]
           }
         }
       ]
@@ -44,8 +51,8 @@
   },
   "edges": [
     {
-      "from": "react_main",
-      "to": null
+      "from_node": "react_main",
+      "to_node": null
     }
   ],
   "triggers": {
@@ -108,12 +115,12 @@
       },
       "edges": [
         {
-          "from": "echo_process",
-          "to": "echo_send"
+          "from_node": "echo_process",
+          "to_node": "echo_send"
         },
         {
-          "from": "echo_send",
-          "to": null
+          "from_node": "echo_send",
+          "to_node": null
         }
       ]
     }

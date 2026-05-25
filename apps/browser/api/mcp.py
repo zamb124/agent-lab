@@ -49,6 +49,13 @@ from apps.browser.interaction.interaction_profiles import (
     InteractionProfileName,
     get_interaction_profile,
 )
+from core.clients.browser import (
+    ToolCloseSessionArgs,
+    ToolCreateSessionArgs,
+    ToolNavigateArgs,
+    ToolObserveArgs,
+)
+from core.integrations.mcp import MCPToolInfo
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
@@ -92,18 +99,10 @@ class McpInitializeResult(BaseModel):
     serverInfo: JsonObject
 
 
-class McpToolInfo(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    name: str
-    description: str
-    inputSchema: JsonObject
-
-
 class McpToolsListResult(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    tools: list[McpToolInfo]
+    tools: list[MCPToolInfo]
 
 
 class McpToolCallResult(BaseModel):
@@ -111,45 +110,6 @@ class McpToolCallResult(BaseModel):
 
     content: list[JsonObject]
     isError: bool = False
-
-
-class ToolCreateSessionArgs(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    session_id: str | None = None
-    run_id: str | None = None
-    task_id: str | None = None
-    page_mode: Literal["interactive", "crawl", "lite"] = "interactive"
-    shared_storage_key: str | None = None
-    proxy_policy: str = ""
-    anti_bot_tier: str = "gray"
-    timeout_ms: int = Field(default=90_000, ge=1000)
-    endpoint_key: str | None = None
-    session_mode: Literal["warm", "restore"] = "warm"
-    restore_state_key: str | None = None
-    interaction_profile: InteractionProfileName = "human"
-    interaction_seed: int | None = None
-    context: JsonObject = Field(default_factory=dict)
-
-
-class ToolNavigateArgs(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    session_id: str
-    url: str
-    wait_policy: str = "domcontentloaded"
-    screenshot: bool = False
-    snapshot: bool = False
-    capture_pdf: bool = False
-    navigation_timeout_ms: int = Field(default=5_000, ge=1000)
-    new_tab: bool = True
-
-
-class ToolObserveArgs(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    session_id: str
-    include_snapshot_refs: bool = False
 
 
 class ToolClickArgs(BaseModel):
@@ -184,12 +144,6 @@ class ToolWaitArgs(BaseModel):
     selector: str | None = None
     load_state: Literal["domcontentloaded", "networkidle"] | None = None
     timeout_ms: int = Field(default=30_000, ge=1000)
-
-
-class ToolCloseSessionArgs(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    session_id: str
 
 
 class ToolSaveHtmlToS3Args(BaseModel): # убрать костыль
@@ -255,14 +209,14 @@ def _schema_for_model(model: type[BaseModel]) -> JsonObject:
     return require_json_object(model.model_json_schema(), f"{model.__name__}.schema")
 
 
-def _tools() -> list[McpToolInfo]:
+def _tools() -> list[MCPToolInfo]:
     return [
-        McpToolInfo(
+        MCPToolInfo(
             name="browser_create_session",
             description="Создать control-сессию browser runtime (выделить страницу под session_id).",
-            inputSchema=_schema_for_model(ToolCreateSessionArgs),
+            input_schema=_schema_for_model(ToolCreateSessionArgs),
         ),
-        McpToolInfo(
+        MCPToolInfo(
             name="browser_navigate",
             description=(
                 "Навигация в рамках сессии (url + wait_policy + optional artifacts). "
@@ -270,9 +224,9 @@ def _tools() -> list[McpToolInfo]:
                 "предыдущая закрывается; refs observe сбрасываются до следующего browser_observe. "
                 "new_tab=false — навигация в текущей вкладке."
             ),
-            inputSchema=_schema_for_model(ToolNavigateArgs),
+            input_schema=_schema_for_model(ToolNavigateArgs),
         ),
-        McpToolInfo(
+        MCPToolInfo(
             name="browser_observe",
             description=(
                 "Получить LLM-friendly snapshot страницы: snapshot.text со строками вида "
@@ -280,40 +234,40 @@ def _tools() -> list[McpToolInfo]:
                 "Поле include_snapshot_refs=true дублирует маппинг в snapshot.refs (лишние токены); "
                 "по умолчанию false — сервер всё равно помнит refs для действий."
             ),
-            inputSchema=_schema_for_model(ToolObserveArgs),
+            input_schema=_schema_for_model(ToolObserveArgs),
         ),
-        McpToolInfo(
+        MCPToolInfo(
             name="browser_click",
             description="Клик строго по ref из последнего browser_observe в этой сессии (human-like interaction).",
-            inputSchema=_schema_for_model(ToolClickArgs),
+            input_schema=_schema_for_model(ToolClickArgs),
         ),
-        McpToolInfo(
+        MCPToolInfo(
             name="browser_fill",
             description="Ввод текста строго в элемент по ref из последнего browser_observe в этой сессии (human-like interaction).",
-            inputSchema=_schema_for_model(ToolFillArgs),
+            input_schema=_schema_for_model(ToolFillArgs),
         ),
-        McpToolInfo(
+        MCPToolInfo(
             name="browser_press",
             description="Нажать клавишу (например Enter, Tab).",
-            inputSchema=_schema_for_model(ToolPressArgs),
+            input_schema=_schema_for_model(ToolPressArgs),
         ),
-        McpToolInfo(
+        MCPToolInfo(
             name="browser_wait",
             description="Ожидание selector и/или load_state в рамках сессии.",
-            inputSchema=_schema_for_model(ToolWaitArgs),
+            input_schema=_schema_for_model(ToolWaitArgs),
         ),
-        McpToolInfo(
+        MCPToolInfo(
             name="browser_close_session",
             description="Закрыть сессию и освободить ресурсы.",
-            inputSchema=_schema_for_model(ToolCloseSessionArgs),
+            input_schema=_schema_for_model(ToolCloseSessionArgs),
         ),
-        McpToolInfo(
+        MCPToolInfo(
             name="browser_save_html_to_s3",
             description=(
                 "Сохранить HTML текущей страницы в S3 через file_processor и вернуть "
                 "file_id/s3_path плюс первые кликабельные ссылки."
             ),
-            inputSchema=_schema_for_model(ToolSaveHtmlToS3Args),
+            input_schema=_schema_for_model(ToolSaveHtmlToS3Args),
         ),
     ]
 
@@ -599,7 +553,10 @@ async def mcp_jsonrpc(
     if method == "tools/list":
         tools = _tools()
         res = McpToolsListResult(tools=tools)
-        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=_model_json_object(res)))
+        # by_alias=True: на проводе MCP всегда camelCase `inputSchema`, как
+        # того требует спецификация JSON-RPC MCP. Внутри Python поле зовётся
+        # `input_schema` (snake_case canonical, alias живёт в MCPToolInfo).
+        return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=require_json_object(res.model_dump(mode="json", by_alias=True), "McpToolsListResult")))
 
     if method == "tools/call":
         name = params.get("name")

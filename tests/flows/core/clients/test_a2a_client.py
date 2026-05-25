@@ -7,6 +7,7 @@ import pytest
 from aiohttp import web
 
 from core.clients.a2a_client import A2AClient, A2AClientError, _extract_task_status_message
+from core.types import require_json_object
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 
 
@@ -91,7 +92,9 @@ class TestA2AClient:
         result = await client.get_agent_card(mock_agent_server)
 
         assert result["name"] == "Test Agent"
-        assert len(result["branches"]) == 1
+        branches = result["branches"]
+        assert isinstance(branches, list)
+        assert len(branches) == 1
 
     @pytest.mark.asyncio
     async def test_get_agent_card_not_found(self, error_server):
@@ -111,8 +114,8 @@ class TestA2AClient:
             session_id="test-session",
         )
 
-        assert result["response"] == "Echo: Hello world"
-        assert result["status"] == "completed"
+        assert result.response == "Echo: Hello world"
+        assert result.status == "completed"
 
     @pytest.mark.asyncio
     async def test_send_task_with_skill_id(self, mock_agent_server):
@@ -124,7 +127,7 @@ class TestA2AClient:
             branch_id="custom_skill",
         )
 
-        assert "response" in result
+        assert result.response
 
     @pytest.mark.asyncio
     async def test_send_task_error_response(self, error_server):
@@ -168,7 +171,7 @@ class TestA2AClient:
                 ],
             },
         }
-        assert _extract_task_status_message(status) == "httpx.ReadTimeout"
+        assert _extract_task_status_message(require_json_object(status, "status")) == "httpx.ReadTimeout"
 
     def test_parse_a2a_response_failed_uses_nested_message(self):
         client = A2AClient()
@@ -185,4 +188,4 @@ class TestA2AClient:
             },
         }
         with pytest.raises(A2AClientError, match="stream stalled"):
-            client._parse_a2a_response(raw)
+            client._parse_a2a_response(require_json_object(raw, "raw"))

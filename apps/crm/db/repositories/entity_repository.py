@@ -38,7 +38,7 @@ from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import SemanticTextIndexStatus
 from apps.crm.types import JsonObject
 from core.config import get_settings
-from core.context import get_context
+from core.context import get_context, resolve_namespace_or_raise
 from core.db.utils import get_rowcount
 from core.logging import get_logger
 from core.rag import RAGRepository
@@ -53,6 +53,16 @@ logger = get_logger(__name__)
 _CRM_HYBRID_RRF_K = 60
 
 type _FilterScalar = str | int | float | bool | date | datetime | None
+
+
+def _entity_namespace(entity: CRMEntity) -> str:
+    """Возвращает namespace CRM-сущности или падает: тихий fallback на 'default' запрещён."""
+    ns = (entity.namespace or "").strip()
+    if not ns:
+        raise ValueError(
+            f"CRMEntity.namespace пуст для entity_id={entity.entity_id!r} company_id={entity.company_id!r}"
+        )
+    return ns
 
 
 class EntityRepository(BaseCRMRepository[CRMEntity]):
@@ -174,12 +184,12 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             return {e.entity_id: None for e in entities}
         triples: list[tuple[str, str, str]] = []
         for e in entities:
-            ns = (e.namespace or "default").strip()
+            ns = _entity_namespace(e)
             triples.append((ns, str(e.entity_id).strip(), str(e.company_id).strip()))
         triple_status = await provider.batch_document_semantic_index_status(triples)
         result: dict[str, SemanticTextIndexStatus | None] = {}
         for e in entities:
-            ns = (e.namespace or "default").strip()
+            ns = _entity_namespace(e)
             key = (ns, str(e.entity_id).strip(), str(e.company_id).strip())
             status = triple_status[key]
             result[e.entity_id] = status
@@ -254,7 +264,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             await session.refresh(entity)
 
         search_text = self._build_search_text(entity)
-        rag_namespace = entity.namespace or "default"
+        rag_namespace = _entity_namespace(entity)
         try:
             _ = await self._rag.upload_text(
                 namespace_id=rag_namespace,
@@ -316,7 +326,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
             await session.commit()
             await session.refresh(merged)
 
-        rag_namespace = entity.namespace or "default"
+        rag_namespace = _entity_namespace(entity)
         try:
             _ = await self._rag.delete_document(rag_namespace, entity.entity_id)
             search_text = self._build_search_text(entity)
@@ -854,7 +864,7 @@ class EntityRepository(BaseCRMRepository[CRMEntity]):
         через RAG index + выборку сущностей из CRM БД.
         """
         cid = company_id or self._get_company_id()
-        resolved_namespace = namespace or "default"
+        resolved_namespace = resolve_namespace_or_raise(namespace)
         actx = get_context()
         if actx is None or str(actx.user.user_id).strip() == "":
             raise ValueError("Контекст пользователя обязателен для семантического поиска CRM.")

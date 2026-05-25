@@ -67,6 +67,8 @@ alwaysApply: false
 - `tracer = get_tracer()` — `PlatformTracer`.
 - Контекст: `TraceContext` + `get_current_trace_context`/`set_current_trace_context` (проброс в TaskIQ).
 - Async context managers на `PlatformTracer` (внутри — OTel `start_as_current_span`, при выходе — flush в БД через репозиторий):
+- `PlatformTracer` всегда создаёт настоящий OpenTelemetry **SDK span** через `ensure_tracer_provider()`, даже когда OTLP/Tempo export выключен. Запрещено возвращать `trace.get_current_span()` как no-op fallback из platform context managers: billing, LLM response recording и persistence читают SDK span attributes/events.
+- `tracing.enabled=false` означает «не экспортировать/не включать lifecycle tracing», а не «использовать NonRecordingSpan внутри platform runtime». Если `SpanRepository` не установлен, span просто не persist'ится в PostgreSQL.
 
 | Метод | Назначение |
 |---|---|

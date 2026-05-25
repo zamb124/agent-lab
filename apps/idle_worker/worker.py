@@ -21,8 +21,8 @@ import asyncio  # noqa: E402
 from taskiq import TaskiqState  # noqa: E402
 
 from apps.flows.config import get_settings  # noqa: E402
-from apps.flows.src.container import get_container  # noqa: E402
 from apps.idle_worker.broker import broker as worker_app, recovery_handler  # noqa: E402
+from apps.idle_worker.container import get_container  # noqa: E402
 from core.clients.llm.factory import get_llm  # noqa: E402
 from core.clients.llm.mock import configure_mock_llm_redis  # noqa: E402
 from core.config.testing import is_testing  # noqa: E402
@@ -40,7 +40,6 @@ async def idle_worker_startup(state: TaskiqState) -> None:
 
     container = get_container()
     state.container = container
-    container.use_worker = False
 
     await recovery_handler()
 
@@ -107,6 +106,7 @@ register_worker_events(
 )
 
 import apps.idle_worker.tasks.calendar_sync_tasks as _calendar_sync_tasks  # noqa: E402
+import apps.idle_worker.tasks.company_init_tasks as _company_init_tasks  # noqa: E402
 import apps.idle_worker.tasks.llm_models_tasks as _llm_models_tasks  # noqa: E402
 import apps.idle_worker.tasks.openrouter_free_models_tasks as _openrouter_free_models_tasks  # noqa: E402
 import apps.idle_worker.tasks.payment_sync_tasks as _payment_sync_tasks  # noqa: E402
@@ -115,6 +115,7 @@ import apps.idle_worker.tasks.span_billing_settlement_tasks as _span_billing_set
 
 _TASK_REGISTRATION_MODULES = (
     _calendar_sync_tasks,
+    _company_init_tasks,
     _llm_models_tasks,
     _openrouter_free_models_tasks,
     _payment_sync_tasks,

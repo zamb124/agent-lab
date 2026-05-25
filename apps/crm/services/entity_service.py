@@ -67,7 +67,7 @@ from apps.crm.services.note_attachment_description import (
     split_text_into_summarize_chunks,
     truncate_attachment_text_for_note,
 )
-from apps.crm.services.saga import EntityDeletionSaga, SagaStep
+from apps.crm.services.saga import EntityDeletionSaga, SagaCompensationError, SagaStep
 from apps.crm.services.user_person_service import UserPersonService
 from apps.crm.types import JsonObject
 from apps.crm_worker.broker import broker as crm_worker_broker
@@ -75,8 +75,8 @@ from apps.crm_worker.task_names import (
     CRM_REBUILD_DAILY_SUMMARY_TASK_NAME,
     CRM_REBUILD_PERIOD_SUMMARY_TASK_NAME,
 )
-from core.clients.a2a_client import A2AClient
-from core.context import get_context
+from core.clients.a2a_client import A2AClient, A2ATaskResponse
+from core.context import get_context, resolve_namespace_or_raise
 from core.db.repositories.namespace_repository import NamespaceRepository
 from core.logging import get_logger
 from core.models.i18n_models import Language
@@ -389,10 +389,19 @@ class EntityService:
 
     @staticmethod
     def _resolve_namespace_for_write(namespace: str | None) -> str:
+        """
+        Резолв namespace для записи в CRM.
+
+        Сначала пытается нормализовать explicit-аргумент (strip + None-coerce).
+        Если намерения caller'а нет — берёт `Context.active_namespace` через
+        `resolve_namespace_or_raise()`. Тихий fallback на `"default"` запрещён
+        (Zero-Guess): запись в `"default"` без явного указания скрывала bug
+        cross-namespace утечки данных.
+        """
         normalized = EntityService._normalize_namespace(namespace)
-        if normalized is None:
-            return "default"
-        return normalized
+        if normalized is not None:
+            return normalized
+        return resolve_namespace_or_raise()
 
     async def _ensure_namespace_exists(self, namespace: str) -> None:
         existing_namespace = await self._namespace_repo.get(namespace)
@@ -1126,11 +1135,11 @@ class EntityService:
             bkey = task_board_key("task", entity_subtype)
             stages = resolve_task_board_stages(crm, bkey)
             if "status" not in base_attrs or base_attrs.get("status") is None:
-                base_attrs["status"] = stages[0].id
+                base_attrs["status"] = stages[0].stage_id
             else:
                 st0 = base_attrs["status"]
                 if not isinstance(st0, str) or not st0.strip():
-                    base_attrs["status"] = stages[0].id
+                    base_attrs["status"] = stages[0].stage_id
             attributes = base_attrs
             await self._validate_task_entity_board_status(
                 namespace=namespace,
@@ -1936,7 +1945,23 @@ class EntityService:
             )
         )
 
-        _ = await saga.execute()
+        try:
+            _ = await saga.execute()
+        except SagaCompensationError as compensation_error:
+            logger.critical(
+                "crm.entity.cascade_delete.compensation_failed",
+                extra={
+                    "entity_id": entity_id,
+                    "entity_type": entity.entity_type,
+                    "company_id": entity.company_id,
+                    "failed_steps": [name for name, _ in compensation_error.failures],
+                    "failure_details": [
+                        f"{name}: {type(err).__name__}: {err}"
+                        for name, err in compensation_error.failures
+                    ],
+                },
+            )
+            raise
         return entity
 
     async def delete_entity(
@@ -2346,7 +2371,7 @@ class EntityService:
         offset = 0
         limit = 200
         while True:
-            page = await self._relationship_type_repo.get_all_for_company(
+            page = await self._relationship_type_repo.list_by_company(
                 include_system=True,
                 limit=limit,
                 offset=offset,
@@ -2421,7 +2446,7 @@ class EntityService:
                 "Нет сохранённой ошибки применения черновика — починка по запросу не выполняется"
             )
 
-        ns_for_types = self._normalize_namespace(note.namespace) or (note.namespace or "default")
+        ns_for_types = self._resolve_namespace_for_write(note.namespace)
 
         entity_rows = await self._entity_type_repo.load_all_entity_types_for_company(
             namespace=ns_for_types
@@ -2609,7 +2634,7 @@ class EntityService:
             and r.target_draft_entity_id in remaining_draft_ids
         ]
 
-        ns_for_types = self._normalize_namespace(note.namespace) or (note.namespace or "default")
+        ns_for_types = self._resolve_namespace_for_write(note.namespace)
 
         existing_entity_ids: set[str] = {e.draft_entity_id for e in entities if e.draft_entity_id}
         if draft.note is not None and draft.note.draft_entity_id:
@@ -2750,7 +2775,7 @@ class EntityService:
 
         valid_rel_type_ids = {
             t.type_id
-            for t in await self._relationship_type_repo.get_all_for_company(include_system=True)
+            for t in await self._relationship_type_repo.list_by_company(include_system=True)
         }
 
         seen_new_rel: set[str] = set()
@@ -2942,7 +2967,7 @@ class EntityService:
         note, draft = await self._load_analysis_draft_from_note(note_id)
         namespace = self._resolve_namespace_for_write(note.namespace)
 
-        all_types = await self._relationship_type_repo.get_all_for_company(include_system=True)
+        all_types = await self._relationship_type_repo.list_by_company(include_system=True)
         valid_type_ids = {t.type_id for t in all_types}
 
         draft_entity_ids = {e.draft_entity_id for e in draft.entities if e.draft_entity_id}
@@ -3106,7 +3131,7 @@ class EntityService:
 
     async def _collect_note_family_type_ids(self, namespace: str) -> set[str]:
         """Возвращает множество type_id, принадлежащих ветке note (включая note и дочерние типы)."""
-        all_types = await self._entity_type_repo.get_all_for_company(
+        all_types = await self._entity_type_repo.list_by_company(
             include_system=True,
             namespace=namespace,
         )
@@ -3360,7 +3385,7 @@ class EntityService:
         offset = 0
         collected: list[EntityType] = []
         while True:
-            batch = await self._entity_type_repo.get_all_for_company(
+            batch = await self._entity_type_repo.list_by_company(
                 namespace=namespace,
                 limit=page_limit,
                 offset=offset,
@@ -3717,7 +3742,7 @@ class EntityService:
     def _looks_like_structured_a2a_payload(payload: JsonObject) -> bool:
         return any(key in payload for key in _A2A_STRUCTURED_DATA_KEYS)
 
-    def _extract_data_from_a2a_response(self, response: JsonObject) -> JsonObject:
+    def _extract_data_from_a2a_response(self, response: A2ATaskResponse) -> JsonObject:
         """
         Извлекает структурированные данные из A2A response.
 
@@ -3725,8 +3750,7 @@ class EntityService:
         1. data parts в artifacts
         2. text parts с JSON в markdown (```json ... ```)
         """
-        # A2AClient возвращает нормализованный ответ с полем raw
-        raw_response = _as_json_object(response.get("raw")) or response
+        raw_response = response.raw
 
         if "result" not in raw_response:
             return {}
@@ -3738,9 +3762,8 @@ class EntityService:
         artifacts = cast(list[object], raw_artifacts) if isinstance(raw_artifacts, list) else []
 
         if not artifacts:
-            response_text = response.get("response")
-            if isinstance(response_text, str) and response_text.strip():
-                extracted = self._extract_json_from_text(response_text)
+            if response.response.strip():
+                extracted = self._extract_json_from_text(response.response)
                 if extracted:
                     return extracted
             history = task_result.get("history")
@@ -3817,9 +3840,8 @@ class EntityService:
                         if extracted:
                             return extracted
 
-        response_text = response.get("response")
-        if isinstance(response_text, str) and response_text.strip():
-            extracted = self._extract_json_from_text(response_text)
+        if response.response.strip():
+            extracted = self._extract_json_from_text(response.response)
             if extracted:
                 return extracted
         return {}

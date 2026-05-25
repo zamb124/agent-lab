@@ -63,7 +63,7 @@ async def test_call_recording_register_platform_file_then_download_ok(
         assert dl.content == payload
     finally:
         cleanup = S3ClientFactory.create_client_for_bucket(get_settings().s3.default_bucket)
-        await cleanup.delete_object(s3_key)
+        await cleanup.delete_file(s3_key)
         await cleanup.close()
         from apps.sync.container import get_sync_container
 

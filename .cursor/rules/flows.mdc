@@ -79,9 +79,17 @@ UI-фабрика `chatSendOp`/`chatCancelOp` (`transport: 'http'`, `apps/flows/
 - `react_role`: `standard` | `reason` | `exit` — роль в ReAct (не путать с `type` ноды и wire-форматом OpenAI `function`).
 - Tools выполняются **параллельно** через `asyncio.gather`.
 
+## Canonical contracts
+
+- Tool schema — только `parameters_schema`: полный JSON Schema object (`{"type":"object","properties":{...},"required":[...]}`). Пустые аргументы задаются явно как `{"type":"object","properties":{},"required":[]}`.
+- Legacy `CallParameter` и поле `args_schema` запрещены в production-коде, API DTO, loader, bundles, frontend payload и tests. Нельзя добавлять конвертеры `args_schema -> parameters_schema`.
+- В Python-авторинге platform tools имя аргументной Pydantic-модели — `parameters_model`. Runtime/API/storage не знают термина `args_schema`.
+- Edge contract — только `from_node`/`to_node`. Поля `from`/`to` запрещены в flow JSON, API payload, bundles, tests и serializer/checksum payload. Исключения возможны только для внешних доменов, где `from`/`to` являются частью чужого протокола (например Telegram payload), и должны быть локально очевидны по типу/файлу.
+- Старый контракт должен падать на Pydantic/validator boundary. Никаких fallback-getter, aliases или silently-normalize проходов.
+
 ## State merge
 
-Ноды одного уровня графа — параллельно. State merge: `messages` extend, `tool_results` merge, остальное — last-wins.
+Ноды одного уровня графа — параллельно. Canonical merge выполняется на boundary `SuperstepCommitted` через deterministic reducer (`durable_execution.mdc`). Успешные node writes внутри parallel wave сначала durable записываются как pending writes/events; global state не считается committed до закрытия superstep.
 
 ## Маппинги
 

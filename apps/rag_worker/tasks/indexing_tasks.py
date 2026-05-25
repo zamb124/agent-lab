@@ -9,6 +9,7 @@ from core.config import get_settings
 from core.context import Context, clear_context, set_context
 from core.logging import get_logger
 from core.models.identity_models import User
+from core.rag.factory import get_rag_provider
 from core.rag.models import RAGMetadata
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
@@ -31,11 +32,13 @@ async def _embedding_context_for_rag_worker(
     """
     cid = str(company_id).strip()
     uid = str(user_id).strip()
-    ns = str(namespace_id).strip() or "default"
+    ns = str(namespace_id).strip()
     if not cid:
         raise ValueError("company_id обязателен для контекста эмбеддингов в RAG worker")
     if not uid:
         raise ValueError("user_id обязателен для контекста эмбеддингов в RAG worker")
+    if not ns:
+        raise ValueError("namespace_id обязателен для контекста эмбеддингов в RAG worker")
 
     container = get_rag_container()
     company = await container.company_repository.get(cid)
@@ -49,13 +52,22 @@ async def _embedding_context_for_rag_worker(
     )
 
 
-@broker.task(retry_on_error=True, max_retries=3, queue_name="rag")
+RAG_INDEX_DOCUMENT_S3_TASK_NAME = "rag.index_document_s3"
+
+
+@broker.task(
+    task_name=RAG_INDEX_DOCUMENT_S3_TASK_NAME,
+    retry_on_error=True,
+    max_retries=3,
+    queue_name="rag",
+)
 async def index_rag_document_s3_task(
     company_id: str,
     namespace_id: str,
     s3_key: str,
     document_name: str,
     metadata: RAGMetadata,
+    provider: str | None = None,
 ) -> JsonObject:
     """
     Одна TaskIQ-задача: индексация S3-файла с конфигом ``rag.document_indexing`` (settings).
@@ -106,14 +118,18 @@ async def index_rag_document_s3_task(
 
             await status_repo.try_mark_processing(document_id)
 
-            provider = container.rag_provider
+            rag_provider = (
+                get_rag_provider(provider, settings=settings)
+                if provider is not None
+                else container.rag_provider
+            )
             meta = ensure_ttl_seconds_in_metadata(
                 dict(metadata),
                 default_ttl_seconds=settings.rag.ttl.default_ttl_seconds,
             )
 
             try:
-                document = await provider.upload_document_from_s3(
+                document = await rag_provider.upload_document_from_s3(
                     namespace_id=namespace_id,
                     s3_key=s3_key,
                     document_name=document_name,
@@ -129,7 +145,7 @@ async def index_rag_document_s3_task(
                 raise ValueError("RAG document metadata.total_chunks должен быть целым числом")
             chunks = raw_chunks
             runtime = document.metadata.get("indexing_runtime")
-            await status_repo.record_indexing_done(
+            _ = await status_repo.record_indexing_done(
                 document_id,
                 chunks,
                 indexing_runtime=(
@@ -203,104 +219,3 @@ async def delete_document_task(
             "namespace": namespace_id,
             "deleted": success,
         }
-
-
-@broker.task(retry_on_error=True, max_retries=3, queue_name="rag")
-async def process_document_upload(
-    document_id: str,
-    task_id: str,
-    namespace_id: str,
-    file_data: bytes,
-    document_name: str,
-    metadata: RAGMetadata,
-) -> JsonObject:
-    """
-    Полная обработка загрузки документа:
-    1. Загрузка в S3
-    2. Парсинг
-    3. Индексация в vector_documents
-    4. Обновление статуса в БД
-    """
-    logger.info(f"RAG Worker: обработка документа {document_name} (doc_id={document_id})")
-
-    container = get_rag_container()
-    status_repo = container.document_status_repository
-
-    company_id = metadata.get("company_id")
-    if not company_id or not isinstance(company_id, str):
-        raise ValueError("metadata.company_id обязателен (строка)")
-
-    await status_repo.update_status(document_id, "processing")
-    logger.info(f"RAG Worker: статус -> processing для {document_id}")
-
-    trace_company_id = metadata.get("company_id")
-    trace_user_id = metadata.get("uploaded_by_user_id")
-    if not trace_company_id or str(trace_company_id).strip() == "":
-        raise ValueError("metadata.company_id обязателен для rag.worker.ingest.full.")
-    if not trace_user_id or str(trace_user_id).strip() == "":
-        raise ValueError("metadata.uploaded_by_user_id обязателен для rag.worker.ingest.full.")
-
-    set_context(
-        await _embedding_context_for_rag_worker(
-            company_id=str(trace_company_id).strip(),
-            user_id=str(trace_user_id).strip(),
-            namespace_id=namespace_id,
-        )
-    )
-    try:
-        async with traced_operation(
-            "rag.worker.ingest.full",
-            event_type="rag.ingest",
-            operation_category="rag_ingest",
-            resource_type="rag.document",
-            resource_id=document_id,
-            extra_attributes={
-                trace_attributes.ATTR_TENANT_COMPANY_ID: str(trace_company_id).strip(),
-                trace_attributes.ATTR_USER_ID: str(trace_user_id).strip(),
-                trace_attributes.ATTR_RAG_DOCUMENT_ID: document_id,
-                trace_attributes.ATTR_RAG_STAGE: "upload_parse_index",
-                "platform.rag.namespace_id": namespace_id,
-                "platform.rag.file_bytes": len(file_data),
-            },
-        ):
-            provider = container.rag_provider
-
-            s3_key, bucket = await provider._upload_bytes_to_s3(file_data, namespace_id, document_name)
-            logger.info(f"RAG Worker: файл загружен в S3: {s3_key}")
-
-            settings = get_settings()
-            binding = UploadProfileBinding(config=settings.rag.document_indexing)
-            upload_meta = ensure_ttl_seconds_in_metadata(
-                {**metadata, "document_id": document_id},
-                default_ttl_seconds=settings.rag.ttl.default_ttl_seconds,
-            )
-
-            document = await provider.upload_document_from_s3(
-                namespace_id=namespace_id,
-                s3_key=s3_key,
-                document_name=document_name,
-                metadata=upload_meta,
-                upload_profile=binding,
-            )
-            logger.info(f"RAG Worker: документ проиндексирован: {document.document_id}")
-
-            chunks_count = document.metadata.get("total_chunks")
-            if not isinstance(chunks_count, int) or isinstance(chunks_count, bool):
-                raise ValueError("RAG document metadata.total_chunks должен быть целым числом")
-            await status_repo.update_status(
-                document_id,
-                "completed",
-                s3_key=s3_key,
-                s3_bucket=bucket,
-                chunks_count=chunks_count,
-            )
-            logger.info(f"RAG Worker: документ {document_id} обработан")
-
-            return {
-                "document_id": document_id,
-                "status": "completed",
-                "s3_key": s3_key,
-                "chunks_count": chunks_count,
-            }
-    finally:
-        clear_context()

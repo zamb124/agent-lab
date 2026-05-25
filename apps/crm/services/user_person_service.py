@@ -46,20 +46,22 @@ class UserPersonService:
 
     @staticmethod
     def _crm_attrs(user: User) -> JsonObject:
-        raw = user.attrs.get("crm")
+        raw = user.attributes.get("crm")
         if raw is None:
             return {}
-        return require_json_object(raw, "user.attrs['crm']")
+        return require_json_object(raw, "user.attributes['crm']")
 
     @staticmethod
     def _string_map(raw: JsonValue, field_name: str) -> dict[str, str]:
         if raw is None:
             return {}
-        raw_object = require_json_object(raw, f"user.attrs['crm'][{field_name!r}]")
+        raw_object = require_json_object(raw, f"user.attributes['crm'][{field_name!r}]")
         out: dict[str, str] = {}
         for key, value in raw_object.items():
             if not isinstance(value, str):
-                raise ValueError(f"user.attrs['crm'][{field_name!r}] must be dict[str, str]")
+                raise ValueError(
+                    f"user.attributes['crm'][{field_name!r}] must be dict[str, str]"
+                )
             out[key] = value
         return out
 
@@ -121,9 +123,9 @@ class UserPersonService:
 
         by_company[company_id] = entity.entity_id
         crm_block["person_entity_by_company"] = by_company
-        merged_attrs = dict(user.attrs)
+        merged_attrs = dict(user.attributes)
         merged_attrs["crm"] = crm_block
-        user.attrs = merged_attrs
+        user.attributes = merged_attrs
         user.updated_at = datetime.now(UTC)
         _ = await self._user_repository.set(user)
 
@@ -146,9 +148,9 @@ class UserPersonService:
         )
         last_map[namespace] = voice_entity_id
         crm_block["last_voice_entity_id_by_namespace"] = last_map
-        merged = dict(user.attrs)
+        merged = dict(user.attributes)
         merged["crm"] = crm_block
-        user.attrs = merged
+        user.attributes = merged
         user.updated_at = datetime.now(UTC)
         _ = await self._user_repository.set(user)
 

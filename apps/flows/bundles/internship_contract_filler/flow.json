@@ -1,5 +1,5 @@
 {
-  "id": "internship_contract_filler",
+  "flow_id": "internship_contract_filler",
   "name": "Заполнение договора стажировки",
   "description": "Собирает данные у пользователя и формирует заполненный договор стажировки в DOCX.",
   "tags": [
@@ -38,12 +38,12 @@
   },
   "edges": [
     {
-      "from": "prepare_prompt_context",
-      "to": "main"
+      "from_node": "prepare_prompt_context",
+      "to_node": "main"
     },
     {
-      "from": "main",
-      "to": null
+      "from_node": "main",
+      "to_node": null
     }
   ]
 }

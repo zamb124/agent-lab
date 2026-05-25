@@ -5,7 +5,7 @@
  *   1. Нормализация: если передана пара (type, payload) — упаковываем в Event через createEvent.
  *   2. Middleware (предобработка/валидация/телеметрия).
  *   3. Append в EventLog.
- *   4. Reducers: синхронно собираем новый snapshot state.
+ *   4. Reducers: синхронно собираем новый projection snapshot.
  *   5. Subscribers (селекторы → Lit-компоненты) — синхронно, чтобы UI обновился в том же тике.
  *   6. Effects: выполняются АСИНХРОННО (queueMicrotask). Любой dispatch внутри
  *      эффекта попадает в этот же bus и проходит весь цикл заново.

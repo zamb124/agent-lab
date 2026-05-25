@@ -31,7 +31,7 @@ class CalculatorArgs(BaseModel):
     name="calculator",
     description="Вычисляет математические выражения. Поддерживает: +, -, *, /, **, %, sqrt, sin, cos, tan, log, exp, pi, e",
     tags=["math"],
-    args_schema=CalculatorArgs,
+    parameters_model=CalculatorArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def calculator(expression: str, state: dict[str, Any] | None = None) -> str:

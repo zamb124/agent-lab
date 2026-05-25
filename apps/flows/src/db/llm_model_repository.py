@@ -3,7 +3,7 @@
 """
 
 
-from typing import override
+from typing import ClassVar, override
 
 from apps.flows.src.models import LLMModel
 from core.db import BaseRepository, Storage
@@ -12,8 +12,8 @@ from core.db import BaseRepository, Storage
 class LLMModelRepository(BaseRepository[LLMModel]):
     """Репозиторий для работы с LLM моделями."""
 
-    is_global: bool = True  # Глобальные модели (не изолированы по компаниям)
-    owner_service: str = "flows"
+    is_global: ClassVar[bool] = True  # Глобальные модели (не изолированы по компаниям)
+    owner_service: ClassVar[str] = "flows"
 
     def __init__(self, storage: Storage):
         super().__init__(storage, LLMModel)
@@ -32,10 +32,25 @@ class LLMModelRepository(BaseRepository[LLMModel]):
         return f"{entity.provider}:{entity.model_id}"
 
     async def list_by_provider(self, provider: str) -> list[LLMModel]:
-        """Возвращает все модели указанного провайдера."""
-        # Получаем все модели и фильтруем по провайдеру
-        all_models = await self.list(limit=10000)
-        return [model for model in all_models if model.provider == provider]
+        """
+        Возвращает все модели указанного провайдера.
+
+        Раньше делал `list(limit=10000)` + Python-фильтр (full scan по всем
+        моделям + сериализация в pydantic + отбрасывание). Теперь фильтр уходит
+        в PostgreSQL через `value->>'provider' = ?`: загружаются только нужные
+        строки, без артифициального лимита 10000.
+        """
+        base_prefix = self._get_prefix()
+        final_prefix = self._build_final_key(base_prefix)
+        table_name = self._get_table_name()
+        raw_rows = await self._storage.get_all_by_prefix_and_table_with_json_eq(
+            final_prefix,
+            table_name,
+            json_field="provider",
+            json_value=provider,
+            limit=1_000_000,
+        )
+        return [LLMModel.model_validate_json(value) for value in raw_rows.values()]
 
     async def delete_by_provider(self, provider: str) -> int:
         """Удаляет все модели указанного провайдера."""

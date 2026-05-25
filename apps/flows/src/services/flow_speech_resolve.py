@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.flow_speech_settings import (
     FlowSpeechSettings,
@@ -13,6 +11,7 @@ from apps.flows.src.models.flow_speech_settings import (
 )
 from core.clients.speech_override import SpeechOverride
 from core.context import Context
+from core.types import JsonObject, require_json_object
 
 PLATFORM_FLOW_SPEECH_LAYERS_KEY = "platform_flow_speech_layers"
 
@@ -148,15 +147,26 @@ def merge_explicit_over_flow_speech_layer(
     flow_layer: SpeechOverride,
 ) -> SpeechOverride:
     """Явный override побеждает по каждому полю; flow_layer заполняет пробелы."""
-    merged: dict[str, Any] = {}
-    for name in SpeechOverride.model_fields:
-        ev = getattr(explicit, name)
-        fv = getattr(flow_layer, name)
-        if ev is not None:
-            merged[name] = ev
-        elif fv is not None:
-            merged[name] = fv
-    return SpeechOverride.model_validate(merged)
+    return SpeechOverride(
+        provider=explicit.provider if explicit.provider is not None else flow_layer.provider,
+        model=explicit.model if explicit.model is not None else flow_layer.model,
+        voice=explicit.voice if explicit.voice is not None else flow_layer.voice,
+        language=explicit.language if explicit.language is not None else flow_layer.language,
+        sample_rate=explicit.sample_rate if explicit.sample_rate is not None else flow_layer.sample_rate,
+        threshold=explicit.threshold if explicit.threshold is not None else flow_layer.threshold,
+        response_format=(
+            explicit.response_format
+            if explicit.response_format is not None
+            else flow_layer.response_format
+        ),
+        timeout_s=explicit.timeout_s if explicit.timeout_s is not None else flow_layer.timeout_s,
+        pronunciation_rules=(
+            explicit.pronunciation_rules
+            if explicit.pronunciation_rules is not None
+            else flow_layer.pronunciation_rules
+        ),
+        pronunciation_replace=explicit.pronunciation_replace,
+    )
 
 
 def triple_to_voice_ws_query_dict(
@@ -166,20 +176,20 @@ def triple_to_voice_ws_query_dict(
 ) -> dict[str, str]:
     """Ключи query для ``apps/voice/api/session.py`` (только непустые)."""
     out: dict[str, str] = {}
-    if stt.provider is not None and stt.provider != "":
-        out["stt_provider_name"] = str(stt.provider)
+    if stt.provider is not None:
+        out["stt_provider_name"] = stt.provider
     if stt.model is not None and stt.model != "":
         out["stt_model"] = stt.model
-    if tts.provider is not None and tts.provider != "":
-        out["tts_provider_name"] = str(tts.provider)
+    if tts.provider is not None:
+        out["tts_provider_name"] = tts.provider
     if tts.model is not None and tts.model != "":
         out["tts_model"] = tts.model
     if tts.voice is not None and tts.voice != "":
         out["tts_voice"] = tts.voice
     if tts.sample_rate is not None:
         out["tts_sample_rate"] = str(tts.sample_rate)
-    if vad.provider is not None and vad.provider != "":
-        out["vad_provider_name"] = str(vad.provider)
+    if vad.provider is not None:
+        out["vad_provider_name"] = vad.provider
     if vad.sample_rate is not None:
         out["vad_sample_rate"] = str(vad.sample_rate)
     if vad.threshold is not None:
@@ -204,28 +214,32 @@ def attach_flow_speech_layers_to_context(
     ctx.metadata = {
         **ctx.metadata,
         PLATFORM_FLOW_SPEECH_LAYERS_KEY: {
-            "stt": stt.model_dump(exclude_none=True),
-            "tts": tts.model_dump(exclude_none=True),
-            "vad": vad.model_dump(exclude_none=True),
+            "stt": require_json_object(stt.model_dump(mode="json", exclude_none=True), "flow_speech.stt"),
+            "tts": require_json_object(tts.model_dump(mode="json", exclude_none=True), "flow_speech.tts"),
+            "vad": require_json_object(vad.model_dump(mode="json", exclude_none=True), "flow_speech.vad"),
         },
     }
 
 
 def load_flow_speech_layers_from_context_metadata(
-    metadata: dict[str, Any] | None,
+    metadata: JsonObject | None,
 ) -> tuple[SpeechOverride, SpeechOverride, SpeechOverride]:
     if not metadata:
         empty = SpeechOverride()
         return empty, empty, empty
     raw = metadata.get(PLATFORM_FLOW_SPEECH_LAYERS_KEY)
-    if not isinstance(raw, dict):
+    if raw is None:
         empty = SpeechOverride()
         return empty, empty, empty
+    layers = require_json_object(raw, PLATFORM_FLOW_SPEECH_LAYERS_KEY)
+
     def _block(key: str) -> SpeechOverride:
-        b = raw.get(key)
-        if not isinstance(b, dict):
+        block = layers.get(key)
+        if block is None:
             return SpeechOverride()
-        return SpeechOverride.model_validate(b)
+        return SpeechOverride.model_validate(
+            require_json_object(block, f"{PLATFORM_FLOW_SPEECH_LAYERS_KEY}.{key}")
+        )
 
     return _block("stt"), _block("tts"), _block("vad")
 

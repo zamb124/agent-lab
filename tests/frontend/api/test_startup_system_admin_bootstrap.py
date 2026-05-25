@@ -60,7 +60,11 @@ async def test_bootstrap_adds_admin_role_to_system_company_and_user():
         user_repo=_InMemoryRepo({"user-1": user}, "user_id"),
     )
 
-    await ensure_system_admin_membership(container)
+    await ensure_system_admin_membership(
+        company_repository=container.company_repository,
+        subdomain_repository=container.subdomain_repository,
+        user_repository=container.user_repository,
+    )
 
     assert "admin" in container.company_repository._entities["system"].members["user-1"]
     assert "admin" in container.user_repository._entities["user-1"].companies["system"]
@@ -75,7 +79,11 @@ async def test_bootstrap_skips_admin_when_target_email_user_missing():
         user_repo=_InMemoryRepo({"user-2": other_user}, "user_id"),
     )
 
-    returned_company, returned_user = await ensure_system_admin_membership(container)
+    returned_company, returned_user = await ensure_system_admin_membership(
+        company_repository=container.company_repository,
+        subdomain_repository=container.subdomain_repository,
+        user_repository=container.user_repository,
+    )
 
     assert returned_company.company_id == "system"
     assert returned_user is None
@@ -95,7 +103,10 @@ async def test_bootstrap_creates_system_company_when_missing():
         user_repo=_InMemoryRepo({"user-3": user}, "user_id"),
     )
 
-    company = await ensure_system_company_exists(container)
+    company = await ensure_system_company_exists(
+        company_repository=container.company_repository,
+        subdomain_repository=container.subdomain_repository,
+    )
 
     assert company.company_id == "system"
     assert company.subdomain == "system"

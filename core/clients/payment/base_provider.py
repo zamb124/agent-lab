@@ -3,11 +3,20 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
-ProviderTypeT = TypeVar("ProviderTypeT", bound=str)
+from core.db.storage import Storage
+from core.models.payment_models import PaymentSyncCandidate, PaymentSyncOperation
+from core.types import JsonObject
+
+ProviderTypeT = TypeVar("ProviderTypeT", bound=str, covariant=True)
+ProviderConfigT = TypeVar(
+    "ProviderConfigT",
+    bound="PaymentProviderConfig[str]",
+    covariant=True,
+)
 
 
 class PaymentProviderConfig(BaseModel, Generic[ProviderTypeT]):
@@ -25,7 +34,7 @@ class PaymentRequest(BaseModel):
     transaction_id: str = Field(description="ID транзакции в нашей системе")
     success_url: str = Field(description="URL успешного платежа")
     fail_url: str = Field(description="URL неудачного платежа")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Дополнительные данные")
+    metadata: JsonObject = Field(default_factory=dict, description="Дополнительные данные")
 
 
 class PaymentResponse(BaseModel):
@@ -33,7 +42,7 @@ class PaymentResponse(BaseModel):
 
     payment_url: str = Field(description="URL для оплаты")
     external_payment_id: str | None = Field(default=None, description="ID платежа у провайдера")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Дополнительные данные")
+    metadata: JsonObject = Field(default_factory=dict, description="Дополнительные данные")
 
 
 class WebhookVerificationResult(BaseModel):
@@ -47,15 +56,15 @@ class WebhookVerificationResult(BaseModel):
     error_message: str | None = Field(default=None, description="Сообщение об ошибке")
 
 
-class BasePaymentProvider(ABC):
+class BasePaymentProvider(ABC, Generic[ProviderConfigT]):
     """
     Базовый класс для всех платежных провайдеров.
     Единый интерфейс для разных платежных систем.
     """
 
-    def __init__(self, config: PaymentProviderConfig[Any]):
-        self.config = config
-        self.provider_name = config.provider_type
+    def __init__(self, config: ProviderConfigT):
+        self.config: ProviderConfigT = config
+        self.provider_name: str = config.provider_type
 
     @abstractmethod
     async def create_payment(self, request: PaymentRequest) -> PaymentResponse:
@@ -63,7 +72,7 @@ class BasePaymentProvider(ABC):
         pass
 
     @abstractmethod
-    async def verify_webhook(self, webhook_data: dict[str, Any]) -> WebhookVerificationResult:
+    async def verify_webhook(self, webhook_data: JsonObject) -> WebhookVerificationResult:
         """Проверяет подпись webhook и извлекает данные"""
         pass
 
@@ -74,13 +83,14 @@ class BasePaymentProvider(ABC):
 
     async def refund_payment(self, external_payment_id: str, amount: float) -> bool:
         """Возврат платежа (опционально)"""
+        _ = external_payment_id, amount
         return False
 
     async def sync_pending_transactions(
         self,
-        pending_transactions: list[dict[str, Any]],
-        storage: Any = None,
-    ) -> list[dict[str, Any]]:
+        pending_transactions: list[PaymentSyncCandidate],
+        storage: Storage | None = None,
+    ) -> list[PaymentSyncOperation]:
         """Сверяет pending-транзакции у провайдера, если провайдер поддерживает такую операцию."""
         _ = pending_transactions, storage
         return []

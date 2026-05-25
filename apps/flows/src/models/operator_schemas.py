@@ -36,7 +36,9 @@ class OperatorQueuePatch(StrictBaseModel):
 
 
 class OperatorQueueOut(StrictBaseModel):
-    id: str
+    """Operator queue API response."""
+
+    queue_id: str
     company_id: str
     name: str
     slug: str
@@ -52,9 +54,11 @@ class OperatorMemberAdd(StrictBaseModel):
 
 
 class OperatorTaskOut(StrictBaseModel):
+    """Operator task API response."""
+
     model_config: ClassVar[ConfigDict] = ConfigDict(use_enum_values=False)
 
-    id: str
+    operator_task_id: str
     company_id: str
     queue_id: str
     status: OperatorTaskStatus

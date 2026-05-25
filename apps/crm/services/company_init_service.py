@@ -272,10 +272,10 @@ class CompanyInitService:
         Returns:
             Список существующих типов компании
         """
-        return await self._entity_type_repo.list_for_company_id(company_id)
+        return await self._entity_type_repo.list_by_company(company_id=company_id, limit=10000)
 
     async def _check_existing_relationship_types(self, company_id: str) -> list[RelationshipType]:
-        return await self._relationship_type_repo.list_for_company_id(company_id)
+        return await self._relationship_type_repo.list_by_company(company_id=company_id, limit=10000)
 
     async def _ensure_company_entity(self, company_id: str) -> str:
         """Идемпотентно создает CRM-сущность для компании-тенанта."""

@@ -64,7 +64,7 @@ class NamespaceTemplateService:
         items: list[EntityType] = []
         offset = 0
         while True:
-            page = await self._entity_type_repo.get_all_for_company(
+            page = await self._entity_type_repo.list_by_company(
                 limit=self._PAGE_LIMIT,
                 offset=offset,
             )
@@ -311,7 +311,7 @@ class NamespaceTemplateService:
         return namespace
 
     async def get_namespace_editability(self, namespace_name: str) -> NamespaceEditability:
-        types_here = await self._entity_type_repo.get_all_for_company(
+        types_here = await self._entity_type_repo.list_by_company(
             namespace=namespace_name,
             include_system=True,
             limit=10_000,

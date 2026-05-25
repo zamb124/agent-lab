@@ -2,7 +2,7 @@
 DocxTemplater — одна ссылка на файл (FileRef): dict из state.files, FileRecord или FileResponse.
 
 - ``await fill(file_ref, context, *, strict=..., date_iso=...)`` → bytes;
-- ``await fill_and_create(..., strict=..., date_iso=..., public=...)`` → FileMetadata.
+- ``await fill_and_create(..., strict=..., date_iso=..., public=...)`` → FileRecord.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Any
 from core.files.docx_template.engine import render_docx_template_bytes
 from core.files.docx_template.files_ref import read_template_bytes_from_file_ref
 from core.files.file_ref import FileRef
-from core.files.models import FileMetadata
+from core.files.models import FileRecord
 from core.files.writer import FileWriteError, FileWriter
 
 
@@ -51,7 +51,7 @@ class DocxTemplater:
         date_iso: bool = True,
         public: bool = True,
         writer: FileWriter | None = None,
-    ) -> FileMetadata:
+    ) -> FileRecord:
         name = (output_original_name or "").strip()
         if not name.lower().endswith(".docx"):
             raise FileWriteError(

@@ -106,7 +106,7 @@ await process_flow_task.kiq(
 )
 ```
 
-Внутри: `get_channel(channel, flow_id)` → `PreparedTaskParams` → `channel.process_task(params)` → `Emitter` публикует события, `FlowFactory` загружает `Flow`, `flow.run(state)` исполняется, `emit_complete` / `emit_interrupt` / `emit_error`, `StateRepository` сохраняет состояние.
+Внутри: `get_channel(channel, flow_id)` → `PreparedTaskParams` → `channel.process_task(params)` → `Emitter` публикует события, `FlowFactory` загружает `Flow`, `flow.run(state)` исполняется, `emit_complete` / `emit_interrupt` / `emit_error`, `DurableWorkflowRuntime` пишет append-only events и обновляет hot projection.
 
 ## Планирование (flows)
 

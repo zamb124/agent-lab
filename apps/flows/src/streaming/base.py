@@ -6,7 +6,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from a2a.types import (
     Artifact,
@@ -23,6 +23,7 @@ from a2a.types import (
 
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind
+from core.types import JsonObject, JsonValue, parse_json_object
 
 if TYPE_CHECKING:
     from core.state import InterruptData
@@ -34,7 +35,7 @@ def _text_part(text: str) -> Part:
     return Part(root=TextPart(text=text))
 
 
-def _data_part(data: dict[str, Any]) -> Part:
+def _data_part(data: JsonObject) -> Part:
     return Part(root=DataPart(data=data))
 
 
@@ -47,16 +48,22 @@ class BaseEmitter(ABC):
     - InMemoryEmitter: хранение в памяти (для внешних агентов)
     """
 
+    state: ExecutionState
+    _span_context: JsonObject | None
+
     def __init__(self, state: ExecutionState):
         self.state = state
         self._span_context = None
 
     def _create_message(
-        self, text: str, metadata: dict[str, Any] | None = None
+        self,
+        text: str,
+        metadata: JsonObject | None = None,
+        message_id: str | None = None,
     ) -> Message:
         """Создаёт A2A Message объект."""
         return Message(
-            message_id=str(uuid.uuid4()),
+            message_id=message_id or str(uuid.uuid4()),
             role=Role.agent,
             parts=[_text_part(text)],
             metadata=metadata,
@@ -94,7 +101,7 @@ class BaseEmitter(ABC):
     async def emit_tool_call(
         self,
         tool_name: str,
-        tool_args: dict[str, Any],
+        tool_args: JsonObject,
         tool_call_id: str,
         react_role: str = "standard",
     ) -> None:
@@ -106,6 +113,7 @@ class BaseEmitter(ABC):
                 "tool": tool_name,
                 "args": tool_args,
                 "tool_call_id": tool_call_id,
+                "react_role": react_role,
             })],
         )
 
@@ -120,7 +128,7 @@ class BaseEmitter(ABC):
     async def emit_tool_result(
         self,
         tool_name: str,
-        result: Any,
+        result: JsonValue,
         tool_call_id: str,
     ) -> None:
         """Публикует результат выполнения инструмента."""
@@ -154,9 +162,10 @@ class BaseEmitter(ABC):
             context_id=self.state.context_id,
             status=TaskStatus(
                 state=TaskState.completed,
-                message=self._create_message(response),
+                message=self._create_message(response, message_id=message_id),
             ),
             final=True,
+            metadata={"has_artifact": has_artifact},
         )
 
         await self._publish(event)
@@ -167,8 +176,8 @@ class BaseEmitter(ABC):
         message_id: str | None = None,
     ) -> None:
         """Публикует input_required с полным объектом interrupt в metadata."""
-        dump = interrupt.model_dump(mode="json")
-        meta: dict[str, Any] = {"platform_interrupt": dump}
+        interrupt_payload = parse_json_object(interrupt.model_dump_json(), "InterruptData")
+        meta: JsonObject = {"platform_interrupt": interrupt_payload}
         is_operator = interrupt.body.kind == InterruptKind.OPERATOR_TASK
         is_oauth = interrupt.body.kind == InterruptKind.OAUTH_REQUIRED
         keep_stream_open = is_operator or is_oauth
@@ -181,7 +190,7 @@ class BaseEmitter(ABC):
             context_id=self.state.context_id,
             status=TaskStatus(
                 state=TaskState.input_required,
-                message=self._create_message(interrupt.question, metadata=meta),
+                message=self._create_message(interrupt.question, metadata=meta, message_id=message_id),
             ),
             final=not keep_stream_open,
             metadata=meta,
@@ -213,21 +222,21 @@ class BaseEmitter(ABC):
             context_id=self.state.context_id,
             status=TaskStatus(
                 state=TaskState.failed,
-                message=self._create_message(error),
+                message=self._create_message(error, message_id=message_id),
             ),
             final=True,
         )
 
         await self._publish(event)
 
-    async def emit(self, event: Any) -> None:
+    async def emit(self, event: StreamEvent) -> None:
         """Публикует произвольное событие (StreamEvent от runner)."""
         await self._publish(event)
 
     async def emit_ping(self, *, sequence: int | None = None) -> None:
         """Публикует heartbeat кадр для живого SSE-потока без пользовательского текста."""
         now = datetime.now(timezone.utc).isoformat()
-        metadata: dict[str, Any] = {
+        metadata: JsonObject = {
             "platform_ping": True,
             "sent_at": now,
         }
@@ -415,7 +424,7 @@ class BaseEmitter(ABC):
     async def emit_ui_event(
         self,
         event_type: str,
-        payload: dict[str, Any],
+        payload: JsonObject,
         *,
         event_id: str | None = None,
         version: str = "1.0.0",
@@ -453,7 +462,7 @@ class BaseEmitter(ABC):
         self,
         node_id: str,
         node_type: str,
-        state_snapshot: dict[str, Any],
+        state_snapshot: JsonObject,
     ) -> None:
         """
         Публикует событие срабатывания breakpoint.
@@ -479,7 +488,7 @@ class BaseEmitter(ABC):
         await self._publish(event)
 
     @abstractmethod
-    async def _publish(self, event: Any) -> None:
+    async def _publish(self, event: StreamEvent) -> None:
         """Публикует событие. Реализуется в наследниках."""
         pass
 

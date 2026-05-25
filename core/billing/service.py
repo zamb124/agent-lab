@@ -15,7 +15,6 @@ from core.context import get_context
 from core.i18n import t
 from core.logging import get_logger
 from core.models.billing_models import (
-    DEFAULT_TARIFF_PRICES,
     BillingCostOrigin,
     TariffPlan,
     UsageRecord,
@@ -131,8 +130,11 @@ class BillingService:
         self._usage_repository: UsageRepository = usage_repository
         self._shared_storage: Storage | None = shared_storage
 
-        # Тарифные цены (множители к базовой цене)
-        self._tariff_prices: dict[TariffPlan, dict[str, dict[str, float]]] = tariff_prices or DEFAULT_TARIFF_PRICES
+        if tariff_prices is None:
+            raise ValueError(
+                "tariff_prices обязателен: передавайте из settings.billing.tariff_prices"
+            )
+        self._tariff_prices: dict[TariffPlan, dict[str, dict[str, float]]] = tariff_prices
 
         if resource_base_prices is None:
             raise ValueError("resource_base_prices обязателен (передавайте из settings.billing.resource_base_prices)")
@@ -460,16 +462,16 @@ class BillingService:
         _ = await self._usage_repository.set(usage_record)
 
         if not is_company:
-            old_balance = actual_company.balance
-            old_spent = actual_company.current_month_spent
+            balance_before = actual_company.balance
+            spent_before = actual_company.current_month_spent
             actual_company.balance -= effective_cost
             actual_company.current_month_spent += effective_cost
             logger.info(
                 "Обновляем компанию %s: баланс %.2f → %.2f, потрачено %.2f → %.2f",
                 actual_company.company_id,
-                old_balance,
+                balance_before,
                 actual_company.balance,
-                old_spent,
+                spent_before,
                 actual_company.current_month_spent,
             )
             _ = await self._company_repository.set(actual_company)

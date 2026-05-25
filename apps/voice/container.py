@@ -27,6 +27,7 @@ from core.clients.voice_resolver import (
     get_vad_client,
     resolve_stt_settings,
 )
+from core.container import ContainerRegistry
 from core.container.base import BaseContainer, lazy
 from core.logging import get_logger
 
@@ -78,17 +79,9 @@ class VoiceContainer(BaseContainer):
         )
 
 
-_voice_container: VoiceContainer | None = None
+_voice_registry: ContainerRegistry[VoiceContainer] = ContainerRegistry(
+    VoiceContainer, name="VoiceContainer"
+)
 
-
-def get_voice_container() -> VoiceContainer:
-    global _voice_container
-    if _voice_container is None:
-        _voice_container = VoiceContainer()
-        logger.info("VoiceContainer инициализирован")
-    return _voice_container
-
-
-def reset_voice_container() -> None:
-    global _voice_container
-    _voice_container = None
+get_voice_container = _voice_registry.get
+reset_voice_container = _voice_registry.reset

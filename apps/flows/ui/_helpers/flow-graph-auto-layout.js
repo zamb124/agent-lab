@@ -31,7 +31,7 @@ export function canvasNeedsAutoLayout(branchData) {
 
 /**
  * @param {Set<string>} nodeIds
- * @param {Array<{ from: string, to: string }>} directed
+ * @param {Array<{ from_node: string, to_node: string }>} directed
  * @param {string | null} entryId
  * @returns {{ reachable: string[], unreachable: string[] }}
  */
@@ -41,9 +41,9 @@ function partitionReachable(nodeIds, directed, entryId) {
     }
     const next = new Map();
     for (const e of directed) {
-        if (!nodeIds.has(e.from) || !nodeIds.has(e.to)) continue;
-        if (!next.has(e.from)) next.set(e.from, []);
-        next.get(e.from).push(e.to);
+        if (!nodeIds.has(e.from_node) || !nodeIds.has(e.to_node)) continue;
+        if (!next.has(e.from_node)) next.set(e.from_node, []);
+        next.get(e.from_node).push(e.to_node);
     }
     const seen = new Set();
     const stack = [entryId];
@@ -67,7 +67,7 @@ function partitionReachable(nodeIds, directed, entryId) {
 
 /**
  * @param {string[]} nodeIdsR
- * @param {Array<{ from: string, to: string }>} directedR — только u->v в R
+ * @param {Array<{ from_node: string, to_node: string }>} directedR — только u->v в R
  * @returns {{ order: string[] } | { cycle: true }}
  */
 function topologicalOrderOrCycle(nodeIdsR, directedR) {
@@ -79,9 +79,9 @@ function topologicalOrderOrCycle(nodeIdsR, directedR) {
         preds.set(id, []);
     }
     for (const e of directedR) {
-        if (!idSet.has(e.from) || !idSet.has(e.to)) continue;
-        indeg.set(e.to, (indeg.get(e.to) || 0) + 1);
-        preds.get(e.to).push(e.from);
+        if (!idSet.has(e.from_node) || !idSet.has(e.to_node)) continue;
+        indeg.set(e.to_node, (indeg.get(e.to_node) || 0) + 1);
+        preds.get(e.to_node).push(e.from_node);
     }
     const q = [];
     for (const id of nodeIdsR) {
@@ -94,11 +94,11 @@ function topologicalOrderOrCycle(nodeIdsR, directedR) {
         qi += 1;
         order.push(u);
         for (const e of directedR) {
-            if (e.from !== u) continue;
-            if (!idSet.has(e.to)) continue;
-            const nextD = (indeg.get(e.to) || 0) - 1;
-            indeg.set(e.to, nextD);
-            if (nextD === 0) q.push(e.to);
+            if (e.from_node !== u) continue;
+            if (!idSet.has(e.to_node)) continue;
+            const nextD = (indeg.get(e.to_node) || 0) - 1;
+            indeg.set(e.to_node, nextD);
+            if (nextD === 0) q.push(e.to_node);
         }
     }
     if (order.length !== nodeIdsR.length) {
@@ -159,10 +159,10 @@ export function applyAutoLayoutToBranchData(branchData) {
     const edges = Array.isArray(branchData.edges) ? branchData.edges : [];
     const directed = [];
     for (const e of edges) {
-        const { from, to } = getEdgeEndpoints(e);
-        if (from.length === 0 || to.length === 0) continue;
-        if (!nodeIds.has(from) || !nodeIds.has(to)) continue;
-        directed.push({ from, to });
+        const { from_node, to_node } = getEdgeEndpoints(e);
+        if (from_node.length === 0 || to_node.length === 0) continue;
+        if (!nodeIds.has(from_node) || !nodeIds.has(to_node)) continue;
+        directed.push({ from_node, to_node });
     }
 
     const entryRaw = branchData.entry;
@@ -174,7 +174,7 @@ export function applyAutoLayoutToBranchData(branchData) {
     const R = new Set(reachable);
     const directedR = [];
     for (const e of directed) {
-        if (R.has(e.from) && R.has(e.to)) {
+        if (R.has(e.from_node) && R.has(e.to_node)) {
             directedR.push(e);
         }
     }
@@ -183,7 +183,7 @@ export function applyAutoLayoutToBranchData(branchData) {
         predsR.set(id, []);
     }
     for (const e of directedR) {
-        predsR.get(e.to).push(e.from);
+        predsR.get(e.to_node).push(e.from_node);
     }
     const topo = topologicalOrderOrCycle(reachable, directedR);
     if ('cycle' in topo) {

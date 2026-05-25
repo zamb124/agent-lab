@@ -68,7 +68,7 @@ async def sync_worker_startup(state: TaskiqState) -> None:
             use_sandbox=apns.use_sandbox,
         )
         logger.info("worker.apns_initialized", service="sync_worker")
-    fcm = resolve_fcm_credentials(settings)
+    fcm = resolve_fcm_credentials(settings.push)
     if fcm:
         init_fcm_push_service(
             project_id=fcm.project_id,

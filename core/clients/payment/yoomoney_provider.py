@@ -13,10 +13,10 @@ Quickpay для приема, OAuth API для сверки транзакций
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import Literal, override
 from urllib.parse import urlencode
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from core.clients.payment.base_provider import (
     BasePaymentProvider,
@@ -25,14 +25,24 @@ from core.clients.payment.base_provider import (
     PaymentResponse,
     WebhookVerificationResult,
 )
+from core.db.storage import Storage
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.models import StrictBaseModel
+from core.models.payment_models import PaymentStatus, PaymentSyncCandidate, PaymentSyncOperation
+from core.types import JsonObject, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 YOOMONEY_TOKEN_LIFETIME_YEARS = 3
 YOOMONEY_TOKEN_STORAGE_KEY = "yoomoney:access_token"
 YOOMONEY_OAUTH_AUTHORIZE_URL = "https://yoomoney.ru/oauth/authorize"
 YOOMONEY_OAUTH_TOKEN_URL = "https://yoomoney.ru/oauth/token"
+YOOMONEY_QUICKPAY_URL = "https://yoomoney.ru/quickpay/confirm.xml"
+YOOMONEY_API_URL = "https://yoomoney.ru/api"
+YOOMONEY_MISSING_TOKEN_MESSAGE = (
+    "YooMoney access_token не найден или истёк. "
+    + "Выполните OAuth-авторизацию через /api/billing/yoomoney/authorize"
+)
 
 class YooMoneyConfig(PaymentProviderConfig[Literal["yoomoney"]]):
     """Конфигурация YooMoney провайдера"""
@@ -40,14 +50,14 @@ class YooMoneyConfig(PaymentProviderConfig[Literal["yoomoney"]]):
     account_number: str = Field(description="Номер кошелька YooMoney")
     notification_secret: str = Field(description="Секрет для проверки HTTP-уведомлений")
     quickpay_url: str = Field(
-        default="https://yoomoney.ru/quickpay/confirm.xml",
+        default=YOOMONEY_QUICKPAY_URL,
         description="URL формы оплаты Quickpay"
     )
     client_id: str | None = Field(default=None, description="OAuth client_id приложения")
     client_secret: str | None = Field(default=None, description="OAuth client_secret приложения")
     access_token: str | None = Field(default=None, description="OAuth access_token (из env, загружается в storage при старте)")
     api_url: str = Field(
-        default="https://yoomoney.ru/api",
+        default=YOOMONEY_API_URL,
         description="URL YooMoney API"
     )
 
@@ -55,9 +65,9 @@ class YooMoneyTokenData:
     """Данные OAuth-токена YooMoney, хранятся в Redis storage."""
 
     def __init__(self, token: str, obtained_at: datetime, expires_at: datetime):
-        self.token = token
-        self.obtained_at = obtained_at
-        self.expires_at = expires_at
+        self.token: str = token
+        self.obtained_at: datetime = obtained_at
+        self.expires_at: datetime = expires_at
 
     def is_expired(self) -> bool:
         return datetime.now(timezone.utc) >= self.expires_at
@@ -71,14 +81,36 @@ class YooMoneyTokenData:
 
     @classmethod
     def from_json(cls, raw: str) -> "YooMoneyTokenData":
-        data = json.loads(raw)
+        data = parse_json_object(raw, "YooMoney token data")
+        token = data["token"]
+        obtained_at = data["obtained_at"]
+        expires_at = data["expires_at"]
+        if not isinstance(token, str):
+            raise ValueError("YooMoney token data token must be a string")
+        if not isinstance(obtained_at, str):
+            raise ValueError("YooMoney token data obtained_at must be a string")
+        if not isinstance(expires_at, str):
+            raise ValueError("YooMoney token data expires_at must be a string")
         return cls(
-            token=data["token"],
-            obtained_at=datetime.fromisoformat(data["obtained_at"]),
-            expires_at=datetime.fromisoformat(data["expires_at"]),
+            token=token,
+            obtained_at=datetime.fromisoformat(obtained_at),
+            expires_at=datetime.fromisoformat(expires_at),
         )
 
-async def save_access_token(storage: Any, token: str) -> YooMoneyTokenData:
+
+class YooMoneyWebhookPayload(StrictBaseModel):
+    notification_type: str
+    operation_id: str
+    amount: str
+    currency: str
+    datetime: str
+    sender: str
+    codepro: str
+    sha1_hash: str
+    label: str
+
+
+async def save_access_token(storage: Storage, token: str) -> YooMoneyTokenData:
     """Сохраняет access_token в storage с метками времени."""
     now = datetime.now(timezone.utc)
     token_data = YooMoneyTokenData(
@@ -86,11 +118,11 @@ async def save_access_token(storage: Any, token: str) -> YooMoneyTokenData:
         obtained_at=now,
         expires_at=now + timedelta(days=365 * YOOMONEY_TOKEN_LIFETIME_YEARS),
     )
-    await storage.set(YOOMONEY_TOKEN_STORAGE_KEY, token_data.to_json(), force_global=True)
+    _ = await storage.set(YOOMONEY_TOKEN_STORAGE_KEY, token_data.to_json(), force_global=True)
     logger.info("YooMoney access_token сохранён в storage, истекает %s", token_data.expires_at.isoformat())
     return token_data
 
-async def load_access_token(storage: Any) -> YooMoneyTokenData | None:
+async def load_access_token(storage: Storage) -> YooMoneyTokenData | None:
     """Загружает access_token из storage. Возвращает None если токена нет."""
     raw = await storage.get(YOOMONEY_TOKEN_STORAGE_KEY, force_global=True)
     if not raw:
@@ -101,7 +133,7 @@ async def load_access_token(storage: Any) -> YooMoneyTokenData | None:
         return None
     return token_data
 
-class YooMoneyProvider(BasePaymentProvider):
+class YooMoneyProvider(BasePaymentProvider[YooMoneyConfig]):
     """
     Провайдер для YooMoney (Quickpay).
 
@@ -110,30 +142,30 @@ class YooMoneyProvider(BasePaymentProvider):
 
     def __init__(self, config: YooMoneyConfig):
         super().__init__(config)
-        self.config: YooMoneyConfig = config
         self._access_token: str | None = None
         logger.info("Инициализирован YooMoney провайдер: кошелек=%s", config.account_number)
 
-    async def _get_access_token(self, storage: Any) -> str:
+    def set_access_token(self, token: str) -> None:
+        normalized = token.strip()
+        if normalized == "":
+            raise ValueError("YooMoney access_token must be a non-empty string")
+        self._access_token = normalized
+
+    async def _get_access_token(self, storage: Storage) -> str:
         """Получает access_token из storage. Raise если нет."""
         if self._access_token:
             return self._access_token
 
         token_data = await load_access_token(storage)
         if not token_data:
-            raise ValueError(
-                "YooMoney access_token не найден или истёк. "
-                "Выполните OAuth-авторизацию через /api/billing/yoomoney/authorize"
-            )
+            raise ValueError(YOOMONEY_MISSING_TOKEN_MESSAGE)
         token = (token_data.token or "").strip()
         if not token:
-            raise ValueError(
-                "YooMoney access_token не найден или истёк. "
-                "Выполните OAuth-авторизацию через /api/billing/yoomoney/authorize"
-            )
+            raise ValueError(YOOMONEY_MISSING_TOKEN_MESSAGE)
         self._access_token = token
         return self._access_token
 
+    @override
     async def create_payment(self, request: PaymentRequest) -> PaymentResponse:
         """Генерирует URL для YooMoney Quickpay формы."""
 
@@ -166,7 +198,8 @@ class YooMoneyProvider(BasePaymentProvider):
             }
         )
 
-    async def verify_webhook(self, webhook_data: dict[str, Any]) -> WebhookVerificationResult:
+    @override
+    async def verify_webhook(self, webhook_data: JsonObject) -> WebhookVerificationResult:
         """
         Проверяет подпись YooMoney HTTP-уведомления.
 
@@ -174,53 +207,53 @@ class YooMoneyProvider(BasePaymentProvider):
         sha1(notification_type&operation_id&amount&currency&datetime&sender&codepro&notification_secret&label)
         """
 
-        logger.info("Проверка webhook YooMoney: %s", webhook_data.get('label'))
+        logger.info("Проверка webhook YooMoney: %s", webhook_data.get("label"))
 
-        required_fields = [
-            'notification_type', 'operation_id', 'amount',
-            'currency', 'datetime', 'sender', 'codepro', 'sha1_hash', 'label'
-        ]
-
-        for field in required_fields:
-            if field not in webhook_data:
-                logger.error("Отсутствует обязательное поле: %s", field)
-                return WebhookVerificationResult(
-                    is_valid=False,
-                    error_message="Missing required fields"
-                )
+        try:
+            payload = YooMoneyWebhookPayload.model_validate(webhook_data)
+        except ValidationError:
+            logger.error("YooMoney webhook payload has invalid schema")
+            return WebhookVerificationResult(
+                is_valid=False,
+                error_message="Missing required webhook field or invalid payload",
+            )
 
         signature_string = (
-            f"{webhook_data['notification_type']}&"
-            f"{webhook_data['operation_id']}&"
-            f"{webhook_data['amount']}&"
-            f"{webhook_data['currency']}&"
-            f"{webhook_data['datetime']}&"
-            f"{webhook_data['sender']}&"
-            f"{webhook_data['codepro']}&"
+            f"{payload.notification_type}&"
+            f"{payload.operation_id}&"
+            f"{payload.amount}&"
+            f"{payload.currency}&"
+            f"{payload.datetime}&"
+            f"{payload.sender}&"
+            f"{payload.codepro}&"
             f"{self.config.notification_secret}&"
-            f"{webhook_data['label']}"
+            f"{payload.label}"
         )
 
         expected_hash = hashlib.sha1(signature_string.encode()).hexdigest()
-        received_hash = webhook_data['sha1_hash']
 
-        is_valid = expected_hash == received_hash
+        is_valid = expected_hash == payload.sha1_hash
 
         if is_valid:
-            logger.info("Webhook валиден: транзакция=%s, сумма=%s", webhook_data['label'], webhook_data['amount'])
+            logger.info("Webhook валиден: транзакция=%s, сумма=%s", payload.label, payload.amount)
         else:
-            logger.error("Невалидная подпись webhook: expected=%s, received=%s", expected_hash, received_hash)
+            logger.error(
+                "Невалидная подпись webhook: expected=%s, received=%s",
+                expected_hash,
+                payload.sha1_hash,
+            )
 
         return WebhookVerificationResult(
             is_valid=is_valid,
-            transaction_id=webhook_data['label'] if is_valid else None,
-            amount=float(webhook_data['amount']) if is_valid else None,
-            external_payment_id=webhook_data['operation_id'] if is_valid else None,
+            transaction_id=payload.label if is_valid else None,
+            amount=float(payload.amount) if is_valid else None,
+            external_payment_id=payload.operation_id if is_valid else None,
             status="success" if is_valid else "unknown",
             error_message=None if is_valid else "Invalid signature"
         )
 
-    async def check_payment_status(self, external_payment_id: str, storage: Any = None) -> str:
+    @override
+    async def check_payment_status(self, external_payment_id: str, storage: Storage | None = None) -> str:
         """
         Проверяет статус платежа через YooMoney operation-details API.
         Требует access_token.
@@ -236,16 +269,21 @@ class YooMoneyProvider(BasePaymentProvider):
                 headers={"Authorization": f"Bearer {access_token}"},
                 data={"operation_id": external_payment_id},
             )
-            response.raise_for_status()
-            data = response.json()
+            _ = response.raise_for_status()
+            data = parse_json_object(response.content, "YooMoney operation-details response")
 
-        status = data.get('status', 'unknown')
+        status = data["status"]
+        if not isinstance(status, str):
+            raise ValueError("YooMoney operation-details status must be a string")
         logger.info("Статус платежа %s: %s", external_payment_id, status)
         return status
 
+    @override
     async def sync_pending_transactions(
-        self, pending_transactions: list[dict[str, Any]], storage: Any = None,
-    ) -> list[dict[str, Any]]:
+        self,
+        pending_transactions: list[PaymentSyncCandidate],
+        storage: Storage | None = None,
+    ) -> list[PaymentSyncOperation]:
         """
         Сверяет pending транзакции через YooMoney operation-history API.
 
@@ -259,10 +297,12 @@ class YooMoneyProvider(BasePaymentProvider):
 
         access_token = await self._get_access_token(storage)
 
-        found: list[dict[str, Any]] = []
+        found: list[PaymentSyncOperation] = []
 
         for txn in pending_transactions:
-            transaction_id = txn["transaction_id"]
+            transaction_id = txn.transaction_id.strip()
+            if transaction_id == "":
+                raise ValueError("pending transaction_id must be a non-empty string")
 
             async with get_httpx_client(timeout=30.0) as client:
                 response = await client.post(
@@ -274,22 +314,40 @@ class YooMoneyProvider(BasePaymentProvider):
                         "records": "1",
                     },
                 )
-                response.raise_for_status()
-                data = response.json()
+                _ = response.raise_for_status()
+                data = parse_json_object(response.content, "YooMoney operation-history response")
 
-            operations = data.get("operations", [])
+            operations_value = data.get("operations")
+            if not isinstance(operations_value, list):
+                raise ValueError("YooMoney operation-history operations must be a list")
 
-            for op in operations:
-                if op.get("status") == "success":
-                    found.append({
-                        "transaction_id": transaction_id,
-                        "operation_id": op.get("operation_id"),
-                        "amount": op.get("amount"),
-                        "status": "success",
-                    })
+            for op in operations_value:
+                op_data = require_json_object(op, "YooMoney operation")
+                if op_data.get("status") == "success":
+                    operation_id = op_data.get("operation_id")
+                    if operation_id is not None and not isinstance(operation_id, str):
+                        raise ValueError("YooMoney operation_id must be a string")
+                    amount = op_data.get("amount")
+                    if isinstance(amount, int | float) and not isinstance(amount, bool):
+                        operation_amount = float(amount)
+                    elif isinstance(amount, str) and amount.strip() != "":
+                        operation_amount = float(amount)
+                    elif amount is None:
+                        operation_amount = None
+                    else:
+                        raise ValueError("YooMoney operation amount must be number, string or null")
+                    found.append(
+                        PaymentSyncOperation(
+                            transaction_id=transaction_id,
+                            operation_id=operation_id,
+                            amount=operation_amount,
+                            status=PaymentStatus.SUCCESS,
+                        )
+                    )
                     logger.info(
                         "Сверка: найдена оплаченная транзакция %s (operation_id=%s)",
-                        transaction_id, op.get("operation_id"),
+                        transaction_id,
+                        operation_id,
                     )
                     break
 

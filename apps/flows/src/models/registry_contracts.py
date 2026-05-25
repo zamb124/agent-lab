@@ -83,8 +83,8 @@ class RegistrySchemaNode(StrictBaseModel):
 class RegistrySchemaEdge(StrictBaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(populate_by_name=True)
 
-    from_node: str = Field(alias="from")
-    to: str | None = None
+    from_node: str
+    to_node: str | None = None
     condition: str | None = None
 
 

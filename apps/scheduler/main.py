@@ -14,7 +14,6 @@ from apps.scheduler.container import SchedulerContainer, get_scheduler_container
 from core.app import create_service_app
 from core.config.testing import is_testing
 from core.identity.system_bootstrap import (
-    as_system_bootstrap_container,
     ensure_system_company_exists,
 )
 from core.logging import get_logger
@@ -309,7 +308,10 @@ async def _ensure_crm_cron_schedule(
 async def on_startup(app: FastAPI, container: SchedulerContainer, settings: SchedulerSettings) -> None:
     _ = app
     if not is_testing():
-        _ = await ensure_system_company_exists(as_system_bootstrap_container(container))
+        _ = await ensure_system_company_exists(
+            company_repository=container.company_repository,
+            subdomain_repository=container.subdomain_repository,
+        )
     config = settings.calendar_sync
     await _ensure_calendar_schedule(
         container=container,

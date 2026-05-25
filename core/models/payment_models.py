@@ -78,6 +78,66 @@ class Transaction(BaseModel):
     metadata: JsonObject = Field(
         default_factory=dict, title="Метаданные", description="Дополнительные данные о транзакции"
     )
+    balance_applied: bool = Field(
+        default=False,
+        title="Баланс начислен",
+        description=(
+            "Идемпотентный маркер: True если средства транзакции уже были "
+            "зачислены на баланс компании. Защита от двойного начисления "
+            "при повторных webhook/sync. Меняется только методом "
+            "PaymentService.finalize_successful_payment."
+        ),
+        json_schema_extra={"readonly": True},
+    )
+
+
+class ExternalPaymentClaim(BaseModel):
+    """Идемпотентная привязка внешней операции провайдера к транзакции платформы."""
+
+    transaction_id: str
+
+
+class PaymentSyncCandidate(BaseModel):
+    """Pending-транзакция, которую можно сверить с платёжным провайдером."""
+
+    transaction_id: str
+    amount: float
+    created_at: datetime
+
+
+class PaymentSyncOperation(BaseModel):
+    """Найденная у провайдера операция по pending-транзакции."""
+
+    transaction_id: str
+    status: PaymentStatus
+    operation_id: str | None = None
+    amount: float | None = None
+
+
+class PaymentProviderSyncStats(BaseModel):
+    """Статистика сверки по одному платёжному провайдеру."""
+
+    checked: int = 0
+    found: int = 0
+
+
+class PaymentSyncStats(BaseModel):
+    """Статистика сверки pending-транзакций одной компании."""
+
+    total_pending: int = 0
+    checked: int = 0
+    found: int = 0
+    updated: int = 0
+    by_provider: dict[PaymentProviderType, PaymentProviderSyncStats] = Field(default_factory=dict)
+
+
+class PaymentSyncAllCompaniesStats(BaseModel):
+    """Статистика сверки pending-транзакций по всем компаниям."""
+
+    companies_checked: int = 0
+    total_pending: int = 0
+    total_found: int = 0
+    total_updated: int = 0
 
 
 class PaymentNotification(BaseModel):
@@ -130,6 +190,15 @@ class CreatePaymentResponse(BaseModel):
     provider: str = Field(description="Использованный провайдер")
     status: str = Field(description="Статус транзакции")
     amount: float = Field(description="Сумма пополнения")
+
+
+class BalanceGrantResult(BaseModel):
+    """Результат начисления баланса без внешнего платёжного провайдера."""
+
+    transaction_id: str
+    company_id: str
+    amount: float
+    balance: float
 
 
 class TransactionResponse(BaseModel):

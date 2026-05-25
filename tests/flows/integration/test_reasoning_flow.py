@@ -9,26 +9,17 @@
 """
 
 import uuid
-
 import pytest
 
 INLINE_CALCULATOR = {
     "tool_id": "calculator",
     "description": "Вычисляет математические выражения",
-    "args_schema": {"expression": {"type": "string"}},
-    "code": """async def execute(args: dict, state: dict = None):
-    import ast
-    import operator
-    expr = args.get('expression', '0')
-    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}
-    def _eval(node):
-        if isinstance(node, ast.Expression): return _eval(node.body)
-        if isinstance(node, ast.Constant): return node.value
-        if isinstance(node, ast.BinOp): return ops[type(node.op)](_eval(node.left), _eval(node.right))
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub): return -_eval(node.operand)
-        raise ValueError(f"Unsupported: {type(node)}")
-    return f"Результат: {_eval(ast.parse(expr, mode='eval'))}"
-"""
+    "parameters_schema": {
+        "type": "object",
+        "properties": {"expression": {"type": "string"}},
+        "required": ["expression"],
+    },
+    "code": "async def execute(args: dict, state: dict = None):\n    import ast\n    import operator\n    expr = args.get('expression', '0')\n    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}\n    def _eval(node):\n        if isinstance(node, ast.Expression): return _eval(node.body)\n        if isinstance(node, ast.Constant): return node.value\n        if isinstance(node, ast.BinOp): return ops[type(node.op)](_eval(node.left), _eval(node.right))\n        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub): return -_eval(node.operand)\n        raise ValueError(f\"Unsupported: {type(node)}\")\n    return f\"Результат: {_eval(ast.parse(expr, mode='eval'))}\"\n",
 }
 
 
@@ -43,7 +34,6 @@ class TestReasoningInAgent:
         from apps.flows.src.container import get_container
 
         flow_id = f"test_reasoning_flow_{unique_id}"
-
         from apps.flows.src.models import FlowConfig
 
         container = get_container()
@@ -59,10 +49,9 @@ class TestReasoningInAgent:
                         "tools": [],
                     }
                 },
-                edges=[{"from": "main", "to": None}],
+                edges=[{"from_node": "main", "to_node": None}],
             )
         )
-
         mock_llm_with_queue(
             [
                 {
@@ -72,7 +61,6 @@ class TestReasoningInAgent:
                 }
             ]
         )
-
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -88,40 +76,36 @@ class TestReasoningInAgent:
                 },
             },
         )
-
         assert response.status_code == 200
         data = response.json()
         assert "result" in data
         result = data["result"]
-
         assert "artifacts" in result
         assert result["artifacts"] is not None
         assert len(result["artifacts"]) == 2
-
         reasoning_artifact = next(
             (a for a in result["artifacts"] if a.get("name") == "reasoning"), None
         )
         response_artifact = next(
-            (a for a in result["artifacts"] if a.get("name") == "response" or a.get("name") is None),
+            (
+                a
+                for a in result["artifacts"]
+                if a.get("name") == "response" or a.get("name") is None
+            ),
             None,
         )
-
         assert reasoning_artifact is not None, "Должен быть reasoning артефакт"
         assert response_artifact is not None, "Должен быть response артефакт"
-
         reasoning_parts = reasoning_artifact.get("parts", [])
         assert len(reasoning_parts) > 0
-
         reasoning_text = ""
         for part in reasoning_parts:
             if part.get("kind") == "text" or "text" in part:
                 reasoning_text += part.get("text", "")
             elif "root" in part and "text" in part.get("root", {}):
                 reasoning_text += part["root"]["text"]
-
         assert "Сначала я подумал" in reasoning_text
         assert "Потом решил" in reasoning_text
-
         response_parts = response_artifact.get("parts", [])
         response_text = ""
         for part in response_parts:
@@ -129,7 +113,6 @@ class TestReasoningInAgent:
                 response_text += part.get("text", "")
             elif "root" in part and "text" in part.get("root", {}):
                 response_text += part["root"]["text"]
-
         assert "Это ответ на вопрос" in response_text
 
     async def test_flow_with_reasoning_only(
@@ -139,7 +122,6 @@ class TestReasoningInAgent:
         from apps.flows.src.container import get_container
 
         flow_id = f"test_reasoning_only_flow_{unique_id}"
-
         from apps.flows.src.models import FlowConfig
 
         container = get_container()
@@ -148,27 +130,13 @@ class TestReasoningInAgent:
                 flow_id=flow_id,
                 name="Test Reasoning Only Agent",
                 entry="main",
-                nodes={
-                    "main": {
-                        "type": "llm_node",
-                        "prompt": "Ты помощник.",
-                        "tools": [],
-                    }
-                },
-                edges=[{"from": "main", "to": None}],
+                nodes={"main": {"type": "llm_node", "prompt": "Ты помощник.", "tools": []}},
+                edges=[{"from_node": "main", "to_node": None}],
             )
         )
-
         mock_llm_with_queue(
-            [
-                {
-                    "type": "text",
-                    "content": "",
-                    "reasoning": "Я думаю над ответом...",
-                }
-            ]
+            [{"type": "text", "content": "", "reasoning": "Я думаю над ответом..."}]
         )
-
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -184,17 +152,14 @@ class TestReasoningInAgent:
                 },
             },
         )
-
         assert response.status_code == 200
         data = response.json()
         result = data["result"]
-
         if result.get("artifacts"):
             reasoning_artifact = next(
                 (a for a in result["artifacts"] if a.get("name") == "reasoning"), None
             )
             assert reasoning_artifact is not None
-
             reasoning_parts = reasoning_artifact.get("parts", [])
             reasoning_text = ""
             for part in reasoning_parts:
@@ -202,7 +167,6 @@ class TestReasoningInAgent:
                     reasoning_text += part.get("text", "")
                 elif "root" in part and "text" in part.get("root", {}):
                     reasoning_text += part["root"]["text"]
-
             assert "Я думаю над ответом" in reasoning_text
 
     async def test_flow_with_reasoning_and_tool_call(
@@ -212,7 +176,6 @@ class TestReasoningInAgent:
         from apps.flows.src.container import get_container
 
         flow_id = f"test_reasoning_tool_flow_{unique_id}"
-
         from apps.flows.src.models import FlowConfig
 
         container = get_container()
@@ -228,17 +191,12 @@ class TestReasoningInAgent:
                         "tools": [INLINE_CALCULATOR],
                     }
                 },
-                edges=[{"from": "main", "to": None}],
+                edges=[{"from_node": "main", "to_node": None}],
             )
         )
-
         mock_llm_with_queue(
             [
-                {
-                    "type": "text",
-                    "content": "",
-                    "reasoning": "Нужно вычислить 2+2...",
-                },
+                {"type": "text", "content": "", "reasoning": "Нужно вычислить 2+2..."},
                 {"type": "tool_call", "tool": "calculator", "args": {"expression": "2+2"}},
                 {
                     "type": "text",
@@ -247,7 +205,6 @@ class TestReasoningInAgent:
                 },
             ]
         )
-
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -263,19 +220,13 @@ class TestReasoningInAgent:
                 },
             },
         )
-
         assert response.status_code == 200
         data = response.json()
         result = data["result"]
-
         assert result["status"]["state"] == "completed"
-
         if result.get("artifacts"):
-            reasoning_artifacts = [
-                a for a in result["artifacts"] if a.get("name") == "reasoning"
-            ]
+            reasoning_artifacts = [a for a in result["artifacts"] if a.get("name") == "reasoning"]
             assert len(reasoning_artifacts) >= 1
-
             all_reasoning_text = ""
             for artifact in reasoning_artifacts:
                 for part in artifact.get("parts", []):
@@ -283,8 +234,9 @@ class TestReasoningInAgent:
                         all_reasoning_text += part.get("text", "")
                     elif "root" in part and "text" in part.get("root", {}):
                         all_reasoning_text += part["root"]["text"]
-
-            assert "Нужно вычислить" in all_reasoning_text or "Получил результат" in all_reasoning_text
+            assert (
+                "Нужно вычислить" in all_reasoning_text or "Получил результат" in all_reasoning_text
+            )
 
     async def test_stream_returns_reasoning_events(
         self, client, mock_llm_with_queue, sync_tools, unique_id: str
@@ -293,7 +245,6 @@ class TestReasoningInAgent:
         from apps.flows.src.container import get_container
 
         flow_id = f"test_reasoning_stream_flow_{unique_id}"
-
         from apps.flows.src.models import FlowConfig
 
         container = get_container()
@@ -302,27 +253,13 @@ class TestReasoningInAgent:
                 flow_id=flow_id,
                 name="Test Reasoning Stream Agent",
                 entry="main",
-                nodes={
-                    "main": {
-                        "type": "llm_node",
-                        "prompt": "Ты помощник.",
-                        "tools": [],
-                    }
-                },
-                edges=[{"from": "main", "to": None}],
+                nodes={"main": {"type": "llm_node", "prompt": "Ты помощник.", "tools": []}},
+                edges=[{"from_node": "main", "to_node": None}],
             )
         )
-
         mock_llm_with_queue(
-            [
-                {
-                    "type": "text",
-                    "content": "Ответ",
-                    "reasoning": "Сначала думаю... Потом отвечаю.",
-                }
-            ]
+            [{"type": "text", "content": "Ответ", "reasoning": "Сначала думаю... Потом отвечаю."}]
         )
-
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -338,10 +275,8 @@ class TestReasoningInAgent:
                 },
             },
         )
-
         assert response.status_code == 200
         assert "text/event-stream" in response.headers.get("content-type", "")
-
         text = response.text
         lines = text.split("\n")
         events = []
@@ -355,18 +290,20 @@ class TestReasoningInAgent:
                         events.append(event_data["result"])
                 except Exception:
                     pass
-
         reasoning_events = [
-            e for e in events if e.get("kind") == "artifact-update" and e.get("artifact", {}).get("name") == "reasoning"
+            e
+            for e in events
+            if e.get("kind") == "artifact-update"
+            and e.get("artifact", {}).get("name") == "reasoning"
         ]
-
         assert len(reasoning_events) > 0, "Должны быть reasoning события в stream"
-
         response_events = [
             e
             for e in events
             if e.get("kind") == "artifact-update"
-            and (e.get("artifact", {}).get("name") is None or e.get("artifact", {}).get("name") == "response")
+            and (
+                e.get("artifact", {}).get("name") is None
+                or e.get("artifact", {}).get("name") == "response"
+            )
         ]
-
         assert len(response_events) > 0, "Должны быть response события в stream"

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from apps.browser.config import get_browser_settings, settings_to_runtime_view
 from apps.browser.orchestration.runtime_facade import BrowserRuntimeFacade
-from core.container import BaseContainer, lazy
+from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -39,23 +39,19 @@ class BrowserContainer(BaseContainer):
         return BrowserRuntimeFacade(settings_to_runtime_view(get_browser_settings()))
 
 
-_browser_container: BrowserContainer | None = None
+def _create_browser_container() -> BrowserContainer:
+    settings = get_browser_settings()
+    if not settings.database.shared_url:
+        raise ValueError("database.shared_url is required для сервиса browser")
+    return BrowserContainer(
+        db_url=settings.database.shared_url,
+        shared_db_url=settings.database.shared_url,
+    )
 
 
-def get_browser_container() -> BrowserContainer:
-    global _browser_container
-    if _browser_container is None:
-        settings = get_browser_settings()
-        if not settings.database.shared_url:
-            raise ValueError("database.shared_url is required для сервиса browser")
-        _browser_container = BrowserContainer(
-            db_url=settings.database.shared_url,
-            shared_db_url=settings.database.shared_url,
-        )
-        logger.info("BrowserContainer инициализирован")
-    return _browser_container
+_browser_registry: ContainerRegistry[BrowserContainer] = ContainerRegistry(
+    _create_browser_container, name="BrowserContainer"
+)
 
-
-def reset_browser_container() -> None:
-    global _browser_container
-    _browser_container = None
+get_browser_container = _browser_registry.get
+reset_browser_container = _browser_registry.reset

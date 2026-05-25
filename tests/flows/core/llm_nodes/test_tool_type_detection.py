@@ -8,13 +8,14 @@
 - Работает с кастомными tools (не только стандартные reason/finish)
 """
 
-from typing import Any, Dict
+from typing import Any, cast
 
 import pytest
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import NodeConfig, ReactConfig, ReactLoopMode
-from apps.flows.src.models.enums import ReactToolRole
-from apps.flows.src.models.node_config import NodeLLMOverride
+from apps.flows.src.models.enums import NodeType, ReactToolRole
+from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.src.tools.base import BaseTool
@@ -40,19 +41,30 @@ class _BillingService:
         _ = company_id, user_id, operation_code, notification_service
 
 
-class _NoopStateManager:
-    async def save_state(self, session_id: str, state: ExecutionState) -> bool:
-        _ = session_id, state
+class _NoopWorkflowRuntime:
+    async def save_state(self, session_id: str, state: ExecutionState, **kwargs: object) -> bool:
+        _ = session_id, state, kwargs
+        return True
+
+    async def record_activity_scheduled(self, **kwargs: object) -> None:
+        _ = kwargs
+
+    async def record_activity_completed(self, **kwargs: object) -> bool:
+        _ = kwargs
         return True
 
 
 class _RuntimeContainer:
     billing_service = _BillingService()
-    state_manager = _NoopStateManager()
+    workflow_runtime = _NoopWorkflowRuntime()
+
+
+def _runtime_container() -> FlowRuntimeContainer:
+    return cast(FlowRuntimeContainer, _RuntimeContainer())
 
 
 async def _run_reminder_agent(runner: LlmNodeRunner, state: ExecutionState) -> None:
-    runner.container = _RuntimeContainer()
+    runner.container = _runtime_container()
     async for _ in runner.run({"content": "test"}, state, InMemoryEmitter(state)):
         pass
 
@@ -64,12 +76,10 @@ class CustomReasonTool(BaseTool):
     description = "Custom reasoning tool"
     react_role = ReactToolRole.REASON
 
-    async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
-        thought = args.get("thought", "")
-        if state and "reasoning_history" not in state:
-            state["reasoning_history"] = []
-        if state:
-            state["reasoning_history"].append({"thought": thought})
+    async def _run_impl(self, args: dict[str, Any], state: ExecutionState | None = None) -> str:
+        thought = str(args.get("thought", ""))
+        if state is not None:
+            state.reasoning_history.append({"thought": thought})
         return f"Thought recorded: {thought}"
 
 
@@ -80,8 +90,9 @@ class CustomExitTool(BaseTool):
     description = "Custom exit tool"
     react_role = ReactToolRole.EXIT
 
-    async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
-        return args.get("answer", "Done")
+    async def _run_impl(self, args: dict[str, Any], state: ExecutionState | None = None) -> str:
+        _ = state
+        return str(args.get("answer", "Done"))
 
 
 class RegularTool(BaseTool):
@@ -91,7 +102,8 @@ class RegularTool(BaseTool):
     description = "Regular helper tool"
     react_role = ReactToolRole.STANDARD
 
-    async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
+    async def _run_impl(self, args: dict[str, Any], state: ExecutionState | None = None) -> str:
+        _ = args, state
         return "helped"
 
 
@@ -102,10 +114,10 @@ class TestGetReasonToolName:
     def base_config(self) -> NodeConfig:
         return NodeConfig(
             node_id="test_agent",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Test Agent",
             prompt="Test prompt",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
         )
 
     def test_returns_reason_name_for_standard_tool(self, base_config):
@@ -170,10 +182,10 @@ class TestGetExitToolName:
     def base_config(self) -> NodeConfig:
         return NodeConfig(
             node_id="test_agent",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Test Agent",
             prompt="Test prompt",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
         )
 
     def test_returns_finish_name_for_standard_tool(self, base_config):
@@ -251,10 +263,10 @@ class TestReactRoleCombinations:
     def base_config(self) -> NodeConfig:
         return NodeConfig(
             node_id="test_agent",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Test Agent",
             prompt="Test prompt",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
         )
 
     def test_both_standard_tools(self, base_config):
@@ -337,10 +349,10 @@ class TestExitToolInjection:
     def explicit_config(self) -> NodeConfig:
         return NodeConfig(
             node_id="explicit_loop",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Explicit loop",
             prompt="Test prompt",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
             react=ReactConfig(
                 loop_mode=ReactLoopMode.EXPLICIT,
                 exit_tool="finish",
@@ -395,10 +407,10 @@ class TestReminderWithToolNames:
     def explicit_strict_config(self) -> NodeConfig:
         return NodeConfig(
             node_id="strict_agent",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Strict Agent",
             prompt="You are a helpful assistant.",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
             react=ReactConfig(
                 loop_mode=ReactLoopMode.EXPLICIT,
                 exit_tool="finish",
@@ -496,10 +508,10 @@ class TestReminderWithToolNames:
         custom_exit = CustomExitTool()
         config = NodeConfig(
             node_id="custom_flow",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Custom Agent",
             prompt="You are a helpful assistant.",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
             react=ReactConfig(
                 loop_mode=ReactLoopMode.EXPLICIT,
                 exit_tool="complete",
@@ -548,10 +560,10 @@ class TestReminderWithToolNames:
         custom_reason = CustomReasonTool()
         config = NodeConfig(
             node_id="custom_reason_agent",
-            type="llm_node",
+            type=NodeType.LLM_NODE,
             name="Custom Reason Agent",
             prompt="You are a helpful assistant.",
-            llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+            llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
             react=ReactConfig(
                 loop_mode=ReactLoopMode.EXPLICIT,
                 exit_tool="finish",

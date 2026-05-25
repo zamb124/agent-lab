@@ -71,7 +71,7 @@ async def test_crm_create_note_tool_returns_blocks_for_chat(
     )
     proposed = json.loads(propose_raw)
     pending_events = state.ui_events_pending
-    assert pending_events[-1].type == "action_previewed"
+    assert pending_events[-1].event_type == "action_previewed"
     preview_buttons = pending_events[-1].payload["blocks"][1]["buttons"]
     assert preview_buttons[0]["action_kind"] == "apply"
     assert preview_buttons[0]["action_id"] == "crm.note.create.apply"

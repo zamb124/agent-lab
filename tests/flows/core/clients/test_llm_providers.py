@@ -304,7 +304,7 @@ class TestLlmNodeLLMConfig:
     @pytest.mark.asyncio
     async def test_llm_node_passes_llm_config_to_factory(self):
         """LlmNode передает llm config в get_llm."""
-        from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride, NodeType
+        from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, NodeType
         from apps.flows.src.runtime.nodes import LlmNode
 
         node_config = NodeConfig(
@@ -312,7 +312,7 @@ class TestLlmNodeLLMConfig:
             type=NodeType.LLM_NODE,
             name="Test Node",
             prompt="Test prompt",
-            llm=NodeLLMOverride(
+            llm=NodeLLMConfig(
                 model="gpt-4-turbo",
                 temperature=0.5,
                 provider="bothub",

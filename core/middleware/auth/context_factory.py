@@ -2,16 +2,18 @@
 Фабрика для создания Context.
 """
 
-from typing import Any
-
 from fastapi import HTTPException, Request
 
+from core.container import BaseContainer
 from core.context import clear_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User, UserStatus
+from core.types import JsonObject
 from core.utils.tokens import TokenData
+
+from .route_config import RouteContextType, WebhookPlatform
 
 logger = get_logger(__name__)
 
@@ -19,17 +21,17 @@ logger = get_logger(__name__)
 class ContextFactory:
     """Единая фабрика для создания Context"""
 
-    def __init__(self, container):
-        self.container = container
+    def __init__(self, container: BaseContainer) -> None:
+        self.container: BaseContainer = container
 
     async def create(
         self,
         request: Request,
-        context_type: str,
+        context_type: RouteContextType,
         company: Company | None,
         user: User | None = None,
         token_data: TokenData | None = None,
-        platform: str | None = None,
+        platform: WebhookPlatform | None = None,
         auth_token: str | None = None,
         trace_id: str | None = None,
     ) -> Context:
@@ -86,9 +88,9 @@ class ContextFactory:
 
         user_companies = await self._get_user_companies(user)
 
-        metadata: dict[str, Any] = {
+        metadata: JsonObject = {
             "context_type": context_type,
-            "authenticated": user is not None,
+            "authenticated": True,
         }
 
         if platform:
@@ -177,12 +179,12 @@ class ContextFactory:
         user_companies: list[Company],
         language: Language,
         host: str,
-        metadata: dict[str, Any],
+        metadata: JsonObject,
         token_data: TokenData | None,
         auth_token: str | None,
         trace_id: str | None,
-        platform: str | None,
-        context_type: str,
+        platform: WebhookPlatform | None,
+        context_type: RouteContextType,
     ) -> str:
         if not company or not user:
             return "default"
@@ -224,10 +226,10 @@ class ContextFactory:
     async def _get_user_companies(self, user: User) -> list[Company]:
         """Получает все компании пользователя"""
         company_repo = self.container.company_repository
-        companies = []
+        companies: list[Company] = []
         for company_id in user.companies.keys():
             company = await company_repo.get(company_id)
-            if company:
+            if company is not None:
                 companies.append(company)
         return companies
 

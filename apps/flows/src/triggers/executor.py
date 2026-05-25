@@ -7,7 +7,6 @@ TriggerExecutor - запуск агента при срабатывании тр
 """
 
 import uuid
-from typing import Any
 
 from apps.flows.src.models import TriggerConfig
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
@@ -16,6 +15,7 @@ from apps.flows_worker.broker import broker as flows_broker
 from core.context import Context, User, get_context
 from core.logging import get_logger
 from core.tasks.kicker import kiq_task_name_with_context
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 
@@ -32,16 +32,16 @@ class TriggerExecutor:
     """
 
     def __init__(self) -> None:
-        self._input_mapper = InputMapper()
+        self._input_mapper: InputMapper = InputMapper()
 
     async def execute(
         self,
         flow_id: str,
         trigger: TriggerConfig,
-        payload: dict[str, Any],
+        payload: JsonObject,
         user_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        metadata: JsonObject | None = None,
+    ) -> JsonObject:
         """
         Запускает агента с данными из триггера.
 
@@ -56,19 +56,23 @@ class TriggerExecutor:
             Результат выполнения агента
         """
         trigger_id = trigger.trigger_id
-        # Обрабатываем и enum и строку
-        trigger_type = trigger.type.value if hasattr(trigger.type, 'value') else str(trigger.type)
+        trigger_type = trigger.type.value
 
         logger.info(
-            f"Executing flow from trigger: flow_id={flow_id}, "
-            f"trigger={trigger_id}, type={trigger_type}"
+            "Executing flow from trigger: flow_id=%s, trigger=%s, type=%s",
+            flow_id,
+            trigger_id,
+            trigger_type,
         )
 
         mapping = {**dict(trigger.input_mapping), **dict(trigger.output_mapping)}
         mapped_data = self._input_mapper.map(trigger_id, payload, mapping)
 
-        content = mapped_data.get("content", "")
-        triggers_data = mapped_data.get("triggers", {})
+        content_raw = mapped_data["content"]
+        if not isinstance(content_raw, str):
+            raise TypeError("Trigger mapped content must be a string")
+        content = content_raw
+        triggers_data = require_json_object(mapped_data["triggers"], "trigger mapped data")
 
         # Формируем IDs
         task_id = str(uuid.uuid4())
@@ -102,14 +106,14 @@ class TriggerExecutor:
             },
         )
 
-        final_metadata = {
+        final_metadata: JsonObject = {
             "trigger_id": trigger_id,
             "trigger_type": trigger_type,
             "triggers": triggers_data,
             **(metadata or {}),
         }
 
-        await kiq_task_name_with_context(
+        _ = await kiq_task_name_with_context(
             TASK_PROCESS_FLOW,
             flows_broker,
             flow_id=flow_id,
@@ -138,28 +142,35 @@ class TriggerExecutor:
         }
 
 
-    def _extract_user_id(self, trigger_type: str, payload: dict[str, Any]) -> str:
+    def _extract_user_id(self, trigger_type: str, payload: JsonObject) -> str:
         """Извлекает user_id из payload в зависимости от типа триггера."""
         if trigger_type == "telegram":
             cq = payload.get("callback_query")
-            if isinstance(cq, dict) and cq:
-                from_user_raw = cq.get("from")
-                from_user = from_user_raw if isinstance(from_user_raw, dict) else {}
+            if cq is not None:
+                callback_query = require_json_object(cq, "telegram.callback_query")
+                from_user_raw = callback_query.get("from")
+                if from_user_raw is None:
+                    raise ValueError("telegram.callback_query.from is required")
+                from_user = require_json_object(from_user_raw, "telegram.callback_query.from")
                 uid = from_user.get("id")
                 if uid is not None:
                     return f"tg:{uid}"
             message_raw = payload.get("message")
-            message = message_raw if isinstance(message_raw, dict) else {}
+            if message_raw is None:
+                return f"trigger:{trigger_type}"
+            message = require_json_object(message_raw, "telegram.message")
             from_user_raw = message.get("from")
-            from_user = from_user_raw if isinstance(from_user_raw, dict) else {}
+            if from_user_raw is None:
+                raise ValueError("telegram.message.from is required")
+            from_user = require_json_object(from_user_raw, "telegram.message.from")
             user_id = from_user.get("id")
             if user_id is not None:
                 return f"tg:{user_id}"
 
         if trigger_type == "email":
             # Email: from адрес
-            from_addr = payload.get("from", "")
-            if from_addr:
+            from_addr = payload.get("from")
+            if isinstance(from_addr, str) and from_addr:
                 return f"email:{from_addr}"
 
         return f"trigger:{trigger_type}"

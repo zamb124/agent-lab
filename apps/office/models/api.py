@@ -3,11 +3,13 @@ Pydantic-модели BFF office.
 """
 
 from datetime import datetime
-from typing import Literal, Self
+from typing import ClassVar, Literal, Self, TypeAlias
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.pagination import ListResponse
+
+SpreadsheetCellValue: TypeAlias = str | int | float | bool | None
 
 
 class OfficeDocumentItem(BaseModel):
@@ -84,7 +86,7 @@ class OfficeDocumentAppendTextRequest(BaseModel):
 
 
 class OfficeSpreadsheetUpdateCellsRequest(BaseModel):
-    cells: dict[str, str | int | float | bool | None] = Field(min_length=1)
+    cells: dict[str, SpreadsheetCellValue] = Field(min_length=1)
     sheet: str | None = Field(default=None, max_length=128)
     tool_call_id: str | None = Field(default=None, max_length=128)
 
@@ -127,6 +129,41 @@ class OfficeEditorConfigResponse(BaseModel):
 
 class OnlyOfficeCallbackResponse(BaseModel):
     error: int = 0
+
+
+class OnlyOfficeDownloadTokenClaims(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    typ: Literal["office_dl"]
+    binding_kind: Literal["document", "file"]
+    file_id: str
+    company_id: str
+    binding_id: str
+    iat: int
+    exp: int
+
+
+class OnlyOfficeCallbackContextClaims(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    typ: Literal["office_cb"]
+    binding_kind: Literal["document", "file"]
+    binding_id: str
+    company_id: str
+    iat: int
+    exp: int
+    namespace: str | None = None
+    file_id: str | None = None
+
+    @model_validator(mode="after")
+    def required_binding_fields(self) -> Self:
+        if self.binding_kind == "document":
+            if self.namespace is None or self.namespace == "":
+                raise ValueError("namespace обязателен для document callback-токена")
+            return self
+        if self.file_id is None or self.file_id == "":
+            raise ValueError("file_id обязателен для file callback-токена")
+        return self
 
 
 class OfficeNamespaceItem(BaseModel):

@@ -22,7 +22,7 @@ from apps.crm.models.api import (
     TaskResponse,
 )
 from apps.crm.services.task_service import ActiveTaskExistsError
-from core.context import get_context
+from core.context import get_context, resolve_namespace_or_raise
 from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -104,7 +104,7 @@ async def start_note_analyze(
         extract_relationship_types=body.extract_relationship_types,
         mentioned_entity_ids=body.mentioned_entity_ids,
     )
-    ns = note.namespace or "default"
+    ns = resolve_namespace_or_raise(note.namespace)
 
     try:
         row = await container.task_service.start_note_analyze(

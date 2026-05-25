@@ -14,7 +14,7 @@ from apps.flows.src.runtime_helpers.state_utils import find_file, push_ui_event
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.clients.service_client import NAMESPACE_HEADER, ServiceClient, ServiceClientError
-from core.context import get_context
+from core.context import resolve_namespace_or_raise
 from core.files.file_ref import FileRef
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
@@ -69,11 +69,7 @@ class DocumentsUpdateCellsArgs(DocumentsOpenFileArgs):
 
 
 def _context_namespace() -> str:
-    ctx = get_context()
-    if ctx is None:
-        raise RuntimeError("Context is not set")
-    ns = (ctx.active_namespace or "default").strip()
-    return ns or "default"
+    return resolve_namespace_or_raise()
 
 
 def _pick_state_file(
@@ -221,7 +217,7 @@ async def _apply_document_mutation(
         "а пользователь видит файл в панели файлов чата и может редактировать его в iframe."
     ),
     tags=["documents", "files", "office"],
-    args_schema=DocumentsOpenFileArgs,
+    parameters_model=DocumentsOpenFileArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def documents_open_file(
@@ -305,7 +301,7 @@ async def documents_open_file(
         "открытый OnlyOffice редактор через forcesave."
     ),
     tags=["documents", "files", "office"],
-    args_schema=DocumentsReplaceTextArgs,
+    parameters_model=DocumentsReplaceTextArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def documents_replace_text(
@@ -337,7 +333,7 @@ async def documents_replace_text(
         "Поддерживает .docx и .txt/.csv; открытый редактор синхронизируется перед правкой."
     ),
     tags=["documents", "files", "office"],
-    args_schema=DocumentsAppendTextArgs,
+    parameters_model=DocumentsAppendTextArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def documents_append_text(
@@ -367,7 +363,7 @@ async def documents_append_text(
         "cells задаётся как JSON object с адресами A1/B2; открытый редактор синхронизируется перед правкой."
     ),
     tags=["documents", "files", "office"],
-    args_schema=DocumentsUpdateCellsArgs,
+    parameters_model=DocumentsUpdateCellsArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def documents_update_cells(

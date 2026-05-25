@@ -60,7 +60,7 @@ async def test_litserve_stt_client_returns_transcript(
     result = await client.transcribe_audio(
         audio_bytes=expected_audio,
         file_name=f"audio-{unique_id}.wav",
-        mime_type="audio/wav",
+        content_type="audio/wav",
     )
 
     assert isinstance(result, STTTranscriptionResult)
@@ -91,7 +91,7 @@ async def test_litserve_stt_client_empty_text_means_no_speech(
     result = await client.transcribe_audio(
         audio_bytes=b"\x00",
         file_name=f"audio-{unique_id}.wav",
-        mime_type="audio/wav",
+        content_type="audio/wav",
     )
     assert result.text == ""
     assert result.provider == "litserve"
@@ -124,7 +124,7 @@ async def test_cloud_ru_stt_client_passes_api_key_and_returns_transcript(
     result = await client.transcribe_audio(
         audio_bytes=b"\x00\x01",
         file_name=f"audio-{unique_id}.wav",
-        mime_type="audio/wav",
+        content_type="audio/wav",
     )
 
     assert result.provider == "cloud_ru"
@@ -159,7 +159,7 @@ async def test_yandex_stt_client_is_stub_until_keys_supplied(unique_id: str) -> 
         await client.transcribe_audio(
             audio_bytes=b"\x00",
             file_name=f"audio-{unique_id}.wav",
-            mime_type="audio/wav",
+            content_type="audio/wav",
         )
 
 
@@ -171,7 +171,7 @@ async def test_sber_stt_client_is_stub_until_keys_supplied(unique_id: str) -> No
         await client.transcribe_audio(
             audio_bytes=b"\x00",
             file_name=f"audio-{unique_id}.wav",
-            mime_type="audio/wav",
+            content_type="audio/wav",
         )
 
 
@@ -183,7 +183,7 @@ async def test_mock_stt_client_returns_configured_transcript(unique_id: str) -> 
     result = await client.transcribe_audio(
         audio_bytes=b"\x00",
         file_name=f"audio-{unique_id}.wav",
-        mime_type="audio/wav",
+        content_type="audio/wav",
     )
     assert result.provider == "mock"
     assert result.status == AudioTranscriptionStatus.DONE

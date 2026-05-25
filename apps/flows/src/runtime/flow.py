@@ -16,11 +16,34 @@ Flow - выполнение графа нод.
 from __future__ import annotations
 
 import asyncio
-import re
+from collections.abc import Mapping, Sequence
 
 from apps.flows.src.constants.execution_limits import get_graph_max_iterations
 from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.durable_execution import (
+    BreakpointHitPayload,
+    EdgeActivatedPayload,
+    InterruptRaisedPayload,
+    NodeCompletedPayload,
+    NodeFailedPayload,
+    NodeScheduledPayload,
+    NodeWriteRecordedPayload,
+    SideEffectPolicy,
+    SuperstepCommittedPayload,
+    SuperstepStartedPayload,
+    WorkflowAppendResult,
+    WorkflowEventPayload,
+    WorkflowEventType,
+    build_state_delta,
+    hash_state_json,
+)
 from apps.flows.src.mapping import MappingResolver
+from apps.flows.src.models.flow_config import (
+    CodeEdgeCondition,
+    Edge,
+    EdgeCondition,
+    SimpleEdgeCondition,
+)
 from apps.flows.src.runtime.exceptions import (
     BreakpointInterrupt,
     EdgeConditionError,
@@ -43,7 +66,14 @@ from core.state.mutation_policy import should_skip_field_on_user_returned_state_
 from core.tracing import get_tracer
 from core.tracing.context import TraceContext, get_current_trace_context
 from core.tracing.provider import is_tracing_enabled
-from core.types import JsonArray, JsonObject, JsonValue, require_json_array, require_json_object
+from core.types import (
+    JsonArray,
+    JsonObject,
+    parse_json_object,
+    require_json_array,
+    require_json_object,
+    require_json_value,
+)
 
 from .nodes import BaseNode, create_node
 
@@ -71,7 +101,7 @@ class Flow:
         name: str,
         entry: str,
         nodes: dict[str, BaseNode],
-        edges: list[JsonObject],
+        edges: Sequence[Edge | JsonObject],
         description: str = "",
         tags: list[str] | None = None,
         variables: JsonObject | None = None,
@@ -92,30 +122,78 @@ class Flow:
                 if node.container is None:
                     node.container = self.container
 
-        # Нормализуем edges в единый формат (список словарей)
-        self.edges: list[JsonObject] = self._normalize_edges(edges)
+        self.edges: list[Edge] = [Edge.model_validate(edge) for edge in edges]
 
         # Индекс edges по from_node
-        self._edges_by_from: dict[str, list[JsonObject]] = {}
+        self._edges_by_from: dict[str, list[Edge]] = {}
         for edge in self.edges:
-            from_node = edge.get("from")
-            if not isinstance(from_node, str) or not from_node:
-                raise ValueError("edge.from must be a non-empty string")
-            self._edges_by_from.setdefault(from_node, []).append(edge)
+            self._edges_by_from.setdefault(edge.from_node, []).append(edge)
 
         self._join_required: dict[str, frozenset[str]] = self._build_join_required_predecessors()
 
     async def _emit_pending_ui_events(self, emitter: Emitter | InMemoryEmitter, state: ExecutionState) -> None:
         await emit_pending_ui_events(emitter=emitter, state=state)
 
-    async def _checkpoint_state(self, state: ExecutionState) -> None:
+    async def _checkpoint_state(
+        self,
+        state: ExecutionState,
+        *,
+        event_type: WorkflowEventType = WorkflowEventType.state_projection_committed,
+        payload: WorkflowEventPayload | None = None,
+    ) -> WorkflowAppendResult | None:
         if self.container is None:
-            return
-        if getattr(state, "_skip_hot_state_checkpoint", False):
-            return
+            return None
         if state.session_flow_id != self.flow_id:
-            return
-        _ = await self.container.state_manager.save_state(state.session_id, state)
+            return None
+        return await self.container.workflow_runtime.record_state_event(
+            state.session_id,
+            state,
+            event_type=event_type,
+            payload=payload,
+        )
+
+    @staticmethod
+    def _clone_state(state: ExecutionState) -> ExecutionState:
+        """Снимок ExecutionState для параллельного выполнения нод в superstep."""
+        return state.model_copy(deep=True)
+
+    @staticmethod
+    def _event_sequence(event: WorkflowAppendResult | None) -> int | None:
+        if event is None:
+            return None
+        return event.sequence
+
+    @staticmethod
+    def _event_execution_branch_id(event: WorkflowAppendResult | None) -> str | None:
+        if event is None:
+            return None
+        return event.execution_branch_id
+
+    @staticmethod
+    def _attach_durable_node_context(
+        state: ExecutionState,
+        *,
+        execution_branch_id: str | None,
+        node_schedule_sequence: int | None,
+        superstep_sequence: int | None,
+    ) -> None:
+        state.attach_durable_node_context(
+            execution_branch_id=execution_branch_id,
+            node_schedule_sequence=node_schedule_sequence,
+            superstep_sequence=superstep_sequence,
+        )
+
+    @staticmethod
+    def _attach_durable_edge_context(
+        state: ExecutionState,
+        *,
+        execution_branch_id: str | None,
+        edge_evaluation_sequence: int | None,
+    ) -> None:
+        state.attach_durable_edge_context(
+            execution_branch_id=execution_branch_id,
+            edge_evaluation_sequence=edge_evaluation_sequence,
+        )
 
     async def _emit_edge_condition_error_artifact(
         self, emitter: Emitter | InMemoryEmitter, ece: EdgeConditionError
@@ -127,52 +205,17 @@ class Flow:
             str(ece.original),
         )
 
-    def _normalize_edges(self, edges: list[JsonObject]) -> list[JsonObject]:
-        """Нормализует edges в list of dicts."""
-        result: list[JsonObject] = []
-        for edge in edges:
-            from_node = edge.get("from")
-            if not isinstance(from_node, str) or not from_node:
-                raise ValueError("edge.from must be a non-empty string")
-            to_node = edge.get("to")
-            if to_node is not None and (not isinstance(to_node, str) or not to_node):
-                raise ValueError("edge.to must be null or a non-empty string")
-            cj = edge.get("contributes_to_join")
-            if cj is None:
-                contributes = True
-            elif isinstance(cj, bool):
-                contributes = cj
-            else:
-                raise ValueError("edge.contributes_to_join must be a boolean")
-            result.append(
-                {
-                    "from": from_node,
-                    "to": to_node,
-                    "condition": edge.get("condition"),
-                    "contributes_to_join": contributes,
-                }
-            )
-        return result
-
     def _build_join_required_predecessors(self) -> dict[str, frozenset[str]]:
         """Для incoming_policy=all: множество предков по рёбрам с contributes_to_join=True."""
         acc: dict[str, set[str]] = {}
         for edge in self.edges:
-            to_n = edge.get("to")
-            from_n = edge.get("from")
-            if not isinstance(to_n, str) or not isinstance(from_n, str):
+            to_node = edge.to_node
+            if to_node is None:
                 continue
-            if not edge.get("contributes_to_join", True):
+            if not edge.contributes_to_join:
                 continue
-            acc.setdefault(to_n, set()).add(from_n)
+            acc.setdefault(to_node, set()).add(edge.from_node)
         return {k: frozenset(v) for k, v in acc.items()}
-
-    @staticmethod
-    def _edge_contributes_to_join(edge: JsonObject) -> bool:
-        raw = edge.get("contributes_to_join", True)
-        if not isinstance(raw, bool):
-            raise ValueError("edge.contributes_to_join must be a boolean")
-        return raw
 
     def _incoming_policy(self, node_id: str) -> str:
         node = self.nodes.get(node_id)
@@ -185,18 +228,13 @@ class Flow:
             )
         return policy
 
-    def _edge_index(self, edge: JsonObject) -> int:
+    def _edge_index(self, edge: Edge) -> int:
         """Индекс ребра в `self.edges` (тот же порядок, что в конфиге flow/skill)."""
         for i, e in enumerate(self.edges):
             if e is edge:
                 return i
         for i, e in enumerate(self.edges):
-            if (
-                e.get("from") == edge.get("from")
-                and e.get("to") == edge.get("to")
-                and e.get("condition") == edge.get("condition")
-                and e.get("contributes_to_join") == edge.get("contributes_to_join")
-            ):
+            if e == edge:
                 return i
         raise ValueError(
             f"Flow {self.flow_id!r}: edge not in edges list: {edge!r}"
@@ -209,18 +247,22 @@ class Flow:
         edges = self._edges_by_from.get(from_node, [])
         out: list[tuple[str, bool, int]] = []
         for edge in edges:
-            to_node = edge.get("to")
+            to_node = edge.to_node
             if to_node is None:
                 continue
-            if not isinstance(to_node, str):
-                raise ValueError("edge.to must be a string or null")
             edge_idx = self._edge_index(edge)
-            condition = edge.get("condition")
+            condition = edge.condition
             try:
                 if condition is None:
                     active = True
                 else:
-                    active = await self._evaluate_condition(condition, state)
+                    active = await self._evaluate_condition(
+                        condition,
+                        state,
+                        edge_index=edge_idx,
+                        from_node=from_node,
+                        to_node=to_node,
+                    )
             except Exception as exc:
                 raise EdgeConditionError(edge_idx, from_node, to_node, exc) from exc
             if not active:
@@ -228,7 +270,7 @@ class Flow:
             out.append(
                 (
                     to_node,
-                    self._edge_contributes_to_join(edge),
+                    edge.contributes_to_join,
                     edge_idx,
                 )
             )
@@ -246,14 +288,20 @@ class Flow:
     ) -> int:
         """Первое активное ребро from_node -> to_node по текущему state."""
         for edge in self._edges_by_from.get(from_node, []):
-            if edge.get("to") != to_node:
+            if edge.to_node != to_node:
                 continue
             edge_idx = self._edge_index(edge)
-            condition = edge.get("condition")
+            condition = edge.condition
             try:
                 if condition is None:
                     return edge_idx
-                if await self._evaluate_condition(condition, state):
+                if await self._evaluate_condition(
+                    condition,
+                    state,
+                    edge_index=edge_idx,
+                    from_node=from_node,
+                    to_node=to_node,
+                ):
                     return edge_idx
             except Exception as exc:
                 raise EdgeConditionError(edge_idx, from_node, to_node, exc) from exc
@@ -334,12 +382,50 @@ class Flow:
 
                     # Проверка breakpoint
                     if await self._check_breakpoint(state, node_id, node_type, emitter):
-                        await self._checkpoint_state(state)
+                        _ = await self._checkpoint_state(
+                            state,
+                            event_type=WorkflowEventType.breakpoint_hit,
+                            payload=BreakpointHitPayload(
+                                node_id=node_id,
+                                node_type=node_type,
+                            ),
+                        )
                         return state
 
                 for node_id in current_nodes:
                     node_type = self._node_type_from_config(self.nodes[node_id])
                     logger.debug(f"Flow {self.flow_id}: executing node '{node_id}' (type={node_type})")
+
+                superstep_base_state = self._clone_state(state)
+                superstep_event = await self._checkpoint_state(
+                    superstep_base_state,
+                    event_type=WorkflowEventType.superstep_started,
+                    payload=SuperstepStartedPayload(current_nodes=current_nodes),
+                )
+                recover_sequence = self._event_sequence(superstep_event)
+                superstep_sequence = recover_sequence
+                execution_branch_id = self._event_execution_branch_id(superstep_event)
+                node_schedule_contexts: dict[str, tuple[str | None, int | None]] = {}
+                for node_id in current_nodes:
+                    node_type = self._node_type_from_config(self.nodes[node_id])
+                    scheduled_event = await self._checkpoint_state(
+                        superstep_base_state,
+                        event_type=WorkflowEventType.node_scheduled,
+                        payload=NodeScheduledPayload(
+                            node_id=node_id,
+                            node_type=node_type,
+                            current_nodes=current_nodes,
+                        ),
+                    )
+                    scheduled_sequence = self._event_sequence(scheduled_event)
+                    scheduled_branch_id = self._event_execution_branch_id(scheduled_event)
+                    if scheduled_branch_id is not None:
+                        execution_branch_id = scheduled_branch_id
+                    node_schedule_contexts[node_id] = (
+                        scheduled_branch_id or execution_branch_id,
+                        scheduled_sequence,
+                    )
+                    recover_sequence = scheduled_sequence or recover_sequence
 
                 # Выполнение всех нод текущего уровня
                 async def _run(node_id: str, run_state: ExecutionState) -> ExecutionState:
@@ -364,14 +450,18 @@ class Flow:
 
                 try:
                     run_states: dict[str, ExecutionState] = {}
-                    if len(current_nodes) > 1:
-                        for nid in current_nodes:
-                            run_states[nid] = ExecutionState.model_validate(
-                                state.model_dump(exclude_none=False)
-                            )
-                    else:
-                        for nid in current_nodes:
-                            run_states[nid] = state
+                    for nid in current_nodes:
+                        run_states[nid] = self._clone_state(superstep_base_state)
+                        branch_id, schedule_sequence = node_schedule_contexts.get(
+                            nid,
+                            (execution_branch_id, None),
+                        )
+                        self._attach_durable_node_context(
+                            run_states[nid],
+                            execution_branch_id=branch_id,
+                            node_schedule_sequence=schedule_sequence,
+                            superstep_sequence=superstep_sequence,
+                        )
 
                     async def _run_captured(
                         node_id: str,
@@ -389,13 +479,44 @@ class Flow:
                         for node_id in current_nodes
                     ]
                     outcomes = await asyncio.gather(*tasks)
-                    results = [
-                        result
-                        for _, result, exc in outcomes
+                    successful_results = [
+                        (node_id, result)
+                        for node_id, result, exc in outcomes
                         if exc is None and result is not None
                     ]
-                    if results:
-                        state = self._merge_results(state, results)
+                    successful_node_writes: list[NodeWriteRecordedPayload] = []
+                    for node_id, result in successful_results:
+                        node_type = self._node_type_from_config(self.nodes[node_id])
+                        state_delta = build_state_delta(superstep_base_state, result)
+                        write_payload = NodeWriteRecordedPayload(
+                            node_id=node_id,
+                            node_type=node_type,
+                            state_delta=state_delta,
+                        )
+                        successful_node_writes.append(write_payload)
+                        write_event = await self._checkpoint_state(
+                            superstep_base_state,
+                            event_type=WorkflowEventType.node_write_recorded,
+                            payload=write_payload,
+                        )
+                        write_branch_id = self._event_execution_branch_id(write_event)
+                        if write_branch_id is not None:
+                            execution_branch_id = write_branch_id
+                        recover_sequence = self._event_sequence(write_event) or recover_sequence
+                        completed_event = await self._checkpoint_state(
+                            superstep_base_state,
+                            event_type=WorkflowEventType.node_completed,
+                            payload=NodeCompletedPayload(
+                                node_id=node_id,
+                                node_type=node_type,
+                            ),
+                        )
+                        completed_branch_id = self._event_execution_branch_id(completed_event)
+                        if completed_branch_id is not None:
+                            execution_branch_id = completed_branch_id
+                        recover_sequence = self._event_sequence(completed_event) or recover_sequence
+
+                    result_states = [result for _, result in successful_results]
 
                     interrupts = [
                         (node_id, exc)
@@ -407,30 +528,68 @@ class Flow:
                         logger.info(
                             f"Flow {self.flow_id}: interrupt at '{node_id}': {interrupt.question}"
                         )
+                        if result_states:
+                            state = self._merge_results(superstep_base_state, result_states)
+                        else:
+                            state = self._clone_state(superstep_base_state)
                         InterruptManager.apply_interrupt(
                             state,
                             interrupt.body,
                             interrupt.tool_call,
-                            getattr(interrupt, "correlation_id", None),
+                            interrupt.correlation_id,
                         )
                         state.current_nodes = current_nodes
-                        await self._checkpoint_state(state)
+                        _ = await self._checkpoint_state(
+                            state,
+                            event_type=WorkflowEventType.interrupt_raised,
+                            payload=InterruptRaisedPayload(
+                                node_id=node_id,
+                                current_nodes=current_nodes,
+                                preserved_node_writes=successful_node_writes,
+                            ),
+                        )
                         return state
 
                     errors = [exc for _, _, exc in outcomes if exc is not None]
                     if errors:
+                        failed_nodes = [
+                            node_id for node_id, _, exc in outcomes if exc is not None
+                        ]
+                        _ = await self._checkpoint_state(
+                            superstep_base_state,
+                            event_type=WorkflowEventType.node_failed,
+                            payload=NodeFailedPayload(
+                                failed_nodes=failed_nodes,
+                                current_nodes=current_nodes,
+                                error=str(errors[0]),
+                                recover_sequence=recover_sequence or 0,
+                                preserved_node_writes=successful_node_writes,
+                            ),
+                        )
                         raise errors[0]
+                    if result_states:
+                        state = self._merge_results(superstep_base_state, result_states)
+                    else:
+                        state = self._clone_state(superstep_base_state)
                 except FlowInterrupt as e:
                     node_id = current_nodes[0]
                     logger.info(f"Flow {self.flow_id}: interrupt at '{node_id}': {e.question}")
+                    state = self._clone_state(superstep_base_state)
                     InterruptManager.apply_interrupt(
                         state,
                         e.body,
                         e.tool_call,
-                        getattr(e, "correlation_id", None),
+                        e.correlation_id,
                     )
                     state.current_nodes = current_nodes
-                    await self._checkpoint_state(state)
+                    _ = await self._checkpoint_state(
+                        state,
+                        event_type=WorkflowEventType.interrupt_raised,
+                        payload=InterruptRaisedPayload(
+                            node_id=node_id,
+                            current_nodes=current_nodes,
+                        ),
+                    )
                     return state
 
                 for node_id in current_nodes:
@@ -442,10 +601,19 @@ class Flow:
                 if state.interrupt:
                     logger.info(f"Flow {self.flow_id}: interrupted")
                     state.current_nodes = current_nodes
-                    await self._checkpoint_state(state)
+                    _ = await self._checkpoint_state(
+                        state,
+                        event_type=WorkflowEventType.interrupt_raised,
+                        payload=InterruptRaisedPayload(current_nodes=current_nodes),
+                    )
                     return state
 
                 try:
+                    self._attach_durable_edge_context(
+                        state,
+                        execution_branch_id=execution_branch_id,
+                        edge_evaluation_sequence=recover_sequence,
+                    )
                     next_nodes, edge_activations = await self._collect_next_wave_targets(
                         current_nodes, state
                     )
@@ -454,15 +622,47 @@ class Flow:
                         await self._raise_if_premature_completion(current_nodes, state)
                         logger.debug(f"Flow {self.flow_id}: completed")
                         state.current_nodes = []
-                        await self._checkpoint_state(state)
+                        _ = await self._checkpoint_state(
+                            state,
+                            event_type=WorkflowEventType.superstep_committed,
+                            payload=SuperstepCommittedPayload(
+                                completed_nodes=current_nodes,
+                                next_nodes=[],
+                            ),
+                        )
                         return state
 
                     for edge_idx, from_n, to_n in edge_activations:
                         await emitter.emit_edge_executed(edge_idx, from_n, to_n)
+                        _ = await self._checkpoint_state(
+                            superstep_base_state,
+                            event_type=WorkflowEventType.edge_activated,
+                            payload=EdgeActivatedPayload(
+                                edge_index=edge_idx,
+                                from_node=from_n,
+                                to_node=to_n,
+                            ),
+                        )
 
+                    completed_nodes = list(current_nodes)
                     current_nodes = list(next_nodes)
                     state.current_nodes = current_nodes
-                    await self._checkpoint_state(state)
+                    _ = await self._checkpoint_state(
+                        state,
+                        event_type=WorkflowEventType.superstep_committed,
+                        payload=SuperstepCommittedPayload(
+                            completed_nodes=completed_nodes,
+                            next_nodes=current_nodes,
+                            edge_activations=[
+                                EdgeActivatedPayload(
+                                    edge_index=edge_idx,
+                                    from_node=from_n,
+                                    to_node=to_n,
+                                )
+                                for edge_idx, from_n, to_n in edge_activations
+                            ],
+                        ),
+                    )
                 except EdgeConditionError as ece:
                     await self._emit_edge_condition_error_artifact(emitter, ece)
                     raise ece.original from ece
@@ -504,15 +704,17 @@ class Flow:
                 if should_skip_field_on_user_returned_state_copy(field):
                     continue
                 value = result[field]
-                if value is not None:
-                    setattr(merged, field, value)
+                original_value = original_state[field]
+                if value is not None or value != original_value:
+                    merged[field] = value
 
-            raw_extra: object | None = getattr(result, "__pydantic_extra__", None)
-            extra = require_json_object(raw_extra, "ExecutionState.extra") if raw_extra else {}
+            extra = result.json_extra()
+            original_extra = original_state.json_extra()
             for key, value in extra.items():
                 if should_skip_field_on_user_returned_state_copy(key):
                     continue
-                setattr(merged, key, value)
+                if value is not None or original_extra.get(key) != value:
+                    merged[key] = value
 
         self._merge_join_arrived_preds(merged, results)
         return merged
@@ -576,20 +778,20 @@ class Flow:
     def _node_has_structural_successor(self, node_id: str) -> bool:
         """Есть ли исходящее ребро к ноде (to не null); связи только в END (to null) не считаются."""
         for edge in self._edges_by_from.get(node_id, []):
-            if edge.get("to") is not None:
+            if edge.to_node is not None:
                 return True
         return False
 
     def _all_structural_outgoing_edges_are_conditional(self, node_id: str) -> bool:
         """Все переходы к нодам (to не null) с условием; иначе есть безусловный выход на ноду."""
-        structural: list[JsonObject] = [
+        structural: list[Edge] = [
             e
             for e in self._edges_by_from.get(node_id, [])
-            if e.get("to") is not None
+            if e.to_node is not None
         ]
         if not structural:
             return False
-        return all(e.get("condition") is not None for e in structural)
+        return all(e.condition is not None for e in structural)
 
     async def _raise_if_premature_completion(
         self,
@@ -672,8 +874,11 @@ class Flow:
 
         logger.info(f"Flow {self.flow_id}: breakpoint hit at node '{node_id}'")
 
-        # Создаем snapshot state
-        state_snapshot = state.model_dump(exclude_none=False)
+        # Создаем projection snapshot
+        state_snapshot = parse_json_object(
+            state.model_dump_json(exclude_none=False),
+            "ExecutionState.breakpoint_state",
+        )
 
         # Публикуем событие breakpoint
         await emitter.emit_breakpoint(node_id, node_type, state_snapshot)
@@ -711,7 +916,7 @@ class Flow:
 
     @staticmethod
     def _node_type_from_config(node: BaseNode) -> str:
-        node_type = node.config.get("type", "function")
+        node_type = node.config.get("type")
         if not isinstance(node_type, str) or not node_type:
             raise TypeError("node.config.type must be a non-empty string")
         return node_type
@@ -749,57 +954,46 @@ class Flow:
                 ordered.append(to_node)
         return ordered
 
-    async def _evaluate_condition(self, condition: JsonValue, state: ExecutionState) -> bool:
+    async def _evaluate_condition(
+        self,
+        condition: EdgeCondition,
+        state: ExecutionState,
+        *,
+        edge_index: int | None = None,
+        from_node: str | None = None,
+        to_node: str | None = None,
+    ) -> bool:
         """
         Вычисляет условие перехода.
 
         Поддерживаемые форматы:
-        1. Объект с type='simple': {"type": "simple", "variable": "route", "operator": "==", "value": "order"}
-        2. Объект с type='code': {"type": "code", "language": "javascript", "code": "..."}
-        3. Строка: "field == value", "field != value", и т.д.
+        1. SimpleEdgeCondition: {"type": "simple", "variable": "route", "operator": "==", "value": "order"}
+        2. CodeEdgeCondition: {"type": "code", "language": "javascript", "code": "..."}
         """
-        if isinstance(condition, dict):
-            return await self._evaluate_condition_object(
-                require_json_object(condition, "edge.condition"),
-                state,
-            )
-        if isinstance(condition, str):
-            return self._evaluate_condition_string(condition, state)
-
-        raise ValueError("edge.condition must be a string or an object")
-
-    async def _evaluate_condition_object(self, condition: JsonObject, state: ExecutionState) -> bool:
-        """Вычисляет условие в новом объектном формате."""
-        condition_type = condition.get("type")
-
-        if condition_type == "simple":
+        if isinstance(condition, SimpleEdgeCondition):
             return self._evaluate_simple_condition(condition, state)
-        if condition_type == "code":
-            return await self._evaluate_code_condition(condition, state)
-
-        raise ValueError(
-            f"Неизвестный type условия ребра: {condition_type!r}, ожидаются 'simple' или 'code'"
+        return await self._evaluate_code_condition(
+            condition,
+            state,
+            edge_index=edge_index,
+            from_node=from_node,
+            to_node=to_node,
         )
 
-    def _evaluate_simple_condition(self, condition: JsonObject, state: ExecutionState) -> bool:
+    def _evaluate_simple_condition(self, condition: SimpleEdgeCondition, state: ExecutionState) -> bool:
         """Вычисляет простое условие: variable operator value."""
-        variable = condition.get("variable", "")
-        if not isinstance(variable, str) or not variable.strip():
-            raise ValueError("Простое условие ребра: variable должен быть непустой строкой")
-        op_str = condition.get("operator", "==")
-        if not isinstance(op_str, str) or not op_str.strip():
-            raise ValueError("Простое условие ребра: operator должен быть непустой строкой")
-        value = condition.get("value", "")
+        variable = condition.variable
+        op_str = condition.operator
+        value = condition.value
         left = MappingResolver.get_nested_value(state, variable)
-        right = self._parse_value(value) if isinstance(value, str) else value
 
         try:
-            return self._evaluate_binary_condition(left, op_str, right)
+            return self._evaluate_binary_condition(left, op_str, value)
         except TypeError as e:
             message = "".join(
                 (
                     f"Условие ребра: несовместимые типы для variable={variable!r} op={op_str!r} ",
-                    f"left={left!r} right={right!r}",
+                    f"left={left!r} right={value!r}",
                 )
             )
             raise ValueError(message) from e
@@ -841,7 +1035,15 @@ class Flow:
                 return left <= right
         raise TypeError(f"unsupported edge condition operator: {op_str!r}")
 
-    async def _evaluate_code_condition(self, condition: JsonObject, state: ExecutionState) -> bool:
+    async def _evaluate_code_condition(
+        self,
+        condition: CodeEdgeCondition,
+        state: ExecutionState,
+        *,
+        edge_index: int | None = None,
+        from_node: str | None = None,
+        to_node: str | None = None,
+    ) -> bool:
         """
         Вычисляет code-condition через isolated remote code runner.
 
@@ -851,90 +1053,117 @@ class Flow:
         """
         if self.container is None:
             raise RuntimeError("Code edge condition requires FlowContainer")
-        code = condition.get("code")
-        if not isinstance(code, str) or not code.strip():
-            raise ValueError("Code-условие ребра: требуется непустой code")
-        language = condition.get("language", "python")
-        if not isinstance(language, str) or not language.strip():
-            raise ValueError("Code-условие ребра: language должен быть непустой строкой")
-        raw_entrypoint = condition.get("entrypoint")
-        entrypoint = raw_entrypoint.strip() if isinstance(raw_entrypoint, str) and raw_entrypoint.strip() else None
-        condition_state = ExecutionState.model_validate(state.model_dump(exclude_none=False))
+        code = condition.code
+        language = condition.language
+        entrypoint = condition.entrypoint
+        input_payload = require_json_object(
+            {
+                "flow_id": self.flow_id,
+                "edge_index": edge_index,
+                "from_node": from_node,
+                "to_node": to_node,
+                "language": language,
+                "entrypoint": entrypoint,
+                "code": code,
+                "state_hash": self._state_hash_for_activity(state),
+            },
+            "edge.code_condition.activity_input",
+        )
+        activity_id = await self._durable_edge_activity_id(
+            state=state,
+            edge_index=edge_index,
+            from_node=from_node,
+            to_node=to_node,
+            input_payload=input_payload,
+        )
+        runtime = self.container.workflow_runtime
+        completed = await runtime.record_activity_scheduled(
+            session_id=state.session_id,
+            activity_id=activity_id,
+            activity_type="code_condition",
+            input_payload=input_payload,
+            node_id=from_node,
+            idempotency_key=activity_id,
+            side_effect_policy=SideEffectPolicy.idempotent,
+        )
+        if completed is not None:
+            result = require_json_value(
+                completed.get("result"),
+                "edge.code_condition.result",
+            )
+            return bool(result)
+
+        started = await runtime.record_activity_started(activity_id=activity_id)
+        if not started:
+            raise RuntimeError(f"Failed to mark code condition activity as started: {activity_id!r}")
+
+        condition_state = state.model_copy(deep=True)
         runner = self.container.get_code_runner(language=language)
         try:
             result = await runner.execute_tool(code, {}, condition_state, entrypoint=entrypoint)
         except Exception as exc:
+            completed_failed = await runtime.record_activity_completed(
+                activity_id=activity_id,
+                error=str(exc),
+            )
+            if not completed_failed:
+                raise RuntimeError(
+                    f"Failed to mark code condition activity as failed: {activity_id!r}"
+                ) from exc
             raise ValueError(
                 f"Code-условие ребра: ошибка выполнения language={language!r}: {exc}"
             ) from exc
-        return bool(result)
+        condition_result = bool(result)
+        completed_ok = await runtime.record_activity_completed(
+            activity_id=activity_id,
+            result_json={"result": condition_result},
+        )
+        if not completed_ok:
+            raise RuntimeError(
+                f"Failed to mark code condition activity as completed: {activity_id!r}"
+            )
+        return condition_result
 
-    def _evaluate_condition_string(self, condition: str, state: ExecutionState) -> bool:
-        """Вычисляет условие в legacy строковом формате."""
-        # Двухсимвольные операторы раньше односимвольных: иначе "count <= 3" матчится как "count" > "= 3".
-        patterns = [
-            (r"(.+?)\s*==\s*(.+)", "=="),
-            (r"(.+?)\s*!=\s*(.+)", "!="),
-            (r"(.+?)\s*>=\s*(.+)", ">="),
-            (r"(.+?)\s*<=\s*(.+)", "<="),
-            (r"(.+?)\s*>\s*(.+)", ">"),
-            (r"(.+?)\s*<\s*(.+)", "<"),
-        ]
+    async def _durable_edge_activity_id(
+        self,
+        *,
+        state: ExecutionState,
+        edge_index: int | None,
+        from_node: str | None,
+        to_node: str | None,
+        input_payload: JsonObject,
+    ) -> str:
+        input_hash = hash_state_json(input_payload)
+        execution_branch_id = state.durable_edge_execution_branch_id
+        evaluation_sequence = state.durable_edge_evaluation_sequence
 
-        for pattern, op_str in patterns:
-            match = re.match(pattern, condition.strip())
-            if match:
-                left_path = match.group(1).strip()
-                right_value = match.group(2).strip()
+        if execution_branch_id is None or evaluation_sequence is None:
+            raise RuntimeError("Code edge condition requires attached durable edge context")
+        if edge_index is None or from_node is None or to_node is None:
+            raise RuntimeError("Code edge condition requires explicit edge scope")
 
-                left = MappingResolver.get_nested_value(state, left_path)
-                right = self._parse_value(right_value)
+        sequence_part = f"evaluation:{evaluation_sequence}"
+        edge_part = edge_index
+        from_part = from_node
+        to_part = to_node
+        return (
+            f"{state.session_id}:{execution_branch_id}:edge:{edge_part}:"
+            + f"{from_part}:{to_part}:code_condition:{sequence_part}:input:{input_hash}"
+        )
 
-                try:
-                    return self._evaluate_binary_condition(left, op_str, right)
-                except TypeError as e:
-                    message = "".join(
-                        (
-                            f"Строковое условие ребра: несовместимые типы left_path={left_path!r} ",
-                            f"right={right_value!r} left={left!r} right={right!r}",
-                        )
-                    )
-                    raise ValueError(message) from e
-
-        value = MappingResolver.get_nested_value(state, condition.strip())
-        return bool(value)
-
-    def _parse_value(self, value: str) -> JsonValue:
-        """Парсит значение из строки."""
-        value = value.strip()
-
-        # Boolean
-        if value.lower() == "true":
-            return True
-        if value.lower() == "false":
-            return False
-
-        # None
-        if value.lower() == "null" or value.lower() == "none":
-            return None
-
-        # String в кавычках
-        if (value.startswith('"') and value.endswith('"')) or (
-            value.startswith("'") and value.endswith("'")
-        ):
-            return value[1:-1]
-
-        if re.fullmatch(r"-?\d+", value):
-            return int(value)
-        if re.fullmatch(r"-?\d+\.\d+", value):
-            return float(value)
-
-        return value
+    @staticmethod
+    def _state_hash_for_activity(state: ExecutionState) -> str:
+        payload = require_json_object(
+            state.model_dump(mode="json", exclude_none=False),
+            "activity.state",
+        )
+        _ = payload.pop("flow_config", None)
+        return hash_state_json(payload)
 
     @classmethod
     async def from_config(
         cls,
-        config: JsonObject,
+        config: Mapping[str, object],
         variables: JsonObject | None = None,
         *,
         container: FlowRuntimeContainer | None = None,
@@ -944,17 +1173,19 @@ class Flow:
 
         Args:
             config: FlowConfig (model_dump() или dict)
-            variables: Опционально - переопределение variables (для обратной совместимости)
+            variables: Опционально - pre-resolved переменные выполнения.
 
         Returns:
             Экземпляр Flow
         """
-        raw_flow_id = config.get("flow_id") or config.get("id")
+        config_json = require_json_object(config, "flow_config")
+
+        raw_flow_id = config_json.get("flow_id")
         if not isinstance(raw_flow_id, str) or not raw_flow_id.strip():
             raise ValueError("Flow.from_config requires non-empty flow_id")
 
         nodes: dict[str, BaseNode] = {}
-        raw_nodes_config = config.get("nodes")
+        raw_nodes_config = config_json.get("nodes")
         nodes_config = (
             require_json_object(raw_nodes_config, "flow_config.nodes")
             if raw_nodes_config is not None
@@ -967,31 +1198,33 @@ class Flow:
                 container=container,
             )
 
-        # variables: параметр > config["resolved_variables"] > config["variables"]
-        raw_variables = variables or config.get("resolved_variables") or config.get("variables")
+        # variables: pre-resolved runtime payload > persisted resolved_variables > authored variables.
+        raw_variables = variables
+        if raw_variables is None:
+            raw_variables = config_json.get("resolved_variables")
+        if raw_variables is None:
+            raw_variables = config_json.get("variables")
         resolved_variables = (
             require_json_object(raw_variables, "flow_config.variables")
             if raw_variables is not None
             else {}
         )
 
-        raw_entry = config.get("entry", "main")
+        raw_entry = config_json.get("entry")
         if not isinstance(raw_entry, str) or not raw_entry.strip():
             raise ValueError("Flow.from_config requires non-empty entry")
 
-        raw_name = config.get("name", "")
-        if raw_name is None:
-            raw_name = ""
+        raw_name = config_json.get("name")
         if not isinstance(raw_name, str):
             raise ValueError("Flow.from_config name must be a string")
 
-        raw_description = config.get("description", "")
+        raw_description = config_json.get("description", "")
         if raw_description is None:
             raw_description = ""
         if not isinstance(raw_description, str):
             raise ValueError("Flow.from_config description must be a string")
 
-        raw_tags = config.get("tags")
+        raw_tags = config_json.get("tags")
         tags: list[str] = []
         if raw_tags is not None:
             for index, item in enumerate(require_json_array(raw_tags, "flow_config.tags")):
@@ -999,11 +1232,13 @@ class Flow:
                     raise ValueError(f"flow_config.tags[{index}] must be a string")
                 tags.append(item)
 
-        raw_edges = config.get("edges")
-        edges: list[JsonObject] = []
+        raw_edges = config_json.get("edges")
+        edges: list[Edge] = []
         if raw_edges is not None:
             edges = [
-                require_json_object(item, f"flow_config.edges[{index}]")
+                Edge.model_validate(
+                    require_json_object(item, f"flow_config.edges[{index}]")
+                )
                 for index, item in enumerate(require_json_array(raw_edges, "flow_config.edges"))
             ]
 
@@ -1016,6 +1251,6 @@ class Flow:
             description=raw_description,
             tags=tags,
             variables=resolved_variables,
-            config=config,
+            config=config_json,
             container=container,
         )

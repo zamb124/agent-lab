@@ -6,14 +6,15 @@ import html
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from apps.flows.src.models.flow_config import FlowType
 from apps.frontend.dependencies import ContainerDep
-from core.clients.service_client import ServiceClientError
 from core.config import get_settings
+from core.context import require_context
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.models.embed_models import (
@@ -22,7 +23,9 @@ from core.models.embed_models import (
     EmbedMapping,
     EmbedStatus,
 )
+from core.models.identity_models import Company, User
 from core.pagination import OffsetPage
+from core.types import JsonObject
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
@@ -31,18 +34,12 @@ router = APIRouter(prefix="/api/embed/configs", tags=["embed_configs"])
 _EMBED_CODE_SESSION_TOKEN_TTL_SECONDS = 300
 
 
-def _service_json_object(response: object, *, service: str, path: str) -> dict[str, Any]:
-    if not isinstance(response, dict):
-        raise HTTPException(status_code=502, detail=f"{service} {path} вернул не JSON object")
-    result: dict[str, Any] = {}
-    for key, value in response.items():
-        if not isinstance(key, str):
-            raise HTTPException(
-                status_code=502,
-                detail=f"{service} {path} вернул JSON object с нестроковым ключом",
-            )
-        result[key] = value
-    return result
+def _require_embed_principal() -> tuple[User, Company]:
+    context = require_context()
+    company = context.active_company
+    if company is None:
+        raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
+    return context.user, company
 
 
 def _build_embed_integration_snippets(
@@ -299,9 +296,8 @@ def _normalize_interface_locale(value: str) -> str:
 @router.post("", response_model=EmbedConfigResponse)
 async def create_embed_config(
     request_data: CreateEmbedConfigRequest,
-    request: Request,
-    container: ContainerDep
-):
+    container: ContainerDep,
+) -> EmbedConfigResponse:
     """
     Создание новой конфигурации виджета.
 
@@ -309,43 +305,25 @@ async def create_embed_config(
     1. EmbedConfig в компании
     2. Глобальный маппинг embed_id -> company_id
     """
-    if not hasattr(request.state, 'user') or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
+    user, company = _require_embed_principal()
+    company_id = company.company_id
 
-    user = request.state.user
-    company_id = user.active_company_id
-
-    if not company_id:
-        raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
-
-    try:
-        agent_path = f"/flows/api/v1/flows/{request_data.flow_id}"
-        agent = _service_json_object(
-            await container.service_client.get("flows", agent_path),
-            service="flows",
-            path=agent_path,
+    flow = await container.flows_flow_repository.get(request_data.flow_id)
+    if flow is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Агент {request_data.flow_id} не найден в flows для текущей компании "
+                "(проверьте flow_id в редакторе flows и совпадение компании)."
+            ),
         )
-    except ServiceClientError as e:
-        if "404" in str(e):
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    f"Агент {request_data.flow_id} не найден в flows для текущей компании "
-                    "(проверьте flow_id в редакторе flows и совпадение компании)."
-                ),
-            )
-        raise HTTPException(status_code=500, detail=f"Ошибка обращения к flows: {str(e)}")
 
     branch_id = request_data.branch_id
-    if agent.get("type") == "external":
+    if flow.type == FlowType.EXTERNAL:
         branch_id = "default"
     else:
-        branches_raw = agent.get("branches", {})
-        if not isinstance(branches_raw, dict):
-            raise HTTPException(status_code=502, detail="flows вернул некорректный branches")
-        branches = branches_raw
-        if branches:
-            if branch_id not in branches:
+        if flow.branches:
+            if branch_id not in flow.branches:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Ветка '{branch_id}' не найдена у flow {request_data.flow_id}",
@@ -411,12 +389,12 @@ async def create_embed_config(
     )
 
     embed_config_repo = container.embed_config_repository
-    await embed_config_repo.set(config)
+    _ = await embed_config_repo.set(config)
 
     # Создаем глобальный маппинг
     mapping = EmbedMapping(embed_id=embed_id, company_id=company_id)
     embed_mapping_repo = container.embed_mapping_repository
-    await embed_mapping_repo.set(mapping)
+    _ = await embed_mapping_repo.set(mapping)
 
     logger.info(f"Создана конфигурация виджета {embed_id} для компании {company_id}")
 
@@ -424,31 +402,23 @@ async def create_embed_config(
 
 @router.get("", response_model=OffsetPage[EmbedConfigResponse])
 async def list_embed_configs(
-    request: Request,
     container: ContainerDep,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-):
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> OffsetPage[EmbedConfigResponse]:
     """
     Получение списка всех конфигураций виджетов компании.
 
     Автоматически фильтруется по активной компании (is_global=False).
     """
-    if not hasattr(request.state, 'user') or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-
-    user = request.state.user
-    company_id = user.active_company_id
-
-    if not company_id:
-        raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
+    _, company = _require_embed_principal()
 
     embed_config_repo = container.embed_config_repository
     configs = await embed_config_repo.list(limit=limit, offset=offset)
 
     visible = [c for c in configs if not c.preview_share_link]
 
-    logger.info(f"Получен список из {len(visible)} конфигураций для компании {company_id}")
+    logger.info(f"Получен список из {len(visible)} конфигураций для компании {company.company_id}")
 
     items = [_embed_config_to_response(c) for c in visible]
     return OffsetPage[EmbedConfigResponse](items=items, total=len(items), limit=limit, offset=offset)
@@ -456,12 +426,10 @@ async def list_embed_configs(
 @router.get("/{embed_id}", response_model=EmbedConfigResponse)
 async def get_embed_config(
     embed_id: str,
-    request: Request,
-    container: ContainerDep
-):
+    container: ContainerDep,
+) -> EmbedConfigResponse:
     """Получение конфигурации виджета по ID"""
-    if not hasattr(request.state, 'user') or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
+    _ = _require_embed_principal()
 
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
@@ -478,12 +446,10 @@ async def get_embed_config(
 async def update_embed_config(
     embed_id: str,
     request_data: UpdateEmbedConfigRequest,
-    request: Request,
-    container: ContainerDep
-):
+    container: ContainerDep,
+) -> EmbedConfigResponse:
     """Обновление конфигурации виджета"""
-    if not hasattr(request.state, 'user') or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
+    _, company = _require_embed_principal()
 
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
@@ -494,28 +460,96 @@ async def update_embed_config(
     if config.preview_share_link:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
 
-    # Обновляем только переданные поля
-    update_data = request_data.model_dump(exclude_unset=True)
-    if "guest_max_user_messages" in update_data:
-        _validate_guest_max_user_messages(update_data.get("guest_max_user_messages"))
-    if "interface_locale" in update_data and update_data["interface_locale"] is not None:
-        update_data["interface_locale"] = _normalize_interface_locale(update_data["interface_locale"])
-    if "landing_card_image_url" in update_data and update_data["landing_card_image_url"] is not None:
-        s = str(update_data["landing_card_image_url"]).strip()
-        update_data["landing_card_image_url"] = s if s else None
+    fields = request_data.model_fields_set
+    if "name" in fields:
+        if request_data.name is None:
+            raise HTTPException(status_code=400, detail="name не может быть null")
+        config.name = request_data.name
+    if "flow_id" in fields:
+        if request_data.flow_id is None:
+            raise HTTPException(status_code=400, detail="flow_id не может быть null")
+        config.flow_id = request_data.flow_id
+    if "branch_id" in fields:
+        if request_data.branch_id is None:
+            raise HTTPException(status_code=400, detail="branch_id не может быть null")
+        config.branch_id = request_data.branch_id
+    if "allowed_origins" in fields:
+        if request_data.allowed_origins is None:
+            raise HTTPException(status_code=400, detail="allowed_origins не может быть null")
+        config.allowed_origins = request_data.allowed_origins
+    if "status" in fields:
+        if request_data.status is None:
+            raise HTTPException(status_code=400, detail="status не может быть null")
+        config.status = request_data.status
+    if "theme" in fields:
+        if request_data.theme is None:
+            raise HTTPException(status_code=400, detail="theme не может быть null")
+        config.theme = request_data.theme
+    if "position" in fields:
+        if request_data.position is None:
+            raise HTTPException(status_code=400, detail="position не может быть null")
+        config.position = request_data.position
+    if "show_launcher" in fields:
+        if request_data.show_launcher is None:
+            raise HTTPException(status_code=400, detail="show_launcher не может быть null")
+        config.show_launcher = request_data.show_launcher
+    if "show_reasoning" in fields:
+        if request_data.show_reasoning is None:
+            raise HTTPException(status_code=400, detail="show_reasoning не может быть null")
+        config.show_reasoning = request_data.show_reasoning
+    if "show_tool_calls" in fields:
+        if request_data.show_tool_calls is None:
+            raise HTTPException(status_code=400, detail="show_tool_calls не может быть null")
+        config.show_tool_calls = request_data.show_tool_calls
+    if "primary_color" in fields:
+        if request_data.primary_color is None:
+            raise HTTPException(status_code=400, detail="primary_color не может быть null")
+        config.primary_color = request_data.primary_color
+    if "greeting_message" in fields:
+        config.greeting_message = request_data.greeting_message
+    if "assistant_title" in fields:
+        config.assistant_title = request_data.assistant_title
+    if "interface_locale" in fields:
+        if request_data.interface_locale is None:
+            raise HTTPException(status_code=400, detail="interface_locale не может быть null")
+        config.interface_locale = _normalize_interface_locale(request_data.interface_locale)
+    if "placeholder" in fields:
+        if request_data.placeholder is None:
+            raise HTTPException(status_code=400, detail="placeholder не может быть null")
+        config.placeholder = request_data.placeholder
+    if "branding" in fields:
+        if request_data.branding is None:
+            raise HTTPException(status_code=400, detail="branding не может быть null")
+        config.branding = request_data.branding
+    if "landing_visible" in fields:
+        if request_data.landing_visible is None:
+            raise HTTPException(status_code=400, detail="landing_visible не может быть null")
+        config.landing_visible = request_data.landing_visible
+    if "landing_card_image_url" in fields:
+        card_url = request_data.landing_card_image_url
+        config.landing_card_image_url = (
+            card_url.strip() if card_url is not None and card_url.strip() else None
+        )
+    if "landing_sort_order" in fields:
+        if request_data.landing_sort_order is None:
+            raise HTTPException(status_code=400, detail="landing_sort_order не может быть null")
+        config.landing_sort_order = request_data.landing_sort_order
+    if "guest_max_user_messages" in fields:
+        _validate_guest_max_user_messages(request_data.guest_max_user_messages)
+        config.guest_max_user_messages = request_data.guest_max_user_messages
+    if "voice_enabled" in fields:
+        if request_data.voice_enabled is None:
+            raise HTTPException(status_code=400, detail="voice_enabled не может быть null")
+        config.voice_enabled = request_data.voice_enabled
+    if "voice_default_on" in fields:
+        if request_data.voice_default_on is None:
+            raise HTTPException(status_code=400, detail="voice_default_on не может быть null")
+        config.voice_default_on = request_data.voice_default_on
 
-    for field, value in update_data.items():
-        if hasattr(config, field):
-            setattr(config, field, value)
-
-    user = request.state.user
-    company_id = user.active_company_id
-    if not company_id:
-        raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
     _validate_landing_catalog_fields(
         landing_visible=config.landing_visible,
         landing_card_image_url=config.landing_card_image_url,
-        company_id=company_id,
+        company_id=company.company_id,
     )
     _validate_voice_flags(
         voice_enabled=config.voice_enabled,
@@ -523,7 +557,7 @@ async def update_embed_config(
     )
 
     config.updated_at = datetime.now(timezone.utc)
-    await embed_config_repo.set(config)
+    _ = await embed_config_repo.set(config)
 
     logger.info(f"Обновлена конфигурация виджета {embed_id}")
 
@@ -532,9 +566,8 @@ async def update_embed_config(
 @router.delete("/{embed_id}")
 async def delete_embed_config(
     embed_id: str,
-    request: Request,
-    container: ContainerDep
-):
+    container: ContainerDep,
+) -> JsonObject:
     """
     Удаление конфигурации виджета.
 
@@ -542,8 +575,7 @@ async def delete_embed_config(
     1. EmbedConfig из компании
     2. Глобальный маппинг embed_id -> company_id
     """
-    if not hasattr(request.state, 'user') or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
+    _ = _require_embed_principal()
 
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
@@ -555,11 +587,11 @@ async def delete_embed_config(
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
 
     # Удаляем конфигурацию
-    await embed_config_repo.delete(embed_id)
+    _ = await embed_config_repo.delete(embed_id)
 
     # Удаляем глобальный маппинг
     embed_mapping_repo = container.embed_mapping_repository
-    await embed_mapping_repo.delete_by_embed_id(embed_id)
+    _ = await embed_mapping_repo.delete_by_embed_id(embed_id)
 
     logger.info(f"Удалена конфигурация виджета {embed_id}")
 
@@ -570,14 +602,13 @@ async def get_embed_code(
     embed_id: str,
     request: Request,
     container: ContainerDep
-):
+) -> EmbedCodeResponse:
     """
     Получение кода для встраивания виджета.
 
     Возвращает готовый HTML код со скриптом для вставки на сайт.
     """
-    if not hasattr(request.state, 'user') or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
+    _, company = _require_embed_principal()
 
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)
@@ -588,8 +619,7 @@ async def get_embed_code(
     if config.preview_share_link:
         raise HTTPException(status_code=404, detail="Конфигурация не найдена")
 
-    user = request.state.user
-    company_id = getattr(user, "active_company_id", None) or ""
+    company_id = company.company_id
     if config.voice_enabled and not company_id:
         raise HTTPException(
             status_code=400,
@@ -660,17 +690,11 @@ async def get_embed_code(
 async def issue_embed_session_token(
     embed_id: str,
     request_data: EmbedSessionTokenRequest,
-    request: Request,
     container: ContainerDep,
-):
+) -> EmbedSessionTokenResponse:
     """Выдает short-lived embed-session токен для канонического A2A embed-пути."""
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-
-    user = request.state.user
-    company_id = user.active_company_id
-    if not company_id:
-        raise HTTPException(status_code=400, detail="Необходимо выбрать компанию")
+    user, company = _require_embed_principal()
+    company_id = company.company_id
 
     embed_config_repo = container.embed_config_repository
     config = await embed_config_repo.get(embed_id)

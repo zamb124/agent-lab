@@ -187,7 +187,7 @@ def _resolve_codegen_llm_kwargs(model: str) -> tuple[dict[str, Any], str]:
         "Supports python, javascript, typescript, go and csharp. The generated code uses capability-gateway for every platform capability."
     ),
     tags=["codegen", "sandbox", "capabilities"],
-    args_schema=SandboxCodegenArgs,
+    parameters_model=SandboxCodegenArgs,
 )
 async def sandbox_codegen(
     task: str,

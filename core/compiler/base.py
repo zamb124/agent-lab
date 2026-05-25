@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import ClassVar, Protocol
 
-from pydantic import ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from core.errors import (
     CyclicDependencyError,
@@ -19,7 +19,7 @@ from core.errors import (
 )
 from core.logging import get_logger
 from core.models import StrictBaseModel
-from core.types import JsonObject
+from core.types import JsonObject, require_json_object
 
 logger = get_logger(__name__)
 
@@ -27,10 +27,17 @@ logger = get_logger(__name__)
 class GraphEdge(Protocol):
     """Минимальный контракт edge для компилятора графа."""
 
-    from_node: str
-    to_node: str | None
-    condition: str | JsonObject | None
-    contributes_to_join: bool
+    @property
+    def from_node(self) -> str: ...
+
+    @property
+    def to_node(self) -> str | None: ...
+
+    @property
+    def condition(self) -> BaseModel | JsonObject | None: ...
+
+    @property
+    def contributes_to_join(self) -> bool: ...
 
 
 class CompiledEdge(StrictBaseModel):
@@ -38,9 +45,9 @@ class CompiledEdge(StrictBaseModel):
 
     from_node: str = Field(..., description="ID исходной ноды")
     to_node: str | None = Field(..., description="ID целевой ноды (null = конец)")
-    condition: str | JsonObject | None = Field(
+    condition: JsonObject | None = Field(
         default=None,
-        description="Условие перехода: строка или объект {type: simple|python, ...}.",
+        description="Типизированное условие перехода как JSON object.",
     )
     contributes_to_join: bool = Field(
         default=True,
@@ -72,7 +79,9 @@ class CompiledGraph(StrictBaseModel):
     variables: JsonObject = Field(default_factory=dict, description="Резолвнутые переменные")
 
     # Метаданные компиляции
-    compiled_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Время компиляции")
+    compiled_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Время компиляции"
+    )
     checksum: str = Field(..., description="Хеш конфига для кеширования")
 
     # Граф только для чтения
@@ -185,11 +194,22 @@ class GraphCompiler:
             CompiledEdge(
                 from_node=edge.from_node,
                 to_node=edge.to_node,
-                condition=edge.condition,
+                condition=self._compile_edge_condition(edge.condition),
                 contributes_to_join=edge.contributes_to_join,
             )
             for edge in edges
         ]
+
+    @staticmethod
+    def _compile_edge_condition(condition: BaseModel | JsonObject | None) -> JsonObject | None:
+        if condition is None:
+            return None
+        if isinstance(condition, BaseModel):
+            return require_json_object(
+                condition.model_dump(mode="json"),
+                "edge.condition",
+            )
+        return require_json_object(condition, "edge.condition")
 
     def _validate_entry_node(self, entry: str, nodes: Mapping[str, JsonObject]) -> None:
         """
@@ -312,7 +332,9 @@ class GraphCompiler:
         # Поэтому недостижимые ноды это предупреждение, не ошибка
         if unreachable:
             unreachable_nodes = ", ".join(sorted(unreachable))
-            logger.warning(f"Ноды не достижимы через edges от entry '{entry}': {unreachable_nodes}.")
+            logger.warning(
+                f"Ноды не достижимы через edges от entry '{entry}': {unreachable_nodes}."
+            )
 
     def _calculate_checksum(
         self,
@@ -333,8 +355,8 @@ class GraphCompiler:
         """
         edge_payloads: list[JsonObject] = [
             {
-                "from": edge.from_node,
-                "to": edge.to_node,
+                "from_node": edge.from_node,
+                "to_node": edge.to_node,
                 "condition": edge.condition,
                 "contributes_to_join": edge.contributes_to_join,
             }

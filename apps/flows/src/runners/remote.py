@@ -355,9 +355,9 @@ class RemoteCodeRunner(BaseCodeRunner):
         returned_state = ExecutionState.model_validate(response.state)
         assert_frozen_fields_unchanged(returned_state, frozen_snapshot)
         for field_name in returned_state.__class__.model_fields:
-            setattr(state, field_name, getattr(returned_state, field_name))
+            state[field_name] = returned_state[field_name]
         for field_name, field_value in returned_state.json_extra().items():
-            setattr(state, field_name, field_value)
+            state[field_name] = field_value
 
     def _raise_execution_failed(self, response: CodeExecutionResponse) -> None:
         error = response.error

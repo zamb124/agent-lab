@@ -83,7 +83,7 @@ SPEAK_FLAG_KEY: str = "speak"
 
 def _artifact_has_any_text_part(artifact: Artifact) -> bool:
     for part in artifact.parts:
-        root = getattr(part, "root", part)
+        root = part.root
         if isinstance(root, TextPart) and root.text:
             return True
     return False
@@ -120,7 +120,7 @@ def iter_speakable_text_parts(artifact: Artifact) -> Iterable[str]:
     if not is_speakable_artifact(artifact):
         return
     for part in artifact.parts:
-        root = getattr(part, "root", part)
+        root = part.root
         if isinstance(root, TextPart):
             text = root.text
             if text:
@@ -137,8 +137,6 @@ def extract_speakable_text(event: TaskArtifactUpdateEvent) -> str | None:
     * строку — конкатенацию всех ``TextPart.text`` артефакта.
     """
     artifact = event.artifact
-    if artifact is None:
-        return None
     if not is_speakable_artifact(artifact):
         return None
     text_parts = list(iter_speakable_text_parts(artifact))

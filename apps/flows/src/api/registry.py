@@ -20,6 +20,7 @@ from core.company_ai import CUSTOM_PROVIDER_REF_PREFIX, AICapability, CompanyAIP
 from core.context import get_context
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 from core.logging import get_logger
+from core.middleware.auth.company_resolver import build_service_base_url
 from core.types import JsonObject
 
 logger = get_logger(__name__)
@@ -94,30 +95,7 @@ def _custom_provider_models(aip: CompanyAIProviders, provider_ref: str) -> list[
 
 
 def get_base_url(request: Request) -> str:
-    """Формирует base URL из запроса с приоритетом X-Forwarded-Proto."""
-    # Приоритет X-Forwarded-Proto над request.url.scheme
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    if forwarded_proto:
-        scheme = forwarded_proto.lower()
-    else:
-        scheme = request.url.scheme
-
-    # Используем X-Forwarded-Host, который содержит host:port от Nginx
-    forwarded_host = request.headers.get("x-forwarded-host")
-    if forwarded_host:
-        host = forwarded_host
-    else:
-        host = request.headers.get("host") or request.url.netloc
-        # Если host не содержит порт, добавляем порт
-        if ":" not in host:
-            if request.url.port:
-                host = f"{host}:{request.url.port}"
-            elif scheme == "https":
-                host = f"{host}:443"
-            elif scheme == "http":
-                host = f"{host}:80"
-
-    return f"{scheme}://{host}"
+    return build_service_base_url(request, include_default_port=True)
 
 
 def build_branch_info(branch_id: str, branch: BranchConfig) -> RegistryBranchInfo:
@@ -329,8 +307,8 @@ def _generate_mermaid(branch_schema: RegistryBranchSchema) -> str:
     used_nodes = {entry}
     for edge in edges:
         used_nodes.add(edge.from_node)
-        if edge.to:
-            used_nodes.add(edge.to)
+        if edge.to_node:
+            used_nodes.add(edge.to_node)
 
     # Определяем специальные ноды
     lines.append("    start((start)):::terminal")
@@ -381,7 +359,7 @@ def _generate_mermaid(branch_schema: RegistryBranchSchema) -> str:
     if edges:
         for edge in edges:
             from_node = edge.from_node.replace("_", "__")
-            to_node = edge.to
+            to_node = edge.to_node
             condition = edge.condition
 
             if to_node is None:

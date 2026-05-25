@@ -11,9 +11,8 @@ import asyncio
 import json
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator
 from contextlib import suppress
-from typing import TypeAlias, cast
 from uuid import UUID
 
 from a2a.types import (
@@ -40,14 +39,20 @@ from apps.flows.config import get_settings
 from apps.flows.src.channels.request_context_variables import flow_variables_from_request_context
 from apps.flows.src.channels.types import ChannelRequestContext, FlowTaskResult, PreparedTaskParams
 from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.durable_execution import (
+    RunStartedPayload,
+    UserInputAppliedPayload,
+    WorkflowEventPayload,
+    WorkflowEventType,
+    create_initial_state,
+)
 from apps.flows.src.mapping import MappingResolver
-from apps.flows.src.mock.resolver import check_mock_permission, resolve_mock_config
 from apps.flows.src.models.enums import ChannelType, MergeMode, NodeType
 from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
 from apps.flows.src.models.operator_schemas import OperatorTaskStatus
 from apps.flows.src.services.flow_speech_resolve import attach_flow_speech_layers_to_context
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
-from apps.flows.src.state import collect_flow_node_files, create_initial_state
+from apps.flows.src.state import collect_flow_node_files
 from apps.flows.src.state.cancellation import (
     CancellationToken,
     FlowCancelled,
@@ -80,7 +85,6 @@ from core.types import JsonObject, JsonValue, require_json_array, require_json_o
 from core.utils.background import run_with_log_context
 
 logger = get_logger(__name__)
-ChannelActionMethod: TypeAlias = Callable[..., Awaitable[JsonObject]]
 
 _BRANCH_BODY_FIELDS = {
     "entry",
@@ -90,32 +94,15 @@ _BRANCH_BODY_FIELDS = {
     "edges_mode",
     "variables",
     "variables_mode",
-    "mock",
 }
 
 
 def _branch_body_from_request(data: JsonObject) -> JsonObject:
-    """Extract branch payload from current and legacy request shapes."""
-    for key in ("branch_body", "skill_body"):
-        raw_body = data.get(key)
-        if isinstance(raw_body, dict):
-            return require_json_object(raw_body, key)
-
-    branch_body: JsonObject = {}
-    for key in _BRANCH_BODY_FIELDS:
-        if key not in data:
-            continue
-        value = data[key]
-        if key in {"nodes", "variables"} and isinstance(value, dict) and not value:
-            continue
-        if key == "edges" and isinstance(value, list) and not value:
-            continue
-        if key in {"entry", "nodes_mode", "edges_mode", "variables_mode"} and value in (None, ""):
-            continue
-        if key == "mock" and value is None:
-            continue
-        branch_body[key] = value
-    return branch_body
+    """Extract strict branch payload from request body."""
+    raw_body = data.get("branch_body")
+    if not isinstance(raw_body, dict):
+        raise ValueError("branch_body is required")
+    return require_json_object(raw_body, "branch_body")
 
 
 def effective_stream_task_id_for_session(
@@ -247,9 +234,7 @@ class BaseChannel(ABC):
             groups.append(group)
         return groups
 
-    async def _normalize_request_variables(
-        self, request_variables: JsonObject
-    ) -> JsonObject:
+    async def _normalize_request_variables(self, request_variables: JsonObject) -> JsonObject:
         """
         Нормализует metadata.variables от клиента перед merge в runtime_flow.variables.
 
@@ -321,14 +306,28 @@ class BaseChannel(ABC):
                 )
 
     async def _get_state(self, session_id: str) -> ExecutionState | None:
-        """Получает state из StateManager."""
+        """Получает projection state из durable workflow runtime."""
         container = self.container
-        return await container.state_manager.get_state(session_id)
+        return await container.workflow_runtime.get_state(session_id)
 
-    async def _save_state(self, session_id: str, state: ExecutionState) -> None:
-        """Сохраняет промежуточный state в Redis через StateManager."""
+    async def _save_state(
+        self,
+        session_id: str,
+        state: ExecutionState,
+        *,
+        event_type: WorkflowEventType = WorkflowEventType.state_projection_committed,
+        payload: WorkflowEventPayload | None = None,
+        snapshot: bool = False,
+    ) -> None:
+        """Коммитит промежуточную projection delta в durable workflow ledger."""
         container = self.container
-        _ = await container.state_manager.save_state(session_id, state)
+        _ = await container.workflow_runtime.save_state(
+            session_id,
+            state,
+            event_type=event_type,
+            payload=payload,
+            snapshot=snapshot,
+        )
 
     async def _save_terminal_state(
         self,
@@ -338,9 +337,9 @@ class BaseChannel(ABC):
         *,
         error: str | None = None,
     ) -> None:
-        """Сохраняет terminal snapshot в БД через StateManager."""
+        """Коммитит terminal boundary в durable workflow ledger."""
         container = self.container
-        _ = await container.state_manager.save_terminal_state(
+        _ = await container.workflow_runtime.save_terminal_state(
             session_id,
             state,
             terminal_task_state,
@@ -359,7 +358,7 @@ class BaseChannel(ABC):
             return direct
 
         container = self.container
-        return await container.state_manager.resolve_session_id_by_flow_and_identifier(
+        return await container.workflow_runtime.resolve_session_id_by_flow_and_identifier(
             self.flow_id, lookup_id
         )
 
@@ -596,7 +595,7 @@ class BaseChannel(ABC):
 
         # Загружаем state для определения task_id, resume и закреплённой версии flow
         container = self.container
-        saved_state = await container.state_manager.get_state(params.session_id)
+        saved_state = await container.workflow_runtime.get_state(params.session_id)
 
         effective_task_id = effective_stream_task_id_for_session(params.task_id, saved_state)
         if not effective_task_id:
@@ -651,7 +650,7 @@ class BaseChannel(ABC):
                 content=params.content,
                 branch_id=params.branch_id,
             )
-            logger.info(f"[state] Created hot state for session {params.session_id}")
+            logger.info(f"[state] Created workflow projection for session {params.session_id}")
         else:
             messages_count = len(state.messages)
             logger.info(
@@ -676,7 +675,17 @@ class BaseChannel(ABC):
         state.user_groups = user_groups
 
         try:
-            await self._save_state(params.session_id, state)
+            await self._save_state(
+                params.session_id,
+                state,
+                event_type=WorkflowEventType.user_input_applied,
+                payload=UserInputAppliedPayload(
+                    task_id=effective_task_id,
+                    context_id=params.context_id,
+                    is_resume=params.is_resume,
+                ),
+                snapshot=state_is_new,
+            )
 
             pinned_version = saved_state.flow_config_version if saved_state else None
             try:
@@ -756,49 +765,12 @@ class BaseChannel(ABC):
             if breakpoints:
                 state.breakpoints = breakpoints
 
-            # Резолвим mock конфиг из всех уровней иерархии
             flow_config = await container.flow_factory.get_flow_config_snapshot(
                 self.flow_id, state.flow_config_version
             )
-            root_flow_mock = flow_config.mock if flow_config else None
 
             if flow_config is not None:
                 attach_flow_speech_layers_to_context(ctx, flow_config, params.branch_id)
-
-            branch_mock = None
-            if flow_config and flow_config.branches and params.branch_id in flow_config.branches:
-                branch_cfg_snapshot = flow_config.branches[params.branch_id]
-                branch_mock = branch_cfg_snapshot.mock
-
-            request_mock_raw = params.metadata.get("mock") if params.metadata else None
-            request_mock: JsonObject | None = (
-                require_json_object(request_mock_raw, "metadata.mock")
-                if request_mock_raw is not None
-                else None
-            )
-
-            # Проверка прав на использование mock через request metadata
-            if request_mock:
-                config = get_settings()
-                global_mock = config.mock.model_dump() if config.mock else None
-                mock_config = resolve_mock_config(
-                    global_mock, root_flow_mock, branch_mock, request_mock
-                )
-
-                if not check_mock_permission(user_groups, mock_config):
-                    logger.warning(f"Mock access denied for user {user_id}")
-                    request_mock = None
-
-            # Резолвим итоговый mock конфиг
-            config = get_settings()
-            global_mock = config.mock.model_dump() if config.mock else None
-            mock_config = resolve_mock_config(
-                global_mock, root_flow_mock, branch_mock, request_mock
-            )
-
-            if mock_config.enabled:
-                state.mock = mock_config.model_dump(exclude_none=False)
-                logger.info(f"[mock] Mock enabled for session {params.session_id}")
 
             final_response = ""
 
@@ -816,7 +788,18 @@ class BaseChannel(ABC):
                 session_id=params.session_id,
                 messages_count=len(state.messages),
             )
-            await self._save_state(params.session_id, state)
+            await self._save_state(
+                params.session_id,
+                state,
+                event_type=WorkflowEventType.run_started,
+                payload=RunStartedPayload(
+                    flow_id=self.flow_id,
+                    branch_id=params.branch_id,
+                    task_id=effective_task_id,
+                    flow_config_version=state.flow_config_version,
+                ),
+                snapshot=True,
+            )
 
             cancellation_token = CancellationToken(effective_task_id, container.redis_client)
             set_cancellation_token(cancellation_token)
@@ -825,7 +808,6 @@ class BaseChannel(ABC):
                 state = await runtime_flow.run(state)
             except FlowCancelled:
                 logger.info(f"Flow cancelled: task_id={effective_task_id}")
-                setattr(state, "_cancelled", True)
                 await self._save_terminal_state(params.session_id, state, "canceled")
                 await emitter.emit_cancelled()
                 return FlowTaskResult(response="", task_state="canceled")
@@ -840,7 +822,9 @@ class BaseChannel(ABC):
                 logger.info(f"Breakpoint hit at node '{node_id}'")
 
                 breakpoint_node = runtime_flow.nodes.get(node_id)
-                raw_node_type = breakpoint_node.config.get("type", "unknown") if breakpoint_node else "unknown"
+                raw_node_type = (
+                    breakpoint_node.config.get("type", "unknown") if breakpoint_node else "unknown"
+                )
                 node_type = raw_node_type if isinstance(raw_node_type, str) else "unknown"
                 await self._save_terminal_state(params.session_id, state, "input-required")
                 await emitter.emit_breakpoint(node_id, node_type, state.breakpoint_state or {})
@@ -885,9 +869,7 @@ class BaseChannel(ABC):
                 state.current_nodes,
                 bool(state.interrupt),
             )
-            task_state: ExecutionTaskState = (
-                "input-required" if state.interrupt else "completed"
-            )
+            task_state: ExecutionTaskState = "input-required" if state.interrupt else "completed"
 
             return FlowTaskResult(
                 response=final_response,
@@ -1002,9 +984,6 @@ class BaseChannel(ABC):
         elif state.interrupt:
             task_state = TaskState.input_required
             response = state.interrupt.question
-        elif getattr(state, "_cancelled", False):
-            task_state = TaskState.canceled
-            response = "Task cancelled"
         elif state.response:
             task_state = TaskState.completed
             response = state.response
@@ -1035,7 +1014,6 @@ class BaseChannel(ABC):
         if state is None:
             return None
 
-        setattr(state, "_cancelled", True)
         await self._save_terminal_state(session_id, state, "canceled")
 
         return Task(
@@ -1175,11 +1153,7 @@ class BaseChannel(ABC):
             branch_body["nodes"] = branch_cfg.nodes
         if branch_cfg.edges is not None:
             branch_body["edges"] = [
-                {
-                    "from": edge.from_node,
-                    "to": edge.to_node,
-                    "condition": edge.condition,
-                }
+                require_json_object(edge.model_dump(mode="json", by_alias=True), "branch.edges[]")
                 for edge in branch_cfg.edges
             ]
         if branch_cfg.variables:
@@ -1447,11 +1421,7 @@ class BaseChannel(ABC):
 
         effective = container.flow_factory.apply_branch(config, branch_id)
         # Graph flow если есть реальные переходы между нодами (не только to: null)
-        real_edges = [
-            e
-            for e in effective["edges"]
-            if e.to_node is not None
-        ]
+        real_edges = [e for e in effective["edges"] if e.to_node is not None]
         is_graph_flow = len(real_edges) > 0
 
         tools_set: set[str] = set()
@@ -1464,13 +1434,15 @@ class BaseChannel(ABC):
             if node_type == NodeType.CODE.value:
                 if node_config.get("code"):
                     raw_tool_id = node_config.get("tool_id")
-                    tool_id = raw_tool_id if isinstance(raw_tool_id, str) and raw_tool_id else node_id
+                    tool_id = (
+                        raw_tool_id if isinstance(raw_tool_id, str) and raw_tool_id else node_id
+                    )
                     inline_tools[tool_id] = {
                         "tool_id": tool_id,
                         "name": node_config.get("name", tool_id),
                         "description": node_config.get("description", ""),
                         "code": node_config.get("code", ""),
-                        "args_schema": node_config.get("args_schema", {}),
+                        "parameters_schema": node_config.get("parameters_schema"),
                     }
                 else:
                     tool_id = node_config.get("tool_id")
@@ -1479,7 +1451,9 @@ class BaseChannel(ABC):
 
             # Собираем inline tools из llm_node nodes
             elif node_type == NodeType.LLM_NODE.value:
-                tools_list = require_json_array(node_config.get("tools", []), f"nodes.{node_id}.tools")
+                tools_list = require_json_array(
+                    node_config.get("tools", []), f"nodes.{node_id}.tools"
+                )
                 for tool_ref in tools_list:
                     if isinstance(tool_ref, dict):
                         tool_ref_obj = require_json_object(tool_ref, f"nodes.{node_id}.tools[]")
@@ -1488,7 +1462,11 @@ class BaseChannel(ABC):
 
                     if tool_ref_obj is not None and tool_ref_obj.get("code"):
                         raw_tool_id = tool_ref_obj.get("tool_id")
-                        tool_id = raw_tool_id if isinstance(raw_tool_id, str) and raw_tool_id else f"inline_{node_id}"
+                        tool_id = (
+                            raw_tool_id
+                            if isinstance(raw_tool_id, str) and raw_tool_id
+                            else f"inline_{node_id}"
+                        )
                         inline_tools[tool_id] = tool_ref_obj
                     else:
                         if tool_ref_obj is not None:
@@ -1522,7 +1500,6 @@ class BaseChannel(ABC):
             inline_attrs: JsonObject = {
                 "description": tool_config.get("description", ""),
                 "code": tool_config.get("code", ""),
-                "args_schema": tool_config.get("args_schema", {}),
                 "source": "inline",
             }
             ps = tool_config.get("parameters_schema")
@@ -1545,10 +1522,8 @@ class BaseChannel(ABC):
                 ref_payload: JsonObject = {
                     "description": ref_attrs.get("description", ""),
                     "source": "reference",
-                    "args_schema": ref_attrs.get("args_schema", {}),
+                    "parameters_schema": ref_attrs["parameters_schema"],
                 }
-                if ref_attrs.get("parameters_schema"):
-                    ref_payload["parameters_schema"] = ref_attrs["parameters_schema"]
                 tools_info.append(
                     {
                         "name": tool_id,
@@ -1621,11 +1596,16 @@ class BaseChannel(ABC):
                 from_node = edge.from_node
                 to_node = edge.to_node
                 condition = edge.condition
+                condition_payload: JsonObject | None = (
+                    require_json_object(condition.model_dump(mode="json"), "edge.condition")
+                    if condition is not None
+                    else None
+                )
 
                 edge_name = f"{from_node} -> {to_node or 'end'}"
                 description = f"Переход от '{from_node}' к '{to_node or 'конец'}'"
-                if condition:
-                    description += f" (условие: {condition})"
+                if condition_payload is not None:
+                    description += f" (условие: {condition_payload})"
 
                 tools_info.append(
                     {
@@ -1635,7 +1615,7 @@ class BaseChannel(ABC):
                             "description": description,
                             "from_node": from_node,
                             "to_node": to_node,
-                            "condition": condition,
+                            "condition": condition_payload,
                         },
                     }
                 )
@@ -1861,19 +1841,85 @@ class BaseChannelHandler(ABC):
         Returns:
             Результат выполнения действия
         """
-        method_raw: object = getattr(self, action, None)
-
-        if not callable(method_raw):
+        recipient = self._require_str_param(params, "recipient")
+        if action == "send_message":
+            text = self._require_str_param(params, "text")
+            kwargs = self._extra_params(params, {"recipient", "text"})
+            result = await self.send_message(
+                recipient=recipient,
+                text=text,
+                config=config,
+                variables=variables,
+                **kwargs,
+            )
+        elif action == "send_photo":
+            photo = self._require_file_param(params, "photo")
+            caption = self._optional_str_param(params, "caption")
+            kwargs = self._extra_params(params, {"recipient", "photo", "caption"})
+            result = await self.send_photo(
+                recipient=recipient,
+                photo=photo,
+                config=config,
+                variables=variables,
+                caption=caption,
+                **kwargs,
+            )
+        elif action == "send_document":
+            document = self._require_file_param(params, "document")
+            caption = self._optional_str_param(params, "caption")
+            filename = self._optional_str_param(params, "filename")
+            kwargs = self._extra_params(
+                params,
+                {"recipient", "document", "caption", "filename"},
+            )
+            result = await self.send_document(
+                recipient=recipient,
+                document=document,
+                config=config,
+                variables=variables,
+                caption=caption,
+                filename=filename,
+                **kwargs,
+            )
+        else:
             raise ValueError(
                 f"Unknown action '{action}' for channel {self.channel_type.value}. Available: send_message, send_photo, send_document"
             )
-        method = cast(ChannelActionMethod, method_raw)
 
         logger.info(
             f"Channel {self.channel_type.value}: executing {action} to {params.get('recipient', 'unknown')}"
         )
 
-        return await method(config=config, variables=variables, **params)
+        return result
+
+    @staticmethod
+    def _require_str_param(params: JsonObject, name: str) -> str:
+        value = params.get(name)
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"Channel action parameter {name!r} must be a non-empty string")
+        return value
+
+    @staticmethod
+    def _optional_str_param(params: JsonObject, name: str) -> str | None:
+        value = params.get(name)
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"Channel action parameter {name!r} must be a string")
+        return value
+
+    @staticmethod
+    def _require_file_param(params: JsonObject, name: str) -> str | bytes:
+        value = params.get(name)
+        if isinstance(value, str) and value:
+            return value
+        if isinstance(value, bytes) and value:
+            return value
+        raise ValueError(f"Channel action parameter {name!r} must be a non-empty string or bytes")
+
+    @staticmethod
+    def _extra_params(params: JsonObject, known: set[str]) -> JsonObject:
+        return {key: value for key, value in params.items() if key not in known}
 
     def _resolve_value(self, value: JsonValue, variables: JsonObject) -> JsonValue:
         """Резолвит @var: значения."""

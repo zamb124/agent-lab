@@ -10,9 +10,11 @@ from core.llm_context.models import (
     CompiledLLMContext,
     LLMContextBlock,
     LLMContextCompileRequest,
+    LLMContextProfile,
     LLMContextUsage,
 )
 from core.llm_context.token_counter import TiktokenTokenCounter, TokenCounter
+from core.types import JsonObject, JsonValue
 
 
 class LLMContextBudgetError(ValueError):
@@ -108,7 +110,7 @@ class LLMContextCompiler:
             request=request,
         )
         ordered_blocks = sorted(selected_blocks, key=_block_output_sort_key)
-        block_messages = [
+        block_messages: list[JsonObject] = [
             {"role": block.role, "content": block.content}
             for block in ordered_blocks
         ]
@@ -138,9 +140,9 @@ class LLMContextCompiler:
 
     def _compact_tool_result_messages(
         self,
-        messages: list[dict[str, Any]],
-        policy: Any,
-    ) -> tuple[list[dict[str, Any]], dict[str, int]]:
+        messages: list[JsonObject],
+        policy: LLMContextProfile,
+    ) -> tuple[list[JsonObject], dict[str, int]]:
         tool_indexes: list[tuple[int, int]] = []
         original_tokens = 0
         for index, message in enumerate(messages):
@@ -193,7 +195,7 @@ class LLMContextCompiler:
 
     def _compact_tool_result_content(
         self,
-        message: dict[str, Any],
+        message: JsonObject,
         *,
         original_tokens: int,
         target_tokens: int,
@@ -214,7 +216,7 @@ class LLMContextCompiler:
         return f"[tool result compacted] sha256={digest} original_tokens={original_tokens}"
 
     @staticmethod
-    def _message_content_to_text(content: Any) -> str:
+    def _message_content_to_text(content: JsonValue) -> str:
         if content is None:
             return ""
         if isinstance(content, str):
@@ -231,9 +233,9 @@ class LLMContextCompiler:
 
     @staticmethod
     def _split_system_prefix(
-        messages: list[dict[str, Any]],
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        prefix: list[dict[str, Any]] = []
+        messages: list[JsonObject],
+    ) -> tuple[list[JsonObject], list[JsonObject]]:
+        prefix: list[JsonObject] = []
         split_index = 0
         for message in messages:
             if message.get("role") != "system":
@@ -244,15 +246,15 @@ class LLMContextCompiler:
 
     def _select_active_messages(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[JsonObject],
         *,
         active_window_tokens: int,
         available_input_tokens: int,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[list[JsonObject], int]:
         if not messages:
             return [], 0
 
-        selected_reversed: list[dict[str, Any]] = []
+        selected_reversed: list[JsonObject] = []
         selected_tokens = 0
         last_message = messages[-1]
         last_tokens = self._token_counter.count_message(last_message)
@@ -352,15 +354,15 @@ class LLMContextCompiler:
             return block.token_count
         return self._token_counter.count_text(block.content) + self._token_counter.count_text(block.role)
 
-    def _count_messages(self, messages: list[dict[str, Any]]) -> int:
+    def _count_messages(self, messages: list[JsonObject]) -> int:
         return sum(self._token_counter.count_message(message) for message in messages)
 
     @staticmethod
     def _provider_hints(
         cache_mode: str,
-        system_prefix: list[dict[str, Any]],
+        system_prefix: list[JsonObject],
         blocks: list[LLMContextBlock],
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         if cache_mode == "off":
             return {}
         stable_messages_payload = [

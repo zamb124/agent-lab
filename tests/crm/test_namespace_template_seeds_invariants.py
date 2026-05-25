@@ -103,7 +103,7 @@ def test_seed_pipeline_stage_preset_stage_ids_are_snake_case_unique(
         seed["crm_settings"]["pipeline_stage_presets"]
     )
     for board_key, preset in presets.items():
-        stage_ids = [stage.id for stage in preset.stages]
+        stage_ids = [stage.stage_id for stage in preset.stages]
         assert len(stage_ids) >= 2, (seed["template_id"], board_key)
         assert len(set(stage_ids)) == len(stage_ids), (
             seed["template_id"],

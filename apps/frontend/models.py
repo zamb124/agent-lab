@@ -2,12 +2,13 @@
 Модели данных для Frontend сервиса
 """
 from datetime import datetime, timezone
-from typing import Any
+from typing import override
 
 from pydantic import BaseModel, Field
 
 from core.clients.llm.config import LLMCallConfig
 from core.company_ai import CapabilityLiteral
+from core.models.payment_models import TransactionResponse
 from core.tracing.models import TraceSpanRecord
 from core.types import JsonObject
 
@@ -44,19 +45,24 @@ class ApiKeyCreated(BaseModel):
     message: str = "Сохраните секрет - он больше не будет показан"
 
 
-class TeamMemberInfo(BaseModel):
-    """Информация об участнике команды"""
-    user_id: str = Field(description="ID пользователя")
-    name: str = Field(description="Имя")
-    email: str | None = Field(default=None, description="Email")
-    roles: list[str] = Field(description="Роли в компании")
-    joined_at: datetime | None = Field(default=None, description="Дата вступления")
-    avatar_url: str | None = Field(default=None, description="URL аватара")
-
-
 class TeamMemberUpdate(BaseModel):
     """Обновление участника"""
     roles: list[str] = Field(description="Новые роли")
+
+
+class TeamMemberRoleUpdateResponse(BaseModel):
+    """Результат изменения ролей участника."""
+
+    success: bool = True
+    user_id: str
+    roles: list[str]
+
+
+class TeamMemberRemoveResponse(BaseModel):
+    """Результат удаления участника из компании."""
+
+    success: bool = True
+    message: str
 
 
 class CompanySettingsUpdate(BaseModel):
@@ -69,7 +75,37 @@ class CompanySettingsUpdate(BaseModel):
 
     name: str | None = Field(default=None, description="Название компании")
     monthly_budget: float | None = Field(default=None, description="Месячный лимит")
-    metadata: dict[str, Any] | None = Field(default=None, description="Дополнительные данные")
+    metadata: JsonObject | None = Field(default=None, description="Дополнительные данные")
+
+
+class CompanySettingsResponse(BaseModel):
+    """Текущие базовые настройки активной компании."""
+
+    company_id: str
+    name: str
+    subdomain: str | None
+    owner_user_id: str | None
+    status: str
+    monthly_budget: float
+    tariff_plan: str
+    created_at: str
+    metadata: JsonObject
+
+
+class CompanySettingsUpdatedCompany(BaseModel):
+    """Изменяемая часть настроек компании после PATCH."""
+
+    name: str
+    monthly_budget: float
+    metadata: JsonObject
+
+
+class CompanySettingsUpdateResponse(BaseModel):
+    """Результат обновления настроек компании."""
+
+    success: bool = True
+    message: str
+    company: CompanySettingsUpdatedCompany
 
 
 # === AI providers (capabilities + custom OpenAI-compatible) ===
@@ -105,7 +141,7 @@ class CustomProviderCreate(BaseModel):
     base_url: str
     api_key: str
     extra_request_headers: dict[str, str] | None = None
-    extra_request_body: dict[str, Any] | None = None
+    extra_request_body: JsonObject | None = None
     rerank_path: str | None = None
     capabilities: list[CapabilityLiteral] = Field(default_factory=list)
     model_by_capability: dict[str, str] = Field(default_factory=dict)
@@ -118,7 +154,7 @@ class CustomProviderUpdate(BaseModel):
     base_url: str | None = None
     api_key: str | None = None
     extra_request_headers: dict[str, str] | None = None
-    extra_request_body: dict[str, Any] | None = None
+    extra_request_body: JsonObject | None = None
     rerank_path: str | None = None
     capabilities: list[CapabilityLiteral] | None = None
     model_by_capability: dict[str, str] | None = None
@@ -161,6 +197,20 @@ class BillingUsage(BaseModel):
 class ChangePlanRequest(BaseModel):
     """Запрос на смену тарифа"""
     plan: str = Field(description="Новый тарифный план")
+
+
+class BillingPlanChangeResponse(BaseModel):
+    """Результат смены тарифного плана компании."""
+
+    success: bool
+    plan: str
+    message: str
+
+
+class PaymentHistoryResponse(BaseModel):
+    """История транзакций пополнения баланса."""
+
+    payments: list[TransactionResponse]
 
 
 class PlatformTracingFacetItem(BaseModel):
@@ -232,6 +282,7 @@ class PlatformTracingSpanItem(TraceSpanRecord):
             user_display_name=user_display_name,
         )
 
+    @override
     def to_json_object(self) -> JsonObject:
         payload = super().to_json_object()
         payload["company_name"] = self.company_name
@@ -252,13 +303,13 @@ class PlatformBillingPricesResponse(BaseModel):
 class PlatformBillingUsageReportResponse(BaseModel):
     """Строки usage из shared БД для админки."""
 
-    items: list[dict[str, Any]]
+    items: list[JsonObject]
 
 
 class PlatformBillingSettlementRulesResponse(BaseModel):
     """Документ правил span settlement (JSON)."""
 
-    document: dict[str, Any]
+    document: JsonObject
 
 
 class PlatformBillingCompanyPricesResponse(BaseModel):

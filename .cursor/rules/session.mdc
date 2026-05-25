@@ -1,67 +1,71 @@
 ---
-description: "Сессии flows: session_id, StateManager, persistence, resume"
+description: "Сессии flows: session_id, durable workflow runtime, resume"
 alwaysApply: false
 ---
 # Сессии flows
 
-`session_id` связывает запросы пользователя с сохранённым `ExecutionState` в PostgreSQL. Хранится в `ExecutionState.session_id`.
+`session_id` связывает пользовательский поток с durable workflow instance. Формат для A2A/flows: `{flow_id}:{context_id}`. Значение хранится в `ExecutionState.session_id`, но сам `ExecutionState` является projection, а не источником истины.
 
-## StateManager
+## Runtime
 
-`apps/flows/src/state/persistence.py`. Доступ — `get_container().state_manager`.
+Канонический доступ к состоянию — через `DurableWorkflowRuntime` из контейнера:
 
 ```python
-from apps.flows.src.state.persistence import create_initial_state
+from apps.flows.src.durable_execution import WorkflowEventType, create_initial_state
 from apps.flows.src.container import get_container
 
-# Создать стартовое состояние
 state = create_initial_state(
-    task_id=task_id, context_id=context_id, user_id=user_id,
-    session_id=session_id, content=content, branch_id="default",
+    task_id=task_id,
+    context_id=context_id,
+    user_id=user_id,
+    session_id=session_id,
+    content=content,
+    branch_id="default",
 )
 
 container = get_container()
 
-# Загрузить
-state = await container.state_manager.get_state(session_id)  # ExecutionState | None
+loaded = await container.workflow_runtime.get_state(session_id)
 
-# Сохранить
-await container.state_manager.save_state(session_id, state)
-
-# Атомарное обновление
-async with conn.transaction():
-    state = await container.state_manager.get_state_for_update(session_id, conn)
-    state.response = "Updated"
-    await container.state_manager.save_state_in_transaction(session_id, state, conn)
-
-# Удалить
-await container.state_manager.delete_state(session_id)
+await container.workflow_runtime.save_state(
+    session_id,
+    state,
+    event_type=WorkflowEventType.user_input_applied,
+    payload={"source": "a2a"},
+    snapshot=True,
+)
 ```
 
 ## Хранение
 
-- Таблица `states` в service-БД flows (`platform_agents`).
-- Ключ — `state:{session_id}` (добавляется автоматически через `BaseRepository`).
-- Значение — JSONB с полным `ExecutionState`.
-- Изоляция по компаниям через `BaseRepository` (`is_global=False`).
-- Сериализация — Pydantic на границе с БД.
+- `workflow_events` — append-only история выполнения и единственный источник истины.
+- `workflow_snapshots` — materialized anchors для быстрого rehydrate, не отдельная бизнес-истина.
+- `workflow_instances` — текущий head/projection metadata: branch, sequence, hash, status.
+- `execution_branches` — линии выполнения для fork/rewind/retry.
+- Redis — disposable projection cache. Потеря Redis не должна терять историю.
 
 ## Правила
 
-- `StateManager` работает с нативным `ExecutionState`, **не** `dict`.
-- `model_dump()` / `model_validate()` — **только в Repository**, не в бизнес-логике.
-- `session_id` — из `get_context().session_id` или передаётся явно при старте задачи.
-- После interrupt состояние сохраняется через `save_state`, возобновление — `get_state` по тому же `session_id`.
+- Новое состояние фиксируется событием с `ExecutionStateDelta`; полная projection может попасть только в snapshot anchor.
+- `session_id` берётся из `get_context().session_id` или передаётся явно при старте задачи.
+- Resume после interrupt загружает projection через `workflow_runtime.get_state`, применяет пользовательский ответ и коммитит новое событие.
+- Retry после `raise` возвращается к последней recoverable durable boundary, а не к грязному in-memory объекту.
+- Time-travel всегда работает через `get_state_history` / `load_state_at_sequence` / fork-branch semantics.
 
 ## Interrupt и resume
 
-При `FlowInterrupt` выполнение прерывается, состояние сохраняется в БД:
-
 ```python
-# apps/flows/src/tasks/flow_tasks.py
-state = await container.state_manager.get_state(session_id)
+from apps.flows.src.durable_execution import WorkflowEventType, create_initial_state
+
+state = await container.workflow_runtime.get_state(session_id)
 if state and state.interrupt:
     state.content = user_answer
+    await container.workflow_runtime.save_state(
+        session_id,
+        state,
+        event_type=WorkflowEventType.user_input_applied,
+        payload={"resume": True},
+    )
 else:
     state = create_initial_state(task_id, context_id, user_id, session_id, content)
 
@@ -70,4 +74,4 @@ flow = await container.flow_factory.get_flow(flow_id)
 await flow.run(state)
 ```
 
-Подробно — `flows_logic.mdc` (FlowInterrupt).
+Подробно — `durable_execution.mdc` и `flows_logic.mdc`.

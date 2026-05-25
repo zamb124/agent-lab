@@ -8,9 +8,10 @@ project_id берётся из самого service account, либо перео
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from typing import Any
+
+from core.config.models import PushConfig
+from core.types import JsonObject, parse_json_object
 
 
 @dataclass(frozen=True)
@@ -21,24 +22,19 @@ class ResolvedFcmCredentials:
     token_uri: str
 
 
-def resolve_fcm_credentials(settings: Any) -> ResolvedFcmCredentials | None:
-    push = settings.push
+def resolve_fcm_credentials(push: PushConfig) -> ResolvedFcmCredentials | None:
     raw = push.fcm_credentials_json
     if raw is None:
         return None
 
-    data = _coerce_to_dict(raw)
-    if data is None:
-        return None
+    payload = _coerce_to_json_object(raw)
 
-    client_email = str(data.get("client_email", "")).strip()
-    private_key = str(data.get("private_key", "")).strip()
-    token_uri = str(data.get("token_uri", "https://oauth2.googleapis.com/token")).strip()
-    project_id_raw = push.fcm_project_id or data.get("project_id")
-    project_id = str(project_id_raw).strip() if project_id_raw else ""
-
-    if not client_email or not private_key or not project_id:
-        return None
+    client_email = _required_string(payload, "client_email")
+    private_key = _required_string(payload, "private_key")
+    token_uri = _required_string(payload, "token_uri")
+    project_id = push.fcm_project_id.strip() if push.fcm_project_id else ""
+    if not project_id:
+        project_id = _required_string(payload, "project_id")
 
     return ResolvedFcmCredentials(
         project_id=project_id,
@@ -48,12 +44,17 @@ def resolve_fcm_credentials(settings: Any) -> ResolvedFcmCredentials | None:
     )
 
 
-def _coerce_to_dict(raw: Any) -> dict[str, Any] | None:
+def _coerce_to_json_object(raw: str | JsonObject) -> JsonObject:
     if isinstance(raw, dict):
         return raw
-    if isinstance(raw, str):
-        text = raw.strip()
-        if not text:
-            return None
-        return json.loads(text)
-    return None
+    text = raw.strip()
+    if not text:
+        raise ValueError("push.fcm_credentials_json must be non-empty JSON")
+    return parse_json_object(text, "push.fcm_credentials_json")
+
+
+def _required_string(payload: JsonObject, key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"push.fcm_credentials_json.{key} must be a non-empty string")
+    return value.strip()

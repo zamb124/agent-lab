@@ -4,30 +4,39 @@ API для управления API ключами компании
 import hashlib
 import secrets
 from datetime import datetime, timezone
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query
 
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.models import ApiKey, ApiKeyCreate, ApiKeyCreated, ApiKeyUpdate
+from core.context import require_context
 from core.db.models.platform import ApiKeyRecord
 from core.logging import get_logger
+from core.models.identity_models import Company, User
 from core.pagination import OffsetPage
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/api-keys", tags=["api-keys"])
 
 VALID_SCOPES = {
-    "agents:read", "agents:write",
-    "crm:read", "crm:write",
-    "rag:read", "rag:write",
+    "agents:read",
+    "agents:write",
+    "crm:read",
+    "crm:write",
+    "rag:read",
+    "rag:write",
     "billing:read",
 }
+
 
 def _generate_api_key() -> tuple[str, str]:
     """Возвращает (secret, sha256_hex)."""
     secret = f"hum_{secrets.token_urlsafe(32)}"
     key_hash = hashlib.sha256(secret.encode()).hexdigest()
     return secret, key_hash
+
 
 def _record_to_model(record: ApiKeyRecord) -> ApiKey:
     return ApiKey(
@@ -41,21 +50,34 @@ def _record_to_model(record: ApiKeyRecord) -> ApiKey:
         created_by=record.created_by,
     )
 
+
+def _require_api_key_principal() -> tuple[User, Company]:
+    context = require_context()
+    company = context.active_company
+    if company is None:
+        raise HTTPException(status_code=400, detail="Компания не выбрана")
+    return context.user, company
+
+
+def _require_api_key_admin() -> tuple[User, Company]:
+    user, company = _require_api_key_principal()
+    roles = company.members.get(user.user_id, [])
+    if "owner" not in roles and "admin" not in roles:
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    return user, company
+
+
 @router.get("", response_model=OffsetPage[ApiKey])
 async def list_api_keys(
-    request: Request,
     container: ContainerDep,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[ApiKey]:
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    if not hasattr(request.state, "company") or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-
-    company = request.state.company
+    _, company = _require_api_key_principal()
     records = await container.api_key_repository.list_by_company(
-        company.company_id, limit=limit, offset=offset,
+        company.company_id,
+        limit=limit,
+        offset=offset,
     )
     items = [_record_to_model(r) for r in records]
     return OffsetPage[ApiKey](items=items, total=len(items), limit=limit, offset=offset)
@@ -63,20 +85,9 @@ async def list_api_keys(
 @router.post("", response_model=ApiKeyCreated)
 async def create_api_key(
     key_data: ApiKeyCreate,
-    request: Request,
     container: ContainerDep,
-):
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    if not hasattr(request.state, "company") or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-
-    user = request.state.user
-    company = request.state.company
-
-    roles = company.members.get(user.user_id, [])
-    if "owner" not in roles and "admin" not in roles:
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+) -> ApiKeyCreated:
+    user, company = _require_api_key_admin()
 
     for scope in key_data.scopes:
         if scope not in VALID_SCOPES:
@@ -114,20 +125,9 @@ async def create_api_key(
 async def update_api_key(
     key_id: str,
     body: ApiKeyUpdate,
-    request: Request,
     container: ContainerDep,
-):
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    if not hasattr(request.state, "company") or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-
-    user = request.state.user
-    company = request.state.company
-
-    roles = company.members.get(user.user_id, [])
-    if "owner" not in roles and "admin" not in roles:
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+) -> JsonObject:
+    _, company = _require_api_key_admin()
 
     updated = await container.api_key_repository.update_name(key_id, company.company_id, body.name)
     if not updated:
@@ -138,20 +138,9 @@ async def update_api_key(
 @router.delete("/{key_id}")
 async def revoke_api_key(
     key_id: str,
-    request: Request,
     container: ContainerDep,
-):
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    if not hasattr(request.state, "company") or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-
-    user = request.state.user
-    company = request.state.company
-
-    roles = company.members.get(user.user_id, [])
-    if "owner" not in roles and "admin" not in roles:
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+) -> JsonObject:
+    _, company = _require_api_key_admin()
 
     revoked = await container.api_key_repository.revoke(key_id, company.company_id)
     if not revoked:

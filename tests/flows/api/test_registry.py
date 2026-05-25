@@ -31,15 +31,9 @@ def test_registry_custom_provider_options_use_label_and_custom_ref():
             )
         ]
     )
-
-    assert [item.model_dump(mode="json", exclude_none=True) for item in _custom_provider_options(aip)] == [
-        {
-            "value": "custom:corp",
-            "label": "Corp LLM",
-            "kind": "custom",
-            "custom_id": "corp",
-        }
-    ]
+    assert [
+        item.model_dump(mode="json", exclude_none=True) for item in _custom_provider_options(aip)
+    ] == [{"value": "custom:corp", "label": "Corp LLM", "kind": "custom", "custom_id": "corp"}]
     assert _custom_provider_models(aip, "custom:corp") == ["chat-model"]
 
 
@@ -61,7 +55,6 @@ async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository():
             raise AssertionError(f"unexpected repository call for {provider}")
 
     service = LLMModelsService(Repo(), AsyncMock())
-
     assert await service.get_models_by_provider(HUMANITEC_LLM_PROVIDER) == [
         HUMANITEC_LLM_AUTO_MODEL
     ]
@@ -74,7 +67,6 @@ class TestRegistryAgents:
     async def test_get_agents_returns_list(self, client):
         """GET /registry/flows возвращает список flows как AgentCard[]."""
         response = await client.get("/flows/api/v1/registry/flows")
-
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
@@ -84,11 +76,8 @@ class TestRegistryAgents:
         """AgentCard содержит обязательные поля."""
         response = await client.get("/flows/api/v1/registry/flows")
         agents = response.json()
-
         if len(agents) > 0:
             agent = agents[0]
-
-            # Обязательные поля A2A протокола
             assert "name" in agent
             assert "url" in agent
             assert "branches" in agent
@@ -100,13 +89,10 @@ class TestRegistryAgents:
         """AgentCard содержит как минимум одну ветку (branch)."""
         response = await client.get("/flows/api/v1/registry/flows")
         agents = response.json()
-
         if len(agents) > 0:
             agent = agents[0]
             branches = agent.get("branches", [])
-
             assert len(branches) >= 1
-            # У каждой ветки в карточке есть id и name
             assert "id" in branches[0]
             assert "name" in branches[0]
 
@@ -115,7 +101,6 @@ class TestRegistryAgents:
         """URL в AgentCard абсолютный."""
         response = await client.get("/flows/api/v1/registry/flows")
         agents = response.json()
-
         if len(agents) > 0:
             url = agents[0].get("url", "")
             assert url.startswith("http")
@@ -128,7 +113,6 @@ class TestRegistryTools:
     async def test_get_tools_returns_list(self, client):
         """GET /registry/tools возвращает список."""
         response = await client.get("/flows/api/v1/registry/tools")
-
         assert response.status_code == 200
         assert isinstance(response.json(), list)
 
@@ -137,28 +121,27 @@ class TestRegistryTools:
         """Tools содержат обязательные поля для platformweb."""
         response = await client.get("/flows/api/v1/registry/tools")
         tools = response.json()
-
-        # Должны быть загружены tools из модулей
         assert len(tools) > 0
-
         tool = tools[0]
-        # Структура для platformweb
         assert "name" in tool
         assert "type" in tool
         assert "attributes" in tool
         assert "description" in tool["attributes"]
-        assert "args_schema" in tool["attributes"]
+        assert "parameters_schema" in tool["attributes"]
 
     @pytest.mark.asyncio
     async def test_calculator_tool_has_parameters(self, client, app):
         """Calculator tool имеет параметры."""
         response = await client.get("/flows/api/v1/registry/tools")
         tools = response.json()
-
         calculator = next((t for t in tools if t["name"] == "calculator"), None)
-        assert calculator is not None, f"Calculator not found in tools: {[t['name'] for t in tools]}"
-        args_schema = calculator["attributes"]["args_schema"]
-        assert args_schema.get("expression") is not None, f"Expression not found in args_schema: {args_schema}"
+        assert calculator is not None, (
+            f"Calculator not found in tools: {[t['name'] for t in tools]}"
+        )
+        parameters_schema = calculator["attributes"]["parameters_schema"]
+        assert parameters_schema["properties"].get("expression") is not None, (
+            f"Expression not found in parameters_schema: {parameters_schema}"
+        )
 
 
 class TestRegistryModels:
@@ -168,7 +151,6 @@ class TestRegistryModels:
     async def test_get_models_returns_list(self, client):
         """GET /registry/models/values возвращает список моделей."""
         response = await client.get("/flows/api/v1/registry/models/values")
-
         assert response.status_code == 200
         models = response.json()
         assert isinstance(models, list)
@@ -178,8 +160,7 @@ class TestRegistryModels:
         """Все элементы списка моделей имеют строковый тип."""
         response = await client.get("/flows/api/v1/registry/models/values")
         models = response.json()
-
-        assert all(isinstance(model_id, str) for model_id in models)
+        assert all((isinstance(model_id, str) for model_id in models))
 
 
 class TestFlowSchema:
@@ -189,7 +170,6 @@ class TestFlowSchema:
     async def test_schema_returns_html(self, client):
         """GET /registry/flows/{flow_id}/schema возвращает HTML."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
-
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
 
@@ -198,7 +178,6 @@ class TestFlowSchema:
         """HTML содержит название flow."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
-
         assert "Пример графового flow" in html
 
     @pytest.mark.asyncio
@@ -206,8 +185,7 @@ class TestFlowSchema:
         """HTML содержит Mermaid диаграмму."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
-
-        assert "class=\"mermaid\"" in html
+        assert 'class="mermaid"' in html
         assert "flowchart TD" in html
 
     @pytest.mark.asyncio
@@ -215,8 +193,6 @@ class TestFlowSchema:
         """HTML содержит табы для skills."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
-
-        # example_graph имеет branches: fast_track, orders_only
         assert "fast_track" in html
         assert "orders_only" in html
 
@@ -225,12 +201,8 @@ class TestFlowSchema:
         """HTML содержит ноды flow."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
-
-        # example_graph имеет ноды: classifier, order/complaint/general процессоры, formatter
-        # classifier и formatter это function ноды - показываются по node_id
         assert "classifier" in html
         assert "formatter" in html
-        # Процессоры — llm_node, в данных примера в имени может быть «Агент»
         assert "Агент" in html or "react" in html.lower()
 
     @pytest.mark.asyncio
@@ -238,8 +210,6 @@ class TestFlowSchema:
         """HTML содержит условия переходов."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
-
-        # example_graph имеет условия route = 'order', route = 'complaint'
         assert "route" in html
         assert "order" in html
 
@@ -247,7 +217,6 @@ class TestFlowSchema:
     async def test_schema_404_for_unknown_flow(self, client):
         """404 для несуществующего flow."""
         response = await client.get("/flows/api/v1/registry/flows/nonexistent_flow/schema")
-
         assert response.status_code == 404
 
     @pytest.mark.asyncio
@@ -255,7 +224,6 @@ class TestFlowSchema:
         """HTML содержит легенду компонентов."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
-
         assert "Components" in html
         assert "React node" in html
         assert "Function" in html
@@ -265,9 +233,6 @@ class TestFlowSchema:
         """Схема react-ноды содержит tools."""
         response = await client.get("/flows/api/v1/registry/flows/example_react/schema")
         html = response.text
-
-        # example_react main агент имеет tools: calculator, ask_user
-        # Проверяем что хотя бы один tool есть
         assert "calculator" in html or "ask_user" in html
 
     @pytest.mark.asyncio
@@ -275,20 +240,13 @@ class TestFlowSchema:
         """Схема react-ноды содержит вложенный flow (как tool)."""
         response = await client.get("/flows/api/v1/registry/flows/example_react/schema")
         html = response.text
-
-        assert (
-            "subflow" in html.lower()
-            or "example_subflow" in html
-            or "Субагент" in html
-        )
+        assert "subflow" in html.lower() or "example_subflow" in html or "Субагент" in html
 
     @pytest.mark.asyncio
     async def test_schema_has_dark_theme(self, client):
         """HTML использует темную тему."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
-
-        # Проверяем темный фон
         assert "#0f0f23" in html or "linear-gradient" in html
 
     @pytest.mark.asyncio
@@ -296,7 +254,6 @@ class TestFlowSchema:
         """HTML показывает entry point."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
-
         assert "Entry:" in html
         assert "classifier" in html
 
@@ -305,9 +262,6 @@ class TestFlowSchema:
         """HTML показывает описание skill."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
-
-        # Проверяем что описание skill отображается
-        # fast_track skill: "Пропускает форматирование, сразу к ответу"
         assert "Пропускает форматирование" in html or "сразу к ответу" in html.lower()
 
     @pytest.mark.asyncio
@@ -315,7 +269,6 @@ class TestFlowSchema:
         """Mermaid диаграмма имеет start и END ноды."""
         response = await client.get("/flows/api/v1/registry/flows/example_graph/schema")
         html = response.text
-
         assert "start" in html
         assert "END" in html
 
@@ -324,5 +277,4 @@ class TestFlowSchema:
         """Ноды показываются с человекочитаемым именем из конфига."""
         response = await client.get("/flows/api/v1/registry/flows/example_react/schema")
         html = response.text
-
         assert "Главный" in html or "главн" in html.lower()

@@ -48,7 +48,7 @@ from apps.crm.services.entity_service import DraftVersionConflictError, SchemaVa
 from apps.crm.services.task_service import ActiveTaskExistsError
 from apps.crm.types import JsonObject
 from core.clients.service_client import ServiceClient
-from core.context import get_context
+from core.context import get_context, resolve_namespace_or_raise
 from core.i18n.service import t
 from core.pagination import CursorPage
 from core.websocket.publisher import Notification, NotificationType, notify_user
@@ -271,7 +271,7 @@ async def _execute_entity_query(
         if body.filters is not None
         else None
     )
-    namespace_name = body.namespace or "default"
+    namespace_name = resolve_namespace_or_raise(body.namespace)
     filter_field_types = await container.entity_service.resolve_filter_field_types(
         namespace=namespace_name,
         entity_type=body.entity_type,
@@ -383,7 +383,7 @@ async def export_entities(
     if status:
         filters_arg = {"field": "status", "op": "$eq", "value": status}
         filter_field_types = await container.entity_service.resolve_filter_field_types(
-            namespace=namespace or "default",
+            namespace=resolve_namespace_or_raise(namespace),
             entity_type=entity_type,
             entity_subtype=entity_subtype,
             filters=filters_arg,
@@ -604,7 +604,7 @@ async def queue_note_analysis_draft_repair(
     if ctx is None or not ctx.auth_token:
         raise HTTPException(status_code=401, detail="Authorization required")
 
-    namespace = note.namespace or "default"
+    namespace = resolve_namespace_or_raise(note.namespace)
 
     note_date_iso = note.note_date.isoformat() if note.note_date is not None else None
     await broadcast_crm_note_event(

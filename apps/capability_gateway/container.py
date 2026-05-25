@@ -10,7 +10,7 @@ from apps.capability_gateway.services.contracts import CapabilityGatewayContaine
 from apps.capability_gateway.services.registry import CapabilityRegistry
 from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
-from core.container import BaseContainer, lazy
+from core.container import BaseContainer, ContainerRegistry, lazy
 from core.logging import get_logger
 from core.text_transforms import TextTransformService
 
@@ -48,23 +48,19 @@ class CapabilityGatewayContainer(BaseContainer):
         )
 
 
-_capability_gateway_container: CapabilityGatewayContainer | None = None
+def _create_capability_gateway_container() -> CapabilityGatewayContainer:
+    settings = get_capability_gateway_settings()
+    if not settings.database.shared_url:
+        raise ValueError("database.shared_url is required для capability-gateway")
+    return CapabilityGatewayContainer(
+        db_url=settings.database.shared_url,
+        shared_db_url=settings.database.shared_url,
+    )
 
 
-def get_capability_gateway_container() -> CapabilityGatewayContainer:
-    global _capability_gateway_container
-    if _capability_gateway_container is None:
-        settings = get_capability_gateway_settings()
-        if not settings.database.shared_url:
-            raise ValueError("database.shared_url is required для capability-gateway")
-        _capability_gateway_container = CapabilityGatewayContainer(
-            db_url=settings.database.shared_url,
-            shared_db_url=settings.database.shared_url,
-        )
-        logger.info("CapabilityGatewayContainer инициализирован")
-    return _capability_gateway_container
+_capability_gateway_registry: ContainerRegistry[CapabilityGatewayContainer] = ContainerRegistry(
+    _create_capability_gateway_container, name="CapabilityGatewayContainer"
+)
 
-
-def reset_capability_gateway_container() -> None:
-    global _capability_gateway_container
-    _capability_gateway_container = None
+get_capability_gateway_container = _capability_gateway_registry.get
+reset_capability_gateway_container = _capability_gateway_registry.reset

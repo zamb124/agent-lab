@@ -4,6 +4,7 @@
 
 from datetime import datetime
 from enum import Enum
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,7 +24,7 @@ class TranslationKey(BaseModel):
     default_value: str = Field(description="Значение по умолчанию (обычно на русском)")
     category: str = Field(default="common", description="Категория ключа (models, common, errors, etc)")
 
-    model_config = ConfigDict(
+    model_config: ClassVar[ConfigDict] = ConfigDict(
         json_schema_extra={
             "example": {
                 "key": "models.user.fields.name",
@@ -44,7 +45,7 @@ class Translation(BaseModel):
     last_updated: datetime = Field(default_factory=datetime.now, description="Время последнего обновления")
     is_auto_generated: bool = Field(default=True, description="Сгенерировано автоматически или переведено вручную")
 
-    model_config = ConfigDict(
+    model_config: ClassVar[ConfigDict] = ConfigDict(
         json_schema_extra={
             "example": {
                 "language": "en",
@@ -109,4 +110,3 @@ class I18nConfig(BaseModel):
         description="Директории для сканирования ключей"
     )
     translations_directory: str = Field(default="core/i18n", description="Директория с файлами переводов")
-

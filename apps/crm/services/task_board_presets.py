@@ -34,9 +34,9 @@ def task_board_key(entity_type: str, entity_subtype: str | None) -> str:
 def default_task_board_stages() -> tuple[BoardStage, ...]:
     """Системные стадии, если для ключа нет пресета в namespace."""
     return (
-        BoardStage(id="todo", label="К выполнению"),
-        BoardStage(id="in_progress", label="В работе"),
-        BoardStage(id="done", label="Готово"),
+        BoardStage(stage_id="todo", label="К выполнению"),
+        BoardStage(stage_id="in_progress", label="В работе"),
+        BoardStage(stage_id="done", label="Готово"),
     )
 
 
@@ -57,7 +57,7 @@ def resolve_allowed_task_status_ids(
     crm: NamespaceCRMSettings,
     board_key: str,
 ) -> set[str]:
-    return {s.id for s in resolve_task_board_stages(crm, board_key)}
+    return {s.stage_id for s in resolve_task_board_stages(crm, board_key)}
 
 
 def build_task_board_editor_boards(

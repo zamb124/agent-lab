@@ -23,6 +23,8 @@ import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
+from pydantic import BaseModel
+
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 from core.variables import VarResolver
 
@@ -44,6 +46,17 @@ def _state_variables(state: MappingState) -> Mapping[str, JsonValue]:
 
 class MappingResolver:
     """Единая логика резолвинга @state:path и @var:name для всех нод."""
+
+    @staticmethod
+    def _as_mapping(value: object) -> Mapping[str, object] | None:
+        if isinstance(value, Mapping):
+            return cast(Mapping[str, object], value)
+        if isinstance(value, BaseModel):
+            return cast(
+                Mapping[str, object],
+                value.model_dump(mode="python", exclude_none=False),
+            )
+        return None
 
     @staticmethod
     def resolve_value(source: object, state: MappingState) -> object:
@@ -71,7 +84,7 @@ class MappingResolver:
         return source
 
     @staticmethod
-    def get_nested_value(data: MappingState | object, path: str) -> object | None:
+    def get_nested_value(data: MappingState, path: str) -> object | None:
         """
         Получает значение по вложенному пути из любого объекта.
 
@@ -91,16 +104,10 @@ class MappingResolver:
         value: object = data
 
         for key in keys:
-            # Сначала пробуем как dict (чтобы избежать .items(), .keys() и т.д.)
-            if isinstance(value, Mapping) and key in value:
-                mapped = cast(Mapping[str, object], value)
-                value = mapped[key]
-            # Потом пробуем атрибут (для ExecutionState и других объектов)
-            else:
-                candidate = cast(object, value)
-                if not hasattr(candidate, key):
-                    return None
-                value = cast(object, getattr(candidate, key))
+            mapping = MappingResolver._as_mapping(value)
+            if mapping is None or key not in mapping:
+                return None
+            value = mapping[key]
 
         return value
 

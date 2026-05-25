@@ -38,6 +38,16 @@ class RAGGlobalSearchRequest(RAGNamespaceSearchRequest):
     namespace_ids: list[str]
 
 
+class RAGIngestTextResponse(StrictBaseModel):
+    """Ответ синхронной индексации текста в RAG namespace."""
+
+    document_id: str
+    document_name: str
+    namespace_id: str
+    status: str
+    provider: str
+
+
 class RAGDocument(StrictBaseModel):
     """Универсальная модель документа для RAG"""
 

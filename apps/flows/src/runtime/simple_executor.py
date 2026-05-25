@@ -18,7 +18,7 @@ from apps.flows.src.runtime.runners import LlmNodeRunner
 from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.src.tools.base import BaseTool
 from core.state import ExecutionState
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject
 
 
 class SimpleLlmNodeExecutor(AgentExecutor):
@@ -72,12 +72,6 @@ class SimpleLlmNodeExecutor(AgentExecutor):
             session_id=session_id,
             user_id="external",
         )
-
-        raw_metadata: object = context.metadata
-        metadata = require_json_object(raw_metadata, "request.metadata")
-        mock_value = metadata.get("mock")
-        if mock_value is not None:
-            state.mock = require_json_object(mock_value, "request.metadata.mock")
 
         input_data: JsonObject = {"content": context.get_user_input()}
         emitter = InMemoryEmitter(state)

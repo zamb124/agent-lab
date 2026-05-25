@@ -21,7 +21,10 @@ async def test_resolve_creates_user_and_mapping(
     crm_container,
     unique_id: str,
 ) -> None:
-    await ensure_system_company_exists(crm_container)
+    await ensure_system_company_exists(
+        company_repository=crm_container.company_repository,
+        subdomain_repository=crm_container.subdomain_repository,
+    )
     company_id = "system"
     provider = "amocrm"
     account = f"sub_{unique_id}"

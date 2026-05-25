@@ -11,6 +11,8 @@ import pytest_asyncio
 from a2a.types import Message
 from a2a.utils.message import get_message_text
 
+from apps.flows.src.models.flow_config import SimpleEdgeCondition
+
 
 def msg_role(msg) -> str:
     """Извлекает role из A2A Message или dict."""
@@ -332,17 +334,28 @@ class TestExampleGraphAgent:
         edges_from_classifier = [e for e in flow_config.edges if e.from_node == "classifier"]
         assert len(edges_from_classifier) == 8
 
-        conditions = [e.condition for e in edges_from_classifier]
-        assert "route == 'order'" in conditions
-        assert "route == 'complaint'" in conditions
-        assert "route == 'general'" in conditions
-        assert "route == 'cat'" in conditions
-        assert "route == 'greeting'" in conditions
-        assert "route == 'operator'" in conditions
-        assert "route == 'takeover'" in conditions
+        conditions = {
+            (condition.variable, condition.operator, condition.value)
+            for condition in (e.condition for e in edges_from_classifier)
+            if isinstance(condition, SimpleEdgeCondition)
+        }
+        assert ("route", "==", "order") in conditions
+        assert ("route", "==", "complaint") in conditions
+        assert ("route", "==", "general") in conditions
+        assert ("route", "==", "cat") in conditions
+        assert ("route", "==", "greeting") in conditions
+        assert ("route", "==", "operator") in conditions
+        assert ("route", "==", "takeover") in conditions
 
         # Проверяем что есть два edge с условием route == 'general'
-        general_edges = [e for e in edges_from_classifier if e.condition == "route == 'general'"]
+        general_edges = [
+            e
+            for e in edges_from_classifier
+            if isinstance(e.condition, SimpleEdgeCondition)
+            and e.condition.variable == "route"
+            and e.condition.operator == "=="
+            and e.condition.value == "general"
+        ]
         assert len(general_edges) == 2
 
         to_nodes = [e.to_node for e in general_edges]
@@ -410,10 +423,14 @@ class TestExampleGraphAgent:
 
         # Edges только для order и general
         edges_from_classifier = [e for e in effective["edges"] if e.from_node == "classifier"]
-        conditions = [e.condition for e in edges_from_classifier if e.condition]
-        assert "route == 'order'" in conditions
-        assert "route == 'general'" in conditions
-        assert "route == 'complaint'" not in conditions
+        conditions = {
+            (condition.variable, condition.operator, condition.value)
+            for condition in (e.condition for e in edges_from_classifier)
+            if isinstance(condition, SimpleEdgeCondition)
+        }
+        assert ("route", "==", "order") in conditions
+        assert ("route", "==", "general") in conditions
+        assert ("route", "==", "complaint") not in conditions
 
     @pytest.mark.asyncio
     async def test_example_graph_nodes_loaded(self, app):

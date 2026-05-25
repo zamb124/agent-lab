@@ -73,8 +73,6 @@ async def _effective_landing_card_image_url(
     if direct:
         return direct
     flow_repo = container.flows_flow_repository
-    if flow_repo is None:
-        return ""
     pair = await flow_repo.get_latest_by_flow_id_unscoped(embed.flow_id)
     if pair is None:
         return ""
@@ -172,7 +170,7 @@ async def issue_public_landing_session(
         company_id=SYSTEM_COMPANY_ID,
         name="Landing Guest",
         roles=["guest"],
-        attrs={
+        attributes={
             "kind": "embed_session_guest",
             "embed_id": embed_id,
             "embed_flow_id": config.flow_id,

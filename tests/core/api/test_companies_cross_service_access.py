@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.api.companies import build_my_companies_response
+from core.api.companies import CompanyMembershipResponse, build_my_companies_response
 from core.models.identity_models import Company, User
 
 
@@ -57,11 +57,11 @@ async def test_build_my_companies_response_returns_items_list_response() -> None
     )
     assert isinstance(response.items, list)
     assert response.items == [
-        {
-            "company_id": "company-1",
-            "name": "Company One",
-            "subdomain": "company-one",
-            "role": ["owner"],
-            "is_active": True,
-        }
+        CompanyMembershipResponse(
+            company_id="company-1",
+            name="Company One",
+            subdomain="company-one",
+            role=["owner"],
+            is_active=True,
+        )
     ]

@@ -4,7 +4,8 @@ HTTP и JSON-RPC эндпоинты A2A для flows (a2a-sdk).
 """
 
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
+from typing import cast
 
 from a2a.types import (
     DeleteTaskPushNotificationConfigParams,
@@ -31,6 +32,7 @@ from core.identity.embed_guest_turns import (
     EMBED_GUEST_USER_TURNS_TTL_SECONDS,
 )
 from core.logging import get_logger
+from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.identity_models import User
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 from core.ui_events.dispatcher import publish_ui_event_to_user
@@ -79,9 +81,16 @@ def _string_list(raw: JsonValue | None) -> list[str]:
     return [item for item in raw if isinstance(item, str)]
 
 
+def _request_state_mapping(request: Request) -> Mapping[str, object]:
+    raw_state = request.scope.get("state")
+    if isinstance(raw_state, Mapping):
+        return cast(Mapping[str, object], raw_state)
+    return {}
+
+
 def _get_user_groups(request: Request) -> list[str]:
     """Извлекает группы пользователя из request.state.user."""
-    raw_user: User | JsonObject | None = getattr(request.state, "user", None)
+    raw_user = _request_state_mapping(request).get("user")
     if raw_user is None:
         return []
 
@@ -315,30 +324,7 @@ async def _get_flow_config(
 
 
 def _get_base_url(request: Request) -> str:
-    """Получает базовый URL из request с приоритетом X-Forwarded-Proto."""
-    # Приоритет X-Forwarded-Proto над request.url.scheme
-    forwarded_proto = request.headers.get("x-forwarded-proto")
-    if forwarded_proto:
-        scheme = forwarded_proto.lower()
-    else:
-        scheme = request.url.scheme
-
-    # Используем X-Forwarded-Host, который содержит host:port от Nginx
-    forwarded_host = request.headers.get("x-forwarded-host")
-    if forwarded_host:
-        host = forwarded_host
-    else:
-        host = request.headers.get("host") or request.url.netloc
-        # Если host не содержит порт, добавляем порт
-        if ":" not in host:
-            if request.url.port:
-                host = f"{host}:{request.url.port}"
-            elif scheme == "https":
-                host = f"{host}:443"
-            elif scheme == "http":
-                host = f"{host}:80"
-
-    return f"{scheme}://{host}"
+    return build_service_base_url(request, include_default_port=True)
 
 
 @router.get("/{flow_id}/.well-known/agent-card.json")
@@ -490,14 +476,9 @@ async def _json_rpc_handler_internal(
             "error": {"code": -32602, "message": "Invalid params: expected object"},
         }
 
-    token_data = getattr(request.state, "token_data", None)
-    if _is_embed_session_token(token_data):
-        if not isinstance(token_data, TokenData):
-            return {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "error": {"code": -32000, "message": "Invalid embed session token"},
-            }
+    token_data_raw = _request_state_mapping(request).get("token_data")
+    token_data = token_data_raw if isinstance(token_data_raw, TokenData) else None
+    if token_data is not None and _is_embed_session_token(token_data):
         embed_error = _validate_embed_session_request(
             request=request,
             token_data=token_data,

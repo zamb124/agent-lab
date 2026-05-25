@@ -17,11 +17,7 @@ import pytest
 
 def _msg(text: str, context_id: str = None) -> Dict[str, Any]:
     """Создаёт A2A Message."""
-    m = {
-        "messageId": str(uuid.uuid4()),
-        "role": "user",
-        "parts": [{"kind": "text", "text": text}],
-    }
+    m = {"messageId": str(uuid.uuid4()), "role": "user", "parts": [{"kind": "text", "text": text}]}
     if context_id:
         m["contextId"] = context_id
     return m
@@ -39,12 +35,9 @@ def get_task_state(task: Dict[str, Any]) -> str:
 
 def get_task_response(task: Dict[str, Any]) -> str:
     """Извлекает текст ответа из Task."""
-    # Сначала проверяем status.message
     msg = task.get("status", {}).get("message")
     if msg and msg.get("parts"):
         return msg["parts"][0].get("text", "")
-
-    # Если нет - ищем в artifacts (node_complete с result_preview)
     artifacts = task.get("artifacts", [])
     for artifact in reversed(artifacts):
         parts = artifact.get("parts", [])
@@ -52,7 +45,6 @@ def get_task_response(task: Dict[str, Any]) -> str:
             data = part.get("data", {})
             if data.get("event") == "node_complete" and data.get("result_preview"):
                 return data["result_preview"]
-
     return ""
 
 
@@ -63,8 +55,6 @@ class TestCodeNodeE2E:
     async def test_create_and_execute_inline_tool_node_flow(self, client, unique_id):
         """E2E: Создание flow с inline CodeNode и выполнение через A2A."""
         flow_id = f"e2e_tool_node_{unique_id}"
-
-        # Создаем flow с inline CodeNode
         create_response = await client.post(
             "/flows/api/v1/flows/",
             json={
@@ -79,10 +69,7 @@ class TestCodeNodeE2E:
                     "calculate": {
                         "type": "code",
                         "code": "async def run(args, state):\n    return {'sum': args['a'] + args['b']}",
-                        "input_mapping": {
-                            "a": "@state:num1",
-                            "b": "@state:num2",
-                        },
+                        "input_mapping": {"a": "@state:num1", "b": "@state:num2"},
                     },
                     "finish": {
                         "type": "code",
@@ -90,15 +77,13 @@ class TestCodeNodeE2E:
                     },
                 },
                 "edges": [
-                    {"from": "prepare", "to": "calculate"},
-                    {"from": "calculate", "to": "finish"},
-                    {"from": "finish", "to": None},
+                    {"from_node": "prepare", "to_node": "calculate"},
+                    {"from_node": "calculate", "to_node": "finish"},
+                    {"from_node": "finish", "to_node": None},
                 ],
             },
         )
         assert create_response.status_code == 200
-
-        # Выполняем flow через A2A API
         exec_response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -111,19 +96,15 @@ class TestCodeNodeE2E:
         assert exec_response.status_code == 200
         data = exec_response.json()
         task = get_task_from_response(data)
-
         assert get_task_state(task) == "completed"
         response_text = get_task_response(task)
         assert "42" in response_text or "Сумма" in response_text
-
-        # Cleanup
         await client.delete(f"/flows/api/v1/{flow_id}")
 
     @pytest.mark.asyncio
     async def test_tool_node_with_variables(self, client, unique_id):
         """E2E: CodeNode использует переменные из flow через A2A."""
         flow_id = f"e2e_tool_var_{unique_id}"
-
         create_response = await client.post(
             "/flows/api/v1/flows/",
             json={
@@ -138,10 +119,7 @@ class TestCodeNodeE2E:
                     "format": {
                         "type": "code",
                         "code": "async def run(args, state):\n    return {'formatted_order': f\"{args['prefix']}{args['id']}\"}",
-                        "input_mapping": {
-                            "prefix": "@var:order_prefix",
-                            "id": "@state:order_id",
-                        },
+                        "input_mapping": {"prefix": "@var:order_prefix", "id": "@state:order_id"},
                     },
                     "finish": {
                         "type": "code",
@@ -149,15 +127,14 @@ class TestCodeNodeE2E:
                     },
                 },
                 "edges": [
-                    {"from": "prepare", "to": "format"},
-                    {"from": "format", "to": "finish"},
-                    {"from": "finish", "to": None},
+                    {"from_node": "prepare", "to_node": "format"},
+                    {"from_node": "format", "to_node": "finish"},
+                    {"from_node": "finish", "to_node": None},
                 ],
                 "variables": {"order_prefix": "ORD-"},
             },
         )
         assert create_response.status_code == 200
-
         exec_response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -169,19 +146,15 @@ class TestCodeNodeE2E:
         )
         assert exec_response.status_code == 200
         task = get_task_from_response(exec_response.json())
-
         assert get_task_state(task) == "completed"
         response_text = get_task_response(task)
         assert "ORD-12345" in response_text
-
-        # Cleanup
         await client.delete(f"/flows/api/v1/{flow_id}")
 
     @pytest.mark.asyncio
     async def test_tool_node_chain(self, client, unique_id):
         """E2E: Цепочка CodeNode через A2A."""
         flow_id = f"e2e_tool_chain_{unique_id}"
-
         create_response = await client.post(
             "/flows/api/v1/flows/",
             json={
@@ -209,15 +182,14 @@ class TestCodeNodeE2E:
                     },
                 },
                 "edges": [
-                    {"from": "init", "to": "double"},
-                    {"from": "double", "to": "square"},
-                    {"from": "square", "to": "finish"},
-                    {"from": "finish", "to": None},
+                    {"from_node": "init", "to_node": "double"},
+                    {"from_node": "double", "to_node": "square"},
+                    {"from_node": "square", "to_node": "finish"},
+                    {"from_node": "finish", "to_node": None},
                 ],
             },
         )
         assert create_response.status_code == 200
-
         exec_response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -229,20 +201,15 @@ class TestCodeNodeE2E:
         )
         assert exec_response.status_code == 200
         task = get_task_from_response(exec_response.json())
-
         assert get_task_state(task) == "completed"
         response_text = get_task_response(task)
-        # 10 * 2 = 20, 20 ** 2 = 400
         assert "400" in response_text
-
-        # Cleanup
         await client.delete(f"/flows/api/v1/{flow_id}")
 
     @pytest.mark.asyncio
     async def test_tool_node_with_nested_state(self, client, unique_id):
         """E2E: CodeNode с вложенными путями в state через A2A."""
         flow_id = f"e2e_tool_nested_{unique_id}"
-
         create_response = await client.post(
             "/flows/api/v1/flows/",
             json={
@@ -268,14 +235,13 @@ class TestCodeNodeE2E:
                     },
                 },
                 "edges": [
-                    {"from": "prepare", "to": "greet"},
-                    {"from": "greet", "to": "finish"},
-                    {"from": "finish", "to": None},
+                    {"from_node": "prepare", "to_node": "greet"},
+                    {"from_node": "greet", "to_node": "finish"},
+                    {"from_node": "finish", "to_node": None},
                 ],
             },
         )
         assert create_response.status_code == 200
-
         exec_response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -287,19 +253,15 @@ class TestCodeNodeE2E:
         )
         assert exec_response.status_code == 200
         task = get_task_from_response(exec_response.json())
-
         assert get_task_state(task) == "completed"
         response_text = get_task_response(task)
         assert "Привет, Иван!" in response_text
-
-        # Cleanup
         await client.delete(f"/flows/api/v1/{flow_id}")
 
     @pytest.mark.asyncio
     async def test_conditional_routing_to_tool_node(self, client, unique_id):
         """E2E: Условный переход к CodeNode через A2A."""
         flow_id = f"e2e_tool_condition_{unique_id}"
-
         create_response = await client.post(
             "/flows/api/v1/flows/",
             json={
@@ -326,17 +288,33 @@ class TestCodeNodeE2E:
                     },
                 },
                 "edges": [
-                    {"from": "classify", "to": "calculate", "condition": "route == 'calc'"},
-                    {"from": "classify", "to": "skip", "condition": "route == 'skip'"},
-                    {"from": "calculate", "to": "finish"},
-                    {"from": "skip", "to": "finish"},
-                    {"from": "finish", "to": None},
+                    {
+                        "from_node": "classify",
+                        "to_node": "calculate",
+                        "condition": {
+                            "type": "simple",
+                            "variable": "route",
+                            "operator": "==",
+                            "value": "calc",
+                        },
+                    },
+                    {
+                        "from_node": "classify",
+                        "to_node": "skip",
+                        "condition": {
+                            "type": "simple",
+                            "variable": "route",
+                            "operator": "==",
+                            "value": "skip",
+                        },
+                    },
+                    {"from_node": "calculate", "to_node": "finish"},
+                    {"from_node": "skip", "to_node": "finish"},
+                    {"from_node": "finish", "to_node": None},
                 ],
             },
         )
         assert create_response.status_code == 200
-
-        # Тест с calc
         exec_response1 = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -349,8 +327,6 @@ class TestCodeNodeE2E:
         assert exec_response1.status_code == 200
         task1 = get_task_from_response(exec_response1.json())
         assert "4" in get_task_response(task1)
-
-        # Тест без calc
         exec_response2 = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -363,6 +339,4 @@ class TestCodeNodeE2E:
         assert exec_response2.status_code == 200
         task2 = get_task_from_response(exec_response2.json())
         assert "skipped" in get_task_response(task2)
-
-        # Cleanup
         await client.delete(f"/flows/api/v1/{flow_id}")

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Form, HTTPException, Response
 from apps.frontend.dependencies import ContainerDep
 from core.clients.payment import PaymentProviderFactory
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/payments", tags=["payments-webhook"])
@@ -45,7 +46,7 @@ async def payment_webhook(
         logger.error("Провайдер %s не найден", provider_name)
         raise HTTPException(status_code=404, detail=f"Провайдер {provider_name} не найден")
 
-    webhook_data = {
+    webhook_data: JsonObject = {
         "notification_type": notification_type,
         "operation_id": operation_id,
         "amount": amount,

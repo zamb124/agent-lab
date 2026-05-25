@@ -12,6 +12,7 @@
 
 import hashlib
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from httpx import AsyncClient
@@ -34,6 +35,7 @@ from core.models.identity_models import Company, User
 from core.models.payment_models import (
     PaymentProviderType,
     PaymentStatus,
+    PaymentSyncCandidate,
     Transaction,
 )
 from core.utils.tokens import get_token_service
@@ -324,12 +326,12 @@ class TestPaymentService:
             company=company, user=user, amount=1000.0, provider=provider,
         )
 
-        assert "transaction_id" in result
-        assert result["amount"] == 1000.0
-        assert result["payment_url"].startswith("https://yoomoney.ru/quickpay/")
+        assert result.transaction_id
+        assert result.amount == 1000.0
+        assert result.payment_url.startswith("https://yoomoney.ru/quickpay/")
 
         stored = await frontend_container.payment_service.get_transaction(
-            result["transaction_id"],
+            result.transaction_id,
         )
         assert stored is not None
         assert stored.status == PaymentStatus.PENDING
@@ -365,7 +367,7 @@ class TestPaymentService:
             company=company, user=user, amount=2000.0, provider=provider,
         )
 
-        txn_id = payment["transaction_id"]
+        txn_id = payment.transaction_id
         webhook_data = _build_webhook_data(
             label=txn_id, amount="2000.00", operation_id=f"op_{unique_id}",
         )
@@ -414,7 +416,7 @@ class TestPaymentService:
             company=company, user=user, amount=500.0, provider=provider,
         )
 
-        txn_id = payment["transaction_id"]
+        txn_id = payment.transaction_id
         op_id = f"op_dup_{unique_id}"
         webhook_data = _build_webhook_data(
             label=txn_id, amount="500.00", operation_id=op_id,
@@ -438,13 +440,10 @@ class TestPaymentService:
         final_company = await frontend_container.company_repository.get(company_id)
         assert final_company.balance == 600.0
 
-    async def test_webhook_recovers_missing_transaction(
+    async def test_webhook_rejects_missing_transaction(
         self, frontend_container, unique_id,
     ):
-        """
-        Webhook для несуществующей транзакции восстанавливает её из label.
-        Формат label: {company_id}:txn_{uuid}
-        """
+        """Webhook для несуществующей транзакции не создаёт платёжную запись."""
         company_id = f"rec_co_{unique_id}"
         user_id = f"rec_usr_{unique_id}"
 
@@ -465,8 +464,6 @@ class TestPaymentService:
         )
         await frontend_container.user_repository.set(user)
 
-        # Транзакция не создавалась через create_payment --
-        # имитируем ситуацию когда KV потерял запись
         fake_txn_id = f"{company_id}:txn_{uuid.uuid4().hex[:16]}"
         op_id = f"op_rec_{unique_id}"
 
@@ -476,19 +473,15 @@ class TestPaymentService:
         )
         verification = await provider.verify_webhook(webhook_data)
 
-        await frontend_container.payment_service.process_webhook(
-            verification_result=verification,
-            provider_name="yoomoney_main",
-            raw_data=webhook_data,
-        )
-
-        recovered_txn = await frontend_container.payment_service.get_transaction(fake_txn_id)
-        assert recovered_txn is not None
-        assert recovered_txn.status == PaymentStatus.SUCCESS
-        assert recovered_txn.amount == 750.0
+        with pytest.raises(ValueError, match="not found"):
+            await frontend_container.payment_service.process_webhook(
+                verification_result=verification,
+                provider_name="yoomoney_main",
+                raw_data=webhook_data,
+            )
 
         updated_company = await frontend_container.company_repository.get(company_id)
-        assert updated_company.balance == 750.0
+        assert updated_company.balance == 0.0
 
     async def test_get_company_transactions_returns_sorted(
         self, frontend_container, unique_id,
@@ -560,7 +553,7 @@ class TestPaymentService:
         )
 
         webhook_data = _build_webhook_data(
-            label=payment["transaction_id"],
+            label=payment.transaction_id,
             amount="100.00",
             operation_id=f"op_unk_{unique_id}",
         )
@@ -607,8 +600,7 @@ class TestBillingTopupAPI:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["success"] is True
-        assert "payment_id" in data
+        assert "transaction_id" in data
         assert data["amount"] == 1000.0
         assert data["payment_url"].startswith("https://yoomoney.ru/quickpay/")
 
@@ -718,7 +710,7 @@ class TestBillingTopupAPI:
             json={"amount": 500.0},
         )
         assert response.status_code == 200
-        assert response.json()["success"] is True
+        assert "transaction_id" in response.json()
 
 
 @pytest.mark.asyncio
@@ -820,7 +812,7 @@ class TestWebhookEndpoint:
         payment = await frontend_container.payment_service.create_payment(
             company=company, user=user, amount=300.0, provider=provider,
         )
-        txn_id = payment["transaction_id"]
+        txn_id = payment.transaction_id
         op_id = f"op_wh_{unique_id}"
 
         form_data = _build_webhook_data(
@@ -916,7 +908,7 @@ class TestWebhookEndpoint:
         )
 
         form_data = _build_webhook_data(
-            label=payment["transaction_id"],
+            label=payment.transaction_id,
             amount="200.00",
             operation_id=f"op_ct_{unique_id}",
         )
@@ -1108,7 +1100,7 @@ class TestYooMoneyTokenStorage:
 
         await storage.delete(YOOMONEY_TOKEN_STORAGE_KEY, force_global=True)
 
-    def test_token_data_serialization_roundtrip(self):
+    async def test_token_data_serialization_roundtrip(self):
         """YooMoneyTokenData сериализуется и десериализуется корректно."""
         from datetime import datetime, timedelta, timezone
 
@@ -1125,7 +1117,7 @@ class TestYooMoneyTokenStorage:
         assert restored.token == "my_token_123"
         assert restored.is_expired() is False
 
-    def test_expired_token_data(self):
+    async def test_expired_token_data(self):
         """YooMoneyTokenData.is_expired() возвращает True для истёкших токенов."""
         from datetime import datetime, timedelta, timezone
 
@@ -1382,14 +1374,20 @@ class TestSyncPendingTransactions:
         txn_id = f"sync_co_{unique_id}:txn_test123"
 
         found = await provider.sync_pending_transactions(
-            [{"transaction_id": txn_id, "amount": 500.0, "created_at": "2026-01-01T00:00:00"}],
+            [
+                PaymentSyncCandidate(
+                    transaction_id=txn_id,
+                    amount=500.0,
+                    created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                )
+            ],
             storage=storage,
         )
 
         assert len(found) == 1
-        assert found[0]["transaction_id"] == txn_id
-        assert found[0]["status"] == "success"
-        assert found[0]["operation_id"] == f"op_sync_{unique_id}"
+        assert found[0].transaction_id == txn_id
+        assert found[0].status == PaymentStatus.SUCCESS
+        assert found[0].operation_id == f"op_sync_{unique_id}"
 
         await storage.delete(YOOMONEY_TOKEN_STORAGE_KEY, force_global=True)
 
@@ -1413,7 +1411,13 @@ class TestSyncPendingTransactions:
 
         with pytest.raises(ValueError, match="access_token"):
             await provider.sync_pending_transactions(
-                [{"transaction_id": "x:txn_1", "amount": 100}],
+                [
+                    PaymentSyncCandidate(
+                        transaction_id="x:txn_1",
+                        amount=100,
+                        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                    )
+                ],
                 storage=storage,
             )
 
@@ -1453,7 +1457,13 @@ class TestSyncPendingTransactions:
         monkeypatch.setattr(SmartProxyClient, "post", mock_post)
 
         found = await provider.sync_pending_transactions(
-            [{"transaction_id": f"no_match_{unique_id}:txn_1", "amount": 100}],
+            [
+                PaymentSyncCandidate(
+                    transaction_id=f"no_match_{unique_id}:txn_1",
+                    amount=100,
+                    created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                )
+            ],
             storage=storage,
         )
         assert found == []
@@ -1466,5 +1476,11 @@ class TestSyncPendingTransactions:
 
         with pytest.raises(ValueError, match="storage"):
             await provider.sync_pending_transactions(
-                [{"transaction_id": "x:txn_1", "amount": 100}],
+                [
+                    PaymentSyncCandidate(
+                        transaction_id="x:txn_1",
+                        amount=100,
+                        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                    )
+                ],
             )

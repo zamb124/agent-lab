@@ -342,7 +342,7 @@ async def test_llm_hitl_operator_task_then_complete_resumes_and_finishes(
 
     set_context(ctx)
     try:
-        saved = await container.state_manager.get_state(session_id)
+        saved = await container.workflow_runtime.get_state(session_id)
     finally:
         clear_context()
     assert saved is not None
@@ -572,7 +572,7 @@ async def test_full_hitl_dialogue_single_reply_then_takeover_then_followup(
 
     set_context(ctx)
     try:
-        saved_sr = await container.state_manager.get_state(session_id)
+        saved_sr = await container.workflow_runtime.get_state(session_id)
     finally:
         clear_context()
     assert saved_sr is not None
@@ -712,7 +712,7 @@ async def test_full_hitl_dialogue_single_reply_then_takeover_then_followup(
 
     set_context(ctx)
     try:
-        saved_tk = await container.state_manager.get_state(session_id)
+        saved_tk = await container.workflow_runtime.get_state(session_id)
     finally:
         clear_context()
     assert saved_tk.interrupt is None
@@ -763,7 +763,7 @@ async def test_full_hitl_dialogue_single_reply_then_takeover_then_followup(
 
     set_context(ctx)
     try:
-        saved_final = await container.state_manager.get_state(session_id)
+        saved_final = await container.workflow_runtime.get_state(session_id)
     finally:
         clear_context()
     assert "дупл" in saved_final.response.lower()
@@ -933,7 +933,7 @@ async def test_hitl_node_single_reply_graph(
 
     set_context(ctx)
     try:
-        saved = await container.state_manager.get_state(session_id)
+        saved = await container.workflow_runtime.get_state(session_id)
     finally:
         clear_context()
 
@@ -1063,7 +1063,7 @@ async def test_hitl_node_takeover_graph(
 
     set_context(ctx)
     try:
-        saved = await container.state_manager.get_state(session_id)
+        saved = await container.workflow_runtime.get_state(session_id)
     finally:
         clear_context()
 
@@ -1235,7 +1235,7 @@ async def test_operator_complete_with_files_single_reply(
 
     set_context(ctx)
     try:
-        saved = await container.state_manager.get_state(session_id)
+        saved = await container.workflow_runtime.get_state(session_id)
     finally:
         clear_context()
     assert saved.interrupt is None

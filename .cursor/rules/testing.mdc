@@ -13,10 +13,10 @@ alwaysApply: false
 1. **Никаких моков** — единственный обязательный мок это `MockLLM`. Реальные PostgreSQL, Redis, MinIO, TaskIQ.
 2. **Только готовые фикстуры** — запрещено создавать свои клиенты, сервисы, worker'ы.
 3. **Изоляция через `unique_id`** — обязательна в каждом тесте для всех ID (`task_id`, `context_id`, `user_id`, `session_id`, …).
-4. **Реальные компоненты** — `FlowFactory`, `ToolRegistry`, `S3Client`, репозитории не мокаются.
+4. **Реальные компоненты** — `FlowFactory`, `ToolRegistry`, `S3Client`, `DurableWorkflowRepository`/`DurableWorkflowRuntime`, репозитории не мокаются.
 5. **RAG эмбеддинги:** по умолчанию `PgVectorProvider` идёт в реальный HTTP эмбеддер. `PGVECTOR_TEST_MOCK_EMBEDDINGS=true` — детерминированные вектора без внешнего API (имя не под префиксом `RAG__`, иначе ломается разбор `rag.embedding` в Pydantic). Подмена методов `EmbeddingService` в конструкторе `PgVectorProvider` (не отдельный «тестовый» провайдер); прокинуть в subprocess `rag_worker` через `**TEST_DATABASE_ENV` (`tests/fixtures/test_database_env.py`).
 
-Запрещено мокать: `StateRepository`, `FlowFactory`, `ToolRegistry`, `BaseChannel`, `S3Client`, любые внутренние компоненты.
+Запрещено мокать: `DurableWorkflowRepository`, `DurableWorkflowRuntime`, `FlowFactory`, `ToolRegistry`, `BaseChannel`, `S3Client`, любые внутренние компоненты.
 
 ## Статические gate перед тестами
 
@@ -55,6 +55,7 @@ uv run python analyze_imports.py
 
 - Session-фикстуры при xdist выполняются **по разу на gw-worker** (не глобально). Повторные `create_bucket`, `run_migrations`, `load_flows_to_db` не должны падать.
 - Teardown session-фикстур не должен разрушать ресурсы, нужные другим gw-workers. Координация — через `FileLock` и ref-counting (`SessionWorkerManager`).
+- DB setup fixture отвечает только за схему/миграции БД. Она не имеет права убивать HTTP/service порты, чистить service pid/ref-count/envsig markers или управлять sandbox-сервисами. Жизненный цикл сервисов принадлежит `SessionServerManager`, который сам проверяет signature/readiness и освобождает только свой конкретный stale-процесс.
 
 ### Чистота тестового тела
 

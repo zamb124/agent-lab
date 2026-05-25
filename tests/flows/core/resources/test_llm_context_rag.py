@@ -163,7 +163,8 @@ async def test_resolves_shared_rag_resource_with_deep_reference_patch() -> None:
 
     assert binds["kb"].namespace == "company-kb"
     assert binds["kb"].filters == {"tenant": "acme", "collection_id": "legal"}
-    assert binds["kb"].search_options == {
+    assert binds["kb"].search_options is not None
+    assert binds["kb"].search_options.model_dump(mode="json", exclude_none=True) == {
         "channels": {"semantic": True},
         "rerank": True,
     }

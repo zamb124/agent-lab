@@ -1,7 +1,7 @@
 {
-  "id": "simple_crawler",
+  "flow_id": "simple_crawler",
   "name": "Simple crawler (rag-first, browser snapshot)",
-  "description": "RAG-first: namespace и первичный поиск до браузера. Если в RAG уже есть релевантные чанки — сразу финальный ответ (LLM с инструментом `simple_crawler_rag_search` в session namespace) без DuckDuckGo и краула. Иначе — LLM-план запросов; веб-этап: `DuckDuckGoBrowserSearch.links_many` по запросам и `BrowserSnapshotDescribe.page_snapshot` по каждому URL (отдельная браузерная сессия на запрос и на URL, `asyncio.gather`), затем `RagClient.ingest_text` по собранным markdown-документам; затем тот же финальный LLM с вызовами поиска в том же namespace. Семантические эмбеддинги для pgvector ожидаются от локального LitServe: в конфигурации процессов `rag` и `rag_worker` задайте `rag.embedding.provider` = `provider_litserve`, `rag.embedding.api.model` и размерность как в `variables` бандла (`rag_embedding_model`, `rag_embedding_dimension`), URL LitServe — `provider_litserve.api.base_url` (канон локальной разработки: порт 8014).",
+  "description": "RAG-first: namespace и первичный поиск до браузера. Если в RAG уже есть релевантные чанки — сразу финальный ответ (LLM с инструментом `simple_crawler_rag_search` в session namespace) без DuckDuckGo и краула. Иначе — LLM-план запросов; веб-этап вызывает platform tools `browser_duckduckgo_links_batch` и `browser_page_snapshot`, затем `rag_add_text` индексирует собранные markdown-документы; после этого тот же финальный LLM вызывает поиск в том же namespace. Семантические эмбеддинги для pgvector ожидаются от локального LitServe: в конфигурации процессов `rag` и `rag_worker` задайте `rag.embedding.provider` = `provider_litserve`, `rag.embedding.api.model` и размерность как в `variables` бандла (`rag_embedding_model`, `rag_embedding_dimension`), URL LitServe — `provider_litserve.api.base_url` (канон локальной разработки: порт 8014).",
   "tags": [
     "crawler",
     "browser",
@@ -16,7 +16,7 @@
   "nodes": {
     "bootstrap_session": {
       "type": "code",
-      "code": "async def run(args, state):\n    session_id = getattr(state, \"session_id\", None)\n    if not isinstance(session_id, str) or session_id.strip() == \"\":\n        raise ValueError(\"session_id обязателен для simple_crawler\")\n    sid = session_id.strip()\n    merged_vars = dict(getattr(state, \"variables\", None) or {})\n    merged_vars.setdefault(\"rag_embedding_provider\", \"provider_litserve\")\n    merged_vars.setdefault(\"rag_embedding_model\", \"qwen/qwen3-embedding-0.6b\")\n    merged_vars.setdefault(\"rag_embedding_dimension\", 1024)\n    state.variables = merged_vars\n    state[\"rag_namespace_id\"] = f\"simple_crawler:{sid}\"\n    state[\"search_links\"] = []\n    state[\"search_queries\"] = []\n    return state"
+      "code": "async def run(args, state):\n    session_id = state.session_id\n    if not isinstance(session_id, str) or session_id.strip() == \"\":\n        raise ValueError(\"session_id обязателен для simple_crawler\")\n    sid = session_id.strip()\n    merged_vars = dict(state.variables or {})\n    merged_vars.setdefault(\"rag_embedding_provider\", \"provider_litserve\")\n    merged_vars.setdefault(\"rag_embedding_model\", \"qwen/qwen3-embedding-0.6b\")\n    merged_vars.setdefault(\"rag_embedding_dimension\", 1024)\n    state.variables = merged_vars\n    state[\"rag_namespace_id\"] = f\"simple_crawler:{sid}\"\n    state[\"rag_collection_id\"] = \"session\"\n    state[\"search_links\"] = []\n    state[\"search_queries\"] = []\n    return state"
     },
     "plan_queries": {
       "type": "llm_node",
@@ -29,23 +29,23 @@
     },
     "prepare_inputs": {
       "type": "code",
-      "code": "import json\n\n\nasync def run(args, state):\n    response = getattr(state, \"response\", None)\n    if not isinstance(response, str) or response.strip() == \"\":\n        raise ValueError(\"plan_queries должен вернуть JSON-строку\")\n    payload = json.loads(response)\n    queries_raw = payload.get(\"queries\")\n    if not isinstance(queries_raw, list):\n        raise ValueError(\"plan_queries: queries должен быть списком\")\n\n    query_limit = int(state.get(\"search_queries_count\", 3))\n    queries: list[str] = []\n    for raw in queries_raw:\n        query = str(raw).strip()\n        if query != \"\":\n            queries.append(query)\n        if len(queries) >= query_limit:\n            break\n    if len(queries) == 0:\n        raise ValueError(\"plan_queries: не получены поисковые запросы\")\n\n    session_id = getattr(state, \"session_id\", None)\n    if not isinstance(session_id, str) or session_id.strip() == \"\":\n        raise ValueError(\"session_id обязателен для simple_crawler\")\n\n    state[\"search_queries\"] = queries\n    state[\"search_links\"] = []\n    return state"
+      "code": "import json\n\n\nasync def run(args, state):\n    response = state.response\n    if not isinstance(response, str) or response.strip() == \"\":\n        raise ValueError(\"plan_queries должен вернуть JSON-строку\")\n    payload = json.loads(response)\n    queries_raw = payload.get(\"queries\")\n    if not isinstance(queries_raw, list):\n        raise ValueError(\"plan_queries: queries должен быть списком\")\n\n    query_limit = int(state.get(\"search_queries_count\", 3))\n    queries: list[str] = []\n    for raw in queries_raw:\n        query = str(raw).strip()\n        if query != \"\":\n            queries.append(query)\n        if len(queries) >= query_limit:\n            break\n    if len(queries) == 0:\n        raise ValueError(\"plan_queries: не получены поисковые запросы\")\n\n    session_id = state.session_id\n    if not isinstance(session_id, str) or session_id.strip() == \"\":\n        raise ValueError(\"session_id обязателен для simple_crawler\")\n\n    state[\"search_queries\"] = queries\n    state[\"search_links\"] = []\n    return state"
     },
     "ensure_rag_namespace": {
       "type": "code",
-      "code": "from core.clients.rag_client import RagClient\n\n\nasync def run(args, state):\n    namespace_id = state.get(\"rag_namespace_id\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id обязателен\")\n    client = RagClient()\n    state[\"rag_namespace\"] = await client.create_namespace(\n        namespace_id,\n        description=\"simple_crawler session namespace\",\n    )\n    return state"
+      "code": "async def run(args, state):\n    namespace_id = state.get(\"rag_namespace_id\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id обязателен\")\n    raw = await tools.rag_create_namespace(\n        name=namespace_id.strip(),\n        description=\"simple_crawler session namespace\",\n    )\n    if raw.get(\"success\") is not True:\n        raise ValueError(str(raw.get(\"error\", \"rag_create_namespace failed\")))\n    state[\"rag_namespace\"] = raw\n    return state"
     },
     "check_rag_context": {
       "type": "code",
-      "code": "from core.clients.rag_client import RagClient\n\n\ndef _build_context_text(results: list[dict]) -> str:\n    blocks: list[str] = []\n    for item in results:\n        if not isinstance(item, dict):\n            continue\n        content = str(item.get(\"content\", \"\")).strip()\n        if content == \"\":\n            continue\n        metadata = item.get(\"metadata\")\n        source_url = \"\"\n        if isinstance(metadata, dict):\n            source_url = str(metadata.get(\"source_url\", \"\")).strip()\n        if source_url == \"\":\n            blocks.append(content)\n        else:\n            blocks.append(f\"Источник: {source_url}\\n{content}\")\n    return \"\\n\\n---\\n\\n\".join(blocks)\n\n\nasync def run(args, state):\n    namespace_id = state.get(\"rag_namespace_id\")\n    question = state.get(\"content\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id обязателен\")\n    if not isinstance(question, str) or question.strip() == \"\":\n        raise ValueError(\"content обязателен\")\n\n    client = RagClient()\n    raw = await client.search(namespace_id, question, limit=8)\n    results = raw.get(\"results\")\n    if not isinstance(results, list):\n        raise ValueError(\"RAG search: results должен быть списком\")\n\n    state[\"rag_context\"] = results\n    state[\"rag_context_text\"] = _build_context_text(results)\n    state[\"need_web_search\"] = len(results) == 0\n    return state"
+      "code": "def _build_context_text(results: list[dict]) -> str:\n    blocks: list[str] = []\n    for item in results:\n        if not isinstance(item, dict):\n            continue\n        content = str(item.get(\"content\", \"\")).strip()\n        if content == \"\":\n            continue\n        metadata = item.get(\"metadata\")\n        source_url = \"\"\n        if isinstance(metadata, dict):\n            source_url = str(metadata.get(\"source_url\", \"\")).strip()\n        if source_url == \"\":\n            blocks.append(content)\n        else:\n            blocks.append(f\"Источник: {source_url}\\n{content}\")\n    return \"\\n\\n---\\n\\n\".join(blocks)\n\n\nasync def run(args, state):\n    namespace_id = state.get(\"rag_namespace_id\")\n    collection_id = state.get(\"rag_collection_id\")\n    question = state.get(\"content\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id обязателен\")\n    if not isinstance(collection_id, str) or collection_id.strip() == \"\":\n        raise ValueError(\"rag_collection_id обязателен\")\n    if not isinstance(question, str) or question.strip() == \"\":\n        raise ValueError(\"content обязателен\")\n\n    raw = await tools.rag_search(\n        namespace_id=namespace_id.strip(),\n        collection_id=collection_id.strip(),\n        query=question.strip(),\n        limit=8,\n    )\n    if raw.get(\"success\") is not True:\n        raise ValueError(str(raw.get(\"error\", \"rag_search failed\")))\n    results = raw.get(\"results\")\n    if not isinstance(results, list):\n        raise ValueError(\"RAG search: results должен быть списком\")\n\n    state[\"rag_context\"] = results\n    state[\"rag_context_text\"] = _build_context_text(results)\n    state[\"need_web_search\"] = len(results) == 0\n    return state"
     },
     "search_duckduckgo_batch": {
       "type": "code",
-      "code": "async def run(args, state):\n    if state.get(\"need_web_search\") is not True:\n        return state\n\n    queries = state.get(\"search_queries\")\n    if not isinstance(queries, list) or len(queries) == 0:\n        raise ValueError(\"search_queries обязателен\")\n\n    per_query_limit = int(state.get(\"search_links_per_query\", 5))\n    search = DuckDuckGoBrowserSearch(per_query_limit=per_query_limit)\n    non_empty = []\n    for raw in queries:\n        q = str(raw).strip()\n        if q != \"\":\n            non_empty.append(q)\n    if len(non_empty) == 0:\n        raise ValueError(\"search_queries: нет непустых запросов\")\n\n    state[\"search_links\"] = await search.links_many(state, non_empty)\n    return state\n"
+      "code": "async def run(args, state):\n    if state.get(\"need_web_search\") is not True:\n        return state\n\n    queries = state.get(\"search_queries\")\n    if not isinstance(queries, list) or len(queries) == 0:\n        raise ValueError(\"search_queries обязателен\")\n\n    per_query_limit = int(state.get(\"search_links_per_query\", 5))\n    non_empty = []\n    for raw in queries:\n        q = str(raw).strip()\n        if q != \"\":\n            non_empty.append(q)\n    if len(non_empty) == 0:\n        raise ValueError(\"search_queries: нет непустых запросов\")\n\n    raw = await tools.browser_duckduckgo_links_batch(\n        queries=non_empty,\n        per_query_limit=per_query_limit,\n    )\n    if raw.get(\"success\") is not True:\n        raise ValueError(str(raw.get(\"error\", \"browser_duckduckgo_links_batch failed\")))\n    urls = raw.get(\"urls\")\n    if not isinstance(urls, list):\n        raise ValueError(\"browser_duckduckgo_links_batch: urls должен быть списком\")\n    state[\"search_links\"] = urls\n    return state\n"
     },
     "rag_ingest_markdown_batch": {
       "type": "code",
-      "code": "import asyncio\nfrom core.clients.rag_client import RagClient\n\n\nasync def _ingest_one(\n    client: RagClient,\n    namespace_id: str,\n    doc: dict,\n) -> dict:\n    return await client.ingest_text(\n        namespace_id,\n        text=str(doc.get(\"text\", \"\")),\n        document_name=str(doc.get(\"document_name\", \"snapshot\")),\n        metadata=doc.get(\"metadata\"),\n        document_id=str(doc.get(\"document_id\", \"\")),\n    )\n\n\nasync def run(args, state):\n    if state.get(\"need_web_search\") is not True:\n        return state\n\n    namespace_id = state.get(\"rag_namespace_id\")\n    markdown_docs = state.get(\"markdown_docs\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id обязателен\")\n    if not isinstance(markdown_docs, list):\n        raise ValueError(\"markdown_docs обязателен\")\n\n    ns = namespace_id.strip()\n    client = RagClient()\n    valid_docs: list[dict] = [doc for doc in markdown_docs if isinstance(doc, dict)]\n    if len(valid_docs) == 0:\n        state[\"rag_ingested_docs\"] = []\n        return state\n\n    ingested: list[dict] = list(\n        await asyncio.gather(*[_ingest_one(client, ns, doc) for doc in valid_docs]),\n    )\n    state[\"rag_ingested_docs\"] = ingested\n    return state"
+      "code": "import asyncio\n\n\nasync def _ingest_one(namespace_id: str, collection_id: str, doc: dict) -> dict:\n    raw = await tools.rag_add_text(\n        namespace_id=namespace_id,\n        collection_id=collection_id,\n        text=str(doc.get(\"text\", \"\")),\n        document_name=str(doc.get(\"document_name\", \"snapshot\")),\n        metadata=doc.get(\"metadata\"),\n        document_id=str(doc.get(\"document_id\", \"\")),\n    )\n    if raw.get(\"success\") is not True:\n        raise ValueError(str(raw.get(\"error\", \"rag_add_text failed\")))\n    return raw\n\n\nasync def run(args, state):\n    if state.get(\"need_web_search\") is not True:\n        return state\n\n    namespace_id = state.get(\"rag_namespace_id\")\n    collection_id = state.get(\"rag_collection_id\")\n    markdown_docs = state.get(\"markdown_docs\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id обязателен\")\n    if not isinstance(collection_id, str) or collection_id.strip() == \"\":\n        raise ValueError(\"rag_collection_id обязателен\")\n    if not isinstance(markdown_docs, list):\n        raise ValueError(\"markdown_docs обязателен\")\n\n    ns = namespace_id.strip()\n    coll = collection_id.strip()\n    valid_docs: list[dict] = [doc for doc in markdown_docs if isinstance(doc, dict)]\n    if len(valid_docs) == 0:\n        state[\"rag_ingested_docs\"] = []\n        return state\n\n    ingested: list[dict] = list(\n        await asyncio.gather(*[_ingest_one(ns, coll, doc) for doc in valid_docs]),\n    )\n    state[\"rag_ingested_docs\"] = ingested\n    return state"
     },
     "crawler_answer": {
       "type": "llm_node",
@@ -71,7 +71,7 @@
               "query"
             ]
           },
-          "code": "async def run(args, state):\n    query = args.get(\"query\")\n    if not isinstance(query, str) or query.strip() == \"\":\n        raise ValueError(\"query обязателен\")\n    raw_limit = args.get(\"limit\", 8)\n    limit = int(raw_limit)\n    if limit < 1 or limit > 16:\n        raise ValueError(\"limit должен быть от 1 до 16\")\n    namespace_id = state.get(\"rag_namespace_id\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id отсутствует в state\")\n    client = RagClient()\n    return await client.search(namespace_id.strip(), query.strip(), limit=limit)\n"
+          "code": "async def run(args, state):\n    query = args.get(\"query\")\n    if not isinstance(query, str) or query.strip() == \"\":\n        raise ValueError(\"query обязателен\")\n    raw_limit = args.get(\"limit\", 8)\n    limit = int(raw_limit)\n    if limit < 1 or limit > 16:\n        raise ValueError(\"limit должен быть от 1 до 16\")\n    namespace_id = state.get(\"rag_namespace_id\")\n    collection_id = state.get(\"rag_collection_id\")\n    if not isinstance(namespace_id, str) or namespace_id.strip() == \"\":\n        raise ValueError(\"rag_namespace_id отсутствует в state\")\n    if not isinstance(collection_id, str) or collection_id.strip() == \"\":\n        raise ValueError(\"rag_collection_id отсутствует в state\")\n    raw = await tools.rag_search(\n        namespace_id=namespace_id.strip(),\n        collection_id=collection_id.strip(),\n        query=query.strip(),\n        limit=limit,\n    )\n    if raw.get(\"success\") is not True:\n        raise ValueError(str(raw.get(\"error\", \"rag_search failed\")))\n    return raw\n"
         }
       ],
       "llm": {
@@ -82,21 +82,21 @@
     },
     "fetch_pages_markdown": {
       "type": "code",
-      "code": "import asyncio\n\n\nasync def run(args, state):\n    if state.get(\"need_web_search\") is not True:\n        state[\"crawled_pages\"] = []\n        state[\"markdown_docs\"] = []\n        return state\n\n    links = state.get(\"search_links\")\n    if not isinstance(links, list) or len(links) == 0:\n        state[\"crawled_pages\"] = []\n        state[\"markdown_docs\"] = []\n        return state\n\n    page_limit = int(state.get(\"crawl_pages_limit\", 5))\n    urls = []\n    for raw_url in links[:page_limit]:\n        u = str(raw_url).strip()\n        if u != \"\":\n            urls.append(u)\n    if len(urls) == 0:\n        state[\"crawled_pages\"] = []\n        state[\"markdown_docs\"] = []\n        return state\n\n    describe = BrowserSnapshotDescribe()\n    snapshots = await asyncio.gather(\n        *[describe.page_snapshot(state, u) for u in urls],\n    )\n\n    crawled_pages = []\n    markdown_docs = []\n    for snap in snapshots:\n        u = str(snap[\"url\"]).strip()\n        file_id = str(snap[\"file_id\"]).strip()\n        s3_path = str(snap[\"s3_path\"]).strip()\n        text = str(snap[\"text\"]).strip()\n        crawled_pages.append({\"url\": u, \"file_id\": file_id, \"s3_path\": s3_path})\n        markdown_docs.append(\n            {\n                \"document_id\": f\"simple_crawler:{file_id}\",\n                \"document_name\": u,\n                \"text\": text,\n                \"metadata\": {\n                    \"source_url\": u,\n                    \"s3_path\": s3_path,\n                    \"file_id\": file_id,\n                },\n            },\n        )\n\n    state[\"crawled_pages\"] = crawled_pages\n    state[\"markdown_docs\"] = markdown_docs\n    return state\n"
+      "code": "import asyncio\n\n\nasync def _snapshot(url: str) -> dict:\n    raw = await tools.browser_page_snapshot(url=url, ingest_source=\"simple_crawler\")\n    if raw.get(\"success\") is not True:\n        raise ValueError(str(raw.get(\"error\", \"browser_page_snapshot failed\")))\n    return raw\n\n\nasync def run(args, state):\n    if state.get(\"need_web_search\") is not True:\n        state[\"crawled_pages\"] = []\n        state[\"markdown_docs\"] = []\n        return state\n\n    links = state.get(\"search_links\")\n    if not isinstance(links, list) or len(links) == 0:\n        state[\"crawled_pages\"] = []\n        state[\"markdown_docs\"] = []\n        return state\n\n    page_limit = int(state.get(\"crawl_pages_limit\", 5))\n    urls = []\n    for raw_url in links[:page_limit]:\n        u = str(raw_url).strip()\n        if u != \"\":\n            urls.append(u)\n    if len(urls) == 0:\n        state[\"crawled_pages\"] = []\n        state[\"markdown_docs\"] = []\n        return state\n\n    snapshots = await asyncio.gather(*[_snapshot(u) for u in urls])\n\n    crawled_pages = []\n    markdown_docs = []\n    for snap in snapshots:\n        u = str(snap[\"url\"]).strip()\n        file_id = str(snap[\"file_id\"]).strip()\n        s3_path = str(snap[\"s3_path\"]).strip()\n        text = str(snap[\"text\"]).strip()\n        crawled_pages.append({\"url\": u, \"file_id\": file_id, \"s3_path\": s3_path})\n        markdown_docs.append(\n            {\n                \"document_id\": f\"simple_crawler:{file_id}\",\n                \"document_name\": u,\n                \"text\": text,\n                \"metadata\": {\n                    \"source_url\": u,\n                    \"s3_path\": s3_path,\n                    \"file_id\": file_id,\n                },\n            },\n        )\n\n    state[\"crawled_pages\"] = crawled_pages\n    state[\"markdown_docs\"] = markdown_docs\n    return state\n"
     }
   },
   "edges": [
     {
-      "from": "bootstrap_session",
-      "to": "ensure_rag_namespace"
+      "from_node": "bootstrap_session",
+      "to_node": "ensure_rag_namespace"
     },
     {
-      "from": "ensure_rag_namespace",
-      "to": "check_rag_context"
+      "from_node": "ensure_rag_namespace",
+      "to_node": "check_rag_context"
     },
     {
-      "from": "check_rag_context",
-      "to": "plan_queries",
+      "from_node": "check_rag_context",
+      "to_node": "plan_queries",
       "condition": {
         "type": "simple",
         "variable": "need_web_search",
@@ -105,8 +105,8 @@
       }
     },
     {
-      "from": "check_rag_context",
-      "to": "crawler_answer",
+      "from_node": "check_rag_context",
+      "to_node": "crawler_answer",
       "condition": {
         "type": "simple",
         "variable": "need_web_search",
@@ -115,28 +115,28 @@
       }
     },
     {
-      "from": "plan_queries",
-      "to": "prepare_inputs"
+      "from_node": "plan_queries",
+      "to_node": "prepare_inputs"
     },
     {
-      "from": "prepare_inputs",
-      "to": "search_duckduckgo_batch"
+      "from_node": "prepare_inputs",
+      "to_node": "search_duckduckgo_batch"
     },
     {
-      "from": "search_duckduckgo_batch",
-      "to": "fetch_pages_markdown"
+      "from_node": "search_duckduckgo_batch",
+      "to_node": "fetch_pages_markdown"
     },
     {
-      "from": "fetch_pages_markdown",
-      "to": "rag_ingest_markdown_batch"
+      "from_node": "fetch_pages_markdown",
+      "to_node": "rag_ingest_markdown_batch"
     },
     {
-      "from": "rag_ingest_markdown_batch",
-      "to": "crawler_answer"
+      "from_node": "rag_ingest_markdown_batch",
+      "to_node": "crawler_answer"
     },
     {
-      "from": "crawler_answer",
-      "to": null
+      "from_node": "crawler_answer",
+      "to_node": null
     }
   ],
   "variables": {

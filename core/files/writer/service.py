@@ -26,7 +26,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from core.context import require_active_company, require_context
 from core.files.checksum import compute_content_checksum_sha256
-from core.files.models import FileMetadata
+from core.files.models import FileRecord
 from core.files.processors import FileProcessor
 from core.files.types import ext_to_category, ext_to_mime
 from core.files.writer.content_kind import (
@@ -165,7 +165,7 @@ class FileWriter:
         *,
         original_name: str,
         public: bool,
-    ) -> FileMetadata:
+    ) -> FileRecord:
         if self._file_processor is None or self._download_url_prefix is None:
             raise FileWriteError(
                 "write: нет привязки к хранилищу — вызовите FileWriter.configure_process_upload(...) "
@@ -197,7 +197,7 @@ class FileWriter:
         http_timeout_seconds: float = 30.0,
         pdf_max_image_width_pt: float = 400.0,
         docx_image_width_inches: float = 5.0,
-    ) -> FileMetadata:
+    ) -> FileRecord:
         opts = WriteOptions(
             text_encoding=text_encoding,
             max_image_bytes=max_image_bytes,
@@ -220,7 +220,7 @@ class FileWriter:
         content_mode: ContentMode = "auto",
         options: WriteOptions | None = None,
         public: bool = True,
-    ) -> FileMetadata:
+    ) -> FileRecord:
         if options is not None:
             built = self.build_bytes(
                 content, original_name, content_mode=content_mode, options=options

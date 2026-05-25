@@ -92,7 +92,7 @@ class TestSplitAudioForSttChunks:
         chunks = split_audio_for_stt_chunks(
             audio_bytes=wav,
             file_name="voice.wav",
-            mime_type="audio/wav",
+            content_type="audio/wav",
             max_upload_bytes=50 * 1024 * 1024,
             chunk_duration_seconds=300,
             chunk_bitrate_kbps=32,
@@ -110,7 +110,7 @@ class TestSplitAudioForSttChunks:
             split_audio_for_stt_chunks(
                 audio_bytes=b"",
                 file_name="x.wav",
-                mime_type="audio/wav",
+                content_type="audio/wav",
                 max_upload_bytes=1024,
                 chunk_duration_seconds=10,
                 chunk_bitrate_kbps=32,
@@ -152,13 +152,13 @@ class TestValidateSttResultText:
 
 class TestAudioNeedsMp3UploadForStt:
     def test_m4a_by_suffix(self) -> None:
-        assert audio_needs_mp3_upload_for_stt(file_name="v.m4a", mime_type="audio/mp4") is True
+        assert audio_needs_mp3_upload_for_stt(file_name="v.m4a", content_type="audio/mp4") is True
 
-    def test_mp4_mime(self) -> None:
-        assert audio_needs_mp3_upload_for_stt(file_name="x.bin", mime_type="video/mp4") is True
+    def test_mp4_content_type(self) -> None:
+        assert audio_needs_mp3_upload_for_stt(file_name="x.bin", content_type="video/mp4") is True
 
     def test_wav_false(self) -> None:
-        assert audio_needs_mp3_upload_for_stt(file_name="v.wav", mime_type="audio/wav") is False
+        assert audio_needs_mp3_upload_for_stt(file_name="v.wav", content_type="audio/wav") is False
 
 
 class TestNormalizeAudioToMp3ForStt:
@@ -167,7 +167,7 @@ class TestNormalizeAudioToMp3ForStt:
         mp3_bytes, name = normalize_audio_to_mp3_for_stt(
             audio_bytes=wav,
             file_name="a.wav",
-            mime_type="audio/wav",
+            content_type="audio/wav",
             chunk_bitrate_kbps=32,
             chunk_sample_rate_hz=16000,
             chunk_channels=1,
@@ -209,7 +209,7 @@ class TestMediaTranscriberAudio:
         result = await transcriber.transcribe_audio(
             audio_bytes=wav,
             file_name="voice.wav",
-            mime_type="audio/wav",
+            content_type="audio/wav",
         )
         assert isinstance(result, TranscriptionResult)
         assert len(result.text) > 0
@@ -220,7 +220,7 @@ class TestMediaTranscriberAudio:
             await transcriber.transcribe_audio(
                 audio_bytes=b"",
                 file_name="voice.wav",
-                mime_type="audio/wav",
+                content_type="audio/wav",
             )
 
     async def test_raises_on_empty_filename(self, unique_id: str) -> None:
@@ -229,7 +229,7 @@ class TestMediaTranscriberAudio:
             await transcriber.transcribe_audio(
                 audio_bytes=b"\x00\x01",
                 file_name="",
-                mime_type="audio/wav",
+                content_type="audio/wav",
             )
 
 

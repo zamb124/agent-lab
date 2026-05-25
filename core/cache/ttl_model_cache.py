@@ -7,7 +7,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Generic, Protocol, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from core.logging import get_logger
 
@@ -65,7 +65,7 @@ class TtlModelCache(Generic[TModel]):
                     model = self._model_type.model_validate_json(payload)
                     self._set_memory(key, ttl_seconds, model)
                     return model
-                except Exception as exc:
+                except ValidationError as exc:
                     logger.warning("%s.invalid_payload", self._name, error=str(exc))
 
             model = await builder()
@@ -88,16 +88,9 @@ class TtlModelCache(Generic[TModel]):
         self._memory_cache = (key, time.monotonic() + ttl_seconds, model)
 
     async def _get_redis(self, key: str) -> str | None:
-        try:
-            return await self._redis_client_factory().get(key)
-        except Exception as exc:
-            logger.warning("%s.redis_get_failed", self._name, error=str(exc))
-            return None
+        return await self._redis_client_factory().get(key)
 
     async def _set_redis(self, key: str, value: str, ttl_seconds: int) -> None:
-        try:
-            ok = await self._redis_client_factory().set(key, value, ttl=ttl_seconds)
-            if not ok:
-                logger.warning("%s.redis_set_failed", self._name)
-        except Exception as exc:
-            logger.warning("%s.redis_set_failed", self._name, error=str(exc))
+        ok = await self._redis_client_factory().set(key, value, ttl=ttl_seconds)
+        if not ok:
+            logger.warning("%s.redis_set_failed", self._name)

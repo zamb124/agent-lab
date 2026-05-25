@@ -4,23 +4,36 @@ A2A Client - HTTP клиент для взаимодействия с внешн
 Автоматически добавляет заголовки из контекста (Authorization, X-Company-Id и т.д.)
 """
 
-import json
 import uuid
-from typing import Any
 
 import httpx
+from pydantic import Field
 
 from core.context import get_context
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.models import StrictBaseModel
+from core.types import (
+    JsonObject,
+    JsonValue,
+    parse_json_object,
+    require_json_array,
+    require_json_object,
+)
 
 logger = get_logger(__name__)
 
 
-def _extract_task_status_message(status_obj: dict[str, Any]) -> str | None:
+class A2ATaskResponse(StrictBaseModel):
+    """Нормализованный ответ A2A `message/send`."""
+
+    response: str = Field(..., description="Склеенный текст из text/data artifacts")
+    status: str = Field(..., description="A2A task status.state")
+    raw: JsonObject = Field(..., description="Исходный JSON-RPC ответ A2A")
+
+
+def _extract_task_status_message(status_obj: JsonObject) -> str | None:
     """Текст из A2A TaskStatus.message (строка или объект с parts)."""
-    if not isinstance(status_obj, dict):
-        return None
     raw = status_obj.get("message")
     if raw is None:
         return None
@@ -52,8 +65,6 @@ def _extract_task_status_message(status_obj: dict[str, Any]) -> str | None:
 class A2AClientError(Exception):
     """Ошибка A2A клиента."""
 
-    pass
-
 
 class A2AClient:
     """
@@ -61,14 +72,14 @@ class A2AClient:
     Позволяет взаимодействовать с внешними агентами.
     """
 
-    def __init__(self, timeout: float = 30.0):
-        self.timeout = timeout
+    def __init__(self, timeout: float = 30.0) -> None:
+        self.timeout: float = timeout
 
     async def get_agent_card(
         self,
         base_url: str,
         headers: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """
         Получает agent-card.json от внешнего агента.
 
@@ -92,11 +103,11 @@ class A2AClient:
                 if response.status_code != 200:
                     raise A2AClientError(f"Failed to get agent-card from {url}: {response.status_code}")
 
-                return response.json()
+                return parse_json_object(response.content, "A2A agent-card")
         except httpx.HTTPError as e:
-            raise A2AClientError(f"HTTP error getting agent card from {url}: {e}")
+            raise A2AClientError(f"HTTP error getting agent card from {url}: {e}") from e
         except ValueError as e:
-            raise A2AClientError(f"Invalid JSON response from {url}: {e}")
+            raise A2AClientError(f"Invalid JSON response from {url}: {e}") from e
 
     async def send_task(
         self,
@@ -104,11 +115,11 @@ class A2AClient:
         content: str,
         session_id: str | None = None,
         branch_id: str = "default",
-        metadata: dict[str, Any] | None = None,
+        metadata: JsonObject | None = None,
         headers: dict[str, str] | None = None,
         *,
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+    ) -> A2ATaskResponse:
         """
         Отправляет задачу внешнему агенту.
 
@@ -128,33 +139,35 @@ class A2AClient:
             A2AClientError: При ошибке запроса
         """
         # A2A endpoint без trailing slash
-        url = base_url.rstrip('/')
+        url = base_url.rstrip("/")
         task_id = str(uuid.uuid4())
         session_id = session_id or str(uuid.uuid4())
 
-        payload: dict[str, Any] = {
+        message_payload: JsonObject = {
+            "role": "user",
+            "parts": [{"type": "text", "text": content}],
+            "messageId": str(uuid.uuid4()),
+        }
+        params_payload: JsonObject = {
+            "message": message_payload,
+            "configuration": {
+                "acceptedOutputModes": ["text"],
+            },
+        }
+        payload: JsonObject = {
             "jsonrpc": "2.0",
             "id": task_id,
             "method": "message/send",
-            "params": {
-                "message": {
-                    "role": "user",
-                    "parts": [{"type": "text", "text": content}],
-                    "messageId": str(uuid.uuid4()),
-                },
-                "configuration": {
-                    "acceptedOutputModes": ["text"],
-                },
-            },
+            "params": params_payload,
         }
 
         # Ветка skill/branch в A2A передаётся как metadata.branch (сервер: BaseChannel._prepare_task_params).
-        final_metadata = metadata.copy() if metadata else {}
+        final_metadata: JsonObject = dict(metadata) if metadata is not None else {}
         if branch_id and branch_id != "default":
             final_metadata["branch"] = branch_id
 
         if final_metadata:
-            payload["params"]["metadata"] = final_metadata
+            params_payload["metadata"] = final_metadata
 
         # Автоматически добавляем заголовки из контекста
         request_headers = dict(headers or {})
@@ -175,17 +188,16 @@ class A2AClient:
 
         try:
             effective_timeout = self.timeout if timeout is None else timeout
-            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             out_headers = {**request_headers, "Content-Type": "application/json"}
             async with get_httpx_client(timeout=effective_timeout, follow_redirects=True) as client:
-                response = await client.post(url, content=body, headers=out_headers)
+                response = await client.post(url, json=payload, headers=out_headers)
 
                 if response.status_code != 200:
                     raise A2AClientError(
                         f"Failed to send task to {url}: {response.status_code} - {response.text}"
                     )
 
-                result = response.json()
+                result = parse_json_object(response.content, "A2A message/send response")
 
                 if "error" in result:
                     raise A2AClientError(f"A2A error: {result['error']}")
@@ -196,11 +208,11 @@ class A2AClient:
                 return self._parse_a2a_response(result)
         except httpx.HTTPError as e:
             error_str = str(e) or type(e).__name__
-            raise A2AClientError(f"HTTP error sending task to {url}: {error_str}")
+            raise A2AClientError(f"HTTP error sending task to {url}: {error_str}") from e
         except ValueError as e:
-            raise A2AClientError(f"Invalid JSON response from {url}: {e}")
+            raise A2AClientError(f"Invalid JSON response from {url}: {e}") from e
 
-    def _parse_a2a_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
+    def _parse_a2a_response(self, raw_response: JsonObject) -> A2ATaskResponse:
         """
         Парсит A2A JSONRPC ответ и извлекает response из artifacts.
 
@@ -210,44 +222,58 @@ class A2AClient:
         Returns:
             Нормализованный ответ с полями response и status
         """
-        # Извлекаем result из JSONRPC обёртки
-        task_result = raw_response.get("result", raw_response)
+        task_result_value = raw_response.get("result")
+        task_result = (
+            require_json_object(task_result_value, "A2A result")
+            if task_result_value is not None
+            else raw_response
+        )
 
-        # Получаем статус
-        status_obj = task_result.get("status", {})
-        status = status_obj.get("state", "completed") if isinstance(status_obj, dict) else "completed"
+        status_value = task_result.get("status")
+        if status_value is None:
+            raise A2AClientError("A2A response missing result.status")
+        status_obj = require_json_object(status_value, "A2A result.status")
+        state_value = status_obj.get("state")
+        if not isinstance(state_value, str) or not state_value:
+            raise A2AClientError("A2A response missing result.status.state")
+        status = state_value
 
         if status == "failed":
-            error_msg = (
-                _extract_task_status_message(status_obj)
-                if isinstance(status_obj, dict)
-                else None
-            )
+            error_msg = _extract_task_status_message(status_obj)
             raise A2AClientError(f"A2A task failed: {error_msg or 'unknown error'}")
 
-        # Извлекаем текст из artifacts
         response_text = ""
-        artifacts = task_result.get("artifacts", [])
-        for artifact in artifacts:
-            parts = artifact.get("parts", [])
+        artifacts_value = task_result.get("artifacts")
+        artifacts = require_json_array(artifacts_value, "A2A result.artifacts") if artifacts_value is not None else []
+        for artifact_value in artifacts:
+            artifact = require_json_object(artifact_value, "A2A result.artifacts[]")
+            parts_value = artifact.get("parts")
+            if parts_value is None:
+                raise A2AClientError("A2A artifact missing parts")
+            parts = require_json_array(parts_value, "A2A artifact.parts")
             for part in parts:
-                # Поддерживаем разные форматы: "type": "text" и "kind": "text"
-                if part.get("type") == "text" or part.get("kind") == "text":
-                    text = part.get("text", "")
-                    if text:
+                part_obj = require_json_object(part, "A2A artifact.parts[]")
+                part_kind: JsonValue | None = part_obj.get("type")
+                if part_kind is None:
+                    part_kind = part_obj.get("kind")
+                if part_kind == "text":
+                    text = part_obj.get("text")
+                    if isinstance(text, str) and text:
                         response_text += text + "\n"
-                elif part.get("type") == "data" or part.get("kind") == "data":
-                    data = part.get("data")
-                    if isinstance(data, dict) and "res" in data:
-                        res_val = data["res"]
-                        if isinstance(res_val, str) and res_val.strip():
-                            response_text += res_val.strip() + "\n"
+                elif part_kind == "data":
+                    data = part_obj.get("data")
+                    if data is None:
+                        continue
+                    data_obj = require_json_object(data, "A2A data part")
+                    res_value = data_obj.get("res")
+                    if isinstance(res_value, str) and res_value.strip():
+                        response_text += res_value.strip() + "\n"
 
-        return {
-            "response": response_text.strip(),
-            "status": status,
-            "raw": raw_response,
-        }
+        return A2ATaskResponse(
+            response=response_text.strip(),
+            status=status,
+            raw=raw_response,
+        )
 
     async def check_health(
         self,
@@ -265,7 +291,7 @@ class A2AClient:
             True если агент доступен
         """
         try:
-            await self.get_agent_card(base_url, headers)
+            _ = await self.get_agent_card(base_url, headers)
             return True
         except (A2AClientError, httpx.HTTPError, ValueError):
             return False

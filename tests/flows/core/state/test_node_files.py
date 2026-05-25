@@ -4,10 +4,11 @@ import pytest
 
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
 from apps.flows.src.state.node_files import collect_flow_node_files, validate_node_files_list
+from core.types import JsonObject
 
 
 def test_collect_flow_node_files_merges_in_stable_order() -> None:
-    nodes = {
+    nodes: dict[str, JsonObject] = {
         "a": {
             "type": "code",
             "files": [
@@ -61,14 +62,14 @@ def test_validate_node_files_list_rejects_bad_shape() -> None:
 @pytest.mark.asyncio
 async def test_flow_validator_invalid_node_files() -> None:
     v = FlowValidator(flow_repository=None, tool_repository=None, node_repository=None)
-    nodes = {
+    nodes: dict[str, JsonObject] = {
         "main": {
             "type": "llm_node",
             "prompt": "hi",
             "files": [{"original_name": "", "url": "/x"}],
         }
     }
-    edges = [{"from": "main", "to": None}]
+    edges: list[JsonObject] = [{"from_node": "main", "to_node": None}]
     result = await v.validate(nodes=nodes, edges=edges, entry="main", variables={})
     assert result.valid is False
     codes = [e.code for e in result.errors if e.severity != ValidationSeverity.INFO]

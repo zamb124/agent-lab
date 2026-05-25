@@ -85,14 +85,6 @@ export function mcpInputMappingDraftFromToolRecord(tool) {
         throw new Error('mcpInputMappingDraftFromToolRecord: tool must be a plain object');
     }
     const out = {};
-    if (isPlainObject(tool.args_schema) && Object.keys(tool.args_schema).length > 0) {
-        for (const k of Object.keys(tool.args_schema)) {
-            if (typeof k === 'string' && k.length > 0) {
-                out[k] = `@var:${k}`;
-            }
-        }
-        return out;
-    }
     const ps = tool.parameters_schema;
     if (isPlainObject(ps) && isPlainObject(ps.properties) && Object.keys(ps.properties).length > 0) {
         for (const k of Object.keys(ps.properties)) {

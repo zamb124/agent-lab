@@ -70,8 +70,10 @@ def push_ui_event(
         raise SafeEvalError("source must be a non-empty string")
 
     event = PendingUIEvent(
-        id=event_id.strip() if event_id is not None and event_id.strip() else str(uuid.uuid4()),
-        type=event_type.strip(),
+        event_id=(
+            event_id.strip() if event_id is not None and event_id.strip() else str(uuid.uuid4())
+        ),
+        event_type=event_type.strip(),
         payload=payload,
         version=version.strip(),
         timestamp=datetime.now(UTC).isoformat(),

@@ -28,15 +28,16 @@ async def stream_s3_file(
     Выставляет Accept-Ranges и Content-Length для полного ответа; поддерживает
     один byte-range (ответ 206), как ожидают медиаплееры Safari.
     """
-    target_bucket = bucket or s3_client.bucket_name
+    target_bucket = s3_client.bucket_name if bucket is None else bucket
+    if target_bucket == "":
+        raise ValueError("Bucket не указан")
 
-    client = await s3_client._get_client()
     try:
-        head = await client.head_object(Bucket=target_bucket, Key=s3_key)
+        metadata = await s3_client.get_object_metadata(s3_key, bucket=target_bucket)
     except BaseException:
         await s3_client.close()
         raise
-    total_size = int(head["ContentLength"])
+    total_size = metadata.content_length
     try:
         span = normalize_s3_byte_range(range_header, total_size)
     except RangeNotSatisfiableError:
@@ -45,11 +46,10 @@ async def stream_s3_file(
 
     if span is None:
         try:
-            response = await client.get_object(Bucket=target_bucket, Key=s3_key)
+            body = await s3_client.open_object_body(s3_key, bucket=target_bucket)
         except BaseException:
             await s3_client.close()
             raise
-        body = response["Body"]
 
         async def _iterate_full() -> AsyncIterator[bytes]:
             try:
@@ -75,15 +75,14 @@ async def stream_s3_file(
     start, end = span
     byte_range = f"bytes={start}-{end}"
     try:
-        response = await client.get_object(
-            Bucket=target_bucket,
-            Key=s3_key,
-            Range=byte_range,
+        body = await s3_client.open_object_body(
+            s3_key,
+            bucket=target_bucket,
+            byte_range=byte_range,
         )
     except BaseException:
         await s3_client.close()
         raise
-    body = response["Body"]
     part_len = end - start + 1
     content_range = f"bytes {start}-{end}/{total_size}"
 

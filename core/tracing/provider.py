@@ -22,6 +22,26 @@ logger = get_logger(__name__)
 _initialized: bool = False
 _tracer_provider: TracerProvider | None = None
 _shutdown_registered: bool = False
+_otlp_configured: bool = False
+
+
+def _tracing_resource(service_name: str) -> Resource:
+    return Resource.create(
+        {
+            "service.name": service_name,
+            "service.version": "0.1.0",
+        }
+    )
+
+
+def ensure_tracer_provider(service_name: str = "platform") -> TracerProvider:
+    """Returns an SDK TracerProvider for platform spans, even without exporters."""
+    global _tracer_provider
+
+    if _tracer_provider is None:
+        _tracer_provider = TracerProvider(resource=_tracing_resource(service_name))
+        trace.set_tracer_provider(_tracer_provider)
+    return _tracer_provider
 
 
 def setup_tracing(config: "TracingConfig") -> None:
@@ -31,38 +51,32 @@ def setup_tracing(config: "TracingConfig") -> None:
     Args:
         config: Конфигурация трейсинга
     """
-    global _initialized, _tracer_provider, _shutdown_registered
+    global _initialized, _shutdown_registered, _otlp_configured
 
     if _initialized:
         return
 
     if not config.enabled:
-        logger.info("Tracing disabled")
+        _ = ensure_tracer_provider(config.service_name)
+        logger.info("Tracing export disabled; SDK spans remain available")
         return
 
-    resource = Resource.create(
-        {
-            "service.name": config.service_name,
-            "service.version": "0.1.0",
-        }
-    )
-
-    _tracer_provider = TracerProvider(resource=resource)
+    tracer_provider = ensure_tracer_provider(config.service_name)
 
     # OTLP exporter: из ENV (docker-compose задаёт OTEL_EXPORTER_OTLP_ENDPOINT)
     # или из config.tempo_enabled/tempo_endpoint. Сервисы не трогаем —
     # достаточно одной ENV-переменной в compose для отправки трейсов в Alloy → Tempo.
     otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-    if otlp_endpoint or config.tempo_enabled:
+    if (otlp_endpoint or config.tempo_enabled) and not _otlp_configured:
         endpoint = otlp_endpoint or config.tempo_endpoint
         try:
             otlp_exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
-            _tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+            tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+            _otlp_configured = True
             logger.info("tracing.otlp_configured", endpoint=endpoint)
         except Exception as e:
             logger.warning("tracing.otlp_failed", error=str(e))
 
-    trace.set_tracer_provider(_tracer_provider)
     _initialized = True
     if not _shutdown_registered:
         _ = atexit.register(shutdown_tracing)
@@ -72,11 +86,12 @@ def setup_tracing(config: "TracingConfig") -> None:
 
 def shutdown_tracing() -> None:
     """Останавливает OTel processors/exporters без логирования из atexit/pytest teardown."""
-    global _initialized, _tracer_provider
+    global _initialized, _tracer_provider, _otlp_configured
 
     provider = _tracer_provider
     _initialized = False
     _tracer_provider = None
+    _otlp_configured = False
     if provider is None:
         return
 

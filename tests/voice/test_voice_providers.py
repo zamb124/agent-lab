@@ -57,12 +57,12 @@ async def test_streaming_stt_flush_posts_wav_to_batch_client(unique_id: str) -> 
             *,
             audio_bytes: bytes,
             file_name: str,
-            mime_type: str,
+            content_type: str,
             language: str | None = None,
         ) -> STTTranscriptionResult:
             self.calls = {
                 "file_name": file_name,
-                "mime_type": mime_type,
+                "content_type": content_type,
                 "is_wav": audio_bytes.startswith(b"RIFF"),
             }
             return STTTranscriptionResult(
@@ -77,7 +77,7 @@ async def test_streaming_stt_flush_posts_wav_to_batch_client(unique_id: str) -> 
     await provider.push_audio(b"\x00\x00" * 160)
     await provider.flush_buffer()
     assert cap.calls["file_name"] == "voice_segment.wav"
-    assert cap.calls["mime_type"] == "audio/wav"
+    assert cap.calls["content_type"] == "audio/wav"
     assert cap.calls["is_wav"] is True
 
 

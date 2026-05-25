@@ -10,7 +10,7 @@ Endpoints (в приложении под префиксом /{server.name}, н�
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from typing import ClassVar, Protocol
+from typing import TYPE_CHECKING, Annotated, ClassVar, Protocol
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -24,6 +24,7 @@ from core.api.integration_oauth_error_html import (
     oauth_error_correlation_ids,
     resolve_oauth_integration_locale,
 )
+from core.app_state import require_platform_app_state
 from core.config import get_settings
 from core.context import get_context
 from core.integrations.guided_integration_error import GuidedIntegrationError
@@ -35,6 +36,9 @@ from core.types import JsonObject
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/integrations", tags=["integrations"])
+
+if TYPE_CHECKING:
+    from core.container import BaseContainer
 
 
 class FlowResumeHandler(Protocol):
@@ -60,6 +64,10 @@ class FlowResumeHandler(Protocol):
 # Реестр callback для resume flow после OAuth.
 # Регистрируется из apps/ при старте сервиса (apps/flows/main.py).
 _flow_resume_handler: FlowResumeHandler | None = None
+
+
+def _integration_container(request: Request) -> BaseContainer:
+    return require_platform_app_state(request).container
 
 
 def set_flow_resume_handler(handler: FlowResumeHandler) -> None:
@@ -105,7 +113,7 @@ async def list_credentials(request: Request) -> ListResponse[CredentialInfo]:
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    repository = request.app.state.container.integration_credential_repository
+    repository = _integration_container(request).integration_credential_repository
     credentials = await repository.list_by_user(
         company_id=ctx.active_company.company_id,
         user_id=ctx.user.user_id,
@@ -136,7 +144,7 @@ async def delete_credential(
     except ValueError:
         raise HTTPException(status_code=422, detail=f"Unknown provider: {provider}")
 
-    repository = request.app.state.container.integration_credential_repository
+    repository = _integration_container(request).integration_credential_repository
     deleted = await repository.delete_by_user_provider_service(
         company_id=ctx.active_company.company_id,
         user_id=ctx.user.user_id,
@@ -151,10 +159,10 @@ async def delete_credential(
 @router.get("/oauth/callback", response_model=None)
 async def oauth_callback(
     request: Request,
-    state: str | None = Query(default=None),
-    code: str | None = Query(default=None),
-    error: str | None = Query(default=None),
-    referer: str | None = Query(default=None),
+    state: Annotated[str | None, Query()] = None,
+    code: Annotated[str | None, Query()] = None,
+    error: Annotated[str | None, Query()] = None,
+    referer: Annotated[str | None, Query()] = None,
 ) -> HTMLResponse | JSONResponse | RedirectResponse:
     """
     Универсальный OAuth callback.
@@ -170,7 +178,7 @@ async def oauth_callback(
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing required parameters: code and state")
 
-    oauth_service = request.app.state.container.oauth_service
+    oauth_service = _integration_container(request).oauth_service
     accept_language = request.headers.get("accept-language")
     fallback_locale = resolve_oauth_integration_locale(
         accept_language,
@@ -228,9 +236,7 @@ async def oauth_callback(
 
     settings = get_settings()
     public_base = settings.server.platform_public_base_url
-    if public_base and public_base.strip() and isinstance(return_path, str) and return_path.startswith(
-        "/"
-    ):
+    if public_base and public_base.strip() and return_path.startswith("/"):
         origin = post_auth_redirect_origin if post_auth_redirect_origin else public_base.rstrip("/")
         target = f"{origin}{return_path}"
         return RedirectResponse(url=target, status_code=302)

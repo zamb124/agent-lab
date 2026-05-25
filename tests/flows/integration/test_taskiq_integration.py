@@ -16,7 +16,6 @@ API возвращает A2A Task формат.
 
 import uuid
 from typing import Any, Dict
-
 import pytest
 
 pytestmark = pytest.mark.real_taskiq
@@ -30,9 +29,9 @@ def require_taskiq_worker(taskiq_worker, container):
     container.use_worker = False
 
 
-from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
-from apps.flows.src.tasks.tool_tasks import execute_tool  # noqa: E402
-from core.state import ExecutionState  # noqa: E402
+from apps.flows.src.tasks.flow_tasks import process_flow_task
+from apps.flows.src.tasks.tool_tasks import execute_tool
+from core.state import ExecutionState
 
 
 def get_task_state(data: Dict[str, Any]) -> str:
@@ -59,17 +58,7 @@ class TestTaskIQToolExecution:
             "tool_id": "taskiq_test_calculator",
             "title": "TaskIQ Test Calculator",
             "description": "Calculator for TaskIQ tests",
-            "code": """
-async def run(args, state):
-    a = args.get('a', 0)
-    b = args.get('b', 0)
-    op = args.get('op', 'add')
-    if op == 'add':
-        return a + b
-    elif op == 'mul':
-        return a * b
-    return 0
-""",
+            "code": "\nasync def run(args, state):\n    a = args.get('a', 0)\n    b = args.get('b', 0)\n    op = args.get('op', 'add')\n    if op == 'add':\n        return a + b\n    elif op == 'mul':\n        return a * b\n    return 0\n",
         }
 
     @pytest.mark.asyncio
@@ -78,33 +67,27 @@ async def run(args, state):
     ):
         """Tool выполняется через TaskIQ .kiq() + wait_result()."""
         import asyncio
-
         from taskiq.exceptions import TaskiqResultTimeoutError
 
         await asyncio.sleep(0.15)
-
-        # Создаем валидный state для tool
         state_dict = {
             "task_id": "test-task",
             "context_id": "test-context",
             "user_id": "test-user",
             "session_id": "test:test-context",
         }
-
         task = await execute_tool.kiq(
             calculator_tool_config,
             {"a": 10, "b": 5, "op": "add"},
             state_dict,
             context_data=mock_context.to_dict(),
         )
-
         try:
             result = await task.wait_result(timeout=5)
         except TaskiqResultTimeoutError as exc:
             raise AssertionError(
                 "TaskIQ worker не обработал задачу за 5 секунд (проверьте, что воркер запущен и Redis доступен)"
             ) from exc
-
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["tool_id"] == "taskiq_test_calculator"
         assert result.return_value["result"] == 15
@@ -114,14 +97,12 @@ async def run(args, state):
         self, app, container, calculator_tool_config, mock_context
     ):
         """Несколько tools кикаются параллельно и ждём все результаты."""
-        # Создаем валидный state
         state_dict = {
             "task_id": "test-task",
             "context_id": "test-context",
             "user_id": "test-user",
             "session_id": "test:test-context",
         }
-
         tasks = []
         for i in range(5):
             task = await execute_tool.kiq(
@@ -131,14 +112,11 @@ async def run(args, state):
                 context_data=mock_context.to_dict(),
             )
             tasks.append((i, task))
-
         results = []
         for i, task in tasks:
             result = await task.wait_result(timeout=5)
             assert not result.is_err, f"Task {i} failed: {result.error}"
             results.append(result.return_value["result"])
-
-        # i * (i * 2) = 2 * i^2
         expected = [0, 2, 8, 18, 32]
         assert results == expected
 
@@ -149,15 +127,8 @@ async def run(args, state):
             "tool_id": "taskiq_state_tool",
             "title": "State Tool",
             "description": "Tool that uses state",
-            "code": """
-async def run(args, state):
-    prefix = state.get('prefix', '')
-    value = args.get('value', '')
-    return f"{prefix}:{value}"
-""",
+            "code": "\nasync def run(args, state):\n    prefix = state.get('prefix', '')\n    value = args.get('value', '')\n    return f\"{prefix}:{value}\"\n",
         }
-
-        # Создаем валидный state с дополнительным полем
         state_dict = {
             "task_id": "test-task",
             "context_id": "test-context",
@@ -165,16 +136,10 @@ async def run(args, state):
             "session_id": "test:test-context",
             "prefix": "STATE",
         }
-
         task = await execute_tool.kiq(
-            tool_config,
-            {"value": "test"},
-            state_dict,
-            context_data=mock_context.to_dict(),
+            tool_config, {"value": "test"}, state_dict, context_data=mock_context.to_dict()
         )
-
         result = await task.wait_result(timeout=5)
-
         assert not result.is_err
         assert result.return_value["tool_id"] == "taskiq_state_tool"
         assert result.return_value["result"] == "STATE:test"
@@ -187,37 +152,21 @@ async def run(args, state):
         from apps.flows.src.models import NodeConfig
         from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 
-        # Inline конфиг второго tool
         tool2_id = f"taskiq_multiplier_{unique_id}"
         tool2_config = {
             "tool_id": tool2_id,
             "title": "Multiplier",
             "description": "Multiplies",
-            "code": """
-async def run(args, state):
-    return args.get('x', 0) * 2
-""",
+            "code": "\nasync def run(args, state):\n    return args.get('x', 0) * 2\n",
         }
-
-        # Создаём tools из inline конфигов
         tool1 = await container.tool_registry.create_tool(calculator_tool_config)
         tool2 = await container.tool_registry.create_tool(tool2_config)
-
-        # Создаём runner с NodeConfig
         node_config = NodeConfig(
-            node_id="test_node",
-            name="Test Node",
-            type="llm_node",
-            prompt="Test",
+            node_id="test_node", name="Test Node", type="llm_node", prompt="Test"
         )
         runner = LlmNodeRunner(
-            node_config=node_config,
-            tools=[tool1, tool2],
-            llm=None,
-            prompt="Test",
+            node_config=node_config, tools=[tool1, tool2], llm=None, prompt="Test"
         )
-
-        # Симулируем tool calls от LLM - два разных tools
         tool_calls = [
             {
                 "name": "taskiq_test_calculator",
@@ -226,7 +175,6 @@ async def run(args, state):
             },
             {"name": tool2_id, "arguments": {"x": 10}, "id": "call_2"},
         ]
-
         state = ExecutionState(
             task_id="test-task",
             context_id="test-context",
@@ -234,16 +182,12 @@ async def run(args, state):
             session_id="test-agent:test-context",
             content="test",
         )
-
-        # Выполняем tools параллельно
         await runner._execute_tools_parallel(tool_calls, state)
-
-        # Проверяем что результаты смержены в tool_results
         assert state.tool_results
         assert "taskiq_test_calculator" in state.tool_results
         assert tool2_id in state.tool_results
-        assert state.tool_results["taskiq_test_calculator"] == 8  # 5+3
-        assert state.tool_results[tool2_id] == 20  # 10*2
+        assert state.tool_results["taskiq_test_calculator"] == 8
+        assert state.tool_results[tool2_id] == 20
 
 
 class TestTaskIQFlowExecution:
@@ -270,8 +214,8 @@ class TestTaskIQFlowExecution:
                 },
             },
             edges=[
-                {"from": "init", "to": "process"},
-                {"from": "process", "to": None},
+                {"from_node": "init", "to_node": "process"},
+                {"from_node": "process", "to_node": None},
             ],
         )
         await container.flow_repository.set(flow_config)
@@ -284,7 +228,6 @@ class TestTaskIQFlowExecution:
         """Agent выполняется через TaskIQ .kiq() + wait_result()."""
         flow_id = setup_simple_flow
         session_id = f"{flow_id}:taskiq-session-{unique_id}-{uuid.uuid4().hex[:8]}"
-
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
@@ -295,9 +238,7 @@ class TestTaskIQFlowExecution:
             content="Test",
             context_data=mock_context.model_dump(),
         )
-
         result = await task.wait_result(timeout=5)
-
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["task_state"] == "completed"
         assert result.return_value["response"] == "Done"
@@ -319,31 +260,16 @@ class TestTaskIQInterruptResume:
             nodes={
                 "ask": {
                     "type": "code",
-                    "code": """
-async def run(args, state):
-    if 'name' in state:
-        return state
-    if state.get('asked_name'):
-        state['name'] = state.get('content', '')
-        return state
-    state['interrupt'] = {'question': 'What is your name?'}
-    state['asked_name'] = True
-    return state
-""",
+                    "code": "\nasync def run(args, state):\n    if 'name' in state:\n        return state\n    if state.get('asked_name'):\n        state['name'] = state.get('content', '')\n        return state\n    state['interrupt'] = {'question': 'What is your name?'}\n    state['asked_name'] = True\n    return state\n",
                 },
                 "greet": {
                     "type": "code",
-                    "code": """
-async def run(args, state):
-    name = state.get('name', 'Unknown')
-    state['response'] = f'Hello, {name}!'
-    return state
-""",
+                    "code": "\nasync def run(args, state):\n    name = state.get('name', 'Unknown')\n    state['response'] = f'Hello, {name}!'\n    return state\n",
                 },
             },
             edges=[
-                {"from": "ask", "to": "greet"},
-                {"from": "greet", "to": None},
+                {"from_node": "ask", "to_node": "greet"},
+                {"from_node": "greet", "to_node": None},
             ],
         )
         await container.flow_repository.set(flow_config)
@@ -356,7 +282,6 @@ async def run(args, state):
         """Interrupt работает через TaskIQ."""
         flow_id = setup_interrupt_flow
         session_id = f"{flow_id}:taskiq-interrupt-{unique_id}-{uuid.uuid4().hex[:8]}"
-
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
@@ -367,9 +292,7 @@ async def run(args, state):
             content="Start",
             context_data=mock_context.model_dump(),
         )
-
         result = await task.wait_result(timeout=5)
-
         if result.is_err:
             print("\n❌ Task failed!")
             print(f"Error type: {type(result.error)}")
@@ -381,7 +304,6 @@ async def run(args, state):
                 traceback.print_exception(
                     type(result.error), result.error, result.error.__traceback__
                 )
-
         assert not result.is_err, f"Task failed: {result.error}"
         assert result.return_value["task_state"] == "input-required"
         assert result.return_value["interrupt"]["question"] == "What is your name?"
@@ -393,7 +315,6 @@ async def run(args, state):
         """Resume после interrupt работает через TaskIQ."""
         flow_id = setup_interrupt_flow
         session_id = f"{flow_id}:taskiq-resume-{unique_id}-{uuid.uuid4().hex[:8]}"
-
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
@@ -405,14 +326,11 @@ async def run(args, state):
             context_data=mock_context.model_dump(),
         )
         result1 = await task1.wait_result(timeout=5)
-
         if result1.is_err:
             print("\n❌ Task1 failed!")
             print(f"Error: {result1.error}")
-
         assert not result1.is_err, f"Task1 failed: {result1.error}"
         assert result1.return_value["task_state"] == "input-required"
-
         task2 = await process_flow_task.kiq(
             flow_id=flow_id,
             session_id=session_id,
@@ -421,9 +339,7 @@ async def run(args, state):
             is_resume=True,
             context_data=mock_context.model_dump(),
         )
-
         result2 = await task2.wait_result(timeout=5)
-
         assert not result2.is_err, f"Resume failed: {result2.error}"
         assert result2.return_value["task_state"] == "completed"
         assert "Alice" in result2.return_value["response"]
@@ -446,9 +362,9 @@ class TestTaskIQAPIIntegration:
                 "main": {
                     "type": "code",
                     "code": "async def run(args, state):\n    state['response'] = f\"Got: {state.get('content', '')}\"\n    return state",
-                },
+                }
             },
-            edges=[{"from": "main", "to": None}],
+            edges=[{"from_node": "main", "to_node": None}],
         )
         await container.flow_repository.set(flow_config)
         return flow_id
@@ -458,33 +374,23 @@ class TestTaskIQAPIIntegration:
         """API /tasks/submit использует TaskIQ внутри."""
         flow_id = setup_api_flow
         session_id = f"{flow_id}:api-taskiq-{unique_id}-{uuid.uuid4().hex[:8]}"
-
         response = await client.post(
             "/flows/api/v1/tasks/submit",
-            json={
-                "flow_id": flow_id,
-                "content": "Hello TaskIQ",
-                "session_id": session_id,
-            },
+            json={"flow_id": flow_id, "content": "Hello TaskIQ", "session_id": session_id},
         )
-
         assert response.status_code == 200
         data = response.json()
-        # API возвращает A2A Task
         assert data["status"]["state"] == "completed"
-        # Ответ в message.parts
         response_text = data["status"]["message"]["parts"][0]["text"]
         assert "Hello TaskIQ" in response_text
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(45)  # Таймаут для предотвращения зависания
+    @pytest.mark.timeout(45)
     async def test_a2a_endpoint_uses_taskiq(self, client, setup_api_flow, unique_id):
         """A2A endpoint использует TaskIQ внутри."""
-
         flow_id = setup_api_flow
         task_id = str(uuid.uuid4())
         context_id = f"a2a-taskiq-{unique_id}-{uuid.uuid4().hex[:8]}"
-
         response = await client.post(
             f"/flows/api/v1/{flow_id}",
             json={
@@ -502,7 +408,6 @@ class TestTaskIQAPIIntegration:
                 },
             },
         )
-
         assert response.status_code == 200
         data = response.json()
         assert "result" in data

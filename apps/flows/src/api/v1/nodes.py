@@ -63,11 +63,6 @@ def _tool_ref_to_response(tool_ref: ToolReference) -> str | JsonObject:
             "description": tool_ref.description,
             "code": tool_ref.code,
         }
-        if tool_ref.args_schema:
-            result["args_schema"] = {
-                k: {"type": v.type, "description": v.description}
-                for k, v in tool_ref.args_schema.items()
-            }
         if tool_ref.parameters_schema:
             result["parameters_schema"] = tool_ref.parameters_schema
         return result
@@ -83,9 +78,13 @@ def _node_to_response(node: NodeConfig) -> NodeResponse:
         description=node.description,
         prompt=node.prompt,
         tools=[_tool_ref_to_response(t) for t in node.tools],
-        llm=parse_json_object(node.llm.model_dump_json(exclude_none=True), "node.llm") if node.llm else None,
+        llm=parse_json_object(node.llm.model_dump_json(exclude_none=True), "node.llm")
+        if node.llm
+        else None,
         llm_context=(
-            parse_json_object(node.llm_context.model_dump_json(exclude_none=True), "node.llm_context")
+            parse_json_object(
+                node.llm_context.model_dump_json(exclude_none=True), "node.llm_context"
+            )
             if node.llm_context
             else None
         ),

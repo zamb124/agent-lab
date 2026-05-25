@@ -1298,7 +1298,7 @@ async def _read_audio_impl(
     transcription = await transcriber.transcribe_audio(
         audio_bytes=raw,
         file_name=file_name,
-        mime_type=mime,
+        content_type=mime,
     )
     page = ReadPage(index=0, text=transcription.text, assets=[], label=None)
     return FileReadResult(

@@ -100,7 +100,7 @@ def _admin_optional_ilike_param(param_name: str, value: str | None) -> str | Non
     return stripped
 
 
-def _facet_query_fragment(q: str | None) -> str | None:
+def facet_query_fragment(q: str | None) -> str | None:
     if q is None:
         return None
     stripped = q.strip()
@@ -586,7 +586,7 @@ class SpanRepository:
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
-        frag = _facet_query_fragment(q)
+        frag = facet_query_fragment(q)
         async with self._storage.get_session() as session:
             stmt = select(Spans.company_id).where(Spans.company_id.isnot(None))
             if frag is not None:
@@ -623,7 +623,7 @@ class SpanRepository:
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
-        frag = _facet_query_fragment(q)
+        frag = facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
         async with self._storage.get_session() as session:
@@ -673,7 +673,7 @@ class SpanRepository:
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
-        frag = _facet_query_fragment(q)
+        frag = facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
         async with self._storage.get_session() as session:
@@ -698,7 +698,7 @@ class SpanRepository:
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
-        frag = _facet_query_fragment(q)
+        frag = facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
         async with self._storage.get_session() as session:
@@ -722,7 +722,7 @@ class SpanRepository:
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
-        frag = _facet_query_fragment(q)
+        frag = facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         async with self._storage.get_session() as session:
             stmt = select(Spans.namespace).where(Spans.namespace.isnot(None))
@@ -744,7 +744,7 @@ class SpanRepository:
     ) -> list[str]:
         if limit < 1 or limit > ADMIN_FACETS_MAX_LIMIT:
             raise ValueError(f"limit должен быть от 1 до {ADMIN_FACETS_MAX_LIMIT}")
-        frag = _facet_query_fragment(q)
+        frag = facet_query_fragment(q)
         scope_co = _admin_facet_scope_company(company_id)
         scope_ns = _admin_facet_scope_namespace(namespace)
         async with self._storage.get_session() as session:

@@ -5,9 +5,14 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlparse
+
+from pydantic import Field
+
+from core.models import StrictBaseModel
+from core.types import JsonObject, JsonValue
 
 DOCS_ASSISTANT_EMBED_ID = "docs_assistant"
 DOCS_ASSISTANT_FLOW_ID = "lara"
@@ -20,6 +25,26 @@ DOCS_COLLECTION_RU = "documentation-ru"
 DOCS_COLLECTION_EN = "documentation-en"
 
 DOCS_MANIFEST_STORAGE_KEY = "docs_assistant_manifest:v1"
+
+
+class DocsRagManifestPage(StrictBaseModel):
+    """Persisted RAG document metadata for a single documentation page."""
+
+    content_hash: str
+    provider_document_id: str
+    language: str
+    source_url: str
+    page_title: str
+    updated_at: datetime
+
+
+class DocsRagManifest(StrictBaseModel):
+    """Persisted manifest for the public documentation assistant RAG index."""
+
+    build_hash: str | None = None
+    updated_at: datetime | None = None
+    namespace_id: str = DOCS_RAG_NAMESPACE_ID
+    pages: dict[str, DocsRagManifestPage] = Field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -49,7 +74,7 @@ class DocsPage:
             if part.strip()
         )
 
-    def metadata(self, *, build_hash: str) -> dict[str, Any]:
+    def metadata(self, *, build_hash: str) -> JsonObject:
         return {
             "collection_id": self.collection_id,
             "docs_language": self.language,
@@ -67,7 +92,7 @@ def docs_collection_for_language(language: str) -> str:
     return DOCS_COLLECTION_EN if normalize_docs_language(language) == "en" else DOCS_COLLECTION_RU
 
 
-def normalize_docs_language(*values: object) -> str:
+def normalize_docs_language(*values: JsonValue | None) -> str:
     for raw in values:
         if raw is None:
             continue
@@ -127,10 +152,10 @@ def plain_text_excerpt(markdown: str, *, limit: int = 220) -> str:
     return text[: limit - 1].rstrip() + "…"
 
 
-def docs_search_card_blocks(results: list[dict[str, Any]], *, language: str) -> list[dict[str, Any]]:
+def docs_search_card_blocks(results: list[JsonObject], *, language: str) -> list[JsonObject]:
     is_en = normalize_docs_language(language) == "en"
     subtitle = "Open this documentation page" if is_en else "Открыть страницу документации"
-    blocks: list[dict[str, Any]] = []
+    blocks: list[JsonObject] = []
     for item in results[:5]:
         title = str(item.get("title") or item.get("document_name") or "").strip()
         url = str(item.get("url") or "").strip()

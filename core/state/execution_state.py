@@ -11,7 +11,13 @@ from collections.abc import Mapping
 from typing import Literal, TypedDict, TypeVar, Unpack, cast, get_args, overload, override
 
 from a2a.types import Message
-from pydantic import Field, field_serializer, field_validator, model_validator
+from pydantic import (
+    Field,
+    PrivateAttr,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from core.clients.llm.messages import LLMToolCall
 from core.files.file_ref import FileRef
@@ -31,9 +37,10 @@ ExecutionTaskState = Literal[
     "unknown",
 ]
 TERMINAL_TASK_STATES: frozenset[str] = frozenset(get_args(ExecutionTaskState))
-DEPRECATED_EXECUTION_STATE_FIELD_NAMES: frozenset[str] = frozenset(
-    {"terminal_status", "terminal_error"}
+FORBIDDEN_EXECUTION_STATE_FIELD_NAMES: frozenset[str] = frozenset(
+    {"terminal_status", "terminal_error", "mock"}
 )
+ChildWorkflowStatus = Literal["running", "suspended", "completed", "failed"]
 _GetDefault = TypeVar("_GetDefault")
 
 
@@ -53,11 +60,16 @@ class ExecutionStateCreateKwargs(TypedDict, total=False):
     interrupt: InterruptData | None
     interrupt_path: list[InterruptPathItem]
     hitl_handoff_correlation_id: str | None
+    # Pydantic-схемы значений документированы в
+    # `core/state/execution_state_records.py`:
+    # node_history — NodeHistoryEntry, tool_results — ToolResult,
+    # reasoning_history/pending_reasoning — ReasoningEntry,
+    # breakpoint_state — BreakpointState, scheduled_tasks — ScheduledTaskRef.
     node_history: dict[str, JsonObject]
     tool_results: JsonObject
     execution_exceptions: list[ExecutionExceptionRecord]
     nested_states: dict[str, NestedStateData]
-    mock: JsonObject | None
+    child_workflows: dict[str, ChildWorkflowLink]
     reasoning_history: list[JsonObject]
     pending_reasoning: JsonObject | None
     breakpoints: dict[str, bool]
@@ -73,11 +85,17 @@ class ExecutionStateCreateKwargs(TypedDict, total=False):
 
 
 class InterruptPathItem(FlexibleBaseModel):
-    """Элемент пути прерывания"""
+    """Элемент пути прерывания."""
 
-    type: str = Field(..., description="Тип: tool, llm_node, flow")
-    id: str = Field(..., description="ID ноды/tool")
+    node_type: str = Field(..., description="Тип: tool, llm_node, flow")
+    node_id: str = Field(..., description="ID ноды/tool")
     tool_call: LLMToolCall | None = Field(default=None, description="Данные tool_call")
+    child_session_id: str | None = Field(
+        default=None,
+        description="Durable session_id child workflow для resume FlowNode",
+    )
+    child_flow_id: str | None = Field(default=None, description="ID child flow")
+    child_flow_branch_id: str | None = Field(default=None, description="Branch child flow")
 
 
 class NodeCallInfo(FlexibleBaseModel):
@@ -105,13 +123,26 @@ class ExecutionExceptionRecord(FlexibleBaseModel):
 class PendingUIEvent(StrictBaseModel):
     """UI event, queued in ExecutionState until the runtime emits it to the A2A stream."""
 
-    id: str = Field(..., description="ID события")
-    type: str = Field(..., description="Тип события")
+    event_id: str = Field(..., description="ID события")
+    event_type: str = Field(..., description="Тип события")
     payload: JsonObject = Field(..., description="Payload события")
     version: str = Field(..., description="Версия события")
     timestamp: str = Field(..., description="Время создания ISO")
     source: str = Field(..., description="Источник события")
     correlation_id: str | None = Field(default=None, description="Correlation id")
+
+
+class ChildWorkflowLink(StrictBaseModel):
+    """Durable связь родительской ноды с отдельной child workflow-сессией."""
+
+    node_id: str = Field(..., min_length=1)
+    child_session_id: str = Field(..., min_length=3)
+    child_flow_id: str = Field(..., min_length=1)
+    child_flow_branch_id: str = Field(..., min_length=1)
+    parent_session_id: str = Field(..., min_length=3)
+    parent_execution_branch_id: str = Field(..., min_length=1)
+    parent_node_schedule_sequence: int = Field(..., ge=1)
+    status: ChildWorkflowStatus
 
 
 class PromptHistoryItem(FlexibleBaseModel):
@@ -236,19 +267,81 @@ class ExecutionState(FlexibleBaseModel):
     current_nodes: list[str] = Field(default_factory=list, description="Текущие ноды для выполнения")
     branch_id: str = Field(default="default", description="ID branch")
 
+    _durable_execution_branch_id: str | None = PrivateAttr(default=None)
+    _durable_node_schedule_sequence: int | None = PrivateAttr(default=None)
+    _durable_superstep_sequence: int | None = PrivateAttr(default=None)
+    _durable_edge_execution_branch_id: str | None = PrivateAttr(default=None)
+    _durable_edge_evaluation_sequence: int | None = PrivateAttr(default=None)
+    _structured_output_result: JsonValue = PrivateAttr(default=None)
+
+    @property
+    def durable_execution_branch_id(self) -> str | None:
+        return self._durable_execution_branch_id
+
+    @property
+    def durable_node_schedule_sequence(self) -> int | None:
+        return self._durable_node_schedule_sequence
+
+    @property
+    def durable_superstep_sequence(self) -> int | None:
+        return self._durable_superstep_sequence
+
+    @property
+    def durable_edge_execution_branch_id(self) -> str | None:
+        return self._durable_edge_execution_branch_id
+
+    @property
+    def durable_edge_evaluation_sequence(self) -> int | None:
+        return self._durable_edge_evaluation_sequence
+
+    @property
+    def structured_output_result(self) -> JsonValue:
+        return self._structured_output_result
+
+    def set_structured_output_result(self, value: JsonValue) -> None:
+        self._structured_output_result = value
+
+    def clear_structured_output_result(self) -> None:
+        self._structured_output_result = None
+
+    def attach_durable_node_context(
+        self,
+        *,
+        execution_branch_id: str | None,
+        node_schedule_sequence: int | None,
+        superstep_sequence: int | None,
+    ) -> None:
+        if execution_branch_id is not None:
+            self._durable_execution_branch_id = execution_branch_id
+        if node_schedule_sequence is not None:
+            self._durable_node_schedule_sequence = node_schedule_sequence
+        if superstep_sequence is not None:
+            self._durable_superstep_sequence = superstep_sequence
+
+    def attach_durable_edge_context(
+        self,
+        *,
+        execution_branch_id: str | None,
+        edge_evaluation_sequence: int | None,
+    ) -> None:
+        if execution_branch_id is not None:
+            self._durable_edge_execution_branch_id = execution_branch_id
+        if edge_evaluation_sequence is not None:
+            self._durable_edge_evaluation_sequence = edge_evaluation_sequence
+
     @model_validator(mode="before")
     @classmethod
-    def reject_deprecated_system_field_names(cls, value: object) -> object:
+    def reject_forbidden_system_field_names(cls, value: object) -> object:
         if not isinstance(value, dict):
             return value
         raw = cast(Mapping[str, object], value)
-        deprecated_field_names = sorted(
-            DEPRECATED_EXECUTION_STATE_FIELD_NAMES.intersection(raw.keys())
+        forbidden_field_names = sorted(
+            FORBIDDEN_EXECUTION_STATE_FIELD_NAMES.intersection(raw.keys())
         )
-        if deprecated_field_names:
-            names = ", ".join(deprecated_field_names)
+        if forbidden_field_names:
+            names = ", ".join(forbidden_field_names)
             raise ValueError(
-                f"ExecutionState deprecated field names are forbidden: {names}. "
+                f"ExecutionState system field names are forbidden: {names}. "
                 + "Use terminal_task_state and terminal_task_error."
             )
         return dict(raw)
@@ -422,14 +515,16 @@ class ExecutionState(FlexibleBaseModel):
         if name.startswith("__pydantic"):
             super().__setattr__(name, value)
             return
-        if name in DEPRECATED_EXECUTION_STATE_FIELD_NAMES:
+        if name in FORBIDDEN_EXECUTION_STATE_FIELD_NAMES:
             raise ValueError(
-                f"ExecutionState deprecated field name is forbidden: {name}. "
+                f"ExecutionState system field name is forbidden: {name}. "
                 + "Use terminal_task_state or terminal_task_error."
             )
         guard_setattr_if_user_code(name)
         if name == "interrupt" and value is not None and isinstance(value, dict):
             value = InterruptData.model_validate(cast(object, value))
+        if name == "child_workflows" and value is not None:
+            value = type(self).validate_child_workflows(value)
         if name == "prompt_history" and value is not None:
             value = ExecutionState.normalize_prompt_history(value)
         super().__setattr__(name, value)
@@ -478,10 +573,34 @@ class ExecutionState(FlexibleBaseModel):
         default_factory=dict,
         description="Состояния вложенных субагентов"
     )
-    mock: JsonObject | None = Field(
-        default=None,
-        description="Mock конфигурация для тестирования"
+    child_workflows: dict[str, ChildWorkflowLink] = Field(
+        default_factory=dict,
+        description=(
+            "Durable child workflow links по node_id; хранит session_id child flow "
+            "для resume без snapshot-копии child state в родителе."
+        ),
     )
+    @field_validator("child_workflows", mode="before")
+    @classmethod
+    def validate_child_workflows(cls, v: object) -> dict[str, ChildWorkflowLink]:
+        if v is None or v == {}:
+            return {}
+        if not isinstance(v, dict):
+            raise ValueError(f"child_workflows: ожидается dict, получен {type(v)}")
+        result: dict[str, ChildWorkflowLink] = {}
+        for key, item in cast(Mapping[object, object], v).items():
+            if not isinstance(key, str) or not key:
+                raise ValueError("child_workflows keys must be non-empty strings")
+            if isinstance(item, ChildWorkflowLink):
+                result[key] = item
+            elif isinstance(item, dict):
+                result[key] = ChildWorkflowLink.model_validate(cast(object, item))
+            else:
+                raise ValueError(
+                    f"child_workflows[{key!r}]: ожидается ChildWorkflowLink или dict, "
+                    + f"получен {type(item)}"
+                )
+        return result
 
     # ========================================================================
     # Reasoning (tool reason)
@@ -510,7 +629,7 @@ class ExecutionState(FlexibleBaseModel):
     )
     breakpoint_state: JsonObject | None = Field(
         default=None,
-        description="Snapshot state на момент срабатывания breakpoint"
+        description="Projection snapshot на момент срабатывания breakpoint"
     )
 
     # ========================================================================
@@ -634,26 +753,23 @@ class ExecutionState(FlexibleBaseModel):
 
     def __contains__(self, key: str) -> bool:
         """Поддержка оператора 'in' для доступа к полям как к dict."""
-        if hasattr(self, key):
+        if key in type(self).model_fields:
             return True
-        if hasattr(self, '__pydantic_extra__') and self.__pydantic_extra__:
+        if self.__pydantic_extra__:
             return key in self.__pydantic_extra__
         return False
 
     def __getitem__(self, key: str) -> object:
         """Поддержка доступа через квадратные скобки."""
-        if hasattr(self, key):
-            return cast(object, getattr(self, key))
-        if hasattr(self, '__pydantic_extra__') and self.__pydantic_extra__ and key in self.__pydantic_extra__:
+        if key in type(self).model_fields:
+            return cast(object, self.__dict__[key])
+        if self.__pydantic_extra__ and key in self.__pydantic_extra__:
             return cast(object, self.__pydantic_extra__[key])
         raise KeyError(key)
 
     def __setitem__(self, key: str, value: object) -> None:
         """Поддержка присваивания через квадратные скобки."""
-        if hasattr(self, key):
-            setattr(self, key, value)
-        else:
-            setattr(self, key, value)
+        self.__setattr__(key, value)
 
     @overload
     def get(self, key: Literal["messages"], default: list[Message]) -> list[Message]: ...
@@ -690,6 +806,8 @@ __all__ = [
     "InterruptPathItem",
     "NodeCallInfo",
     "NestedStateData",
+    "ChildWorkflowLink",
+    "ChildWorkflowStatus",
     "PromptHistoryItem",
     "ExecutionExceptionRecord",
 ]

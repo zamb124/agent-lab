@@ -31,11 +31,17 @@ from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture(autouse=True)
-def patch_service_clients_asgi(monkeypatch: pytest.MonkeyPatch) -> None:
+def patch_service_clients_asgi(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Универсальный патч для ServiceClient, направляющий запросы между сервисами
     через ASGITransport, если соответствующее приложение доступно.
     """
+    if request.node.get_closest_marker("no_service_client_patch"):
+        return
+
     from httpx import ASGITransport, AsyncClient
 
     from core.clients.service_client import ServiceClient

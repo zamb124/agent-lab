@@ -6,11 +6,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
-from typing import Any
 
 from core.errors import FrozenStateFieldError
 
@@ -40,7 +39,6 @@ FROZEN_STATE_FIELDS: frozenset[str] = frozenset(
         "breakpoints",
         "breakpoint_hit",
         "breakpoint_state",
-        "mock",
         "triggers",
         "scheduled_tasks",
         "nested_states",
@@ -90,7 +88,7 @@ def is_runtime_state_mutation_allowed() -> bool:
 
 
 @contextmanager
-def user_code_state_mutation_guard() -> Iterator[None]:
+def user_code_state_mutation_guard() -> Generator[None, None, None]:
     token = _runtime_mutation_allowed.set(False)
     try:
         yield
@@ -121,16 +119,18 @@ def forbid_frozen_update_key(key: str, *, reason: str = "update") -> None:
         raise FrozenStateFieldError(field=key, reason=reason)
 
 
-def snapshot_frozen_fields(state: object) -> dict[str, Any]:
-    out: dict[str, Any] = {}
+def snapshot_frozen_fields(state: object) -> dict[str, object]:
+    out: dict[str, object] = {}
+    state_fields: dict[str, object] = dict(vars(state))
     for k in FROZEN_STATE_SNAPSHOT_FIELDS:
-        out[k] = deepcopy(getattr(state, k, None))
+        out[k] = deepcopy(state_fields.get(k))
     return out
 
 
-def assert_frozen_fields_unchanged(state: object, snapshot: dict[str, Any]) -> None:
+def assert_frozen_fields_unchanged(state: object, snapshot: dict[str, object]) -> None:
+    state_fields: dict[str, object] = dict(vars(state))
     for k, old_val in snapshot.items():
-        new_val = getattr(state, k, None)
+        new_val = state_fields.get(k)
         if old_val != new_val:
             raise FrozenStateFieldError(
                 field=k,

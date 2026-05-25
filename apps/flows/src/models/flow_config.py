@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar, Literal, cast
+from typing import Annotated, ClassVar, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -131,27 +131,48 @@ class FlowVariableConfig(StrictBaseModel):
     order: int | None = Field(default=None, description="Порядок отображения")
 
 
+EdgeConditionOperator = Literal["==", "!=", ">", "<", ">=", "<=", "in"]
+EdgeCodeLanguage = Literal["python", "javascript", "typescript", "go", "csharp"]
+
+
+class SimpleEdgeCondition(StrictBaseModel):
+    """Типизированное условие перехода по значению из ExecutionState."""
+
+    type: Literal["simple"] = "simple"
+    variable: str = Field(..., min_length=1, description="Путь в ExecutionState")
+    operator: EdgeConditionOperator = Field(..., description="Оператор сравнения")
+    value: JsonValue = Field(..., description="JSON-значение для сравнения")
+
+
+class CodeEdgeCondition(StrictBaseModel):
+    """Типизированное условие перехода через durable code activity."""
+
+    type: Literal["code"] = "code"
+    language: EdgeCodeLanguage = Field(..., description="Язык code-condition")
+    code: str = Field(..., min_length=1, description="Исходный код condition activity")
+    entrypoint: str | None = Field(default=None, min_length=1, description="Entry point функции")
+
+
+EdgeCondition = Annotated[SimpleEdgeCondition | CodeEdgeCondition, Field(discriminator="type")]
+
+
 class Edge(StrictBaseModel):
     """
     Связь между нодами.
 
-    condition - выражение для проверки (опционально).
+    condition - типизированный объект для проверки (опционально).
     Если condition не указан - безусловный переход.
 
     Допустимые форматы condition:
-      - строка: выражение `"<variable> <op> <value>"` (например, `route == 'order'`);
-      - объект `{"type": "simple", "variable": str, "operator": str, "value": Any}`;
-      - объект `{"type": "code", "language": "python|javascript|typescript|go|csharp", "code": str}`.
+      - `{"type": "simple", "variable": str, "operator": str, "value": Any}`;
+      - `{"type": "code", "language": "python|javascript|typescript|go|csharp", "code": str}`.
     """
 
-    from_node: str = Field(..., alias="from", description="ID исходной ноды")
-    to_node: str | None = Field(..., alias="to", description="ID целевой ноды (null = конец)")
-    condition: str | JsonObject | None = Field(
+    from_node: str = Field(..., description="ID исходной ноды")
+    to_node: str | None = Field(..., description="ID целевой ноды (null = конец)")
+    condition: EdgeCondition | None = Field(
         default=None,
-        description=(
-            "Условие перехода. Строковое выражение, объект simple "
-            "({type, variable, operator, value}) или code ({type, language, code})."
-        ),
+        description="Условие перехода: simple ({type, variable, operator, value}) или code ({type, language, code}).",
     )
     contributes_to_join: bool = Field(
         default=True,
@@ -353,12 +374,6 @@ class BranchConfig(StrictBaseModel):
         default=MergeMode.MERGE, description="Режим применения variables: 'merge' или 'replace'"
     )
 
-    # Mock конфигурация
-    mock: JsonObject | None = Field(
-        default=None,
-        description="Mock конфигурация для ветки. Переопределяет mock flow.",
-    )
-
     # Ресурсы skill
     resources: dict[str, ResourceReference] = Field(
         default_factory=dict,
@@ -397,7 +412,7 @@ class FlowConfig(StrictBaseModel):
         "description": "Agent description",
         "entry": "main",
         "nodes": {"main": {...}},
-        "edges": [{"from": "main", "to": null}],
+        "edges": [{"from_node": "main", "to_node": null}],
         "permission": ["admin", "developers"]
     }
     """
@@ -520,12 +535,6 @@ class FlowConfig(StrictBaseModel):
             "URL обложки агента (витрина, публичные embed/лендинг). "
             "В UI задаётся загрузкой файла; при установке из bundle поле материализуется из store_card_image."
         ),
-    )
-
-    # Mock конфигурация
-    mock: JsonObject | None = Field(
-        default=None,
-        description="Mock конфигурация (tools, flows, nodes, llm)"
     )
 
     # Ресурсы flow

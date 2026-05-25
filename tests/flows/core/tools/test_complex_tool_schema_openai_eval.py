@@ -19,14 +19,12 @@ import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.models import NodeConfig
-from apps.flows.src.models.node_config import NodeLLMOverride
-from apps.flows.src.models.tool_reference import CallParameter, ToolReference
+from apps.flows.src.models.node_config import NodeLLMConfig
+from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.tools.code_tool import CodeTool
 from apps.flows.src.tools.json_schema_parameters import (
-    call_parameters_to_parameters_schema,
     pydantic_model_to_parameters_schema,
-    resolve_tool_parameters_schema,
     sanitize_parameters_schema_for_llm,
 )
 from apps.flows.tools.lara_crm import CrmSearchEntitiesArgs
@@ -46,20 +44,15 @@ def _json_pointer_resolve(root: Dict[str, Any], pointer: str) -> Dict[str, Any]:
     return cur
 
 
-def _assert_schema_fragment(
-    fragment: Dict[str, Any],
-    root: Dict[str, Any],
-    *,
-    path: str,
-) -> None:
+def _assert_schema_fragment(fragment: Dict[str, Any], root: Dict[str, Any], *, path: str) -> None:
     """Рекурсивно: фрагмент JSON Schema допустим для parameters функции (OpenAI-style)."""
     if not isinstance(fragment, dict):
         raise AssertionError(f"{path}: ожидался dict")
-
     if "$ref" in fragment:
-        _assert_schema_fragment(_json_pointer_resolve(root, fragment["$ref"]), root, path=f"{path}($ref)")
+        _assert_schema_fragment(
+            _json_pointer_resolve(root, fragment["$ref"]), root, path=f"{path}($ref)"
+        )
         return
-
     if "oneOf" in fragment:
         opts = fragment["oneOf"]
         assert isinstance(opts, list) and len(opts) > 0, f"{path}: oneOf непустой список"
@@ -67,7 +60,6 @@ def _assert_schema_fragment(
             assert isinstance(opt, dict), f"{path}.oneOf[{i}]"
             _assert_schema_fragment(opt, root, path=f"{path}.oneOf[{i}]")
         return
-
     if "anyOf" in fragment:
         opts = fragment["anyOf"]
         assert isinstance(opts, list) and len(opts) > 0, f"{path}: anyOf"
@@ -75,23 +67,19 @@ def _assert_schema_fragment(
             assert isinstance(opt, dict), f"{path}.anyOf[{i}]"
             _assert_schema_fragment(opt, root, path=f"{path}.anyOf[{i}]")
         return
-
     if "allOf" in fragment:
         for i, sub in enumerate(fragment["allOf"]):
             assert isinstance(sub, dict), f"{path}.allOf[{i}]"
             _assert_schema_fragment(sub, root, path=f"{path}.allOf[{i}]")
         return
-
     if "const" in fragment:
         return
-
     t = fragment.get("type")
     if t == "array":
         assert "items" in fragment, f"{path}: type=array требует items (OpenAI / JSON Schema)"
         assert isinstance(fragment["items"], dict), f"{path}.items"
         _assert_schema_fragment(fragment["items"], root, path=f"{path}.items")
         return
-
     if t == "object":
         if "properties" in fragment:
             assert isinstance(fragment["properties"], dict), f"{path}.properties"
@@ -104,26 +92,25 @@ def _assert_schema_fragment(
             if isinstance(ap, dict):
                 _assert_schema_fragment(ap, root, path=f"{path}.additionalProperties")
         else:
-            raise AssertionError(
-                f"{path}: type=object ожидает properties или additionalProperties"
-            )
+            raise AssertionError(f"{path}: type=object ожидает properties или additionalProperties")
         return
-
     if t in ("string", "number", "integer", "boolean", "null"):
         return
-
-    if t is None and not any(
-        k in fragment for k in ("properties", "items", "oneOf", "anyOf", "allOf", "$ref", "const")
+    if t is None and (
+        not any(
+            (
+                k in fragment
+                for k in ("properties", "items", "oneOf", "anyOf", "allOf", "$ref", "const")
+            )
+        )
     ):
         raise AssertionError(f"{path}: нет type и нет составной конструкции: keys={list(fragment)}")
-
     if isinstance(t, list):
         for i, tt in enumerate(t):
             assert tt in ("string", "number", "integer", "boolean", "null", "object", "array"), (
                 f"{path}.type[{i}]"
             )
         return
-
     raise AssertionError(f"{path}: неподдерживаемый type={t!r}")
 
 
@@ -134,10 +121,9 @@ def assert_openai_function_parameters_compatible(parameters: Dict[str, Any]) -> 
     assert isinstance(props, dict), "parameters.properties — dict"
     req = parameters.get("required", [])
     assert isinstance(req, list), "parameters.required — list"
-    assert all(isinstance(x, str) for x in req), "required — только строки"
+    assert all((isinstance(x, str) for x in req)), "required — только строки"
     for name in req:
         assert name in props, f"required ссылается на неизвестное поле {name!r}"
-
     root = parameters
     for pname, pschema in props.items():
         _assert_schema_fragment(pschema, root, path=f"properties.{pname}")
@@ -156,14 +142,12 @@ def assert_openai_tools_list_entry(entry: Dict[str, Any]) -> None:
 
 class Coord(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
 
 
 class ComplexArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     title: str = Field(min_length=1, max_length=200)
     count: int = Field(default=10, ge=1, le=1000)
     ratio: float = Field(default=0.25, gt=0, lt=1)
@@ -186,29 +170,7 @@ class RootUnion(BaseModel):
     item: Union[VariantA, VariantB] = Field(discriminator="kind")
 
 
-COMPLEX_TOOL_CODE = """
-async def complex_demo(
-    title: str,
-    tags: list,
-    coord: dict,
-    count: int = 10,
-    ratio: float = 0.25,
-    extras: dict | None = None,
-    state=None,
-):
-    import json
-    return json.dumps(
-        {
-            "title": title,
-            "count": count,
-            "ratio": ratio,
-            "tags": tags,
-            "coord": coord,
-            "extras": extras,
-        },
-        ensure_ascii=False,
-    )
-"""
+COMPLEX_TOOL_CODE = '\nasync def complex_demo(\n    title: str,\n    tags: list,\n    coord: dict,\n    count: int = 10,\n    ratio: float = 0.25,\n    extras: dict | None = None,\n    state=None,\n):\n    import json\n    return json.dumps(\n        {\n            "title": title,\n            "count": count,\n            "ratio": ratio,\n            "tags": tags,\n            "coord": coord,\n            "extras": extras,\n        },\n        ensure_ascii=False,\n    )\n'
 
 
 def test_sanitize_preserves_defs_and_constraints() -> None:
@@ -227,7 +189,7 @@ def test_sanitize_preserves_defs_and_constraints() -> None:
     assert props["coord"].get("$ref") == "#/$defs/Coord"
 
 
-def test_openai_compatible_complex_args_schema() -> None:
+def test_openai_compatible_complex_parameters_schema() -> None:
     params = pydantic_model_to_parameters_schema(ComplexArgs)
     assert_openai_function_parameters_compatible(params)
 
@@ -249,29 +211,16 @@ def test_crm_search_entities_schema_openai_compatible() -> None:
     assert lim.get("maximum") == 1000
 
 
-def test_resolve_prefers_parameters_schema_over_args_schema() -> None:
-    legacy = {
-        "q": CallParameter(type="string", description="legacy", required=True),
-    }
-    full = {
-        "type": "object",
-        "properties": {
-            "query": {"type": "string", "description": "canonical", "minLength": 1},
-        },
-        "required": ["query"],
-    }
-    out = resolve_tool_parameters_schema(parameters_schema=full, args_schema=legacy)
-    assert out["properties"]["query"]["minLength"] == 1
-
-
-def test_call_parameters_fallback_openai_shape() -> None:
-    cp = {
-        "x": CallParameter(type="integer", description="coord x", required=True),
-        "y": CallParameter(type="integer", description="coord y", required=False),
-    }
-    params = call_parameters_to_parameters_schema(cp)
-    assert_openai_function_parameters_compatible(params)
-    assert params["required"] == ["x"]
+def test_tool_reference_rejects_legacy_flat_schema() -> None:
+    legacy_key = "args" + "_schema"
+    with pytest.raises(ValueError):
+        ToolReference.model_validate(
+            {
+                "tool_id": "legacy_schema",
+                "code": "async def run(args, state): return args",
+                legacy_key: {"x": {"type": "string"}},
+            }
+        )
 
 
 @pytest.mark.asyncio
@@ -297,9 +246,6 @@ async def test_registry_materialize_merges_full_parameters_schema(app) -> None:
         description="materialize complex",
         code=COMPLEX_TOOL_CODE.strip(),
         parameters_schema=schema,
-        args_schema={
-            "title": CallParameter(type="string", description="t", required=True),
-        },
     )
     dumped = ref.model_dump(exclude_none=True)
     tool = await get_container().tool_registry.materialize(dumped)
@@ -321,14 +267,9 @@ async def test_llm_node_runner_build_tools_schema_matches_openai_canon(app) -> N
         type="llm_node",
         name="Agent",
         prompt="p",
-        llm_override=NodeLLMOverride(model="mock-gpt-4", temperature=0.0),
+        llm=NodeLLMConfig(model="mock-gpt-4", temperature=0.0),
     )
-    runner = LlmNodeRunner(
-        node_config=cfg,
-        tools=[complex_tool],
-        llm=None,
-        prompt="p",
-    )
+    runner = LlmNodeRunner(node_config=cfg, tools=[complex_tool], llm=None, prompt="p")
     built = runner._build_tools_schema()
     assert len(built) == 1
     assert_openai_tools_list_entry(built[0])
@@ -351,17 +292,8 @@ async def test_code_tool_run_applies_json_defaults_and_executes(app) -> None:
         parameters_schema=schema,
         container=get_container(),
     )
-    state = ExecutionState.create(
-        task_id="t1",
-        context_id="c1",
-        user_id="u1",
-        session_id="flow:c1",
-    )
-    payload = {
-        "title": "Заголовок",
-        "tags": ["one", "two"],
-        "coord": {"lat": 55.75, "lon": 37.62},
-    }
+    state = ExecutionState.create(task_id="t1", context_id="c1", user_id="u1", session_id="flow:c1")
+    payload = {"title": "Заголовок", "tags": ["one", "two"], "coord": {"lat": 55.75, "lon": 37.62}}
     raw = await tool.run(payload, state)
     data = json.loads(raw)
     assert data["title"] == "Заголовок"
@@ -384,12 +316,7 @@ async def test_code_tool_explicit_args_override_defaults(app) -> None:
         parameters_schema=schema,
         container=get_container(),
     )
-    state = ExecutionState.create(
-        task_id="t2",
-        context_id="c2",
-        user_id="u1",
-        session_id="flow:c2",
-    )
+    state = ExecutionState.create(task_id="t2", context_id="c2", user_id="u1", session_id="flow:c2")
     payload = {
         "title": "T",
         "tags": ["x"],

@@ -2,7 +2,7 @@
 
 import datetime
 
-from apps.flows.src.db.scheduled_task_repository import ScheduledTaskRepository
+from apps.flows.src.models.scheduled_task_payload import FlowScheduledTaskPayload
 from core.clients.scheduler_client import SchedulerClient
 from core.context import get_context
 from core.logging import get_logger
@@ -14,72 +14,47 @@ from core.scheduler.models import (
     PlatformScheduleType,
     ScheduledTaskInfo,
     ScheduledTaskStatus,
-    ScheduleType,
 )
 from core.scheduler.service import SchedulerService
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, parse_json_object
 
 logger = get_logger(__name__)
 
 
 class ScheduleService:
-    """Сервис совместимости для tools scheduling в flows."""
+    """Сервис scheduling для flows.
+
+    Source of truth — платформенный scheduler control-plane
+    (``core.scheduler.SchedulerService`` + таблица ``scheduler_tasks``
+    в shared БД).
+    """
 
     def __init__(
         self,
         scheduler_client: SchedulerClient,
         scheduler_service: SchedulerService | None = None,
-        scheduled_task_repository: ScheduledTaskRepository | None = None,
     ) -> None:
         self._scheduler_client: SchedulerClient = scheduler_client
         self._scheduler_service: SchedulerService | None = scheduler_service
-        self._scheduled_task_repository: ScheduledTaskRepository | None = scheduled_task_repository
 
     def _map_task(self, task: PlatformScheduledTask) -> ScheduledTaskInfo:
-        payload = task.payload
-        nested_payload = payload.get("payload")
-        if not isinstance(nested_payload, dict):
-            raise ValueError("scheduler payload must include nested payload dict")
-        content = nested_payload.get("content")
-        if not isinstance(content, str):
-            raise ValueError("scheduler payload.content must be string")
-        tool_args = nested_payload.get("tool_args")
-        description = nested_payload.get("description")
-        if description is not None and not isinstance(description, str):
-            raise ValueError("scheduler payload.description must be string or null")
-        task_type = payload.get("task_type")
-        if not isinstance(task_type, str):
-            raise ValueError("scheduler payload.task_type must be string")
-        flow_id = payload.get("flow_id")
-        session_id = payload.get("session_id")
-        user_id = payload.get("user_id")
-        if not isinstance(flow_id, str):
-            raise ValueError("scheduler payload.flow_id must be string")
-        if not isinstance(session_id, str):
-            raise ValueError("scheduler payload.session_id must be string")
-        if not isinstance(user_id, str):
-            raise ValueError("scheduler payload.user_id must be string")
-        schedule_type = ScheduleType(task.schedule_type.value)
-        typed_tool_args = (
-            require_json_object(tool_args, "scheduler payload.tool_args")
-            if tool_args is not None
-            else None
-        )
+        payload = FlowScheduledTaskPayload.model_validate(task.payload)
+        schedule_type = PlatformScheduleType(task.schedule_type)
 
         return ScheduledTaskInfo(
             schedule_task_id=task.schedule_task_id,
             schedule_id=task.schedule_id,
-            flow_id=flow_id,
-            session_id=session_id,
-            user_id=user_id,
+            flow_id=payload.flow_id,
+            session_id=payload.session_id,
+            user_id=payload.user_id,
             schedule_type=schedule_type,
-            content_type=ContentType(task_type),
+            content_type=payload.content_type,
             cron=task.cron,
             interval_minutes=int(task.interval_seconds / 60) if task.interval_seconds else None,
             run_at=task.run_at,
-            content=content,
-            tool_args=typed_tool_args,
-            description=description,
+            content=payload.content,
+            tool_args=payload.tool_args,
+            description=payload.description,
             status=task.status,
             created_at=task.created_at,
             executed_at=task.last_run_at,
@@ -102,17 +77,15 @@ class ScheduleService:
         interval_seconds: int | None = None,
         run_at: datetime.datetime | None = None,
     ) -> ScheduledTaskInfo:
-        payload: JsonObject = {
-            "flow_id": flow_id,
-            "session_id": session_id,
-            "user_id": user_id,
-            "task_type": content_type.value,
-            "payload": {
-                "content": content,
-                "tool_args": tool_args,
-                "description": description,
-            },
-        }
+        payload = FlowScheduledTaskPayload(
+            flow_id=flow_id,
+            session_id=session_id,
+            user_id=user_id,
+            content_type=content_type,
+            content=content,
+            tool_args=tool_args,
+            description=description,
+        )
         request = PlatformScheduleCreateRequest(
             target_service="flows",
             task_name="execute_scheduled_task",
@@ -121,7 +94,10 @@ class ScheduleService:
             cron=cron,
             interval_seconds=interval_seconds,
             run_at=run_at,
-            payload=payload,
+            payload=parse_json_object(
+                payload.model_dump_json(exclude_none=True),
+                "FlowScheduledTaskPayload",
+            ),
         )
         if self._scheduler_service is not None:
             context = get_context()
@@ -134,10 +110,7 @@ class ScheduleService:
             )
         else:
             created = await self._scheduler_client.create_schedule(request)
-        mapped = self._map_task(created)
-        if self._scheduled_task_repository is not None:
-            _ = await self._scheduled_task_repository.save(mapped)
-        return mapped
+        return self._map_task(created)
 
     async def schedule_cron_task(
         self,
@@ -316,8 +289,8 @@ class ScheduleService:
             task_items = tasks_page.items
         filtered: list[ScheduledTaskInfo] = []
         for item in task_items:
-            item_session = item.payload.get("session_id")
-            if item_session == session_id:
+            item_payload = FlowScheduledTaskPayload.model_validate(item.payload)
+            if item_payload.session_id == session_id:
                 filtered.append(self._map_task(item))
         return filtered
 
@@ -348,11 +321,6 @@ class ScheduleService:
             "Task cancelled via scheduler API: schedule_task_id=%s",
             cancelled.schedule_task_id,
         )
-        if self._scheduled_task_repository is not None:
-            _ = await self._scheduled_task_repository.update_status(
-                schedule_task_id,
-                ScheduledTaskStatus.CANCELLED,
-            )
         return True
 
     async def get_task(self, schedule_task_id: str) -> ScheduledTaskInfo | None:

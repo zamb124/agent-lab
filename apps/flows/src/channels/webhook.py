@@ -244,18 +244,7 @@ class WebhookChannelHandler(BaseChannelHandler):
         else:
             config_headers = require_json_object(raw_config_headers, "webhook.config.headers")
 
-        raw_legacy_auth = config.get("auth_headers")
-        if raw_legacy_auth is None:
-            legacy_auth: JsonObject = {}
-        else:
-            legacy_auth = require_json_object(raw_legacy_auth, "webhook.config.auth_headers")
-
-        if legacy_auth:
-            merged_h = {**config_headers, **legacy_auth}
-        else:
-            merged_h = config_headers
-
-        for key, value in merged_h.items():
+        for key, value in config_headers.items():
             resolved_value = self._resolve_value(value, variables)
             if not isinstance(resolved_value, str):
                 raise ValueError(f"webhook header {key!r} must resolve to a string")

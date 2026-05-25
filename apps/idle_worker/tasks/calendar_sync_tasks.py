@@ -13,8 +13,8 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from apps.flows.config import get_settings
-from apps.flows.src.container import get_container
 from apps.idle_worker.broker import broker as idle_broker
+from apps.idle_worker.container import get_container
 from core.calendar.service import CalendarReauthRequiredError, _credential_to_calendar_integration
 from core.integrations.models import IntegrationProvider
 from core.logging import get_logger

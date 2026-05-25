@@ -3,8 +3,6 @@ TaskIQ tasks для push notifications.
 Проксирует вызовы в core.tasks.push_notifications (где изолирована логика).
 """
 
-from typing import Any
-
 from a2a.types import (
     DeleteTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigParams,
@@ -34,24 +32,33 @@ from core.tasks.push_notifications import (
 from core.tasks.push_notifications import (
     send_webhook as core_send_webhook,
 )
+from core.types import JsonObject, parse_json_object
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_SET, queue_name="idle")
-async def set_config(params: TaskPushNotificationConfig) -> dict[str, Any]:
+async def set_config(params: TaskPushNotificationConfig) -> JsonObject:
     """Сохраняет конфигурацию push notification."""
-    return await set_push_config(params)
+    config = await set_push_config(params)
+    return parse_json_object(config.model_dump_json(by_alias=True), "TaskPushNotificationConfig")
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_GET, queue_name="idle")
-async def get_config(params: GetTaskPushNotificationConfigParams) -> dict[str, Any] | None:
+async def get_config(params: GetTaskPushNotificationConfigParams) -> JsonObject | None:
     """Получает конфигурацию push notification."""
-    return await get_push_config(params)
+    config = await get_push_config(params)
+    if config is None:
+        return None
+    return parse_json_object(config.model_dump_json(by_alias=True), "TaskPushNotificationConfig")
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_LIST, queue_name="idle")
-async def list_configs(params: ListTaskPushNotificationConfigParams) -> list[dict[str, Any]]:
+async def list_configs(params: ListTaskPushNotificationConfigParams) -> list[JsonObject]:
     """Список конфигураций для задачи."""
-    return await list_push_configs(params)
+    configs = await list_push_configs(params)
+    return [
+        parse_json_object(config.model_dump_json(by_alias=True), "TaskPushNotificationConfig")
+        for config in configs
+    ]
 
 
 @idle_broker.task(task_name=TASK_PUSH_CONFIG_DELETE, queue_name="idle")
@@ -69,12 +76,21 @@ async def delete_config(params: DeleteTaskPushNotificationConfigParams) -> None:
 )
 async def send_webhook(
     url: str,
-    payload: dict[str, Any],
+    payload: JsonObject,
     token: str | None = None,
     credentials: str | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """Отправляет webhook с ретраями чере TaskIQ."""
     return await core_send_webhook(url, payload, token, credentials)
+
+
+async def _enqueue_webhook(
+    url: str,
+    payload: JsonObject,
+    token: str | None,
+    credentials: str | None,
+) -> None:
+    _ = await send_webhook.kiq(url, payload, token, credentials)
 
 
 @idle_broker.task(
@@ -88,7 +104,7 @@ async def send_task_update(
 ) -> None:
     """Отправляет уведомление всем подписчикам задачи."""
     await process_send_task_update(
-        task_id, context_id, state, message, is_final, webhook_trigger_func=send_webhook.kiq
+        task_id, context_id, state, message, is_final, webhook_trigger_func=_enqueue_webhook
     )
 
 

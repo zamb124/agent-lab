@@ -1,5 +1,5 @@
 {
-  "id": "lara",
+  "flow_id": "lara",
   "name": "Lara",
   "description": "Мультисервисный ассистент: навыки по сервисам, документации и редактору flows",
   "version": "1.0.0",
@@ -34,8 +34,8 @@
   },
   "edges": [
     {
-      "from": "main",
-      "to": null
+      "from_node": "main",
+      "to_node": null
     }
   ],
   "variables": {
@@ -147,7 +147,11 @@
     "llm_node_helper": {
       "name": "LLM Node Helper",
       "description": "Lara для llm_node: prompt, tools, messages_filter, mappings и output_key",
-      "tags": ["flows", "llm_node", "lara"],
+      "tags": [
+        "flows",
+        "llm_node",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -159,7 +163,9 @@
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
-          "tools": ["flows_patch_node"],
+          "tools": [
+            "flows_patch_node"
+          ],
           "output_key": "response"
         }
       }
@@ -167,7 +173,11 @@
     "flow_node_helper": {
       "name": "Flow Node Helper",
       "description": "Lara для вложенной flow-ноды: контракт входов/выходов и mappings",
-      "tags": ["flows", "flow_node", "lara"],
+      "tags": [
+        "flows",
+        "flow_node",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -179,7 +189,9 @@
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
-          "tools": ["flows_patch_node"],
+          "tools": [
+            "flows_patch_node"
+          ],
           "output_key": "response"
         }
       }
@@ -187,7 +199,11 @@
     "remote_flow_node_helper": {
       "name": "Remote Flow Node Helper",
       "description": "Lara для remote_flow ноды: A2A contract, payload mapping и errors",
-      "tags": ["flows", "remote_flow", "lara"],
+      "tags": [
+        "flows",
+        "remote_flow",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -199,7 +215,9 @@
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
-          "tools": ["flows_patch_node"],
+          "tools": [
+            "flows_patch_node"
+          ],
           "output_key": "response"
         }
       }
@@ -207,7 +225,11 @@
     "external_api_node_helper": {
       "name": "External API Node Helper",
       "description": "Lara для external_api ноды: HTTP contract, auth/config и mappings",
-      "tags": ["flows", "external_api", "lara"],
+      "tags": [
+        "flows",
+        "external_api",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -219,7 +241,9 @@
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
-          "tools": ["flows_patch_node"],
+          "tools": [
+            "flows_patch_node"
+          ],
           "output_key": "response"
         }
       }
@@ -227,7 +251,11 @@
     "mcp_node_helper": {
       "name": "MCP Node Helper",
       "description": "Lara для MCP-ноды: server/tool selection, args и result mapping",
-      "tags": ["flows", "mcp", "lara"],
+      "tags": [
+        "flows",
+        "mcp",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -239,7 +267,9 @@
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
-          "tools": ["flows_patch_node"],
+          "tools": [
+            "flows_patch_node"
+          ],
           "output_key": "response"
         }
       }
@@ -247,7 +277,11 @@
     "channel_node_helper": {
       "name": "Channel Node Helper",
       "description": "Lara для channel-ноды: channel settings и payload mapping",
-      "tags": ["flows", "channel", "lara"],
+      "tags": [
+        "flows",
+        "channel",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -259,7 +293,9 @@
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
-          "tools": ["flows_patch_node"],
+          "tools": [
+            "flows_patch_node"
+          ],
           "output_key": "response"
         }
       }
@@ -267,7 +303,11 @@
     "hitl_node_helper": {
       "name": "HITL Node Helper",
       "description": "Lara для hitl_node: operator queue, interrupt payload и resume mapping",
-      "tags": ["flows", "hitl_node", "lara"],
+      "tags": [
+        "flows",
+        "hitl_node",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -279,7 +319,9 @@
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
-          "tools": ["flows_patch_node"],
+          "tools": [
+            "flows_patch_node"
+          ],
           "output_key": "response"
         }
       }
@@ -287,7 +329,11 @@
     "resource_node_helper": {
       "name": "Resource Node Helper",
       "description": "Lara для resource-ноды: binding и node-level overrides",
-      "tags": ["flows", "resource_node", "lara"],
+      "tags": [
+        "flows",
+        "resource_node",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -299,7 +345,9 @@
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
-          "tools": ["flows_patch_node"],
+          "tools": [
+            "flows_patch_node"
+          ],
           "output_key": "response"
         }
       }
@@ -307,7 +355,11 @@
     "node_helper": {
       "name": "Node Helper",
       "description": "Lara для ноды неизвестного или нового типа",
-      "tags": ["flows", "node", "lara"],
+      "tags": [
+        "flows",
+        "node",
+        "lara"
+      ],
       "permission": [],
       "nodes_mode": "merge",
       "nodes": {
@@ -319,7 +371,9 @@
             "temperature": 0.15,
             "provider": "humanitec_llm"
           },
-          "tools": ["flows_patch_node"],
+          "tools": [
+            "flows_patch_node"
+          ],
           "output_key": "response"
         }
       }
@@ -357,8 +411,8 @@
       },
       "edges": [
         {
-          "from": "docs_lookup",
-          "to": "main"
+          "from_node": "docs_lookup",
+          "to_node": "main"
         }
       ]
     }

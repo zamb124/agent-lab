@@ -1,7 +1,7 @@
 /**
  * flows-code-node-editor — редактор code-ноды.
  *
- * Поля: `code`, `args_schema`, `language` (NodeConfig / CodeNode).
+ * Поля: `code`, `parameters_schema`, `language` (NodeConfig / CodeNode).
  * Область кода — `flows-code-workbench` (общий UI с code-ресурсом).
  * Если в данных был только `tool_id` без `code`, при открытии подставляется исходник из реестра, `tool_id` сбрасывается.
  */
@@ -118,8 +118,8 @@ export class FlowsCodeNodeEditor extends PlatformElement {
             this._emitPatch({ code: asString(d.value), tool_id: null });
             return;
         }
-        if (d.type === 'args_schema') {
-            this._emitPatch({ args_schema: d.args_schema });
+        if (d.type === 'parameters_schema') {
+            this._emitPatch({ parameters_schema: d.parameters_schema });
             return;
         }
         if (d.type === 'language') {
@@ -140,9 +140,9 @@ export class FlowsCodeNodeEditor extends PlatformElement {
     render() {
         const cfg = this.nodeConfig && typeof this.nodeConfig === 'object' ? this.nodeConfig : {};
         const code = typeof cfg.code === 'string' ? cfg.code : '';
-        const argsSchema = cfg.args_schema && typeof cfg.args_schema === 'object' && !Array.isArray(cfg.args_schema)
-            ? cfg.args_schema
-            : {};
+        const parametersSchema = cfg.parameters_schema && typeof cfg.parameters_schema === 'object' && !Array.isArray(cfg.parameters_schema)
+            ? cfg.parameters_schema
+            : { type: 'object', properties: {}, required: [] };
         const language = normalizeFlowCodeLanguage(cfg.language);
         const fv =
             this.flowVariables &&
@@ -174,7 +174,7 @@ export class FlowsCodeNodeEditor extends PlatformElement {
                         documentation-perspective="node"
                         .code=${code}
                         .language=${language}
-                        .argsSchema=${argsSchema}
+                        .parametersSchema=${parametersSchema}
                         .completionFlowId=${fid}
                         .completionBranchId=${bid}
                         .completionVariableKeys=${completionVariableKeys}

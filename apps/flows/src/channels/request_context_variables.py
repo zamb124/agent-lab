@@ -40,6 +40,13 @@ def flow_variables_from_request_context(context: Context | None) -> JsonObject:
         interface_language_code = "ru"
         interface_language_name = "русском"
 
+    active_namespace = (context.active_namespace or "").strip()
+    if not active_namespace:
+        raise ValueError(
+            "flow_variables_from_request_context: Context.active_namespace пуст — "
+            "переменная active_namespace для промпта не определена (Zero-Guess)."
+        )
+
     return {
         "user_id": user.user_id,
         "user_name": user.name or "",
@@ -48,7 +55,7 @@ def flow_variables_from_request_context(context: Context | None) -> JsonObject:
         "user_last_name": user.last_name or "",
         "company_id": company_id,
         "company_name": company_name,
-        "active_namespace": context.active_namespace or "default",
+        "active_namespace": active_namespace,
         "user_language": lang,
         "interface_language_code": interface_language_code,
         "interface_language_name": interface_language_name,

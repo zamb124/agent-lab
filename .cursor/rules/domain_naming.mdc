@@ -16,11 +16,11 @@ alwaysApply: false
 
 В схеме визуализации (`FlowFactory.get_flow_schema`) у llm-ноды вложенные flow, подключённые как tools, перечисляются в поле **`subflows`** (рекурсивно: `tools`, `subflows`), не `subagents`.
 
-Mock-конфиг: `resolve_mock_config(..., flow_mock=..., ...)`. Ресурсы уровня flow в `ResourceResolver.resolve_for_node(flow_resources=...)`, не `agent_*`.
+Ресурсы уровня flow в `ResourceResolver.resolve_for_node(flow_resources=...)`, не `agent_*`.
 
 Документация кода (autocomplete): ракурс **`flow`**, не `agent`; source of truth для пользовательского кода — `CapabilityManifest`.
 
-Примеры в bundles: ветка `direct_subflow`, нода `example_subflow`, evaluation `flow_dialog_test`, `inline_flows`; mock вложенных ответов — ключ **`flows`** (устаревший **`agents`** в `resolve_mock_config` мержится в `flows`).
+Примеры в bundles: ветка `direct_subflow`, нода `example_subflow`, evaluation `flow_dialog_test`, `inline_flows`.
 
 Не смешивать с внешним «агентом» в смысле спецификации A2A (agent card, удалённый endpoint): там допустимы термины спеки, но платформенная сущность — **flow**.
 

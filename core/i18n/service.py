@@ -8,9 +8,7 @@ import asyncio
 import json
 import re
 import threading
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
 
 from core.context import get_context
 from core.logging import get_logger
@@ -21,8 +19,15 @@ from core.models.i18n_models import (
     TranslationKey,
     TranslationStats,
 )
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
+HTML_TRANSLATION_CALL_PATTERN: re.Pattern[str] = re.compile(r'\bt\([\'"]([^\'"]+)[\'"]\)')
+JS_TRANSLATION_CALL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r'app\.i18n\.t\([\'"]([^\'"]+)[\'"]\)'),
+    re.compile(r'\.t\([\'"]([^\'"]+)[\'"]\)'),
+    re.compile(r'i18n\.t\([\'"]([^\'"]+)[\'"]\)'),
+)
 
 
 class TranslationManager:
@@ -31,15 +36,18 @@ class TranslationManager:
     Управляет загрузкой, генерацией и предоставлением переводов.
     """
 
-    _instance: Optional["TranslationManager"] = None
+    _instance: "TranslationManager | None" = None
+    config: I18nConfig
+    translations_dir: Path
+    _initialized: bool
 
-    def __new__(cls):
+    def __new__(cls) -> "TranslationManager":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         if self._initialized:
             return
 
@@ -79,101 +87,64 @@ class TranslationManager:
             # Если нет цикла событий, создаем новый
             asyncio.run(self._load_existing_translations())
 
-    async def _load_existing_translations(self):
+    async def _load_existing_translations(self) -> None:
         """Загружает существующие переводы при создании экземпляра"""
-        try:
-            await self._ensure_directories()
-            await self._load_translations()
-            logger.debug(
-                f"Загружено переводов: {sum(len(t) for t in self._translations_cache.values())} ключей"
-            )
-        except Exception as e:
-            logger.debug(f"Ошибка загрузки переводов: {e}")
+        await self._ensure_directories()
+        await self._load_translations()
+        logger.debug(
+            f"Загружено переводов: {sum(len(t) for t in self._translations_cache.values())} ключей"
+        )
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """Инициализация менеджера переводов"""
-        try:
-            logger.info("i18n.initializing")
+        logger.info("i18n.initializing")
 
-            # Создаем директории если их нет
-            await self._ensure_directories()
+        # Создаем директории если их нет
+        await self._ensure_directories()
 
-            # Загружаем существующие переводы
-            await self._load_translations()
+        # Загружаем существующие переводы
+        await self._load_translations()
 
-            # Если включена автогенерация - сканируем код
-            if self.config.auto_generate_on_startup:
-                await self._auto_generate_translations()
+        # Если включена автогенерация - сканируем код
+        if self.config.auto_generate_on_startup:
+            await self._auto_generate_translations()
 
-            logger.info(
-                "i18n.initialized",
-                languages=[lang.value for lang in Language],
-            )
+        logger.info(
+            "i18n.initialized",
+            languages=[lang.value for lang in Language],
+        )
 
-        except Exception as e:
-            logger.exception(
-                "i18n.initialize_failed",
-                **{"exception.type": type(e).__name__},
-            )
-            raise
-
-    async def _ensure_directories(self):
+    async def _ensure_directories(self) -> None:
         """Создает необходимые директории"""
         directories = [
             self.translations_dir / "translations",
             self.translations_dir / "keys",
             self.translations_dir / "generated",
+            *(self.translations_dir / "translations" / language.value for language in Language),
         ]
 
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
 
-    async def _load_translations(self):
+    async def _load_translations(self) -> None:
         """Загружает переводы из модульных файлов в кеш"""
         translations_path = self.translations_dir / "translations"
 
         for language in Language:
             lang_dir = translations_path / language.value
 
-            # Проверяем модульную структуру
             if lang_dir.exists() and lang_dir.is_dir():
-                try:
-                    translations = await self._load_modular_translations(lang_dir)
-                    self._translations_cache[language] = translations
-                    logger.debug(
-                        f"Загружено {len(translations)} переводов для языка {language.value} (модульная структура)"
-                    )
-                except Exception as e:
-                    logger.error(f"Ошибка загрузки модульных переводов для {language.value}: {e}")
-                    self._translations_cache[language] = {}
+                translations = await self._load_modular_translations(lang_dir)
+                self._translations_cache[language] = translations
+                logger.debug(
+                    f"Загружено {len(translations)} переводов для языка {language.value}"
+                )
             else:
-                # Резерв на старую монолитную структуру
-                old_file_path = translations_path / f"{language.value}.json"
-                if old_file_path.exists():
-                    try:
-                        with open(old_file_path, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-
-                        translations = {}
-                        self._extract_nested_translations(data, translations, prefix="")
-                        translations = {
-                            k: v for k, v in translations.items() if not k.startswith("meta.")
-                        }
-
-                        self._translations_cache[language] = translations
-                        logger.debug(
-                            f"Загружено {len(translations)} переводов для языка {language.value} (монолитная структура)"
-                        )
-                    except Exception as e:
-                        logger.error(f"Ошибка загрузки переводов для {language.value}: {e}")
-                        self._translations_cache[language] = {}
-                else:
-                    logger.warning(f"Переводы для {language.value} не найдены")
-                    self._translations_cache[language] = {}
+                raise FileNotFoundError(f"Translations directory not found: {lang_dir}")
 
     async def _load_modular_translations(self, lang_dir: Path) -> dict[str, str]:
         """Загружает переводы из модульной структуры"""
-        translations = {}
+        translations: dict[str, str] = {}
 
         # Загружаем модули верхнего уровня (*.json файлы в корне директории языка)
         for json_file in lang_dir.glob("*.json"):
@@ -184,7 +155,7 @@ class TranslationManager:
             module_name = json_file.stem
             try:
                 with open(json_file, "r", encoding="utf-8") as f:
-                    module_data = json.load(f)
+                    module_data = parse_json_object(f.read(), str(json_file))
 
                 # Добавляем переводы с префиксом модуля
                 self._extract_nested_translations(module_data, translations, prefix=module_name)
@@ -201,7 +172,7 @@ class TranslationManager:
                 model_name = json_file.stem
                 try:
                     with open(json_file, "r", encoding="utf-8") as f:
-                        model_data = json.load(f)
+                        model_data = parse_json_object(f.read(), str(json_file))
 
                     # Добавляем переводы с префиксом models.model_name
                     self._extract_nested_translations(
@@ -213,14 +184,18 @@ class TranslationManager:
         return translations
 
     def _extract_nested_translations(
-        self, data: dict[str, Any], result: dict[str, str], prefix: str = ""
+        self, data: JsonObject, result: dict[str, str], prefix: str = ""
     ) -> None:
         """Рекурсивно извлекает переводы из вложенной структуры"""
         for key, value in data.items():
             full_key = f"{prefix}.{key}" if prefix else key
 
             if isinstance(value, dict):
-                self._extract_nested_translations(value, result, full_key)
+                self._extract_nested_translations(
+                    require_json_object(value, full_key),
+                    result,
+                    full_key,
+                )
             else:
                 result[full_key] = str(value)
 
@@ -348,11 +323,8 @@ class TranslationManager:
                 content = f.read()
 
             # Ищем вызовы t('key') и t("key") - только как вызов функции
-            t_pattern = r'\bt\([\'"]([^\'"]+)[\'"]\)'
-            matches = re.findall(t_pattern, content)
-
-            for match in matches:
-                key = match.strip()
+            for match in HTML_TRANSLATION_CALL_PATTERN.finditer(content):
+                key = match.group(1).strip()
                 if key and key not in self._discovered_keys:
                     self._discovered_keys[key] = TranslationKey(
                         key=key,
@@ -386,17 +358,9 @@ class TranslationManager:
                 content = f.read()
 
             # Ищем различные паттерны вызовов
-            patterns = [
-                r'app\.i18n\.t\([\'"]([^\'"]+)[\'"]\)',  # app.i18n.t('key')
-                r'\.t\([\'"]([^\'"]+)[\'"]\)',  # .t('key')
-                r'i18n\.t\([\'"]([^\'"]+)[\'"]\)',  # i18n.t('key')
-            ]
-
-            for pattern in patterns:
-                matches = re.findall(pattern, content)
-
-                for match in matches:
-                    key = match.strip()
+            for pattern in JS_TRANSLATION_CALL_PATTERNS:
+                for match in pattern.finditer(content):
+                    key = match.group(1).strip()
                     if key and key not in self._discovered_keys:
                         self._discovered_keys[key] = TranslationKey(
                             key=key,
@@ -420,13 +384,9 @@ class TranslationManager:
 
         for language in Language:
             lang_dir = translations_path / language.value
-
-            # Определяем используется ли модульная структура
-            if lang_dir.exists() and lang_dir.is_dir():
-                await self._update_modular_translations(lang_dir, language)
-            else:
-                # Резерв на монолитную структуру
-                await self._update_monolithic_translations(translations_path, language)
+            if not lang_dir.exists() or not lang_dir.is_dir():
+                raise FileNotFoundError(f"Translations directory not found: {lang_dir}")
+            await self._update_modular_translations(lang_dir, language)
 
         # Перезагружаем кеш
         await self._load_translations()
@@ -478,12 +438,9 @@ class TranslationManager:
             # Загружаем существующий модуль
             if file_path.exists():
                 with open(file_path, "r", encoding="utf-8") as f:
-                    loaded_module = json.load(f)
-                if not isinstance(loaded_module, dict):
-                    raise ValueError(f"i18n module must be JSON object: {file_path}")
-                module_data: dict[str, Any] = loaded_module
+                    module_data = parse_json_object(f.read(), str(file_path))
             else:
-                module_data = {}
+                module_data: JsonObject = {}
 
             # Добавляем новые ключи
             updated = False
@@ -500,78 +457,10 @@ class TranslationManager:
                     path=str(file_path.relative_to(lang_dir.parent)),
                 )
 
-    async def _update_monolithic_translations(self, translations_path: Path, language: Language):
-        """Обновляет переводы в монолитной структуре (для обратной совместимости)"""
-        file_path = translations_path / f"{language.value}.json"
-
-        # Загружаем существующий файл или создаем новый
-        if file_path.exists():
-            with open(file_path, "r", encoding="utf-8") as f:
-                loaded = json.load(f)
-            if not isinstance(loaded, dict):
-                raise ValueError(f"i18n translations file must be JSON object: {file_path}")
-            data: dict[str, Any] = loaded
-        else:
-            data = {
-                "meta": {
-                    "language": language.value,
-                    "version": "1.0.0",
-                    "last_updated": datetime.now().isoformat(),
-                    "completeness": 0,
-                    "total_keys": 0,
-                    "translated_keys": 0,
-                }
-            }
-
-        # Добавляем новые ключи
-        updated = False
-        for key, translation_key in self._discovered_keys.items():
-            if not self._key_exists_in_data(key, data):
-                if language == Language.RU:
-                    default_value = translation_key.default_value
-                else:
-                    default_value = f"[TODO: {key}]"
-
-                self._set_nested_key(data, key, default_value)
-                updated = True
-
-        if updated:
-            # Обновляем метаданные
-            data["meta"]["last_updated"] = datetime.now().isoformat()
-
-            # Подсчитываем статистику
-            all_translations: dict[str, str] = {}
-            self._extract_nested_translations(data, all_translations)
-            all_translations = {
-                k: v for k, v in all_translations.items() if not k.startswith("meta.")
-            }
-
-            total_keys = len(all_translations)
-            translated_keys = sum(
-                1 for v in all_translations.values() if not str(v).startswith("[TODO:")
-            )
-
-            data["meta"]["total_keys"] = total_keys
-            data["meta"]["translated_keys"] = translated_keys
-            data["meta"]["completeness"] = (
-                (translated_keys / total_keys * 100) if total_keys > 0 else 0
-            )
-
-            # Сохраняем файл
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-
-            logger.info(
-                "i18n.translations_updated",
-                language=language.value,
-                translated=translated_keys,
-                total=total_keys,
-            )
-
-    def _key_exists_in_data(self, key: str, data: dict[str, Any]) -> bool:
+    def _key_exists_in_data(self, key: str, data: JsonObject) -> bool:
         """Проверяет существование ключа в данных"""
         keys = key.split(".")
-        current = data
+        current: JsonValue = data
 
         for k in keys:
             if isinstance(current, dict) and k in current:
@@ -581,16 +470,22 @@ class TranslationManager:
 
         return True
 
-    def _set_nested_key(self, data: dict[str, Any], key: str, value: str) -> None:
+    def _set_nested_key(self, data: JsonObject, key: str, value: str) -> None:
         """Устанавливает значение по вложенному ключу"""
         keys = key.split(".")
-        current = data
+        current: JsonObject = data
 
         # Проходим по всем частям ключа кроме последней
         for k in keys[:-1]:
-            if k not in current:
-                current[k] = {}
-            current = current[k]
+            child = current.get(k)
+            if child is None:
+                next_node: JsonObject = {}
+                current[k] = next_node
+                current = next_node
+            elif isinstance(child, dict):
+                current = require_json_object(child, f"{key}.{k}")
+            else:
+                raise ValueError(f"Cannot set nested i18n key {key}: {k} is not an object")
 
         # Устанавливаем значение
         current[keys[-1]] = value
@@ -620,7 +515,7 @@ class TranslationManager:
                 # Сохраняем в static директорию
                 static_js_file = frontend_static_path / f"{language.value}.js"
                 with open(static_js_file, "w", encoding="utf-8") as f:
-                    f.write(js_content)
+                    _ = f.write(js_content)
 
         logger.debug(f"Сгенерированы JS модули для {len(Language)} языков")
 
@@ -670,7 +565,7 @@ class TranslationManager:
 
     def get_stats(self) -> TranslationStats:
         """Возвращает статистику переводов"""
-        languages_stats = {}
+        languages_stats: dict[Language, TranslationFile] = {}
 
         for language in Language:
             translations = self._translations_cache.get(language, {})

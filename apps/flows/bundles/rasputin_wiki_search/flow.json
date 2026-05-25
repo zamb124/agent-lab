@@ -1,7 +1,7 @@
 {
-  "id": "rasputin_wiki_search",
+  "flow_id": "rasputin_wiki_search",
   "name": "Тест: поиск Wikipedia + markdown страницы (Распутин)",
-  "description": "Один ReAct-шаг: инструмент browser_duckduckgo_links находит HTTP(S) URL из выдачи DuckDuckGo; затем browser_page_markdown открывает выбранную страницу и возвращает готовый markdown (тот же путь, что BrowserSnapshotDescribe.page_markdown в simple_crawler). Сценарий по умолчанию — статья Википедии о Григории Распутине.",
+  "description": "Один ReAct-шаг: инструмент browser_duckduckgo_links находит HTTP(S) URL из выдачи DuckDuckGo; затем browser_page_markdown открывает выбранную страницу и возвращает готовый markdown. Сценарий по умолчанию — статья Википедии о Григории Распутине.",
   "tags": [
     "browser",
     "mcp",
@@ -31,8 +31,8 @@
   },
   "edges": [
     {
-      "from": "wiki_rasputin_agent",
-      "to": null
+      "from_node": "wiki_rasputin_agent",
+      "to_node": null
     }
   ],
   "variables": {}

@@ -129,7 +129,7 @@ class TestS3Integration:
             print(f"✅ Файл загружен в S3: {test_key}")
 
             # Проверяем существование
-            exists = await client.object_exists(test_key)
+            exists = await client.file_exists(test_key)
             assert exists
             print("✅ Файл существует в S3")
 
@@ -140,14 +140,13 @@ class TestS3Integration:
 
             # Получаем метаданные
             metadata = await client.get_object_metadata(test_key)
-            assert metadata is not None
-            assert metadata['content_length'] == len(test_data)
-            print(f"✅ Метаданные получены: {metadata['content_length']} bytes")
+            assert metadata.content_length == len(test_data)
+            print(f"✅ Метаданные получены: {metadata.content_length} bytes")
 
         finally:
             # Очищаем тестовый файл
             try:
-                delete_success = await client.delete_object(test_key)
+                delete_success = await client.delete_file(test_key)
                 if delete_success:
                     print("✅ Тестовый файл удален")
             except Exception:
@@ -178,7 +177,7 @@ class TestS3Integration:
             print(f"✅ Файл загружен с диска в S3: {test_key}")
 
             # Проверяем что файл существует
-            exists = await client.object_exists(test_key)
+            exists = await client.file_exists(test_key)
             assert exists
 
             # Скачиваем обратно на диск
@@ -194,7 +193,7 @@ class TestS3Integration:
 
         finally:
             # Очистка
-            await client.delete_object(test_key)
+            await client.delete_file(test_key)
             temp_path.unlink(missing_ok=True)
             if 'download_path' in locals():
                 download_path.unlink(missing_ok=True)
@@ -226,14 +225,14 @@ class TestS3Integration:
             print(f"✅ Получен список объектов: {len(objects)} файлов")
 
             # Проверяем что наши файлы в списке
-            found_keys = [obj['key'] for obj in objects]
+            found_keys = [obj.key for obj in objects]
             for test_key in test_files:
                 assert test_key in found_keys
 
         finally:
             # Очищаем тестовые файлы
             for key in test_files:
-                await client.delete_object(key)
+                await client.delete_file(key)
             await client.close()
 
     async def test_copy_object(self, minio_bucket):
@@ -257,8 +256,8 @@ class TestS3Integration:
             print(f"✅ Файл скопирован: {source_key} -> {dest_key}")
 
             # Проверяем что оба файла существуют
-            source_exists = await client.object_exists(source_key)
-            dest_exists = await client.object_exists(dest_key)
+            source_exists = await client.file_exists(source_key)
+            dest_exists = await client.file_exists(dest_key)
 
             assert source_exists
             assert dest_exists
@@ -272,8 +271,8 @@ class TestS3Integration:
 
         finally:
             # Очистка
-            await client.delete_object(source_key)
-            await client.delete_object(dest_key)
+            await client.delete_file(source_key)
+            await client.delete_file(dest_key)
 
     async def test_presigned_url_generation(self, minio_bucket):
         """Тест генерации подписанных URL"""
@@ -312,7 +311,7 @@ class TestS3Integration:
 
         finally:
             # Очистка
-            await client.delete_object(test_key)
+            await client.delete_file(test_key)
 
 
 @pytest.mark.asyncio
@@ -420,7 +419,7 @@ class TestS3WithDatabase:
             print("✅ 3. Статус обновлен в БД: UPLOADED")
 
             # 4. Проверяем что файл доступен
-            exists = await client.object_exists(s3_key)
+            exists = await client.file_exists(s3_key)
             assert exists
 
             # 5. Скачиваем и проверяем содержимое
@@ -430,9 +429,8 @@ class TestS3WithDatabase:
 
             # 6. Проверяем метаданные S3
             s3_metadata = await client.get_object_metadata(s3_key)
-            assert s3_metadata is not None
-            assert s3_metadata['content_length'] == len(test_data)
-            assert s3_metadata['metadata']['file_id'] == file_id
+            assert s3_metadata.content_length == len(test_data)
+            assert s3_metadata.metadata["file_id"] == file_id
             print("✅ 5. Метаданные S3 корректны")
 
             # 7. Генерируем публичный URL
@@ -444,7 +442,7 @@ class TestS3WithDatabase:
 
         finally:
             # 8. Очистка: удаляем из S3 и БД
-            await client.delete_object(s3_key)
+            await client.delete_file(s3_key)
             file_record.status = FileStatus.DELETED
             await storage.set(file_record.key, file_record.model_dump_json())
             print("✅ 7. Очистка завершена")
@@ -502,12 +500,12 @@ class TestS3WithDatabase:
             upload_success = await default_client.upload_bytes(test_data, test_key)
             assert upload_success, "S3 upload_bytes вернул False для default_client"
 
-            exists = await default_client.object_exists(test_key)
+            exists = await default_client.file_exists(test_key)
             assert exists
             print("✅ Дефолтный клиент работает корректно")
 
         finally:
-            await default_client.delete_object(test_key)
+            await default_client.delete_file(test_key)
 
 
 class TestS3Configuration:

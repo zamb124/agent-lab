@@ -95,7 +95,7 @@ async def dynamic_mcp_func(**kwargs):
 dynamic_mcp_func.__name__ = safe_tool_name
 dynamic_mcp_func.__qualname__ = safe_tool_name
 
-mcp_tool = tool(description=description, args_schema=pydantic_model)(dynamic_mcp_func)
+mcp_tool = tool(description=description, parameters_model=pydantic_model)(dynamic_mcp_func)
 ```
 
 **Запрещено:** `@tool(name="my_tool")` — LangChain `tool` не принимает `name`. Имя — через `__name__`/`__qualname__` **до** декоратора.

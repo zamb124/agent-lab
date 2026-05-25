@@ -91,10 +91,6 @@ external_flow = await container.flow_discovery.register_agent(
 
 Требования к внешнему endpoint (A2A): `GET /.well-known/agent-card.json`, `POST /tasks/send` (JSON-RPC 2.0).
 
-### A2A `message/stream`: `metadata.mock`
-
-В `params.metadata` для отладки передаётся **`mock`** — объект формата `MockConfig` (`enabled`, `llm`, `tools`, `nodes`, `flows`, см. `apps/flows/src/mock/config.py` и `resolve_mock_config` в `apps/flows/src/channels/base.py`). Ключ `mocks` бэкендом не используется. Сборка из UI редактора execution-panel — `apps/flows/ui/utils/build-mock-config.js`, отправка через `a2a.service` (`metadata.mock`).
-
 ## External API node
 
 ```json
@@ -104,11 +100,17 @@ external_flow = await container.flow_discovery.register_agent(
  "headers": {"Authorization": "Bearer @var:auth.token", "X-Trace-Id": "@state:trace_id"},
  "body_template": "{\"payload\": \"@state:content\"}",
  "input_mapping": {"item_id": "@state:order.id"},
- "args_schema": {"item_id": {"type": "string", "description": "Path placeholder {item_id} when invoked as LLM tool"}}
+ "parameters_schema": {
+   "type": "object",
+   "properties": {
+     "item_id": {"type": "string", "description": "Path placeholder {item_id} when invoked as LLM tool"}
+   },
+   "required": ["item_id"]
+ }
 }
 ```
 
-Входы ноды: **input_mapping** (как у остальных нод); значения из резолва подставляются в `{ключ}` URL и мержатся поверх резолва **body_template**; строки заголовков и тела поддерживают **@state:** / **@var:**. Отдельной таблицы query/path/header-параметров нет — при необходимости query в строке URL. Для тула без графового маппинга — **args_schema** в конфиге (как у NodeAsToolWrapper).
+Входы ноды: **input_mapping** (как у остальных нод); значения из резолва подставляются в `{ключ}` URL и мержатся поверх резолва **body_template**; строки заголовков и тела поддерживают **@state:** / **@var:**. Отдельной таблицы query/path/header-параметров нет — при необходимости query в строке URL. Для тула без графового маппинга — **parameters_schema** в конфиге (как у NodeAsToolWrapper).
 
 `@var:` поддерживает вложенные пути: `@var:api.host` → `variables["api"]["host"]`; `@var:auth.tokens.access` → `variables["auth"]["tokens"]["access"]`.
 

@@ -158,8 +158,7 @@ class TestBillingAPI:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["success"] is True
-        assert "payment_id" in data
+        assert "transaction_id" in data
         assert data["amount"] == 1000.0
         assert "payment_url" in data
 
@@ -473,4 +472,3 @@ class TestBillingAPI:
         assert data2["balance"] == 5000.0
         assert data1["monthly_budget"] == 1000.0
         assert data2["monthly_budget"] == 10000.0
-

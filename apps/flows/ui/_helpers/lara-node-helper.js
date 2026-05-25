@@ -56,7 +56,7 @@ function _codeNodeSummary(nodeId, node) {
         type: asString(node.type),
         language: asString(node.language),
         code: asString(node.code),
-        args_schema: isPlainObject(node.args_schema) ? node.args_schema : {},
+        parameters_schema: isPlainObject(node.parameters_schema) ? node.parameters_schema : null,
         input_mapping: isPlainObject(node.input_mapping) ? node.input_mapping : {},
         output_mapping: isPlainObject(node.output_mapping) ? node.output_mapping : {},
     };

@@ -63,8 +63,8 @@ export class FlowsCodeResourceEditor extends PlatformElement {
             this._emitConfig(patch);
             return;
         }
-        if (d.type === 'args_schema') {
-            throw new Error('flows-code-resource-editor: args_schema not supported for code resource');
+        if (d.type === 'parameters_schema') {
+            throw new Error('flows-code-resource-editor: parameters_schema not supported for code resource');
         }
         throw new Error('flows-code-resource-editor: unknown code-workbench-change type');
     }

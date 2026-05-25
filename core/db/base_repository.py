@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
+from typing import ClassVar, Generic, TypeVar
 
 from pydantic import BaseModel
 
@@ -40,9 +40,9 @@ class BaseRepository(ABC, Generic[T]):
     - Иначе → HTTP запросы к сервису-владельцу
     """
 
-    is_global: bool = False
-    owner_service: str = "core"  # Сервис-владелец репозитория
-    api_prefix: str = ""  # Префикс для HTTP API (без двоеточия)
+    is_global: ClassVar[bool] = False
+    owner_service: ClassVar[str] = "core"  # Сервис-владелец репозитория
+    api_prefix: ClassVar[str] = ""  # Префикс для HTTP API (без двоеточия)
 
     @classmethod
     def get_service_url(cls) -> str:
@@ -60,8 +60,8 @@ class BaseRepository(ABC, Generic[T]):
             storage: Экземпляр Storage для работы с БД
             model_class: Класс Pydantic модели
         """
-        self._storage = storage
-        self.model_class = model_class
+        self._storage: Storage = storage
+        self.model_class: type[T] = model_class
 
     def _get_key(self, entity_id: str, /) -> str:
         """
@@ -140,9 +140,9 @@ class BaseRepository(ABC, Generic[T]):
 
         context = get_context()
         if not context or not context.active_company:
+            repository_name = self.__class__.__name__
             raise ValueError(
-                f"Репозиторий {self.__class__.__name__} требует активную компанию в контексте "
-                f"(is_global=False)"
+                f"Репозиторий {repository_name} требует активную компанию в контексте (is_global=False)"
             )
 
         # Используем subdomain если есть, иначе company_id
@@ -255,7 +255,7 @@ class BaseRepository(ABC, Generic[T]):
         base_prefix = self._get_prefix()
         final_prefix = self._build_final_key(base_prefix)
         table_name = self._get_table_name()
-        return await self._storage._count_by_prefix_and_table(final_prefix, table_name)
+        return await self._storage.count_by_prefix_and_table(final_prefix, table_name)
 
     async def get_many(self, entity_ids: list[str]) -> dict[str, T]:
         """

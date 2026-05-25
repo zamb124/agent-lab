@@ -8,12 +8,6 @@ from typing import Generic, TypeVar
 from pydantic import BaseModel, Field
 
 
-class IDModel(BaseModel):
-    """Базовая модель с идентификатором."""
-
-    id: str = Field(description="Уникальный идентификатор ресурса.")
-
-
 class TimestampedModel(BaseModel):
     """Базовая модель с временными метками."""
 

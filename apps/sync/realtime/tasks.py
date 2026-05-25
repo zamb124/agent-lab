@@ -9,29 +9,28 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Protocol, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
-import redis.asyncio as redis_async
-from google.protobuf.json_format import MessageToDict
+from livekit.protocol.egress import EgressInfo
+from redis.asyncio.client import Redis
 
 import core.tracing.attributes as trace_attributes
-from apps.sync.container import get_sync_container
+from apps.sync.container import SyncContainer, get_sync_container
 from apps.sync.db.models import SyncCallRecording, SyncFile
 from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.meetings import CallRecordingRead, RecordingStatus
 from apps.sync.models.messages import (
-    SYNC_MESSAGE_TEXT_MAX_CHARS,
     CallTranscriptContent,
     CallTranscriptEntry,
     MessageContentModel,
     MessageContentType,
     MessageCreate,
+    MessageRead,
     TextPlainContent,
 )
 from apps.sync.realtime.broker import broker
@@ -63,9 +62,25 @@ from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models.identity_models import User
 from core.tracing.operation_span import traced_operation
+from core.types import parse_json_object
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
+
+
+class _TranscribeAudioRedis(Protocol):
+    def set(
+        self,
+        name: str,
+        value: str,
+        *,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> Awaitable[bool | None]: ...
+
+    def eval(self, script: str, numkeys: int, *keys_and_args: str) -> Awaitable[str | int | None]: ...
+
+    def aclose(self) -> Awaitable[None]: ...
 
 
 def _recording_status(value: str) -> RecordingStatus:
@@ -94,9 +109,11 @@ end
 def _sync_call_aggregate_empty_body() -> str:
     """Текст сообщения в ленте, если нечего агрегировать (строка из core/i18n/translations/ru/sync.json)."""
     path = Path(__file__).resolve().parents[3] / "core" / "i18n" / "translations" / "ru" / "sync.json"
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = parse_json_object(path.read_text(encoding="utf-8"), "i18n ru/sync.json")
     key = "call_aggregate_empty_body"
-    text = data.get(key)
+    if key not in data:
+        raise ValueError(f"i18n ru/sync.json: обязательный корневой ключ {key!r}.")
+    text = data[key]
     if not isinstance(text, str) or text.strip() == "":
         raise ValueError(f"i18n ru/sync.json: обязательный корневой ключ {key!r}.")
     return text.strip()
@@ -111,61 +128,32 @@ def _build_interservice_auth_headers(actor_user_id: str, company_id: str) -> dic
     }
 
 
-def _normalize_http_base_url(url: str) -> str:
-    if not isinstance(url, str) or url == "":
-        raise ValueError("URL источника записи обязателен.")
-    if url.startswith("ws://"):
-        return "http://" + url[len("ws://") :]
-    if url.startswith("wss://"):
-        return "https://" + url[len("wss://") :]
-    if url.startswith("http://") or url.startswith("https://"):
-        return url
-    raise ValueError(f"Неподдерживаемая схема URL источника записи: {url}")
-
-
-def _egress_item_failure_match_text(item: Any) -> str:
+def _egress_item_failure_match_text(item: EgressInfo) -> str:
     """Текст для поиска известных ошибок LiveKit (сообщение может быть в error, details или вложенных полях)."""
     parts: list[str] = []
-    for attr in ("error", "details"):
-        v = getattr(item, attr, None)
-        if v:
-            s = str(v).strip()
-            if s:
-                parts.append(s)
-    code = getattr(item, "error_code", None)
-    if code is not None:
-        parts.append(str(code))
-    try:
-        blob = json.dumps(
-            MessageToDict(item, preserving_proto_field_name=True),
-            ensure_ascii=False,
-        )
-        parts.append(blob)
-    except Exception:
-        pass
+    for value in (item.error, item.details):
+        text = value.strip()
+        if text != "":
+            parts.append(text)
+    if item.error_code != 0:
+        parts.append(str(item.error_code))
+    message_text = str(item).strip()
+    if message_text != "":
+        parts.append(message_text)
     return " ".join(parts).lower()
 
 
-def _extract_egress_file_location(egress_info: Any) -> str | None:
-    file_results = getattr(egress_info, "file_results", None)
-    if file_results is not None:
-        for file_info in file_results:
-            location = getattr(file_info, "location", None)
-            if isinstance(location, str) and location != "":
-                return location
-    single_file = getattr(egress_info, "file", None)
-    if single_file is not None:
-        location = getattr(single_file, "location", None)
-        if isinstance(location, str) and location != "":
-            return location
+def _extract_egress_file_location(egress_info: EgressInfo) -> str | None:
+    for file_info in egress_info.file_results:
+        if file_info.location != "":
+            return file_info.location
+    if egress_info.file.location != "":
+        return egress_info.file.location
     return None
 
 
-def _egress_sort_key(egress_info: Any) -> tuple[int, int, int]:
-    updated_at = int(getattr(egress_info, "updated_at", 0) or 0)
-    ended_at = int(getattr(egress_info, "ended_at", 0) or 0)
-    started_at = int(getattr(egress_info, "started_at", 0) or 0)
-    return updated_at, ended_at, started_at
+def _egress_sort_key(egress_info: EgressInfo) -> tuple[int, int, int]:
+    return egress_info.updated_at, egress_info.ended_at, egress_info.started_at
 
 
 def _normalize_storage_url_for_worker(*, storage_url: str, testing: bool) -> str:
@@ -226,20 +214,23 @@ async def _resolve_livekit_egress_result(
             sorted_items = sorted(egress_items, key=_egress_sort_key, reverse=True)
             observed_items: list[str] = []
             for item in sorted_items:
-                egress_id = getattr(item, "egress_id", None)
+                egress_id = item.egress_id
                 if expected_egress_id is not None and egress_id != expected_egress_id:
                     continue
-                status = getattr(item, "status", None)
+                status = item.status
                 location = _extract_egress_file_location(item)
-                ended_at = int(getattr(item, "ended_at", 0) or 0)
-                error = getattr(item, "error", None)
+                ended_at = item.ended_at
+                error = item.error
                 observed_items.append(
-                    "id="
-                    f"{egress_id or 'unknown'},"
-                    f"status={status},"
-                    f"ended_at={ended_at},"
-                    f"location={'yes' if location else 'no'},"
-                    f"error={error}"
+                    ",".join(
+                        (
+                            f"id={egress_id or 'unknown'}",
+                            f"status={status}",
+                            f"ended_at={ended_at}",
+                            f"location={'yes' if location else 'no'}",
+                            f"error={error}",
+                        )
+                    )
                 )
                 logger.info(
                     "resolve_egress_result matched item: room=%s egress_id=%s status=%s ended_at=%s location=%s error=%s",
@@ -251,7 +242,7 @@ async def _resolve_livekit_egress_result(
                     error,
                 )
                 if location is not None:
-                    if not isinstance(egress_id, str) or egress_id == "":
+                    if egress_id == "":
                         raise ValueError(
                             f"LiveKit вернул egress без egress_id для room={room_name}."
                         )
@@ -271,11 +262,11 @@ async def _resolve_livekit_egress_result(
                     if "start signal not received" in error_str:
                         raise RuntimeError(
                             "Запись не получила медиа с комнаты: нет опубликованного видео или аудио для композита. "
-                            "Включите камеру или микрофон до старта записи либо дождитесь публикации потока участниками."
+                            + "Включите камеру или микрофон до старта записи либо дождитесь публикации потока участниками."
                         )
                     raise RuntimeError(
                         "LiveKit egress завершился без location. "
-                        f"room_name={room_name}, egress_id={egress_id}, status={status}, error={error}."
+                        + f"room_name={room_name}, egress_id={egress_id}, status={status}, error={error}."
                     )
             last_observed = "; ".join(observed_items) if observed_items else "none"
 
@@ -286,8 +277,8 @@ async def _resolve_livekit_egress_result(
 
     raise RuntimeError(
         "LiveKit egress не вернул готовый файл записи. "
-        f"room_name={room_name}, observed={last_observed}. "
-        "Проверьте egress service и output конфигурацию."
+        + f"room_name={room_name}, observed={last_observed}. "
+        + "Проверьте egress service и output конфигурацию."
     )
 
 
@@ -310,7 +301,7 @@ def _recording_read_from_entity(recording: SyncCallRecording) -> CallRecordingRe
     )
 
 
-async def _load_message_read(container: Any, *, message_id: str, company_id: str) -> Any:
+async def _load_message_read(container: SyncContainer, *, message_id: str, company_id: str) -> MessageRead:
     message_entity = await container.message_repository.get_by_id_for_company(message_id, company_id)
     if message_entity is None:
         raise ValueError(f"Сообщение {message_id} не найдено.")
@@ -426,37 +417,6 @@ def _extract_video_info(contents: list[MessageContentModel]) -> VideoAttachmentC
         return block.data
     raise ValueError("Сообщение не содержит file/video.")
 
-
-
-
-def _utc_iso_z(dt: datetime) -> str:
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    return dt.astimezone(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _split_text_plain_chunks(full_text: str) -> list[str]:
-    if full_text == "":
-        return []
-    lines = full_text.split("\n")
-    chunks: list[str] = []
-    buf = ""
-    for line in lines:
-        candidate = line if buf == "" else f"{buf}\n{line}"
-        if len(candidate) > SYNC_MESSAGE_TEXT_MAX_CHARS:
-            if buf != "":
-                chunks.append(buf)
-                buf = line
-            while len(buf) > SYNC_MESSAGE_TEXT_MAX_CHARS:
-                chunks.append(buf[:SYNC_MESSAGE_TEXT_MAX_CHARS])
-                buf = buf[SYNC_MESSAGE_TEXT_MAX_CHARS:]
-            continue
-        buf = candidate
-    if buf != "":
-        chunks.append(buf)
-    return chunks
-
-
 def _make_actor_user(actor_user_id: str, company_id: str) -> User:
     """Создать минимальный User-объект для in-process вызова `op_messages_send`
     из TaskIQ-таска (где нет HTTP/WS-контекста).
@@ -503,15 +463,12 @@ async def _register_platform_file_record_for_call_recording(
     s3_endpoint_url = s3_client.endpoint_url
     await s3_client.close()
 
-    content_length = meta.get("content_length")
-    if not isinstance(content_length, int) or content_length < 0:
-        raise ValueError(f"S3 head_object для записи встречи: неверный ContentLength: {content_length!r}")
-    raw_ct = meta.get("content_type")
-    content_type = (
-        raw_ct.strip()
-        if isinstance(raw_ct, str) and raw_ct.strip() != ""
-        else "video/mp4"
-    )
+    content_length = meta.content_length
+    if content_length < 0:
+        raise ValueError(f"S3 head_object для записи встречи: неверный ContentLength: {content_length}")
+    content_type = meta.content_type.strip()
+    if content_type == "":
+        raise ValueError("S3 head_object для записи встречи: пустой ContentType")
 
     api_prefix = f"/{settings.server.name}/api/v1"
     download_prefix = f"{api_prefix.rstrip('/')}/files/download"
@@ -532,7 +489,7 @@ async def _register_platform_file_record_for_call_recording(
         download_url=f"{download_prefix}/{raw_file_id}",
     )
     container = get_sync_container()
-    await container.file_repository.set(file_record)
+    _ = await container.file_repository.set(file_record)
     return content_length
 
 
@@ -584,7 +541,7 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
             finalize_span.set_attribute(trace_attributes.ATTR_LIVEKIT_EGRESS_ID, provider_job_id)
             raw_storage_url = _normalize_storage_url_for_worker(
                 storage_url=raw_storage_url,
-                testing=bool(getattr(settings, "testing", False)),
+                testing=settings.testing,
             )
             logger.info(
                 "sync_finalize_recording_task egress resolved: recording_id=%s egress_id=%s raw_storage_url=%s",
@@ -616,14 +573,14 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
             )
             existing_raw = await container.sync_file_repository.get(raw_file_id)
             if existing_raw is None:
-                await container.sync_file_repository.create(raw_file)
+                _ = await container.sync_file_repository.create(raw_file)
             else:
                 existing_raw.original_name = raw_original_name
                 existing_raw.content_type = "video/mp4"
                 existing_raw.file_size = recording_file_size
                 existing_raw.storage_url = raw_storage_url
                 existing_raw.checksum = None
-                await container.sync_file_repository.update(existing_raw)
+                _ = await container.sync_file_repository.update(existing_raw)
 
             await container.call_recording_repository.mark_status(
                 recording.recording_id,
@@ -655,7 +612,7 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                 call_id=recording.call_id,
             )
             send_payload = MessagesSendPayload(channel_id=recording.channel_id, body=video_body)
-            await op_messages_send(
+            _ = await op_messages_send(
                 send_payload,
                 user=_make_actor_user(recording.started_by_user_id, company_id),
                 container=container,
@@ -736,7 +693,7 @@ async def transcribe_audio_message_core(
 
     settings = get_settings()
     redis_url = settings.database.redis_url
-    if redis_url is None or redis_url.strip() == "":
+    if redis_url.strip() == "":
         raise ValueError("database.redis_url обязателен для sync_transcribe_audio_message_task.")
 
     timeout_seconds = settings.media_transcriber.batch_download_timeout_s
@@ -744,7 +701,7 @@ async def transcribe_audio_message_core(
         raise ValueError("media_transcriber.batch_download_timeout_s должен быть больше 0.")
 
     sync_base_url = settings.server.get_service_url("sync")
-    if not isinstance(sync_base_url, str) or sync_base_url == "":
+    if sync_base_url == "":
         raise ValueError("URL sync сервиса не задан.")
     file_download_url = f"{sync_base_url.rstrip('/')}/sync/api/v1/files/download/{audio_info.file_id}"
     auth_headers = _build_interservice_auth_headers(
@@ -752,7 +709,8 @@ async def transcribe_audio_message_core(
         company_id=company_id,
     )
 
-    r = redis_async.from_url(redis_url)
+    redis_from_url = cast(Callable[[str], _TranscribeAudioRedis], Redis.from_url)
+    r = redis_from_url(redis_url)
     lock_key = f"sync:transcribe_audio:{company_id}:{message_id}"
     token = uuid4().hex
     lock_ttl = settings.transcribe_audio_redis_lock_ttl_seconds
@@ -780,7 +738,7 @@ async def transcribe_audio_message_core(
             ) as stt_span:
                 async with get_httpx_client(timeout=timeout_seconds) as client:
                     response = await client.get(file_download_url, headers=auth_headers)
-                response.raise_for_status()
+                _ = response.raise_for_status()
                 if not response.content:
                     raise ValueError("Файл аудиосообщения пустой.")
                 audio_len = len(response.content)
@@ -791,7 +749,7 @@ async def transcribe_audio_message_core(
                     company_id=company_id,
                     audio_bytes=response.content,
                     file_name=audio_info.original_name,
-                    mime_type=audio_info.content_type,
+                    content_type=audio_info.content_type,
                     language=settings.voice.stt.default_language,
                 )
                 stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, used_provider)
@@ -864,8 +822,7 @@ async def transcribe_audio_message_core(
                 str(exc),
             )
     finally:
-        redis_eval = cast(Callable[..., Awaitable[Any]], r.eval)
-        await redis_eval(_TRANSCRIBE_AUDIO_LOCK_RELEASE_LUA, 1, lock_key, token)
+        _ = await r.eval(_TRANSCRIBE_AUDIO_LOCK_RELEASE_LUA, 1, lock_key, token)
         await r.aclose()
 
 
@@ -918,7 +875,7 @@ async def transcribe_video_message_core(
         raise ValueError("media_transcriber.batch_download_timeout_s должен быть больше 0.")
 
     sync_base_url = settings.server.get_service_url("sync")
-    if not isinstance(sync_base_url, str) or sync_base_url == "":
+    if sync_base_url == "":
         raise ValueError("URL sync сервиса не задан.")
     file_download_url = f"{sync_base_url.rstrip('/')}/sync/api/v1/files/download/{video_info.file_id}"
     auth_headers = _build_interservice_auth_headers(
@@ -941,12 +898,13 @@ async def transcribe_video_message_core(
         ) as video_stt_span:
             async with get_httpx_client(timeout=timeout_seconds) as client:
                 response = await client.get(file_download_url, headers=auth_headers)
-            response.raise_for_status()
+            _ = response.raise_for_status()
             if not response.content:
                 raise ValueError("Файл видеосообщения пустой.")
             video_stt_span.set_attribute(trace_attributes.ATTR_STT_AUDIO_BYTES, len(response.content))
 
-            audio_bytes, audio_name = extract_audio_from_video(
+            audio_bytes, audio_name = await asyncio.to_thread(
+                extract_audio_from_video,
                 video_bytes=response.content,
                 base_name=video_info.original_name,
             )
@@ -956,7 +914,7 @@ async def transcribe_video_message_core(
                 company_id=company_id,
                 audio_bytes=audio_bytes,
                 file_name=audio_name,
-                mime_type="audio/mpeg",
+                content_type="audio/mpeg",
                 language=settings.voice.stt.default_language,
             )
             video_stt_span.set_attribute(trace_attributes.ATTR_STT_PROVIDER, used_provider)
@@ -1183,7 +1141,7 @@ async def sync_aggregate_call_transcript_task(
             call_id=call_id,
         )
         send_payload = MessagesSendPayload(channel_id=channel_id, body=agg_body)
-        await op_messages_send(
+        _ = await op_messages_send(
             send_payload,
             user=_make_actor_user(actor_user_id, company_id),
             container=container,
@@ -1214,8 +1172,6 @@ async def sync_speech_to_chat_poll_task(
         await asyncio.sleep(_speech_to_chat_poll_sleep_seconds(is_continuation=is_continuation))
     container = get_sync_container()
     call_row = await container.call_repository.get_call(call_id, company_id)
-    if call_row is None:
-        raise ValueError(f"Звонок {call_id} не найден для speech_to_chat poll.")
     poll_user_id = call_row.created_by_user_id
 
     async with traced_operation(
@@ -1238,7 +1194,7 @@ async def sync_speech_to_chat_poll_task(
             if outcome.next_delay == "lock_busy"
             else None
         )
-        await sync_speech_to_chat_poll_task.kiq(
+        _ = await sync_speech_to_chat_poll_task.kiq(
             call_id=call_id,
             company_id=company_id,
             is_continuation=True,

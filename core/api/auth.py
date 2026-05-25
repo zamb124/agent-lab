@@ -5,8 +5,10 @@ API эндпоинты для авторизации.
 Контейнер получается через request.app.state.container.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timezone
-from typing import Annotated, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Annotated
 from typing import cast as type_cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -15,6 +17,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
 
+from core.app_state import PlatformAppState
 from core.config import get_settings
 from core.identity import AuthService
 from core.logging import get_logger
@@ -26,34 +29,8 @@ from core.utils.tokens import TokenData, TokenService, get_token_service
 logger = get_logger(__name__)
 router = APIRouter(tags=["auth"])
 
-
-class _AuthContainer(Protocol):
-    @property
-    def auth_service(self) -> AuthService: ...
-
-
-class _GoogleCalendarOAuthService(Protocol):
-    async def complete_google_oauth(self, *, state: str, code: str) -> str: ...
-
-
-class _OAuthCallbackContainer(_AuthContainer, Protocol):
-    @property
-    def calendar_service(self) -> _GoogleCalendarOAuthService: ...
-
-
-@runtime_checkable
-class _AuthAppState(Protocol):
-    container: _AuthContainer
-
-
-@runtime_checkable
-class _OAuthCallbackAppState(Protocol):
-    container: _OAuthCallbackContainer
-
-
-@runtime_checkable
-class _AuthRequestState(Protocol):
-    token_data: TokenData | None
+if TYPE_CHECKING:
+    from core.container import BaseContainer
 
 
 class UserUpdate(BaseModel):
@@ -89,24 +66,28 @@ def get_auth_service(request: Request) -> AuthService:
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
-def _auth_container(request: Request) -> _AuthContainer:
+def _platform_app_state(request: Request) -> PlatformAppState:
     app = type_cast(FastAPI, request.app)
-    if not isinstance(app.state, _AuthAppState):
-        raise RuntimeError("Auth container is not configured")
-    return app.state.container
+    if not hasattr(app.state, "container") or not hasattr(app.state, "settings"):
+        raise RuntimeError("Platform app state is not configured")
+    return type_cast(PlatformAppState, type_cast(object, app.state))
 
 
-def _oauth_callback_container(request: Request) -> _OAuthCallbackContainer:
-    app = type_cast(FastAPI, request.app)
-    if not isinstance(app.state, _OAuthCallbackAppState):
-        raise RuntimeError("OAuth callback container is not configured")
-    return app.state.container
+def _auth_container(request: Request) -> BaseContainer:
+    return _platform_app_state(request).container
+
+
+def _oauth_callback_container(request: Request) -> BaseContainer:
+    return _platform_app_state(request).container
 
 
 def _request_token_data(request: Request) -> TokenData | None:
-    if not isinstance(request.state, _AuthRequestState):
+    token_data = getattr(request.state, "token_data", None)
+    if token_data is None:
+        return None
+    if not isinstance(token_data, TokenData):
         raise RuntimeError("AuthMiddleware did not populate request.state.token_data")
-    return request.state.token_data
+    return token_data
 
 
 def _require_token_data(request: Request) -> TokenData:
@@ -522,7 +503,7 @@ async def get_current_user(request: Request, auth_service: AuthServiceDep):
         "avatar_url": user.avatar_url,
         "bio": user.bio,
         "ui_preferences": user.ui_preferences,
-        "attrs": user.attrs,
+        "attrs": user.attributes,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
@@ -549,7 +530,7 @@ async def switch_company(
 
     company_roles = user.companies[payload.company_id]
     token_service = get_token_service()
-    new_token = token_service.create_token(
+    issued_token = token_service.create_token(
         user_id=user.user_id,
         company_id=payload.company_id,
         roles=company_roles,
@@ -561,7 +542,7 @@ async def switch_company(
     response = JSONResponse(content={"success": True, "company_id": payload.company_id})
     response.set_cookie(
         key="auth_token",
-        value=new_token,
+        value=issued_token,
         domain=get_cookie_domain(request.headers.get("host", "")),
         httponly=True,
         secure=settings.server.env == "production",
@@ -639,10 +620,10 @@ async def get_service_attrs(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    service_attrs = user.attrs.get(service)
+    service_attrs = user.attributes.get(service)
     if service_attrs is None:
         return {}
-    return require_json_object(service_attrs, f"user.attrs[{service!r}]")
+    return require_json_object(service_attrs, f"user.attributes[{service!r}]")
 
 
 @router.put("/me/attrs/{service}")
@@ -663,17 +644,17 @@ async def update_service_attrs(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    existing_attrs = user.attrs.get(service)
+    existing_attrs = user.attributes.get(service)
     if existing_attrs is None:
         service_attrs: JsonObject = {}
     else:
-        service_attrs = require_json_object(existing_attrs, f"user.attrs[{service!r}]")
+        service_attrs = require_json_object(existing_attrs, f"user.attributes[{service!r}]")
 
-    user.attrs[service] = {**service_attrs, **attrs}
+    user.attributes[service] = {**service_attrs, **attrs}
     user.updated_at = datetime.now(timezone.utc)
     _ = await auth_service.save_user(user)
 
-    return {"success": True, "service": service, "attrs": user.attrs[service]}
+    return {"success": True, "service": service, "attrs": user.attributes[service]}
 
 
 @router.get("/grafana-check")

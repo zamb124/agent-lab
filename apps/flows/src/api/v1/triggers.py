@@ -8,11 +8,11 @@ import secrets
 from typing import Annotated, ClassVar
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, ValidationError
 
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models import TriggerConfig, TriggerStatus, TriggerType
+from apps.flows.src.models import TelegramUpdate, TriggerConfig, TriggerStatus, TriggerType
 from apps.flows.src.models.channel_config import (
     OutputAction,
     default_output_actions_for_trigger,
@@ -94,14 +94,8 @@ async def _resolve_company_from_flow_storage_identifier(
         if company is not None:
             return company
 
-    logger.warning(
-        "Flow storage company identifier has no persisted Company; using minimal context",
-        company_identifier=company_identifier,
-    )
-    return Company(
-        company_id=company_identifier,
-        subdomain=company_identifier,
-        name=company_identifier,
+    raise RuntimeError(
+        f"Flow storage company identifier has no persisted Company: {company_identifier!r}"
     )
 
 router = APIRouter(tags=["triggers"])
@@ -639,24 +633,27 @@ async def telegram_webhook(
         logger.warning("Telegram webhook: invalid secret token: %s", trigger_id)
         raise HTTPException(status_code=403, detail="Invalid secret token")
 
-    # Парсим Update
     try:
-        payload = parse_json_object(await request.body(), "Telegram webhook payload")
-    except ValueError as e:
+        update = TelegramUpdate.model_validate_json(await request.body())
+    except ValidationError as e:
         logger.error(f"Telegram webhook: failed to parse JSON: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON") from e
+    payload = update.to_payload()
 
     logger.info(
         "Telegram webhook received: flow_id=%s, trigger=%s, update_id=%s",
         flow_id,
         trigger_id,
-        payload.get("update_id"),
+        update.update_id,
     )
 
     # Обрабатываем
     try:
         result = await telegram_handler.handle(flow_id, trigger_id, payload)
-        return {"status": "ok", "task_id": result.get("task_id", "")}
+        task_id = result["task_id"]
+        if not isinstance(task_id, str):
+            raise RuntimeError("Telegram trigger result.task_id must be a string")
+        return {"status": "ok", "task_id": task_id}
     except TriggerValidationError as e:
         logger.warning(f"Telegram webhook validation error: {e}")
         return {"status": "skipped", "reason": str(e)}

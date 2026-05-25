@@ -6,6 +6,7 @@ import pytest
 
 from core.billing.service import BillingService
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
+from core.models.billing_models import DEFAULT_TARIFF_PRICES
 from core.models.identity_models import Company
 
 
@@ -23,6 +24,7 @@ def _make_billing(
         frontend_container.company_repository,
         frontend_container.user_repository,
         frontend_container.usage_repository,
+        tariff_prices=DEFAULT_TARIFF_PRICES,
         resource_base_prices=_minimal_base_prices(),
         shared_storage=None,
         balance_enforcement_enabled=enforcement,

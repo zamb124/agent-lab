@@ -10,8 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.runtime_helpers.state_utils import find_file, normalize_file_lookup_name
 from apps.flows.src.tools.decorator import tool
-from core.files.docx_template import DocxTemplater
+from core.files.docx_template import DocxTemplateError, DocxTemplater
 from core.files.models import FileResponse
+from core.files.writer import FileWriteError
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
@@ -43,25 +44,6 @@ _FILL_DOCX_DESCRIPTION = """
 Успех: success=true, file_id, url, original_name, content_type, file_size, checksum (если есть), is_public.
 Ошибка: success=false, error (текст), при сбое шаблона также code из платформы.
 """.strip()
-
-
-def _fill_docx_mock(args: JsonDict, state: ExecutionState | None = None) -> JsonDict:
-    _ = state
-    output_original_name = args["output_original_name"]
-    if not isinstance(output_original_name, str) or not output_original_name.strip():
-        raise ValueError("fill_docx_template.output_original_name must be a non-empty string")
-    return {
-        "success": True,
-        "file_id": "file_mockdocx01",
-        "original_name": output_original_name,
-        "content_type": (
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ),
-        "file_size": 100,
-        "url": "/flows/api/v1/files/download/file_mockdocx01",
-        "checksum": None,
-        "is_public": True,
-    }
 
 
 class FillDocxTemplateArgs(BaseModel):
@@ -109,8 +91,7 @@ class FillDocxTemplateArgs(BaseModel):
     name="fill_docx_template",
     description=_FILL_DOCX_DESCRIPTION,
     tags=["files", "docx", "template"],
-    mock_response=_fill_docx_mock,
-    args_schema=FillDocxTemplateArgs,
+    parameters_model=FillDocxTemplateArgs,
 )
 async def fill_docx_template(
     variables: JsonObject,
@@ -171,18 +152,15 @@ async def fill_docx_template(
             output_original_name=output_original_name,
             strict=strict,
         )
-    except Exception as exc:
-        exc_type_name = getattr(type(exc), "__name__", "")
-        if exc_type_name == "FileWriteError":
-            return {"success": False, "error": str(exc)}
-        if exc_type_name.startswith("DocxTemplate") and exc_type_name.endswith("Error"):
-            return {
-                "success": False,
-                "error": getattr(exc, "message", str(exc)),
-                "code": getattr(exc, "code", "DOCX_TEMPLATE_ERROR"),
-                "payload": getattr(exc, "payload", None) or {},
-            }
-        raise
+    except FileWriteError as exc:
+        return {"success": False, "error": str(exc)}
+    except DocxTemplateError as exc:
+        return {
+            "success": False,
+            "error": exc.message,
+            "code": exc.code,
+            "payload": exc.payload,
+        }
 
     response = FileResponse.from_record(record)
     return {

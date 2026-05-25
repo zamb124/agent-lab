@@ -42,8 +42,13 @@ class BaseTTSStreamer(ABC):
 
     @property
     @abstractmethod
-    def mime_type(self) -> str:
-        """MIME-тип чанков аудио, которые отдаёт ``astream`` / ``synthesize_chunk``."""
+    def content_type(self) -> str:
+        """Платформенный MIME-тип чанков аудио, которые отдаёт
+        ``astream`` / ``synthesize_chunk``.
+
+        Маппится в HTTP-заголовок ``Content-Type`` ответа voice-сервиса
+        ровно один раз — в `apps/voice/api/synthesize`.
+        """
 
     @property
     @abstractmethod
@@ -81,7 +86,7 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
         response_format: str,
         sample_rate: int,
         provider_name: str,
-        mime_type: str,
+        content_type: str,
         chunk_max_chars: int = 100,
         min_words: int = 3,
     ) -> None:
@@ -89,13 +94,13 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
             raise ValueError("BatchBackedTTSStreamer: sample_rate должен быть > 0.")
         if provider_name == "":
             raise ValueError("BatchBackedTTSStreamer: provider_name обязателен.")
-        if mime_type == "":
-            raise ValueError("BatchBackedTTSStreamer: mime_type обязателен.")
+        if content_type == "":
+            raise ValueError("BatchBackedTTSStreamer: content_type обязателен.")
         self._tts_client = tts_client
         self._response_format = response_format
         self._sample_rate = sample_rate
         self._provider = provider_name
-        self._mime_type = mime_type
+        self._content_type = content_type
         self._chunk_max_chars = chunk_max_chars
         self._min_words = min_words
 
@@ -104,8 +109,8 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
         return self._provider
 
     @property
-    def mime_type(self) -> str:
-        return self._mime_type
+    def content_type(self) -> str:
+        return self._content_type
 
     @property
     def sample_rate(self) -> int:

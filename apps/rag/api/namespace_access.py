@@ -5,11 +5,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from fastapi import HTTPException
 
 from core.context import get_context
+from core.types import JsonObject, JsonValue
 
 from ..container import RAGContainer
 
@@ -30,19 +30,16 @@ async def require_registered_rag_namespace(namespace_id: str, container: RAGCont
         raise HTTPException(status_code=403, detail="Namespace does not belong to current company")
 
 
-def validate_rag_user_metadata(metadata: dict[str, Any]) -> None:
-    if not isinstance(metadata, dict):
-        raise HTTPException(status_code=400, detail="metadata must be an object")
-
-    def walk(obj: Any, depth: int) -> None:
+def validate_rag_user_metadata(metadata: JsonObject) -> None:
+    def walk(value: JsonValue, depth: int) -> None:
         if depth > _MAX_METADATA_DEPTH:
             raise HTTPException(status_code=400, detail="metadata JSON nesting too deep")
-        if isinstance(obj, dict):
-            for v in obj.values():
-                walk(v, depth + 1)
-        elif isinstance(obj, list):
-            for v in obj:
-                walk(v, depth + 1)
+        if isinstance(value, dict):
+            for item in value.values():
+                walk(item, depth + 1)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item, depth + 1)
 
     walk(metadata, 0)
     raw = json.dumps(metadata, ensure_ascii=False)

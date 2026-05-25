@@ -137,3 +137,58 @@ class SuggestRepository(BaseCRMRepository[CRMSuggest]):
             )
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
+
+    async def find_by_targets_batch(
+        self,
+        *,
+        namespace: str,
+        suggest_type: str,
+        target_entity_ids_batches: list[list[str]],
+        statuses: set[str],
+    ) -> dict[tuple[str, ...], CRMSuggest]:
+        """
+        Batched версия `find_by_targets` для перебора пар в `suggest_service`.
+
+        Раньше `suggest_service._generate_duplicate_suggests` дёргал `find_by_targets`
+        в цикле по каждой найденной паре entity-кандидат (до 250+ запросов на
+        company-scan). Этот метод одним запросом достаёт все совпадения и
+        возвращает map `tuple(sorted_target_ids) -> latest CRMSuggest`.
+
+        Ключ map нормализован тем же sort + strip, что используется в insert
+        (`_create_suggest`), поэтому caller обращается через `tuple(sorted(...))`.
+        """
+        if not target_entity_ids_batches:
+            return {}
+        if not statuses:
+            raise ValueError("statuses are required")
+
+        company_id = self._get_company_id()
+        normalized_batches: list[list[str]] = []
+        for batch in target_entity_ids_batches:
+            normalized_batch = sorted({item.strip() for item in batch if item.strip()})
+            if normalized_batch:
+                normalized_batches.append(normalized_batch)
+        if not normalized_batches:
+            return {}
+
+        async with self._db.session() as session:
+            stmt = (
+                select(CRMSuggest)
+                .where(
+                    CRMSuggest.company_id == company_id,
+                    CRMSuggest.namespace == namespace,
+                    CRMSuggest.suggest_type == suggest_type,
+                    CRMSuggest.target_entity_ids.in_(normalized_batches),
+                    CRMSuggest.status.in_(sorted(statuses)),
+                )
+                .order_by(CRMSuggest.created_at.desc())
+            )
+            result = await session.execute(stmt)
+            rows: list[CRMSuggest] = list(result.scalars().all())
+
+        latest_by_targets: dict[tuple[str, ...], CRMSuggest] = {}
+        for row in rows:
+            key = tuple(row.target_entity_ids)
+            if key not in latest_by_targets:
+                latest_by_targets[key] = row
+        return latest_by_targets

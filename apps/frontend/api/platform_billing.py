@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import ValidationError
 
 from apps.frontend.dependencies import ContainerDep
@@ -31,16 +31,18 @@ from apps.frontend.models import (
 from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.billing.service import company_resource_prices_storage_key
 from core.billing.settlement_rules import parse_settlement_rules_json
+from core.context import get_context
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID, SYSTEM_COMPANY_SUBDOMAIN
 from core.models.billing_models import UsageType
 from core.models.identity_models import Company
-from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, _facet_query_fragment
+from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, facet_query_fragment
+from core.types import JsonObject, parse_json_object, require_json_object
 
 router = APIRouter(prefix="/api/platform-billing", tags=["platform-billing"])
 
 _STORAGE_PRICES_KEY = "billing:resource_base_prices_json"
 
-_BILLING_COMPANY_LIST_CAP = 2000
+BILLING_COMPANY_LIST_CAP = 2000
 _COMPANIES_OVERVIEW_MAX_LIMIT = 500
 
 
@@ -85,7 +87,7 @@ async def _resolve_company_for_billing_admin(container: "FrontendContainer", raw
             if co is not None:
                 return co
 
-    companies = await container.company_repository.list(limit=_BILLING_COMPANY_LIST_CAP)
+    companies = await container.company_repository.list(limit=BILLING_COMPANY_LIST_CAP)
     lowered = [candidate.lower() for candidate in candidates]
     for q_lower in lowered:
         for co in companies:
@@ -101,7 +103,7 @@ async def _resolve_company_for_billing_admin(container: "FrontendContainer", raw
     )
 
 
-def _company_matches_billing_facet_query(co: Company, frag_lower: str) -> bool:
+def company_matches_billing_facet_query(co: Company, frag_lower: str) -> bool:
     if not frag_lower:
         return True
     cid = co.company_id.lower()
@@ -119,40 +121,38 @@ def _company_matches_billing_facet_query(co: Company, frag_lower: str) -> bool:
     return False
 
 
-def _require_system(request: Request) -> None:
-    user = getattr(request.state, "user", None)
-    if not user:
+def _require_system_user_id() -> str:
+    context = get_context()
+    if context is None:
         raise HTTPException(status_code=401, detail="Необходима авторизация")
-    company = getattr(request.state, "company", None)
-    if not company or company.company_id != SYSTEM_COMPANY_ID:
+    company = context.active_company
+    if company is None or company.company_id != SYSTEM_COMPANY_ID:
         raise HTTPException(status_code=403, detail="Доступно только для компании system")
+    return context.user.user_id
 
 
-def _validate_price_catalog(data: Any) -> dict[str, dict[str, float]]:
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=422, detail="Тело запроса должно быть JSON-объектом категорий")
+def _validate_price_catalog(data: JsonObject) -> dict[str, dict[str, float]]:
     out: dict[str, dict[str, float]] = {}
     for cat, resources in data.items():
-        if not isinstance(cat, str):
-            raise HTTPException(status_code=422, detail=f"Ключ категории должен быть строкой: {cat!r}")
         if cat == "tool":
             raise HTTPException(
                 status_code=422,
                 detail="Категория tool в прайсе не поддерживается: инструменты не тарифицируются",
             )
-        if not isinstance(resources, dict):
+        try:
+            resource_prices = require_json_object(resources, f"billing.price_catalog.{cat}")
+        except ValueError:
             raise HTTPException(status_code=422, detail=f"Категория {cat!r} должна быть объектом resource->price")
+        if not resource_prices:
+            raise HTTPException(status_code=422, detail=f"Категория {cat!r} не должна быть пустой")
         bucket: dict[str, float] = {}
-        for res_name, price in resources.items():
-            if not isinstance(res_name, str):
-                raise HTTPException(status_code=422, detail=f"Имя ресурса в {cat!r} должно быть строкой")
-            try:
-                bucket[res_name] = float(price)
-            except (TypeError, ValueError) as e:
+        for res_name, price in resource_prices.items():
+            if isinstance(price, bool) or not isinstance(price, int | float):
                 raise HTTPException(
                     status_code=422,
                     detail=f"Цена для {cat}:{res_name} должна быть числом",
-                ) from e
+                )
+            bucket[res_name] = float(price)
         out[cat] = bucket
     return out
 
@@ -162,14 +162,13 @@ def _validate_price_catalog(data: Any) -> dict[str, dict[str, float]]:
     response_model=PlatformBillingCompaniesOverviewResponse,
 )
 async def companies_billing_overview(
-    request: Request,
     container: ContainerDep,
-    limit: int = Query(default=50, ge=1, le=_COMPANIES_OVERVIEW_MAX_LIMIT),
-    offset: int = Query(default=0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=_COMPANIES_OVERVIEW_MAX_LIMIT)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> PlatformBillingCompaniesOverviewResponse:
-    _require_system(request)
+    _ = _require_system_user_id()
     all_companies = await container.company_repository.list(
-        limit=_BILLING_COMPANY_LIST_CAP, offset=0
+        limit=BILLING_COMPANY_LIST_CAP, offset=0
     )
     sorted_companies = sorted(
         all_companies,
@@ -200,12 +199,10 @@ async def companies_billing_overview(
     response_model=PlatformBillingBalanceGrantResponse,
 )
 async def post_balance_grant(
-    request: Request,
     container: ContainerDep,
     body: PlatformBillingBalanceGrantRequest,
 ) -> PlatformBillingBalanceGrantResponse:
-    _require_system(request)
-    user = request.state.user
+    user_id = _require_system_user_id()
     cid = body.company_id.strip()
     if not cid:
         raise HTTPException(status_code=422, detail="company_id не может быть пустым")
@@ -215,14 +212,14 @@ async def post_balance_grant(
     out = await container.payment_service.apply_balance_grant(
         company_id=cid,
         amount=body.amount,
-        grantor_user_id=user.user_id,
+        grantor_user_id=user_id,
         note=body.note,
     )
     return PlatformBillingBalanceGrantResponse(
-        transaction_id=out["transaction_id"],
-        company_id=out["company_id"],
-        amount=out["amount"],
-        balance=out["balance"],
+        transaction_id=out.transaction_id,
+        company_id=out.company_id,
+        amount=out.amount,
+        balance=out.balance,
     )
 
 
@@ -231,11 +228,10 @@ async def post_balance_grant(
     response_model=PlatformBillingCompanyResolveResponse,
 )
 async def resolve_billing_company(
-    request: Request,
     container: ContainerDep,
-    q: str = Query(..., min_length=1),
+    q: Annotated[str, Query(min_length=1)],
 ) -> PlatformBillingCompanyResolveResponse:
-    _require_system(request)
+    _ = _require_system_user_id()
     co = await _resolve_company_for_billing_admin(container, q)
     return PlatformBillingCompanyResolveResponse(
         company_id=co.company_id,
@@ -249,15 +245,14 @@ async def resolve_billing_company(
     response_model=PlatformTracingFacetItemsResponse,
 )
 async def facet_billing_companies(
-    request: Request,
     container: ContainerDep,
-    q: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+    q: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=ADMIN_FACETS_MAX_LIMIT)] = 20,
 ) -> PlatformTracingFacetItemsResponse:
-    _require_system(request)
+    _ = _require_system_user_id()
     frag = (q or "").strip().lower()
-    companies = await container.company_repository.list(limit=_BILLING_COMPANY_LIST_CAP)
-    matched = [c for c in companies if _company_matches_billing_facet_query(c, frag)]
+    companies = await container.company_repository.list(limit=BILLING_COMPANY_LIST_CAP)
+    matched = [c for c in companies if company_matches_billing_facet_query(c, frag)]
 
     def sort_key(c: Company) -> tuple[int, str]:
         if not frag:
@@ -283,14 +278,12 @@ async def facet_billing_companies(
 
 
 @router.get("/prices", response_model=PlatformBillingPricesResponse)
-async def get_billing_prices(request: Request, container: ContainerDep) -> PlatformBillingPricesResponse:
-    _require_system(request)
+async def get_billing_prices(container: ContainerDep) -> PlatformBillingPricesResponse:
+    _ = _require_system_user_id()
     raw = await container.shared_storage.get(_STORAGE_PRICES_KEY, force_global=True)
     override: dict[str, dict[str, float]] | None = None
     if raw:
-        parsed = json.loads(raw)
-        if not isinstance(parsed, dict):
-            raise ValueError("billing:resource_base_prices_json должен быть JSON-объектом")
+        parsed = parse_json_object(raw, "billing:resource_base_prices_json")
         override = _validate_price_catalog(parsed)
     effective = await container.billing_service.get_effective_resource_base_prices()
     return PlatformBillingPricesResponse(
@@ -302,13 +295,12 @@ async def get_billing_prices(request: Request, container: ContainerDep) -> Platf
 
 @router.put("/prices")
 async def put_billing_prices(
-    request: Request,
     container: ContainerDep,
-    body: dict[str, Any] = Body(...),
+    body: Annotated[JsonObject, Body()],
 ) -> dict[str, str]:
-    _require_system(request)
+    _ = _require_system_user_id()
     catalog = _validate_price_catalog(body)
-    await container.shared_storage.set(
+    _ = await container.shared_storage.set(
         _STORAGE_PRICES_KEY,
         json.dumps(catalog),
         force_global=True,
@@ -321,14 +313,12 @@ async def put_billing_prices(
     response_model=PlatformBillingSettlementRulesResponse,
 )
 async def get_default_settlement_rules_template(
-    container: ContainerDep,
-    request: Request,
 ) -> PlatformBillingSettlementRulesResponse:
     """Кодовый дефолт правил (без сохранения) — для подстановки в админке."""
-    _ = container
-    _require_system(request)
+    _ = _require_system_user_id()
     doc = default_settlement_rules_document()
-    return PlatformBillingSettlementRulesResponse(document=doc.model_dump(mode="json"))
+    document = require_json_object(doc.model_dump(mode="json"), "default_settlement_rules")
+    return PlatformBillingSettlementRulesResponse(document=document)
 
 
 @router.get(
@@ -336,11 +326,10 @@ async def get_default_settlement_rules_template(
     response_model=PlatformBillingSettlementRulesResponse,
 )
 async def get_settlement_rules(
-    request: Request,
     container: ContainerDep,
     company_id: str,
 ) -> PlatformBillingSettlementRulesResponse:
-    _require_system(request)
+    _ = _require_system_user_id()
     cid = company_id.strip()
     if not cid:
         raise HTTPException(status_code=422, detail="company_id не может быть пустым")
@@ -348,17 +337,17 @@ async def get_settlement_rules(
     if company is None:
         raise HTTPException(status_code=404, detail=f"Компания {cid} не найдена")
     doc = await container.billing_service.load_settlement_rules_document_for_company(cid)
-    return PlatformBillingSettlementRulesResponse(document=doc.model_dump(mode="json"))
+    document = require_json_object(doc.model_dump(mode="json"), f"settlement_rules.{cid}")
+    return PlatformBillingSettlementRulesResponse(document=document)
 
 
 @router.put("/settlement-rules/{company_id}")
 async def put_settlement_rules(
-    request: Request,
     container: ContainerDep,
     company_id: str,
-    body: dict[str, Any] = Body(...),
+    body: Annotated[JsonObject, Body()],
 ) -> dict[str, str]:
-    _require_system(request)
+    _ = _require_system_user_id()
     cid = company_id.strip()
     if not cid:
         raise HTTPException(status_code=422, detail="company_id не может быть пустым")
@@ -371,7 +360,7 @@ async def put_settlement_rules(
         raise HTTPException(status_code=422, detail=str(e)) from e
     for rule in document.rules:
         rn = rule.resource_name
-        if isinstance(rn, str) and rn.startswith("tool:"):
+        if rn.startswith("tool:"):
             raise HTTPException(
                 status_code=422,
                 detail=f"Правило {rule.rule_id}: resource_name с префиксом tool: запрещён (инструменты вне биллинга)",
@@ -385,11 +374,10 @@ async def put_settlement_rules(
     response_model=PlatformBillingCompanyPricesResponse,
 )
 async def get_company_billing_prices(
-    request: Request,
     container: ContainerDep,
     company_id: str,
 ) -> PlatformBillingCompanyPricesResponse:
-    _require_system(request)
+    _ = _require_system_user_id()
     cid = company_id.strip()
     if not cid:
         raise HTTPException(status_code=422, detail="company_id не может быть пустым")
@@ -397,9 +385,7 @@ async def get_company_billing_prices(
     raw = await container.shared_storage.get(key, force_global=True)
     override: dict[str, dict[str, float]] | None = None
     if raw:
-        parsed = json.loads(raw)
-        if not isinstance(parsed, dict):
-            raise ValueError(f"{key} должен быть JSON-объектом")
+        parsed = parse_json_object(raw, key)
         override = _validate_price_catalog(parsed)
     effective = await container.billing_service.get_effective_resource_base_prices_for_company(cid)
     company = await container.company_repository.get(cid)
@@ -427,17 +413,16 @@ async def get_company_billing_prices(
 
 @router.put("/prices/company/{company_id}")
 async def put_company_billing_prices(
-    request: Request,
     container: ContainerDep,
     company_id: str,
-    body: dict[str, Any] = Body(...),
+    body: Annotated[JsonObject, Body()],
 ) -> dict[str, str]:
-    _require_system(request)
+    _ = _require_system_user_id()
     cid = company_id.strip()
     if not cid:
         raise HTTPException(status_code=422, detail="company_id не может быть пустым")
     catalog = _validate_price_catalog(body)
-    await container.shared_storage.set(
+    _ = await container.shared_storage.set(
         company_resource_prices_storage_key(cid),
         json.dumps(catalog),
         force_global=True,
@@ -447,14 +432,13 @@ async def put_company_billing_prices(
 
 @router.get("/facets/usage-types", response_model=PlatformTracingFacetItemsResponse)
 async def facet_usage_types(
-    request: Request,
     container: ContainerDep,
-    q: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+    q: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=ADMIN_FACETS_MAX_LIMIT)] = 20,
 ) -> PlatformTracingFacetItemsResponse:
-    _require_system(request)
+    _ = _require_system_user_id()
     enum_values = {e.value for e in UsageType}
-    frag = _facet_query_fragment(q)
+    frag = facet_query_fragment(q)
     from_db = await container.usage_repository.admin_facet_distinct_usage_types(
         q=q if frag is not None else None,
         limit=limit,
@@ -471,12 +455,11 @@ async def facet_usage_types(
 
 @router.get("/facets/resource-names", response_model=PlatformTracingFacetItemsResponse)
 async def facet_resource_names(
-    request: Request,
     container: ContainerDep,
-    q: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=ADMIN_FACETS_MAX_LIMIT),
+    q: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=ADMIN_FACETS_MAX_LIMIT)] = 20,
 ) -> PlatformTracingFacetItemsResponse:
-    _require_system(request)
+    _ = _require_system_user_id()
     names = await container.usage_repository.admin_facet_distinct_resource_names(q=q, limit=limit)
     return PlatformTracingFacetItemsResponse(
         items=[PlatformTracingFacetItem(value=n, label=n) for n in names],
@@ -485,17 +468,16 @@ async def facet_resource_names(
 
 @router.get("/usage-report", response_model=PlatformBillingUsageReportResponse)
 async def get_usage_report(
-    request: Request,
     container: ContainerDep,
-    company_id: str | None = Query(default=None),
-    usage_type: str | None = Query(default=None),
-    resource_name: str | None = Query(default=None),
-    from_time: datetime | None = Query(default=None, alias="from"),
-    to_time: datetime | None = Query(default=None, alias="to"),
-    limit: int = Query(default=200, ge=1, le=5000),
-    offset: int = Query(default=0, ge=0),
+    company_id: Annotated[str | None, Query()] = None,
+    usage_type: Annotated[str | None, Query()] = None,
+    resource_name: Annotated[str | None, Query()] = None,
+    from_time: Annotated[datetime | None, Query(alias="from")] = None,
+    to_time: Annotated[datetime | None, Query(alias="to")] = None,
+    limit: Annotated[int, Query(ge=1, le=5000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> PlatformBillingUsageReportResponse:
-    _require_system(request)
+    _ = _require_system_user_id()
     items = await container.usage_repository.admin_search_usage_records(
         company_id=company_id,
         usage_type=usage_type,
@@ -505,26 +487,24 @@ async def get_usage_report(
         limit=limit,
         offset=offset,
     )
-    serialized = [rec.model_dump(mode="json") for rec in items]
-    company_ids = {cid for row in serialized if (cid := row.get("company_id"))}
+    serialized = [
+        require_json_object(rec.model_dump(mode="json"), f"usage_record.{rec.usage_id}")
+        for rec in items
+    ]
+    company_ids = {rec.company_id for rec in items}
     companies = (
         await container.company_repository.get_many(list(company_ids)) if company_ids else {}
     )
-    for row in serialized:
-        cid = row.get("company_id")
-        co = companies.get(cid) if cid else None
+    for rec, row in zip(items, serialized, strict=True):
+        co = companies.get(rec.company_id)
         row["company_name"] = co.name if co else None
-        metadata = row.get("metadata")
-        if not isinstance(metadata, dict):
-            metadata = {}
+        metadata = rec.metadata
         row["span_id"] = metadata.get("span_id")
         row["trace_id"] = metadata.get("trace_id")
         row["rule_id"] = metadata.get("rule_id")
         row["settlement_source"] = metadata.get("settlement_source")
-        quantity = row.get("quantity")
-        cost = row.get("cost")
-        if isinstance(quantity, (int, float)) and quantity > 0 and isinstance(cost, (int, float)):
-            row["unit_cost"] = cost / quantity
+        if rec.quantity > 0:
+            row["unit_cost"] = rec.cost / rec.quantity
         else:
             row["unit_cost"] = None
     return PlatformBillingUsageReportResponse(items=serialized)

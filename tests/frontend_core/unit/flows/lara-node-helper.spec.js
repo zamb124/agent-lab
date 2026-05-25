@@ -31,7 +31,11 @@ describe('lara node helper context', () => {
                         name: 'Calc',
                         language: 'python',
                         code: 'async def run(args, state):\n    return {"ok": True}',
-                        args_schema: { value: { type: 'number' } },
+                        parameters_schema: {
+                            type: 'object',
+                            properties: { value: { type: 'number' } },
+                            required: ['value'],
+                        },
                         output_mapping: { result: 'answer' },
                     },
                     helper: {

@@ -1,5 +1,5 @@
 {
-  "id": "universal_agent",
+  "flow_id": "universal_agent",
   "name": "Универсальный агент",
   "description": "Серия ассистентов общего назначения: уточнения, расчёты, мультиязычный sandbox_codegen, навыки — базовый, усиленный код, RAG.",
   "version": "1.0.0",
@@ -36,8 +36,8 @@
   },
   "edges": [
     {
-      "from": "main",
-      "to": null
+      "from_node": "main",
+      "to_node": null
     }
   ],
   "variables": {

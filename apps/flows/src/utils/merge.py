@@ -1,18 +1,21 @@
 """
-Универсальный deep merge для переопределения конфигов.
+Deep merge для переопределения flow-конфигов.
 
 Используется для merge базового конфига из БД с inline переопределениями из flow.json.
 """
 
 import copy
-from typing import Any
+
+from core.types import JsonObject, require_json_object, require_json_value
+
+_DEFAULT_EXCLUDED_KEYS = frozenset({"node_id", "tool_id", "flow_id"})
 
 
 def deep_merge(
-    base: dict[str, Any],
-    override: dict[str, Any],
+    base: JsonObject,
+    override: JsonObject,
     exclude: set[str] | None = None,
-) -> dict[str, Any]:
+) -> JsonObject:
     """
     Deep merge override в base.
 
@@ -30,18 +33,25 @@ def deep_merge(
     Returns:
         Новый dict с объединенным конфигом
     """
-    exclude = exclude or {"node_id", "tool_id", "flow_id"}
-    result = copy.deepcopy(base)
+    excluded_keys = _DEFAULT_EXCLUDED_KEYS if exclude is None else exclude
+    result: JsonObject = copy.deepcopy(base)
 
     for key, value in override.items():
-        if key in exclude:
+        if key in excluded_keys:
             continue
         if value is None:
             continue
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = deep_merge(result[key], value, exclude)
+        current_value = result.get(key)
+        if isinstance(current_value, dict) and isinstance(value, dict):
+            result[key] = deep_merge(
+                require_json_object(current_value, f"deep_merge.base.{key}"),
+                require_json_object(value, f"deep_merge.override.{key}"),
+                exclude,
+            )
         else:
-            result[key] = copy.deepcopy(value)
+            result[key] = require_json_value(
+                copy.deepcopy(value),
+                f"deep_merge.override.{key}",
+            )
 
     return result
-

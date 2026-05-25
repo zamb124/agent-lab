@@ -7,7 +7,9 @@
 """
 
 from datetime import datetime, timezone
-from typing import override
+from typing import ClassVar, override
+
+from pydantic import ValidationError
 
 from apps.flows.src.models import FlowConfig
 from core.db import BaseRepository, Storage
@@ -28,8 +30,8 @@ class FlowRepository(BaseRepository[FlowConfig]):
     Данные изолированы по компаниям (is_global=False).
     """
 
-    is_global: bool = False
-    owner_service: str = "flows"
+    is_global: ClassVar[bool] = False
+    owner_service: ClassVar[str] = "flows"
 
     def __init__(self, storage: Storage):
         super().__init__(storage, FlowConfig)
@@ -125,6 +127,25 @@ class FlowRepository(BaseRepository[FlowConfig]):
             return (_flow_config_from_storage_json(raw), company_identifier)
         return None
 
+    async def list_company_identifiers(
+        self,
+        *,
+        limit: int = 10_000,
+        offset: int = 0,
+    ) -> list[str]:
+        """Вернуть company identifiers из ключей актуальной таблицы flows."""
+        table_name = self._get_table_name()
+        all_data = await self._storage.get_all_by_prefix_and_table(
+            "company:", table_name, limit, offset
+        )
+        identifiers: set[str] = set()
+        for key in all_data.keys():
+            parts = key.split(":")
+            if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
+                continue
+            identifiers.add(parts[1])
+        return sorted(identifiers)
+
     async def get_version(self, flow_id: str, version: str) -> FlowConfig | None:
         """
         Получает конкретную версию из flows_versions.
@@ -169,7 +190,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
             if final_key in all_data:
                 try:
                     result[entity_id] = _flow_config_from_storage_json(all_data[final_key])
-                except Exception as e:
+                except (ValueError, ValidationError) as e:
                     logger.warning("Failed to parse flow %s: %s", entity_id, e)
         return result
 
@@ -187,7 +208,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
             try:
                 cfg = _flow_config_from_storage_json(value)
                 items.append(cfg)
-            except Exception as e:
+            except (ValueError, ValidationError) as e:
                 logger.warning(f"Failed to parse flow from key {key}: {e}")
                 continue
 

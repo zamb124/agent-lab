@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from apps.flows.config import get_settings
-from apps.flows.src.container import get_container
 from apps.idle_worker.broker import broker as idle_broker
+from apps.idle_worker.container import get_container
 from core.clients.llm.openrouter_free_models import refresh_openrouter_free_models_cache
 from core.logging import get_logger
 from core.types import JsonObject

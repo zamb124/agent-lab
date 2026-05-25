@@ -3,17 +3,19 @@ EventSubscriber - подписка на A2A события из Redis Pub/Sub.
 """
 
 import asyncio
-import json
 from collections.abc import AsyncIterator
+from typing import override
 
 from a2a.types import (
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
 )
+from pydantic import ValidationError
 
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
 from core.state import TERMINAL_TASK_STATES
+from core.types import parse_json_object
 
 from .base import BaseSubscriber, StreamEvent
 
@@ -22,7 +24,7 @@ logger = get_logger(__name__)
 
 def parse_event(data: str) -> StreamEvent:
     """Парсит событие из JSON."""
-    parsed = json.loads(data)
+    parsed = parse_json_object(data, "StreamEvent")
     kind = parsed.get("kind")
 
     if kind == "status-update":
@@ -49,7 +51,7 @@ def is_final_event(event: StreamEvent) -> bool:
         state = event.status.state if event.status else None
         if state is None:
             return False
-        state_str = state.value if hasattr(state, "value") else str(state)
+        state_str = state.value
         if state_str in TERMINAL_TASK_STATES:
             md = event.metadata or {}
             if state_str == "input-required" and md.get("platform_handoff_continue") is True:
@@ -66,9 +68,12 @@ class EventSubscriber(BaseSubscriber):
     Используется в API для получения streaming событий от worker.
     """
 
+    redis: RedisClient
+
     def __init__(self, redis_client: RedisClient):
         self.redis = redis_client
 
+    @override
     async def subscribe(
         self,
         task_id: str,
@@ -93,21 +98,21 @@ class EventSubscriber(BaseSubscriber):
         async for message in self.redis.subscribe(channel, timeout=timeout, ready_event=ready_event):
             try:
                 event = parse_event(message)
-                event_count += 1
-                event_kind = message[:50] if isinstance(message, str) else str(type(message))
-                logger.debug(f"[Subscriber] Received event #{event_count} on {channel}: {event_kind}")
-                yield event
-
-                if is_final_event(event):
-                    logger.debug(f"[Subscriber] Final event on {channel}, closing subscription")
-                    break
-
-            except Exception as e:
+            except (ValueError, ValidationError) as e:
                 logger.error(f"[Subscriber] Error parsing event on {channel}: {e}")
                 continue
+            event_count += 1
+            event_kind = message[:50]
+            logger.debug(f"[Subscriber] Received event #{event_count} on {channel}: {event_kind}")
+            yield event
+
+            if is_final_event(event):
+                logger.debug(f"[Subscriber] Final event on {channel}, closing subscription")
+                break
 
         logger.debug(f"[Subscriber] Subscription ended on {channel}, received {event_count} events")
 
+    @override
     async def collect(
         self,
         task_id: str,

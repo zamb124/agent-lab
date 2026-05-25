@@ -1,10 +1,10 @@
 """
-InterruptManager - управление interrupt/resume для вложенных вызовов.
+InterruptManager - управление interrupt/resume для nested node-as-tool вызовов.
 
-Работает с любой вложенностью делегирования в другой flow (tool с flow_id / branch_id — исполняется как вложенный subflow):
-- flow → нода → subflow → … → ask_user
-- flow → граф из нод → нода, внутри которой снова subflow → ask_user
-- цепочка из нескольких subflow: каждый уровень — свой снимок в nested_states и сегмент в interrupt_path
+`FlowNode` исполняется как отдельный durable child workflow и не использует
+`nested_states`. Этот менеджер остается только для изолированного `llm_node`,
+вызванного как tool через `NodeWrapperTool`: каждый уровень хранит typed snapshot
+в `nested_states` и сегмент в `interrupt_path`.
 
 При interrupt сохраняется путь (interrupt_path) к месту прерывания.
 При resume ответ доставляется по этому пути.
@@ -15,10 +15,9 @@ Zero-Guess: все методы работают с ExecutionState, не Dict.
 from uuid import UUID
 
 from apps.flows.src.runtime.a2a_messages import build_user_message
-from apps.flows.src.state.execution_state import NestedStateData
 from core.clients.llm import LLMToolCall
 from core.logging import get_logger
-from core.state import ExecutionState, InterruptData, InterruptPathItem
+from core.state import ExecutionState, InterruptData, InterruptPathItem, NestedStateData
 from core.state.interrupt import InterruptBody, InterruptSystemContext
 
 logger = get_logger(__name__)
@@ -26,12 +25,12 @@ logger = get_logger(__name__)
 
 class InterruptManager:
     """
-    Управляет interrupt/resume для вложенных вызовов.
+    Управляет interrupt/resume для nested node-as-tool вызовов.
 
     Структура ExecutionState:
     - interrupt: InterruptData (body + system)
     - interrupt_path: List[InterruptPathItem] путь к месту прерывания
-    - nested_states: Dict[str, Dict] снимки state вложенных subflow (по nested_id)
+    - nested_states: Dict[str, NestedStateData] снимки isolated llm_node tool state
     """
 
     @staticmethod
@@ -125,13 +124,7 @@ class InterruptManager:
     @staticmethod
     def get_interrupt_path(state: ExecutionState) -> list[InterruptPathItem]:
         """Возвращает текущий путь interrupt."""
-        result = []
-        for item in state.interrupt_path:
-            if isinstance(item, InterruptPathItem):
-                result.append(item)
-            elif isinstance(item, dict):
-                result.append(InterruptPathItem.model_validate(item))
-        return result
+        return list(state.interrupt_path)
 
     @staticmethod
     def clear_interrupt_path(state: ExecutionState) -> None:
@@ -196,7 +189,7 @@ class InterruptManager:
             True если первый элемент пути соответствует nested_id
         """
         if state.interrupt_path and len(state.interrupt_path) > 0:
-            return state.interrupt_path[0].id == nested_id
+            return state.interrupt_path[0].node_id == nested_id
         return False
 
     @staticmethod

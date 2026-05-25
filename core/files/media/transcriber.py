@@ -1,5 +1,6 @@
 """MediaTranscriber — единая точка входа для транскрипции аудио и видео."""
 
+import asyncio
 
 from pydantic import BaseModel, Field
 
@@ -59,7 +60,7 @@ class MediaTranscriber:
         *,
         audio_bytes: bytes,
         file_name: str,
-        mime_type: str,
+        content_type: str,
         language: str | None = None,
     ) -> TranscriptionResult:
         """Транскрибирует аудиофайл в текст (с чанкованием при необходимости).
@@ -67,15 +68,15 @@ class MediaTranscriber:
         Args:
             audio_bytes: байты аудиофайла
             file_name: имя файла
-            mime_type: MIME-тип
+            content_type: платформенный MIME-тип файла (например, ``audio/wav``)
             language: язык (None — из tier-резолва / media_transcriber.default_language)
         """
         if not audio_bytes:
             raise ValueError("audio_bytes не может быть пустым.")
         if file_name == "":
             raise ValueError("file_name не может быть пустым.")
-        if mime_type == "":
-            raise ValueError("mime_type не может быть пустым.")
+        if content_type == "":
+            raise ValueError("content_type не может быть пустым.")
 
         stt_client = await self._get_stt_client()
         text, provider = await transcribe_audio_with_chunking(
@@ -83,7 +84,7 @@ class MediaTranscriber:
             company_id=self._company_id,
             audio_bytes=audio_bytes,
             file_name=file_name,
-            mime_type=mime_type,
+            content_type=content_type,
             language=language,
             speech_override=self._speech_override,
             stt_client=stt_client,
@@ -113,14 +114,15 @@ class MediaTranscriber:
         if file_name == "":
             raise ValueError("file_name не может быть пустым.")
 
-        audio_bytes, audio_file_name = extract_audio_from_video(
+        audio_bytes, audio_file_name = await asyncio.to_thread(
+            extract_audio_from_video,
             video_bytes=video_bytes,
             base_name=file_name,
         )
         return await self.transcribe_audio(
             audio_bytes=audio_bytes,
             file_name=audio_file_name,
-            mime_type="audio/mpeg",
+            content_type="audio/mpeg",
             language=language,
         )
 
@@ -139,10 +141,12 @@ class MediaTranscriber:
         if not url or url.strip() == "":
             raise ValueError("url не может быть пустым.")
 
-        audio_bytes, audio_file_name, mime_type = await download_audio_from_url(url=url.strip())
+        audio_bytes, audio_file_name, downloaded_content_type = await download_audio_from_url(
+            url=url.strip()
+        )
         return await self.transcribe_audio(
             audio_bytes=audio_bytes,
             file_name=audio_file_name,
-            mime_type=mime_type,
+            content_type=downloaded_content_type,
             language=language,
         )

@@ -5,7 +5,7 @@
 Для ``audio/wav`` внутри собирается один RIFF: потоковый TTS режет текст на
 фразы и каждая даёт **отдельный** WAV; сыря конкатенация байт ломает
 ``<audio>`` в браузере (слышна только первая фраза). Для иных MIME чанки
-пробрасываются как раньше. ``Content-Type`` — ``BaseTTSStreamer.mime_type``.
+пробрасываются как раньше. ``Content-Type`` — ``BaseTTSStreamer.content_type``.
 
 После успеха — запись ``record_tts_usage`` (если request-scope содержит
 ``user``); пустого текста и отсутствия ``company_id`` в контексте
@@ -181,7 +181,7 @@ async def synthesize(body: SynthesizeRequest) -> StreamingResponse:
 
     return StreamingResponse(
         stream_from_first_chunk(),
-        media_type=tts_streamer.mime_type,
+        media_type=tts_streamer.content_type,
         headers={"X-Voice-Provider": tts_streamer.provider},
     )
 
@@ -203,7 +203,7 @@ async def _synthesize_audio_chunks(
             raw_chunks.append(audio_bytes)
     if not raw_chunks:
         return
-    mime = (tts_streamer.mime_type or "").strip().lower()
+    mime = (tts_streamer.content_type or "").strip().lower()
     use_wav_merge = mime in ("audio/wav", "audio/wave", "audio/x-wav") or (
         len(raw_chunks[0]) >= 12
         and raw_chunks[0][:4] == b"RIFF"

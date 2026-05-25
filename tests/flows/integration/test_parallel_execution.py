@@ -11,9 +11,7 @@
 
 import time
 import uuid
-
 import pytest
-
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 
@@ -41,23 +39,7 @@ class TestParallelNodeExecution:
         Если последовательное - сумма sleep по нодам.
         """
         flow_id = f"parallel_test_{unique_id}"
-
-        # Код для нод которые делают sleep и записывают время
-        node_code_template = '''
-import time
-import asyncio
-
-async def run(args, state):
-    start = time.time()
-    await asyncio.sleep(0.12)
-    end = time.time()
-
-    state['{node_name}_start'] = start
-    state['{node_name}_end'] = end
-    state['{node_name}_done'] = True
-    return state
-'''
-
+        node_code_template = "\nimport time\nimport asyncio\n\nasync def run(args, state):\n    start = time.time()\n    await asyncio.sleep(0.12)\n    end = time.time()\n\n    state['{node_name}_start'] = start\n    state['{node_name}_end'] = end\n    state['{node_name}_done'] = True\n    return state\n"
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Parallel Execution Test",
@@ -65,50 +47,26 @@ async def run(args, state):
             nodes={
                 "start": {
                     "type": "code",
-                    "code": """
-async def run(args, state):
-    import time
-    state['execution_start'] = time.time()
-    return state
-""",
+                    "code": "\nasync def run(args, state):\n    import time\n    state['execution_start'] = time.time()\n    return state\n",
                 },
-                "node_a": {
-                    "type": "code",
-                    "code": node_code_template.format(node_name="node_a"),
-                },
-                "node_b": {
-                    "type": "code",
-                    "code": node_code_template.format(node_name="node_b"),
-                },
-                "node_c": {
-                    "type": "code",
-                    "code": node_code_template.format(node_name="node_c"),
-                },
+                "node_a": {"type": "code", "code": node_code_template.format(node_name="node_a")},
+                "node_b": {"type": "code", "code": node_code_template.format(node_name="node_b")},
+                "node_c": {"type": "code", "code": node_code_template.format(node_name="node_c")},
                 "final": {
                     "type": "code",
-                    "code": """
-async def run(args, state):
-    import time
-    state['execution_end'] = time.time()
-    state['response'] = 'All nodes completed'
-    return state
-""",
+                    "code": "\nasync def run(args, state):\n    import time\n    state['execution_end'] = time.time()\n    state['response'] = 'All nodes completed'\n    return state\n",
                 },
             },
             edges=[
-                # Fan-out: start -> 3 параллельные ноды
-                {"from": "start", "to": "node_a"},
-                {"from": "start", "to": "node_b"},
-                {"from": "start", "to": "node_c"},
-                # Fan-in: 3 ноды -> final
-                {"from": "node_a", "to": "final"},
-                {"from": "node_b", "to": "final"},
-                {"from": "node_c", "to": "final"},
-                # Завершение
-                {"from": "final", "to": None},
+                {"from_node": "start", "to_node": "node_a"},
+                {"from_node": "start", "to_node": "node_b"},
+                {"from_node": "start", "to_node": "node_c"},
+                {"from_node": "node_a", "to_node": "final"},
+                {"from_node": "node_b", "to_node": "final"},
+                {"from_node": "node_c", "to_node": "final"},
+                {"from_node": "final", "to_node": None},
             ],
         )
-
         await container.flow_repository.set(flow_config)
         return flow_id
 
@@ -125,13 +83,10 @@ async def run(args, state):
         """
         flow_id = setup_parallel_flow
         session_id = f"{flow_id}:parallel-{unique_id}-{uuid.uuid4().hex[:8]}"
-
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-
         overall_start = time.time()
-
         task = await process_flow_task.kiq(
             flow_id=flow_id,
             session_id=session_id,
@@ -139,31 +94,16 @@ async def run(args, state):
             content="Start parallel test",
             context_data=mock_context.model_dump(),
         )
-
         result = await task.wait_result(timeout=30)
-
         overall_end = time.time()
         overall_duration = overall_end - overall_start
-
         assert not result.is_err, f"Task failed: {result.error}"
-
         state = result.return_value
         assert state["status"] == "completed"
-
-        # Проверяем что все ноды выполнились
-        # Note: после merge результатов мы можем не увидеть все поля
-        # если они перезаписываются. Проверим хотя бы response.
         assert state["response"] == "All nodes completed"
-
-        # Главная проверка: время выполнения
-        # Если последовательно: 3 * 0.5 = 1.5+ сек
-        # Если параллельно: ~0.5-1.0 сек (с накладными расходами)
         print(f"\n⏱️  Overall duration: {overall_duration:.2f}s")
-
-        # Даем запас на накладные расходы TaskIQ, но должно быть < 2 сек
         assert overall_duration < 2.0, (
-            f"Execution took {overall_duration:.2f}s, expected < 2.0s for parallel execution. "
-            "Nodes may be executing sequentially instead of in parallel."
+            f"Execution took {overall_duration:.2f}s, expected < 2.0s for parallel execution. Nodes may be executing sequentially instead of in parallel."
         )
 
     @pytest.mark.asyncio
@@ -179,11 +119,9 @@ async def run(args, state):
         """
         flow_id = setup_parallel_flow
         session_id = f"{flow_id}:timestamps-{unique_id}-{uuid.uuid4().hex[:8]}"
-
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-
         task = await process_flow_task.kiq(
             flow_id=flow_id,
             session_id=session_id,
@@ -191,38 +129,22 @@ async def run(args, state):
             content="Start timestamp test",
             context_data=mock_context.model_dump(),
         )
-
         result = await task.wait_result(timeout=30)
-
         assert not result.is_err, f"Task failed: {result.error}"
-
         state = result.return_value
-
-        # Получаем timestamps из state
-        # Note: из-за merge "кто последний тот прав" мы можем потерять часть timestamps
-        # Но если хотя бы некоторые есть - проверим их
         node_a_start = state.get("node_a_start")
         node_b_start = state.get("node_b_start")
         node_c_start = state.get("node_c_start")
-
         print("\n📊 Timestamps:")
         print(f"  node_a_start: {node_a_start}")
         print(f"  node_b_start: {node_b_start}")
         print(f"  node_c_start: {node_c_start}")
-
-        # Проверяем что хотя бы некоторые timestamps есть
         available_starts = [t for t in [node_a_start, node_b_start, node_c_start] if t is not None]
-
         if len(available_starts) >= 2:
-            # Если есть хотя бы 2 timestamp - проверяем что они близки (< 0.5 сек разницы)
             max_start = max(available_starts)
             min_start = min(available_starts)
             start_diff = max_start - min_start
-
             print(f"  Start time difference: {start_diff:.3f}s")
-
-            # Если параллельно - разница должна быть < 0.3 сек
-            # (с учетом накладных расходов на сериализацию и TaskIQ)
             assert start_diff < 0.5, (
                 f"Start times differ by {start_diff:.3f}s, expected < 0.5s for parallel execution"
             )
@@ -238,7 +160,6 @@ class TestParallelNodesMerge:
         Проверяем что все поля сохраняются после merge.
         """
         flow_id = f"merge_test_{unique_id}"
-
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Merge Test",
@@ -258,22 +179,17 @@ class TestParallelNodesMerge:
                 },
                 "final": {
                     "type": "code",
-                    "code": """
-async def run(args, state):
-    state['response'] = f"a={state.get('field_a')}, b={state.get('field_b')}"
-    return state
-""",
+                    "code": "\nasync def run(args, state):\n    state['response'] = f\"a={state.get('field_a')}, b={state.get('field_b')}\"\n    return state\n",
                 },
             },
             edges=[
-                {"from": "start", "to": "writer_a"},
-                {"from": "start", "to": "writer_b"},
-                {"from": "writer_a", "to": "final"},
-                {"from": "writer_b", "to": "final"},
-                {"from": "final", "to": None},
+                {"from_node": "start", "to_node": "writer_a"},
+                {"from_node": "start", "to_node": "writer_b"},
+                {"from_node": "writer_a", "to_node": "final"},
+                {"from_node": "writer_b", "to_node": "final"},
+                {"from_node": "final", "to_node": None},
             ],
         )
-
         await container.flow_repository.set(flow_config)
         return flow_id
 
@@ -286,11 +202,9 @@ async def run(args, state):
         """
         flow_id = setup_merge_flow
         session_id = f"{flow_id}:merge-{unique_id}-{uuid.uuid4().hex[:8]}"
-
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user"
-
         task = await process_flow_task.kiq(
             flow_id=flow_id,
             session_id=session_id,
@@ -298,16 +212,10 @@ async def run(args, state):
             content="Test merge",
             context_data=mock_context.model_dump(),
         )
-
         result = await task.wait_result(timeout=30)
-
         assert not result.is_err, f"Task failed: {result.error}"
-
         state = result.return_value
         assert state["status"] == "completed"
-
-        # Проверяем что оба поля сохранились через response финальной ноды
-        # (response показывает что merge работает: 'a=value_a, b=value_b')
         response = state.get("response", "")
         assert "value_a" in response, "field_a lost during merge"
         assert "value_b" in response, "field_b lost during merge"

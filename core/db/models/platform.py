@@ -5,7 +5,7 @@
 """
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import TypeAlias, override
 
 from sqlalchemy import (
     Boolean,
@@ -23,6 +23,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db.models.base import Base
+from core.types import JsonObject
+
+_TableArgs: TypeAlias = tuple[CheckConstraint | Index | UniqueConstraint, ...]
 
 
 class Storage(Base):
@@ -36,10 +39,10 @@ class Storage(Base):
     - company:system:request:{uuid} — заявки с лендинга (frontend), значение JSON
     """
 
-    __tablename__ = "storage"
+    __tablename__: str = "storage"
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    value: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -50,7 +53,7 @@ class Storage(Base):
     )
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         UniqueConstraint("key", name="uq_storage_key"),
         Index("ix_storage_key_prefix", "key"),
         Index("ix_storage_updated_at", "updated_at"),
@@ -60,6 +63,7 @@ class Storage(Base):
         Index("ix_storage_key_expired_at", "key", "expired_at"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<Storage(key='{self.key}', updated_at='{self.updated_at}')>"
 
@@ -75,10 +79,10 @@ class Users(Base):
     - auth_state:state (временные OAuth-состояния)
     """
 
-    __tablename__ = "users"
+    __tablename__: str = "users"
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    value: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -89,7 +93,7 @@ class Users(Base):
     )
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         UniqueConstraint("key", name="uq_users_key"),
         Index("ix_users_key_prefix", "key"),
         Index("ix_users_updated_at", "updated_at"),
@@ -105,6 +109,7 @@ class Users(Base):
         ),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<Users(key='{self.key}', updated_at='{self.updated_at}')>"
 
@@ -116,10 +121,10 @@ class Variables(Base):
     Ключи имеют формат: company:{company_id}:var:{key}
     """
 
-    __tablename__ = "variables"
+    __tablename__: str = "variables"
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    value: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -130,13 +135,14 @@ class Variables(Base):
     )
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         UniqueConstraint("key", name="uq_variables_key"),
         Index("ix_variables_key_prefix", "key"),
         Index("ix_variables_updated_at", "updated_at"),
         Index("ix_variables_expired_at", "expired_at"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<Variables(key='{self.key}', updated_at='{self.updated_at}')>"
 
@@ -148,10 +154,10 @@ class Usage(Base):
     Ключи имеют формат: company:{company_id}:usage:{resource_name}:{usage_id}
     """
 
-    __tablename__ = "usage"
+    __tablename__: str = "usage"
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    value: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -162,7 +168,7 @@ class Usage(Base):
     )
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         UniqueConstraint("key", name="uq_usage_key"),
         Index("ix_usage_key_prefix", "key"),
         Index("ix_usage_updated_at", "updated_at"),
@@ -173,6 +179,7 @@ class Usage(Base):
         Index("ix_usage_resource_name", text("(value->>'resource_name')")),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<Usage(key='{self.key}', updated_at='{self.updated_at}')>"
 
@@ -184,10 +191,10 @@ class Namespaces(Base):
     Ключи имеют формат: namespace:{company_id}:{namespace_name}
     """
 
-    __tablename__ = "namespaces"
+    __tablename__: str = "namespaces"
 
     key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    value: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -198,12 +205,13 @@ class Namespaces(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         UniqueConstraint("key", name="uq_namespaces_key"),
         Index("ix_namespaces_key_prefix", "key"),
         Index("ix_namespaces_company_id", text("(value->>'company_id')")),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<Namespaces(key='{self.key}', updated_at='{self.updated_at}')>"
 
@@ -211,7 +219,7 @@ class Namespaces(Base):
 class CalendarEventRecord(Base):
     """Реляционная таблица событий платформенного календаря."""
 
-    __tablename__ = "calendar_events"
+    __tablename__: str = "calendar_events"
 
     event_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
     company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -227,13 +235,13 @@ class CalendarEventRecord(Base):
     all_day: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
-    attendees: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    attendees: Mapped[list[JsonObject]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     recurrence_rule: Mapped[str | None] = mapped_column(Text, nullable=True)
     recurrence_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     series_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     deep_link: Mapped[str | None] = mapped_column(Text, nullable=True)
-    external_refs: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+    external_refs: Mapped[list[JsonObject]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    metadata_json: Mapped[JsonObject] = mapped_column(
         "metadata",
         JSONB,
         nullable=False,
@@ -251,7 +259,7 @@ class CalendarEventRecord(Base):
         nullable=False,
     )
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         UniqueConstraint("company_id", "source", "source_id", name="uq_calendar_events_company_source"),
         Index("ix_calendar_events_company_time", "company_id", "start_at", "end_at"),
         Index("ix_calendar_events_company_kind_time", "company_id", "kind", "start_at"),
@@ -264,14 +272,14 @@ class CalendarEventRecord(Base):
 class CalendarIntegrationRecord(Base):
     """Реляционная таблица интеграций календаря на уровне пользователя."""
 
-    __tablename__ = "calendar_integrations"
+    __tablename__: str = "calendar_integrations"
 
     integration_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
     company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    credentials: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    settings: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    credentials: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
+    settings: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -282,7 +290,7 @@ class CalendarIntegrationRecord(Base):
         nullable=False,
     )
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         UniqueConstraint("company_id", "user_id", "provider", name="uq_calendar_integrations_user_provider"),
         Index("ix_calendar_integrations_credentials_gin", "credentials", postgresql_using="gin"),
         Index("ix_calendar_integrations_settings_gin", "settings", postgresql_using="gin"),
@@ -292,7 +300,7 @@ class CalendarIntegrationRecord(Base):
 class IntegrationCredentialRecord(Base):
     """Per-user OAuth токены внешних интеграций (shared БД)."""
 
-    __tablename__ = "integration_credentials"
+    __tablename__: str = "integration_credentials"
 
     credential_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
     company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -304,7 +312,7 @@ class IntegrationCredentialRecord(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scope: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+    metadata_json: Mapped[JsonObject] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -317,7 +325,7 @@ class IntegrationCredentialRecord(Base):
         nullable=False,
     )
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         UniqueConstraint(
             "company_id", "user_id", "provider", "service",
             name="uq_integration_credentials_user_provider_service",
@@ -328,7 +336,7 @@ class IntegrationCredentialRecord(Base):
 class SchedulerTaskRecord(Base):
     """Служебная таблица задач платформенного scheduler (shared БД)."""
 
-    __tablename__ = "scheduler_tasks"
+    __tablename__: str = "scheduler_tasks"
 
     schedule_task_id: Mapped[str] = mapped_column("id", String(255), primary_key=True, index=True)
     company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -341,7 +349,7 @@ class SchedulerTaskRecord(Base):
     interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    payload: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True, default="pending")
     created_by_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -357,7 +365,7 @@ class SchedulerTaskRecord(Base):
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         Index("ix_scheduler_tasks_company_status", "company_id", "status"),
         Index("ix_scheduler_tasks_company_service", "company_id", "target_service"),
         Index("ix_scheduler_tasks_company_task", "company_id", "task_name"),
@@ -368,12 +376,12 @@ class SchedulerTaskRecord(Base):
 class PushSubscription(Base):
     """Подписка пользователя на push-уведомления."""
 
-    __tablename__ = "push_subscriptions"
+    __tablename__: str = "push_subscriptions"
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
     user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     endpoint: Mapped[str] = mapped_column(String(2048), nullable=False, unique=True)
-    keys: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    keys: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     platform: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -385,10 +393,11 @@ class PushSubscription(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         Index("ix_push_subscriptions_user_endpoint", "user_id", "endpoint"),
     )
 
+    @override
     def __repr__(self) -> str:
         return f"<PushSubscription(user_id={self.user_id}, platform={self.platform})>"
 
@@ -396,7 +405,7 @@ class PushSubscription(Base):
 class ApiKeyRecord(Base):
     """API-ключи компаний (shared БД)."""
 
-    __tablename__ = "api_keys"
+    __tablename__: str = "api_keys"
 
     key_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -411,7 +420,7 @@ class ApiKeyRecord(Base):
     )
     last_used: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         Index("ix_api_keys_company_id", "company_id"),
         Index("ix_api_keys_key_hash", "key_hash", unique=True),
     )
@@ -431,7 +440,7 @@ class CompanyVoiceProvider(Base):
     3. `settings.voice.<kind>` (deployment-default).
     """
 
-    __tablename__ = "company_voice_providers"
+    __tablename__: str = "company_voice_providers"
 
     company_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     kind: Mapped[str] = mapped_column(String, primary_key=True)
@@ -442,7 +451,7 @@ class CompanyVoiceProvider(Base):
     sample_rate: Mapped[int | None] = mapped_column(Integer, nullable=True)
     threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
     response_format: Mapped[str | None] = mapped_column(String, nullable=True)
-    secrets: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    secrets: Mapped[dict[str, str] | None] = mapped_column(JSONB, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -450,7 +459,7 @@ class CompanyVoiceProvider(Base):
         nullable=False,
     )
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         CheckConstraint(
             "kind IN ('stt','tts','vad')",
             name="company_voice_providers_kind_check",
@@ -465,17 +474,17 @@ class CompanyVoiceProvider(Base):
 class PlatformShortLink(Base):
     """Короткий публичный код -> полезная нагрузка (вход по звонку Sync, JWT инвайта)."""
 
-    __tablename__ = "platform_short_links"
+    __tablename__: str = "platform_short_links"
 
     code: Mapped[str] = mapped_column(String(32), primary_key=True)
     kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    payload: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         Index(
             "ix_platform_short_links_sync_link_token",
             text("(payload->>'link_token')"),
@@ -491,7 +500,7 @@ class PlatformPronunciationRule(Base):
     per-company правилами из ``CompanyPronunciationRule``.
     """
 
-    __tablename__ = "platform_pronunciation_rules"
+    __tablename__: str = "platform_pronunciation_rules"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -514,7 +523,7 @@ class PlatformPronunciationRule(Base):
         nullable=False,
     )
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         CheckConstraint(
             "kind IN ('alias','regex','stress')",
             name="platform_pronunciation_rules_kind_check",
@@ -531,7 +540,7 @@ class CompanyPronunciationRule(Base):
     порядок применения — platform → company → per-call (SpeechOverride).
     """
 
-    __tablename__ = "company_pronunciation_rules"
+    __tablename__: str = "company_pronunciation_rules"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -555,7 +564,7 @@ class CompanyPronunciationRule(Base):
         nullable=False,
     )
 
-    __table_args__ = (
+    __table_args__: _TableArgs = (
         CheckConstraint(
             "kind IN ('alias','regex','stress')",
             name="company_pronunciation_rules_kind_check",

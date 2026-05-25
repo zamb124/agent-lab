@@ -18,7 +18,6 @@ from core.scheduler.models import (
     PlatformScheduleUpdateStatusRequest,
     ScheduledTaskInfo,
     ScheduledTaskStatus,
-    ScheduleType,
 )
 from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.service import SchedulerService
@@ -27,7 +26,6 @@ from core.scheduler.source import get_schedule_source, reset_schedule_source
 __all__ = [
     "get_schedule_source",
     "reset_schedule_source",
-    "ScheduleType",
     "ContentType",
     "ScheduledTaskStatus",
     "ScheduledTaskInfo",

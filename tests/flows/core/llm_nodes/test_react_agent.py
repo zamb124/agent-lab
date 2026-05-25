@@ -8,7 +8,7 @@ State и messages - A2A типы.
 
 import pytest
 
-from apps.flows.src.models.node_config import NodeConfig, NodeLLMOverride
+from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.tools.base import BaseTool
@@ -58,7 +58,7 @@ class TestReactAgentWithToolCalls:
             name="Test Agent",
             description="Agent for testing",
             prompt="You are a helpful assistant",
-            llm=NodeLLMOverride(provider="mock"),
+            llm=NodeLLMConfig(provider="mock"),
         )
 
     @pytest.mark.asyncio
@@ -96,7 +96,7 @@ class TestReactAgentStreaming:
             name="Stream Agent",
             description="Agent for streaming tests",
             prompt="You are a helpful assistant",
-            llm=NodeLLMOverride(provider="mock"),
+            llm=NodeLLMConfig(provider="mock"),
         )
 
     @pytest.mark.asyncio

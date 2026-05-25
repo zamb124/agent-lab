@@ -44,7 +44,6 @@ from apps.flows.src.files import (
     format_a2a_files_content,
     transcribe_incoming_audio_files,
 )
-from apps.flows.src.services.push_notifications import dict_to_config
 from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.streaming.base import StreamEvent
@@ -220,15 +219,14 @@ async def _build_task_from_events(
     session_id = f"{flow_id}:{context_id}"
     existing_history: list[Message] = []
     if container is not None:
-        state = await container.state_manager.get_state(session_id)
+        state = await container.workflow_runtime.get_state(session_id)
         existing_history = state.messages if state else []
 
     # Устанавливаем task_id в input_message для истории
     history_message = input_message.model_copy(update={"task_id": task_id})
 
-    # Для existing_history устанавливаем task_id если его нет
     for msg in existing_history:
-        if hasattr(msg, "task_id") and not msg.task_id:
+        if not msg.task_id:
             msg.task_id = task_id
 
     history: list[Message] = [*existing_history, history_message]
@@ -836,9 +834,9 @@ class A2AChannel(BaseChannel):
     ) -> TaskPushNotificationConfig:
         """Установка конфигурации push notification."""
         _ = context
-        data = await set_push_config(params)
+        config = await set_push_config(params)
         logger.info(f"Set push notification config for task: {params.task_id}")
-        return dict_to_config(data)
+        return config
 
     @override
     async def on_get_task_push_notification_config(
@@ -848,9 +846,9 @@ class A2AChannel(BaseChannel):
     ) -> TaskPushNotificationConfig | None:
         """Получение конфигурации push notification."""
         _ = context
-        data = await get_push_config(params)
+        config = await get_push_config(params)
         logger.info(f"Get push notification config for task: {params.id}")
-        return dict_to_config(data) if data else None
+        return config
 
     @override
     async def on_list_task_push_notification_config(
@@ -862,7 +860,7 @@ class A2AChannel(BaseChannel):
         _ = context
         configs = await list_push_configs(params)
         logger.info(f"List push notification configs for task: {params.id}, found: {len(configs)}")
-        return [dict_to_config(data) for data in configs]
+        return configs
 
     @override
     async def on_delete_task_push_notification_config(

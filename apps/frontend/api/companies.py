@@ -3,19 +3,21 @@ API для управления компаниями
 """
 
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from apps.frontend.dependencies import ContainerDep
-from core.api.companies import build_my_companies_response
+from apps.idle_worker.broker import broker as idle_broker
+from apps.idle_worker.tasks.task_names import TASK_INIT_NEW_COMPANY
+from core.api.companies import CompanyMembershipResponse, build_my_companies_response
 from core.config import get_settings
 from core.identity.system_bootstrap import SYSTEM_COMPANY_ID
 from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.pagination import ListResponse
+from core.tasks.kicker import kiq_task_name_with_context
 from core.utils.domain import build_url, get_cookie_domain
 from core.utils.subdomain import validate_slug
 from core.utils.tokens import TokenService, get_token_service
@@ -49,18 +51,13 @@ class SystemAccessRequest(BaseModel):
     role: str
 
 
+class SystemAccessGrantedResponse(BaseModel):
+    success: bool
+    company_id: str
+    roles: list[str]
+
+
 _SYSTEM_ASSIGNABLE_ROLES: tuple[str, ...] = ("admin", "developer", "viewer")
-
-
-def _service_json_object(response: object, *, service: str, path: str) -> dict[str, Any]:
-    if not isinstance(response, dict):
-        raise RuntimeError(f"{service} {path} вернул не JSON object")
-    result: dict[str, Any] = {}
-    for key, value in response.items():
-        if not isinstance(key, str):
-            raise RuntimeError(f"{service} {path} вернул JSON object с нестроковым ключом")
-        result[key] = value
-    return result
 
 
 def _require_authenticated_user(request: Request) -> User:
@@ -155,6 +152,7 @@ async def create_company(
         owner_user_id=user.user_id,
         status="active",
         members={user.user_id: ["owner"]},
+        metadata={"initialization_status": "pending"},
     )
 
     await company_repo.set(company)
@@ -189,62 +187,19 @@ async def create_company(
             company_id=company.company_id,
         )
 
-    # Инициализировать агенты и тулы для новой компании
-    try:
-        service_client = container.service_client
-        init_response = _service_json_object(
-            await service_client.post(
-                "flows",
-                "/flows/api/v1/company/init",
-                json={"company_id": company_id, "company_name": name, "subdomain": slug},
-            ),
-            service="flows",
-            path="/flows/api/v1/company/init",
-        )
-
-        logger.info(
-            f"Инициализация агентов для {company_id} запущена: "
-            f"task_id={init_response.get('task_id')}"
-        )
-    except Exception as e:
-        logger.error(
-            f"Не удалось запустить инициализацию агентов для {company_id}: {e}", exc_info=True
-        )
-        # НЕ падаем - компания уже создана
-
-    # Создать default namespace-backed канал в sync для новой компании
-    try:
-        service_client = container.service_client
-        namespace = "default"
-
-        channel_response = _service_json_object(
-            await service_client.post(
-                "sync",
-                "/sync/api/v1/channels/",
-                json={
-                    "namespace": namespace,
-                    "type": "topic",
-                    "name": name,
-                    "is_private": False,
-                },
-                headers={"X-Company-Id": company_id, "X-User-Id": user.user_id},
-            ),
-            service="sync",
-            path="/sync/api/v1/channels/",
-        )
-        channel_id = channel_response["id"]
-        logger.info(
-            "frontend.channel_created",
-            channel_id=channel_id,
-            namespace=namespace,
-            company_id=company_id,
-        )
-
-    except Exception as e:
-        logger.error(
-            f"Не удалось создать namespace/канал в sync для {company_id}: {e}", exc_info=True
-        )
-        # НЕ падаем - компания уже создана
+    init_task = await kiq_task_name_with_context(
+        TASK_INIT_NEW_COMPANY,
+        idle_broker,
+        company_id=company_id,
+        company_name=name,
+        subdomain=slug,
+        owner_user_id=user.user_id,
+    )
+    logger.info(
+        "frontend.company_init_task_enqueued",
+        company_id=company_id,
+        taskiq_task_id=init_task.task_id,
+    )
 
     redirect_url = build_url(request.headers.get("host", ""), "/dashboard", slug)
     logger.info("frontend.company_create_redirect", redirect_url=redirect_url)
@@ -280,21 +235,12 @@ async def create_company(
     return response
 
 
-@router.get("/me", response_model=ListResponse[dict[str, Any]])
+@router.get("/me", response_model=ListResponse[CompanyMembershipResponse])
 async def get_my_companies(
     request: Request,
     container: ContainerDep,
-) -> ListResponse[dict[str, Any]]:
-    """
-    Получить список компаний текущего пользователя
-
-    Args:
-        request: FastAPI request
-        container: DI контейнер
-
-    Returns:
-        Список компаний с их данными
-    """
+) -> ListResponse[CompanyMembershipResponse]:
+    """Возвращает компании текущего пользователя с subdomain и ролями."""
     token_data = getattr(request.state, "token_data", None)
     if token_data is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -309,13 +255,13 @@ async def get_my_companies(
     )
 
 
-@router.post("/{company_id}/system-access")
+@router.post("/{company_id}/system-access", response_model=SystemAccessGrantedResponse)
 async def enter_company_as_system_member(
     company_id: str,
     payload: SystemAccessRequest,
     request: Request,
     container: ContainerDep,
-) -> dict[str, Any]:
+) -> SystemAccessGrantedResponse:
     user = _require_authenticated_user(request)
     _ensure_user_is_system_member(user)
 
@@ -354,11 +300,11 @@ async def enter_company_as_system_member(
     else:
         user.companies[target_company_id] = user_roles
 
-    return {
-        "success": True,
-        "company_id": target_company_id,
-        "roles": user.companies[target_company_id],
-    }
+    return SystemAccessGrantedResponse(
+        success=True,
+        company_id=target_company_id,
+        roles=user.companies[target_company_id],
+    )
 
 
 @router.delete("/{company_id}/system-access")

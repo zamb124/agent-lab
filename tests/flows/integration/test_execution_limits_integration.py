@@ -14,11 +14,8 @@
 """
 
 from __future__ import annotations
-
 import time
-
 import pytest
-
 from apps.flows.config import get_settings
 from apps.flows.src.constants.execution_limits import (
     get_flow_execution_wall_time_cap_seconds,
@@ -50,10 +47,8 @@ async def test_check_cancellation_raises_flow_wall_clock_when_deadline_passed(
     )
     state.flow_deadline_monotonic = time.monotonic() - 1.0
     state.flow_timeout_effective_seconds = 77
-
     with pytest.raises(FlowWallClockTimeoutError) as exc_info:
         await check_cancellation(state)
-
     assert exc_info.value.payload["flow_id"] == f"flow_cap_{unique_id}"
     assert exc_info.value.payload["timeout_seconds"] == 77
     assert exc_info.value.code == "FLOW_WALL_CLOCK_TIMEOUT"
@@ -70,10 +65,8 @@ async def test_check_cancellation_uses_default_flow_timeout_when_effective_unset
     )
     state.flow_deadline_monotonic = time.monotonic() - 0.5
     state.flow_timeout_effective_seconds = None
-
     with pytest.raises(FlowWallClockTimeoutError) as exc_info:
         await check_cancellation(state)
-
     assert exc_info.value.payload["timeout_seconds"] == get_settings().default_flow_timeout_seconds
 
 
@@ -86,10 +79,9 @@ async def test_check_cancellation_does_not_raise_when_deadline_in_future(
         context_id=f"ctx-{unique_id}",
         session_id=f"flow_ok_{unique_id}:ctx-{unique_id}",
     )
-    state.flow_deadline_monotonic = time.monotonic() + 50_000.0
+    state.flow_deadline_monotonic = time.monotonic() + 50000.0
     state.flow_timeout_effective_seconds = 120
     set_cancellation_token(None)
-
     await check_cancellation(state)
 
 
@@ -105,7 +97,6 @@ async def test_check_cancellation_wall_clock_before_redis_cancel(
     )
     state.flow_deadline_monotonic = time.monotonic() - 0.5
     state.flow_timeout_effective_seconds = 30
-
     token = CancellationToken(f"task-{unique_id}", container.redis_client)
     set_cancellation_token(token)
     try:
@@ -128,7 +119,6 @@ async def test_check_cancellation_redis_cancel_when_deadline_not_set(
     )
     state.flow_deadline_monotonic = None
     state.flow_timeout_effective_seconds = None
-
     token = CancellationToken(f"task-{unique_id}", container.redis_client)
     set_cancellation_token(token)
     try:
@@ -145,29 +135,17 @@ async def test_check_cancellation_redis_cancel_when_deadline_not_set(
 async def test_code_node_node_timeout_stops_overlong_await(
     app, make_test_state, unique_id: str
 ) -> None:
-    code = """
-import asyncio
-async def run(args, state):
-    await asyncio.sleep(30)
-    return state
-"""
+    code = "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(30)\n    return state\n"
     node = CodeNode(
-        f"sleep_node_{unique_id}",
-        config={
-            "type": "code",
-            "code": code,
-            "node_timeout_seconds": 1,
-        },
+        f"sleep_node_{unique_id}", config={"type": "code", "code": code, "node_timeout_seconds": 1}
     )
     state = make_test_state(
         task_id=f"task-{unique_id}",
         context_id=f"ctx-{unique_id}",
         session_id=f"flow_n_{unique_id}:ctx-{unique_id}",
     )
-
     with pytest.raises(NodeWallClockTimeoutError) as exc_info:
         await node.run(state)
-
     assert exc_info.value.code == "NODE_WALL_CLOCK_TIMEOUT"
     assert exc_info.value.payload["node_id"] == f"sleep_node_{unique_id}"
     assert exc_info.value.payload["timeout_seconds"] == 1
@@ -177,22 +155,15 @@ async def run(args, state):
 async def test_flow_run_aborts_on_expired_deadline_before_node(
     app, make_test_state, unique_id: str
 ) -> None:
-    code = """
-async def run(args, state):
-    state.proof = "must_not_run"
-    return state
-"""
+    code = '\nasync def run(args, state):\n    state.proof = "must_not_run"\n    return state\n'
     n_id = f"step1_{unique_id}"
-    node = CodeNode(
-        n_id,
-        config={"type": "code", "code": code},
-    )
+    node = CodeNode(n_id, config={"type": "code", "code": code})
     flow = Flow(
         flow_id=f"linear_{unique_id}",
         name="linear",
         entry=n_id,
         nodes={n_id: node},
-        edges=[{"from": n_id, "to": None}],
+        edges=[{"from_node": n_id, "to_node": None}],
     )
     state = make_test_state(
         task_id=f"task-{unique_id}",
@@ -202,10 +173,8 @@ async def run(args, state):
     )
     state.flow_deadline_monotonic = time.monotonic() - 0.01
     state.flow_timeout_effective_seconds = 5
-
     with pytest.raises(FlowWallClockTimeoutError):
         await flow.run(state)
-
     assert getattr(state, "proof", None) is None
 
 
@@ -219,7 +188,7 @@ async def test_apply_flow_wall_clock_deadline_clamps_to_settings_cap(
         session_id=f"flow_clamp_{unique_id}:ctx-{unique_id}",
     )
     cap = get_flow_execution_wall_time_cap_seconds()
-    apply_flow_wall_clock_deadline(state, 9_999_999)
+    apply_flow_wall_clock_deadline(state, 9999999)
     assert state.flow_timeout_effective_seconds == cap
     assert state.flow_deadline_monotonic is not None
     assert state.flow_deadline_monotonic <= time.monotonic() + float(cap) + 1.0
@@ -233,14 +202,8 @@ def test_flow_config_rejects_timeout_above_service_cap(app, unique_id: str) -> N
             name="n",
             type=FlowType.LOCAL,
             entry="a",
-            nodes={
-                "a": {
-                    "type": "code",
-                    "code": "async def run(s):\n    return s",
-                    "name": "a",
-                }
-            },
-            edges=[{"from": "a", "to": None}],
+            nodes={"a": {"type": "code", "code": "async def run(s):\n    return s", "name": "a"}},
+            edges=[{"from_node": "a", "to_node": None}],
             timeout=cap + 1,
         )
 
@@ -251,10 +214,7 @@ def test_node_config_rejects_node_timeout_above_service_cap(app, unique_id: str)
     cap = get_node_execution_wall_time_cap_seconds()
     with pytest.raises(ValueError, match="node_timeout_seconds: максимум"):
         NodeConfig(
-            node_id=f"n_{unique_id}",
-            type=NodeType.CODE,
-            name="x",
-            node_timeout_seconds=cap + 1,
+            node_id=f"n_{unique_id}", type=NodeType.CODE, name="x", node_timeout_seconds=cap + 1
         )
 
 
@@ -273,12 +233,9 @@ def test_node_config_rejects_max_visits_above_graph_cap(app, unique_id: str) -> 
 
 
 @pytest.mark.asyncio
-async def test_http_validate_requires_python_entrypoint(
-    client, app, unique_id: str
-) -> None:
+async def test_http_validate_requires_python_entrypoint(client, app, unique_id: str) -> None:
     r = await client.post(
-        "/flows/api/v1/code/validate",
-        json={"code": "while True:\n    pass\n", "node_type": "code"},
+        "/flows/api/v1/code/validate", json={"code": "while True:\n    pass\n", "node_type": "code"}
     )
     assert r.status_code == 200
     body = r.json()
@@ -288,19 +245,13 @@ async def test_http_validate_requires_python_entrypoint(
 
 
 @pytest.mark.asyncio
-async def test_http_execute_node_timeout_surfaces_error(
-    client, app, unique_id: str
-) -> None:
+async def test_http_execute_node_timeout_surfaces_error(client, app, unique_id: str) -> None:
     code = "async def run(args, state):\n    while True:\n        pass\n"
     r = await client.post(
         "/flows/api/v1/code/execute",
         json={
             "node_type": "code",
-            "node_config": {
-                "type": "code",
-                "code": code,
-                "node_timeout_seconds": 1,
-            },
+            "node_config": {"type": "code", "code": code, "node_timeout_seconds": 1},
             "state": {
                 "task_id": f"t_{unique_id}",
                 "context_id": f"c_{unique_id}",

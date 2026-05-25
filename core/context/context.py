@@ -57,6 +57,37 @@ def require_active_company() -> "Company":
     return company
 
 
+def resolve_namespace_or_raise(override: str | None = None) -> str:
+    """
+    Каноничный резолвер namespace для CRM/RAG/flows.
+
+    Приоритет:
+    1. Явный `override` (из API request body / query / payload) — если непустая строка.
+    2. `Context.active_namespace` — если непустая строка и не дефолтный плейсхолдер.
+    3. `raise ValueError` — без молчаливого fallback на `"default"`.
+
+    Раньше по 18+ местам в коде стоял `namespace or "default"`, что прятало
+    отсутствие реального namespace в данных/контексте под валидно выглядящий
+    `"default"`. Это маскировало баги (запись попадает в чужой namespace,
+    cross-tenant read), которые невозможно отдиагностировать постфактум.
+
+    Если caller действительно хочет работать в namespace `"default"` —
+    передаёт `override="default"` явно.
+    """
+    if override is not None:
+        stripped = override.strip()
+        if stripped:
+            return stripped
+    context = get_context()
+    if context is not None:
+        ns = (context.active_namespace or "").strip()
+        if ns:
+            return ns
+    raise ValueError(
+        "resolve_namespace_or_raise: namespace не определён ни override-аргументом, ни Context.active_namespace. Тихий fallback на 'default' запрещён (Zero-Guess)."
+    )
+
+
 def clear_context() -> None:
     """Очищает контекст"""
     _context.set(None)

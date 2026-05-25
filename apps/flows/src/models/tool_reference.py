@@ -4,31 +4,25 @@
 
 from __future__ import annotations
 
+import copy
 from typing import ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from apps.flows.src.tools.json_schema_parameters import resolve_tool_parameters_schema
-from core.types import JsonObject, JsonValue
+from core.types import JsonObject, JsonValue, require_json_object
 
 from .enums import CodeMode, ReactToolRole
 
-# Тип для permission: строка или список строк
 Permission = str | list[str] | None
-
-
-class CallParameter(BaseModel):
-    """Параметр вызова инструмента"""
-
-    type: str = Field(default="string", description="Тип параметра")
-    description: str = Field(default="", description="Описание параметра")
-    required: bool = Field(default=True, description="Обязательный параметр")
 
 
 class ToolReference(BaseModel):
     """Инструмент с inline кодом"""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(json_schema_extra={"storage_prefix": "tool"})
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        json_schema_extra={"storage_prefix": "tool"},
+        extra="forbid",
+    )
 
     tool_id: str = Field(..., description="ID инструмента")
     name: str | None = Field(
@@ -40,16 +34,9 @@ class ToolReference(BaseModel):
     parameters_schema: JsonObject | None = Field(
         default=None,
         description=(
-            "Полная JSON Schema объекта параметров для LLM (type: object, properties, required, "
-            "minLength, default, items и т.д.). Имеет приоритет над args_schema при сборке схемы для модели."
+            "Полная JSON Schema объекта параметров для LLM "
+            "(type: object, properties, required, minLength, default, items и т.д.)."
         ),
-    )
-    args_schema: dict[str, CallParameter] = Field(
-        default_factory=dict,
-        description="Legacy: плоская схема {param_name: CallParameter}; если parameters_schema нет — строится LLM-схема отсюда",
-    )
-    mock_map: JsonObject | None = Field(
-        default=None, description="Mock данные для api_call tools"
     )
     params: JsonObject = Field(default_factory=dict, description="Параметры инструмента")
     resources: JsonObject = Field(
@@ -95,45 +82,38 @@ class ToolReference(BaseModel):
         description="Роль в ReAct: standard, reason, exit",
     )
     public_fields: list[str] | None = Field(
-        default=None,
-        description="Поля доступные для редактирования в UI. None = все поля доступны"
+        default=None, description="Поля доступные для редактирования в UI. None = все поля доступны"
     )
 
     # MCP-специфичные поля
     code_mode: CodeMode = Field(
-        default=CodeMode.INLINE_CODE,
-        description="Режим кода: inline_code или mcp_tool"
+        default=CodeMode.INLINE_CODE, description="Режим кода: inline_code или mcp_tool"
     )
-    mcp_server_id: str | None = Field(
-        default=None,
-        description="ID MCP сервера (для MCP тулов)"
-    )
-    mcp_tool_name: str | None = Field(
-        default=None,
-        description="Имя tool на MCP сервере"
-    )
+    mcp_server_id: str | None = Field(default=None, description="ID MCP сервера (для MCP тулов)")
+    mcp_tool_name: str | None = Field(default=None, description="Имя tool на MCP сервере")
 
     def effective_parameters_schema(self) -> JsonObject:
-        """Схема параметров для LLM: parameters_schema или сборка из args_schema."""
-        return resolve_tool_parameters_schema(
-            parameters_schema=self.parameters_schema,
-            args_schema=self.args_schema,
+        """Canonical JSON Schema параметров для LLM."""
+        if self.parameters_schema is None:
+            raise ValueError(f"ToolReference '{self.tool_id}' requires parameters_schema")
+        schema = require_json_object(
+            copy.deepcopy(self.parameters_schema),
+            f"tool.{self.tool_id}.parameters_schema",
         )
+        if schema.get("type") != "object" or not isinstance(schema.get("properties"), dict):
+            raise ValueError(
+                f"ToolReference '{self.tool_id}' parameters_schema must be object JSON Schema"
+            )
+        return schema
 
     def to_registry_format(self) -> JsonObject:
-        """Преобразует в формат для registry API (совместимость с platformweb)"""
+        """Преобразует в формат registry API."""
         attrs: JsonObject = {
             "description": self.description or "",
-            "args_schema": {
-                k: {"type": v.type, "description": v.description}
-                for k, v in self.args_schema.items()
-            },
+            "parameters_schema": self.effective_parameters_schema(),
         }
-        if self.parameters_schema:
-            attrs["parameters_schema"] = self.parameters_schema
         return {
             "name": self.tool_id,
             "type": "inline_code",
             "attributes": attrs,
-            "mock_map": self.mock_map,
         }

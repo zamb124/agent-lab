@@ -5,7 +5,17 @@
 from datetime import date, datetime, timezone
 from typing import override
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -126,31 +136,185 @@ class Tools(Base):
         return f"<Tools(key='{self.key}', updated_at='{self.updated_at}')>"
 
 
-class States(Base):
-    """
-    Таблица для хранения состояний агентов.
+class WorkflowInstances(Base):
+    """Current durable workflow head/projection."""
 
-    Ключи имеют формат: company:{company_id}:state:{session_id}
-    """
+    __tablename__: str = "workflow_instances"
 
-    __tablename__: str = "states"
-
-    key: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    value: Mapped[JsonObject] = mapped_column(JSONB)
+    workflow_instance_id: Mapped[str] = mapped_column(String, primary_key=True)
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    session_id: Mapped[str] = mapped_column(String, nullable=False)
+    flow_id: Mapped[str | None] = mapped_column(String, default=None)
+    context_id: Mapped[str | None] = mapped_column(String, default=None)
+    task_id: Mapped[str | None] = mapped_column(String, default=None)
+    user_id: Mapped[str | None] = mapped_column(String, default=None)
+    flow_branch_id: Mapped[str | None] = mapped_column(String, default=None)
+    active_execution_branch_id: Mapped[str] = mapped_column(String, nullable=False)
+    head_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    head_state_hash: Mapped[str | None] = mapped_column(String, default=None)
+    latest_snapshot_id: Mapped[str | None] = mapped_column(String, default=None)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="running")
+    last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
-    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     __table_args__: tuple[UniqueConstraint | Index, ...] = (
-        UniqueConstraint("key", name="uq_states_key"),
-        Index("ix_states_key_prefix", "key"),
-        Index("ix_states_updated_at", "updated_at"),
-        Index("ix_states_expired_at", "expired_at"),
+        UniqueConstraint("company_id", "session_id", name="uq_workflow_instances_company_session"),
+        Index("ix_workflow_instances_company_flow_updated", "company_id", "flow_id", "updated_at"),
+        Index("ix_workflow_instances_company_user_updated", "company_id", "user_id", "updated_at"),
+        Index("ix_workflow_instances_company_task", "company_id", "task_id"),
+        Index("ix_workflow_instances_company_context", "company_id", "context_id"),
+        Index("ix_workflow_instances_company_status", "company_id", "status"),
+        Index("ix_workflow_instances_company_updated", "company_id", "updated_at"),
     )
 
-    @override
-    def __repr__(self) -> str:
-        return f"<States(key='{self.key}', updated_at='{self.updated_at}')>"
+
+class ExecutionBranches(Base):
+    """Append-only execution branch lineage for fork/rewind/retry."""
+
+    __tablename__: str = "execution_branches"
+
+    execution_branch_id: Mapped[str] = mapped_column(String, primary_key=True)
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    session_id: Mapped[str] = mapped_column(String, nullable=False)
+    parent_execution_branch_id: Mapped[str | None] = mapped_column(String, default=None)
+    base_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    base_state_hash: Mapped[str | None] = mapped_column(String, default=None)
+    reason: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+
+    __table_args__: tuple[Index, ...] = (
+        Index("ix_execution_branches_company_session", "company_id", "session_id"),
+        Index("ix_execution_branches_parent", "parent_execution_branch_id"),
+    )
+
+
+class WorkflowEvents(Base):
+    """Canonical append-only event history."""
+
+    __tablename__: str = "workflow_events"
+
+    event_id: Mapped[str] = mapped_column(String, primary_key=True)
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    session_id: Mapped[str] = mapped_column(String, nullable=False)
+    execution_branch_id: Mapped[str] = mapped_column(String, nullable=False)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
+    state_delta: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
+    prev_state_hash: Mapped[str | None] = mapped_column(String, default=None)
+    next_state_hash: Mapped[str] = mapped_column(String, nullable=False)
+    causation_id: Mapped[str | None] = mapped_column(String, default=None)
+    correlation_id: Mapped[str | None] = mapped_column(String, default=None)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+
+    __table_args__: tuple[UniqueConstraint | Index, ...] = (
+        UniqueConstraint(
+            "company_id",
+            "session_id",
+            "execution_branch_id",
+            "sequence",
+            name="uq_workflow_events_sequence",
+        ),
+        Index("ix_workflow_events_company_session_sequence", "company_id", "session_id", "sequence"),
+        Index("ix_workflow_events_branch_sequence", "execution_branch_id", "sequence"),
+        Index("ix_workflow_events_type", "event_type"),
+    )
+
+
+class WorkflowSnapshots(Base):
+    """Materialized projection anchors for rehydration."""
+
+    __tablename__: str = "workflow_snapshots"
+
+    snapshot_id: Mapped[str] = mapped_column(String, primary_key=True)
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    session_id: Mapped[str] = mapped_column(String, nullable=False)
+    execution_branch_id: Mapped[str] = mapped_column(String, nullable=False)
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    state_json: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
+    state_hash: Mapped[str] = mapped_column(String, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+
+    __table_args__: tuple[UniqueConstraint | Index, ...] = (
+        UniqueConstraint(
+            "company_id",
+            "session_id",
+            "execution_branch_id",
+            "sequence",
+            name="uq_workflow_snapshots_sequence",
+        ),
+        Index("ix_workflow_snapshots_company_session_sequence", "company_id", "session_id", "sequence"),
+        Index("ix_workflow_snapshots_branch_sequence", "execution_branch_id", "sequence"),
+    )
+
+
+class ActivityTasks(Base):
+    """Logical durable activity identity scoped by workflow branch."""
+
+    __tablename__: str = "activity_tasks"
+
+    activity_id: Mapped[str] = mapped_column(String, primary_key=True)
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    session_id: Mapped[str] = mapped_column(String, nullable=False)
+    execution_branch_id: Mapped[str] = mapped_column(String, nullable=False)
+    node_id: Mapped[str | None] = mapped_column(String, default=None)
+    tool_call_id: Mapped[str | None] = mapped_column(String, default=None)
+    activity_type: Mapped[str] = mapped_column(String, nullable=False)
+    input_hash: Mapped[str] = mapped_column(String, nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String, default=None)
+    side_effect_policy: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+
+    __table_args__: tuple[UniqueConstraint | Index, ...] = (
+        UniqueConstraint(
+            "company_id",
+            "session_id",
+            "execution_branch_id",
+            "idempotency_key",
+            name="uq_activity_tasks_branch_idempotency_key",
+        ),
+        Index("ix_activity_tasks_company_session", "company_id", "session_id"),
+        Index("ix_activity_tasks_branch", "execution_branch_id"),
+        Index("ix_activity_tasks_node", "node_id"),
+    )
+
+
+class ActivityAttempts(Base):
+    """Append-only durable activity attempts with lease/result/error per attempt."""
+
+    __tablename__: str = "activity_attempts"
+
+    activity_attempt_id: Mapped[str] = mapped_column(String, primary_key=True)
+    activity_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("activity_tasks.activity_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    company_id: Mapped[str] = mapped_column(String, nullable=False)
+    session_id: Mapped[str] = mapped_column(String, nullable=False)
+    execution_branch_id: Mapped[str] = mapped_column(String, nullable=False)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    result_json: Mapped[JsonObject | None] = mapped_column(JSONB, default=None)
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+    __table_args__: tuple[UniqueConstraint | Index, ...] = (
+        UniqueConstraint(
+            "activity_id",
+            "attempt",
+            name="uq_activity_attempts_activity_attempt",
+        ),
+        Index("ix_activity_attempts_activity", "activity_id"),
+        Index("ix_activity_attempts_branch_status", "execution_branch_id", "status"),
+        Index("ix_activity_attempts_company_session", "company_id", "session_id"),
+    )
 
 
 class EvaluationResults(Base):
@@ -189,47 +353,6 @@ class EvaluationResults(Base):
         return f"<EvaluationResults(flow_id='{self.flow_id}', test_case_id='{self.test_case_id}')>"
 
 
-class ScheduledTasks(Base):
-    """
-    Таблица для хранения scheduled tasks.
-    """
-
-    __tablename__: str = "scheduled_tasks"
-
-    schedule_task_id: Mapped[str] = mapped_column("id", String, primary_key=True)
-    schedule_id: Mapped[str | None] = mapped_column(String, default=None)
-    flow_id: Mapped[str] = mapped_column(String)
-    session_id: Mapped[str] = mapped_column(String)
-    user_id: Mapped[str] = mapped_column(String)
-    schedule_type: Mapped[str] = mapped_column(String)
-    content_type: Mapped[str] = mapped_column(String)
-    cron: Mapped[str | None] = mapped_column(String, default=None)
-    interval_minutes: Mapped[int | None] = mapped_column(Integer, default=None)
-    run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    content: Mapped[str] = mapped_column(String)
-    tool_args: Mapped[JsonObject | None] = mapped_column(JSONB, default=None)
-    description: Mapped[str | None] = mapped_column(String, default=None)
-    status: Mapped[str] = mapped_column(String, default="pending")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    next_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
-    error_message: Mapped[str | None] = mapped_column(String, default=None)
-
-    __table_args__: tuple[Index, ...] = (
-        Index("ix_scheduled_tasks_session_id", "session_id"),
-        Index("ix_scheduled_tasks_flow_id", "flow_id"),
-        Index("ix_scheduled_tasks_status", "status"),
-        Index("ix_scheduled_tasks_next_run", "next_run"),
-    )
-
-    @override
-    def __repr__(self) -> str:
-        return (
-            f"<ScheduledTasks(schedule_task_id='{self.schedule_task_id}', "
-            f"flow_id='{self.flow_id}', status='{self.status}')>"
-        )
-
-
 class Resources(Base):
     """
     Таблица для хранения shared ресурсов.
@@ -255,51 +378,6 @@ class Resources(Base):
     @override
     def __repr__(self) -> str:
         return f"<Resources(key='{self.key}', updated_at='{self.updated_at}')>"
-
-
-class Stores(Base):
-    """
-    Таблица хранения store (единого для всего flow).
-    Все агенты в flow используют один и тот же store через store_id.
-    """
-
-    __tablename__: str = "stores"
-
-    store_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
-    store_data: Mapped[JsonObject] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
-
-    __table_args__: tuple[Index, ...] = (
-        Index("ix_stores_updated_at", "updated_at"),
-    )
-
-    @override
-    def __repr__(self) -> str:
-        return f"<Stores(store_id='{self.store_id}', updated_at='{self.updated_at}')>"
-
-
-class FlowStates(Base):
-    """
-    Состояния сессий (JSONB). Store — в таблице stores по store_id.
-    """
-
-    __tablename__: str = "flow_states"
-
-    session_id: Mapped[str] = mapped_column(String(255), primary_key=True, index=True)
-    store_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    state_data: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), insert_default=utc_now, onupdate=utc_now)
-
-    __table_args__: tuple[Index, ...] = (
-        Index("ix_flow_states_store_id", "store_id"),
-        Index("ix_flow_states_updated_at", "updated_at"),
-    )
-
-    @override
-    def __repr__(self) -> str:
-        return f"<FlowStates(session_id='{self.session_id}', store_id='{self.store_id}')>"
 
 
 class OperatorQueues(Base):

@@ -2,27 +2,42 @@
 API для биллинга, пополнения баланса и управления подпиской.
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 
 from apps.frontend.dependencies import ContainerDep
-from apps.frontend.models import BillingSubscription, BillingUsage, ChangePlanRequest
+from apps.frontend.models import (
+    BillingPlanChangeResponse,
+    BillingSubscription,
+    BillingUsage,
+    ChangePlanRequest,
+    PaymentHistoryResponse,
+)
 from core.clients.payment import PaymentProviderFactory
-from core.context import set_context
+from core.context import require_context
 from core.logging import get_logger
 from core.models.billing_models import TariffPlan
-from core.models.payment_models import CreatePaymentRequest, TransactionResponse
+from core.models.identity_models import Company, User
+from core.models.payment_models import (
+    CreatePaymentRequest,
+    CreatePaymentResponse,
+    TransactionResponse,
+)
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
-@router.get("/subscription", response_model=BillingSubscription)
-async def get_subscription(request: Request, container: ContainerDep):
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    if not hasattr(request.state, "company") or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
 
-    company = request.state.company
+def _require_billing_principal() -> tuple[User, Company]:
+    context = require_context()
+    company = context.active_company
+    if company is None:
+        raise HTTPException(status_code=400, detail="Компания не выбрана")
+    return context.user, company
+
+
+@router.get("/subscription", response_model=BillingSubscription)
+async def get_subscription() -> BillingSubscription:
+    _, company = _require_billing_principal()
     return BillingSubscription(
         plan=company.tariff_plan.value,
         balance=company.balance,
@@ -31,107 +46,78 @@ async def get_subscription(request: Request, container: ContainerDep):
         billing_period_start=company.billing_period_start,
     )
 
+
 @router.get("/usage", response_model=BillingUsage)
-async def get_usage_stats(request: Request, container: ContainerDep):
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    if not hasattr(request.state, "company") or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-
-    company = request.state.company
-
-    if hasattr(request.state, "context"):
-        set_context(request.state.context)
-
+async def get_usage_stats(container: ContainerDep) -> BillingUsage:
+    _, company = _require_billing_principal()
     stats = await container.billing_service.get_company_usage_stats(company.company_id)
     return BillingUsage.model_validate(stats)
 
-@router.patch("/plan")
+
+@router.patch("/plan", response_model=BillingPlanChangeResponse)
 async def change_plan(
     plan_request: ChangePlanRequest,
-    request: Request,
     container: ContainerDep,
-):
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    if not hasattr(request.state, "company") or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-
-    user = request.state.user
-    company = request.state.company
+) -> BillingPlanChangeResponse:
+    user, company = _require_billing_principal()
 
     if "owner" not in company.members.get(user.user_id, []):
         raise HTTPException(status_code=403, detail="Только владелец компании может менять тариф")
 
     try:
         tariff = TariffPlan(plan_request.plan)
-    except ValueError:
+    except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail="Недопустимый тариф. Допустимые: free, basic, premium, enterprise",
-        )
+        ) from exc
 
     if tariff == company.tariff_plan:
         raise HTTPException(status_code=400, detail="Компания уже использует этот тариф")
 
     company.tariff_plan = tariff
-    await container.company_repository.set(company)
+    _ = await container.company_repository.set(company)
 
     logger.info("Тариф компании %s изменен на %s", company.company_id, tariff.value)
 
-    return {
-        "success": True,
-        "plan": tariff.value,
-        "message": f"Тариф успешно изменен на {tariff.value}",
-    }
+    return BillingPlanChangeResponse(
+        success=True,
+        plan=tariff.value,
+        message=f"Тариф успешно изменен на {tariff.value}",
+    )
 
-@router.post("/topup")
+
+@router.post("/topup", response_model=CreatePaymentResponse)
 async def create_topup_payment(
     payment_request: CreatePaymentRequest,
-    request: Request,
     container: ContainerDep,
-):
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    if not hasattr(request.state, "company") or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-
-    user = request.state.user
-    company = request.state.company
+) -> CreatePaymentResponse:
+    user, company = _require_billing_principal()
 
     user_roles = company.members.get(user.user_id, [])
     if "owner" not in user_roles and "admin" not in user_roles:
-        raise HTTPException(status_code=403, detail="Только владелец или администратор может пополнять баланс")
+        raise HTTPException(
+            status_code=403,
+            detail="Только владелец или администратор может пополнять баланс",
+        )
 
     provider = PaymentProviderFactory.get_default_provider()
-    if not provider:
+    if provider is None:
         raise HTTPException(status_code=503, detail="Платежный провайдер не настроен")
 
-    result = await container.payment_service.create_payment(
+    return await container.payment_service.create_payment(
         company=company,
         user=user,
         amount=payment_request.amount,
         provider=provider,
     )
 
-    return {
-        "success": True,
-        "payment_id": result["transaction_id"],
-        "payment_url": result["payment_url"],
-        "amount": result["amount"],
-    }
 
-@router.get("/history")
+@router.get("/history", response_model=PaymentHistoryResponse)
 async def get_payment_history(
-    request: Request,
     container: ContainerDep,
-):
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    if not hasattr(request.state, "company") or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-
-    company = request.state.company
+) -> PaymentHistoryResponse:
+    _, company = _require_billing_principal()
 
     transactions = await container.payment_service.get_company_transactions(
         company_id=company.company_id,
@@ -152,4 +138,4 @@ async def get_payment_history(
         for t in transactions
     ]
 
-    return {"payments": [p.model_dump(mode="json") for p in payments]}
+    return PaymentHistoryResponse(payments=payments)

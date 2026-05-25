@@ -111,7 +111,7 @@ class BufferedSTTStreamer(BaseSTTStreamer):
         return await self._stt_client.transcribe_audio(
             audio_bytes=wav,
             file_name="voice_segment.wav",
-            mime_type="audio/wav",
+            content_type="audio/wav",
             language=self._language,
         )
 

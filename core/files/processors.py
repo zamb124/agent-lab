@@ -23,9 +23,9 @@ from core.files.audio_transcode import (
 from core.files.file_ref import FileRef
 from core.files.media.transcriber import MediaTranscriber
 from core.files.models import (
-    AudioMetadata,
+    AudioRecord,
     AudioTranscriptionStatus,
-    FileMetadata,
+    FileRecord,
     FileStatus,
 )
 from core.files.s3_client import S3Client, S3ClientFactory
@@ -115,7 +115,7 @@ class FileProcessor:
         metadata: JsonObject | None = None,
         tags: list[str] | None = None,
         public: bool = False,
-    ) -> FileMetadata:
+    ) -> FileRecord:
         """
         Обрабатывает файл из данных в памяти.
 
@@ -170,7 +170,7 @@ class FileProcessor:
             public=public,
         )
 
-        file_record = FileMetadata(
+        file_record = FileRecord(
             file_id=file_id,
             provider=s3_client.provider_name,
             original_name=original_name,
@@ -204,7 +204,7 @@ class FileProcessor:
         content_sha256_hex: str | None = None,
         metadata: JsonObject | None = None,
         tags: list[str] | None = None,
-    ) -> FileMetadata:
+    ) -> FileRecord:
         """
         Один путь для «байты с клиента или воркера → S3 + FileRecord»: process_file_from_bytes,
         затем company_id, same-origin download_url и при необходимости checksum (как POST .../files/).
@@ -270,7 +270,7 @@ class FileProcessor:
             is_public=record.is_public,
         )
 
-    async def get_file_record(self, file_id: str) -> FileMetadata | None:
+    async def get_file_record(self, file_id: str) -> FileRecord | None:
         """
         Получает запись о файле.
 
@@ -308,12 +308,12 @@ class FileProcessor:
         logger.info(f"Файл удален: {file_id}")
         return True
 
-    def format_file_message(self, file_record: FileMetadata) -> str:
+    def format_file_message(self, file_record: FileRecord) -> str:
         """
         Форматирует сообщение о файле для агента.
 
         Args:
-            file_record: Запись о файле (FileRecord или FileMetadata)
+            file_record: Запись о файле
 
         Returns:
             Отформатированное сообщение в формате [FILE] ... [/FILE]
@@ -398,7 +398,7 @@ class AudioProcessor:
         metadata: JsonObject | None = None,
         tags: list[str] | None = None,
         public: bool = True,
-    ) -> AudioMetadata:
+    ) -> AudioRecord:
         """Загружает аудио в S3 и при auto_recognize транскрибирует через MediaTranscriber."""
         logger.info("Обработка аудио: %s, размер=%s байт", original_name, len(data))
 
@@ -432,14 +432,14 @@ class AudioProcessor:
             transcription_result = await transcriber.transcribe_audio(
                 audio_bytes=data,
                 file_name=original_name,
-                mime_type=content_type,
+                content_type=content_type,
                 language=language,
             )
             transcription_text = transcription_result.text
             transcription_status = AudioTranscriptionStatus.DONE
             transcription_provider = transcription_result.provider
 
-        audio_record = AudioMetadata(
+        audio_record = AudioRecord(
             file_id=file_id,
             provider=s3_client.provider_name,
             original_name=original_name,
@@ -462,13 +462,13 @@ class AudioProcessor:
         logger.info("Аудио обработано: %s", file_id)
         return audio_record
 
-    async def get_audio_record(self, audio_id: str) -> AudioMetadata | None:
+    async def get_audio_record(self, audio_id: str) -> AudioRecord | None:
         record = await self.file_repository.get(audio_id)
         if record is None:
             return None
-        if isinstance(record, AudioMetadata):
+        if isinstance(record, AudioRecord):
             return record
-        return AudioMetadata.model_validate(record.model_dump(mode="json"))
+        return AudioRecord.model_validate(record.model_dump(mode="json"))
 
 _default_file_processor: FileProcessor | None = None
 _default_audio_processor: AudioProcessor | None = None

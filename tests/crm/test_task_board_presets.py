@@ -29,8 +29,8 @@ def test_resolve_custom_preset() -> None:
         pipeline_stage_presets={
             "task": TaskBoardPreset(
                 stages=[
-                    BoardStage(id="open", label="Открыто"),
-                    BoardStage(id="closed", label="Закрыто"),
+                    BoardStage(stage_id="open", label="Открыто"),
+                    BoardStage(stage_id="closed", label="Закрыто"),
                 ]
             )
         }

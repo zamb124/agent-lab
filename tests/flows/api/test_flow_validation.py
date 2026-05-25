@@ -19,6 +19,10 @@ import pytest
 BUNDLES_DIR = Path(__file__).parent.parent.parent.parent / "apps" / "flows" / "bundles"
 
 
+def simple_condition(variable: str, operator: str, value: object) -> dict[str, object]:
+    return {"type": "simple", "variable": variable, "operator": operator, "value": value}
+
+
 class TestFlowValidationStructure:
     """Тесты валидации структуры графа."""
 
@@ -28,14 +32,8 @@ class TestFlowValidationStructure:
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {
-                        "type": "llm_node",
-                        "prompt": "Test agent",
-                        "tools": [],
-                    }
-                },
-                "edges": [{"from": "main", "to": None}],
+                "nodes": {"main": {"type": "llm_node", "prompt": "Test agent", "tools": []}},
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
@@ -51,9 +49,7 @@ class TestFlowValidationStructure:
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {"type": "llm_node", "prompt": "Test"},
-                },
+                "nodes": {"main": {"type": "llm_node", "prompt": "Test"}},
                 "edges": [],
                 "entry": "",
                 "variables": {},
@@ -62,7 +58,6 @@ class TestFlowValidationStructure:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "missing_entry" in error_codes
 
@@ -72,9 +67,7 @@ class TestFlowValidationStructure:
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {"type": "llm_node", "prompt": "Test"},
-                },
+                "nodes": {"main": {"type": "llm_node", "prompt": "Test"}},
                 "edges": [],
                 "entry": "nonexistent_node",
                 "variables": {},
@@ -83,22 +76,17 @@ class TestFlowValidationStructure:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "entry_not_found" in error_codes
 
     @pytest.mark.asyncio
     async def test_validate_edge_from_not_found(self, client, app):
-        """Ошибка если edge.from ссылается на несуществующую ноду."""
+        """Ошибка если edge.from_node ссылается на несуществующую ноду."""
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {"type": "llm_node", "prompt": "Test"},
-                },
-                "edges": [
-                    {"from": "nonexistent", "to": "main"},
-                ],
+                "nodes": {"main": {"type": "llm_node", "prompt": "Test"}},
+                "edges": [{"from_node": "nonexistent", "to_node": "main"}],
                 "entry": "main",
                 "variables": {},
             },
@@ -106,22 +94,17 @@ class TestFlowValidationStructure:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "edge_from_not_found" in error_codes
 
     @pytest.mark.asyncio
     async def test_validate_edge_to_not_found(self, client, app):
-        """Ошибка если edge.to ссылается на несуществующую ноду."""
+        """Ошибка если edge.to_node ссылается на несуществующую ноду."""
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {"type": "llm_node", "prompt": "Test"},
-                },
-                "edges": [
-                    {"from": "main", "to": "nonexistent"},
-                ],
+                "nodes": {"main": {"type": "llm_node", "prompt": "Test"}},
+                "edges": [{"from_node": "main", "to_node": "nonexistent"}],
                 "entry": "main",
                 "variables": {},
             },
@@ -129,7 +112,6 @@ class TestFlowValidationStructure:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "edge_to_not_found" in error_codes
 
@@ -143,21 +125,17 @@ class TestFlowValidationStructure:
                     "main": {"type": "llm_node", "prompt": "Test"},
                     "orphan": {"type": "llm_node", "prompt": "Orphan node"},
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
-        # Valid - нет критических ошибок, но есть warning
         warnings = [e for e in data["errors"] if e["severity"] == "warning"]
         warning_codes = [w["code"] for w in warnings]
         assert "unreachable_nodes" in warning_codes
-
-        # Проверяем что orphan в details
-        unreachable_warning = next(w for w in warnings if w["code"] == "unreachable_nodes")
+        unreachable_warning = next((w for w in warnings if w["code"] == "unreachable_nodes"))
         assert "orphan" in unreachable_warning["details"]["unreachable"]
 
 
@@ -170,20 +148,14 @@ class TestFlowValidationReferences:
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {
-                        "type": "llm_node",
-                        "node_id": test_node_in_db,
-                    }
-                },
-                "edges": [{"from": "main", "to": None}],
+                "nodes": {"main": {"type": "llm_node", "node_id": test_node_in_db}},
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "node_not_found" not in error_codes
 
@@ -193,13 +165,8 @@ class TestFlowValidationReferences:
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {
-                        "type": "llm_node",
-                        "node_id": "nonexistent_node_xyz_12345",
-                    }
-                },
-                "edges": [{"from": "main", "to": None}],
+                "nodes": {"main": {"type": "llm_node", "node_id": "nonexistent_node_xyz_12345"}},
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
@@ -207,7 +174,6 @@ class TestFlowValidationReferences:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "node_not_found" in error_codes
 
@@ -217,21 +183,14 @@ class TestFlowValidationReferences:
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {
-                        "type": "llm_node",
-                        "prompt": "Test",
-                        "tools": ["calculator"],
-                    }
-                },
-                "edges": [{"from": "main", "to": None}],
+                "nodes": {"main": {"type": "llm_node", "prompt": "Test", "tools": ["calculator"]}},
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes
 
@@ -248,7 +207,7 @@ class TestFlowValidationReferences:
                         "tools": ["nonexistent_tool_xyz_12345"],
                     }
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
@@ -256,7 +215,6 @@ class TestFlowValidationReferences:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "tool_not_found" in error_codes
 
@@ -278,14 +236,13 @@ class TestFlowValidationReferences:
                         ],
                     }
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes
 
@@ -295,20 +252,14 @@ class TestFlowValidationReferences:
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {
-                        "type": "code",
-                        "tool_id": "calculator",
-                    }
-                },
-                "edges": [{"from": "main", "to": None}],
+                "nodes": {"main": {"type": "code", "tool_id": "calculator"}},
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes
 
@@ -318,13 +269,8 @@ class TestFlowValidationReferences:
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {
-                        "type": "code",
-                        "tool_id": "nonexistent_tool_xyz_12345",
-                    }
-                },
-                "edges": [{"from": "main", "to": None}],
+                "nodes": {"main": {"type": "code", "tool_id": "nonexistent_tool_xyz_12345"}},
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
@@ -332,7 +278,6 @@ class TestFlowValidationReferences:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "tool_not_found" in error_codes
 
@@ -343,19 +288,15 @@ class TestFlowValidationReferences:
             "/flows/api/v1/flows/validate",
             json={
                 "nodes": {
-                    "main": {
-                        "type": "code",
-                        "code": "async def run(args, state): return 'ok'",
-                    }
+                    "main": {"type": "code", "code": "async def run(args, state): return 'ok'"}
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes
 
@@ -365,13 +306,8 @@ class TestFlowValidationReferences:
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {
-                        "type": "flow",
-                        "flow_id": "nonexistent_agent_xyz_12345",
-                    }
-                },
-                "edges": [{"from": "main", "to": None}],
+                "nodes": {"main": {"type": "flow", "flow_id": "nonexistent_agent_xyz_12345"}},
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
@@ -379,7 +315,6 @@ class TestFlowValidationReferences:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "flow_not_found" in error_codes
 
@@ -389,12 +324,8 @@ class TestFlowValidationReferences:
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {
-                        "type": "remote_flow",
-                    }
-                },
-                "edges": [{"from": "main", "to": None}],
+                "nodes": {"main": {"type": "remote_flow"}},
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
@@ -402,7 +333,6 @@ class TestFlowValidationReferences:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "remote_flow_no_target" in error_codes
 
@@ -420,25 +350,18 @@ class TestFlowValidationVariables:
                     "main": {
                         "type": "llm_node",
                         "prompt": "Test",
-                        "input_mapping": {
-                            "api_key": "@var:my_api_key",
-                        },
+                        "input_mapping": {"api_key": "@var:my_api_key"},
                     }
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
-                "variables": {
-                    "my_api_key": "secret123",
-                },
+                "variables": {"my_api_key": "secret123"},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "undefined_variable" not in error_codes
-
-        # Проверяем что переменная собрана
         assert "my_api_key" in data["var_keys_used"]
 
     @pytest.mark.asyncio
@@ -451,12 +374,10 @@ class TestFlowValidationVariables:
                     "main": {
                         "type": "llm_node",
                         "prompt": "Test",
-                        "input_mapping": {
-                            "api_key": "@var:undefined_var_xyz",
-                        },
+                        "input_mapping": {"api_key": "@var:undefined_var_xyz"},
                     }
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
@@ -464,7 +385,6 @@ class TestFlowValidationVariables:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "undefined_variable" in error_codes
 
@@ -478,24 +398,21 @@ class TestFlowValidationVariables:
                     "main": {
                         "type": "llm_node",
                         "prompt": "Test",
-                        "input_mapping": {
-                            "bot_token": "@var:telegram_mirror_bot_token",
-                        },
+                        "input_mapping": {"bot_token": "@var:telegram_mirror_bot_token"},
                     }
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {
                     "telegram_mirror_bot_token": {
                         "value": "@var:telegram_notify_bot_token",
                         "secret": True,
-                    },
+                    }
                 },
             },
         )
         assert response.status_code == 200
         data = response.json()
-
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "undefined_variable" not in error_codes
         assert "telegram_mirror_bot_token" in data["var_keys_used"]
@@ -513,16 +430,13 @@ class TestFlowValidationVariables:
                         "url": "https://api.example.com/@var:api_version/endpoint",
                     }
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
-                "variables": {
-                    "api_version": "v2",
-                },
+                "variables": {"api_version": "v2"},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "undefined_variable" not in error_codes
 
@@ -536,20 +450,17 @@ class TestFlowValidationVariables:
                     "main": {
                         "type": "external_api",
                         "url": "https://api.example.com",
-                        "headers": {
-                            "Authorization": "Bearer @var:api_token",
-                        },
+                        "headers": {"Authorization": "Bearer @var:api_token"},
                     }
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
-                "variables": {},  # api_token НЕ определён
+                "variables": {},
             },
         )
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
         error_codes = [e["code"] for e in data["errors"]]
         assert "undefined_variable" in error_codes
 
@@ -569,15 +480,13 @@ class TestFlowValidationInlineCode:
                         "code": "async def run(args, state):\n    content = state.get('content', '')\n    state['result'] = content.upper()\n    return state",
                     }
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
-        # state_keys_used должен содержать найденные ключи
         assert "content" in data["state_keys_used"]
         assert "result" in data["state_keys_used"]
 
@@ -593,17 +502,15 @@ class TestFlowValidationInlineCode:
                         "code": "async def run(args, state):\n    content = state['content'].lower()\n    if 'order' in content:\n        state['route'] = 'order'\n    return state",
                     }
                 },
-                "edges": [{"from": "classifier", "to": None}],
+                "edges": [{"from_node": "classifier", "to_node": None}],
                 "entry": "classifier",
                 "variables": {},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
         info_messages = [e for e in data["errors"] if e["severity"] == "info"]
         assert len(info_messages) > 0
-
         code_info = [e for e in info_messages if e["code"] == "inline_code_state_keys"]
         assert len(code_info) > 0
 
@@ -617,7 +524,6 @@ class TestFlowValidationExampleGraph:
         flow_path = BUNDLES_DIR / "example_graph" / "flow.json"
         with open(flow_path) as f:
             flow_config = json.load(f)
-
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
@@ -625,24 +531,19 @@ class TestFlowValidationExampleGraph:
                 "edges": flow_config["edges"],
                 "entry": flow_config["entry"],
                 "variables": flow_config.get("variables", {}),
-                "flow_id": flow_config["id"],
+                "flow_id": flow_config["flow_id"],
             },
         )
         assert response.status_code == 200
         data = response.json()
-
-        # Должен быть валидным (агенты предзагружены)
         errors = [e for e in data["errors"] if e["severity"] == "error"]
-
-        # Выводим ошибки для отладки
         for err in errors:
             print(f"Error: {err['code']} - {err['message']}")
-
-        # example_graph может иметь ссылки на несуществующие агенты в тестах
-        # Проверяем только структуру
         structure_errors = [
-            e for e in errors
-            if e["code"] in ["missing_entry", "entry_not_found", "edge_from_not_found", "edge_to_not_found"]
+            e
+            for e in errors
+            if e["code"]
+            in ["missing_entry", "entry_not_found", "edge_from_not_found", "edge_to_not_found"]
         ]
         assert len(structure_errors) == 0, f"Structure errors: {structure_errors}"
 
@@ -652,7 +553,6 @@ class TestFlowValidationExampleGraph:
         flow_path = BUNDLES_DIR / "example_graph" / "flow.json"
         with open(flow_path) as f:
             flow_config = json.load(f)
-
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
@@ -664,8 +564,6 @@ class TestFlowValidationExampleGraph:
         )
         assert response.status_code == 200
         data = response.json()
-
-        # classifier имеет inline code с state.get('content'), state['route']
         assert "content" in data["state_keys_used"]
         assert "route" in data["state_keys_used"]
 
@@ -675,7 +573,6 @@ class TestFlowValidationExampleGraph:
         flow_path = BUNDLES_DIR / "example_graph" / "flow.json"
         with open(flow_path) as f:
             flow_config = json.load(f)
-
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
@@ -687,8 +584,6 @@ class TestFlowValidationExampleGraph:
         )
         assert response.status_code == 200
         data = response.json()
-
-        # Variables секция использует @var:company_name и @var:support_contacts
         assert "company_name" in data["var_keys_used"]
         assert "support_contacts" in data["var_keys_used"]
 
@@ -712,11 +607,19 @@ class TestFlowValidationComplexCases:
                     "final": {"type": "llm_node", "prompt": "Final"},
                 },
                 "edges": [
-                    {"from": "router", "to": "handler_a", "condition": "route == 'a'"},
-                    {"from": "router", "to": "handler_b", "condition": "route == 'b'"},
-                    {"from": "handler_a", "to": "final"},
-                    {"from": "handler_b", "to": "final"},
-                    {"from": "final", "to": None},
+                    {
+                        "from_node": "router",
+                        "to_node": "handler_a",
+                        "condition": simple_condition("route", "==", "a"),
+                    },
+                    {
+                        "from_node": "router",
+                        "to_node": "handler_b",
+                        "condition": simple_condition("route", "==", "b"),
+                    },
+                    {"from_node": "handler_a", "to_node": "final"},
+                    {"from_node": "handler_b", "to_node": "final"},
+                    {"from_node": "final", "to_node": None},
                 ],
                 "entry": "router",
                 "variables": {},
@@ -724,7 +627,6 @@ class TestFlowValidationComplexCases:
         )
         assert response.status_code == 200
         data = response.json()
-
         errors = [e for e in data["errors"] if e["severity"] == "error"]
         assert len(errors) == 0
 
@@ -743,10 +645,18 @@ class TestFlowValidationComplexCases:
                     "exit_b": {"type": "llm_node", "prompt": "Exit B"},
                 },
                 "edges": [
-                    {"from": "router", "to": "exit_a", "condition": "route == 'a'"},
-                    {"from": "router", "to": "exit_b", "condition": "route == 'b'"},
-                    {"from": "exit_a", "to": None},
-                    {"from": "exit_b", "to": None},
+                    {
+                        "from_node": "router",
+                        "to_node": "exit_a",
+                        "condition": simple_condition("route", "==", "a"),
+                    },
+                    {
+                        "from_node": "router",
+                        "to_node": "exit_b",
+                        "condition": simple_condition("route", "==", "b"),
+                    },
+                    {"from_node": "exit_a", "to_node": None},
+                    {"from_node": "exit_b", "to_node": None},
                 ],
                 "entry": "router",
                 "variables": {},
@@ -754,7 +664,6 @@ class TestFlowValidationComplexCases:
         )
         assert response.status_code == 200
         data = response.json()
-
         errors = [e for e in data["errors"] if e["severity"] == "error"]
         assert len(errors) == 0
 
@@ -763,18 +672,11 @@ class TestFlowValidationComplexCases:
         """Пустой граф - ошибка."""
         response = await client.post(
             "/flows/api/v1/flows/validate",
-            json={
-                "nodes": {},
-                "edges": [],
-                "entry": "main",
-                "variables": {},
-            },
+            json={"nodes": {}, "edges": [], "entry": "main", "variables": {}},
         )
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
-        # entry не найден
         error_codes = [e["code"] for e in data["errors"]]
         assert "entry_not_found" in error_codes
 
@@ -789,58 +691,36 @@ class TestFlowValidationComplexCases:
                         "type": "llm_node",
                         "prompt": "Test",
                         "input_mapping": {
-                            "config": {
-                                "api_key": "@var:api_key",
-                                "settings": {
-                                    "mode": "@var:mode",
-                                },
-                            },
+                            "config": {"api_key": "@var:api_key", "settings": {"mode": "@var:mode"}}
                         },
                     }
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
-                "variables": {
-                    "api_key": "secret",
-                    # mode НЕ определён
-                },
+                "variables": {"api_key": "secret"},
             },
         )
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
-
-        # mode не определён
         undefined_errors = [e for e in data["errors"] if e["code"] == "undefined_variable"]
         assert len(undefined_errors) > 0
-
-        # api_key определён, mode нет
         assert "api_key" in data["var_keys_used"]
         assert "mode" in data["var_keys_used"]
 
     @pytest.mark.asyncio
     async def test_validate_build_failure(self, client, app):
-        """Agent не может быть собран - ошибка build_failed."""
+        """Unknown node type rejected at strict API contract boundary."""
         response = await client.post(
             "/flows/api/v1/flows/validate",
             json={
-                "nodes": {
-                    "main": {
-                        "type": "unknown_type_xyz",  # Неизвестный тип ноды
-                        "prompt": "Test",
-                    }
-                },
-                "edges": [{"from": "main", "to": None}],
+                "nodes": {"main": {"type": "unknown_type_xyz", "prompt": "Test"}},
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["valid"] is False
-
-        error_codes = [e["code"] for e in data["errors"]]
-        assert "build_failed" in error_codes
+        assert response.status_code == 422
 
     @pytest.mark.asyncio
     async def test_validate_agent_as_tool_reference(self, client, app, test_agent_for_tool):
@@ -849,20 +729,14 @@ class TestFlowValidationComplexCases:
             "/flows/api/v1/flows/validate",
             json={
                 "nodes": {
-                    "main": {
-                        "type": "llm_node",
-                        "prompt": "Test",
-                        "tools": [test_agent_for_tool],  # Агент используется как tool
-                    }
+                    "main": {"type": "llm_node", "prompt": "Test", "tools": [test_agent_for_tool]}
                 },
-                "edges": [{"from": "main", "to": None}],
+                "edges": [{"from_node": "main", "to_node": None}],
                 "entry": "main",
                 "variables": {},
             },
         )
         assert response.status_code == 200
         data = response.json()
-
-        # Агент как tool должен быть найден
         error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
         assert "tool_not_found" not in error_codes

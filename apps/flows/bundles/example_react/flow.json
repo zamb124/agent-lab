@@ -1,12 +1,11 @@
 {
-  "id": "example_react",
+  "flow_id": "example_react",
   "name": "Пример ReAct flow",
-  "description": "Демонстрация ReAct: tools, subflow, interrupt, variables, skills, mock; HITL — skills hitl_operator_react (тул hitl_operator_task) и hitl_operator_node (нода hitl_node), очередь example_hitl; Google Docs — skill google_docs",
+  "description": "Демонстрация ReAct: tools, subflow, interrupt, variables, skills; HITL — skills hitl_operator_react (тул hitl_operator_task) и hitl_operator_node (нода hitl_node), очередь example_hitl; Google Docs — skill google_docs",
   "tags": [
     "example",
     "react",
-    "demo",
-    "mock"
+    "demo"
   ],
   "permission": [
     "admin",
@@ -53,20 +52,20 @@
   },
   "edges": [
     {
-      "from": "main",
-      "to": null
+      "from_node": "main",
+      "to_node": null
     },
     {
-      "from": "direct_subflow",
-      "to": null
+      "from_node": "direct_subflow",
+      "to_node": null
     },
     {
-      "from": "explicit_loop",
-      "to": null
+      "from_node": "explicit_loop",
+      "to_node": null
     },
     {
-      "from": "explicit_relaxed",
-      "to": null
+      "from_node": "explicit_relaxed",
+      "to_node": null
     }
   ],
   "variables": {
@@ -85,20 +84,6 @@
     "support_contacts": {
       "value": "@var:support_contacts",
       "public": false
-    }
-  },
-  "mock": {
-    "enabled": false,
-    "tools": {
-      "calculator": 42
-    },
-    "flows": {
-      "example_subflow": "Mock ответ вложенного subflow: данные собраны успешно"
-    },
-    "nodes": {
-      "main": {
-        "response": "Mock ответ от главной ноды flow"
-      }
     }
   },
   "evaluation": {
@@ -427,7 +412,7 @@
       "nodes": {
         "main": {
           "type": "llm_node",
-          "prompt_file": "prompts/main.md",
+          "prompt": "prompts/main.md",
           "tools": [
             "calculator",
             "ask_user"
@@ -446,82 +431,6 @@
       "description": "Пропуск главной ноды, прямой вход в ноду вложенного subflow",
       "entry": "direct_subflow"
     },
-    "test_tools": {
-      "name": "Тестирование tools",
-      "description": "Skill с mock для всех tools - для unit тестов",
-      "mock": {
-        "enabled": true,
-        "tools": {
-          "calculator": 100,
-          "ask_user": "Автоответ от mock ask_user"
-        }
-      }
-    },
-    "test_subflows": {
-      "name": "Тестирование вложенных subflow",
-      "description": "Skill с mock для вложенных flow — для интеграционных тестов",
-      "mock": {
-        "enabled": true,
-        "flows": {
-          "example_subflow": "Mock: subflow вернул тестовые данные"
-        }
-      }
-    },
-    "test_llm": {
-      "name": "Тестирование LLM",
-      "description": "Skill с mock для LLM ответов - для e2e тестов без реальных вызовов LLM",
-      "mock": {
-        "enabled": true,
-        "llm": [
-          {
-            "type": "text",
-            "content": "Mock ответ 1 от LLM"
-          },
-          {
-            "type": "tool_call",
-            "tool": "calculator",
-            "args": {
-              "expression": "2+2"
-            }
-          },
-          {
-            "type": "text",
-            "content": "Mock финальный ответ после calculator"
-          }
-        ],
-        "tools": {
-          "calculator": 4
-        }
-      }
-    },
-    "test_full": {
-      "name": "Полное мокирование",
-      "description": "Skill с mock для всех компонентов - полная изоляция",
-      "mock": {
-        "enabled": true,
-        "llm": [
-          {
-            "type": "text",
-            "content": "Полностью замоканный ответ"
-          }
-        ],
-        "tools": {
-          "calculator": 999,
-          "ask_user": "Mock user response"
-        },
-        "flows": {
-          "example_subflow": "Mock subflow response"
-        },
-        "nodes": {
-          "main": {
-            "response": "Mock node response"
-          },
-          "direct_subflow": {
-            "response": "Mock direct subflow node response"
-          }
-        }
-      }
-    },
     "explicit_mode": {
       "name": "Режим явного завершения (строгий)",
       "description": "Нода завершается ТОЛЬКО через finish tool. При тексте без finish - получает reminder.",
@@ -531,33 +440,6 @@
       "name": "Режим явного завершения (нестрогий)",
       "description": "Желательно через finish, но текстовый ответ тоже принимается.",
       "entry": "explicit_relaxed"
-    },
-    "test_explicit": {
-      "name": "Тест explicit режима",
-      "description": "Тестирование режима explicit с mock LLM",
-      "entry": "explicit_loop",
-      "mock": {
-        "enabled": true,
-        "llm": [
-          {
-            "type": "tool_call",
-            "tool": "calculator",
-            "args": {
-              "expression": "10+5"
-            }
-          },
-          {
-            "type": "tool_call",
-            "tool": "finish",
-            "args": {
-              "answer": "Результат: 10+5 = 15"
-            }
-          }
-        ],
-        "tools": {
-          "calculator": 15
-        }
-      }
     },
     "hitl_operator_react": {
       "name": "HITL: ReAct и тул hitl_operator_task",
@@ -577,8 +459,8 @@
       "nodes_mode": "merge",
       "edges": [
         {
-          "from": "hitl_tool_main",
-          "to": null
+          "from_node": "hitl_tool_main",
+          "to_node": null
         }
       ],
       "edges_mode": "merge"
@@ -602,12 +484,12 @@
       "nodes_mode": "merge",
       "edges": [
         {
-          "from": "hitl_prepare",
-          "to": "hitl_pause"
+          "from_node": "hitl_prepare",
+          "to_node": "hitl_pause"
         },
         {
-          "from": "hitl_pause",
-          "to": null
+          "from_node": "hitl_pause",
+          "to_node": null
         }
       ],
       "edges_mode": "merge"
@@ -630,8 +512,8 @@
       "nodes_mode": "merge",
       "edges": [
         {
-          "from": "gdocs_main",
-          "to": null
+          "from_node": "gdocs_main",
+          "to_node": null
         }
       ],
       "edges_mode": "merge",

@@ -321,7 +321,7 @@
   "nano_banana": {
     "enabled": true,
     "api_key": "YOUR_NANO_BANANA_API_KEY",
-    "model_name": "auto",
+    "model": "auto",
     "timeout": 60
   },
   "payment_providers": {

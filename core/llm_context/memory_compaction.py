@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
 
 from core.llm_context.memory import LLMContextMemoryEpisode, LLMContextMemoryStore
 from core.llm_context.models import LLMContextMemoryScope, LLMContextProfile
 from core.llm_context.token_counter import TiktokenTokenCounter, TokenCounter
-from core.types import JsonObject
+from core.types import JsonObject, JsonValue
 
 _SOURCE = "llm_context_compaction"
 LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY = "llm_context_recall_content"
@@ -24,7 +23,7 @@ LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION = (
 async def close_llm_context_memory_window(
     store: LLMContextMemoryStore,
     *,
-    messages: list[dict[str, Any]],
+    messages: list[JsonObject],
     policy: LLMContextProfile,
     cursor: int,
     session_id: str | None = None,
@@ -54,7 +53,7 @@ async def close_llm_context_memory_window(
 
 def build_llm_context_memory_episode(
     *,
-    messages: list[dict[str, Any]],
+    messages: list[JsonObject],
     policy: LLMContextProfile,
     cursor: int,
     session_id: str | None = None,
@@ -173,7 +172,7 @@ def _compaction_enabled(policy: LLMContextProfile) -> bool:
 
 
 def _closed_prefix_end(
-    messages: list[dict[str, Any]],
+    messages: list[JsonObject],
     *,
     policy: LLMContextProfile,
     token_counter: TokenCounter,
@@ -194,7 +193,7 @@ def _closed_prefix_end(
     return selected_start
 
 
-def _render_episode_content(messages: list[dict[str, Any]]) -> str:
+def _render_episode_content(messages: list[JsonObject]) -> str:
     rendered = "\n\n".join(
         part for part in (_render_message(message) for message in messages) if part
     )
@@ -213,7 +212,7 @@ def _render_memory_recall_content(summary: str) -> str:
     return "[Compacted conversation memory]\n" + summary.strip()
 
 
-def _render_message(message: dict[str, Any]) -> str:
+def _render_message(message: JsonObject) -> str:
     role = str(message.get("role") or "user")
     content = _content_to_text(message.get("content")).strip()
     tool_calls = message.get("tool_calls")
@@ -231,7 +230,7 @@ def _render_message(message: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def _content_to_text(content: Any) -> str:
+def _content_to_text(content: JsonValue) -> str:
     if isinstance(content, str):
         return content
     if content is None:
@@ -273,7 +272,7 @@ def _content_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
-def _stable_json(value: Any) -> str:
+def _stable_json(value: JsonValue) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
 
 

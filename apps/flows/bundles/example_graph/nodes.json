@@ -4,7 +4,7 @@
     "type": "llm_node",
     "name": "Агент заказов",
     "description": "Обрабатывает вопросы о заказах",
-    "prompt_file": "prompts/order.md",
+    "prompt": "prompts/order.md",
     "tools": [
       "ask_user"
     ],
@@ -19,7 +19,7 @@
     "type": "llm_node",
     "name": "Агент жалоб",
     "description": "Обрабатывает жалобы пользователей",
-    "prompt_file": "prompts/complaint.md",
+    "prompt": "prompts/complaint.md",
     "tools": [
       "ask_user"
     ],
@@ -34,7 +34,7 @@
     "type": "llm_node",
     "name": "Агент-тестер графа",
     "description": "Тестирует графовый flow ведя диалог как пользователь. Завершает диалог маркером [TEST_COMPLETE].",
-    "prompt_file": "prompts/graph_tester.md",
+    "prompt": "prompts/graph_tester.md",
     "tools": [],
     "llm": {
       "model": "auto",
@@ -47,7 +47,7 @@
     "type": "llm_node",
     "name": "Агент-судья графа",
     "description": "Оценивает качество диалога с графовым flow. Выставляет оценку по критериям.",
-    "prompt_file": "prompts/graph_judge.md",
+    "prompt": "prompts/graph_judge.md",
     "tools": [],
     "llm": {
       "model": "auto",

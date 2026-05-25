@@ -52,23 +52,6 @@ function quoteValue(value) {
     return `'${str}'`;
 }
 
-function parseLegacyString(condition) {
-    if (typeof condition !== 'string' || condition.length === 0) {
-        return { variable: '', operator: '==', value: '' };
-    }
-    for (const op of ['!=', '>=', '<=', '==', '>', '<', 'in']) {
-        const sep = ` ${op} `;
-        const idx = condition.indexOf(sep);
-        if (idx > 0) {
-            const variable = condition.slice(0, idx).trim();
-            const raw = condition.slice(idx + sep.length).trim();
-            const value = raw.replace(/^['"]|['"]$/g, '');
-            return { variable, operator: op, value };
-        }
-    }
-    return { variable: '', operator: '==', value: '' };
-}
-
 export class FlowsEdgeConditionModal extends PlatformFormModal {
     static modalKind = 'flows.edge_condition';
     static i18nNamespace = 'flows';
@@ -373,14 +356,6 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
         }
         if (typeof condition === 'object') {
             const type = condition.type;
-            if (type === 'python') {
-                this._mode = 'python';
-                this._codeLanguage = 'python';
-                this._pythonCode = typeof condition.code === 'string' && condition.code.length > 0
-                    ? condition.code
-                    : edgeConditionStarterCodeForLanguage(this._codeLanguage);
-                return;
-            }
             if (type === 'code') {
                 this._mode = 'python';
                 this._codeLanguage = normalizeFlowCodeLanguage(condition.language);
@@ -399,14 +374,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                 return;
             }
         }
-        if (typeof condition === 'string') {
-            const parsed = parseLegacyString(condition);
-            this._mode = 'simple';
-            this._variable = parsed.variable;
-            this._operator = parsed.operator;
-            this._value = parsed.value;
-            return;
-        }
+        throw new TypeError('flows-edge-condition-modal: edge.condition must be a typed object');
     }
 
     _collectVariables() {
@@ -421,7 +389,7 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
             }
             const edge = this._currentEdge();
             if (edge) {
-                const { from: fromId } = getEdgeEndpoints(edge);
+                const { from_node: fromId } = getEdgeEndpoints(edge);
                 const sourceNode = fromId && data.nodes ? data.nodes[fromId] : null;
                 if (sourceNode && sourceNode.config) {
                     const mapping = sourceNode.config.output_mapping;
@@ -683,7 +651,9 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
 
     renderBody() {
         const edge = this._currentEdge();
-        const { from: fromId, to: toId } = edge ? getEdgeEndpoints(edge) : { from: '', to: '' };
+        const { from_node: fromId, to_node: toId } = edge
+            ? getEdgeEndpoints(edge)
+            : { from_node: '', to_node: '' };
         const preview = this._previewText();
         const sep = this.t('edge_condition_modal.subtitle_separator');
         return html`

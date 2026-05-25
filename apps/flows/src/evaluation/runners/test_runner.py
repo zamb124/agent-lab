@@ -530,7 +530,10 @@ class TestRunner:
         """Импортирует функцию по полному пути модуля."""
         module_path, func_name = function_path.rsplit(".", 1)
         module = importlib.import_module(module_path)
-        checker = cast(StringChecker, getattr(module, func_name))
+        raw_checker = vars(module).get(func_name)
+        if raw_checker is None:
+            raise AttributeError(f"Module {module_path!r} has no checker {func_name!r}")
+        checker = cast(StringChecker, raw_checker)
         if not callable(checker):
             raise TypeError(f"Checker '{function_path}' is not callable")
         return checker

@@ -89,7 +89,7 @@ async def create_relationship(
         raise HTTPException(status_code=401, detail="Not authenticated")
     company_id = context.active_company.company_id
 
-    all_types = await container.relationship_type_repository.get_all_for_company(
+    all_types = await container.relationship_type_repository.list_by_company(
         include_system=True
     )
     valid_type_ids = {t.type_id for t in all_types}
@@ -142,7 +142,7 @@ async def list_relationship_types(
 ) -> OffsetPage[RelationshipTypeResponse]:
     repo = container.relationship_type_repository
     types, total = await asyncio.gather(
-        repo.get_all_for_company(include_system=True, limit=limit, offset=offset),
+        repo.list_by_company(include_system=True, limit=limit, offset=offset),
         repo.count_all_for_company(include_system=True),
     )
     return OffsetPage[RelationshipTypeResponse](

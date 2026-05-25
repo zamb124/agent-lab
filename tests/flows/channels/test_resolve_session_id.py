@@ -6,13 +6,15 @@ import uuid
 
 import pytest
 
-from apps.flows.src.db.state_repository import InMemoryStateRepository
-from apps.flows.src.state.persistence import create_initial_state
+from apps.flows.src.container import get_container
+from apps.flows.src.durable_execution import WorkflowEventType, create_initial_state
 
 
 @pytest.mark.asyncio
-async def test_inmemory_resolve_by_task_id(unique_id: str) -> None:
-    flow_id = "flow-x"
+async def test_runtime_resolve_by_task_id(app, unique_id: str) -> None:
+    _ = app
+    container = get_container()
+    flow_id = f"flow-{unique_id}"
     context_id = str(uuid.uuid4())
     task_id = str(uuid.uuid4())
     session_id = f"{flow_id}:{context_id}"
@@ -25,21 +27,33 @@ async def test_inmemory_resolve_by_task_id(unique_id: str) -> None:
         session_id=session_id,
         content="hi",
     )
-    repo = InMemoryStateRepository()
-    await repo.set(session_id, state)
-    assert await repo.get(session_id_wrong) is None
+    await container.workflow_runtime.save_state(
+        session_id,
+        state,
+        event_type=WorkflowEventType.user_input_applied,
+        snapshot=True,
+    )
+    assert await container.workflow_runtime.get_state(session_id_wrong) is None
 
-    found = await repo.resolve_session_id_by_flow_and_identifier(flow_id, task_id)
+    found = await container.workflow_runtime.resolve_session_id_by_flow_and_identifier(
+        flow_id,
+        task_id,
+    )
     assert found == session_id
 
-    found_ctx = await repo.resolve_session_id_by_flow_and_identifier(
-        flow_id, context_id
+    found_ctx = await container.workflow_runtime.resolve_session_id_by_flow_and_identifier(
+        flow_id,
+        context_id,
     )
     assert found_ctx == session_id
 
 
 @pytest.mark.asyncio
-async def test_inmemory_resolve_unknown() -> None:
-    repo = InMemoryStateRepository()
-    out = await repo.resolve_session_id_by_flow_and_identifier("f", "missing")
+async def test_runtime_resolve_unknown(app) -> None:
+    _ = app
+    container = get_container()
+    out = await container.workflow_runtime.resolve_session_id_by_flow_and_identifier(
+        "f",
+        "missing",
+    )
     assert out is None

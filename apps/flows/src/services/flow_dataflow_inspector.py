@@ -81,7 +81,9 @@ def inspect_flow_dataflow(
     }
     edge_list = list(edges)
     normalized_branch_id = branch_id or "default"
-    normalized_entry = entry if isinstance(entry, str) and entry else _infer_entry(node_payloads, edge_list)
+    normalized_entry = (
+        entry if isinstance(entry, str) and entry else _infer_entry(node_payloads, edge_list)
+    )
 
     seed = _initial_state_map(variables or {}, sample_state or {})
     incoming_by_node = _incoming_edges(edge_list)
@@ -113,11 +115,13 @@ def inspect_flow_dataflow(
             observation = (observed_runs or {}).get(node_id)
             info, output_state = _inspect_node(node_id, node, incoming, observation)
             if normalized_entry and node_id not in reachable and node_id != normalized_entry:
-                info.issues.append(_issue(
-                    "unreachable_node",
-                    "info",
-                    "Node is not reachable from the branch entry.",
-                ))
+                info.issues.append(
+                    _issue(
+                        "unreachable_node",
+                        "info",
+                        "Node is not reachable from the branch entry.",
+                    )
+                )
 
             if _state_signature(in_states.get(node_id, {})) != _state_signature(incoming):
                 in_states[node_id] = incoming
@@ -131,7 +135,9 @@ def inspect_flow_dataflow(
 
     for node_id, info in node_infos.items():
         info.incoming_state = _summarize_state_map(in_states.get(node_id, seed))
-        info.output_state = _summarize_state_map(out_states.get(node_id, in_states.get(node_id, seed)))
+        info.output_state = _summarize_state_map(
+            out_states.get(node_id, in_states.get(node_id, seed))
+        )
         info.canvas = _canvas_summary(info)
 
     return DataflowInspectResult(
@@ -216,7 +222,9 @@ def _initial_state_map(
     return out
 
 
-def _variable_state_map(variables: Mapping[str, FlowVariableConfig]) -> dict[str, DataflowStateDescriptor]:
+def _variable_state_map(
+    variables: Mapping[str, FlowVariableConfig],
+) -> dict[str, DataflowStateDescriptor]:
     out: dict[str, DataflowStateDescriptor] = {}
     for key, variable in variables.items():
         if not key:
@@ -235,8 +243,10 @@ def _variable_state_map(variables: Mapping[str, FlowVariableConfig]) -> dict[str
     return out
 
 
-def _state_for_edge(state_map: dict[str, DataflowStateDescriptor], edge: Edge) -> dict[str, DataflowStateDescriptor]:
-    conditioned = edge.condition not in (None, "", {})
+def _state_for_edge(
+    state_map: dict[str, DataflowStateDescriptor], edge: Edge
+) -> dict[str, DataflowStateDescriptor]:
+    conditioned = edge.condition is not None
     contributes = edge.contributes_to_join is not False
     if not conditioned and contributes:
         return copy.deepcopy(state_map)
@@ -249,7 +259,9 @@ def _state_for_edge(state_map: dict[str, DataflowStateDescriptor], edge: Edge) -
     return out
 
 
-def _merge_state_maps(maps: list[dict[str, DataflowStateDescriptor]]) -> dict[str, DataflowStateDescriptor]:
+def _merge_state_maps(
+    maps: list[dict[str, DataflowStateDescriptor]],
+) -> dict[str, DataflowStateDescriptor]:
     if not maps:
         return {}
     total = len(maps)
@@ -324,7 +336,9 @@ def _infer_result_keys(node: JsonObject, observation: JsonValue = None) -> list[
                 keys.update(key for key in result_obj if key)
             api_response = output_state_obj.get("api_response")
             if isinstance(api_response, dict):
-                api_response_obj = require_json_object(api_response, "observation.output_state.api_response")
+                api_response_obj = require_json_object(
+                    api_response, "observation.output_state.api_response"
+                )
                 keys.update(key for key in api_response_obj if key)
     node_type = str(node.get("type") or "")
     if node_type in {"llm_node", "flow", "remote_flow", "hitl_node"}:
@@ -362,13 +376,15 @@ def _inspect_input_mapping(
             desc = incoming.get(path)
             if desc is None:
                 row.status = "missing"
-                issues.append(_issue(
-                    "missing_state_path",
-                    "warning",
-                    f"Input mapping reads @state:{path}, but that field is not produced before this node.",
-                    path=path,
-                    target=target,
-                ))
+                issues.append(
+                    _issue(
+                        "missing_state_path",
+                        "warning",
+                        f"Input mapping reads @state:{path}, but that field is not produced before this node.",
+                        path=path,
+                        target=target,
+                    )
+                )
             else:
                 row.type = desc.type
                 row.producers = desc.producers
@@ -378,13 +394,15 @@ def _inspect_input_mapping(
             desc = incoming.get(path)
             if desc is None:
                 row.status = "missing"
-                issues.append(_issue(
-                    "missing_variable",
-                    "warning",
-                    f"Input mapping reads @var:{parsed.path}, but this variable is not declared in the branch.",
-                    path=str(parsed.path),
-                    target=target,
-                ))
+                issues.append(
+                    _issue(
+                        "missing_variable",
+                        "warning",
+                        f"Input mapping reads @var:{parsed.path}, but this variable is not declared in the branch.",
+                        path=str(parsed.path),
+                        target=target,
+                    )
+                )
             else:
                 row.type = desc.type
                 row.sample_value = desc.sample_value
@@ -411,20 +429,24 @@ def _inspect_config_reads(
         lookup = path if kind == "state" else f"variables.{path}"
         desc = incoming.get(lookup)
         status: DataflowStatus = "ok" if desc else "missing"
-        reads.append(DataflowConfigRead(
-            source_kind=kind,
-            source_path=path,
-            config_path=ref.config_path,
-            status=status,
-            type=desc.type if desc else "any",
-        ))
+        reads.append(
+            DataflowConfigRead(
+                source_kind=kind,
+                source_path=path,
+                config_path=ref.config_path,
+                status=status,
+                type=desc.type if desc else "any",
+            )
+        )
         if status == "missing":
-            issues.append(_issue(
-                f"missing_{kind}_path",
-                "warning",
-                f"Config field {ref.config_path} reads @{kind}:{path}, but it is not available before this node.",
-                path=path,
-            ))
+            issues.append(
+                _issue(
+                    f"missing_{kind}_path",
+                    "warning",
+                    f"Config field {ref.config_path} reads @{kind}:{path}, but it is not available before this node.",
+                    path=path,
+                )
+            )
     return reads
 
 
@@ -458,7 +480,11 @@ def _infer_node_writes(
 
     # Общий контракт маппинга BaseNode.
     raw_output_mapping = node.get("output_mapping")
-    output_mapping = require_json_object(raw_output_mapping, "output_mapping") if isinstance(raw_output_mapping, dict) else {}
+    output_mapping = (
+        require_json_object(raw_output_mapping, "output_mapping")
+        if isinstance(raw_output_mapping, dict)
+        else {}
+    )
     schema_props = _schema_properties(node.get("output_schema"))
     return_keys = _infer_code_return_keys(node)
     if output_mapping:
@@ -472,23 +498,35 @@ def _infer_node_writes(
                 )
     elif schema_props:
         for result_key, prop_schema in schema_props.items():
-            add(result_key, type_name=_schema_type(prop_schema), source="output_schema", confidence="declared")
+            add(
+                result_key,
+                type_name=_schema_type(prop_schema),
+                source="output_schema",
+                confidence="declared",
+            )
 
     if node_type == "llm_node":
         add("response", "string", source="llm.response")
         if bool(node.get("structured_output")) and schema_props:
             for key, prop_schema in schema_props.items():
                 if not output_mapping:
-                    add(key, type_name=_schema_type(prop_schema), source="structured_output", confidence="declared")
+                    add(
+                        key,
+                        type_name=_schema_type(prop_schema),
+                        source="structured_output",
+                        confidence="declared",
+                    )
         tools = node.get("tools")
         if isinstance(tools, list) and tools:
             add("tool_results", "object", source="llm.tools")
             writes.extend(_infer_llm_tool_writes(node_id, tools, issues))
-            issues.append(_issue(
-                "llm_tools_dynamic_state",
-                "info",
-                "LLM tools can mutate state dynamically; inspect individual tools for exact fields.",
-            ))
+            issues.append(
+                _issue(
+                    "llm_tools_dynamic_state",
+                    "info",
+                    "LLM tools can mutate state dynamically; inspect individual tools for exact fields.",
+                )
+            )
     elif node_type == "code":
         direct_fields = _infer_code_state_writes(node)
         for field in direct_fields:
@@ -500,14 +538,20 @@ def _infer_node_writes(
                 add(key, source="code.return", confidence="inferred_code")
         else:
             add("result", source="code.return", confidence="dynamic")
-            issues.append(_issue(
-                "code_return_dynamic",
-                "info",
-                "Code return shape is dynamic or could not be inferred statically.",
-            ))
+            issues.append(
+                _issue(
+                    "code_return_dynamic",
+                    "info",
+                    "Code return shape is dynamic or could not be inferred statically.",
+                )
+            )
     elif node_type == "external_api":
         raw_state_mapping = node.get("state_mapping")
-        state_mapping = require_json_object(raw_state_mapping, "state_mapping") if isinstance(raw_state_mapping, dict) else {}
+        state_mapping = (
+            require_json_object(raw_state_mapping, "state_mapping")
+            if isinstance(raw_state_mapping, dict)
+            else {}
+        )
         for response_field, state_field in state_mapping.items():
             if isinstance(state_field, str):
                 add(state_field, source=f"state_mapping.{response_field}", confidence="declared")
@@ -515,14 +559,20 @@ def _infer_node_writes(
         add("api_status", "string", source="external_api.status")
         add("result", "any", source="external_api.response")
         if not output_mapping:
-            issues.append(_issue(
-                "external_api_response_dynamic",
-                "info",
-                "External API data may be a JSON object; without output_mapping its keys can be copied to state by BaseNode.",
-            ))
+            issues.append(
+                _issue(
+                    "external_api_response_dynamic",
+                    "info",
+                    "External API data may be a JSON object; without output_mapping its keys can be copied to state by BaseNode.",
+                )
+            )
     elif node_type == "mcp":
         raw_state_mapping = node.get("state_mapping")
-        state_mapping = require_json_object(raw_state_mapping, "state_mapping") if isinstance(raw_state_mapping, dict) else {}
+        state_mapping = (
+            require_json_object(raw_state_mapping, "state_mapping")
+            if isinstance(raw_state_mapping, dict)
+            else {}
+        )
         for _response_field, state_field in state_mapping.items():
             if isinstance(state_field, str):
                 add(state_field, "string", source="state_mapping", confidence="declared")
@@ -532,42 +582,52 @@ def _infer_node_writes(
         add("channel_result", "any", source="channel.result")
         add("result", "any", source="channel.result")
         if not output_mapping:
-            issues.append(_issue(
-                "channel_result_dynamic",
-                "info",
-                "Channel handlers can return objects; without output_mapping their keys may be copied to state by BaseNode.",
-            ))
+            issues.append(
+                _issue(
+                    "channel_result_dynamic",
+                    "info",
+                    "Channel handlers can return objects; without output_mapping their keys may be copied to state by BaseNode.",
+                )
+            )
     elif node_type == "flow":
         add("response", "string|null", source="nested_flow.response")
         add("result", "any", source="nested_flow.result")
         nested = node.get("__dataflow_nested")
-        if isinstance(nested, dict) and isinstance(require_json_object(nested, "__dataflow_nested").get("nodes"), dict):
+        if isinstance(nested, dict) and isinstance(
+            require_json_object(nested, "__dataflow_nested").get("nodes"), dict
+        ):
             nested_obj = require_json_object(nested, "__dataflow_nested")
             nested_writes = _nested_flow_writes(node_id, node, nested_obj)
             writes.extend(nested_writes)
             if nested_writes:
-                issues.append(_issue(
-                    "nested_flow_static_expanded",
-                    "info",
-                    "Nested flow state writes are expanded from the referenced graph.",
-                ))
+                issues.append(
+                    _issue(
+                        "nested_flow_static_expanded",
+                        "info",
+                        "Nested flow state writes are expanded from the referenced graph.",
+                    )
+                )
         else:
-            issues.append(_issue(
-                "nested_flow_state_dynamic",
-                "info",
-                "Nested flow copies its returned state back to the parent; exact fields depend on the nested graph.",
-            ))
+            issues.append(
+                _issue(
+                    "nested_flow_state_dynamic",
+                    "info",
+                    "Nested flow copies its returned state back to the parent; exact fields depend on the nested graph.",
+                )
+            )
     elif node_type == "remote_flow":
         add("response", "string|null", source="remote_flow.response")
         add("remote_status", "string", source="remote_flow.status")
         add("result", "any", source="remote_flow.response")
     elif node_type == "hitl_node":
         add("response", "string|null", source="hitl.resume")
-        issues.append(_issue(
-            "hitl_interrupt",
-            "info",
-            "Initial HITL execution interrupts the graph; response is written after operator resume.",
-        ))
+        issues.append(
+            _issue(
+                "hitl_interrupt",
+                "info",
+                "Initial HITL execution interrupts the graph; response is written after operator resume.",
+            )
+        )
     elif node_type == "resource":
         pass
     elif output_mapping or schema_props:
@@ -597,16 +657,18 @@ def _observed_writes(node_id: str, observation: JsonValue) -> list[DataflowState
             value = None
         else:
             value = item_obj.get("new_value")
-        writes.append(_descriptor(
-            path,
-            type_name=_type_of_value(value),
-            source="observed_run",
-            availability="observed",
-            confidence="observed",
-            producers=[node_id],
-            sample_value=_sample_value(value),
-            protected=_top_path(path) in FROZEN_STATE_FIELDS,
-        ))
+        writes.append(
+            _descriptor(
+                path,
+                type_name=_type_of_value(value),
+                source="observed_run",
+                availability="observed",
+                confidence="observed",
+                producers=[node_id],
+                sample_value=_sample_value(value),
+                protected=_top_path(path) in FROZEN_STATE_FIELDS,
+            )
+        )
     return _dedupe_descriptors(writes)
 
 
@@ -619,51 +681,61 @@ def _infer_llm_tool_writes(
     for idx, raw_tool in enumerate(tools):
         if isinstance(raw_tool, str):
             tool_name = raw_tool
-            writes.append(_descriptor(
+            writes.append(
+                _descriptor(
+                    f"tool_results.{tool_name}",
+                    type_name="any",
+                    source="llm.tool_result",
+                    availability="maybe",
+                    confidence="runtime_contract",
+                    producers=[node_id],
+                )
+            )
+            continue
+        if not isinstance(raw_tool, dict):
+            continue
+        raw_tool_obj = require_json_object(raw_tool, "tool")
+        tool_name = _tool_display_id(raw_tool_obj, idx)
+        writes.append(
+            _descriptor(
                 f"tool_results.{tool_name}",
                 type_name="any",
                 source="llm.tool_result",
                 availability="maybe",
                 confidence="runtime_contract",
                 producers=[node_id],
-            ))
-            continue
-        if not isinstance(raw_tool, dict):
-            continue
-        raw_tool_obj = require_json_object(raw_tool, "tool")
-        tool_name = _tool_display_id(raw_tool_obj, idx)
-        writes.append(_descriptor(
-            f"tool_results.{tool_name}",
-            type_name="any",
-            source="llm.tool_result",
-            availability="maybe",
-            confidence="runtime_contract",
-            producers=[node_id],
-        ))
+            )
+        )
         code = raw_tool_obj.get("code")
         if isinstance(code, str) and code.strip():
             for path in sorted(_infer_code_state_writes(raw_tool_obj)):
-                writes.append(_descriptor(
-                    path,
-                    type_name="any",
-                    source=f"tool.{tool_name}.state_assignment",
-                    availability="maybe",
-                    confidence="inferred_code",
-                    producers=[node_id],
-                    protected=_top_path(path) in FROZEN_STATE_FIELDS,
-                ))
+                writes.append(
+                    _descriptor(
+                        path,
+                        type_name="any",
+                        source=f"tool.{tool_name}.state_assignment",
+                        availability="maybe",
+                        confidence="inferred_code",
+                        producers=[node_id],
+                        protected=_top_path(path) in FROZEN_STATE_FIELDS,
+                    )
+                )
                 _append_write_issues(path, f"tool.{tool_name}.state_assignment", issues)
         tool_type = str(raw_tool_obj.get("type") or "")
         if tool_type in {"flow", "llm_node"} and not raw_tool_obj.get("code"):
-            issues.append(_issue(
-                "llm_tool_dynamic_state",
-                "info",
-                f"Tool '{tool_name}' can mutate state depending on runtime execution.",
-            ))
+            issues.append(
+                _issue(
+                    "llm_tool_dynamic_state",
+                    "info",
+                    f"Tool '{tool_name}' can mutate state depending on runtime execution.",
+                )
+            )
     return _dedupe_descriptors(writes)
 
 
-def _nested_flow_writes(node_id: str, node: JsonObject, nested: JsonObject) -> list[DataflowStateDescriptor]:
+def _nested_flow_writes(
+    node_id: str, node: JsonObject, nested: JsonObject
+) -> list[DataflowStateDescriptor]:
     flow_id = str(node.get("flow_id") or "nested")
     writes: list[DataflowStateDescriptor] = []
     nested_nodes = nested.get("nodes")
@@ -684,16 +756,18 @@ def _nested_flow_writes(node_id: str, node: JsonObject, nested: JsonObject) -> l
             path = nested_write_obj.get("path")
             if not isinstance(path, str) or not path:
                 continue
-            writes.append(_descriptor(
-                path,
-                type_name=str(nested_write_obj.get("type") or "any"),
-                source=f"nested_flow.{flow_id}",
-                availability="maybe",
-                confidence="nested_static",
-                producers=[node_id],
-                sample_value=nested_write_obj.get("sample_value"),
-                protected=_top_path(path) in FROZEN_STATE_FIELDS,
-            ))
+            writes.append(
+                _descriptor(
+                    path,
+                    type_name=str(nested_write_obj.get("type") or "any"),
+                    source=f"nested_flow.{flow_id}",
+                    availability="maybe",
+                    confidence="nested_static",
+                    producers=[node_id],
+                    sample_value=nested_write_obj.get("sample_value"),
+                    protected=_top_path(path) in FROZEN_STATE_FIELDS,
+                )
+            )
     return _dedupe_descriptors(writes)
 
 
@@ -708,19 +782,23 @@ def _tool_display_id(tool: JsonObject, idx: int) -> str:
 def _append_write_issues(path: str, source: str, issues: list[DataflowIssue]) -> None:
     top = _top_path(path)
     if top in FROZEN_STATE_FIELDS:
-        issues.append(_issue(
-            "frozen_state_write",
-            "error",
-            f"{source} writes frozen state field '{path}'. Runtime may reject or make this field unsafe to rely on.",
-            path=path,
-        ))
+        issues.append(
+            _issue(
+                "frozen_state_write",
+                "error",
+                f"{source} writes frozen state field '{path}'. Runtime may reject or make this field unsafe to rely on.",
+                path=path,
+            )
+        )
     if "." in path and source.startswith(("output_mapping", "state_mapping")):
-        issues.append(_issue(
-            "nested_mapping_path_runtime",
-            "warning",
-            f"{source} targets '{path}'. Runtime writes mapping targets as a top-level state attribute, not as a nested path.",
-            path=path,
-        ))
+        issues.append(
+            _issue(
+                "nested_mapping_path_runtime",
+                "warning",
+                f"{source} targets '{path}'. Runtime writes mapping targets as a top-level state attribute, not as a nested path.",
+                path=path,
+            )
+        )
 
 
 def _infer_code_state_writes(node: JsonObject) -> set[str]:
@@ -810,7 +888,9 @@ def _infer_text_state_writes(code: str) -> set[str]:
 
 
 def _infer_text_return_keys(code: str) -> set[str]:
-    returns: list[str] = re.findall(r"\breturn\s+\{(?P<body>[^}]{0,4000})\}", code, flags=re.MULTILINE | re.DOTALL)
+    returns: list[str] = re.findall(
+        r"\breturn\s+\{(?P<body>[^}]{0,4000})\}", code, flags=re.MULTILINE | re.DOTALL
+    )
     out: set[str] = set()
     for body in returns:
         out.update(re.findall(r"['\"]([A-Za-z_][A-Za-z0-9_.-]*)['\"]\s*:", body))
@@ -846,9 +926,9 @@ def _schema_type(schema: JsonValue) -> str:
 
 def _parse_mapping_source(source: str) -> DataflowMappingSource:
     if source.startswith("@state:"):
-        return DataflowMappingSource(kind="state", path=source[len("@state:"):])
+        return DataflowMappingSource(kind="state", path=source[len("@state:") :])
     if source.startswith("@var:"):
-        return DataflowMappingSource(kind="var", path=source[len("@var:"):])
+        return DataflowMappingSource(kind="var", path=source[len("@var:") :])
     return DataflowMappingSource(kind="const")
 
 
@@ -910,7 +990,9 @@ def _descriptor(
     )
 
 
-def _merge_descriptor(a: DataflowStateDescriptor | None, b: DataflowStateDescriptor) -> DataflowStateDescriptor:
+def _merge_descriptor(
+    a: DataflowStateDescriptor | None, b: DataflowStateDescriptor
+) -> DataflowStateDescriptor:
     if a is None:
         return copy.deepcopy(b)
     out = copy.deepcopy(a)
@@ -930,7 +1012,9 @@ def _merge_descriptor(a: DataflowStateDescriptor | None, b: DataflowStateDescrip
     return out
 
 
-def _dedupe_descriptors(descriptors: list[DataflowStateDescriptor]) -> list[DataflowStateDescriptor]:
+def _dedupe_descriptors(
+    descriptors: list[DataflowStateDescriptor],
+) -> list[DataflowStateDescriptor]:
     by_path: dict[str, DataflowStateDescriptor] = {}
     for desc in descriptors:
         path = desc.path
@@ -941,7 +1025,9 @@ def _dedupe_descriptors(descriptors: list[DataflowStateDescriptor]) -> list[Data
     return [by_path[path] for path in sorted(by_path)]
 
 
-def _summarize_state_map(state_map: dict[str, DataflowStateDescriptor]) -> list[DataflowStateDescriptor]:
+def _summarize_state_map(
+    state_map: dict[str, DataflowStateDescriptor],
+) -> list[DataflowStateDescriptor]:
     def sort_key(item: tuple[str, DataflowStateDescriptor]) -> tuple[int, str]:
         path, desc = item
         if desc.source == "system":
@@ -950,7 +1036,10 @@ def _summarize_state_map(state_map: dict[str, DataflowStateDescriptor]) -> list[
             return (0, path)
         return (1, path)
 
-    return [copy.deepcopy(desc) for _path, desc in sorted(state_map.items(), key=sort_key)[:MAX_STATE_FIELDS_PER_NODE]]
+    return [
+        copy.deepcopy(desc)
+        for _path, desc in sorted(state_map.items(), key=sort_key)[:MAX_STATE_FIELDS_PER_NODE]
+    ]
 
 
 def _canvas_summary(info: DataflowNodeInfo) -> DataflowCanvasSummary:
@@ -958,31 +1047,37 @@ def _canvas_summary(info: DataflowNodeInfo) -> DataflowCanvasSummary:
     inputs: list[DataflowCanvasChip] = []
     for row in input_rows:
         label = row.source_path or row.source or row.target
-        inputs.append(DataflowCanvasChip(
-            label=str(label),
-            target=row.target,
-            status=row.status,
-            type=row.type,
-        ))
+        inputs.append(
+            DataflowCanvasChip(
+                label=str(label),
+                target=row.target,
+                status=row.status,
+                type=row.type,
+            )
+        )
     for read in info.reads:
         label = read.source_path
         if not label:
             continue
-        inputs.append(DataflowCanvasChip(
-            label=str(label),
-            target=read.config_path,
-            status=read.status,
-            type=read.type,
-        ))
+        inputs.append(
+            DataflowCanvasChip(
+                label=str(label),
+                target=read.config_path,
+                status=read.status,
+                type=read.type,
+            )
+        )
     if not inputs:
         for desc in info.incoming_state:
             if desc.source == "system":
                 continue
-            inputs.append(DataflowCanvasChip(
-                label=desc.path,
-                status="ok",
-                type=desc.type,
-            ))
+            inputs.append(
+                DataflowCanvasChip(
+                    label=desc.path,
+                    status="ok",
+                    type=desc.type,
+                )
+            )
             if len(inputs) >= MAX_CANVAS_CHIPS:
                 break
     outputs: list[DataflowCanvasOutputChip] = [
@@ -1001,7 +1096,9 @@ def _graph_issues(entry: str | None, nodes: dict[str, JsonObject]) -> list[Dataf
     if entry is None and nodes:
         issues.append(_issue("missing_entry", "warning", "Branch has nodes but no entry node."))
     elif entry is not None and entry not in nodes:
-        issues.append(_issue("entry_not_found", "error", f"Entry node '{entry}' does not exist.", path=entry))
+        issues.append(
+            _issue("entry_not_found", "error", f"Entry node '{entry}' does not exist.", path=entry)
+        )
     return issues
 
 
@@ -1022,15 +1119,19 @@ def _issue(
     )
 
 
-def _state_signature(state_map: dict[str, DataflowStateDescriptor]) -> tuple[tuple[str, str, tuple[str, ...], str], ...]:
+def _state_signature(
+    state_map: dict[str, DataflowStateDescriptor],
+) -> tuple[tuple[str, str, tuple[str, ...], str], ...]:
     rows: list[tuple[str, str, tuple[str, ...], str]] = []
     for path, desc in sorted(state_map.items()):
-        rows.append((
-            path,
-            desc.type,
-            tuple(desc.producers),
-            desc.availability,
-        ))
+        rows.append(
+            (
+                path,
+                desc.type,
+                tuple(desc.producers),
+                desc.availability,
+            )
+        )
     return tuple(rows)
 
 

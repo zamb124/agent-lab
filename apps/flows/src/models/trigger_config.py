@@ -126,7 +126,7 @@ class TriggerConfig(StrictBaseModel):
         validate_trigger_state_mapping_keys(self.output_mapping, "output_mapping")
         validate_trigger_state_mapping_keys(self.input_mapping, "input_mapping")
         if self.type == TriggerType.CRON and self.post_flow_output_enabled:
-            object.__setattr__(self, "post_flow_output_enabled", False)
+            self.post_flow_output_enabled = False
         return self
 
 
@@ -136,6 +136,11 @@ class TelegramTriggerConfig(StrictBaseModel):
     """Конфигурация Telegram триггера."""
 
     bot_token: str | None = Field(default=None, description="Токен бота (@var:key для секрета)")
+    bot_token_resolved: str | None = Field(
+        default=None,
+        alias="_bot_token_resolved",
+        description="Runtime-resolved bot token for unregister/deleteWebhook.",
+    )
     api_base: str | None = Field(
         default=None,
         description="Override Telegram Bot API base URL for tests/local integrations.",
@@ -168,6 +173,40 @@ class TelegramTriggerConfig(StrictBaseModel):
         default=False,
         description="Передавать drop_pending_updates в Telegram setWebhook.",
     )
+
+
+class TelegramUpdate(StrictBaseModel):
+    """Telegram Bot API Update для поддерживаемых trigger-входов."""
+
+    update_id: int
+    message: JsonObject | None = None
+    callback_query: JsonObject | None = None
+
+    def to_payload(self) -> JsonObject:
+        payload: JsonObject = {"update_id": self.update_id}
+        if self.message is not None:
+            payload["message"] = self.message
+        if self.callback_query is not None:
+            payload["callback_query"] = self.callback_query
+        return payload
+
+
+class TelegramGetUpdatesResponse(StrictBaseModel):
+    """Ответ Telegram Bot API getUpdates."""
+
+    ok: bool
+    result: list[TelegramUpdate] | None = None
+    description: str | None = None
+    error_code: int | None = None
+
+
+class TelegramBotApiBooleanResponse(StrictBaseModel):
+    """Ответ Telegram Bot API для методов с boolean result."""
+
+    ok: bool
+    result: bool | None = None
+    description: str | None = None
+    error_code: int | None = None
 
 
 class CronTriggerConfig(StrictBaseModel):
@@ -241,6 +280,9 @@ class RedisTriggerConfig(StrictBaseModel):
 __all__ = [
     "TriggerConfig",
     "TelegramTriggerConfig",
+    "TelegramUpdate",
+    "TelegramGetUpdatesResponse",
+    "TelegramBotApiBooleanResponse",
     "CronTriggerConfig",
     "WebhookTriggerConfig",
     "EmailTriggerConfig",

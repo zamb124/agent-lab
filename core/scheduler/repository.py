@@ -46,7 +46,7 @@ class SchedulerTaskRepository:
     """Репозиторий scheduler task metadata."""
 
     def __init__(self, db_url: str) -> None:
-        self._db_url = db_url
+        self._db_url: str = db_url
 
     async def save(self, task: PlatformScheduledTask) -> PlatformScheduledTask:
         session_factory = await get_session_factory(self._db_url)
@@ -95,7 +95,7 @@ class SchedulerTaskRepository:
             },
         )
         async with session_factory() as session:
-            await session.execute(stmt)
+            _ = await session.execute(stmt)
             await session.commit()
         return task
 
@@ -170,7 +170,7 @@ class SchedulerTaskRepository:
         error_message: str | None = None,
     ) -> bool:
         status_value = status.value if isinstance(status, ScheduledTaskStatus) else str(status)
-        values: dict[str, object] = {
+        values: dict[str, str | datetime] = {
             "status": status_value,
             "updated_at": datetime.now(timezone.utc),
         }

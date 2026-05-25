@@ -106,7 +106,7 @@ class FinalAnswerArgs(BaseModel):
     description="Запиши свои рассуждения перед принятием решения. Опиши: что наблюдаешь, анализ ситуации, план действий, следующий шаг.",
     tags=["reasoning", "internal"],
     react_role=ReactToolRole.REASON,
-    args_schema=ReasonArgs,
+    parameters_model=ReasonArgs,
 )
 async def reason(
     observation: str,
@@ -132,7 +132,7 @@ async def reason(
     name="ask_user",
     description="Задает вопрос пользователю и ожидает ответ. Используй когда нужна информация от пользователя.",
     tags=["misc"],
-    args_schema=AskUserArgs,
+    parameters_model=AskUserArgs,
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def ask_user(question: str, *, state: "ExecutionState") -> str:
@@ -143,7 +143,7 @@ async def ask_user(question: str, *, state: "ExecutionState") -> str:
     name="hitl_operator_task",
     description="Ставит выполнение на паузу до обработки оператором: заголовок задачи, очередь назначения, текст статуса для пользователя в чате.",
     tags=["misc", "hitl"],
-    args_schema=HitlOperatorTaskArgs,
+    parameters_model=HitlOperatorTaskArgs,
 )
 async def hitl_operator_task(
     question: str,
@@ -178,7 +178,7 @@ async def hitl_operator_task(
     name="self_check",
     description="Самопроверка гипотезы. Требует указать гипотезу, подтверждающие и противоречащие факты, результат.",
     tags=["validation"],
-    args_schema=SelfCheckArgs,
+    parameters_model=SelfCheckArgs,
 )
 async def self_check(
     hypothesis: str,
@@ -204,7 +204,7 @@ async def self_check(
     description="Формирует финальный обоснованный ответ. Требует указать ответ, обоснование, уверенность и источники.",
     tags=["validation"],
     react_role=ReactToolRole.EXIT,
-    args_schema=FinalAnswerArgs,
+    parameters_model=FinalAnswerArgs,
 )
 async def final_answer(
     answer: str,

@@ -952,8 +952,8 @@ export class FlowsFlowCanvas extends PlatformElement {
         const newNodes = { ...asObject(data.nodes) };
         for (const id of deletableIds) delete newNodes[id];
         const newEdges = asArray(data.edges).filter((edge) => {
-            const { from, to } = getEdgeEndpoints(edge);
-            return !deletableIds.includes(from) && !deletableIds.includes(to);
+            const { from_node, to_node } = getEdgeEndpoints(edge);
+            return !deletableIds.includes(from_node) && !deletableIds.includes(to_node);
         });
         const next = { ...data, nodes: newNodes, edges: newEdges };
         this._editor.updateBranchData({ data: next });
@@ -2059,7 +2059,7 @@ export class FlowsFlowCanvas extends PlatformElement {
     }
 
     _renderEdge(edge, i, nodes) {
-        const { from: fromId, to: toId } = getEdgeEndpoints(edge);
+        const { from_node: fromId, to_node: toId } = getEdgeEndpoints(edge);
         const fromNode = nodes[fromId];
         const toNode = nodes[toId];
         if (!fromNode || !toNode) return svg``;
@@ -2258,10 +2258,10 @@ export class FlowsFlowCanvas extends PlatformElement {
 
         const fromIds = new Set();
         for (const edge of edges) {
-            const { from, to } = getEdgeEndpoints(edge);
-            if (!from || !to) continue;
-            if (!nodes[from] || !nodes[to]) continue;
-            fromIds.add(from);
+            const { from_node, to_node } = getEdgeEndpoints(edge);
+            if (!from_node || !to_node) continue;
+            if (!nodes[from_node] || !nodes[to_node]) continue;
+            fromIds.add(from_node);
         }
         const orphanNodes = Object.entries(nodes).filter(([nid, n]) => !fromIds.has(nid) && !this._isResourceNode(n));
         const entryId = typeof state.entryNodeId === 'string' && state.entryNodeId.length > 0
@@ -2271,10 +2271,10 @@ export class FlowsFlowCanvas extends PlatformElement {
 
         const inDegrees = new Map();
         for (const edge of edges) {
-            const { to } = getEdgeEndpoints(edge);
-            if (!to) continue;
-            const prev = inDegrees.has(to) ? inDegrees.get(to) : 0;
-            inDegrees.set(to, prev + 1);
+            const { to_node } = getEdgeEndpoints(edge);
+            if (!to_node) continue;
+            const prev = inDegrees.has(to_node) ? inDegrees.get(to_node) : 0;
+            inDegrees.set(to_node, prev + 1);
         }
 
         return html`

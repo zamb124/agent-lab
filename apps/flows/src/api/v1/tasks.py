@@ -3,6 +3,7 @@ API endpoints для задач через A2A типы.
 """
 
 import uuid
+from typing import Annotated
 
 from a2a.types import (
     Message,
@@ -14,11 +15,15 @@ from a2a.types import (
     TextPart,
 )
 from a2a.utils.message import new_agent_text_message
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import Field
 
 from apps.flows.src.channels.types import FlowTaskResult
 from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.durable_execution.models import (
+    WorkflowBranchRecord,
+    WorkflowEventRecord,
+)
 from apps.flows.src.runtime.message_metadata import MESSAGE_SOURCE_TASK
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from core.context import get_context
@@ -67,7 +72,7 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Ta
         session_id = f"{request.flow_id}:{context_id}"
     logger.info(f"API database_url: {container.db_url}")
 
-    state = await container.state_manager.get_state(session_id)
+    state = await container.workflow_runtime.get_state(session_id)
 
     if state is None:
         branch_id = request.branch_id
@@ -146,9 +151,51 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Ta
 
 
 class StateUpdateRequest(StrictBaseModel):
-    """Запрос на обновление state"""
+    """Manual state patch request for an existing durable workflow session."""
 
     state: ExecutionState
+
+
+class TimeTravelRequest(StrictBaseModel):
+    sequence: int = Field(..., ge=0)
+    execution_branch_id: str | None = Field(default=None, min_length=1)
+
+
+class ForkStateRequest(TimeTravelRequest):
+    activate: bool = False
+
+
+class ManualStatePatchRequest(TimeTravelRequest):
+    state: ExecutionState
+    activate: bool = True
+
+
+class RetryFromFailureRequest(StrictBaseModel):
+    failed_sequence: int | None = Field(default=None, ge=1)
+    execution_branch_id: str | None = Field(default=None, min_length=1)
+
+
+class WorkflowBranchOperationResponse(StrictBaseModel):
+    execution_branch_id: str
+    parent_execution_branch_id: str | None
+    base_sequence: int
+    base_state_hash: str | None
+    reason: str
+    event_id: str | None
+    sequence: int
+    state_hash: str
+    snapshot_id: str
+
+
+class WorkflowBranchesResponse(StrictBaseModel):
+    branches: list[WorkflowBranchRecord]
+
+
+class WorkflowHistoryResponse(StrictBaseModel):
+    events: list[WorkflowEventRecord]
+    total: int
+    limit: int
+    offset: int
 
 
 @router.get("/state", response_model=ExecutionState)
@@ -172,10 +219,10 @@ async def get_state(
     """
 
     if session_id:
-        state = await container.state_manager.get_state(session_id)
+        state = await container.workflow_runtime.get_state(session_id)
     elif context_id and flow_id:
         session_id = f"{flow_id}:{context_id}"
-        state = await container.state_manager.get_state(session_id)
+        state = await container.workflow_runtime.get_state(session_id)
     else:
         raise HTTPException(
             status_code=400,
@@ -197,13 +244,13 @@ async def update_state(
     flow_id: str | None = None,
 ) -> ExecutionState:
     """
-    Сохраняет изменения state.
+    Применяет manual patch к существующей durable workflow-сессии.
 
     Args:
-        request: Тело запроса с обновленным state
+        request: Тело запроса с целевой projection state
         session_id: ID сессии (альтернатива context_id+flow_id)
-        context_id: ID контекста A2A
-        flow_id: ID агента
+        context_id: ID контекста A2A для вычисления session_id
+        flow_id: ID flow для вычисления session_id
 
     Returns:
         Обновленный state
@@ -219,10 +266,137 @@ async def update_state(
             detail="Need session_id or context_id+flow_id"
         )
 
-    _ = await container.state_manager.save_state(session_id, request.state)
-    updated_state = await container.state_manager.get_state(session_id)
+    current = await container.workflow_runtime.get_state(session_id)
+    if current is None:
+        raise HTTPException(status_code=404, detail="Workflow session not found")
+
+    history, total = await container.workflow_runtime.get_state_history(
+        session_id,
+        limit=1,
+        offset=0,
+    )
+    if total > 1:
+        history, _ = await container.workflow_runtime.get_state_history(
+            session_id,
+            limit=1,
+            offset=total - 1,
+        )
+    head_sequence = history[-1].sequence if history else 0
+    _ = await container.workflow_runtime.patch_state_at_sequence(
+        session_id,
+        head_sequence,
+        request.state,
+    )
+    updated_state = await container.workflow_runtime.get_state(session_id)
 
     if updated_state is None:
         raise HTTPException(status_code=500, detail="Failed to save state")
 
     return updated_state
+
+
+@router.get("/{session_id}/history", response_model=WorkflowHistoryResponse)
+async def get_state_history(
+    session_id: str,
+    container: ContainerDep,
+    execution_branch_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> WorkflowHistoryResponse:
+    events, total = await container.workflow_runtime.get_state_history(
+        session_id,
+        execution_branch_id=execution_branch_id,
+        limit=limit,
+        offset=offset,
+    )
+    return WorkflowHistoryResponse(
+        events=events,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/{session_id}/branches", response_model=WorkflowBranchesResponse)
+async def list_execution_branches(
+    session_id: str,
+    container: ContainerDep,
+) -> WorkflowBranchesResponse:
+    branches = await container.workflow_runtime.list_branches(session_id)
+    return WorkflowBranchesResponse(branches=branches)
+
+
+@router.post("/{session_id}/fork", response_model=WorkflowBranchOperationResponse)
+async def fork_state(
+    session_id: str,
+    request: ForkStateRequest,
+    container: ContainerDep,
+) -> WorkflowBranchOperationResponse:
+    result = await container.workflow_runtime.fork_state_at_sequence(
+        session_id,
+        request.sequence,
+        execution_branch_id=request.execution_branch_id,
+        activate=request.activate,
+    )
+    return WorkflowBranchOperationResponse.model_validate(result)
+
+
+@router.post("/{session_id}/rewind", response_model=WorkflowBranchOperationResponse)
+async def rewind_state(
+    session_id: str,
+    request: TimeTravelRequest,
+    container: ContainerDep,
+) -> WorkflowBranchOperationResponse:
+    result = await container.workflow_runtime.rewind_to_sequence(
+        session_id,
+        request.sequence,
+        execution_branch_id=request.execution_branch_id,
+    )
+    return WorkflowBranchOperationResponse.model_validate(result)
+
+
+@router.post("/{session_id}/manual-patch", response_model=WorkflowBranchOperationResponse)
+async def manual_state_patch(
+    session_id: str,
+    request: ManualStatePatchRequest,
+    container: ContainerDep,
+) -> WorkflowBranchOperationResponse:
+    result = await container.workflow_runtime.patch_state_at_sequence(
+        session_id,
+        request.sequence,
+        request.state,
+        execution_branch_id=request.execution_branch_id,
+        activate=request.activate,
+    )
+    return WorkflowBranchOperationResponse.model_validate(result)
+
+
+@router.post("/{session_id}/retry-from-failure", response_model=WorkflowBranchOperationResponse)
+async def retry_from_failure(
+    session_id: str,
+    request: RetryFromFailureRequest,
+    container: ContainerDep,
+) -> WorkflowBranchOperationResponse:
+    result = await container.workflow_runtime.retry_from_failure(
+        session_id,
+        failed_sequence=request.failed_sequence,
+        execution_branch_id=request.execution_branch_id,
+    )
+    return WorkflowBranchOperationResponse.model_validate(result)
+
+
+@router.get("/{session_id}/state-at/{sequence}", response_model=ExecutionState)
+async def get_state_at_sequence(
+    session_id: str,
+    sequence: int,
+    container: ContainerDep,
+    execution_branch_id: str | None = None,
+) -> ExecutionState:
+    state = await container.workflow_runtime.load_state_at_sequence(
+        session_id,
+        sequence,
+        execution_branch_id=execution_branch_id,
+    )
+    if state is None:
+        raise HTTPException(status_code=404, detail="State projection not found")
+    return state

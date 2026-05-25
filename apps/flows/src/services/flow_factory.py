@@ -3,6 +3,7 @@ FlowFactory - создание flow из БД.
 """
 
 import copy
+import json
 from collections.abc import Mapping, Sequence
 from typing import overload
 
@@ -14,7 +15,7 @@ from apps.flows.src.container_contracts import (
 from apps.flows.src.db import FlowRepository
 from apps.flows.src.models import BranchConfig, FlowConfig, ResourceMapInput, ResourceReference
 from apps.flows.src.models.enums import MergeMode
-from apps.flows.src.models.flow_config import Edge
+from apps.flows.src.models.flow_config import CodeEdgeCondition, Edge, SimpleEdgeCondition
 from apps.flows.src.models.registry_contracts import (
     RegistryBranchSchema,
     RegistryFlowSchema,
@@ -32,6 +33,18 @@ from core.types import JsonArray, JsonObject, JsonValue, require_json_object
 from core.variables import VarResolver
 
 logger = get_logger(__name__)
+
+
+def _registry_edge_condition_label(
+    condition: SimpleEdgeCondition | CodeEdgeCondition | None,
+) -> str | None:
+    if condition is None:
+        return None
+    if isinstance(condition, SimpleEdgeCondition):
+        value = json.dumps(condition.value, ensure_ascii=False, separators=(",", ":"))
+        return f"{condition.variable} {condition.operator} {value}"
+    return f"{condition.language} code condition"
+
 
 class FlowFactory:
     """Фабрика для создания Flow из БД."""
@@ -145,7 +158,12 @@ class FlowFactory:
 
         flow_resources = self._resource_map_to_plain(config.resources)
         skill_resources: ResourceMapInput | None = None
-        if branch_id and branch_id != "default" and config.branches and branch_id in config.branches:
+        if (
+            branch_id
+            and branch_id != "default"
+            and config.branches
+            and branch_id in config.branches
+        ):
             sk = config.branches[branch_id]
             raw_skill_res = sk.resources or {}
             if raw_skill_res:
@@ -227,9 +245,11 @@ class FlowFactory:
 
         edges = [
             {
-                "from": e.from_node,
-                "to": e.to_node,
-                "condition": e.condition,
+                "from_node": e.from_node,
+                "to_node": e.to_node,
+                "condition": (
+                    e.condition.model_dump(mode="json") if e.condition is not None else None
+                ),
                 "contributes_to_join": e.contributes_to_join,
             }
             for e in effective["edges"]
@@ -398,10 +418,7 @@ class FlowFactory:
                 for key, item in value.items()
             }
         if isinstance(value, list):
-            return [
-                self._resolve_flow_variables(item, company_variables)
-                for item in value
-            ]
+            return [self._resolve_flow_variables(item, company_variables) for item in value]
         if not isinstance(value, str):
             return value
 
@@ -539,9 +556,9 @@ class FlowFactory:
                 edges.append(
                     RegistrySchemaEdge.model_validate(
                         {
-                            "from": e.from_node,
-                            "to": e.to_node,
-                            "condition": e.condition,
+                            "from_node": e.from_node,
+                            "to_node": e.to_node,
+                            "condition": _registry_edge_condition_label(e.condition),
                         }
                     )
                 )

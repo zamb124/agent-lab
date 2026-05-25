@@ -4,36 +4,31 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Any, Protocol, cast
 
+from core.container.base import BaseContainer
 from core.models.identity_models import User, UserStatus
+from core.types import JsonObject
 
 
-class _UserRepository(Protocol):
-    async def get(self, entity_id: str) -> User | None: ...
-
-    async def set(self, entity: User) -> bool: ...
-
-
-def _clean_roles(roles: Sequence[str] | None, *, fallback: str) -> list[str]:
+def _clean_roles(roles: Sequence[str]) -> list[str]:
     out: list[str] = []
-    for role in roles or []:
-        value = str(role).strip()
+    for role in roles:
+        value = role.strip()
         if value and value not in out:
             out.append(value)
     if not out:
-        out.append(fallback)
+        raise ValueError("runtime user roles must be non-empty")
     return out
 
 
 async def ensure_persisted_runtime_user(
-    container: object,
+    container: BaseContainer,
     *,
     user_id: str,
     company_id: str,
     name: str,
-    roles: Sequence[str] | None,
-    attrs: dict[str, Any] | None = None,
+    roles: Sequence[str],
+    attributes: JsonObject | None = None,
     email: str | None = None,
 ) -> User:
     """
@@ -49,17 +44,23 @@ async def ensure_persisted_runtime_user(
         raise ValueError("runtime user_id must be non-empty")
     if not clean_company_id:
         raise ValueError("runtime company_id must be non-empty")
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("runtime user name must be non-empty")
 
-    user_repository = cast(_UserRepository, getattr(container, "user_repository"))
-    clean_roles = _clean_roles(roles, fallback="guest")
+    clean_roles = _clean_roles(roles)
     now = datetime.now(timezone.utc)
-    existing = await user_repository.get(clean_user_id)
-    runtime_attrs = dict(attrs or {})
+    existing = await container.user_repository.get(clean_user_id)
+    runtime_attrs: JsonObject = dict(attributes) if attributes is not None else {}
     runtime_attrs["runtime_identity"] = True
 
     if existing is not None:
         changed = False
-        existing_roles = list(existing.companies.get(clean_company_id) or [])
+        existing_roles = (
+            list(existing.companies[clean_company_id])
+            if clean_company_id in existing.companies
+            else []
+        )
         merged_roles = list(dict.fromkeys([*existing_roles, *clean_roles]))
         if merged_roles != existing_roles:
             existing.companies[clean_company_id] = merged_roles
@@ -71,27 +72,28 @@ async def ensure_persisted_runtime_user(
         if not existing.active_company_id:
             existing.active_company_id = clean_company_id
             changed = True
-        merged_attrs = {**existing.attrs, **runtime_attrs}
-        if merged_attrs != existing.attrs:
-            existing.attrs = merged_attrs
+        merged_attrs = {**existing.attributes, **runtime_attrs}
+        if merged_attrs != existing.attributes:
+            existing.attributes = merged_attrs
             changed = True
         if changed:
             existing.updated_at = now
-            _ = await user_repository.set(existing)
+            _ = await container.user_repository.set(existing)
         return existing
 
-    emails = [email.strip()] if isinstance(email, str) and email.strip() else []
+    clean_email = email.strip() if email is not None else ""
+    emails = [clean_email] if clean_email else []
     user = User(
         user_id=clean_user_id,
-        name=name.strip() or clean_user_id,
+        name=clean_name,
         status=UserStatus.ACTIVE,
         groups=clean_roles,
         companies={clean_company_id: clean_roles},
         active_company_id=clean_company_id,
         emails=emails,
-        attrs=runtime_attrs,
+        attributes=runtime_attrs,
         created_at=now,
         updated_at=now,
     )
-    _ = await user_repository.set(user)
+    _ = await container.user_repository.set(user)
     return user

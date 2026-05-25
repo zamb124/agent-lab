@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from core.clients.redis_client import RedisClient
+from core.types import JsonObject, parse_json_object
 
 _FLOW_PREVIEW_HANDOFF_PREFIX = "flow_preview_handoff:"
 
@@ -21,7 +21,7 @@ async def store_flow_preview_handoff(
     *,
     redis: RedisClient,
     handoff_id: str,
-    payload: dict[str, Any],
+    payload: JsonObject,
     ttl_seconds: int,
 ) -> None:
     if ttl_seconds < 1:
@@ -36,11 +36,11 @@ async def consume_flow_preview_handoff(
     *,
     redis: RedisClient,
     handoff_id: str,
-) -> dict[str, Any] | None:
+) -> JsonObject | None:
     raw = await redis.getdel(flow_preview_handoff_redis_key(handoff_id))
     if raw is None or raw == "":
         return None
-    return json.loads(raw)
+    return parse_json_object(raw, "flow_preview_handoff payload")
 
 
 async def peek_flow_preview_handoff(*, redis: RedisClient, handoff_id: str) -> bool:

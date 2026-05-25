@@ -221,5 +221,3 @@ class VideoAttachmentContent(BaseModel):
     )
 
 
-FileMetadata = FileRecord
-AudioMetadata = AudioRecord

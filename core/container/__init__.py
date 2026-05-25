@@ -15,8 +15,10 @@ Container - Dependency Injection контейнер.
 """
 
 from core.container.base import BaseContainer, lazy
+from core.container.registry import ContainerRegistry
 
 __all__ = [
     "BaseContainer",
+    "ContainerRegistry",
     "lazy",
 ]

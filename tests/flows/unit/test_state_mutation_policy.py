@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+from typing import cast, override
+
 import pytest
 
-from apps.flows.src.runtime.nodes import BaseNode
+from apps.flows.src.runtime.nodes import BaseNode, NodeInputs, NodeRunResult
 from core.errors import FrozenStateFieldError
 from core.state import ExecutionState
 from core.state.mutation_policy import (
@@ -16,6 +18,7 @@ from core.state.mutation_policy import (
     snapshot_frozen_fields,
     user_code_state_mutation_guard,
 )
+from core.types import JsonObject
 
 
 def _minimal_state() -> ExecutionState:
@@ -46,32 +49,47 @@ def test_snapshot_detects_in_place_mutation() -> None:
     state = _minimal_state()
     state.node_history["n1"] = {"calls": []}
     snap = snapshot_frozen_fields(state)
-    state.node_history["n1"]["calls"].append({"x": 1})
+    calls = cast(list[JsonObject], state.node_history["n1"]["calls"])
+    calls.append({"x": 1})
     with pytest.raises(FrozenStateFieldError) as exc:
         assert_frozen_fields_unchanged(state, snap)
     assert exc.value.payload["reason"] == "in_place_mutation"
 
 
 class _DummyNode(BaseNode):
-    async def _run_impl(self, state: ExecutionState, inputs: dict) -> object:
+    @override
+    async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
+        _ = state, inputs
         return None
+
+    def apply_output_mapping_for_test(self, state: ExecutionState, result: JsonObject) -> None:
+        self._apply_output_mapping(state, result)
+
+    def copy_state_back_for_test(
+        self,
+        source: ExecutionState,
+        target: ExecutionState,
+        *,
+        full_trust: bool,
+    ) -> None:
+        self._copy_state_back(source, target, full_trust=full_trust)
 
 
 def test_apply_output_mapping_rejects_frozen_key() -> None:
-    node = _DummyNode("n1")
+    node = _DummyNode("n1", config={"type": "test_dummy"})
     state = _minimal_state()
     with pytest.raises(FrozenStateFieldError):
-        node._apply_output_mapping(state, {"session_id": "x:y"})
+        node.apply_output_mapping_for_test(state, {"session_id": "x:y"})
 
 
 def test_copy_state_back_preserves_target_identity_when_not_full_trust() -> None:
-    node = _DummyNode("n1")
+    node = _DummyNode("n1", config={"type": "test_dummy"})
     tgt = _minimal_state()
     src_dict = tgt.model_dump(exclude_none=False)
     src_dict["task_id"] = "forged"
     src_dict["variables"] = {"k": 1}
     src = ExecutionState.model_validate(src_dict)
-    node._copy_state_back(src, tgt, full_trust=False)
+    node.copy_state_back_for_test(src, tgt, full_trust=False)
     assert tgt.task_id == "task_1"
     assert tgt.variables == {"k": 1}
 

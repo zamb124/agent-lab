@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,11 +16,12 @@ from core.docs.assistant import (
     docs_url_for_page,
     normalize_docs_language,
 )
+from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
 
-JsonDict = dict[str, Any]
+JsonDict = JsonObject
 
 _DOCS_SEARCH_DESCRIPTION = """
 Ищет только по публичной документации Humanitec/NetWorkle и возвращает найденные
@@ -40,7 +41,7 @@ _DOCS_SEARCH_DESCRIPTION = """
 
 
 class DocsSearchArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     query: str = Field(
         ...,
@@ -63,19 +64,19 @@ class DocsPrepareContextArgs(DocsSearchArgs):
     """Arguments for deterministic docs lookup before the answer LLM call."""
 
 
-def _state_variables(state: "ExecutionState") -> dict[str, Any]:
-    variables = getattr(state, "variables", None)
-    return variables if isinstance(variables, dict) else {}
+def _state_variables(state: "ExecutionState") -> JsonObject:
+    return state.variables
 
 
-def _result_item(raw: dict[str, Any], *, current_page_url: str, language: str) -> dict[str, Any]:
+def _result_item(raw: JsonObject, *, current_page_url: str, language: str) -> JsonObject:
     metadata = raw.get("metadata")
     if not isinstance(metadata, dict):
         metadata = {}
-    fallback_url = str(metadata.get("source_url") or metadata.get("page_url") or "").strip()
-    page_path = str(metadata.get("page_path") or "").strip("/")
+    metadata_obj = require_json_object(metadata, "docs_search.result.metadata")
+    fallback_url = str(metadata_obj.get("source_url") or metadata_obj.get("page_url") or "").strip()
+    page_path = str(metadata_obj.get("page_path") or "").strip("/")
     title = str(
-        metadata.get("page_title")
+        metadata_obj.get("page_title")
         or raw.get("document_name")
         or raw.get("document_id")
         or "Documentation",
@@ -98,7 +99,7 @@ def _result_item(raw: dict[str, Any], *, current_page_url: str, language: str) -
     }
 
 
-def _prompt_context_from_results(results: list[dict[str, Any]], *, language: str) -> tuple[str, str]:
+def _prompt_context_from_results(results: list[JsonObject], *, language: str) -> tuple[str, str]:
     is_en = normalize_docs_language(language) == "en"
     if not results:
         empty = (
@@ -175,17 +176,20 @@ async def _search_docs(
             "prompt_links": "",
         }
 
-    raw_results = raw.get("results")
-    if not isinstance(raw_results, list):
+    raw_results: list[JsonValue]
+    raw_results_value = raw.get("results")
+    if raw_results_value is None:
         raw_results = []
+    else:
+        raw_results = require_json_array(raw_results_value, "docs_search.results")
 
-    results: list[dict[str, Any]] = []
+    results: list[JsonObject] = []
     seen_urls: set[str] = set()
-    for item in raw_results:
+    for index, item in enumerate(raw_results):
         if not isinstance(item, dict):
             continue
         result_item = _result_item(
-            item,
+            require_json_object(item, f"docs_search.results[{index}]"),
             current_page_url=current_page_url,
             language=resolved_language,
         )
@@ -216,7 +220,7 @@ async def _search_docs(
     name="docs_search",
     description=_DOCS_SEARCH_DESCRIPTION,
     tags=["docs", "documentation", "rag", "lara"],
-    args_schema=DocsSearchArgs,
+    parameters_model=DocsSearchArgs,
 )
 async def docs_search(
     query: str,
@@ -235,7 +239,7 @@ async def docs_search(
         "контекст prompt_context + prompt_links для ответа Lara без LLM tool-calling."
     ),
     tags=["docs", "documentation", "rag", "lara"],
-    args_schema=DocsPrepareContextArgs,
+    parameters_model=DocsPrepareContextArgs,
 )
 async def docs_prepare_context(
     query: str,

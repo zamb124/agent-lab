@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import override
 
 from apps.voice.providers.base import (
     BaseSTTProvider,
@@ -26,6 +26,7 @@ from core.clients.tts_client import BaseTTSClient
 from core.clients.vad_client import BaseVADClient
 from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -50,19 +51,23 @@ class StreamingSTTProvider(BaseSTTProvider):
     ) -> None:
         if sample_rate <= 0:
             raise ValueError("StreamingSTTProvider: sample_rate должен быть > 0.")
-        self._stt_client = stt_client
-        self._sample_rate = sample_rate
-        self._language = language
+        self._stt_client: BaseSTTClient = stt_client
+        self._sample_rate: int = sample_rate
+        self._language: str | None = language
         self._audio_buffer: bytearray = bytearray()
 
-    async def init(self, config: Any | None = None) -> None:
+    @override
+    async def init(self, config: JsonObject | None = None) -> None:
+        _ = config
         return None
 
+    @override
     async def push_audio(self, chunk: bytes) -> None:
         if not chunk:
             return
         self._audio_buffer.extend(chunk)
 
+    @override
     async def flush_buffer(self) -> STTTranscriptionResult | None:
         if not self._audio_buffer:
             return None
@@ -72,10 +77,11 @@ class StreamingSTTProvider(BaseSTTProvider):
         return await self._stt_client.transcribe_audio(
             audio_bytes=wav,
             file_name="voice_segment.wav",
-            mime_type="audio/wav",
+            content_type="audio/wav",
             language=self._language,
         )
 
+    @override
     async def peek_transcript(
         self, *, min_buffer_bytes: int = 16000
     ) -> STTTranscriptionResult | None:
@@ -102,10 +108,11 @@ class StreamingSTTProvider(BaseSTTProvider):
         return await self._stt_client.transcribe_audio(
             audio_bytes=wav,
             file_name="voice_segment_partial.wav",
-            mime_type="audio/wav",
+            content_type="audio/wav",
             language=self._language,
         )
 
+    @override
     def reset(self) -> None:
         self._audio_buffer = bytearray()
 
@@ -122,12 +129,15 @@ class StreamingTTSProvider(BaseTTSProvider):
     """
 
     def __init__(self, *, tts_client: BaseTTSClient) -> None:
-        self._tts_client = tts_client
-        self._initialized = False
+        self._tts_client: BaseTTSClient = tts_client
+        self._initialized: bool = False
 
-    async def init(self, config: Any | None = None) -> None:
+    @override
+    async def init(self, config: JsonObject | None = None) -> None:
+        _ = config
         self._initialized = True
 
+    @override
     async def synthesize(self, text: str) -> bytes:
         if not self._initialized:
             raise RuntimeError("StreamingTTSProvider не инициализирован (вызовите init).")
@@ -136,6 +146,7 @@ class StreamingTTSProvider(BaseTTSProvider):
         result = await self._tts_client.synthesize(text=text)
         return result.audio_bytes
 
+    @override
     async def close(self) -> None:
         self._initialized = False
 
@@ -190,8 +201,8 @@ class StreamingVADProvider(BaseVADProvider):
         if not vad_client.supports_streaming:
             raise ValueError(
                 f"StreamingVADProvider: vad_client {type(vad_client).__name__} "
-                "не поддерживает streaming (supports_streaming=False); используйте "
-                "silero_local или mock."
+                + "не поддерживает streaming (supports_streaming=False); используйте "
+                + "silero_local или mock."
             )
         if not 0.0 <= activation_threshold <= 1.0:
             raise ValueError("activation_threshold должен быть в [0.0, 1.0].")
@@ -199,8 +210,7 @@ class StreamingVADProvider(BaseVADProvider):
             raise ValueError("deactivation_threshold должен быть в [0.0, 1.0].")
         if deactivation_threshold > activation_threshold:
             raise ValueError(
-                "deactivation_threshold должен быть ≤ activation_threshold "
-                "(гистерезис)."
+                "deactivation_threshold должен быть ≤ activation_threshold (гистерезис)."
             )
         if min_speech_ms < 0:
             raise ValueError("min_speech_ms должен быть ≥ 0.")
@@ -209,32 +219,32 @@ class StreamingVADProvider(BaseVADProvider):
         if prefix_padding_ms < 0:
             raise ValueError("prefix_padding_ms должен быть ≥ 0.")
 
-        self._vad_client = vad_client
-        self._sample_rate = sample_rate
-        self._activation_threshold = activation_threshold
-        self._deactivation_threshold = deactivation_threshold
-        self._min_speech_ms = min_speech_ms
-        self._min_silence_ms = min_silence_ms
+        self._vad_client: BaseVADClient = vad_client
+        self._sample_rate: int = sample_rate
+        self._activation_threshold: float = activation_threshold
+        self._deactivation_threshold: float = deactivation_threshold
+        self._min_speech_ms: int = min_speech_ms
+        self._min_silence_ms: int = min_silence_ms
 
-        self._chunk_samples = 512 if sample_rate == 16000 else 256
-        self._chunk_bytes = self._chunk_samples * 2
-        self._chunk_duration_ms = self._chunk_samples * 1000 // sample_rate
+        self._chunk_samples: int = 512 if sample_rate == 16000 else 256
+        self._chunk_bytes: int = self._chunk_samples * 2
+        self._chunk_duration_ms: int = self._chunk_samples * 1000 // sample_rate
 
-        self._preroll_max_bytes = sample_rate * 2 * prefix_padding_ms // 1000
+        self._preroll_max_bytes: int = sample_rate * 2 * prefix_padding_ms // 1000
 
         self._chunk_buffer: bytearray = bytearray()
         self._preroll_buffer: bytearray = bytearray()
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock = asyncio.Lock()
 
         self._state: str = "silence"
         self._pending_speech_ms: int = 0
         self._pending_silence_ms: int = 0
 
+    @override
     async def detect_speech(self, audio_pcm: bytes, sample_rate: int) -> bool:
         if sample_rate != self._sample_rate:
             raise ValueError(
-                f"StreamingVADProvider: ожидается sample_rate={self._sample_rate}, "
-                f"получено {sample_rate}."
+                f"StreamingVADProvider: ожидается sample_rate={self._sample_rate}, получено {sample_rate}."
             )
 
         async with self._lock:
@@ -276,6 +286,7 @@ class StreamingVADProvider(BaseVADProvider):
         else:
             self._pending_silence_ms = 0
 
+    @override
     def consume_preroll(self) -> bytes:
         """Забрать накопленный pre-roll PCM (rolling последние ``prefix_padding_ms``).
 
@@ -291,15 +302,14 @@ class StreamingVADProvider(BaseVADProvider):
     def state(self) -> str:
         return self._state
 
+    @override
     def reset_state(self) -> None:
         self._chunk_buffer = bytearray()
         self._preroll_buffer = bytearray()
         self._state = "silence"
         self._pending_speech_ms = 0
         self._pending_silence_ms = 0
-        reset_streaming = getattr(self._vad_client, "reset_streaming_state", None)
-        if callable(reset_streaming):
-            reset_streaming()
+        self._vad_client.reset_streaming_state()
 
 
 __all__ = [
