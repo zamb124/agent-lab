@@ -48,3 +48,23 @@ def test_state_delta_roundtrip_incremental_map_and_fields() -> None:
         mode="json",
         exclude_none=False,
     )
+
+
+def test_state_delta_preserves_json_string_whitespace() -> None:
+    before = _state(raw_input="apple, banana, cherry")
+    after = _state(
+        raw_input="apple, banana, cherry",
+        extracted_data={"items": ["apple", " banana", " cherry"], "count": 3},
+    )
+
+    delta = build_state_delta(before, after)
+    restored = apply_state_delta(before, delta)
+
+    assert delta.fields_set["extracted_data"] == {
+        "items": ["apple", " banana", " cherry"],
+        "count": 3,
+    }
+    assert restored.model_dump(mode="json", exclude_none=False) == after.model_dump(
+        mode="json",
+        exclude_none=False,
+    )

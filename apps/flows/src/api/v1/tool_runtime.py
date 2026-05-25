@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
+
 from fastapi import APIRouter, HTTPException
 from pydantic import Field
 
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.tool_call_context import active_tool_call_context
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
     CapabilityCallResponse,
@@ -154,9 +158,11 @@ async def call_tool_runtime(
     set_context(runtime_context)
     try:
         state = ExecutionState.model_validate(request.state)
+        _attach_durable_context(state, request.context)
         tool = await container.tool_registry.materialize({"tool_id": request.tool_id})
         try:
-            result = await tool.run(request.arguments, state)
+            with _active_tool_runtime_context(request, state):
+                result = await tool.run(request.arguments, state)
         except FlowInterrupt as exc:
             body = require_json_object(exc.body.model_dump(mode="json"), "FlowInterrupt.body")
             raw_kind = body.get("kind")
@@ -171,6 +177,7 @@ async def call_tool_runtime(
                 interrupt=CapabilityInterruptEnvelope(
                     kind=raw_kind,
                     body=body,
+                    correlation_id=str(exc.correlation_id) if exc.correlation_id is not None else None,
                 ),
             )
         return CapabilityCallResponse(
@@ -200,12 +207,14 @@ async def call_builtin_tool_runtime(
     set_context(runtime_context)
     try:
         state = ExecutionState.model_validate(request.state)
+        _attach_durable_context(state, request.context)
         container.tool_registry.register_builtin_tools()
         tool = container.tool_registry.get(request.tool_id)
         if tool is None:
             raise HTTPException(status_code=404, detail=f"Builtin tool not found: {request.tool_id}")
         try:
-            result = await tool.run(request.arguments, state)
+            with _active_tool_runtime_context(request, state):
+                result = await tool.run(request.arguments, state)
         except FlowInterrupt as exc:
             body = require_json_object(exc.body.model_dump(mode="json"), "FlowInterrupt.body")
             raw_kind = body.get("kind")
@@ -220,6 +229,7 @@ async def call_builtin_tool_runtime(
                 interrupt=CapabilityInterruptEnvelope(
                     kind=raw_kind,
                     body=body,
+                    correlation_id=str(exc.correlation_id) if exc.correlation_id is not None else None,
                 ),
             )
         return CapabilityCallResponse(
@@ -237,6 +247,40 @@ async def call_builtin_tool_runtime(
             set_context(previous_context)
 
 
+def _attach_durable_context(
+    state: ExecutionState,
+    execution_context: CapabilityExecutionContext,
+) -> None:
+    state.attach_durable_node_context(
+        execution_branch_id=execution_context.durable_execution_branch_id,
+        node_schedule_sequence=execution_context.durable_node_schedule_sequence,
+        superstep_sequence=execution_context.durable_superstep_sequence,
+    )
+
+
+@contextmanager
+def _active_tool_runtime_context(
+    request: ToolRuntimeCallRequest,
+    state: ExecutionState,
+) -> Generator[None, None, None]:
+    source_node_id = request.context.source_node_id
+    source_tool_call_id = request.context.source_tool_call_id
+    if source_node_id is None and source_tool_call_id is None:
+        yield
+        return
+    if source_node_id is None or source_tool_call_id is None:
+        raise ValueError(
+            "Capability tool runtime context requires both source_node_id and source_tool_call_id"
+        )
+    with active_tool_call_context(
+        tool_name=request.tool_id,
+        tool_call_id=source_tool_call_id,
+        node_id=source_node_id,
+        state=state,
+    ):
+        yield
+
+
 async def _build_context(container: ContainerDep, execution_context: CapabilityExecutionContext) -> Context:
     if execution_context.user_id is None:
         raise HTTPException(status_code=401, detail="Capability context requires user_id")
@@ -251,7 +295,7 @@ async def _build_context(container: ContainerDep, execution_context: CapabilityE
         active_company=company,
         user_companies=[company],
         session_id=execution_context.session_id,
-        channel="tool_runtime",
+        channel=execution_context.channel,
         flow_id=execution_context.flow_id,
         trace_id=execution_context.trace_id,
     )

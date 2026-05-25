@@ -33,7 +33,6 @@ class _EmptyAudioTTSClient(BaseTTSClient):
 async def test_batch_backed_raises_when_upstream_audio_empty() -> None:
     streamer = BatchBackedTTSStreamer(
         tts_client=_EmptyAudioTTSClient(),
-        response_format="wav",
         sample_rate=8000,
         provider_name="empty_fixture",
         content_type="audio/wav",
@@ -58,7 +57,6 @@ class _NeverSynthesizeTTSClient(BaseTTSClient):
 async def test_batch_backed_whitespace_only_chunk_skips_http() -> None:
     streamer = BatchBackedTTSStreamer(
         tts_client=_NeverSynthesizeTTSClient(),
-        response_format="wav",
         sample_rate=8000,
         provider_name="skip_ws",
         content_type="audio/wav",

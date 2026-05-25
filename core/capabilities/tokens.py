@@ -27,7 +27,13 @@ class CapabilityExecutionTokenClaims(BaseModel):
     session_id: str = Field(..., min_length=1)
     task_id: str = Field(..., min_length=1)
     context_id: str = Field(..., min_length=1)
+    channel: str = Field(..., min_length=1)
     request_id: str | None = None
+    durable_execution_branch_id: str | None = Field(default=None, min_length=1)
+    durable_node_schedule_sequence: int | None = Field(default=None, ge=0)
+    durable_superstep_sequence: int | None = Field(default=None, ge=0)
+    source_node_id: str | None = Field(default=None, min_length=1)
+    source_tool_call_id: str | None = Field(default=None, min_length=1)
     exp: int = Field(..., gt=0)
 
 
@@ -73,8 +79,20 @@ def verify_execution_context(context: CapabilityExecutionContext) -> None:
         mismatches.append("task_id")
     if claims.context_id != context.context_id:
         mismatches.append("context_id")
+    if claims.channel != context.channel:
+        mismatches.append("channel")
     if claims.request_id != context.request_id:
         mismatches.append("request_id")
+    if claims.durable_execution_branch_id != context.durable_execution_branch_id:
+        mismatches.append("durable_execution_branch_id")
+    if claims.durable_node_schedule_sequence != context.durable_node_schedule_sequence:
+        mismatches.append("durable_node_schedule_sequence")
+    if claims.durable_superstep_sequence != context.durable_superstep_sequence:
+        mismatches.append("durable_superstep_sequence")
+    if claims.source_node_id != context.source_node_id:
+        mismatches.append("source_node_id")
+    if claims.source_tool_call_id != context.source_tool_call_id:
+        mismatches.append("source_tool_call_id")
     if mismatches:
         joined = ", ".join(mismatches)
         raise ValueError(f"Execution token context mismatch: {joined}")

@@ -11,6 +11,7 @@ import weakref
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import (
 
 from core.config import get_settings
 from core.logging import get_logger
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -44,7 +46,7 @@ def _build_asyncpg_server_settings() -> dict[str, str]:
     return server_settings
 
 
-def _build_connect_args(db_url: str) -> dict[str, object]:
+def _build_connect_args(db_url: str) -> JsonObject:
     """
     Готовит connect_args для create_async_engine.
 
@@ -58,6 +60,8 @@ def _build_connect_args(db_url: str) -> dict[str, object]:
     if not server_settings:
         return {}
     return {"server_settings": server_settings}
+
+
 def _require_shared_db_url() -> str:
     settings = get_settings()
     u = settings.database.shared_url
@@ -75,6 +79,7 @@ def _get_loop_id() -> int:
     """Получает ID текущего event loop для кэширования"""
     loop = asyncio.get_running_loop()
     return id(loop)
+
 
 async def get_engine(db_url: str | None = None) -> AsyncEngine:
     """
@@ -127,6 +132,7 @@ async def get_engine(db_url: str | None = None) -> AsyncEngine:
     _engines[cache_key] = engine
     return engine
 
+
 async def get_session_factory(db_url: str | None = None) -> async_sessionmaker[AsyncSession]:
     """
     Лениво создает session factory для текущего event loop и URL БД.
@@ -154,6 +160,7 @@ async def get_session_factory(db_url: str | None = None) -> async_sessionmaker[A
     logger.debug(f"Session factory создана (loop {loop_id}, db_url={db_url[:50]}...)")
     return session_factory
 
+
 async def session(db_url: str | None = None) -> AsyncGenerator[AsyncSession, None]:
     """
     Алиас для get_session_factory() - создает контекстный менеджер сессии.
@@ -170,6 +177,7 @@ async def session(db_url: str | None = None) -> AsyncGenerator[AsyncSession, Non
     async with session_factory() as s:
         yield s
 
+
 async def get_db(db_url: str | None = None) -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency для получения сессии БД в FastAPI.
@@ -183,7 +191,12 @@ async def get_db(db_url: str | None = None) -> AsyncGenerator[AsyncSession, None
         yield session
         await session.close()
 
-async def wait_for_db(max_retries: int = 30, retry_interval: int = 2, db_url: str | None = None):
+
+async def wait_for_db(
+    max_retries: int = 30,
+    retry_interval: int = 2,
+    db_url: str | None = None,
+) -> None:
     """
     Ожидает готовности БД с повторными попытками.
     Если БД недоступна после всех попыток - бросает исключение.
@@ -193,23 +206,29 @@ async def wait_for_db(max_retries: int = 30, retry_interval: int = 2, db_url: st
         retry_interval: Интервал между попытками
         db_url: URL БД (если не указан — shared_url)
     """
-    for attempt in range(1, max_retries + 1):
-        session_factory = await get_session_factory(db_url)
-        async with session_factory() as session:
-            await session.execute(text("SELECT 1"))
-        logger.info(f"БД готова к работе (попытка {attempt}/{max_retries})")
-        return
+    if max_retries < 1:
+        raise ValueError("max_retries должен быть >= 1")
+    if retry_interval < 0:
+        raise ValueError("retry_interval должен быть >= 0")
 
-        if attempt < max_retries:
+    for attempt in range(1, max_retries + 1):
+        try:
+            session_factory = await get_session_factory(db_url)
+            async with session_factory() as session:
+                _ = await session.execute(text("SELECT 1"))
+            logger.info(f"БД готова к работе (попытка {attempt}/{max_retries})")
+            return
+        except SQLAlchemyError as exc:
+            if attempt == max_retries:
+                raise RuntimeError(f"БД недоступна после {max_retries} попыток") from exc
             logger.warning(
                 f"БД не готова (попытка {attempt}/{max_retries}), "
-                f"повтор через {retry_interval}с"
+                + f"повтор через {retry_interval}с: {exc}"
             )
             await asyncio.sleep(retry_interval)
 
-    raise RuntimeError(f"БД недоступна после {max_retries} попыток")
 
-async def close_db():
+async def close_db() -> None:
     """Закрывает соединения с БД для текущего event loop"""
     loop_id = _get_loop_id()
 
@@ -222,7 +241,7 @@ async def close_db():
         await engine.dispose()
         logger.debug(f"Engine закрыт (loop {loop_id})")
 
-        _engines.pop(key, None)
-        _session_factories.pop(key, None)
+        _ = _engines.pop(key, None)
+        _ = _session_factories.pop(key, None)
     if keys:
         logger.info(f"Соединения с БД закрыты (loop {loop_id})")

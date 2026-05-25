@@ -43,9 +43,9 @@ class MediaTranscriber:
     ) -> None:
         if company_id == "":
             raise ValueError("MediaTranscriber: company_id не может быть пустым.")
-        self._company_id = company_id
-        self._speech_override = speech_override
-        self._stt_client = stt_client
+        self._company_id: str = company_id
+        self._speech_override: SpeechOverride | None = speech_override
+        self._stt_client: BaseSTTClient | None = stt_client
 
     async def _get_stt_client(self) -> BaseSTTClient:
         if self._stt_client is not None:

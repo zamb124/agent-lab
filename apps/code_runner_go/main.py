@@ -11,7 +11,6 @@ app = create_service_app(
     settings_class=CodeRunnerGoSettings,
     get_container=get_code_runner_go_container,
     routers=[execute_router, validate_router],
-    repository_names=[],
     cors_origins=["*"],
     title="Platform Go Code Runner",
     description="Untrusted Go sandbox runner",

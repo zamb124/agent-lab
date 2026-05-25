@@ -915,6 +915,7 @@ class DurableWorkflowRuntime:
             WorkflowEventType.run_started,
             WorkflowEventType.breakpoint_hit,
             WorkflowEventType.interrupt_raised,
+            WorkflowEventType.handoff_requested,
         }:
             return True
         if (expected_head_sequence + 1) % 25 == 0:

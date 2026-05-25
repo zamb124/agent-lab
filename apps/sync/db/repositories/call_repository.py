@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import override
 
 from sqlalchemy import select, update
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import (
@@ -28,12 +30,19 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         super().__init__(db)
 
     @property
+    @override
     def model_class(self) -> type[SyncCall]:
         return SyncCall
 
     @property
-    def id_field(self) -> str:
-        return "call_id"
+    @override
+    def id_column(self) -> InstrumentedAttribute[str]:
+        return SyncCall.call_id
+
+    @property
+    @override
+    def company_id_column(self) -> InstrumentedAttribute[str]:
+        return SyncCall.company_id
 
     async def create_call(self, call: SyncCall) -> SyncCall:
         async with self._db.session() as session:
@@ -80,14 +89,14 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         if ended_at is not None:
             values["ended_at"] = ended_at
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(SyncCall).where(SyncCall.call_id == call_id).values(**values)
             )
             await session.commit()
 
     async def set_call_admin(self, call_id: str, admin_user_id: str) -> None:
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(SyncCall)
                 .where(SyncCall.call_id == call_id)
                 .values(created_by_user_id=admin_user_id)
@@ -116,7 +125,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         if left_at is not None:
             values["left_at"] = left_at
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(SyncCallParticipant)
                 .where(
                     SyncCallParticipant.call_id == call_id,
@@ -159,7 +168,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
     async def attach_call_to_link(self, link_token: str, call_id: str) -> None:
         """Привязывает созданный звонок к ссылке (при первом входе)."""
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(SyncCallLink)
                 .where(SyncCallLink.link_token == link_token)
                 .values(call_id=call_id)
@@ -206,7 +215,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
 
     async def update_link_expires_at(self, link_token: str, expires_at: datetime) -> None:
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(SyncCallLink)
                 .where(SyncCallLink.link_token == link_token)
                 .values(expires_at=expires_at)
@@ -238,7 +247,7 @@ class CallRepository(BaseSyncRepository[SyncCall]):
         if not values:
             return
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(SyncCallLink)
                 .where(
                     SyncCallLink.link_token == link_token,

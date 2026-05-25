@@ -12,12 +12,12 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import ClassVar, Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.dependencies import ContainerDep, require_frontend_user
 from core.clients.tts_pronunciation.models import (
     CompiledPronunciation,
     NormalizationConfig,
@@ -46,7 +46,7 @@ _MAX_RULES_PER_COMPANY = 1000
 # ---------------------------------------------------------------------------
 
 class PronunciationRuleDTO(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     id: str
     kind: Literal["alias", "regex", "stress"]
@@ -62,7 +62,7 @@ class PronunciationRuleDTO(BaseModel):
 
 
 class PronunciationRuleCreateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     kind: Literal["alias", "regex", "stress"] = Field(description="Тип правила.")
     pattern: str = Field(min_length=1, description="Искомое слово / regex.")
@@ -77,7 +77,7 @@ class PronunciationRuleCreateRequest(BaseModel):
 
 
 class PronunciationRuleUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     kind: Literal["alias", "regex", "stress"] | None = None
     pattern: str | None = Field(default=None, min_length=1)
@@ -92,7 +92,7 @@ class PronunciationRuleUpdateRequest(BaseModel):
 
 
 class PronunciationRuleTestRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     text: str = Field(min_length=1, description="Текст для dry-run.")
     provider: str = Field(default="litserve", description="Имя TTS-провайдера.")
@@ -101,7 +101,7 @@ class PronunciationRuleTestRequest(BaseModel):
 
 
 class PronunciationRuleTestResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     original: str
     transformed: str
@@ -109,7 +109,7 @@ class PronunciationRuleTestResponse(BaseModel):
 
 
 class PronunciationRulesListResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     company_id: str
     items: list[PronunciationRuleDTO]
@@ -118,13 +118,6 @@ class PronunciationRulesListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Вспомогательные функции
 # ---------------------------------------------------------------------------
-
-def _require_user(request: Request) -> User:
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    return request.state.user
-
-
 def _ensure_member(user: User, company_id: str) -> None:
     if company_id not in user.companies:
         raise HTTPException(status_code=403, detail="Доступ только участникам компании")
@@ -168,11 +161,10 @@ def _row_to_dto(row: CompanyPronunciationRule) -> PronunciationRuleDTO:
 @router.get("", response_model=PronunciationRulesListResponse)
 async def list_company_pronunciation_rules(
     company_id: str,
-    request: Request,
     container: ContainerDep,
 ) -> PronunciationRulesListResponse:
     """Список правил произношения TTS компании."""
-    user = _require_user(request)
+    user = require_frontend_user()
     _ensure_member(user, company_id)
     rows = await container.company_pronunciation_rule_repository.list_all(
         company_id=company_id
@@ -187,11 +179,10 @@ async def list_company_pronunciation_rules(
 async def create_company_pronunciation_rule(
     company_id: str,
     payload: PronunciationRuleCreateRequest,
-    request: Request,
     container: ContainerDep,
 ) -> PronunciationRuleDTO:
     """Создать правило произношения TTS для компании."""
-    user = _require_user(request)
+    user = require_frontend_user()
     _ensure_admin(user, company_id)
 
     try:
@@ -228,11 +219,10 @@ async def update_company_pronunciation_rule(
     company_id: str,
     rule_id: str,
     payload: PronunciationRuleUpdateRequest,
-    request: Request,
     container: ContainerDep,
 ) -> PronunciationRuleDTO:
     """Обновить правило произношения TTS компании."""
-    user = _require_user(request)
+    user = require_frontend_user()
     _ensure_admin(user, company_id)
 
     row = await container.company_pronunciation_rule_repository.update(
@@ -266,11 +256,10 @@ async def update_company_pronunciation_rule(
 async def delete_company_pronunciation_rule(
     company_id: str,
     rule_id: str,
-    request: Request,
     container: ContainerDep,
 ) -> dict[str, bool]:
     """Удалить правило произношения TTS компании."""
-    user = _require_user(request)
+    user = require_frontend_user()
     _ensure_admin(user, company_id)
 
     deleted = await container.company_pronunciation_rule_repository.delete(
@@ -292,14 +281,13 @@ async def delete_company_pronunciation_rule(
 async def test_company_pronunciation_rules(
     company_id: str,
     payload: PronunciationRuleTestRequest,
-    request: Request,
     container: ContainerDep,
 ) -> PronunciationRuleTestResponse:
     """Dry-run: применить текущие правила произношения к тексту и вернуть результат.
 
     Включает только per-company правила (без платформенных).
     """
-    user = _require_user(request)
+    user = require_frontend_user()
     _ensure_member(user, company_id)
 
     rows = await container.company_pronunciation_rule_repository.list_enabled(

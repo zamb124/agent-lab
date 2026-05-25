@@ -21,7 +21,7 @@ per-company-настройку и deployment-default. Используется �
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -53,7 +53,7 @@ class SpeechOverride(BaseModel):
     читает только свои поля. Лишние поля игнорируются.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: SpeechOverrideProviderName | None = Field(
         default=None,
@@ -123,7 +123,7 @@ class SpeechOverride(BaseModel):
 
 
 def _rebuild_with_pronunciation_rule() -> None:
-    SpeechOverride.model_rebuild()
+    _ = SpeechOverride.model_rebuild()
 
 
 _rebuild_with_pronunciation_rule()

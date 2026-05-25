@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.scheduler.dependencies import ContainerDep
-from core.context import get_context
+from core.context import require_active_company, require_context
 from core.pagination import OffsetPage
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
@@ -21,17 +22,11 @@ router = APIRouter(tags=["scheduler"])
 
 
 def _company_id_from_context() -> str:
-    context = get_context()
-    if context is None or context.active_company is None:
-        raise HTTPException(status_code=401, detail="Company context is required")
-    return context.active_company.company_id
+    return require_active_company().company_id
 
 
 def _user_id_from_context() -> str:
-    context = get_context()
-    if context is None or context.user is None:
-        raise HTTPException(status_code=401, detail="User context is required")
-    return context.user.user_id
+    return require_context().user.user_id
 
 
 @router.post("/schedules", response_model=PlatformScheduledTask)
@@ -47,11 +42,11 @@ async def create_schedule(request: PlatformScheduleCreateRequest, container: Con
 @router.get("/schedules", response_model=OffsetPage[PlatformScheduledTask])
 async def list_schedules(
     container: ContainerDep,
-    status: ScheduledTaskStatus | None = Query(default=None),
-    target_service: str | None = Query(default=None),
-    task_name: str | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
+    status: Annotated[ScheduledTaskStatus | None, Query()] = None,
+    target_service: Annotated[str | None, Query()] = None,
+    task_name: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[PlatformScheduledTask]:
     company_id = _company_id_from_context()
     filters = PlatformScheduleFilter(

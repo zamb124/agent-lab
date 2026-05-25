@@ -16,6 +16,7 @@ from core.capabilities import (
     CodeExecutionRequest,
     execution_token_exp,
     issue_execution_token,
+    locked_down_code_sandbox_policy,
 )
 
 STATIC_PLATFORM_CAPABILITIES = {
@@ -216,8 +217,8 @@ async def run(args, state):
     results["state.merge"] = merge["state"]["merged"]["ok"]
     files_state = await call("state.get_files", {})
     results["state.get_files"] = len(files_state)
-    found_file = await call("state.find_file", {"name": "state-file.txt"})
-    results["state.find_file"] = found_file["name"]
+    found_file = await call("state.find_file", {"original_name": "state-file.txt"})
+    results["state.find_file"] = found_file["original_name"]
     user = await call("state.get_user", {})
     results["state.get_user"] = user["id"]
     tool_result = await call("state.get_tool_result", {"tool_name": "seed_tool"})
@@ -229,8 +230,8 @@ async def run(args, state):
     agent_message = await call("state.add_agent_message", {"content": "hello agent"})
     results["state.add_agent_message"] = agent_message["role"]
     ui_event = await call("state.push_ui_event", {"event_type": "capability.single", "payload": {"ok": True}})
-    results["state.push_ui_event"] = ui_event["type"]
-    ui_events = await call("state.push_ui_events", {"events": [{"type": "capability.batch", "payload": {"ok": True}}]})
+    results["state.push_ui_event"] = ui_event["event_type"]
+    ui_events = await call("state.push_ui_events", {"events": [{"event_type": "capability.batch", "payload": {"ok": True}}]})
     results["state.push_ui_events"] = len(ui_events)
     popped = await call("state.pop_ui_events", {})
     results["state.pop_ui_events"] = len(popped)
@@ -310,14 +311,14 @@ async function run(args, state) {
   results["state.set_nested"] = (await call("state.set_nested", {path: "nested.value", value: "updated"})).value;
   results["state.merge"] = (await call("state.merge", {updates: {merged: {ok: true}}})).state.merged.ok;
   results["state.get_files"] = (await call("state.get_files", {})).length;
-  results["state.find_file"] = (await call("state.find_file", {name: "state-file.txt"})).name;
+  results["state.find_file"] = (await call("state.find_file", {original_name: "state-file.txt"})).original_name;
   results["state.get_user"] = (await call("state.get_user", {})).id;
   results["state.get_tool_result"] = (await call("state.get_tool_result", {tool_name: "seed_tool"})).ok;
   results["state.get_messages"] = (await call("state.get_messages", {})).length;
   results["state.add_user_message"] = (await call("state.add_user_message", {content: "hello user"})).role;
   results["state.add_agent_message"] = (await call("state.add_agent_message", {content: "hello agent"})).role;
-  results["state.push_ui_event"] = (await call("state.push_ui_event", {event_type: "capability.single", payload: {ok: true}})).type;
-  results["state.push_ui_events"] = (await call("state.push_ui_events", {events: [{type: "capability.batch", payload: {ok: true}}]})).length;
+  results["state.push_ui_event"] = (await call("state.push_ui_event", {event_type: "capability.single", payload: {ok: true}})).event_type;
+  results["state.push_ui_events"] = (await call("state.push_ui_events", {events: [{event_type: "capability.batch", payload: {ok: true}}]})).length;
   results["state.pop_ui_events"] = (await call("state.pop_ui_events", {})).length;
   results["state.extract_json"] = (await call("state.extract_json", {text: "```json\\n{\\"ok\\": true}\\n```"})).ok;
   results["channel.send"] = (await call("channel.send", {content: "queued message"})).queued;
@@ -455,9 +456,9 @@ func Run(args map[string]any, state map[string]any) (any, error) {
     filesState, err := call("state.get_files", map[string]any{})
     if err != nil { return nil, err }
     results["state.get_files"] = len(filesState.([]any))
-    foundFile, err := callObj("state.find_file", map[string]any{"name": "state-file.txt"})
+    foundFile, err := callObj("state.find_file", map[string]any{"original_name": "state-file.txt"})
     if err != nil { return nil, err }
-    results["state.find_file"] = foundFile["name"]
+    results["state.find_file"] = foundFile["original_name"]
     user, err := callObj("state.get_user", map[string]any{})
     if err != nil { return nil, err }
     results["state.get_user"] = user["id"]
@@ -475,8 +476,8 @@ func Run(args map[string]any, state map[string]any) (any, error) {
     results["state.add_agent_message"] = agentMessage["role"]
     uiEvent, err := callObj("state.push_ui_event", map[string]any{"event_type": "capability.single", "payload": map[string]any{"ok": true}})
     if err != nil { return nil, err }
-    results["state.push_ui_event"] = uiEvent["type"]
-    uiEvents, err := call("state.push_ui_events", map[string]any{"events": []any{map[string]any{"type": "capability.batch", "payload": map[string]any{"ok": true}}}})
+    results["state.push_ui_event"] = uiEvent["event_type"]
+    uiEvents, err := call("state.push_ui_events", map[string]any{"events": []any{map[string]any{"event_type": "capability.batch", "payload": map[string]any{"ok": true}}}})
     if err != nil { return nil, err }
     results["state.push_ui_events"] = len(uiEvents.([]any))
     popped, err := call("state.pop_ui_events", map[string]any{})
@@ -627,7 +628,7 @@ async Task<object?> Run(Dictionary<string, object?> args, Dictionary<string, obj
         ["updates"] = new Dictionary<string, object?> { ["merged"] = new Dictionary<string, object?> { ["ok"] = true } },
     }))["state"]!)["merged"]!)["ok"];
     results["state.get_files"] = ((List<object?>) (await Call("state.get_files", new Dictionary<string, object?>()))!).Count;
-    results["state.find_file"] = (await CallObj("state.find_file", new Dictionary<string, object?> { ["name"] = "state-file.txt" }))["name"];
+    results["state.find_file"] = (await CallObj("state.find_file", new Dictionary<string, object?> { ["original_name"] = "state-file.txt" }))["original_name"];
     results["state.get_user"] = (await CallObj("state.get_user", new Dictionary<string, object?>()))["id"];
     results["state.get_tool_result"] = (await CallObj("state.get_tool_result", new Dictionary<string, object?> { ["tool_name"] = "seed_tool" }))["ok"];
     results["state.get_messages"] = ((List<object?>) (await Call("state.get_messages", new Dictionary<string, object?>()))!).Count;
@@ -636,9 +637,9 @@ async Task<object?> Run(Dictionary<string, object?> args, Dictionary<string, obj
     results["state.push_ui_event"] = (await CallObj("state.push_ui_event", new Dictionary<string, object?> {
         ["event_type"] = "capability.single",
         ["payload"] = new Dictionary<string, object?> { ["ok"] = true },
-    }))["type"];
+    }))["event_type"];
     results["state.push_ui_events"] = ((List<object?>) (await Call("state.push_ui_events", new Dictionary<string, object?> {
-        ["events"] = new List<object?> { new Dictionary<string, object?> { ["type"] = "capability.batch", ["payload"] = new Dictionary<string, object?> { ["ok"] = true } } },
+        ["events"] = new List<object?> { new Dictionary<string, object?> { ["event_type"] = "capability.batch", ["payload"] = new Dictionary<string, object?> { ["ok"] = true } } },
     }))!).Count;
     results["state.pop_ui_events"] = ((List<object?>) (await Call("state.pop_ui_events", new Dictionary<string, object?>()))!).Count;
     results["state.extract_json"] = (await CallObj("state.extract_json", new Dictionary<string, object?> { ["text"] = "```json\\n{\\"ok\\": true}\\n```" }))["ok"];
@@ -1008,7 +1009,14 @@ async def assert_language_runs_static_platform_capabilities(
                 "file_name": f"capability-{language}-{unique_id}.txt",
                 "speech_file_name": f"capability-{language}-{unique_id}.wav",
                 "nested": {"value": "initial"},
-                "files": [{"name": "state-file.txt", "file_id": "state-file-id"}],
+                "files": [
+                    {
+                        "file_id": "state-file-id",
+                        "original_name": "state-file.txt",
+                        "content_type": "text/plain",
+                        "file_size": 0,
+                    }
+                ],
                 "user_id": f"user-{language}",
                 "user_groups": ["capability"],
                 "tool_results": {"seed_tool": {"ok": True}},
@@ -1070,15 +1078,24 @@ async def assert_language_runs_interrupt_platform_capabilities(
         session_id="test_flow:test_context",
         task_id="test_task",
         context_id="test_context",
+        channel="a2a",
         request_id=f"capability-interrupt-{language}",
         exp=execution_token_exp(300),
     )
+    wall_time_limit_seconds = 30
     request = CodeExecutionRequest(
         kind="node",
         language=cast(CapabilityLanguage, language),
         code=interrupt_capability_code(language),
         entrypoint=None,
-        wall_time_limit_seconds=30,
+        wall_time_limit_seconds=wall_time_limit_seconds,
+        sandbox=locked_down_code_sandbox_policy(
+            wall_time_limit_seconds=wall_time_limit_seconds,
+            cpu_time_limit_seconds=wall_time_limit_seconds,
+            memory_limit_mb=256,
+            filesystem_limit_mb=64,
+            stdout_stderr_limit_bytes=1_048_576,
+        ),
         args={},
         state={},
         context=CapabilityExecutionContext(
@@ -1090,6 +1107,7 @@ async def assert_language_runs_interrupt_platform_capabilities(
             session_id=claims.session_id,
             task_id=claims.task_id,
             context_id=claims.context_id,
+            channel=claims.channel,
             request_id=claims.request_id,
             trace_id=f"capability-interrupt-trace-{language}",
         ),

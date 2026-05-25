@@ -7,20 +7,18 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 
 
 class AudioTranscodeError(RuntimeError):
     """Не удалось перекодировать аудио для совместимости с iOS (нет ffmpeg или сбой ffmpeg)."""
 
 
-import shutil  # noqa: E402
-import subprocess  # noqa: E402
-import tempfile  # noqa: E402
-from pathlib import Path  # noqa: E402
-
-
 def audio_needs_ios_compatible_transcode(content_type: str) -> bool:
-    if not isinstance(content_type, str) or content_type.strip() == "":
+    if content_type.strip() == "":
         return False
     base = content_type.split(";")[0].strip().lower()
     if base in (
@@ -63,9 +61,9 @@ def resolve_ios_transcode_source(
 
     Учитывает MIME, расширение имени и магические байты (обход неверного Content-Type).
     """
-    if audio_needs_ios_compatible_transcode(content_type or ""):
+    if audio_needs_ios_compatible_transcode(content_type):
         magic = sniff_ios_incompatible_audio_magic(data)
-        if magic:
+        if magic is not None:
             return True, magic
         suf = Path(original_name).suffix.lower()
         if suf in (".ogg", ".oga", ".opus"):
@@ -79,7 +77,7 @@ def resolve_ios_transcode_source(
         return True, ".webm"
 
     magic = sniff_ios_incompatible_audio_magic(data)
-    if magic:
+    if magic is not None:
         return True, magic
 
     ext = Path(original_name).suffix.lower()
@@ -103,7 +101,7 @@ def _transcode_sync(data: bytes, ffmpeg: str, source_suffix: str) -> bytes:
         work = Path(td)
         src = work / f"source{suffix}"
         dst = work / "out.m4a"
-        src.write_bytes(data)
+        _ = src.write_bytes(data)
         result = subprocess.run(
             [
                 ffmpeg,

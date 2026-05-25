@@ -160,7 +160,7 @@ class BaseSettings(PydanticBaseSettings):
             file_secret_settings,
         )
 
-_settings_instance = None
+_settings_instance: BaseSettings | None = None
 
 def get_settings() -> BaseSettings:
     """Получает синглтон настроек"""
@@ -190,9 +190,133 @@ class _SettingsProxy:
     def server(self) -> ServerConfig:
         return get_settings().server
 
-    def __getattr__(self, name: str) -> object:
-        value: object = object.__getattribute__(get_settings(), name)
-        return value
+    @property
+    def testing(self) -> bool:
+        return get_settings().testing
+
+    @property
+    def auth(self) -> AuthConfig:
+        return get_settings().auth
+
+    @property
+    def database(self) -> DatabaseConfig:
+        return get_settings().database
+
+    @property
+    def llm(self) -> LLMConfig:
+        return get_settings().llm
+
+    @property
+    def llm_context(self) -> LLMContextConfig:
+        return get_settings().llm_context
+
+    @property
+    def text_transforms(self) -> TextTransformsConfig:
+        return get_settings().text_transforms
+
+    @property
+    def provider_litserve(self) -> ProviderLitserveConfig:
+        return get_settings().provider_litserve
+
+    @property
+    def worker(self) -> WorkerConfig:
+        return get_settings().worker
+
+    @property
+    def logging(self) -> LoggingConfig:
+        return get_settings().logging
+
+    @property
+    def s3(self) -> S3Config:
+        return get_settings().s3
+
+    @property
+    def voice(self) -> SpeechProvidersConfig:
+        return get_settings().voice
+
+    @property
+    def telegram(self) -> TelegramConfig:
+        return get_settings().telegram
+
+    @property
+    def whatsapp(self) -> WhatsAppConfig:
+        return get_settings().whatsapp
+
+    @property
+    def nano_banana(self) -> NanoBananaConfig:
+        return get_settings().nano_banana
+
+    @property
+    def proxy(self) -> ProxyConfig:
+        return get_settings().proxy
+
+    @property
+    def payment_providers(self) -> PaymentProvidersConfig:
+        return get_settings().payment_providers
+
+    @property
+    def rag(self) -> RAGConfig:
+        return get_settings().rag
+
+    @property
+    def sgr(self) -> SGRConfig:
+        return get_settings().sgr
+
+    @property
+    def legal(self) -> LegalConfig:
+        return get_settings().legal
+
+    @property
+    def public_site(self) -> PublicSiteConfig:
+        return get_settings().public_site
+
+    @property
+    def tracing(self) -> TracingConfig:
+        return get_settings().tracing
+
+    @property
+    def billing(self) -> BillingConfig:
+        return get_settings().billing
+
+    @property
+    def tasks(self) -> TasksConfig:
+        return get_settings().tasks
+
+    @property
+    def calendar_sync(self) -> CalendarSyncConfig:
+        return get_settings().calendar_sync
+
+    @property
+    def push(self) -> PushConfig:
+        return get_settings().push
+
+    @property
+    def calls(self) -> CallsConfig:
+        return get_settings().calls
+
+    @property
+    def media_transcriber(self) -> MediaTranscriberConfig:
+        return get_settings().media_transcriber
+
+    @property
+    def recording_max_duration_seconds(self) -> float:
+        return get_settings().recording_max_duration_seconds
+
+    @property
+    def transcribe_audio_redis_lock_ttl_seconds(self) -> int:
+        return get_settings().transcribe_audio_redis_lock_ttl_seconds
+
+    @property
+    def ws_presence_heartbeat_interval_seconds(self) -> float:
+        return get_settings().ws_presence_heartbeat_interval_seconds
+
+    @property
+    def ws_presence_ttl_seconds(self) -> int:
+        return get_settings().ws_presence_ttl_seconds
+
+    @property
+    def sync_taskiq_wait_result_timeout_seconds(self) -> float:
+        return get_settings().sync_taskiq_wait_result_timeout_seconds
 
     @override
     def __repr__(self) -> str:

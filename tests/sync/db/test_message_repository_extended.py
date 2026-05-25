@@ -25,6 +25,7 @@ async def test_get_by_id_for_company(
     company_id: str,
     unique_id: str,
 ) -> None:
+    _ = sync_db_clean
     ch_g = f"{unique_id}_ch_g"
     m_gc = f"{unique_id}_m_gc"
     other_co = f"{unique_id}_other_co"
@@ -38,8 +39,8 @@ async def test_get_by_id_for_company(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u1",
     )
-    await channel_repo.create(ch)
-    await message_repo.create_message(
+    _ = await channel_repo.create(ch)
+    _ = await message_repo.create_message(
         message_id=m_gc,
         company_id=company_id,
         channel_id=ch_g,
@@ -66,6 +67,7 @@ async def test_replace_contents_soft_delete_reactions_max_sent(
     company_id: str,
     unique_id: str,
 ) -> None:
+    _ = sync_db_clean
     ch_r = f"{unique_id}_ch_r"
     m_r = f"{unique_id}_m_r"
     ch = SyncChannel(
@@ -78,9 +80,9 @@ async def test_replace_contents_soft_delete_reactions_max_sent(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u1",
     )
-    await channel_repo.create(ch)
+    _ = await channel_repo.create(ch)
     t0 = datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC)
-    await message_repo.create_message(
+    _ = await message_repo.create_message(
         message_id=m_r,
         company_id=company_id,
         channel_id=ch_r,
@@ -106,7 +108,8 @@ async def test_replace_contents_soft_delete_reactions_max_sent(
     )
     contents = await message_repo.list_contents(m_r)
     assert len(contents) == 1
-    assert contents[0].data["body"] == "b"
+    assert isinstance(contents[0].data, TextPlainContent)
+    assert contents[0].data.body == "b"
 
     await message_repo.set_message_reactions(
         m_r,
@@ -130,6 +133,7 @@ async def test_get_thread_root_chain(
     company_id: str,
     unique_id: str,
 ) -> None:
+    _ = sync_db_clean
     ch_trt = f"{unique_id}_ch_trt"
     root = f"{unique_id}_root"
     c1 = f"{unique_id}_c1"
@@ -144,9 +148,9 @@ async def test_get_thread_root_chain(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u1",
     )
-    await channel_repo.create(ch)
+    _ = await channel_repo.create(ch)
     t = datetime.now(tz=UTC)
-    await message_repo.create_message(
+    _ = await message_repo.create_message(
         message_id=root,
         company_id=company_id,
         channel_id=ch_trt,
@@ -159,7 +163,7 @@ async def test_get_thread_root_chain(
             MessageContentModel(type=MessageContentType.TEXT_PLAIN, data=TextPlainContent(body="r"), order=0),
         ],
     )
-    await message_repo.create_message(
+    _ = await message_repo.create_message(
         message_id=c1,
         company_id=company_id,
         channel_id=ch_trt,
@@ -172,7 +176,7 @@ async def test_get_thread_root_chain(
             MessageContentModel(type=MessageContentType.TEXT_PLAIN, data=TextPlainContent(body="c1"), order=0),
         ],
     )
-    await message_repo.create_message(
+    _ = await message_repo.create_message(
         message_id=c2,
         company_id=company_id,
         channel_id=ch_trt,
@@ -198,6 +202,7 @@ async def test_list_by_channel_pagination(
     company_id: str,
     unique_id: str,
 ) -> None:
+    _ = sync_db_clean
     ch_pg = f"{unique_id}_ch_pg"
     ch = SyncChannel(
         channel_id=ch_pg,
@@ -209,10 +214,10 @@ async def test_list_by_channel_pagination(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u1",
     )
-    await channel_repo.create(ch)
+    _ = await channel_repo.create(ch)
     for i in range(5):
         mid = f"{unique_id}_pg_{i}"
-        await message_repo.create_message(
+        _ = await message_repo.create_message(
             message_id=mid,
             company_id=company_id,
             channel_id=ch_pg,

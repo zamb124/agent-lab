@@ -11,9 +11,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.flows.src.clients.mcp_client import (
+    MCPClient,
     MCPClientError,
-    MCPHttpClient,
-    clear_mcp_client_cache,
 )
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
@@ -76,8 +75,12 @@ class MCPToolResponse(BaseModel):
     """Информация о tool."""
 
     name: str
+    title: str | None
     description: str | None
-    input_schema: JsonObject | None
+    parameters_schema: JsonObject
+    output_schema: JsonObject | None
+    schema_hash: str
+    schema_version: str
 
 
 class MCPSyncResponse(BaseModel):
@@ -193,8 +196,6 @@ async def update_server(
         server.description = request.description
 
     _ = await container.mcp_server_repository.set(server)
-    clear_mcp_client_cache(server_id)
-
     logger.info(f"MCP server updated: {server_id}")
     return _server_to_response(server)
 
@@ -214,8 +215,6 @@ async def delete_server(
         _ = await container.tool_repository.delete(tool_id)
 
     _ = await container.mcp_server_repository.delete(server_id)
-    clear_mcp_client_cache(server_id)
-
     logger.info(f"MCP server deleted: {server_id}")
     return {"status": "deleted", "server_id": server_id}
 
@@ -250,9 +249,13 @@ async def sync_server_tools(
         tools_count=len(tools),
         tools=[
             MCPToolResponse(
-                name=t.name,
+                name=t.tool_name,
+                title=t.title,
                 description=t.description,
-                input_schema=t.input_schema,
+                parameters_schema=t.parameters_schema,
+                output_schema=t.output_schema,
+                schema_hash=t.schema_hash,
+                schema_version=t.schema_version,
             )
             for t in tools
         ],
@@ -275,7 +278,7 @@ async def test_server_connection(
     if has_var_refs:
         variables = await container.variables_service.get_all_resolved_vars()
 
-    client = MCPHttpClient(server, variables)
+    client = MCPClient(server, variables)
 
     try:
         _ = await client.initialize()

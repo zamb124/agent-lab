@@ -30,9 +30,9 @@ class VoiceChunker:
             raise ValueError("VoiceChunker: chunk_max_chars должен быть > 0.")
         if min_words <= 0:
             raise ValueError("VoiceChunker: min_words должен быть > 0.")
-        self._chunk_max_chars = chunk_max_chars
-        self._min_words = min_words
-        self._buffer = ""
+        self._chunk_max_chars: int = chunk_max_chars
+        self._min_words: int = min_words
+        self._buffer: str = ""
 
     def feed(self, text: str) -> list[str]:
         """Добавить текст и вернуть готовые чанки."""

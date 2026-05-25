@@ -9,6 +9,7 @@ from typing import override
 
 import pytest
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import (
     BaseNode,
@@ -22,6 +23,7 @@ from core.errors import FlowInfiniteLoopError
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue, require_json_object
 from core.variables import VariableResolver
+from tests.flows.durable_runtime_harness import run_flow
 
 
 def simple_condition(variable: str, operator: str, value: JsonValue) -> JsonObject:
@@ -73,67 +75,89 @@ def patch_node(
     node_id: str,
     patch: JsonObject | None = None,
     *,
+    container: FlowRuntimeContainer,
     node_type: str = "function",
     max_visits_per_run: int | None = None,
 ) -> _StatePatchNode:
     config: JsonObject = {"type": node_type, "patch": patch or {}}
     if max_visits_per_run is not None:
         config["max_visits_per_run"] = max_visits_per_run
-    return _StatePatchNode(node_id, config=config)
+    return _StatePatchNode(node_id, config=config, container=container)
 
 
-def make_state(**extra: object) -> ExecutionState:
+def make_state(flow_id: str, unique_id: str, **extra: object) -> ExecutionState:
+    context_id = f"context-{unique_id}"
     payload: dict[str, object] = {
-        "task_id": "test-task",
-        "context_id": "test-context",
-        "user_id": "test-user",
-        "session_id": "test-agent:test-context",
+        "task_id": f"task-{unique_id}",
+        "context_id": context_id,
+        "user_id": f"user-{unique_id}",
+        "session_id": f"{flow_id}:{context_id}",
     }
     payload.update(extra)
     return ExecutionState.model_validate(payload)
+
+
+async def run_test_flow(
+    *,
+    container: FlowRuntimeContainer,
+    flow: Flow,
+    unique_id: str,
+    **state_extra: object,
+) -> ExecutionState:
+    return await run_flow(
+        container=container,
+        flow=flow,
+        state=make_state(flow.flow_id, unique_id, **state_extra),
+    )
 
 
 class TestCodeNode:
     """Тесты CodeNode."""
 
     @pytest.mark.asyncio
-    async def test_code_node_requires_container_for_sync_function(self):
-        """CodeNode без FlowContainer не запускает удаленный runner."""
+    async def test_code_node_requires_durable_context_for_sync_function(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
+        """CodeNode без NodeScheduled context не запускает remote runner."""
 
         node = CodeNode("test", config={
             "type": "code",
             "code": """async def run(args, state):
     state.result = "done"
     return {"result": "done"}"""
-        })
-        with pytest.raises(RuntimeError, match="requires FlowContainer"):
-            _ = await node.run(make_state())
+        }, container=container)
+        with pytest.raises(RuntimeError, match="requires durable workflow instance"):
+            _ = await node.run(make_state("code_context", unique_id))
 
     @pytest.mark.asyncio
-    async def test_code_node_requires_container_for_async_function(self):
-        """CodeNode исполняется только через runtime container."""
+    async def test_code_node_requires_durable_context_for_async_function(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
+        """CodeNode исполняется только внутри durable workflow context."""
 
         node = CodeNode("test", config={
             "type": "code",
             "code": """async def run(args, state):
     state.async_result = "async_done"
     return {"async_result": "async_done"}"""
-        })
-        with pytest.raises(RuntimeError, match="requires FlowContainer"):
-            _ = await node.run(make_state())
+        }, container=container)
+        with pytest.raises(RuntimeError, match="requires durable workflow instance"):
+            _ = await node.run(make_state("code_context", unique_id))
 
     @pytest.mark.asyncio
-    async def test_code_node_requires_container_before_state_mutation(self):
-        """CodeNode не мутирует state без runner container."""
+    async def test_code_node_requires_durable_context_before_state_mutation(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
+        """CodeNode не мутирует state без durable command boundary."""
 
         node = CodeNode("test", config={
             "type": "code",
             "code": """async def run(args, state):
     state.stage = "next"
     return {"stage": "next"}"""
-        })
-        state = make_state(stage="init")
-        with pytest.raises(RuntimeError, match="requires FlowContainer"):
+        }, container=container)
+        state = make_state("code_context", unique_id, stage="init")
+        with pytest.raises(RuntimeError, match="requires durable workflow instance"):
             _ = await node.run(state)
         assert state["stage"] == "init"
 
@@ -142,37 +166,39 @@ class TestCreateNode:
     """Тесты фабрики create_node."""
 
     @pytest.mark.asyncio
-    async def test_create_function_node(self):
+    async def test_create_function_node(self, container: FlowRuntimeContainer):
         """create_node создает CodeNode."""
         config: JsonObject = {
             "type": "code",
             "code": "async def run(args, state):\n    state['initialized'] = True\n    return state",
         }
 
-        node = await create_node("init", config)
+        node = await create_node("init", config, container=container)
 
         assert isinstance(node, CodeNode)
 
     @pytest.mark.asyncio
-    async def test_create_node_rejects_missing_type(self):
+    async def test_create_node_rejects_missing_type(self, container: FlowRuntimeContainer):
         """create_node требует явный type."""
         config: JsonObject = {
             "code": "async def run(args, state):\n    return state",
         }
 
         with pytest.raises(ValueError, match="type is required"):
-            _ = await create_node("missing_type", config)
+            _ = await create_node("missing_type", config, container=container)
 
     @pytest.mark.asyncio
-    async def test_create_node_rejects_function_field_without_type(self):
+    async def test_create_node_rejects_function_field_without_type(
+        self, container: FlowRuntimeContainer
+    ):
         """Поле function без type отклоняется строгим контрактом."""
         config: JsonObject = {"function": "math.sqrt"}
 
         with pytest.raises(ValueError, match="type is required"):
-            _ = await create_node("missing_type", config)
+            _ = await create_node("missing_type", config, container=container)
 
     @pytest.mark.asyncio
-    async def test_create_llm_node_node(self):
+    async def test_create_llm_node_node(self, container: FlowRuntimeContainer):
         """create_node создает LlmNode."""
         config: JsonObject = {
             "type": "llm_node",
@@ -181,30 +207,32 @@ class TestCreateNode:
             "llm": {"model": "gpt-4o"},
         }
 
-        node = await create_node("agent", config)
+        node = await create_node("agent", config, container=container)
 
         assert isinstance(node, LlmNode)
         assert node.prompt_template == "Test prompt"
 
     @pytest.mark.asyncio
-    async def test_create_node_raises_on_unknown_type(self):
+    async def test_create_node_raises_on_unknown_type(self, container: FlowRuntimeContainer):
         """create_node выбрасывает ошибку для неизвестного типа."""
         config: JsonObject = {"type": "unknown_type"}
 
         with pytest.raises(ValueError, match="Unknown node type"):
-            _ = await create_node("test", config)
+            _ = await create_node("test", config, container=container)
 
 
 class TestFlowWithEdges:
     """Тесты Flow с edges."""
 
     @pytest.mark.asyncio
-    async def test_flow_executes_linear_chain(self):
+    async def test_flow_executes_linear_chain(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         """Flow выполняет линейную цепочку нод."""
 
         nodes: dict[str, BaseNode] = {
-            "step1": patch_node("step1", {"step1": True}),
-            "step2": patch_node("step2", {"step2": True}),
+            "step1": patch_node("step1", {"step1": True}, container=container),
+            "step2": patch_node("step2", {"step2": True}, container=container),
         }
 
         flow = Flow(
@@ -216,22 +244,25 @@ class TestFlowWithEdges:
                 {"from_node": "step1", "to_node": "step2"},
                 {"from_node": "step2", "to_node": None},
             ],
+            container=container,
         )
 
-        result = await flow.run(make_state())
+        result = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
         assert result["step1"] is True
         assert result["step2"] is True
         assert result.current_nodes == []  # Flow завершён
 
     @pytest.mark.asyncio
-    async def test_flow_with_condition_true(self):
+    async def test_flow_with_condition_true(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         """Flow переходит по edge с условием true."""
 
         nodes: dict[str, BaseNode] = {
-            "check": patch_node("check", {"valid": True}),
-            "valid_path": patch_node("valid_path", {"path": "valid"}),
-            "invalid_path": patch_node("invalid_path", {"path": "invalid"}),
+            "check": patch_node("check", {"valid": True}, container=container),
+            "valid_path": patch_node("valid_path", {"path": "valid"}, container=container),
+            "invalid_path": patch_node("invalid_path", {"path": "invalid"}, container=container),
         }
 
         flow = Flow(
@@ -245,20 +276,23 @@ class TestFlowWithEdges:
                 {"from_node": "valid_path", "to_node": None},
                 {"from_node": "invalid_path", "to_node": None},
             ],
+            container=container,
         )
 
-        result = await flow.run(make_state())
+        result = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
         assert result["path"] == "valid"
 
     @pytest.mark.asyncio
-    async def test_flow_with_condition_false(self):
+    async def test_flow_with_condition_false(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         """Flow переходит по edge с условием false."""
 
         nodes: dict[str, BaseNode] = {
-            "check": patch_node("check", {"valid": False}),
-            "valid_path": patch_node("valid_path", {"path": "valid"}),
-            "invalid_path": patch_node("invalid_path", {"path": "invalid"}),
+            "check": patch_node("check", {"valid": False}, container=container),
+            "valid_path": patch_node("valid_path", {"path": "valid"}, container=container),
+            "invalid_path": patch_node("invalid_path", {"path": "invalid"}, container=container),
         }
 
         flow = Flow(
@@ -272,19 +306,22 @@ class TestFlowWithEdges:
                 {"from_node": "valid_path", "to_node": None},
                 {"from_node": "invalid_path", "to_node": None},
             ],
+            container=container,
         )
 
-        result = await flow.run(make_state())
+        result = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
         assert result["path"] == "invalid"
 
     @pytest.mark.asyncio
-    async def test_flow_with_nested_condition(self):
+    async def test_flow_with_nested_condition(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         """Flow проверяет вложенное условие."""
 
         nodes: dict[str, BaseNode] = {
-            "init": patch_node("init", {"validation": {"valid": True}}),
-            "success": patch_node("success", {"result": "success"}),
+            "init": patch_node("init", {"validation": {"valid": True}}, container=container),
+            "success": patch_node("success", {"result": "success"}, container=container),
         }
 
         flow = Flow(
@@ -296,19 +333,22 @@ class TestFlowWithEdges:
                 {"from_node": "init", "to_node": "success", "condition": simple_condition("validation.valid", "==", True)},
                 {"from_node": "success", "to_node": None},
             ],
+            container=container,
         )
 
-        result = await flow.run(make_state())
+        result = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
         assert result["result"] == "success"
 
     @pytest.mark.asyncio
-    async def test_flow_unconditional_edge(self):
+    async def test_flow_unconditional_edge(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         """Edge без condition - безусловный переход."""
 
         nodes: dict[str, BaseNode] = {
-            "step1": patch_node("step1", {"step1": True}),
-            "step2": patch_node("step2", {"step2": True}),
+            "step1": patch_node("step1", {"step1": True}, container=container),
+            "step2": patch_node("step2", {"step2": True}, container=container),
         }
 
         flow = Flow(
@@ -320,19 +360,22 @@ class TestFlowWithEdges:
                 {"from_node": "step1", "to_node": "step2"},  # Без condition
                 {"from_node": "step2", "to_node": None},
             ],
+            container=container,
         )
 
-        result = await flow.run(make_state())
+        result = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
         assert result["step1"] is True
         assert result["step2"] is True
 
     @pytest.mark.asyncio
-    async def test_flow_raises_on_missing_node(self):
+    async def test_flow_raises_on_missing_node(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         """Flow выбрасывает ошибку для несуществующей ноды."""
 
         nodes: dict[str, BaseNode] = {
-            "start": patch_node("start"),
+            "start": patch_node("start", container=container),
         }
 
         flow = Flow(
@@ -341,18 +384,25 @@ class TestFlowWithEdges:
             entry="nonexistent",
             nodes=nodes,
             edges=[],
+            container=container,
         )
 
         with pytest.raises(ValueError, match="not found"):
-            _ = await flow.run(make_state())
+            _ = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
     @pytest.mark.asyncio
-    async def test_flow_raises_on_infinite_loop(self):
+    async def test_flow_raises_on_infinite_loop(
+        self,
+        container: FlowRuntimeContainer,
+        unique_id: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         """Flow выбрасывает ошибку при бесконечном цикле."""
+        monkeypatch.setattr("apps.flows.src.runtime.flow.get_graph_max_iterations", lambda: 4)
 
         nodes: dict[str, BaseNode] = {
-            "a": patch_node("a"),
-            "b": patch_node("b"),
+            "a": patch_node("a", container=container),
+            "b": patch_node("b", container=container),
         }
 
         flow = Flow(
@@ -364,17 +414,20 @@ class TestFlowWithEdges:
                 {"from_node": "a", "to_node": "b"},
                 {"from_node": "b", "to_node": "a"},  # Бесконечный цикл
             ],
+            container=container,
         )
 
         with pytest.raises(FlowInfiniteLoopError):
-            _ = await flow.run(make_state())
+            _ = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
     @pytest.mark.asyncio
-    async def test_flow_node_call_limit_resets_each_run(self):
+    async def test_flow_node_call_limit_resets_each_run(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         """Лимит вызовов code-ноды считается только в текущем Flow.run, без хвоста node_history."""
 
         nodes: dict[str, BaseNode] = {
-            "prep": patch_node("prep", {"ran": True}, node_type="code"),
+            "prep": patch_node("prep", {"ran": True}, container=container, node_type="code"),
         }
         flow = Flow(
             flow_id="limit_reset",
@@ -382,23 +435,31 @@ class TestFlowWithEdges:
             entry="prep",
             nodes=nodes,
             edges=[{"from_node": "prep", "to_node": None}],
+            container=container,
         )
-        state = make_state()
+        state = make_state(flow.flow_id, unique_id)
         state.current_nodes = ["prep"]
         state.node_history["prep"] = {
             "type": "code",
             "calls": [{"response": None, "validation": None}] * 5,
         }
-        result = await flow.run(state)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert result.get("ran") is True
         calls = (result.node_history.get("prep") or {}).get("calls")
         assert isinstance(calls, list)
         assert len(calls) == 1
 
     @pytest.mark.asyncio
-    async def test_code_node_respects_max_visits_per_run(self):
+    async def test_code_node_respects_max_visits_per_run(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         nodes: dict[str, BaseNode] = {
-            "loop": patch_node("loop", node_type="code", max_visits_per_run=3),
+            "loop": patch_node(
+                "loop",
+                container=container,
+                node_type="code",
+                max_visits_per_run=3,
+            ),
         }
         flow = Flow(
             flow_id="mvpr",
@@ -406,19 +467,34 @@ class TestFlowWithEdges:
             entry="loop",
             nodes=nodes,
             edges=[{"from_node": "loop", "to_node": "loop"}],
+            container=container,
         )
         from core.errors import NodeCallLimitError
 
         with pytest.raises(NodeCallLimitError) as exc_info:
-            _ = await flow.run(make_state())
+            _ = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
         assert exc_info.value.payload["node_id"] == "loop"
         assert exc_info.value.payload["limit"] == 3
 
     @pytest.mark.asyncio
-    async def test_non_code_cycle_hits_flow_iteration_cap_not_node_limit(self):
+    async def test_non_code_cycle_hits_flow_iteration_cap_not_node_limit(
+        self,
+        container: FlowRuntimeContainer,
+        unique_id: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setattr("apps.flows.src.runtime.flow.get_graph_max_iterations", lambda: 4)
         nodes: dict[str, BaseNode] = {
-            "a": _PassthroughNonCodeNode("a", config={"type": "external_api"}),
-            "b": _PassthroughNonCodeNode("b", config={"type": "external_api"}),
+            "a": _PassthroughNonCodeNode(
+                "a",
+                config={"type": "external_api"},
+                container=container,
+            ),
+            "b": _PassthroughNonCodeNode(
+                "b",
+                config={"type": "external_api"},
+                container=container,
+            ),
         }
         flow = Flow(
             flow_id="ncc",
@@ -429,19 +505,22 @@ class TestFlowWithEdges:
                 {"from_node": "a", "to_node": "b"},
                 {"from_node": "b", "to_node": "a"},
             ],
+            container=container,
         )
         from core.errors import FlowInfiniteLoopError
 
         with pytest.raises(FlowInfiniteLoopError):
-            _ = await flow.run(make_state())
+            _ = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
     @pytest.mark.asyncio
-    async def test_non_code_node_respects_max_visits_per_run(self):
+    async def test_non_code_node_respects_max_visits_per_run(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         nodes: dict[str, BaseNode] = {
             "nc": _PassthroughNonCodeNode("nc", config={
                 "type": "external_api",
                 "max_visits_per_run": 2,
-            }),
+            }, container=container),
         }
         flow = Flow(
             flow_id="ncmv",
@@ -449,16 +528,17 @@ class TestFlowWithEdges:
             entry="nc",
             nodes=nodes,
             edges=[{"from_node": "nc", "to_node": "nc"}],
+            container=container,
         )
         from core.errors import NodeCallLimitError
 
         with pytest.raises(NodeCallLimitError) as exc_info:
-            _ = await flow.run(make_state())
+            _ = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
         assert exc_info.value.payload["node_id"] == "nc"
         assert exc_info.value.payload["limit"] == 2
 
     @pytest.mark.asyncio
-    async def test_flow_from_config(self):
+    async def test_flow_from_config(self, container: FlowRuntimeContainer):
         """Flow создаётся из JSON конфига."""
         config: JsonObject = {
             "flow_id": "config_flow",
@@ -475,7 +555,7 @@ class TestFlowWithEdges:
             ],
         }
 
-        flow = await Flow.from_config(config)
+        flow = await Flow.from_config(config, container=container)
 
         assert flow.flow_id == "config_flow"
         assert flow.name == "From Config"
@@ -487,11 +567,17 @@ class TestFlowVariables:
     """Тесты переменных flow."""
 
     @pytest.mark.asyncio
-    async def test_variables_available_in_state(self):
+    async def test_variables_available_in_state(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         """Переменные flow доступны в state["variables"]."""
 
         nodes: dict[str, BaseNode] = {
-            "main": _CaptureVariablesNode("main", config={"type": "function"}),
+            "main": _CaptureVariablesNode(
+                "main",
+                config={"type": "function"},
+                container=container,
+            ),
         }
 
         flow = Flow(
@@ -501,18 +587,25 @@ class TestFlowVariables:
             nodes=nodes,
             edges=[{"from_node": "main", "to_node": None}],
             variables={"company": "TestCorp", "phone": "123-456"},
+            container=container,
         )
 
-        result = await flow.run(make_state())
+        result = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
         assert result["captured_variables"] == {"company": "TestCorp", "phone": "123-456"}
 
     @pytest.mark.asyncio
-    async def test_function_can_use_variables(self):
+    async def test_function_can_use_variables(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         """Функция может использовать переменные из state."""
 
         nodes: dict[str, BaseNode] = {
-            "main": _GreetingFromVariablesNode("main", config={"type": "function"}),
+            "main": _GreetingFromVariablesNode(
+                "main",
+                config={"type": "function"},
+                container=container,
+            ),
         }
 
         flow = Flow(
@@ -522,14 +615,15 @@ class TestFlowVariables:
             nodes=nodes,
             edges=[{"from_node": "main", "to_node": None}],
             variables={"company": "Acme Inc"},
+            container=container,
         )
 
-        result = await flow.run(make_state())
+        result = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
         assert result["greeting"] == "Welcome to Acme Inc"
 
     @pytest.mark.asyncio
-    async def test_flow_from_config_with_variables(self):
+    async def test_flow_from_config_with_variables(self, container: FlowRuntimeContainer):
         """Flow.from_config принимает переменные."""
         config: JsonObject = {
             "flow_id": "var_config_flow",
@@ -545,7 +639,7 @@ class TestFlowVariables:
         }
         variables: JsonObject = {"api_key": "secret123", "timeout": 30}
 
-        flow = await Flow.from_config(config, variables=variables)
+        flow = await Flow.from_config(config, variables=variables, container=container)
 
         assert flow.variables == {"api_key": "secret123", "timeout": 30}
 
@@ -625,12 +719,12 @@ class TestFlowConditionEvaluation:
     """Тесты вычисления условий."""
 
     @pytest.mark.asyncio
-    async def test_string_comparison(self):
+    async def test_string_comparison(self, container: FlowRuntimeContainer, unique_id: str):
         """Сравнение со строкой."""
 
         nodes: dict[str, BaseNode] = {
-            "init": patch_node("init", {"status": "active"}),
-            "active": patch_node("active", {"result": "is_active"}),
+            "init": patch_node("init", {"status": "active"}, container=container),
+            "active": patch_node("active", {"result": "is_active"}, container=container),
         }
 
         flow = Flow(
@@ -642,20 +736,23 @@ class TestFlowConditionEvaluation:
                 {"from_node": "init", "to_node": "active", "condition": simple_condition("status", "==", "active")},
                 {"from_node": "active", "to_node": None},
             ],
+            container=container,
         )
 
-        result = await flow.run(make_state())
+        result = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
         assert result["result"] == "is_active"
 
     @pytest.mark.asyncio
-    async def test_numeric_comparison(self):
+    async def test_numeric_comparison(
+        self, container: FlowRuntimeContainer, unique_id: str
+    ):
         """Числовое сравнение."""
 
         nodes: dict[str, BaseNode] = {
-            "init": patch_node("init", {"count": 5}),
-            "high": patch_node("high", {"level": "high"}),
-            "low": patch_node("low", {"level": "low"}),
+            "init": patch_node("init", {"count": 5}, container=container),
+            "high": patch_node("high", {"level": "high"}, container=container),
+            "low": patch_node("low", {"level": "low"}, container=container),
         }
 
         flow = Flow(
@@ -669,8 +766,9 @@ class TestFlowConditionEvaluation:
                 {"from_node": "high", "to_node": None},
                 {"from_node": "low", "to_node": None},
             ],
+            container=container,
         )
 
-        result = await flow.run(make_state())
+        result = await run_test_flow(container=container, flow=flow, unique_id=unique_id)
 
         assert result["level"] == "high"

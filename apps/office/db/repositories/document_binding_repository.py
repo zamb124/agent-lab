@@ -13,7 +13,7 @@ from apps.office.db.models import OfficeDocumentBinding
 
 class DocumentBindingRepository:
     def __init__(self, db: OfficeDatabase) -> None:
-        self._db = db
+        self._db: OfficeDatabase = db
 
     async def list_by_company_namespace_and_catalog(
         self, company_id: str, namespace: str, catalog_id: str

@@ -225,7 +225,7 @@ class TestAllFlowConfigs:
             ],
         }
 
-        flow = await Flow.from_config(config_dict)
+        flow = await Flow.from_config(config_dict, container=container)
         assert flow.flow_id == config.flow_id
         assert flow.name == config.name
 

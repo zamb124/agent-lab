@@ -8,11 +8,11 @@
 """
 
 from datetime import UTC, datetime
-from typing import Any
 
 from fastapi import APIRouter
 
 from apps.voice.dependencies import ContainerDep
+from apps.voice.models import VoiceProvidersHealth
 
 health_router = APIRouter(prefix="/health", tags=["voice"])
 
@@ -20,18 +20,15 @@ health_router = APIRouter(prefix="/health", tags=["voice"])
 @health_router.get(
     "/providers",
     summary="Deployment-default STT/TTS/VAD провайдеры",
+    response_model=VoiceProvidersHealth,
 )
-async def health_providers(container: ContainerDep) -> dict[str, Any]:
+async def health_providers(container: ContainerDep) -> VoiceProvidersHealth:
     settings = container.settings
-    stt_provider = settings.voice.stt.provider
-    tts_provider = settings.voice.tts.provider
-    vad_provider = settings.voice.vad.provider
-
-    return {
-        "status": "ready",
-        "vad": "ready",
-        "stt_provider": stt_provider,
-        "tts_provider": tts_provider,
-        "vad_provider": vad_provider,
-        "checked_at": datetime.now(UTC).isoformat(),
-    }
+    return VoiceProvidersHealth(
+        status="ready",
+        vad="ready",
+        stt_provider=settings.voice.stt.provider,
+        tts_provider=settings.voice.tts.provider,
+        vad_provider=settings.voice.vad.provider,
+        checked_at=datetime.now(UTC),
+    )

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import override
 
 from sqlalchemy import select, update
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncCallRecording
@@ -15,12 +17,19 @@ class CallRecordingRepository(BaseSyncRepository[SyncCallRecording]):
         super().__init__(db)
 
     @property
+    @override
     def model_class(self) -> type[SyncCallRecording]:
         return SyncCallRecording
 
     @property
-    def id_field(self) -> str:
-        return "recording_id"
+    @override
+    def id_column(self) -> InstrumentedAttribute[str]:
+        return SyncCallRecording.recording_id
+
+    @property
+    @override
+    def company_id_column(self) -> InstrumentedAttribute[str]:
+        return SyncCallRecording.company_id
 
     async def list_for_call(self, call_id: str, company_id: str) -> list[SyncCallRecording]:
         async with self._db.session() as session:
@@ -65,7 +74,7 @@ class CallRecordingRepository(BaseSyncRepository[SyncCallRecording]):
         if ended_at is not None:
             values["ended_at"] = ended_at
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(SyncCallRecording)
                 .where(SyncCallRecording.recording_id == recording_id)
                 .values(**values)

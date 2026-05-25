@@ -48,7 +48,6 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.lara_crm", "push_embed_blocks"),
     ("apps.flows.tools.files", "read_file"),
     ("apps.flows.tools.agent_session_tools", "reason"),
-    ("apps.flows.tools.agent_session_tools", "self_check"),
     ("apps.flows.tools.agent_session_tools", "ask_user"),
     ("apps.flows.tools.summarize_text", "summarize_text"),
     ("apps.flows.tools.agent_session_tools", "hitl_operator_task"),

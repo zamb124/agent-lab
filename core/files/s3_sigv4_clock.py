@@ -14,11 +14,13 @@
 from __future__ import annotations
 
 import datetime
+import importlib
 import ssl
 from collections.abc import Callable
 from email.utils import parsedate_to_datetime
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from http.client import HTTPConnection, HTTPSConnection
+from typing import Literal
+from urllib.parse import urlsplit
 
 import botocore.compat as bc
 
@@ -28,28 +30,52 @@ logger = get_logger(__name__)
 _clock_patch_applied: bool = False
 _original_get_current_datetime: Callable[[bool], datetime.datetime] | None = None
 
-def _read_date_header(req: Request) -> str | None:
-    ctx = ssl.create_default_context()
+
+def _read_date_header(url: str, method: Literal["GET", "HEAD"]) -> str | None:
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"SigV4 clock sync: неподдерживаемая схема endpoint URL: {url!r}")
+    if parsed.hostname is None:
+        raise ValueError(f"SigV4 clock sync: endpoint URL без host: {url!r}")
+
+    path = parsed.path if parsed.path != "" else "/"
+    if parsed.query != "":
+        path = f"{path}?{parsed.query}"
+
+    connection: HTTPConnection
+    if parsed.scheme == "https":
+        ctx = ssl.create_default_context()
+        connection = HTTPSConnection(
+            parsed.hostname,
+            parsed.port,
+            timeout=8,
+            context=ctx,
+        )
+    else:
+        connection = HTTPConnection(parsed.hostname, parsed.port, timeout=8)
+
     try:
-        with urlopen(req, timeout=8, context=ctx) as resp:
-            return resp.headers.get("Date")
-    except HTTPError as exc:
-        return exc.headers.get("Date")
-    except (URLError, OSError, TimeoutError):
+        connection.request(method, path)
+        response = connection.getresponse()
+        return response.getheader("Date")
+    except (OSError, TimeoutError):
         return None
+    finally:
+        connection.close()
+
 
 def _http_date_for_endpoint(base_url: str) -> str | None:
     b = base_url.strip().rstrip("/")
-    attempts: list[tuple[str, str]] = [
+    attempts: list[tuple[str, Literal["GET", "HEAD"]]] = [
         (f"{b}/minio/health/live", "GET"),
         (f"{b}/", "HEAD"),
     ]
     for url, method in attempts:
-        req = Request(url, method=method)
-        date_hdr = _read_date_header(req)
+        date_hdr = _read_date_header(url, method)
         if date_hdr:
             return date_hdr
     return None
+
 
 def _apply_process_wide_offset(offset: datetime.timedelta) -> None:
     global _clock_patch_applied, _original_get_current_datetime
@@ -72,23 +98,24 @@ def _apply_process_wide_offset(offset: datetime.timedelta) -> None:
         "botocore.endpoint",
         "botocore.utils",
     ):
-        mod = __import__(name, fromlist=["*"])
-        if hasattr(mod, "get_current_datetime"):
-            mod.get_current_datetime = _patched_get_current_datetime
+        module = importlib.import_module(name)
+        if hasattr(module, "get_current_datetime"):
+            setattr(module, "get_current_datetime", _patched_get_current_datetime)
 
     try:
-        crt_auth = __import__("botocore.crt.auth", fromlist=["*"])
+        crt_auth = importlib.import_module("botocore.crt.auth")
     except ImportError:
         pass
     else:
         if hasattr(crt_auth, "get_current_datetime"):
-            crt_auth.get_current_datetime = _patched_get_current_datetime
+            setattr(crt_auth, "get_current_datetime", _patched_get_current_datetime)
 
     _clock_patch_applied = True
     logger.info(
         "SigV4: сдвиг времени относительно HTTP Date S3 endpoint: %s",
         offset,
     )
+
 
 def ensure_sigv4_clock_aligned_with_endpoint(endpoint_url: str | None) -> None:
     """

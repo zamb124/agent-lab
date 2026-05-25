@@ -39,14 +39,15 @@ def register_platform_pwa_routes(app: FastAPI, project_root: Path) -> None:
         raise FileNotFoundError(f"PWA offline.html не найден: {offline_path}")
 
     @app.get("/manifest.json")
-    async def serve_manifest():
+    async def serve_manifest() -> FileResponse:
         return FileResponse(
             manifest_path,
             media_type="application/manifest+json",
         )
+    _ = serve_manifest
 
     @app.get("/sw.js")
-    async def serve_service_worker():
+    async def serve_service_worker() -> FileResponse:
         return FileResponse(
             sw_path,
             media_type="application/javascript",
@@ -55,25 +56,29 @@ def register_platform_pwa_routes(app: FastAPI, project_root: Path) -> None:
                 "Cache-Control": "no-cache, no-store, must-revalidate",
             },
         )
+    _ = serve_service_worker
 
     @app.get("/offline.html")
-    async def serve_offline():
+    async def serve_offline() -> FileResponse:
         return FileResponse(offline_path)
+    _ = serve_offline
 
     if assetlinks_path.is_file():
 
         @app.get("/.well-known/assetlinks.json")
-        async def serve_asset_links():
+        async def serve_asset_links() -> FileResponse:
             return FileResponse(
                 assetlinks_path,
                 media_type="application/json",
             )
+        _ = serve_asset_links
 
     if aasa_path.is_file():
 
         @app.get("/.well-known/apple-app-site-association")
-        async def serve_apple_app_site_association():
+        async def serve_apple_app_site_association() -> FileResponse:
             return FileResponse(
                 aasa_path,
                 media_type="application/json",
             )
+        _ = serve_apple_app_site_association

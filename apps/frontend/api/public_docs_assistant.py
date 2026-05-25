@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import ClassVar
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
@@ -28,7 +29,7 @@ router = APIRouter(prefix="/api/public/docs-assistant", tags=["public_docs_assis
 
 
 class PublicDocsAssistantSessionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     embed_id: str = Field(default=DOCS_ASSISTANT_EMBED_ID, min_length=1)
     origin: str = Field(default="", description="window.location.origin")
@@ -36,6 +37,8 @@ class PublicDocsAssistantSessionRequest(BaseModel):
 
 
 class PublicDocsAssistantSessionResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
     token: str
     token_type: str
     expires_at: datetime

@@ -106,19 +106,6 @@ class FlowSettings(BaseSettings):
         le=_FLOWS_WALL_TIME_HARD_MAX_SECONDS,
         description="TTL подписанного execution token для вызовов sandbox -> capability_gateway",
     )
-    capability_manifest_cache_enabled: bool = Field(
-        default=True,
-        description="Кэшировать capability manifest в flows/code-runner клиенте.",
-    )
-    capability_manifest_cache_ttl_seconds: int = Field(
-        default=60,
-        ge=1,
-        description="TTL Redis/in-memory кэша capability manifest в flows_worker.",
-    )
-    capability_manifest_cache_key: str = Field(
-        default="capability_gateway:manifest:v1",
-        description="Redis key с capability manifest, который публикует capability_gateway.",
-    )
     default_flow_timeout_seconds: int = Field(
         default=600,
         ge=1,

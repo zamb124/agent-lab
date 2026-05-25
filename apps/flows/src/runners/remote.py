@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import ClassVar, cast, override
+from typing import cast, override
 
 from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.runners.base import BaseCodeRunner
 from apps.flows.src.runtime.exceptions import FlowInterrupt
-from core.cache.ttl_model_cache import TtlModelCache
+from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
 from core.capabilities import (
     CapabilityExecutionContext,
     CapabilityExecutionTokenClaims,
@@ -17,15 +17,16 @@ from core.capabilities import (
     CodeExecutionKind,
     CodeExecutionRequest,
     CodeExecutionResponse,
+    CodeSandboxPolicy,
     CodeValidationRequest,
     CodeValidationResponse,
     JsonObject,
     JsonValue,
     execution_token_exp,
     issue_execution_token,
+    locked_down_code_sandbox_policy,
 )
 from core.capabilities.source_sanitize import strip_forbidden_platform_import_lines
-from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.errors import CodeExecutionRuntimeError
@@ -38,6 +39,9 @@ from core.state.mutation_policy import (
 from core.tracing.operation_span import traced_operation
 
 CAPABILITY_MANIFEST_PATH = "/capability-gateway/api/v1/capabilities/manifest"
+CODE_SANDBOX_MEMORY_LIMIT_MB = 256
+CODE_SANDBOX_FILESYSTEM_LIMIT_MB = 64
+CODE_SANDBOX_STDOUT_STDERR_LIMIT_BYTES = 1_048_576
 
 RUNNER_EXECUTE_PATHS: dict[str, tuple[str, str]] = {
     "python": ("code_runner_python", "/code-runner-python/api/v1/execute"),
@@ -62,8 +66,6 @@ class RemoteCodeRunner(BaseCodeRunner):
     """BaseCodeRunner adapter over isolated code-runner HTTP services."""
 
     language: str = "remote"
-    _manifest_cache: ClassVar[TtlModelCache[CapabilityManifest] | None] = None
-    _manifest_redis_client: ClassVar[RedisClient | None] = None
 
     def __init__(self, language: str):
         if language not in RUNNER_EXECUTE_PATHS:
@@ -134,6 +136,7 @@ class RemoteCodeRunner(BaseCodeRunner):
             code=strip_forbidden_platform_import_lines(code),
             entrypoint=entrypoint,
             wall_time_limit_seconds=get_flows_settings().node_execution_wall_time_cap_seconds,
+            sandbox=self._sandbox_policy(),
             context=context,
             capability_manifest=manifest,
         )
@@ -153,6 +156,9 @@ class RemoteCodeRunner(BaseCodeRunner):
                 "platform.flow.session_id": context.session_id,
                 "platform.flow.task_id": context.task_id,
                 "platform.flow.context_id": context.context_id,
+                "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
             },
         ):
             raw_response = await self._client.post(
@@ -181,6 +187,7 @@ class RemoteCodeRunner(BaseCodeRunner):
             code=strip_forbidden_platform_import_lines(code),
             entrypoint=entrypoint,
             wall_time_limit_seconds=get_flows_settings().node_execution_wall_time_cap_seconds,
+            sandbox=self._sandbox_policy(),
             args=args,
             state=cast(JsonObject, state.model_dump(mode="json", exclude_none=False)),
             context=context,
@@ -203,6 +210,9 @@ class RemoteCodeRunner(BaseCodeRunner):
                 "platform.flow.session_id": state.session_id,
                 "platform.flow.task_id": state.task_id,
                 "platform.flow.context_id": state.context_id,
+                "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
             },
         ):
             raw_response = await self._client.post(
@@ -220,13 +230,7 @@ class RemoteCodeRunner(BaseCodeRunner):
         return response
 
     async def _load_manifest(self) -> CapabilityManifest:
-        settings = get_flows_settings()
-        return await self._get_manifest_cache().get_or_build(
-            enabled=settings.capability_manifest_cache_enabled,
-            key=settings.capability_manifest_cache_key,
-            ttl_seconds=settings.capability_manifest_cache_ttl_seconds,
-            builder=self._fetch_manifest_from_gateway,
-        )
+        return await self._fetch_manifest_from_gateway()
 
     async def _fetch_manifest_from_gateway(self) -> CapabilityManifest:
         raw_manifest = await self._client.get(
@@ -236,23 +240,15 @@ class RemoteCodeRunner(BaseCodeRunner):
         )
         return CapabilityManifest.model_validate(raw_manifest)
 
-    def _get_manifest_cache(self) -> TtlModelCache[CapabilityManifest]:
-        cache = self.__class__._manifest_cache
-        if cache is None:
-            cache = TtlModelCache(
-                name="flows.capability_manifest_cache",
-                model_type=CapabilityManifest,
-                redis_client_factory=self._get_manifest_redis_client,
-            )
-            self.__class__._manifest_cache = cache
-        return cache
-
-    def _get_manifest_redis_client(self) -> RedisClient:
-        client = self.__class__._manifest_redis_client
-        if client is None or client.redis_url != get_flows_settings().database.redis_url:
-            client = RedisClient(get_flows_settings().database.redis_url)
-            self.__class__._manifest_redis_client = client
-        return client
+    def _sandbox_policy(self) -> CodeSandboxPolicy:
+        wall_time_limit_seconds = get_flows_settings().node_execution_wall_time_cap_seconds
+        return locked_down_code_sandbox_policy(
+            wall_time_limit_seconds=wall_time_limit_seconds,
+            cpu_time_limit_seconds=wall_time_limit_seconds,
+            memory_limit_mb=CODE_SANDBOX_MEMORY_LIMIT_MB,
+            filesystem_limit_mb=CODE_SANDBOX_FILESYSTEM_LIMIT_MB,
+            stdout_stderr_limit_bytes=CODE_SANDBOX_STDOUT_STDERR_LIMIT_BYTES,
+        )
 
     def _execution_context(self, state: ExecutionState) -> CapabilityExecutionContext:
         context = get_context()
@@ -264,6 +260,9 @@ class RemoteCodeRunner(BaseCodeRunner):
         log_context = get_log_context()
         request_id = log_context.get("request_id")
         request_id_value = request_id if isinstance(request_id, str) and request_id.strip() else None
+        tool_context = get_active_tool_call_context()
+        source_node_id = tool_context.node_id if tool_context is not None else None
+        source_tool_call_id = tool_context.tool_call_id if tool_context is not None else None
         claims = CapabilityExecutionTokenClaims(
             company_id=company_id,
             user_id=user_id,
@@ -272,7 +271,13 @@ class RemoteCodeRunner(BaseCodeRunner):
             session_id=state.session_id,
             task_id=state.task_id,
             context_id=state.context_id,
+            channel=context.channel,
             request_id=request_id_value,
+            durable_execution_branch_id=state.durable_execution_branch_id,
+            durable_node_schedule_sequence=state.durable_node_schedule_sequence,
+            durable_superstep_sequence=state.durable_superstep_sequence,
+            source_node_id=source_node_id,
+            source_tool_call_id=source_tool_call_id,
             exp=execution_token_exp(settings.capability_execution_token_ttl_seconds),
         )
         token = issue_execution_token(claims)
@@ -285,8 +290,14 @@ class RemoteCodeRunner(BaseCodeRunner):
             session_id=state.session_id,
             task_id=state.task_id,
             context_id=state.context_id,
+            channel=context.channel,
             request_id=request_id_value,
             trace_id=context.trace_id,
+            durable_execution_branch_id=state.durable_execution_branch_id,
+            durable_node_schedule_sequence=state.durable_node_schedule_sequence,
+            durable_superstep_sequence=state.durable_superstep_sequence,
+            source_node_id=source_node_id,
+            source_tool_call_id=source_tool_call_id,
         )
 
     def _validation_context(
@@ -317,6 +328,7 @@ class RemoteCodeRunner(BaseCodeRunner):
             session_id=session_id,
             task_id=task_id,
             context_id=context_id,
+            channel="code_validation",
             request_id=request_id_value,
             exp=execution_token_exp(settings.capability_execution_token_ttl_seconds),
         )
@@ -330,6 +342,7 @@ class RemoteCodeRunner(BaseCodeRunner):
             session_id=session_id,
             task_id=task_id,
             context_id=context_id,
+            channel="code_validation",
             request_id=request_id_value,
             trace_id=context.trace_id,
         )
@@ -401,4 +414,9 @@ class RemoteCodeRunner(BaseCodeRunner):
                 message="Code runner returned interrupted status without interrupt envelope",
                 exception_type="CodeExecutionInterruptError",
             )
-        raise FlowInterrupt(body=parse_interrupt_body_from_external_dict(interrupt.body))
+        raise FlowInterrupt(
+            body=parse_interrupt_body_from_external_dict(interrupt.body),
+            correlation_id=uuid.UUID(interrupt.correlation_id)
+            if interrupt.correlation_id is not None
+            else None,
+        )

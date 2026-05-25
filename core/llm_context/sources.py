@@ -26,7 +26,9 @@ class LLMContextSourceRequest(StrictBaseModel):
 class LLMContextSource(Protocol):
     """Source contract for retrieving candidate context blocks."""
 
-    name: str
+    @property
+    def name(self) -> str:
+        ...  # pragma: no cover
 
     async def collect(self, request: LLMContextSourceRequest) -> list[LLMContextBlock]:
         ...  # pragma: no cover

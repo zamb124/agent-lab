@@ -27,7 +27,7 @@ import asyncio  # noqa: E402
 from taskiq import TaskiqState  # noqa: E402
 
 from apps.flows.config import get_settings  # noqa: E402
-from apps.flows.src.container import get_container  # noqa: E402
+from apps.flows.src.container import FlowContainer, get_container  # noqa: E402
 from apps.flows_worker.broker import broker as worker_app, recovery_handler  # noqa: E402
 from core.billing import set_billing_service  # noqa: E402
 from core.billing.cbr_rate_provider import refresh_loop_coro as _cbr_loop_coro  # noqa: E402
@@ -46,13 +46,18 @@ from core.utils.background import run_with_log_context  # noqa: E402
 
 logger = get_logger(__name__)
 
+_worker_container: FlowContainer | None = None
+
 
 async def _initialize_worker_state(state: TaskiqState, service_name: str) -> None:
     """Инициализация контейнера при старте worker."""
+    global _worker_container
+
     settings = get_settings()
     set_core_settings(settings)
 
     container = get_container()
+    _worker_container = container
     state.container = container
 
     await recovery_handler()
@@ -62,7 +67,7 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
 
     _cbr_fallback = settings.billing.usd_to_rub_rate
     await _cbr_refresh_once(fallback=_cbr_fallback)
-    run_with_log_context(
+    _ = run_with_log_context(
         _cbr_loop_coro(fallback=_cbr_fallback),
         name="billing.cbr_rate_refresh",
         background_kind="startup",
@@ -88,7 +93,7 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
             break
         except Exception:
             if attempt < max_retries - 1:
-                wait_seconds = 2**attempt
+                wait_seconds = 1 << attempt
                 logger.warning(
                     "worker.redis_connect_retry",
                     service=service_name,
@@ -112,8 +117,8 @@ async def _initialize_worker_state(state: TaskiqState, service_name: str) -> Non
         logger.info("worker.tracing_initialized", service=service_name)
 
     if is_testing():
-        get_llm("mock-gpt-4")
-        configure_mock_llm_redis(container.redis_client)
+        _ = get_llm("mock-gpt-4")
+        _ = configure_mock_llm_redis(container.redis_client)
         logger.info("worker.mock_llm_configured", service=service_name)
 
     logger.info("worker.container_initialized", service=service_name)
@@ -126,15 +131,21 @@ async def worker_startup(state: TaskiqState) -> None:
 
 async def worker_shutdown(state: TaskiqState) -> None:
     """Закрытие контейнера при остановке worker."""
-    if hasattr(state, "container"):
+    _ = state
+    global _worker_container
+
+    container = _worker_container
+    if container is not None:
         try:
-            await state.container.redis_client.close()
+            await container.redis_client.close()
             logger.info("worker.redis_disconnected")
         except Exception as exc:
             logger.exception(
                 "worker.redis_close_failed",
                 **{"exception.type": type(exc).__name__},
             )
+        finally:
+            _worker_container = None
     logger.info("worker.container_closed")
 
 

@@ -9,7 +9,7 @@ Permissions основаны на группах пользователя из J
 ADMIN_GROUP = "admin"
 
 # Fallback permission если не указан
-DEFAULT_PERMISSION = [ADMIN_GROUP]
+DEFAULT_PERMISSION: tuple[str, ...] = (ADMIN_GROUP,)
 
 
 class PermissionChecker:
@@ -22,12 +22,10 @@ class PermissionChecker:
     def normalize(self, permission: str | list[str] | None) -> list[str]:
         """Нормализует permission к списку строк."""
         if permission is None:
-            return DEFAULT_PERMISSION
+            return list(DEFAULT_PERMISSION)
         if isinstance(permission, str):
             return [permission]
-        if isinstance(permission, list):
-            return permission if permission else DEFAULT_PERMISSION
-        return DEFAULT_PERMISSION
+        return permission if permission else list(DEFAULT_PERMISSION)
 
     def check(self, user_groups: list[str], required: list[str]) -> bool:
         """Проверяет есть ли у пользователя доступ."""

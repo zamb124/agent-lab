@@ -7,13 +7,16 @@ E2E-бюджет SQL-запросов при выполнении flow.
 """
 
 from __future__ import annotations
+
 import uuid
 from dataclasses import dataclass
 from typing import Any
+
 import pytest
 from filelock import FileLock
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+
 from apps.flows.config import get_settings
 
 pytestmark = [pytest.mark.e2e, pytest.mark.real_taskiq, pytest.mark.timeout(120, func_only=True)]

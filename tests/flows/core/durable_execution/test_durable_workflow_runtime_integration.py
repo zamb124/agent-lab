@@ -19,6 +19,7 @@ from apps.flows.src.durable_execution import (
     DurableWorkflowRepository,
     DurableWorkflowRuntime,
     NodeFailedPayload,
+    NodeScheduledPayload,
     NonIdempotentActivityReplayBlockedError,
     RunStartedPayload,
     SideEffectPolicy,
@@ -74,6 +75,31 @@ class _StateWriteNode(BaseNode):
         _ = inputs
         state.variables[self.node_id] = "done"
         state.response = f"{self.node_id}:done"
+        return None
+
+
+class _CountingStateWriteNode(BaseNode):
+    def __init__(
+        self,
+        node_id: str,
+        config: JsonObject | None = None,
+        *,
+        container: FlowRuntimeContainer,
+        calls: list[str],
+    ) -> None:
+        super().__init__(node_id, config, container=container)
+        self.calls = calls
+
+    @override
+    async def _run_impl(
+        self,
+        state: ExecutionState,
+        inputs: NodeInputs,
+    ) -> NodeRunResult:
+        _ = inputs
+        self.calls.append(state.session_id)
+        state.variables["child_calls"] = len(self.calls)
+        state.response = "child counted"
         return None
 
 
@@ -504,21 +530,22 @@ async def test_parallel_superstep_retry_preserves_successful_pending_writes(
         payload=RunStartedPayload(),
         snapshot=True,
     )
+    container = _runtime_container(
+        DurableFlowHarness(
+            workflow_runtime=runtime,
+            redis_client=durable_stack.redis_client,
+        ),
+    )
     flow = Flow(
         flow_id=flow_id,
         name="parallel retry",
         entry="ok",
         nodes={
-            "ok": _StateWriteNode("ok", {"type": "function"}),
-            "bad": _FailingNode("bad", {"type": "function"}),
+            "ok": _StateWriteNode("ok", {"type": "function"}, container=container),
+            "bad": _FailingNode("bad", {"type": "function"}, container=container),
         },
         edges=[],
-        container=_runtime_container(
-            DurableFlowHarness(
-                workflow_runtime=runtime,
-                redis_client=durable_stack.redis_client,
-            ),
-        ),
+        container=container,
     )
 
     with pytest.raises(RuntimeError, match="boom"):
@@ -580,8 +607,14 @@ async def test_node_activity_id_uses_durable_schedule_sequence_for_loop_visits(
         payload=RunStartedPayload(),
         snapshot=True,
     )
-    loop_node = _DurableCountingActivityNode("loop", {"type": "function"})
-    done_node = _StateWriteNode("done", {"type": "function"})
+    container = _runtime_container(
+        DurableFlowHarness(
+            workflow_runtime=runtime,
+            redis_client=durable_stack.redis_client,
+        ),
+    )
+    loop_node = _DurableCountingActivityNode("loop", {"type": "function"}, container=container)
+    done_node = _StateWriteNode("done", {"type": "function"}, container=container)
     flow = Flow(
         flow_id=flow_id,
         name="durable loop activity ids",
@@ -612,12 +645,7 @@ async def test_node_activity_id_uses_durable_schedule_sequence_for_loop_visits(
                 },
             },
         ],
-        container=_runtime_container(
-            DurableFlowHarness(
-                workflow_runtime=runtime,
-                redis_client=durable_stack.redis_client,
-            ),
-        ),
+        container=container,
     )
 
     result = await flow.run(state)
@@ -739,13 +767,20 @@ async def test_code_edge_condition_replays_from_activity_journal_for_same_edge_s
         snapshot=True,
     )
     runner = _FalseCodeConditionRunner()
+    container = _runtime_container(
+        DurableCodeConditionHarness(
+            workflow_runtime=runtime,
+            redis_client=durable_stack.redis_client,
+            code_runner=runner,
+        ),
+    )
     flow = Flow(
         flow_id=flow_id,
         name="durable code edge condition",
         entry="start",
         nodes={
-            "start": _StateWriteNode("start", {"type": "function"}),
-            "done": _StateWriteNode("done", {"type": "function"}),
+            "start": _StateWriteNode("start", {"type": "function"}, container=container),
+            "done": _StateWriteNode("done", {"type": "function"}, container=container),
         },
         edges=[
             {
@@ -759,13 +794,7 @@ async def test_code_edge_condition_replays_from_activity_journal_for_same_edge_s
                 },
             },
         ],
-        container=_runtime_container(
-            DurableCodeConditionHarness(
-                workflow_runtime=runtime,
-                redis_client=durable_stack.redis_client,
-                code_runner=runner,
-            ),
-        ),
+        container=container,
     )
 
     with pytest.raises(FlowPrematureCompletionError):
@@ -1348,7 +1377,13 @@ async def test_flow_node_records_child_workflow_as_separate_durable_history(
         flow_id=child_flow_id,
         name="child",
         entry="child_write",
-        nodes={"child_write": _StateWriteNode("child_write", {"type": "function"})},
+        nodes={
+            "child_write": _StateWriteNode(
+                "child_write",
+                {"type": "function"},
+                container=container,
+            )
+        },
         edges=[],
         config={"version": "child-v1"},
         container=container,
@@ -1394,6 +1429,7 @@ async def test_flow_node_records_child_workflow_as_separate_durable_history(
     assert link.status == "completed"
     assert link.child_flow_id == child_flow_id
     assert link.child_flow_branch_id == "default"
+    assert link.child_execution_branch_id
     assert result.variables["child_write"] == "done"
 
     parent_history, _ = await runtime.get_state_history(session_id)
@@ -1413,9 +1449,15 @@ async def test_flow_node_records_child_workflow_as_separate_durable_history(
     for event in parent_child_events:
         payload = _child_workflow_payload(event.payload, "WorkflowEvent.payload")
         assert payload.child_session_id == link.child_session_id
-        child_position = payload.child_execution_position
-        assert child_position is not None
-        assert isinstance(child_position.execution_branch_id, str)
+        assert payload.child_execution_branch_id == link.child_execution_branch_id
+        if event.event_type is WorkflowEventType.child_workflow_started:
+            assert payload.status == "running"
+        else:
+            assert payload.status == link.status
+        assert (
+            payload.child_execution_position.execution_branch_id
+            == link.child_execution_branch_id
+        )
 
     child_history, _ = await runtime.get_state_history(link.child_session_id)
     child_event_types = [event.event_type.value for event in child_history]
@@ -1426,6 +1468,127 @@ async def test_flow_node_records_child_workflow_as_separate_durable_history(
         WorkflowEventType.node_write_recorded.value,
     ]
     assert WorkflowEventType.superstep_committed.value in child_event_types
+
+
+async def test_flow_node_replay_reuses_completed_child_workflow_history(
+    durable_stack: DurableStack,
+) -> None:
+    runtime = durable_stack.runtime
+    parent_flow_id = f"durable_parent_child_replay_{uuid.uuid4().hex}"
+    child_flow_id = f"durable_child_replay_{uuid.uuid4().hex}"
+    session_id = _session_id(parent_flow_id)
+    factory = DurableChildFlowFactory()
+    container = _runtime_container(
+        DurableChildWorkflowHarness(
+            workflow_runtime=runtime,
+            redis_client=durable_stack.redis_client,
+            flow_factory=factory,
+        )
+    )
+    child_calls: list[str] = []
+    child_flow = Flow(
+        flow_id=child_flow_id,
+        name="child replay",
+        entry="child_count",
+        nodes={
+            "child_count": _CountingStateWriteNode(
+                "child_count",
+                {"type": "function"},
+                container=container,
+                calls=child_calls,
+            )
+        },
+        edges=[],
+        config={"version": "child-v1"},
+        container=container,
+    )
+    factory.set_flow(child_flow)
+    flow_node = FlowNode(
+        "call_child",
+        {
+            "type": "flow",
+            "flow_id": child_flow_id,
+            "branch_id": "default",
+        },
+        container=container,
+    )
+    state = create_initial_state(
+        task_id=f"task-{uuid.uuid4().hex}",
+        context_id=session_id.split(":", 1)[1],
+        user_id="durable-user",
+        session_id=session_id,
+        content="start",
+    )
+    state.current_nodes = ["call_child"]
+    _ = await runtime.record_state_event(
+        session_id,
+        state,
+        event_type=WorkflowEventType.run_started,
+        payload=RunStartedPayload(),
+        snapshot=True,
+    )
+    superstep_event = await runtime.record_state_event(
+        session_id,
+        state,
+        event_type=WorkflowEventType.superstep_started,
+        payload=SuperstepStartedPayload(current_nodes=["call_child"]),
+    )
+    scheduled_event = await runtime.record_state_event(
+        session_id,
+        state,
+        event_type=WorkflowEventType.node_scheduled,
+        payload=NodeScheduledPayload(
+            node_id="call_child",
+            node_type="flow",
+            current_nodes=["call_child"],
+        ),
+    )
+    state.attach_durable_node_context(
+        execution_branch_id=scheduled_event.execution_branch_id,
+        node_schedule_sequence=scheduled_event.sequence,
+        superstep_sequence=superstep_event.sequence,
+    )
+
+    first = await flow_node.execute(state.runtime_copy())
+
+    link = first.child_workflows["call_child"]
+    assert link.status == "completed"
+    assert child_calls == [link.child_session_id]
+    assert first.variables["child_calls"] == 1
+
+    replayed = await flow_node.execute(state.runtime_copy())
+
+    assert child_calls == [link.child_session_id]
+    assert replayed.variables["child_calls"] == 1
+    assert replayed.child_workflows["call_child"].child_session_id == link.child_session_id
+    assert (
+        replayed.child_workflows["call_child"].child_execution_branch_id
+        == link.child_execution_branch_id
+    )
+    assert replayed.child_workflows["call_child"].status == "completed"
+
+    parent_history, _ = await runtime.get_state_history(session_id)
+    parent_child_event_types = [
+        event.event_type
+        for event in parent_history
+        if event.event_type
+        in {
+            WorkflowEventType.child_workflow_started,
+            WorkflowEventType.child_workflow_completed,
+        }
+    ]
+    assert parent_child_event_types.count(WorkflowEventType.child_workflow_started) == 1
+    assert parent_child_event_types.count(WorkflowEventType.child_workflow_completed) == 1
+
+    child_history, _ = await runtime.get_state_history(link.child_session_id)
+    child_completed_count = 0
+    for event in child_history:
+        if event.event_type is not WorkflowEventType.node_completed:
+            continue
+        payload = _event_payload(event)
+        if payload.get("node_id") == "child_count":
+            child_completed_count += 1
+    assert child_completed_count == 1
 
 
 async def test_flow_node_resume_uses_same_child_workflow_session_after_interrupt(
@@ -1447,7 +1610,13 @@ async def test_flow_node_resume_uses_same_child_workflow_session_after_interrupt
         flow_id=child_flow_id,
         name="child resume",
         entry="ask",
-        nodes={"ask": _ChildInterruptUntilAnswerNode("ask", {"type": "function"})},
+        nodes={
+            "ask": _ChildInterruptUntilAnswerNode(
+                "ask",
+                {"type": "function"},
+                container=container,
+            )
+        },
         edges=[],
         config={"version": "child-v1"},
         container=container,
@@ -1495,6 +1664,10 @@ async def test_flow_node_resume_uses_same_child_workflow_session_after_interrupt
     assert first_path.node_type == "flow"
     assert first_path.node_id == "call_child"
     child_session_id = _json_str(first_path.child_session_id, "interrupt_path.child_session_id")
+    child_execution_branch_id = _json_str(
+        first_path.child_execution_branch_id,
+        "interrupt_path.child_execution_branch_id",
+    )
 
     loaded_parent = await runtime.get_state(session_id)
     assert loaded_parent is not None
@@ -1504,6 +1677,10 @@ async def test_flow_node_resume_uses_same_child_workflow_session_after_interrupt
     assert resumed.interrupt is None
     assert resumed.variables["child_answer"] == "answer"
     assert resumed.child_workflows["call_child"].child_session_id == child_session_id
+    assert (
+        resumed.child_workflows["call_child"].child_execution_branch_id
+        == child_execution_branch_id
+    )
     assert resumed.child_workflows["call_child"].status == "completed"
 
     child_history, _ = await runtime.get_state_history(child_session_id)

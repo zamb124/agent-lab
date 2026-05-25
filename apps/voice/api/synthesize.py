@@ -203,7 +203,9 @@ async def _synthesize_audio_chunks(
             raw_chunks.append(audio_bytes)
     if not raw_chunks:
         return
-    mime = (tts_streamer.content_type or "").strip().lower()
+    mime = tts_streamer.content_type.strip().lower()
+    if mime == "":
+        raise RuntimeError("voice.synthesize requires non-empty TTS content_type.")
     use_wav_merge = mime in ("audio/wav", "audio/wave", "audio/x-wav") or (
         len(raw_chunks[0]) >= 12
         and raw_chunks[0][:4] == b"RIFF"
@@ -249,7 +251,7 @@ async def _record_usage_after_stream(
         company = ctx.active_company
         if company is None:
             raise RuntimeError("voice.synthesize usage requires active company in context")
-        await record_tts_usage(
+        _ = await record_tts_usage(
             user=user,
             company=company,
             provider=tts_streamer.provider,

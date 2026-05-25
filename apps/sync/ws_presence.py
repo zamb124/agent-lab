@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Protocol, cast
 
-import redis.asyncio as redis
+from redis.asyncio.client import Redis
 
 from core.config import get_settings
 
@@ -12,6 +15,37 @@ SYNC_WS_PRESENCE_PREFIX = "sync:ws:presence:"
 
 SYNC_LAST_SEEN_PREFIX = "sync:last_seen:"
 SYNC_LAST_SEEN_TTL_SEC = 365 * 24 * 3600
+
+
+class _SyncPresencePipeline(Protocol):
+    def exists(self, key: str) -> "_SyncPresencePipeline": ...
+
+    def get(self, key: str) -> "_SyncPresencePipeline": ...
+
+    def execute(self) -> Awaitable[list[int | str | bytes | None]]: ...
+
+
+class _SyncPresenceRedis(Protocol):
+    def set(
+        self,
+        name: str,
+        value: str,
+        *,
+        ex: int | None = None,
+    ) -> Awaitable[bool | None]: ...
+
+    def delete(self, name: str) -> Awaitable[int]: ...
+
+    def get(self, name: str) -> Awaitable[str | bytes | None]: ...
+
+    def pipeline(self) -> _SyncPresencePipeline: ...
+
+    def aclose(self) -> Awaitable[None]: ...
+
+
+def _presence_redis(redis_url: str) -> _SyncPresenceRedis:
+    from_url = cast(Callable[[str], _SyncPresenceRedis], Redis.from_url)
+    return from_url(redis_url)
 
 
 def sync_ws_presence_key(user_id: str) -> str:
@@ -24,23 +58,23 @@ def sync_last_seen_key(user_id: str) -> str:
 
 async def refresh_sync_ws_presence(redis_url: str, user_id: str) -> None:
     ttl = get_settings().ws_presence_ttl_seconds
-    r = redis.from_url(redis_url)
+    r = _presence_redis(redis_url)
     try:
-        await r.set(sync_ws_presence_key(user_id), "1", ex=ttl)
+        _ = await r.set(sync_ws_presence_key(user_id), "1", ex=ttl)
     finally:
         await r.aclose()
 
 
 async def clear_sync_ws_presence(redis_url: str, user_id: str) -> None:
-    r = redis.from_url(redis_url)
+    r = _presence_redis(redis_url)
     try:
-        await r.delete(sync_ws_presence_key(user_id))
+        _ = await r.delete(sync_ws_presence_key(user_id))
     finally:
         await r.aclose()
 
 
 async def is_user_sync_ws_online(redis_url: str, user_id: str) -> bool:
-    r = redis.from_url(redis_url)
+    r = _presence_redis(redis_url)
     try:
         v = await r.get(sync_ws_presence_key(user_id))
         return v is not None
@@ -51,35 +85,33 @@ async def is_user_sync_ws_online(redis_url: str, user_id: str) -> bool:
 async def set_last_seen_now(redis_url: str, user_id: str) -> str:
     now = datetime.now(timezone.utc)
     iso = now.isoformat()
-    r = redis.from_url(redis_url)
+    r = _presence_redis(redis_url)
     try:
-        await r.set(sync_last_seen_key(user_id), iso, ex=SYNC_LAST_SEEN_TTL_SEC)
+        _ = await r.set(sync_last_seen_key(user_id), iso, ex=SYNC_LAST_SEEN_TTL_SEC)
         return iso
     finally:
         await r.aclose()
 
 
+@dataclass(frozen=True, slots=True)
 class PeerPresenceRow:
     """Снимок присутствия одного пользователя для API /company/members."""
 
-    __slots__ = ("user_id", "is_online", "last_seen_at")
-
-    def __init__(self, user_id: str, is_online: bool, last_seen_at: str | None) -> None:
-        self.user_id = user_id
-        self.is_online = is_online
-        self.last_seen_at = last_seen_at
+    user_id: str
+    is_online: bool
+    last_seen_at: str | None
 
 
 async def batch_peer_presence(redis_url: str, user_ids: list[str]) -> dict[str, PeerPresenceRow]:
     """По списку user_id: онлайн (ключ presence) и last_seen из Redis (если офлайн)."""
     if not user_ids:
         return {}
-    r = redis.from_url(redis_url)
+    r = _presence_redis(redis_url)
     try:
         pipe = r.pipeline()
         for uid in user_ids:
-            pipe.exists(sync_ws_presence_key(uid))
-            pipe.get(sync_last_seen_key(uid))
+            _ = pipe.exists(sync_ws_presence_key(uid))
+            _ = pipe.get(sync_last_seen_key(uid))
         raw = await pipe.execute()
     finally:
         await r.aclose()

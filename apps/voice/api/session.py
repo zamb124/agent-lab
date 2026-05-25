@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable
-from typing import Any, cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
@@ -24,7 +24,7 @@ from apps.voice.services.speak_worker import run_speak_worker
 from apps.voice.services.voice_barge_in import BargeInController
 from apps.voice.services.voice_client_channel import VoiceClientChannel
 from apps.voice.services.voice_session import VoiceSession
-from apps.voice.workers.stt_worker import run_stt_worker
+from apps.voice.workers.stt_worker import VadCallbackState, run_stt_worker
 from apps.voice.workers.ws_receiver import run_ws_receiver
 from core.clients.speech_override import (
     SpeechOverride,
@@ -66,17 +66,55 @@ def _speech_override_provider_name(value: str | None) -> SpeechOverrideProviderN
 async def voice_session(
     websocket: WebSocket,
     session_id: str,
-    company_id: str = Query(..., description="ID компании, в контексте которой работает сессия."),
-    stt_provider_name: str | None = Query(default=None, description="Override STT провайдера для сессии."),
-    stt_model: str | None = Query(default=None, description="Override STT модели."),
-    tts_provider_name: str | None = Query(default=None, description="Override TTS провайдера."),
-    tts_model: str | None = Query(default=None, description="Override TTS модели."),
-    tts_voice: str | None = Query(default=None, description="Override TTS голоса."),
-    tts_sample_rate: int | None = Query(default=None, description="Override частоты дискретизации TTS (Гц)."),
-    vad_provider_name: str | None = Query(default=None, description="Override VAD провайдера."),
-    vad_sample_rate: int | None = Query(default=None, description="Override частоты дискретизации VAD (Гц)."),
-    vad_threshold: float | None = Query(default=None, description="Override порога детекции VAD [0..1]."),
-    language: str | None = Query(default=None, description="Язык сессии (ISO 639-1): STT и выбор TTS-модели LitServe по `synthesis_locale` в каталоге."),
+    company_id: Annotated[
+        str,
+        Query(description="ID компании, в контексте которой работает сессия."),
+    ],
+    stt_provider_name: Annotated[
+        str | None,
+        Query(description="Override STT провайдера для сессии."),
+    ] = None,
+    stt_model: Annotated[
+        str | None,
+        Query(description="Override STT модели."),
+    ] = None,
+    tts_provider_name: Annotated[
+        str | None,
+        Query(description="Override TTS провайдера."),
+    ] = None,
+    tts_model: Annotated[
+        str | None,
+        Query(description="Override TTS модели."),
+    ] = None,
+    tts_voice: Annotated[
+        str | None,
+        Query(description="Override TTS голоса."),
+    ] = None,
+    tts_sample_rate: Annotated[
+        int | None,
+        Query(description="Override частоты дискретизации TTS (Гц)."),
+    ] = None,
+    vad_provider_name: Annotated[
+        str | None,
+        Query(description="Override VAD провайдера."),
+    ] = None,
+    vad_sample_rate: Annotated[
+        int | None,
+        Query(description="Override частоты дискретизации VAD (Гц)."),
+    ] = None,
+    vad_threshold: Annotated[
+        float | None,
+        Query(description="Override порога детекции VAD [0..1]."),
+    ] = None,
+    language: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Язык сессии (ISO 639-1): STT и выбор TTS-модели LitServe "
+                "по `synthesis_locale` в каталоге."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """WebSocket сессия: PCM uplink + text/PCM downlink.
 
@@ -210,14 +248,12 @@ async def voice_session(
         )
         await channel.send_transcript(text=text, final=False, language=lang)
 
-    async def _on_vad_state(sess: VoiceSession, state: str) -> None:
-        if state not in ("started", "ended"):
-            return
-        await channel.send_vad(state)  # type: ignore[arg-type]
+    async def _on_vad_state(_sess: VoiceSession, state: VadCallbackState) -> None:
+        await channel.send_vad(state)
 
-    all_tasks: list[asyncio.Task[Any]] = []
+    all_tasks: list[asyncio.Task[None]] = []
 
-    def _spawn(coro: Awaitable[Any], task_name: str) -> None:
+    def _spawn(coro: Awaitable[None], task_name: str) -> None:
         task = run_with_log_context(
             coro, name=task_name, background_kind="voice_session"
         )

@@ -25,6 +25,7 @@ from core.capabilities import (
     JsonObject,
     execution_token_exp,
     issue_execution_token,
+    locked_down_code_sandbox_policy,
 )
 
 pytestmark = pytest.mark.timeout(180)
@@ -186,6 +187,7 @@ def _execution_context() -> CapabilityExecutionContext:
         session_id="test_flow:test_context",
         task_id="test_task",
         context_id="test_context",
+        channel="a2a",
         request_id="test-request-id",
         exp=execution_token_exp(300),
     )
@@ -198,6 +200,7 @@ def _execution_context() -> CapabilityExecutionContext:
         session_id=claims.session_id,
         task_id=claims.task_id,
         context_id=claims.context_id,
+        channel=claims.channel,
         request_id=claims.request_id,
         trace_id="test-trace-id",
     )
@@ -212,12 +215,20 @@ def _request(
     args: JsonObject | None = None,
     state: JsonObject | None = None,
 ) -> dict[str, object]:
+    wall_time_limit_seconds = 30
     request = CodeExecutionRequest(
         kind=kind,
         language=language,
         code=code,
         entrypoint=entrypoint,
-        wall_time_limit_seconds=30,
+        wall_time_limit_seconds=wall_time_limit_seconds,
+        sandbox=locked_down_code_sandbox_policy(
+            wall_time_limit_seconds=wall_time_limit_seconds,
+            cpu_time_limit_seconds=wall_time_limit_seconds,
+            memory_limit_mb=256,
+            filesystem_limit_mb=64,
+            stdout_stderr_limit_bytes=1_048_576,
+        ),
         args=args or {"x": 41},
         state=state or {},
         context=_execution_context(),
@@ -233,12 +244,20 @@ def _validation_request(
     entrypoint: str | None = None,
     kind: CodeExecutionKind = "node",
 ) -> dict[str, object]:
+    wall_time_limit_seconds = 30
     request = CodeValidationRequest(
         kind=kind,
         language=language,
         code=code,
         entrypoint=entrypoint,
-        wall_time_limit_seconds=30,
+        wall_time_limit_seconds=wall_time_limit_seconds,
+        sandbox=locked_down_code_sandbox_policy(
+            wall_time_limit_seconds=wall_time_limit_seconds,
+            cpu_time_limit_seconds=wall_time_limit_seconds,
+            memory_limit_mb=256,
+            filesystem_limit_mb=64,
+            stdout_stderr_limit_bytes=1_048_576,
+        ),
         context=_execution_context(),
         capability_manifest=CapabilityManifest(version="test", capabilities=[]),
     )

@@ -1,0 +1,3 @@
+"""asyncpg exception types used by the platform."""
+
+class InvalidPasswordError(Exception): ...

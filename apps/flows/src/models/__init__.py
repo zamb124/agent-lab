@@ -1,3 +1,15 @@
+from .branch_contracts import (
+    BranchCreateRequest,
+    BranchDetailResponse,
+    BranchMutationResponse,
+    BranchPayload,
+    BranchSummaryResponse,
+    BranchUpdateRequest,
+    branch_detail_response,
+    branch_model_dump,
+    branch_payload_to_config,
+    branch_summary_response,
+)
 from .channel_config import ChannelNodeConfig, OutputAction
 from .dataflow import (
     DataflowAvailability,
@@ -82,7 +94,14 @@ from .flow_speech_settings import (
     FlowSpeechVadBlock,
 )
 from .llm_model import LLMModel
-from .mcp import MCPCallResult, MCPServerConfig, MCPToolInfo, MCPTransportType
+from .mcp import (
+    MCPCallResult,
+    MCPDiscoveredTool,
+    MCPInitializeResult,
+    MCPServerConfig,
+    MCPToolDefinition,
+    MCPTransportType,
+)
 from .node_config import (
     GraphNodeConfig,
     NodeConfig,
@@ -197,6 +216,16 @@ __all__ = [
     "SessionConfig",
     "SessionStatus",
     "BranchConfig",
+    "BranchCreateRequest",
+    "BranchDetailResponse",
+    "BranchMutationResponse",
+    "BranchPayload",
+    "BranchSummaryResponse",
+    "BranchUpdateRequest",
+    "branch_detail_response",
+    "branch_model_dump",
+    "branch_payload_to_config",
+    "branch_summary_response",
     "TelegramBotApiBooleanResponse",
     "TelegramGetUpdatesResponse",
     "TelegramTriggerConfig",
@@ -211,7 +240,9 @@ __all__ = [
     "TriggerType",
     "WebhookTriggerConfig",
     "MCPServerConfig",
-    "MCPToolInfo",
+    "MCPDiscoveredTool",
+    "MCPInitializeResult",
+    "MCPToolDefinition",
     "MCPCallResult",
     "MCPTransportType",
     "ResourceType",

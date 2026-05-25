@@ -20,11 +20,13 @@ from __future__ import annotations
 import io
 import wave
 from collections.abc import AsyncIterator
+from typing import override
 
 import httpx
 import pytest
 from httpx import AsyncClient
 
+from core.clients.speech_override import SpeechOverride
 from core.clients.tts_client import TTSLitserveHttpError
 from core.clients.tts_streaming import BaseTTSStreamer
 from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
@@ -43,9 +45,9 @@ async def test_synthesize_authenticated_returns_audio_bytes(
     )
 
     assert response.status_code == 200, response.text
-    content_type = response.headers.get("content-type", "")
+    content_type = response.headers["content-type"]
     assert content_type.startswith("audio/"), f"expected audio/* got {content_type!r}"
-    assert response.headers.get("x-voice-provider", "") == "mock"
+    assert response.headers["x-voice-provider"] == "mock"
     audio = response.content
     assert isinstance(audio, (bytes, bytearray)) and len(audio) > 0
 
@@ -76,7 +78,7 @@ async def test_synthesize_supports_response_format_override(
         headers=auth_headers_system,
     )
     assert response.status_code == 200
-    assert response.headers.get("content-type", "").startswith("audio/")
+    assert response.headers["content-type"].startswith("audio/")
     assert len(response.content) > 0
 
 
@@ -91,27 +93,36 @@ async def test_synthesize_zero_audio_returns_502(
 
     class _SilentStreamer(BaseTTSStreamer):
         @property
+        @override
         def provider(self) -> str:
             return "silent_test"
 
         @property
-        def mime_type(self) -> str:
+        @override
+        def content_type(self) -> str:
             return "audio/wav"
 
         @property
+        @override
         def sample_rate(self) -> int:
             return 8000
 
+        @override
         async def synthesize_chunk(self, text: str) -> bytes:
             raise RuntimeError("_SilentStreamer does not use synthesize_chunk")
 
+        @override
         async def astream(self, text_stream: AsyncIterator[str]) -> AsyncIterator[bytes]:
-            async for _ in text_stream:
-                pass
-            if False:
-                yield b""
+            async for piece in text_stream:
+                if piece == "\0":
+                    yield b""
 
-    async def _fake_get_tts_streamer(*_a: object, **_k: object) -> _SilentStreamer:
+    async def _fake_get_tts_streamer(
+        *, company_id: str, override: SpeechOverride | None = None
+    ) -> _SilentStreamer:
+        if company_id == "":
+            raise AssertionError("company_id must be non-empty")
+        _ = override
         return _SilentStreamer()
 
     monkeypatch.setattr(
@@ -142,33 +153,44 @@ async def test_synthesize_litserve_upstream_422_returns_same_detail(
 
     class _Litserve422Streamer(BaseTTSStreamer):
         @property
+        @override
         def provider(self) -> str:
             return "litserve"
 
         @property
-        def mime_type(self) -> str:
+        @override
+        def content_type(self) -> str:
             return "audio/wav"
 
         @property
+        @override
         def sample_rate(self) -> int:
             return 24000
 
+        @override
         async def synthesize_chunk(self, text: str) -> bytes:
             raise NotImplementedError
 
+        @override
         async def astream(
             self, text_stream: AsyncIterator[str]
         ) -> AsyncIterator[bytes]:
-            async for _ in text_stream:
+            async for piece in text_stream:
+                if piece == "\0":
+                    yield b""
+                    return
                 raise TTSLitserveHttpError(
                     status_code=422,
                     detail=f"litserve-reject-{unique_id}",
                     url="http://127.0.0.1:8014/v1/audio/speech",
                 )
-            if False:
-                yield b""
 
-    async def _fake_get_tts_streamer(*_a: object, **_k: object) -> _Litserve422Streamer:
+    async def _fake_get_tts_streamer(
+        *, company_id: str, override: SpeechOverride | None = None
+    ) -> _Litserve422Streamer:
+        if company_id == "":
+            raise AssertionError("company_id must be non-empty")
+        _ = override
         return _Litserve422Streamer()
 
     monkeypatch.setattr(
@@ -197,29 +219,40 @@ async def test_synthesize_upstream_connect_error_returns_503(
 
     class _UnreachableStreamer(BaseTTSStreamer):
         @property
+        @override
         def provider(self) -> str:
             return "litserve"
 
         @property
-        def mime_type(self) -> str:
+        @override
+        def content_type(self) -> str:
             return "audio/wav"
 
         @property
+        @override
         def sample_rate(self) -> int:
             return 24000
 
+        @override
         async def synthesize_chunk(self, text: str) -> bytes:
             raise NotImplementedError
 
+        @override
         async def astream(
             self, text_stream: AsyncIterator[str]
         ) -> AsyncIterator[bytes]:
-            async for _ in text_stream:
+            async for piece in text_stream:
+                if piece == "\0":
+                    yield b""
+                    return
                 raise httpx.ConnectError("All connection attempts failed")
-            if False:
-                yield b""
 
-    async def _fake_get_tts_streamer(*_a: object, **_k: object) -> _UnreachableStreamer:
+    async def _fake_get_tts_streamer(
+        *, company_id: str, override: SpeechOverride | None = None
+    ) -> _UnreachableStreamer:
+        if company_id == "":
+            raise AssertionError("company_id must be non-empty")
+        _ = override
         return _UnreachableStreamer()
 
     monkeypatch.setattr(
@@ -252,20 +285,25 @@ async def test_synthesize_merges_multi_wav_chunks_into_one_playable_file(
 
     class _MultiWavStreamer(BaseTTSStreamer):
         @property
+        @override
         def provider(self) -> str:
             return f"multichunk-{unique_id}"
 
         @property
-        def mime_type(self) -> str:
+        @override
+        def content_type(self) -> str:
             return "audio/wav"
 
         @property
+        @override
         def sample_rate(self) -> int:
             return 16000
 
+        @override
         async def synthesize_chunk(self, text: str) -> bytes:
             raise RuntimeError("unused")
 
+        @override
         async def astream(
             self, text_stream: AsyncIterator[str]
         ) -> AsyncIterator[bytes]:
@@ -274,7 +312,12 @@ async def test_synthesize_merges_multi_wav_chunks_into_one_playable_file(
             yield w1
             yield w2
 
-    async def _fake_get(*_a: object, **_k: object) -> _MultiWavStreamer:
+    async def _fake_get(
+        *, company_id: str, override: SpeechOverride | None = None
+    ) -> _MultiWavStreamer:
+        if company_id == "":
+            raise AssertionError("company_id must be non-empty")
+        _ = override
         return _MultiWavStreamer()
 
     monkeypatch.setattr(

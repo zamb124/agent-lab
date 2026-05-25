@@ -22,6 +22,7 @@ async def test_message_create_and_list(
     unique_id: str,
 ) -> None:
     """Создание сообщений с контентом и выборка по каналу."""
+    _ = sync_db_clean
     ch_msg = f"{unique_id}_ch_msg"
     msg_1 = f"{unique_id}_msg_1"
     ch = SyncChannel(
@@ -34,7 +35,7 @@ async def test_message_create_and_list(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
-    await channel_repo.create(ch)
+    _ = await channel_repo.create(ch)
 
     contents = [
         MessageContentModel(
@@ -61,10 +62,11 @@ async def test_message_create_and_list(
     assert len(listed) == 1
     assert listed[0].message_id == msg_1
 
-    content_rows = await message_repo.list_contents(msg_1)
-    assert len(content_rows) == 1
-    assert content_rows[0].type == "text/plain"
-    assert content_rows[0].data["body"] == "hello world"
+    listed_contents = await message_repo.list_contents(msg_1)
+    assert len(listed_contents) == 1
+    assert listed_contents[0].type == MessageContentType.TEXT_PLAIN
+    assert isinstance(listed_contents[0].data, TextPlainContent)
+    assert listed_contents[0].data.body == "hello world"
 
 
 @pytest.mark.asyncio
@@ -77,6 +79,7 @@ async def test_message_list_by_thread(
     unique_id: str,
 ) -> None:
     """Выборка сообщений по треду."""
+    _ = sync_db_clean
     ch_thr = f"{unique_id}_ch_thr"
     thr_1 = f"{unique_id}_thr_1"
     msg_root = f"{unique_id}_msg_root"
@@ -91,7 +94,7 @@ async def test_message_list_by_thread(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
-    await channel_repo.create(ch)
+    _ = await channel_repo.create(ch)
 
     thread = SyncThread(
         thread_id=thr_1,
@@ -102,9 +105,9 @@ async def test_message_list_by_thread(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
-    await thread_repo.create(thread)
+    _ = await thread_repo.create(thread)
 
-    await message_repo.create_message(
+    _ = await message_repo.create_message(
         message_id=msg_root,
         company_id=company_id,
         channel_id=ch_thr,
@@ -118,7 +121,7 @@ async def test_message_list_by_thread(
         ],
     )
 
-    await message_repo.create_message(
+    _ = await message_repo.create_message(
         message_id=msg_reply,
         company_id=company_id,
         channel_id=ch_thr,
@@ -145,6 +148,7 @@ async def test_main_channel_feed_includes_reply_with_parent(
     unique_id: str,
 ) -> None:
     """Основная лента канала (thread_id IS NULL) включает ответы с parent_message_id."""
+    _ = sync_db_clean
     ch_main = f"{unique_id}_ch_main"
     root_a = f"{unique_id}_root_a"
     reply_b = f"{unique_id}_reply_b"
@@ -158,9 +162,9 @@ async def test_main_channel_feed_includes_reply_with_parent(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
-    await channel_repo.create(ch)
+    _ = await channel_repo.create(ch)
 
-    await message_repo.create_message(
+    _ = await message_repo.create_message(
         message_id=root_a,
         company_id=company_id,
         channel_id=ch_main,
@@ -173,7 +177,7 @@ async def test_main_channel_feed_includes_reply_with_parent(
             MessageContentModel(type=MessageContentType.TEXT_PLAIN, data=TextPlainContent(body="root"), order=0),
         ],
     )
-    await message_repo.create_message(
+    _ = await message_repo.create_message(
         message_id=reply_b,
         company_id=company_id,
         channel_id=ch_main,
@@ -201,6 +205,7 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
     unique_id: str,
 ) -> None:
     """Сводка ленты: непрочитанные чужие сообщения и превью последнего."""
+    _ = sync_db_clean
     ch_lane = f"{unique_id}_ch_lane"
     m1 = f"{unique_id}_m1"
     ch = SyncChannel(
@@ -213,11 +218,11 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u_viewer",
     )
-    await channel_repo.create(ch)
+    _ = await channel_repo.create(ch)
     await channel_repo.upsert_member(ch_lane, "u_viewer", "owner", company_id=company_id)
 
     t_msg = datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC)
-    await message_repo.create_message(
+    _ = await message_repo.create_message(
         message_id=m1,
         company_id=company_id,
         channel_id=ch_lane,
@@ -269,6 +274,7 @@ async def test_channel_lane_summaries_batch_mention_unread_count(
     company_id: str,
     unique_id: str,
 ) -> None:
+    _ = sync_db_clean
     ch_men = f"{unique_id}_ch_men"
     m_men = f"{unique_id}_m_men"
     ch = SyncChannel(
@@ -281,11 +287,11 @@ async def test_channel_lane_summaries_batch_mention_unread_count(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u_viewer",
     )
-    await channel_repo.create(ch)
+    _ = await channel_repo.create(ch)
     await channel_repo.upsert_member(ch_men, "u_viewer", "owner", company_id=company_id)
     await channel_repo.upsert_member(ch_men, "u_other", "member", company_id=company_id)
     t_msg = datetime(2026, 3, 2, 12, 0, 0, tzinfo=UTC)
-    await message_repo.create_message(
+    _ = await message_repo.create_message(
         message_id=m_men,
         company_id=company_id,
         channel_id=ch_men,

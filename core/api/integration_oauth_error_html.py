@@ -7,6 +7,7 @@ HTML для ошибок универсального OAuth callback (навиг
 from __future__ import annotations
 
 import html as html_module
+from typing import TypedDict
 
 from starlette.requests import Request
 
@@ -14,6 +15,12 @@ from core.integrations.guided_integration_error import (
     GuidedIntegrationError,
     OAuthErrorLocale,
 )
+
+
+class OAuthErrorCorrelation(TypedDict, total=False):
+    request_id: str
+    trace_id: str
+    service: str
 
 
 def oauth_callback_prefers_html_response(request: Request) -> bool:
@@ -98,7 +105,7 @@ def build_integration_oauth_error_html(
     exc: GuidedIntegrationError,
     *,
     locale: OAuthErrorLocale,
-    correlation: dict[str, str] | None = None,
+    correlation: OAuthErrorCorrelation | None = None,
 ) -> str:
     title = html_module.escape(exc.title_for_locale(locale))
     message = html_module.escape(exc.message_for_locale(locale))
@@ -169,8 +176,8 @@ a.btn:focus,a.btn:hover{background:#7b53a8}
 </html>"""
 
 
-def oauth_error_correlation_ids(request: Request) -> dict[str, str]:
-    out: dict[str, str] = {}
+def oauth_error_correlation_ids(request: Request) -> OAuthErrorCorrelation:
+    out: OAuthErrorCorrelation = {}
     rq = getattr(request.state, "request_id", None)
     tr = getattr(request.state, "trace_id", None)
     if isinstance(rq, str) and rq.strip():
@@ -180,7 +187,7 @@ def oauth_error_correlation_ids(request: Request) -> dict[str, str]:
     path = request.url.path.strip("/")
     if path:
         first = path.split("/", 1)[0]
-        if isinstance(first, str) and first.strip():
+        if first.strip():
             out["service"] = first.strip()
     return out
 
@@ -189,10 +196,10 @@ def build_integration_oauth_simple_error_html(
     message: str,
     *,
     locale: OAuthErrorLocale,
-    correlation: dict[str, str] | None = None,
+    correlation: OAuthErrorCorrelation | None = None,
 ) -> str:
     """Минимальная страница для ValueError в complete_oauth без структуры guided."""
-    if not isinstance(message, str) or not message:
+    if not message:
         raise ValueError("build_integration_oauth_simple_error_html: message обязателен")
     title_html = html_module.escape(
         "Connection failed" if locale == "en" else "Ошибка подключения",

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from apps.sync.dependencies import ContainerDep
+from apps.sync.models.channels import ChannelRead
 from apps.sync.models.common import PaginationResponse
 from apps.sync.models.messages import MessageCreate, MessageEdit, MessageRead
 from apps.sync.realtime.context import require_current_user
@@ -65,7 +66,7 @@ async def list_messages(
     channel_id: str,
     request: Request,
     container: ContainerDep,
-    pagination: _MessagePaginationRequest = Depends(),
+    pagination: Annotated[_MessagePaginationRequest, Depends()],
 ) -> PaginationResponse[MessageRead]:
     user = require_current_user()
     limit = pagination.limit
@@ -184,19 +185,18 @@ async def mark_message_read(
     return {"message_id": message_id}
 
 
-@router.post("/{channel_id}/pins")
+@router.post("/{channel_id}/pins", response_model=ChannelRead)
 async def pin_message(
     container: ContainerDep, channel_id: str, body: MessagePinBody
-) -> dict[str, object]:
+) -> ChannelRead:
     user = require_current_user()
-    result = await op_messages_pin(
+    return await op_messages_pin(
         MessagesPinPayload(
             channel_id=channel_id, message_id=body.message_id, action=body.action
         ),
         user=user,
         container=container,
     )
-    return result.model_dump(mode="json")
 
 
 @router.post("/{channel_id}/messages/{message_id}/transcribe", response_model=MessageRead)

@@ -44,7 +44,7 @@ def flow_variables_from_request_context(context: Context | None) -> JsonObject:
     if not active_namespace:
         raise ValueError(
             "flow_variables_from_request_context: Context.active_namespace пуст — "
-            "переменная active_namespace для промпта не определена (Zero-Guess)."
+            + "переменная active_namespace для промпта не определена (Zero-Guess)."
         )
 
     return {

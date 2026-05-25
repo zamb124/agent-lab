@@ -19,6 +19,7 @@ from core.capabilities import (
     CodeValidationResponse,
     code_execution_failed_response,
     code_validation_failed_response,
+    verify_execution_context,
 )
 from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
@@ -37,6 +38,31 @@ CSHARP_METHOD_RE = re.compile(
     + r"(?:[A-Za-z_][A-Za-z0-9_<>,\[\]\.?]*\s+)+"
     + r"([A-Za-z_][A-Za-z0-9_]*)\s*\("
 )
+ALLOWED_CSHARP_USINGS: frozenset[str] = frozenset(
+    {
+        "System",
+        "System.Collections.Generic",
+        "System.Linq",
+        "System.Threading.Tasks",
+    }
+)
+FORBIDDEN_CSHARP_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bSystem\.IO\b"),
+    re.compile(r"\bSystem\.Net\b"),
+    re.compile(r"\bSystem\.Reflection\b"),
+    re.compile(r"\bSystem\.Diagnostics\b"),
+    re.compile(r"\bSystem\.Runtime\.InteropServices\b"),
+    re.compile(r"\bDllImport\b"),
+    re.compile(r"\bProcess\b"),
+    re.compile(r"\bFile\b"),
+    re.compile(r"\bDirectory\b"),
+    re.compile(r"\bEnvironment\b"),
+    re.compile(r"\bAssembly\b"),
+    re.compile(r"\bActivator\b"),
+    re.compile(r"\bType\.GetType\b"),
+    re.compile(r"\bHttpClient\b"),
+    re.compile(r"\bSocket\b"),
+)
 
 
 class CsharpSandboxExecutor:
@@ -48,12 +74,25 @@ class CsharpSandboxExecutor:
         self._build_locks_guard: asyncio.Lock = asyncio.Lock()
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
+        security_error = self._verify_execution_request(request)
+        if security_error is not None:
+            return security_error
         if request.language != "csharp":
             return self._failed_response(
                 request=request,
                 stage="validation",
                 message=f"code-runner-csharp cannot execute language={request.language}",
                 exception_type="UnsupportedLanguageError",
+            )
+        try:
+            self._validate_user_source(request.code)
+        except Exception as exc:
+            return self._failed_response(
+                request=request,
+                stage="security",
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                traceback_text="".join(traceback.format_exception(exc)),
             )
 
         dotnet_bin = resolve_runtime_executable("dotnet", override_env=DOTNET_BIN_ENV)
@@ -77,6 +116,9 @@ class CsharpSandboxExecutor:
                 "platform.code_runner.runtime": "build_artifact_cache",
                 "platform.code_runner.dotnet_target": "net10.0",
                 "platform.code_runner.csharp_lang_version": "14.0",
+                "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
             },
         ):
             artifact_key = self._artifact_key(request)
@@ -114,12 +156,25 @@ class CsharpSandboxExecutor:
         return completed
 
     async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
+        security_error = self._verify_validation_request(request)
+        if security_error is not None:
+            return security_error
         if request.language != "csharp":
             return self._failed_validation_response(
                 request=request,
                 stage="validation",
                 message=f"code-runner-csharp cannot validate language={request.language}",
                 exception_type="UnsupportedLanguageError",
+            )
+        try:
+            self._validate_user_source(request.code)
+        except Exception as exc:
+            return self._failed_validation_response(
+                request=request,
+                stage="security",
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                traceback_text="".join(traceback.format_exception(exc)),
             )
 
         entrypoint = request.entrypoint.strip() if isinstance(request.entrypoint, str) and request.entrypoint.strip() else self._infer_entrypoint(request.code)
@@ -165,6 +220,9 @@ class CsharpSandboxExecutor:
                 "platform.code_runner.runtime": "build_artifact_cache",
                 "platform.code_runner.dotnet_target": "net10.0",
                 "platform.code_runner.csharp_lang_version": "14.0",
+                "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
             },
         ):
             request_for_build = request.model_copy(update={"entrypoint": entrypoint})
@@ -390,6 +448,49 @@ class CsharpSandboxExecutor:
             stderr=stderr,
         )
 
+    def _verify_execution_request(
+        self,
+        request: CodeExecutionRequest,
+    ) -> CodeExecutionResponse | None:
+        try:
+            verify_execution_context(request.context)
+        except Exception as exc:
+            return self._failed_response(
+                request=request,
+                stage="security",
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                traceback_text="".join(traceback.format_exception(exc)),
+            )
+        return None
+
+    def _verify_validation_request(
+        self,
+        request: CodeValidationRequest,
+    ) -> CodeValidationResponse | None:
+        try:
+            verify_execution_context(request.context)
+        except Exception as exc:
+            return self._failed_validation_response(
+                request=request,
+                stage="security",
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                traceback_text="".join(traceback.format_exception(exc)),
+            )
+        return None
+
+    def _validate_user_source(self, code: str) -> None:
+        for match in re.finditer(r"(?m)^\s*using\s+([^;]+);", code):
+            namespace = match.group(1).strip()
+            if namespace not in ALLOWED_CSHARP_USINGS:
+                raise PermissionError(f"csharp using is not allowed in code runner: {namespace}")
+        for pattern in FORBIDDEN_CSHARP_PATTERNS:
+            if pattern.search(code):
+                raise PermissionError(
+                    f"csharp API is not allowed in code runner: {pattern.pattern}"
+                )
+
     def _infer_entrypoint(self, code: str) -> str | None:
         match = CSHARP_METHOD_RE.search(code)
         return match.group(1) if match else None
@@ -500,9 +601,26 @@ class CsharpSandboxExecutor:
             properties.append(f"    public static {type_name} {property_name} {{ get; }} = new();")
             chunks.append(f"public sealed class {type_name} : CapabilityNamespaceBase")
             chunks.append("{")
-            chunks.append(
-                f'    public Task<object?> Call(string method, Dictionary<string, object?> kwargs) => CallCapability({json.dumps(namespace + ".")} + method, kwargs);'
-            )
+            if namespace == "tools":
+                chunks.append(
+                    '    public Task<object?> Call(string method, Dictionary<string, object?> kwargs) => CallCapability("tools." + method, kwargs);'
+                )
+            else:
+                chunks.append(
+                    "    public Task<object?> Call(string method, Dictionary<string, object?> kwargs)"
+                )
+                chunks.append("    {")
+                chunks.append("        return method switch")
+                chunks.append("        {")
+                for method, capability_name in sorted(grouped[namespace].items()):
+                    chunks.append(
+                        f"            {json.dumps(method)} => CallCapability({json.dumps(capability_name)}, kwargs),"
+                    )
+                chunks.append(
+                    f'            _ => throw new System.InvalidOperationException($"capability method is not declared in manifest: {namespace}.{{method}}"),'
+                )
+                chunks.append("        };")
+                chunks.append("    }")
             used_methods = {"Call"}
             for method, capability_name in sorted(grouped[namespace].items()):
                 csharp_method = self._csharp_member_name(method)
@@ -583,6 +701,10 @@ class CsharpSandboxExecutor:
 
                 public static async Task<object?> Capability(string name, Dictionary<string, object?> kwargs)
                 {{
+                    if (!Program.ManifestCapabilityNames(CurrentRequest).Contains(name))
+                    {{
+                        throw new InvalidOperationException($"Capability is not declared in manifest: {{name}}");
+                    }}
                     var payload = new Dictionary<string, object?>
                     {{
                         ["context"] = CurrentRequest.Context,
@@ -643,6 +765,31 @@ class CsharpSandboxExecutor:
                     WriteIndented = false,
                 }};
 
+                public static HashSet<string> ManifestCapabilityNames(ExecutionRequest request)
+                {{
+                    var names = new HashSet<string>();
+                    if (!request.CapabilityManifest.TryGetValue("capabilities", out var rawCapabilities))
+                    {{
+                        return names;
+                    }}
+                    if (rawCapabilities is not List<object?> capabilities)
+                    {{
+                        return names;
+                    }}
+                    foreach (var rawCapability in capabilities)
+                    {{
+                        if (rawCapability is not Dictionary<string, object?> capability)
+                        {{
+                            continue;
+                        }}
+                        if (capability.TryGetValue("name", out var rawName) && rawName is string name && name.Length > 0)
+                        {{
+                            names.Add(name);
+                        }}
+                    }}
+                    return names;
+                }}
+
                 public static async Task Main(string[] args)
                 {{
                     var stage = "bootstrap";
@@ -658,6 +805,7 @@ class CsharpSandboxExecutor:
                         request.Args = NormalizeDictionary(request.Args);
                         request.State = NormalizeDictionary(request.State);
                         request.Context = NormalizeDictionary(request.Context);
+                        request.CapabilityManifest = NormalizeDictionary(request.CapabilityManifest);
                         UserCode.CurrentRequest = request;
                         UserCode.GatewayUrl = args[1];
 

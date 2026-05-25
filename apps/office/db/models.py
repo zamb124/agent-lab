@@ -13,7 +13,7 @@ from core.db.models import Base
 class OfficeDocumentCatalog(Base):
     """Каталог документов в рамках компании и CRM namespace; владелец управляет участниками."""
 
-    __tablename__ = "office_document_catalogs"
+    __tablename__: str = "office_document_catalogs"
 
     catalog_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -27,7 +27,7 @@ class OfficeDocumentCatalog(Base):
         default=lambda: datetime.now(timezone.utc),
     )
 
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_office_catalogs_company_namespace", "company_id", "namespace"),
     )
 
@@ -35,7 +35,7 @@ class OfficeDocumentCatalog(Base):
 class OfficeCatalogMember(Base):
     """Пользователь с доступом к каталогу (владелец хранится в catalog.owner_user_id)."""
 
-    __tablename__ = "office_catalog_members"
+    __tablename__: str = "office_catalog_members"
 
     catalog_id: Mapped[str] = mapped_column(
         String(64),
@@ -53,7 +53,7 @@ class OfficeCatalogMember(Base):
 class OfficeDocumentBinding(Base):
     """Привязка файла Office (S3 / FileRecord) к компании и namespace."""
 
-    __tablename__ = "office_document_bindings"
+    __tablename__: str = "office_document_bindings"
 
     binding_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -73,7 +73,7 @@ class OfficeDocumentBinding(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
-    __table_args__ = (
+    __table_args__: tuple[Index, ...] = (
         Index("ix_office_bindings_company_namespace_created", "company_id", "namespace", "created_at"),
         Index("uq_office_bindings_company_namespace_file", "company_id", "namespace", "file_id", unique=True),
     )

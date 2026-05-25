@@ -3,7 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import TYPE_CHECKING, Literal, NotRequired, Required, TypeAlias, TypedDict, cast
+from datetime import date, datetime
+from decimal import Decimal
+from typing import (
+    TYPE_CHECKING,
+    Literal,
+    NotRequired,
+    Protocol,
+    Required,
+    TypeAlias,
+    TypedDict,
+    cast,
+)
 
 from pydantic import JsonValue as PydanticJsonValue
 from pydantic import TypeAdapter, ValidationError
@@ -13,6 +24,15 @@ if TYPE_CHECKING:
     JsonValue: TypeAlias = JsonScalar | Mapping[str, "JsonValue"] | Sequence["JsonValue"]
     JsonObject: TypeAlias = dict[str, JsonValue]
     JsonArray: TypeAlias = list[JsonValue]
+    DocxTemplateScalar: TypeAlias = JsonScalar | date | datetime | Decimal
+    DocxTemplateContextValue: TypeAlias = (
+        DocxTemplateScalar
+        | Mapping[str, "DocxTemplateContextValue"]
+        | Sequence["DocxTemplateContextValue"]
+    )
+    DocxTemplateContext: TypeAlias = Mapping[str, DocxTemplateContextValue]
+    SpeechProvider: TypeAlias = Literal["litserve", "cloud_ru", "yandex", "sber", "mock"]
+    VadProvider: TypeAlias = Literal["litserve", "silero_local", "mock"]
     OtelAttributeScalar: TypeAlias = str | bool | int | float
     OtelAttributeValue: TypeAlias = (
         OtelAttributeScalar | Sequence[str] | Sequence[bool] | Sequence[int] | Sequence[float]
@@ -23,6 +43,15 @@ else:
     JsonValue: TypeAlias = PydanticJsonValue
     JsonObject: TypeAlias = dict[str, PydanticJsonValue]
     JsonArray: TypeAlias = list[PydanticJsonValue]
+    DocxTemplateScalar: TypeAlias = JsonScalar | date | datetime | Decimal
+    DocxTemplateContextValue: TypeAlias = (
+        DocxTemplateScalar
+        | Mapping[str, "DocxTemplateContextValue"]
+        | Sequence["DocxTemplateContextValue"]
+    )
+    DocxTemplateContext: TypeAlias = Mapping[str, DocxTemplateContextValue]
+    SpeechProvider: TypeAlias = Literal["litserve", "cloud_ru", "yandex", "sber", "mock"]
+    VadProvider: TypeAlias = Literal["litserve", "silero_local", "mock"]
     OtelAttributeScalar: TypeAlias = str | bool | int | float
     OtelAttributeValue: TypeAlias = (
         OtelAttributeScalar | Sequence[str] | Sequence[bool] | Sequence[int] | Sequence[float]
@@ -88,10 +117,26 @@ ASGISendMessage: TypeAlias = (
 ASGIReceive: TypeAlias = Callable[[], Awaitable[ASGIReceiveMessage]]
 ASGISend: TypeAlias = Callable[[ASGISendMessage], Awaitable[None]]
 ASGIApp: TypeAlias = Callable[[ASGIScope, ASGIReceive, ASGISend], Awaitable[None]]
+MigrationDatabaseUrlKey: TypeAlias = Literal[
+    "shared_url",
+    "flows_url",
+    "crm_url",
+    "sync_url",
+    "rag_url",
+    "office_url",
+    "tracing_url",
+]
+
+
+class RuntimeChannel(Protocol):
+    """Минимальный контракт канала, который хранится в request context."""
+
+    name: str
 
 _JSON_VALUE_ADAPTER: TypeAdapter[PydanticJsonValue] = TypeAdapter(PydanticJsonValue)
 _JSON_OBJECT_ADAPTER: TypeAdapter[dict[str, PydanticJsonValue]] = TypeAdapter(dict[str, PydanticJsonValue])
 _JSON_ARRAY_ADAPTER: TypeAdapter[list[PydanticJsonValue]] = TypeAdapter(list[PydanticJsonValue])
+_ASGI_RECEIVE_MESSAGE_ADAPTER: TypeAdapter[ASGIReceiveMessage] = TypeAdapter(ASGIReceiveMessage)
 
 
 def require_json_value(value: object, field_name: str = "value") -> JsonValue:
@@ -140,6 +185,14 @@ def parse_json_array(data: str | bytes, field_name: str = "value") -> JsonArray:
         return cast(JsonArray, _JSON_ARRAY_ADAPTER.validate_json(data))
     except ValidationError as exc:
         raise ValueError(f"{field_name} must be a JSON array") from exc
+
+
+def require_asgi_receive_message(value: object, field_name: str = "message") -> ASGIReceiveMessage:
+    """Проверить сообщение ASGI receive на WebSocket contract."""
+    try:
+        return _ASGI_RECEIVE_MESSAGE_ADAPTER.validate_python(value)
+    except ValidationError as exc:
+        raise ValueError(f"{field_name} must be an ASGI receive message") from exc
 
 
 def otel_attribute_value_to_json_value(value: OtelAttributeValue) -> JsonValue:

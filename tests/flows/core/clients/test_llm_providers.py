@@ -16,6 +16,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.models.enums import NodeType as RuntimeNodeType
+
 
 @contextmanager
 def disable_testing_mode():
@@ -298,11 +301,15 @@ class TestGetLLMWithCustomCredentials:
                 # Bothub не добавляет special headers
                 assert "HTTP-Referer" not in client.default_headers
 
+
 class TestLlmNodeLLMConfig:
     """Тесты передачи LLM конфига из LlmNode."""
 
     @pytest.mark.asyncio
-    async def test_llm_node_passes_llm_config_to_factory(self):
+    async def test_llm_node_passes_llm_config_to_factory(
+        self,
+        container: FlowRuntimeContainer,
+    ):
         """LlmNode передает llm config в get_llm."""
         from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, NodeType
         from apps.flows.src.runtime.nodes import LlmNode
@@ -323,7 +330,8 @@ class TestLlmNodeLLMConfig:
 
         node = LlmNode(
             node_id="test_node",
-            config={"prompt": "Test prompt"},
+            config={"type": RuntimeNodeType.LLM_NODE.value, "prompt": "Test prompt"},
+            container=container,
         )
         node._node_config = node_config
 
@@ -340,19 +348,24 @@ class TestLlmNodeLLMConfig:
             clear_context()
             node._get_llm(state)
 
-            mock_get_llm.assert_called_once_with(**_expected_get_llm_kwargs(
-                model_name="gpt-4-turbo",
-                temperature=0.5,
-                provider="bothub",
-                api_key="sk-node-api-key",
-                base_url="https://bothub.chat/api/v2/openai/v1",
-                folder_id=None,
-                max_tokens=None,
-                state=state,
-            ))
+            mock_get_llm.assert_called_once_with(
+                **_expected_get_llm_kwargs(
+                    model_name="gpt-4-turbo",
+                    temperature=0.5,
+                    provider="bothub",
+                    api_key="sk-node-api-key",
+                    base_url="https://bothub.chat/api/v2/openai/v1",
+                    folder_id=None,
+                    max_tokens=None,
+                    state=state,
+                )
+            )
 
     @pytest.mark.asyncio
-    async def test_llm_node_passes_llm_config_dict(self):
+    async def test_llm_node_passes_llm_config_dict(
+        self,
+        container: FlowRuntimeContainer,
+    ):
         """LlmNode передает llm_config_dict в get_llm."""
         from apps.flows.src.runtime.nodes import LlmNode
 
@@ -366,7 +379,12 @@ class TestLlmNodeLLMConfig:
 
         node = LlmNode(
             node_id="test_node",
-            config={"prompt": "Test prompt", "llm": llm_config},
+            config={
+                "type": RuntimeNodeType.LLM_NODE.value,
+                "prompt": "Test prompt",
+                "llm": llm_config,
+            },
+            container=container,
         )
 
         state = ExecutionState(
@@ -383,16 +401,18 @@ class TestLlmNodeLLMConfig:
             clear_context()
             node._get_llm(state)
 
-            mock_get_llm.assert_called_once_with(**_expected_get_llm_kwargs(
-                model_name="claude-3",
-                temperature=0.7,
-                provider="openrouter",
-                api_key="@var:my_key",
-                base_url="@var:my_url",
-                folder_id=None,
-                max_tokens=None,
-                state=state,
-            ))
+            mock_get_llm.assert_called_once_with(
+                **_expected_get_llm_kwargs(
+                    model_name="claude-3",
+                    temperature=0.7,
+                    provider="openrouter",
+                    api_key="@var:my_key",
+                    base_url="@var:my_url",
+                    folder_id=None,
+                    max_tokens=None,
+                    state=state,
+                )
+            )
 
 
 class TestLLMModelsServiceSchedulerIdempotency:
@@ -959,12 +979,15 @@ class TestGetLLMYandex:
                 mock_settings.return_value.llm.openai = MagicMock(
                     base_url="https://api.openai.com/v1"
                 )
-                client = cast(LLMClient, get_llm(
-                    model_name="gpt://stale/yandexgpt-5.1/latest",
-                    api_key="user-key",
-                    provider="yandex",
-                    base_url="https://llm.api.cloud.yandex.net/v1",
-                ))
+                client = cast(
+                    LLMClient,
+                    get_llm(
+                        model_name="gpt://stale/yandexgpt-5.1/latest",
+                        api_key="user-key",
+                        provider="yandex",
+                        base_url="https://llm.api.cloud.yandex.net/v1",
+                    ),
+                )
                 assert client.default_headers["x-folder-id"] == "platform-folder"
                 assert client.model == "gpt://platform-folder/yandexgpt-5.1/latest"
 

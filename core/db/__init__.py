@@ -10,7 +10,6 @@ Database - работа с базой данных.
 """
 
 from core.db.base_repository import BaseRepository
-from core.db.base_sql_repository import BaseSQLRepository
 from core.db.database import (
     close_db,
     get_db,
@@ -38,6 +37,5 @@ __all__ = [
     "get_service_by_name",
     "Storage",
     "BaseRepository",
-    "BaseSQLRepository",
     "get_rowcount",
 ]

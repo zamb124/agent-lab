@@ -16,7 +16,7 @@ from core.models.identity_models import Company, User
 
 
 class MemoryContextSource:
-    name = "memory"
+    name: str = "memory"
 
     async def collect(self, request: LLMContextSourceRequest) -> list[LLMContextBlock]:
         return [
@@ -75,12 +75,12 @@ def test_source_registry_rejects_duplicate_source_names() -> None:
     source = StaticLLMContextSource("same", [])
 
     with pytest.raises(ValueError, match="Duplicate"):
-        LLMContextSourceRegistry([source, source])
+        _ = LLMContextSourceRegistry([source, source])
 
 
 def test_static_source_rejects_invalid_source_name() -> None:
     with pytest.raises(ValueError, match="source name"):
-        StaticLLMContextSource("bad name", [])
+        _ = StaticLLMContextSource("bad name", [])
 
 
 @pytest.mark.asyncio
@@ -96,7 +96,7 @@ async def test_identity_profile_source_reads_explicit_context_profile_fields() -
         active_company=Company(
             company_id="c1",
             name="Company",
-            metadata={LLM_CONTEXT_PROFILE_METADATA_KEY: {"content": "Company sells SaaS."}},
+            metadata={LLM_CONTEXT_PROFILE_METADATA_KEY: "Company sells SaaS."},
         ),
         metadata={LLM_CONTEXT_PROFILE_METADATA_KEY: "Runtime project is context layer."},
         channel="test",

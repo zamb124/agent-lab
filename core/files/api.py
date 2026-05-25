@@ -11,7 +11,7 @@
 import mimetypes
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 from urllib.parse import urlparse
 
 import httpx
@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 _DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 _UPLOAD_READ_CHUNK_BYTES = 1024 * 1024  # 1 MB
+
 
 async def _read_upload_with_limit(file: UploadFile, max_bytes: int) -> bytes:
     """
@@ -72,6 +73,7 @@ def _safe_original_name(raw: str | None) -> str:
         return "file"
     name = Path(raw).name.strip()
     return name[:255] if name and name != "." else "file"
+
 
 def _is_http_url(url: str) -> bool:
     if url == "":
@@ -108,10 +110,9 @@ def build_file_api_router(
     router = APIRouter(tags=["files"])
     download_url_prefix = f"{service_api_prefix}/files/download"
 
-    @router.post("/", response_model=FileResponse, summary="Загрузить файл")
     async def upload_file(
-        file: UploadFile = File(...),
-        public: str | None = Form(None),
+        file: Annotated[UploadFile, File()],
+        public: Annotated[str | None, Form()] = None,
     ) -> FileResponse:
         settings = get_settings()
         if not settings.s3.enabled or not settings.s3.default_bucket:
@@ -165,12 +166,6 @@ def build_file_api_router(
         logger.info(f"Файл загружен: {file_record.file_id} ({original_name}, {len(data)} байт)")
         return FileResponse.from_record(file_record)
 
-    @router.get(
-        "/download/{file_id}",
-        response_class=StreamingResponse,
-        summary="Скачать файл",
-        response_model=None,
-    )
     async def download_file(file_id: str, request: Request) -> StreamingResponse | Response:
         repo = get_file_repo()
         file_record = await repo.get(file_id)
@@ -260,11 +255,6 @@ def build_file_api_router(
             media_type=response_content_type,
         )
 
-    @router.get(
-        "/{file_id}/preview",
-        response_model=FileReadPreviewResponse,
-        summary="Превью извлечённого текста файла",
-    )
     async def get_file_text_preview(file_id: str) -> FileReadPreviewResponse:
         repo = get_file_repo()
         file_record = await repo.get(file_id)
@@ -280,7 +270,6 @@ def build_file_api_router(
         except FileReadError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.get("/{file_id}", response_model=FileResponse, summary="Метаданные файла")
     async def get_file_metadata(file_id: str) -> FileResponse:
         repo = get_file_repo()
         file_record = await repo.get(file_id)
@@ -290,4 +279,33 @@ def build_file_api_router(
         _ensure_file_record_access(file_record)
         return FileResponse.from_record(file_record)
 
+    router.add_api_route(
+        "/",
+        endpoint=upload_file,
+        methods=["POST"],
+        response_model=FileResponse,
+        summary="Загрузить файл",
+    )
+    router.add_api_route(
+        "/download/{file_id}",
+        endpoint=download_file,
+        methods=["GET"],
+        response_class=StreamingResponse,
+        summary="Скачать файл",
+        response_model=None,
+    )
+    router.add_api_route(
+        "/{file_id}/preview",
+        endpoint=get_file_text_preview,
+        methods=["GET"],
+        response_model=FileReadPreviewResponse,
+        summary="Превью извлечённого текста файла",
+    )
+    router.add_api_route(
+        "/{file_id}",
+        endpoint=get_file_metadata,
+        methods=["GET"],
+        response_model=FileResponse,
+        summary="Метаданные файла",
+    )
     return router

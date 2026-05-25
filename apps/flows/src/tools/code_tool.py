@@ -22,20 +22,10 @@ from apps.flows.src.tools.base import (
     ToolResult,
 )
 from apps.flows.src.tools.json_schema_parameters import validate_tool_args_against_parameters_schema
-from core.config.testing import is_testing
 from core.types import JsonObject, require_json_object, require_json_value
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
-
-
-def _builtin_delegate_tool_id(code: str) -> str | None:
-    first_line = code.lstrip().splitlines()[0] if code.strip() else ""
-    marker = "# platform:builtin:"
-    if not first_line.startswith(marker):
-        return None
-    tool_id = first_line.removeprefix(marker).strip()
-    return tool_id or None
 
 
 class CodeTool(BaseTool):
@@ -113,14 +103,6 @@ class CodeTool(BaseTool):
         )
 
         container = cast(FlowRuntimeContainer | None, self.container)
-        delegated_tool_id = _builtin_delegate_tool_id(self._code)
-        if delegated_tool_id and is_testing() and container is not None:
-            container.tool_registry.register_builtin_tools()
-            builtin_tool = container.tool_registry.get(delegated_tool_id)
-            if builtin_tool is None:
-                raise RuntimeError(f"Builtin tool not found: {delegated_tool_id}")
-            return await builtin_tool.run(full_args, state)
-
         if container is None:
             raise RuntimeError(
                 f"CodeTool '{self.name}' requires FlowContainer to execute remote code"

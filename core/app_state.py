@@ -42,6 +42,15 @@ class AuthRequestState(TraceRequestState, Protocol):
     token_data: TokenData | None
 
 
+def get_request_token_data(request: Request) -> TokenData | None:
+    token_data = getattr(request.state, "token_data", None)
+    if token_data is None:
+        return None
+    if not isinstance(token_data, TokenData):
+        raise RuntimeError("AuthMiddleware did not populate request.state.token_data")
+    return token_data
+
+
 @runtime_checkable
 class SessionTokenRequestState(Protocol):
     session_token_data: TokenData

@@ -31,14 +31,14 @@ def classify_content(text: str) -> ContentKind:
     decoded_ok = False
     if looks_b64:
         try:
-            base64.b64decode(compact, validate=True)
+            _ = base64.b64decode(compact, validate=True)
             decoded_ok = True
         except (ValueError, binascii.Error):
             decoded_ok = False
 
     if has_md and looks_b64 and decoded_ok:
         raise FileWriteError(
-            "Неоднозначный контент: похож одновременно на markdown и на base64. "
+            "Неоднозначный контент: похож одновременно на markdown и на base64. " +
             "Укажите content_mode явно: markdown, base64 или raw."
         )
     if looks_b64 and decoded_ok:
@@ -55,6 +55,4 @@ def normalize_str_content(content: SourceContent, encoding: str) -> tuple[str, b
     """Возвращает (строка, was_bytes)."""
     if isinstance(content, bytes):
         return content.decode(encoding), True
-    if not isinstance(content, str):
-        raise TypeError(f"content must be str or bytes, got {type(content).__name__}")
     return content, False

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import asyncio
 
-from apps.voice.services.voice_client_channel import VoiceClientChannel
+from apps.voice.services.voice_client_channel import VoiceSynthesisChannel
 from apps.voice.services.voice_session import VoiceSession
 from core.clients.tts_streaming import BaseTTSStreamer
 from core.clients.voice_chunker import VoiceChunker
@@ -44,7 +44,7 @@ async def run_speak_worker(
     session: VoiceSession,
     tts_streamer: BaseTTSStreamer,
     *,
-    channel: VoiceClientChannel,
+    channel: VoiceSynthesisChannel,
     chunker: VoiceChunker | None = None,
 ) -> None:
     """Читать ``synthesis_queue`` и отправлять клиенту PCM через ``channel``.
@@ -70,7 +70,7 @@ async def run_speak_worker(
             )
             continue
 
-        if not isinstance(text_piece, str) or text_piece == "":
+        if text_piece == "":
             continue
 
         await _announce_tts_started(session=session, channel=channel)
@@ -99,7 +99,7 @@ async def _flush_and_synthesize(
     session: VoiceSession,
     tts_streamer: BaseTTSStreamer,
     chunker: VoiceChunker,
-    channel: VoiceClientChannel,
+    channel: VoiceSynthesisChannel,
 ) -> None:
     """Флашим остаток и отправляем синтез по сегментам (лимит чанкера)."""
     tails = chunker.flush()
@@ -128,7 +128,7 @@ async def _flush_and_synthesize(
 
 
 async def _announce_tts_started(
-    *, session: VoiceSession, channel: VoiceClientChannel
+    *, session: VoiceSession, channel: VoiceSynthesisChannel
 ) -> None:
     if session.is_tts_active:
         return
@@ -137,7 +137,7 @@ async def _announce_tts_started(
 
 
 async def _announce_tts_stopped(
-    *, session: VoiceSession, channel: VoiceClientChannel
+    *, session: VoiceSession, channel: VoiceSynthesisChannel
 ) -> None:
     if not session.is_tts_active:
         return

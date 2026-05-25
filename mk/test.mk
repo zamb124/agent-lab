@@ -1,13 +1,22 @@
-.PHONY: test test-all test-up test-down test-reset test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser
+.PHONY: test test-all test-static test-up test-down test-reset test-cov test-cov-all test-cov-report test-browser test-unit test-ui test-ui-doc test-ui-components test-frontend-core test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser
 
 WORKERS ?= 5
 PYTEST_COMMAND_TIMEOUT_SECONDS ?= 600
 PYTEST_MAX_WORKER_RESTART ?= 0
 RUN_UI_IN_TEST ?= 0
 DOCKER_COMPOSE_PULL ?= never
+PYTHON_CHECK_PATHS ?= apps core
+RUFF_CHECK_ARGS ?= $(PYTHON_CHECK_PATHS)
+BASEDPYRIGHT_CHECK_ARGS ?= --level warning --warnings $(PYTHON_CHECK_PATHS)
 
 # E2E UI (pytest + Playwright) и старый каталог browser — не гонять в unit/cov без инфраструктуры
 _PYTEST_IGNORE_UI := --ignore=tests/frontend/browser --ignore=tests/ui
+
+test-static:
+	@echo "=== Python static checks: ruff ==="
+	uv run ruff check $(RUFF_CHECK_ARGS)
+	@echo "=== Python static checks: basedpyright ==="
+	uv run basedpyright $(BASEDPYRIGHT_CHECK_ARGS)
 
 test-up: runtime-bootstrap
 	docker-compose -f docker-compose-test.yaml up -d --pull $(DOCKER_COMPOSE_PULL) postgres-test redis-test minio-test onlyoffice-documentserver provider_litserve test-a2a-agent livekit-test livekit-egress-test livekit-cli-test loki-test tempo-test alloy-test grafana-test
@@ -77,8 +86,11 @@ test-frontend-core-browser: runtime-bootstrap
 test-frontend-core: test-frontend-core-canon test-frontend-core-unit test-frontend-core-browser
 	@echo "core/frontend: 3/3 OK"
 
-# Полный запуск: фундамент UI -> unit параллельно -> retry упавших -> browser
-test: test-frontend-core test-up
+# Полный запуск: Python static -> фундамент UI -> unit параллельно -> retry упавших -> browser
+test:
+	@$(MAKE) --no-print-directory test-static
+	@$(MAKE) --no-print-directory test-frontend-core
+	@$(MAKE) --no-print-directory test-up
 	@echo "=== 1/3 Запуск unit/API тестов в $(WORKERS) воркерах ==="
 	@set +e; \
 	phase1_rc=0; \
@@ -110,7 +122,10 @@ test: test-frontend-core test-up
 		exit 1; \
 	fi
 
-test-all: test-frontend-core test-up
+test-all:
+	@$(MAKE) --no-print-directory test-static
+	@$(MAKE) --no-print-directory test-frontend-core
+	@$(MAKE) --no-print-directory test-up
 	@echo "=== 1/3 Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
 	@set +e; \
 	phase1_rc=0; \

@@ -9,11 +9,16 @@ from typing import ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from core.integrations.mcp import (
+    MCPDiscoveredTool,
+    mcp_parameters_schema_hash,
+    mcp_tool_reference_id,
+    validate_mcp_output_schema,
+    validate_mcp_parameters_schema,
+)
 from core.types import JsonObject, JsonValue, require_json_object
 
 from .enums import CodeMode, ReactToolRole
-
-Permission = str | list[str] | None
 
 
 class ToolReference(BaseModel):
@@ -70,7 +75,7 @@ class ToolReference(BaseModel):
         label = t if t else self.tool_id.strip()
         if not label:
             raise ValueError("tool_id must be non-empty for display name")
-        object.__setattr__(self, "name", label)
+        self.name = label
         return self
 
     tags: list[str] = Field(
@@ -91,6 +96,11 @@ class ToolReference(BaseModel):
     )
     mcp_server_id: str | None = Field(default=None, description="ID MCP сервера (для MCP тулов)")
     mcp_tool_name: str | None = Field(default=None, description="Имя tool на MCP сервере")
+    mcp_schema_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    mcp_schema_version: str | None = Field(default=None, min_length=1)
+    mcp_output_schema: JsonObject | None = None
+    mcp_annotations: JsonObject | None = None
+    mcp_execution: JsonObject | None = None
 
     def effective_parameters_schema(self) -> JsonObject:
         """Canonical JSON Schema параметров для LLM."""
@@ -100,11 +110,89 @@ class ToolReference(BaseModel):
             copy.deepcopy(self.parameters_schema),
             f"tool.{self.tool_id}.parameters_schema",
         )
+        if self.code_mode == CodeMode.MCP_TOOL:
+            return validate_mcp_parameters_schema(
+                schema,
+                f"ToolReference '{self.tool_id}'",
+            )
         if schema.get("type") != "object" or not isinstance(schema.get("properties"), dict):
             raise ValueError(
                 f"ToolReference '{self.tool_id}' parameters_schema must be object JSON Schema"
             )
         return schema
+
+    def require_mcp_contract(self) -> MCPDiscoveredTool:
+        if self.code_mode != CodeMode.MCP_TOOL:
+            raise ValueError(f"ToolReference '{self.tool_id}' is not an MCP tool")
+
+        raw_server_id = self.mcp_server_id
+        if raw_server_id is None:
+            raise ValueError(f"ToolReference '{self.tool_id}' requires mcp_server_id")
+        server_id = raw_server_id.strip()
+        if not server_id:
+            raise ValueError(f"ToolReference '{self.tool_id}' requires mcp_server_id")
+
+        raw_tool_name = self.mcp_tool_name
+        if raw_tool_name is None:
+            raise ValueError(f"ToolReference '{self.tool_id}' requires mcp_tool_name")
+        tool_name = raw_tool_name.strip()
+        if not tool_name:
+            raise ValueError(f"ToolReference '{self.tool_id}' requires mcp_tool_name")
+
+        expected_tool_id = mcp_tool_reference_id(server_id, tool_name)
+        if self.tool_id != expected_tool_id:
+            raise ValueError(
+                f"ToolReference '{self.tool_id}' MCP ids must match {expected_tool_id!r}"
+            )
+
+        schema_hash = self.mcp_schema_hash
+        if schema_hash is None:
+            raise ValueError(f"ToolReference '{self.tool_id}' requires mcp_schema_hash")
+
+        raw_schema_version = self.mcp_schema_version
+        if raw_schema_version is None:
+            raise ValueError(f"ToolReference '{self.tool_id}' requires mcp_schema_version")
+        schema_version = raw_schema_version.strip()
+        if not schema_version:
+            raise ValueError(f"ToolReference '{self.tool_id}' requires mcp_schema_version")
+
+        parameters_schema = self.effective_parameters_schema()
+        expected_hash = mcp_parameters_schema_hash(parameters_schema)
+        if schema_hash != expected_hash:
+            raise ValueError(
+                f"ToolReference '{self.tool_id}' mcp_schema_hash does not match parameters_schema"
+            )
+
+        output_schema = (
+            validate_mcp_output_schema(
+                self.mcp_output_schema,
+                f"ToolReference '{self.tool_id}'",
+            )
+            if self.mcp_output_schema is not None
+            else None
+        )
+
+        return MCPDiscoveredTool(
+            server_id=server_id,
+            tool_name=tool_name,
+            title=self.title,
+            description=self.description,
+            icons=None,
+            parameters_schema=parameters_schema,
+            output_schema=output_schema,
+            execution=self.mcp_execution,
+            annotations=self.mcp_annotations,
+            meta=None,
+            schema_hash=schema_hash,
+            schema_version=schema_version,
+        )
+
+    @model_validator(mode="after")
+    def validate_mcp_contract(self) -> Self:
+        if self.code_mode != CodeMode.MCP_TOOL:
+            return self
+        _ = self.require_mcp_contract()
+        return self
 
     def to_registry_format(self) -> JsonObject:
         """Преобразует в формат registry API."""

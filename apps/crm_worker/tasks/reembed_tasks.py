@@ -15,8 +15,8 @@ from apps.crm.db.models import CRMTask
 from apps.crm.scheduled_task_constants import CRM_REEMBED_STALE_DOCUMENTS_TASK_NAME
 from apps.crm.services.task_service import ALL_NAMESPACES_TASK_KEY
 from apps.crm_worker.broker import broker
+from core.rag.models import RAGReembedTickResult
 from core.rag.reembed_stale_documents import execute_reembed_tick
-from core.types import JsonObject
 
 
 @broker.task(
@@ -28,7 +28,7 @@ from core.types import JsonObject
 async def crm_reembed_stale_documents_tick(
     schedule_task_id: str,
     company_id: str | None = None,
-) -> JsonObject:
+) -> RAGReembedTickResult:
     """
     ``company_id`` приходит из ``SchedulerService.create`` в ``task.payload``
     для всех cron-задач; reembed группирует чанки по ``vector_documents.company_id``.
@@ -39,18 +39,11 @@ async def crm_reembed_stale_documents_tick(
         channel="crm_worker",
         schedule_task_id=schedule_task_id,
     )
-    raw_by_company = result.get("by_company_written")
-    by_company: dict[str, int] = {}
-    if isinstance(raw_by_company, dict):
-        for k, v in raw_by_company.items():
-            if isinstance(v, int):
-                by_company[k] = v
 
     container = get_crm_container()
     repo = container.task_repository
     now = datetime.now(timezone.utc)
-    skipped_flag = result.get("skipped") is True
-    for cid, cnt in sorted(by_company.items()):
+    for cid, cnt in sorted(result["by_company_written"].items()):
         if cnt <= 0:
             continue
         task_row_id = str(uuid.uuid4())
@@ -67,7 +60,7 @@ async def crm_reembed_stale_documents_tick(
                 data={
                     "schedule_task_id": schedule_task_id,
                     "chunks_reembedded": cnt,
-                    "skipped": skipped_flag,
+                    "skipped": result["skipped"],
                 },
                 started_at=now,
                 completed_at=now,

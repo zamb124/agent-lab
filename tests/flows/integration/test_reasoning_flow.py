@@ -9,6 +9,7 @@
 """
 
 import uuid
+
 import pytest
 
 INLINE_CALCULATOR = {

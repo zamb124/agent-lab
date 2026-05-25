@@ -6,10 +6,13 @@ HTTP-сессии идут в локальный stub (`tests.fixtures.mcp_http_
 """
 
 import uuid
+
 import httpx
 import pytest
-from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError, clear_mcp_client_cache
+
+from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
+from core.integrations.mcp import MCP_PROTOCOL_VERSION, MCPToolDefinition
 
 
 class TestMCPJsonrpcBodyParse:
@@ -47,19 +50,13 @@ def _local_mcp_config(url: str, server_id: str = "local-mcp-http") -> MCPServerC
 class TestMCPClientHTTP:
     """Тесты MCP клиента против локального HTTP stub."""
 
-    @pytest.fixture(autouse=True)
-    def cleanup_cache(self):
-        """Очищаем кэш клиентов перед каждым тестом."""
-        clear_mcp_client_cache()
-        yield
-        clear_mcp_client_cache()
-
     @pytest.mark.asyncio
     async def test_initialize_real_server(self, local_mcp_http_url: str):
         """Инициализация сессии на локальном MCP HTTP."""
         client = MCPClient(_local_mcp_config(local_mcp_http_url), timeout=10.0)
         result = await client.initialize()
         assert result is not None
+        assert result.protocol_version == MCP_PROTOCOL_VERSION
         assert client._initialized is True
 
     @pytest.mark.asyncio
@@ -70,8 +67,11 @@ class TestMCPClientHTTP:
         assert isinstance(tools, list)
         assert len(tools) > 0
         for tool in tools:
-            assert tool.name
-            print(f"Tool: {tool.name} - {tool.description}")
+            assert tool.tool_name
+            assert tool.parameters_schema["type"] == "object"
+            assert len(tool.schema_hash) == 64
+            assert tool.schema_version == MCP_PROTOCOL_VERSION
+            print(f"Tool: {tool.tool_name} - {tool.description}")
 
     @pytest.mark.asyncio
     async def test_call_tool_handles_response(self, local_mcp_http_url: str):
@@ -81,7 +81,7 @@ class TestMCPClientHTTP:
         assert len(tools) > 0
         first_tool = tools[0]
         try:
-            result = await client.call_tool(first_tool.name, {"libraryName": "react"})
+            result = await client.call_tool(first_tool.tool_name, {"libraryName": "react"})
         except httpx.ReadTimeout as exc:
             raise AssertionError("MCP stub не ответил в отведённое время") from exc
         assert result is not None
@@ -90,6 +90,29 @@ class TestMCPClientHTTP:
         text = result.get_text()
         assert isinstance(text, str)
         print(f"Tool call result (is_error={result.is_error}): {text[:200]}...")
+
+    @pytest.mark.asyncio
+    async def test_require_tool_contract_detects_stale_schema(self, local_mcp_http_url: str):
+        """Schema hash/version mismatch fails explicitly before tools/call."""
+        client = MCPClient(_local_mcp_config(local_mcp_http_url), timeout=10.0)
+        tools = await client.list_tools()
+        first_tool = tools[0]
+        with pytest.raises(MCPClientError, match="schema_hash mismatch"):
+            await client.require_tool_contract(
+                first_tool.tool_name,
+                expected_schema_hash="0" * 64,
+                expected_schema_version=first_tool.schema_version,
+            )
+
+    def test_wire_tool_rejects_platform_shape(self):
+        """MCP wire contract accepts inputSchema only, not platform aliases."""
+        with pytest.raises(ValueError, match="inputSchema"):
+            MCPToolDefinition.from_wire(
+                {
+                    "name": "bad_tool",
+                    "parameters_schema": {"type": "object", "properties": {}},
+                }
+            )
 
     @pytest.mark.asyncio
     async def test_invalid_tool_returns_error(self, local_mcp_http_url: str):
@@ -135,6 +158,10 @@ class TestMCPSyncAPI:
         assert sync_data["tools_count"] > 0
         tools = sync_data["tools"]
         assert len(tools) > 0
+        assert tools[0]["parameters_schema"]["type"] == "object"
+        assert len(tools[0]["schema_hash"]) == 64
+        assert tools[0]["schema_version"] == MCP_PROTOCOL_VERSION
+        assert "input_schema" not in tools[0]
         tool_names = [t["name"] for t in tools]
         print(f"Synced {len(tools)} tools: {tool_names}")
         tools_resp = await client.get("/flows/api/v1/tools/all")

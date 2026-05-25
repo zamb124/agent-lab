@@ -8,6 +8,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.models.base import StrictBaseModel
 from core.types import JsonObject
 
 
@@ -27,6 +28,21 @@ class PaymentProviderType(str, Enum):
     YOOMONEY = "yoomoney"
     YUKASSA = "yukassa"
     GRANT = "grant"
+
+
+class YooMoneyWebhookPayload(StrictBaseModel):
+    """HTTP-уведомление YooMoney P2P incoming."""
+
+    notification_type: str
+    operation_id: str
+    amount: str
+    currency: str
+    datetime: str
+    sender: str
+    codepro: str
+    sha1_hash: str
+    label: str
+    test_notification: str | None = None
 
 
 class Transaction(BaseModel):
@@ -158,9 +174,7 @@ class PaymentNotification(BaseModel):
         default=None, title="ID транзакции", description="ID транзакции в нашей системе"
     )
     external_payment_id: str | None = Field(default=None, title="ID платежа у провайдера")
-    raw_data: JsonObject = Field(
-        default_factory=dict, title="Сырые данные", description="Полные данные webhook для отладки"
-    )
+    raw_data: YooMoneyWebhookPayload = Field(title="Сырые данные", description="Полные данные webhook")
     processed: bool = Field(
         default=False, title="Обработано", description="Было ли обработано это уведомление"
     )

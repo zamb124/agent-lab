@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
-from apps.sync.models.messages import MessageContentType
+from apps.sync.models.messages import (
+    CallBoundaryContent,
+    MessageContentModel,
+    MessageContentType,
+    TextPlainContent,
+)
 
 
 @dataclass(frozen=True)
@@ -25,39 +29,38 @@ def _truncate(text: str, max_len: int) -> str:
     return text[: max_len - 1] + "…"
 
 
-def lane_preview_from_content_row(content_type: str, data: dict[str, Any]) -> str:
+def lane_preview_from_content(content: MessageContentModel) -> str:
     """Текст превью из первого блока контента последнего сообщения."""
-    if content_type == MessageContentType.TEXT_PLAIN.value:
-        body = data.get("body")
-        if not isinstance(body, str):
-            raise ValueError("text/plain: поле body должно быть строкой.")
-        stripped = body.strip()
+    if content.type == MessageContentType.TEXT_PLAIN:
+        if not isinstance(content.data, TextPlainContent):
+            raise ValueError("text/plain: ожидается TextPlainContent.")
+        stripped = content.data.body.strip()
         if stripped == "":
             return ""
         return _truncate(stripped, 120)
-    if content_type == MessageContentType.CODE_BLOCK.value:
+    if content.type == MessageContentType.CODE_BLOCK:
         return "[Код]"
-    if content_type == MessageContentType.MOCK_IMAGE.value:
+    if content.type == MessageContentType.MOCK_IMAGE:
         return "[Изображение]"
-    if content_type == MessageContentType.FILE_IMAGE.value:
+    if content.type == MessageContentType.FILE_IMAGE:
         return "[Фото]"
-    if content_type == MessageContentType.FILE_DOCUMENT.value:
+    if content.type == MessageContentType.FILE_DOCUMENT:
         return "[Файл]"
-    if content_type == MessageContentType.FILE_AUDIO.value:
+    if content.type == MessageContentType.FILE_AUDIO:
         return "[Аудио]"
-    if content_type == MessageContentType.FILE_VIDEO.value:
+    if content.type == MessageContentType.FILE_VIDEO:
         return "[Видео]"
-    if content_type == MessageContentType.CALL_TRANSCRIPT.value:
+    if content.type == MessageContentType.CALL_TRANSCRIPT:
         return "[Транскрипт звонка]"
-    if content_type == MessageContentType.CALL_BOUNDARY.value:
-        phase = data.get("phase")
-        if phase == "started":
+    if content.type == MessageContentType.CALL_BOUNDARY:
+        if not isinstance(content.data, CallBoundaryContent):
+            raise ValueError("call/boundary: ожидается CallBoundaryContent.")
+        if content.data.phase == "started":
             return "[Звонок начался]"
-        if phase == "ended":
+        if content.data.phase == "ended":
             return "[Звонок завершён]"
-        return "[Звонок]"
-    if content_type == MessageContentType.GIT_REFERENCE.value:
+    if content.type == MessageContentType.GIT_REFERENCE:
         return "[Git]"
-    if content_type == MessageContentType.CUSTOM_TOOL_RESPONSE.value:
+    if content.type == MessageContentType.CUSTOM_TOOL_RESPONSE:
         return "[Инструмент]"
-    raise ValueError(f"Неизвестный тип контента для превью: {content_type!r}.")
+    raise ValueError(f"Неизвестный тип контента для превью: {content.type.value!r}.")

@@ -7,7 +7,7 @@
 # Инициализируем settings
 from apps.rag_worker.config import get_settings
 
-get_settings()
+_ = get_settings()
 
 # Импортируем worker app
 # Регистрируем startup/shutdown события

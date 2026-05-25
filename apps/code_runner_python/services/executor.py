@@ -23,6 +23,7 @@ from core.capabilities import (
     CodeValidationResponse,
     code_execution_failed_response,
     code_validation_failed_response,
+    verify_execution_context,
 )
 from core.config import get_settings
 from core.tracing.operation_span import traced_operation
@@ -191,6 +192,9 @@ class PythonSandboxExecutor:
         _ = self._worker_path.write_text(self._worker_source(), encoding="utf-8")
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
+        security_error = self._verify_execution_request(request)
+        if security_error is not None:
+            return security_error
         if request.language != "python":
             return self._failed_response(
                 request=request,
@@ -208,6 +212,9 @@ class PythonSandboxExecutor:
                 "platform.code_runner.kind": request.kind,
                 "platform.code_runner.entrypoint": request.entrypoint or "<first_function>",
                 "platform.code_runner.runtime": "warm_worker_pool",
+                "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
             },
         ):
             try:
@@ -223,6 +230,9 @@ class PythonSandboxExecutor:
                 )
 
     async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
+        security_error = self._verify_validation_request(request)
+        if security_error is not None:
+            return security_error
         if request.language != "python":
             return self._failed_validation_response(
                 request=request,
@@ -240,6 +250,9 @@ class PythonSandboxExecutor:
                 "platform.code_runner.kind": request.kind,
                 "platform.code_runner.entrypoint": request.entrypoint or "<first_function>",
                 "platform.code_runner.runtime": "warm_worker_pool",
+                "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
             },
         ):
             try:
@@ -272,6 +285,38 @@ class PythonSandboxExecutor:
         if raw is None:
             return max(2, min(8, (os.cpu_count() or 2)))
         return max(1, int(raw))
+
+    def _verify_execution_request(
+        self,
+        request: CodeExecutionRequest,
+    ) -> CodeExecutionResponse | None:
+        try:
+            verify_execution_context(request.context)
+        except Exception as exc:
+            return self._failed_response(
+                request=request,
+                stage="security",
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                traceback_text="".join(traceback.format_exception(exc)),
+            )
+        return None
+
+    def _verify_validation_request(
+        self,
+        request: CodeValidationRequest,
+    ) -> CodeValidationResponse | None:
+        try:
+            verify_execution_context(request.context)
+        except Exception as exc:
+            return self._failed_validation_response(
+                request=request,
+                stage="security",
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                traceback_text="".join(traceback.format_exception(exc)),
+            )
+        return None
 
     def _failed_response(
         self,
@@ -331,6 +376,7 @@ class PythonSandboxExecutor:
             import math
             import sys
             import traceback
+            import types
             import typing
             import urllib.error
             import urllib.request
@@ -338,6 +384,20 @@ class PythonSandboxExecutor:
             gateway_url = sys.argv[1]
             capability_call_path = {json.dumps(CAPABILITY_CALL_PATH)}
             compiled_cache = {{}}
+            allowed_import_roots = {{
+                "__future__", "asyncio", "ast", "base64", "collections", "datetime", "decimal",
+                "functools", "hashlib", "html", "itertools", "json", "math", "operator",
+                "random", "re", "statistics", "string", "time", "typing", "uuid",
+            }}
+            forbidden_builtin_names = {{
+                "breakpoint", "compile", "delattr", "dir", "eval", "exec", "getattr",
+                "globals", "hasattr", "input", "locals", "memoryview", "open", "setattr",
+                "vars",
+            }}
+
+
+            class SandboxPolicyViolation(PermissionError):
+                pass
 
 
             class CapabilityInterrupt(Exception):
@@ -364,34 +424,24 @@ class PythonSandboxExecutor:
                     super().__init__(self.body.get("question", "Flow interrupted"))
 
 
-            class AttrDict(dict):
-                def __getattr__(self, name):
-                    try:
-                        return self[name]
-                    except KeyError as exc:
-                        raise AttributeError(name) from exc
-
-                def __setattr__(self, name, value):
-                    self[name] = value
-
-                def __delattr__(self, name):
-                    try:
-                        del self[name]
-                    except KeyError as exc:
-                        raise AttributeError(name) from exc
-
-
-            def _wrap_attr(value):
-                if isinstance(value, AttrDict):
-                    return value
-                if isinstance(value, dict):
-                    return AttrDict({{key: _wrap_attr(item) for key, item in value.items()}})
-                if isinstance(value, list):
-                    return [_wrap_attr(item) for item in value]
-                return value
+            def manifest_capability_names():
+                manifest = current_request.get("capability_manifest") or {{}}
+                capabilities = manifest.get("capabilities") or []
+                names = set()
+                for item in capabilities:
+                    if not isinstance(item, dict):
+                        continue
+                    name = item.get("name")
+                    if isinstance(name, str) and name:
+                        names.add(name)
+                return names
 
 
             async def capability(capability_name, **kwargs):
+                if capability_name not in manifest_capability_names():
+                    raise SandboxPolicyViolation(
+                        f"Capability is not declared in manifest: {{capability_name}}"
+                    )
                 payload = json.dumps({{
                     "context": current_request["context"],
                     "name": capability_name,
@@ -423,30 +473,45 @@ class PythonSandboxExecutor:
                 returned_state = decoded.get("state")
                 if isinstance(returned_state, dict):
                     current_request["state"].clear()
-                    current_request["state"].update(_wrap_attr(returned_state))
+                    current_request["state"].update(returned_state)
                 if decoded.get("status") == "interrupt":
                     raise CapabilityInterrupt(decoded)
                 return decoded.get("result")
 
 
-            class CapabilityNamespace:
-                def __init__(self, namespace, mapping):
-                    self._namespace = namespace
-                    self._mapping = dict(mapping)
-
-                def __getattr__(self, method):
-                    capability_name = self._mapping.get(method)
-                    if capability_name is None:
-                        raise AttributeError(f"Unknown capability method: {{self._namespace}}.{{method}}")
-
-                    async def call(**kwargs):
-                        return await capability(capability_name, **kwargs)
-
-                    return call
-
-                async def call(self, method, **kwargs):
-                    capability_name = self._mapping.get(method, f"{{self._namespace}}.{{method}}")
+            def sdk_call_factory(capability_name):
+                async def sdk_call(**kwargs):
                     return await capability(capability_name, **kwargs)
+
+                return sdk_call
+
+
+            def sdk_namespace_call_factory(namespace, mapping):
+                async def namespace_call(method, **kwargs):
+                    if namespace == "tools":
+                        if not isinstance(method, str) or not method:
+                            raise AttributeError("Tool capability method must be a non-empty string")
+                        capability_name = f"tools.{{method}}"
+                    else:
+                        capability_name = mapping.get(method)
+                        if capability_name is None:
+                            raise AttributeError(f"Unknown capability method: {{namespace}}.{{method}}")
+                    return await capability(capability_name, **kwargs)
+
+                return namespace_call
+
+
+            def build_capability_namespace(namespace, mapping):
+                attributes = {{
+                    "call": sdk_namespace_call_factory(namespace, dict(mapping)),
+                }}
+                for method, capability_name in mapping.items():
+                    if method == "call":
+                        raise SandboxPolicyViolation(
+                            f"Capability SDK method name is reserved: {{namespace}}.{{method}}"
+                        )
+                    attributes[method] = sdk_call_factory(capability_name)
+                return types.SimpleNamespace(**attributes)
 
 
             def build_sdk_namespaces():
@@ -467,18 +532,12 @@ class PythonSandboxExecutor:
                         method = name.split(".", 1)[1]
                     namespace_maps.setdefault(namespace, {{}})[method] = name
                 return {{
-                    namespace: CapabilityNamespace(namespace, mapping)
+                    namespace: build_capability_namespace(namespace, mapping)
                     for namespace, mapping in namespace_maps.items()
                 }}
 
 
             def build_namespace():
-                allowed_import_roots = {{
-                    "__future__", "asyncio", "ast", "base64", "collections", "datetime", "decimal",
-                    "functools", "hashlib", "html", "itertools", "json", "math", "operator",
-                    "random", "re", "statistics", "string", "time", "typing", "uuid",
-                }}
-
                 def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
                     if level != 0:
                         raise ImportError("relative imports are not allowed in code runner")
@@ -512,16 +571,12 @@ class PythonSandboxExecutor:
                     "callable": callable,
                     "chr": chr,
                     "classmethod": classmethod,
-                    "compile": compile,
                     "dict": dict,
                     "divmod": divmod,
                     "enumerate": enumerate,
-                    "eval": eval,
                     "filter": filter,
                     "float": float,
                     "format": format,
-                    "getattr": getattr,
-                    "hasattr": hasattr,
                     "hex": hex,
                     "int": int,
                     "iter": iter,
@@ -543,7 +598,6 @@ class PythonSandboxExecutor:
                     "reversed": reversed,
                     "round": round,
                     "set": set,
-                    "setattr": setattr,
                     "sorted": sorted,
                     "staticmethod": staticmethod,
                     "str": str,
@@ -586,6 +640,44 @@ class PythonSandboxExecutor:
                 return None
 
 
+            def validate_sandbox_source(tree):
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        for alias in node.names:
+                            root = alias.name.split(".", 1)[0]
+                            if root not in allowed_import_roots:
+                                raise SandboxPolicyViolation(
+                                    f"import is not allowed in code runner: {{alias.name}}"
+                                )
+                    elif isinstance(node, ast.ImportFrom):
+                        if node.level != 0:
+                            raise SandboxPolicyViolation("relative imports are not allowed in code runner")
+                        module = node.module or ""
+                        root = module.split(".", 1)[0]
+                        if root not in allowed_import_roots:
+                            raise SandboxPolicyViolation(
+                                f"import is not allowed in code runner: {{module}}"
+                            )
+                    elif isinstance(node, ast.Name):
+                        if node.id in forbidden_builtin_names:
+                            raise SandboxPolicyViolation(
+                                f"builtin is not allowed in code runner: {{node.id}}"
+                            )
+                        if node.id.startswith("__") and node.id.endswith("__"):
+                            raise SandboxPolicyViolation(
+                                f"dunder name is not allowed in code runner: {{node.id}}"
+                            )
+                    elif isinstance(node, ast.Attribute):
+                        if node.attr in forbidden_builtin_names:
+                            raise SandboxPolicyViolation(
+                                f"attribute is not allowed in code runner: {{node.attr}}"
+                            )
+                        if node.attr.startswith("__") and node.attr.endswith("__"):
+                            raise SandboxPolicyViolation(
+                                f"dunder attribute is not allowed in code runner: {{node.attr}}"
+                            )
+
+
             def artifact_key(request):
                 manifest = request.get("capability_manifest") or {{}}
                 key_payload = json.dumps(
@@ -608,6 +700,7 @@ class PythonSandboxExecutor:
                     source = str(request.get("code") or "")
                     stage = "parse"
                     tree = ast.parse(source)
+                    validate_sandbox_source(tree)
                     entrypoint_name = request.get("entrypoint")
                     if not entrypoint_name:
                         for node in tree.body:
@@ -627,6 +720,8 @@ class PythonSandboxExecutor:
                     compiled = compiled_cache.get(key)
                     if compiled is None:
                         stage = "compile"
+                        tree = ast.parse(source)
+                        validate_sandbox_source(tree)
                         compiled = compile(
                             source,
                             f"<sandbox:{{key}}>",
@@ -686,14 +781,16 @@ class PythonSandboxExecutor:
                     current_request = json.loads(raw_line)
                     if "args" not in current_request and "state" not in current_request:
                         return json.dumps(validate_request(current_request), ensure_ascii=False, separators=(",", ":"))
-                    state = _wrap_attr(dict(current_request["state"]))
+                    state = dict(current_request["state"])
                     current_request["state"] = state
-                    args = _wrap_attr(dict(current_request["args"]))
+                    args = dict(current_request["args"])
 
                     key = artifact_key(current_request)
                     compiled = compiled_cache.get(key)
                     if compiled is None:
                         stage = "compile"
+                        tree = ast.parse(current_request["code"])
+                        validate_sandbox_source(tree)
                         compiled = compile(
                             current_request["code"],
                             f"<sandbox:{{key}}>",

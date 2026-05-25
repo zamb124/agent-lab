@@ -114,14 +114,14 @@ class LLMContextMemorySource:
         user_id: str | None = None,
         top_k: int | None = None,
     ) -> None:
-        self.store = store
-        self.name = name
-        self.session_id = session_id
-        self.flow_id = flow_id
-        self.branch_id = branch_id
-        self.node_id = node_id
-        self.user_id = user_id
-        self.top_k = top_k
+        self.store: LLMContextMemoryStore = store
+        self.name: str = name
+        self.session_id: str | None = session_id
+        self.flow_id: str | None = flow_id
+        self.branch_id: str | None = branch_id
+        self.node_id: str | None = node_id
+        self.user_id: str | None = user_id
+        self.top_k: int | None = top_k
 
     async def collect(self, request: LLMContextSourceRequest) -> list[LLMContextBlock]:
         query = str(request.query or "").strip()

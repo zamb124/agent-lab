@@ -10,13 +10,12 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sys
-from typing import Any
 
 import structlog
+from structlog.types import Processor
 
 from core.config import get_settings
 from core.config.models import LoggingConfig
@@ -72,10 +71,9 @@ def _build_processors_chain(
     sampled_loggers: list[str],
     drop_keys: list[str],
     max_string_len: int,
-    is_console: bool,
-) -> list[Any]:
+) -> list[Processor]:
     """Список processors для structlog.configure (для structlog API)."""
-    chain: list[Any] = [
+    chain: list[Processor] = [
         structlog.contextvars.merge_contextvars,
         add_service_fields(service_name, service_version, environment),
         structlog.stdlib.add_logger_name,
@@ -97,11 +95,11 @@ def _build_processors_chain(
     return chain
 
 
-def _build_renderer(format_name: str, console_colors: bool) -> Any:
+def _build_renderer(format_name: str, console_colors: bool) -> Processor:
     if format_name == "json":
         return structlog.processors.JSONRenderer(
             sort_keys=False,
-            serializer=lambda obj, **kwargs: json.dumps(obj, ensure_ascii=False, **kwargs),
+            ensure_ascii=False,
         )
     if format_name == "console":
         return structlog.dev.ConsoleRenderer(colors=console_colors)
@@ -114,7 +112,7 @@ def _build_foreign_pre_chain(
     service_name: str,
     service_version: str | None,
     environment: str,
-) -> list[Any]:
+) -> list[Processor]:
     """
     Pre-chain для записей из stdlib (uvicorn, taskiq, sqlalchemy и т.п.):
     добавляем те же контекстные поля, что и для structlog, чтобы вывод
@@ -154,7 +152,8 @@ def setup_logging(service_name: str, logging_config: LoggingConfig | None = None
         )
 
     level_name = logging_config.level.upper()
-    if not hasattr(logging, level_name):
+    level_value = logging.getLevelNamesMapping().get(level_name)
+    if level_value is None:
         raise LoggingMisconfigured(f"logging.level некорректен: {logging_config.level!r}")
 
     if _initialized:
@@ -164,17 +163,17 @@ def setup_logging(service_name: str, logging_config: LoggingConfig | None = None
             return
         raise LoggingMisconfigured(
             "setup_logging уже вызывался с другими параметрами: "
-            f"было {_initialized_for}, повторно {(service_name, format_name)}. "
-            "Инициализируйте логирование один раз на процесс."
+            + f"было {_initialized_for}, повторно {(service_name, format_name)}. "
+            + "Инициализируйте логирование один раз на процесс."
         )
 
     environment = _resolve_environment()
     service_version = _resolve_service_version()
-    sample_rate_info = float(getattr(logging_config, "sample_rate_info", 1.0))
-    sampled_loggers = list(getattr(logging_config, "sampled_loggers", []))
-    drop_keys = list(getattr(logging_config, "drop_keys", []))
-    max_string_len = int(getattr(logging_config, "max_string_len", 8192))
-    console_colors = bool(getattr(logging_config, "console_colors", False))
+    sample_rate_info = logging_config.sample_rate_info
+    sampled_loggers = list(logging_config.sampled_loggers)
+    drop_keys = list(logging_config.drop_keys)
+    max_string_len = logging_config.max_string_len
+    console_colors = logging_config.console_colors
 
     renderer = _build_renderer(format_name, console_colors)
     foreign_pre_chain = _build_foreign_pre_chain(service_name, service_version, environment)
@@ -186,7 +185,7 @@ def setup_logging(service_name: str, logging_config: LoggingConfig | None = None
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
-    handler.setLevel(level_name)
+    handler.setLevel(level_value)
 
     root_logger = logging.getLogger()
     for existing in list(root_logger.handlers):
@@ -195,12 +194,12 @@ def setup_logging(service_name: str, logging_config: LoggingConfig | None = None
 
     # Loki push handler: включается явно через loki_enabled в конфиге.
     # В production/test сервисы в Docker — Alloy собирает stdout, дублировать не нужно.
-    loki_url = getattr(logging_config, "loki_url", None)
-    loki_enabled = getattr(logging_config, "loki_enabled", False)
+    loki_url = logging_config.loki_url
+    loki_enabled = logging_config.loki_enabled
     if loki_url and loki_enabled:
         loki_renderer = structlog.processors.JSONRenderer(
             sort_keys=False,
-            serializer=lambda obj, **kw: json.dumps(obj, ensure_ascii=False, **kw),
+            ensure_ascii=False,
         )
         loki_formatter = structlog.stdlib.ProcessorFormatter(
             processor=loki_renderer,
@@ -208,10 +207,10 @@ def setup_logging(service_name: str, logging_config: LoggingConfig | None = None
         )
         loki_handler = LokiHandler(loki_url=loki_url, service_name=service_name)
         loki_handler.setFormatter(loki_formatter)
-        loki_handler.setLevel(level_name)
+        loki_handler.setLevel(level_value)
         root_logger.addHandler(loki_handler)
 
-    root_logger.setLevel(level_name)
+    root_logger.setLevel(level_value)
 
     _silence_noisy_loggers(logging_config.loggers_levels)
 
@@ -224,9 +223,8 @@ def setup_logging(service_name: str, logging_config: LoggingConfig | None = None
             sampled_loggers=sampled_loggers,
             drop_keys=drop_keys,
             max_string_len=max_string_len,
-            is_console=(format_name == "console"),
         ),
-        wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, level_name)),
+        wrapper_class=structlog.make_filtering_bound_logger(level_value),
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
@@ -238,10 +236,7 @@ def setup_logging(service_name: str, logging_config: LoggingConfig | None = None
 
 def _resolve_service_version() -> str | None:
     settings = get_settings()
-    server = getattr(settings, "server", None)
-    if server is None:
-        return None
-    version = getattr(server, "deployment_version", None)
+    version = settings.server.deployment_version
     if isinstance(version, str) and version.strip():
         return version.strip()
     return None

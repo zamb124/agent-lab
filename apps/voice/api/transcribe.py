@@ -8,6 +8,8 @@ override)` — один и тот же tier-резолв, что и для real-
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
@@ -41,9 +43,9 @@ class TranscribeResponse(BaseModel):
 )
 async def transcribe_audio(
     file: UploadFile,
-    provider: SpeechProviderName | None = Form(default=None),
-    model: str | None = Form(default=None),
-    language: str | None = Form(default=None),
+    provider: Annotated[SpeechProviderName | None, Form()] = None,
+    model: Annotated[str | None, Form()] = None,
+    language: Annotated[str | None, Form()] = None,
 ) -> TranscribeResponse:
     """Транскрибирует загруженный аудиофайл через платформенный STT-провайдер."""
     audio_bytes = await file.read()
@@ -104,7 +106,7 @@ async def transcribe_audio(
             size_bytes=len(audio_bytes),
         )
     else:
-        await record_stt_usage(
+        _ = await record_stt_usage(
             user=ctx.user,
             company=company,
             provider=result.provider,

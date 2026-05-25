@@ -161,14 +161,14 @@ class TestFlowVariables:
         await client.delete(f"/flows/api/v1/flows/{flow_id}")
 
     @pytest.mark.asyncio
-    async def test_skill_variables_full_structure(self, client, app, unique_id):
-        """Skills содержат полную структуру variables"""
-        flow_id = f"test_skill_vars_{unique_id}"
+    async def test_branch_variables_full_structure(self, client, app, unique_id):
+        """Branches содержат полную структуру variables"""
+        flow_id = f"test_branch_vars_{unique_id}"
         response = await client.post(
             "/flows/api/v1/flows/",
             json={
                 "flow_id": flow_id,
-                "name": "Test Skill Variables",
+                "name": "Test Branch Variables",
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "@var:role", "tools": []}},
                 "edges": [{"from_node": "main", "to_node": None}],
@@ -181,14 +181,14 @@ class TestFlowVariables:
                     }
                 },
                 "branches": {
-                    "custom_skill": {
-                        "name": "Custom Skill",
-                        "description": "Test skill",
+                    "custom_branch": {
+                        "name": "Custom Branch",
+                        "description": "Test branch",
                         "variables": {
-                            "skill_param": {
-                                "value": "skill_value",
-                                "title": "Skill Param",
-                                "description": "Параметр скила",
+                            "branch_param": {
+                                "value": "branch_value",
+                                "title": "Branch Param",
+                                "description": "Параметр ветки",
                                 "order": 5,
                                 "public": True,
                             }
@@ -199,31 +199,31 @@ class TestFlowVariables:
         )
         assert response.status_code == 200
         data = response.json()
-        skill = data["branches"]["custom_skill"]
-        skill_param = skill["variables"]["skill_param"]
-        assert skill_param["value"] == "skill_value"
-        assert skill_param["title"] == "Skill Param"
-        assert skill_param["description"] == "Параметр скила"
-        assert skill_param["order"] == 5
-        assert skill_param["public"] is True
+        branch = data["branches"]["custom_branch"]
+        branch_param = branch["variables"]["branch_param"]
+        assert branch_param["value"] == "branch_value"
+        assert branch_param["title"] == "Branch Param"
+        assert branch_param["description"] == "Параметр ветки"
+        assert branch_param["order"] == 5
+        assert branch_param["public"] is True
         await client.delete(f"/flows/api/v1/flows/{flow_id}")
 
     @pytest.mark.asyncio
-    async def test_skill_variables_simple_value_normalized(self, client, app, unique_id):
-        """Простые значения в skill.variables нормализуются в полную структуру"""
-        flow_id = f"test_skill_simple_{unique_id}"
+    async def test_branch_variables_simple_value_normalized(self, client, app, unique_id):
+        """Простые значения в branch.variables нормализуются в полную структуру"""
+        flow_id = f"test_branch_simple_{unique_id}"
         response = await client.post(
             "/flows/api/v1/flows/",
             json={
                 "flow_id": flow_id,
-                "name": "Test Simple Skill Variables",
+                "name": "Test Simple Branch Variables",
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "Test", "tools": []}},
                 "edges": [{"from_node": "main", "to_node": None}],
                 "variables": {},
                 "branches": {
-                    "simple_skill": {
-                        "name": "Simple Skill",
+                    "simple_branch": {
+                        "name": "Simple Branch",
                         "variables": {"role": "Custom role value"},
                     }
                 },
@@ -231,8 +231,8 @@ class TestFlowVariables:
         )
         assert response.status_code == 200
         data = response.json()
-        skill = data["branches"]["simple_skill"]
-        role = skill["variables"]["role"]
+        branch = data["branches"]["simple_branch"]
+        role = branch["variables"]["role"]
         assert role["value"] == "Custom role value"
         assert role.get("public") is False
         await client.delete(f"/flows/api/v1/flows/{flow_id}")
@@ -292,29 +292,29 @@ class TestFlowVariables:
         await client.delete(f"/flows/api/v1/flows/{flow_id}")
 
 
-class TestSkillsAPIVariables:
-    """Тесты на variables в отдельных ручках skills (/flows/{id}/skills)"""
+class TestBranchesAPIVariables:
+    """Тесты на variables в отдельных ручках branches."""
 
     @pytest.mark.asyncio
-    async def test_get_skill_returns_full_variables(self, client, app, unique_id):
+    async def test_get_branch_returns_full_variables(self, client, app, unique_id):
         """GET /flows/{id}/branches/{branch_id} возвращает полную структуру variables"""
-        flow_id = f"test_skill_api_{unique_id}"
+        flow_id = f"test_branch_api_{unique_id}"
         await client.post(
             "/flows/api/v1/flows/",
             json={
                 "flow_id": flow_id,
-                "name": "Test Skill API",
+                "name": "Test Branch API",
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "@var:role", "tools": []}},
                 "edges": [{"from_node": "main", "to_node": None}],
                 "variables": {},
                 "branches": {
-                    "my_skill": {
-                        "name": "My Skill",
-                        "description": "Test skill",
+                    "my_branch": {
+                        "name": "My Branch",
+                        "description": "Test branch",
                         "variables": {
                             "role": {
-                                "value": "Skill role",
+                                "value": "Branch role",
                                 "title": "Role Title",
                                 "description": "Role description",
                                 "order": 10,
@@ -325,14 +325,13 @@ class TestSkillsAPIVariables:
                 },
             },
         )
-        response = await client.get(f"/flows/api/v1/{flow_id}/branches/my_skill")
+        response = await client.get(f"/flows/api/v1/{flow_id}/branches/my_branch")
         assert response.status_code == 200
         data = response.json()
-        branch_body = data.get("branch_body", {})
-        variables = branch_body.get("variables", {})
+        variables = data["variables"]
         assert "role" in variables
         role = variables["role"]
-        assert role["value"] == "Skill role"
+        assert role["value"] == "Branch role"
         assert role["title"] == "Role Title"
         assert role["description"] == "Role description"
         assert role["order"] == 10
@@ -340,14 +339,14 @@ class TestSkillsAPIVariables:
         await client.delete(f"/flows/api/v1/flows/{flow_id}")
 
     @pytest.mark.asyncio
-    async def test_create_skill_with_full_variables(self, client, app, unique_id):
-        """POST /flows/{id}/skills создаёт skill с полными variables"""
-        flow_id = f"test_create_skill_{unique_id}"
+    async def test_create_branch_with_full_variables(self, client, app, unique_id):
+        """POST /flows/{id}/branches создаёт branch с полными variables"""
+        flow_id = f"test_create_branch_{unique_id}"
         await client.post(
             "/flows/api/v1/flows/",
             json={
                 "flow_id": flow_id,
-                "name": "Test Create Skill",
+                "name": "Test Create Branch",
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "Test", "tools": []}},
                 "edges": [{"from_node": "main", "to_node": None}],
@@ -357,28 +356,25 @@ class TestSkillsAPIVariables:
         response = await client.post(
             f"/flows/api/v1/{flow_id}/branches",
             json={
-                "branch_id": "new_skill",
-                "name": "New Skill",
+                "branch_id": "new_branch",
+                "name": "New Branch",
                 "description": "Created via API",
-                "branch_body": {
-                    "variables": {
-                        "param": {
-                            "value": "param_value",
-                            "title": "Param Title",
-                            "description": "Param desc",
-                            "order": 5,
-                            "public": False,
-                        }
+                "variables": {
+                    "param": {
+                        "value": "param_value",
+                        "title": "Param Title",
+                        "description": "Param desc",
+                        "order": 5,
+                        "public": False,
                     }
                 },
             },
         )
         assert response.status_code == 201
-        get_response = await client.get(f"/flows/api/v1/{flow_id}/branches/new_skill")
+        get_response = await client.get(f"/flows/api/v1/{flow_id}/branches/new_branch")
         assert get_response.status_code == 200
         data = get_response.json()
-        branch_body = data.get("branch_body", {})
-        variables = branch_body.get("variables", {})
+        variables = data["variables"]
         assert "param" in variables
         param = variables["param"]
         assert param["value"] == "param_value"
@@ -387,21 +383,21 @@ class TestSkillsAPIVariables:
         await client.delete(f"/flows/api/v1/flows/{flow_id}")
 
     @pytest.mark.asyncio
-    async def test_update_skill_preserves_variables(self, client, app, unique_id):
+    async def test_update_branch_preserves_variables(self, client, app, unique_id):
         """PUT /flows/{id}/branches/{branch_id} сохраняет все поля variables"""
-        flow_id = f"test_update_skill_{unique_id}"
+        flow_id = f"test_update_branch_{unique_id}"
         await client.post(
             "/flows/api/v1/flows/",
             json={
                 "flow_id": flow_id,
-                "name": "Test Update Skill",
+                "name": "Test Update Branch",
                 "entry": "main",
                 "nodes": {"main": {"type": "llm_node", "prompt": "Test", "tools": []}},
                 "edges": [{"from_node": "main", "to_node": None}],
                 "variables": {},
                 "branches": {
                     "updatable": {
-                        "name": "Updatable Skill",
+                        "name": "Updatable Branch",
                         "variables": {"config": {"value": "old", "title": "Config", "order": 1}},
                     }
                 },
@@ -410,16 +406,14 @@ class TestSkillsAPIVariables:
         response = await client.put(
             f"/flows/api/v1/{flow_id}/branches/updatable",
             json={
-                "name": "Updated Skill",
-                "branch_body": {
-                    "variables": {
-                        "config": {
-                            "value": "new_value",
-                            "title": "Updated Config",
-                            "description": "New description",
-                            "order": 99,
-                            "public": True,
-                        }
+                "name": "Updated Branch",
+                "variables": {
+                    "config": {
+                        "value": "new_value",
+                        "title": "Updated Config",
+                        "description": "New description",
+                        "order": 99,
+                        "public": True,
                     }
                 },
             },
@@ -428,8 +422,7 @@ class TestSkillsAPIVariables:
         get_response = await client.get(f"/flows/api/v1/{flow_id}/branches/updatable")
         assert get_response.status_code == 200
         data = get_response.json()
-        branch_body = data.get("branch_body", {})
-        variables = branch_body.get("variables", {})
+        variables = data["variables"]
         config = variables["config"]
         assert config["value"] == "new_value"
         assert config["title"] == "Updated Config"

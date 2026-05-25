@@ -2,28 +2,12 @@
 
 from __future__ import annotations
 
-from pydantic import Field
-
 from core.config import BaseSettings
 from core.config.loader import load_merged_config
 
 
 class CapabilityGatewaySettings(BaseSettings):
     """Настройки trusted capability gateway."""
-
-    capability_manifest_cache_enabled: bool = Field(
-        default=True,
-        description="Кэшировать собранный capability manifest, чтобы не дергать flows на каждый execution.",
-    )
-    capability_manifest_cache_ttl_seconds: int = Field(
-        default=60,
-        ge=1,
-        description="TTL Redis/in-memory кэша capability manifest.",
-    )
-    capability_manifest_cache_key: str = Field(
-        default="capability_gateway:manifest:v1",
-        description="Redis key для shared cache capability manifest.",
-    )
 
 
 _capability_gateway_settings: CapabilityGatewaySettings | None = None

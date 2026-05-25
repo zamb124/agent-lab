@@ -21,7 +21,7 @@ def extract_audio_from_video(*, video_bytes: bytes, base_name: str) -> tuple[byt
     with tempfile.TemporaryDirectory(prefix="media-video-stt-") as work_dir:
         in_path = Path(work_dir) / "input.mp4"
         out_path = Path(work_dir) / "audio.mp3"
-        in_path.write_bytes(video_bytes)
+        _ = in_path.write_bytes(video_bytes)
         ffmpeg_cmd = [
             "ffmpeg",
             "-hide_banner",
@@ -47,10 +47,11 @@ def extract_audio_from_video(*, video_bytes: bytes, base_name: str) -> tuple[byt
         )
         if ffmpeg_result.returncode != 0:
             stderr = ffmpeg_result.stderr.strip()
-            raise RuntimeError(
+            message = (
                 "Не удалось извлечь аудио из видео для STT. "
-                f"return_code={ffmpeg_result.returncode}; stderr={stderr}"
+                + f"return_code={ffmpeg_result.returncode}; stderr={stderr}"
             )
+            raise RuntimeError(message)
         audio_bytes_out = out_path.read_bytes()
         if len(audio_bytes_out) == 0:
             raise ValueError("Извлечённая аудиодорожка пуста.")

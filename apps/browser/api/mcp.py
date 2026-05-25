@@ -21,7 +21,7 @@ from html.parser import HTMLParser
 from typing import ClassVar, Literal, override
 from urllib.parse import urljoin, urlparse
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.browser.api.control import (
@@ -55,13 +55,12 @@ from core.clients.browser import (
     ToolNavigateArgs,
     ToolObserveArgs,
 )
-from core.integrations.mcp import MCPToolInfo
+from core.integrations.mcp import MCP_PROTOCOL_VERSION, MCPToolDefinition
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 router = APIRouter(prefix="/mcp", tags=["browser-mcp"])
 
-MCP_PROTOCOL_VERSION = "2024-11-05"
 AntiBotTier = Literal["white", "gray", "black"]
 
 
@@ -102,7 +101,7 @@ class McpInitializeResult(BaseModel):
 class McpToolsListResult(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    tools: list[MCPToolInfo]
+    tools: list[MCPToolDefinition]
 
 
 class McpToolCallResult(BaseModel):
@@ -209,14 +208,14 @@ def _schema_for_model(model: type[BaseModel]) -> JsonObject:
     return require_json_object(model.model_json_schema(), f"{model.__name__}.schema")
 
 
-def _tools() -> list[MCPToolInfo]:
+def _tools() -> list[MCPToolDefinition]:
     return [
-        MCPToolInfo(
+        MCPToolDefinition(
             name="browser_create_session",
             description="Создать control-сессию browser runtime (выделить страницу под session_id).",
-            input_schema=_schema_for_model(ToolCreateSessionArgs),
+            parameters_schema=_schema_for_model(ToolCreateSessionArgs),
         ),
-        MCPToolInfo(
+        MCPToolDefinition(
             name="browser_navigate",
             description=(
                 "Навигация в рамках сессии (url + wait_policy + optional artifacts). "
@@ -224,9 +223,9 @@ def _tools() -> list[MCPToolInfo]:
                 "предыдущая закрывается; refs observe сбрасываются до следующего browser_observe. "
                 "new_tab=false — навигация в текущей вкладке."
             ),
-            input_schema=_schema_for_model(ToolNavigateArgs),
+            parameters_schema=_schema_for_model(ToolNavigateArgs),
         ),
-        MCPToolInfo(
+        MCPToolDefinition(
             name="browser_observe",
             description=(
                 "Получить LLM-friendly snapshot страницы: snapshot.text со строками вида "
@@ -234,40 +233,40 @@ def _tools() -> list[MCPToolInfo]:
                 "Поле include_snapshot_refs=true дублирует маппинг в snapshot.refs (лишние токены); "
                 "по умолчанию false — сервер всё равно помнит refs для действий."
             ),
-            input_schema=_schema_for_model(ToolObserveArgs),
+            parameters_schema=_schema_for_model(ToolObserveArgs),
         ),
-        MCPToolInfo(
+        MCPToolDefinition(
             name="browser_click",
             description="Клик строго по ref из последнего browser_observe в этой сессии (human-like interaction).",
-            input_schema=_schema_for_model(ToolClickArgs),
+            parameters_schema=_schema_for_model(ToolClickArgs),
         ),
-        MCPToolInfo(
+        MCPToolDefinition(
             name="browser_fill",
             description="Ввод текста строго в элемент по ref из последнего browser_observe в этой сессии (human-like interaction).",
-            input_schema=_schema_for_model(ToolFillArgs),
+            parameters_schema=_schema_for_model(ToolFillArgs),
         ),
-        MCPToolInfo(
+        MCPToolDefinition(
             name="browser_press",
             description="Нажать клавишу (например Enter, Tab).",
-            input_schema=_schema_for_model(ToolPressArgs),
+            parameters_schema=_schema_for_model(ToolPressArgs),
         ),
-        MCPToolInfo(
+        MCPToolDefinition(
             name="browser_wait",
             description="Ожидание selector и/или load_state в рамках сессии.",
-            input_schema=_schema_for_model(ToolWaitArgs),
+            parameters_schema=_schema_for_model(ToolWaitArgs),
         ),
-        MCPToolInfo(
+        MCPToolDefinition(
             name="browser_close_session",
             description="Закрыть сессию и освободить ресурсы.",
-            input_schema=_schema_for_model(ToolCloseSessionArgs),
+            parameters_schema=_schema_for_model(ToolCloseSessionArgs),
         ),
-        MCPToolInfo(
+        MCPToolDefinition(
             name="browser_save_html_to_s3",
             description=(
                 "Сохранить HTML текущей страницы в S3 через file_processor и вернуть "
                 "file_id/s3_path плюс первые кликабельные ссылки."
             ),
-            input_schema=_schema_for_model(ToolSaveHtmlToS3Args),
+            parameters_schema=_schema_for_model(ToolSaveHtmlToS3Args),
         ),
     ]
 
@@ -524,6 +523,7 @@ async def _tool_call(
 @router.post("")
 async def mcp_jsonrpc(
     req: JsonRpcRequest,
+    request: Request,
     response: Response,
     container: ContainerDep,
 ) -> JsonObject:
@@ -550,12 +550,22 @@ async def mcp_jsonrpc(
         )
         return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=_model_json_object(res)))
 
+    protocol_header = request.headers.get("MCP-Protocol-Version")
+    if protocol_header != MCP_PROTOCOL_VERSION:
+        response.status_code = 400
+        err = _error(-32000, "MCP-Protocol-Version header is required")
+        return _jsonrpc_payload(JsonRpcResponse(id=req_id, error=err))
+
+    if method == "notifications/initialized":
+        response.status_code = 202
+        return {}
+
     if method == "tools/list":
         tools = _tools()
         res = McpToolsListResult(tools=tools)
         # by_alias=True: на проводе MCP всегда camelCase `inputSchema`, как
-        # того требует спецификация JSON-RPC MCP. Внутри Python поле зовётся
-        # `input_schema` (snake_case canonical, alias живёт в MCPToolInfo).
+        # того требует спецификация JSON-RPC MCP; внутри платформы поле
+        # называется `parameters_schema`.
         return _jsonrpc_payload(JsonRpcResponse(id=req_id, result=require_json_object(res.model_dump(mode="json", by_alias=True), "McpToolsListResult")))
 
     if method == "tools/call":

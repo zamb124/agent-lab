@@ -3,18 +3,19 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from typing import override
 
 from sqlalchemy import and_, func, literal, or_, select, text, tuple_, update
 from sqlalchemy import delete as sql_delete
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
-from apps.sync.channel_lane_preview import ChannelLaneSummary, lane_preview_from_content_row
+from apps.sync.channel_lane_preview import ChannelLaneSummary, lane_preview_from_content
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncChannelMember, SyncMessage, SyncMessageContent
 from apps.sync.models.messages import MessageContentModel, ReactionEntry
-from core.logging import get_logger
 from core.types import JsonObject, parse_json_object
 
-logger = get_logger(__name__)
+
 @dataclass(frozen=True)
 class MessageCursorWindow:
     """Окно сообщений для курсорной пагинации."""
@@ -23,6 +24,22 @@ class MessageCursorWindow:
     has_more_older: bool
     has_more_newer: bool
 
+
+def _message_content_from_storage(
+    *,
+    content_type: str,
+    data: JsonObject,
+    order: int,
+) -> MessageContentModel:
+    return MessageContentModel.model_validate(
+        {
+            "type": content_type,
+            "data": data,
+            "order": order,
+        }
+    )
+
+
 class MessageRepository(BaseSyncRepository[SyncMessage]):
     """Репозиторий для сообщений с изоляцией по company_id."""
 
@@ -30,12 +47,19 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         super().__init__(db=db)
 
     @property
+    @override
     def model_class(self) -> type[SyncMessage]:
         return SyncMessage
 
     @property
-    def id_field(self) -> str:
-        return "message_id"
+    @override
+    def id_column(self) -> InstrumentedAttribute[str]:
+        return SyncMessage.message_id
+
+    @property
+    @override
+    def company_id_column(self) -> InstrumentedAttribute[str]:
+        return SyncMessage.company_id
 
     async def list_by_channel(
         self,
@@ -229,9 +253,11 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
             root_id = result.scalar_one_or_none()
             if root_id is None:
                 return None
+            if not isinstance(root_id, str):
+                raise ValueError("thread root query returned non-string message_id.")
             return await self.get(root_id)
 
-    async def list_contents(self, message_id: str) -> list[SyncMessageContent]:
+    async def list_contents(self, message_id: str) -> list[MessageContentModel]:
         """Контент-блоки сообщения."""
         async with self._db.session() as session:
             stmt = (
@@ -240,7 +266,14 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                 .order_by(SyncMessageContent.order.asc(), SyncMessageContent.id.asc())
             )
             result = await session.execute(stmt)
-            return list(result.scalars().all())
+            return [
+                _message_content_from_storage(
+                    content_type=row.type,
+                    data=row.data,
+                    order=row.order,
+                )
+                for row in result.scalars().all()
+            ]
 
     async def create_message(
         self,
@@ -310,7 +343,9 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
         edited_at: datetime,
     ) -> None:
         async with self._db.session() as session:
-            await session.execute(sql_delete(SyncMessageContent).where(SyncMessageContent.message_id == message_id))
+            _ = await session.execute(
+                sql_delete(SyncMessageContent).where(SyncMessageContent.message_id == message_id)
+            )
             for content in contents:
                 session.add(
                     SyncMessageContent(
@@ -320,7 +355,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                         data=content.data.model_dump(mode="json"),
                     )
                 )
-            await session.execute(
+            _ = await session.execute(
                 update(SyncMessage)
                 .where(SyncMessage.message_id == message_id)
                 .values(edited_at=edited_at)
@@ -329,7 +364,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
 
     async def soft_delete_message(self, message_id: str, deleted_at: datetime) -> None:
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(SyncMessage)
                 .where(SyncMessage.message_id == message_id)
                 .values(deleted_at=deleted_at)
@@ -346,7 +381,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
             for reaction in reactions
         ]
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(SyncMessage)
                 .where(SyncMessage.message_id == message_id)
                 .values(reactions=reaction_payload)
@@ -392,8 +427,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
 
         async with self._db.session() as session:
             unread_stmt = (
-                select(SyncMessage.channel_id, func.count().label("cnt"))
-                .select_from(SyncMessage)
+                select(SyncMessage)
                 .join(
                     SyncChannelMember,
                     and_(
@@ -413,15 +447,12 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                         SyncMessage.sent_at > SyncChannelMember.last_read_at,
                     ),
                 )
-                .group_by(SyncMessage.channel_id)
             )
             unread_res = await session.execute(unread_stmt)
-            for row in unread_res.all():
-                cid = row.channel_id
-                cnt = int(row.cnt)
-                prev = base[cid]
-                base[cid] = ChannelLaneSummary(
-                    unread_count=cnt,
+            for message in unread_res.scalars().all():
+                prev = base[message.channel_id]
+                base[message.channel_id] = ChannelLaneSummary(
+                    unread_count=prev.unread_count + 1,
                     last_message_preview=prev.last_message_preview,
                     last_message_at=prev.last_message_at,
                     mention_unread_count=prev.mention_unread_count,
@@ -429,8 +460,7 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
 
             mention_json = json.dumps([viewer_user_id])
             mention_stmt = (
-                select(SyncMessage.channel_id, func.count().label("mcnt"))
-                .select_from(SyncMessage)
+                select(SyncMessage)
                 .join(
                     SyncChannelMember,
                     and_(
@@ -461,18 +491,15 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                         """
                     ).bindparams(mj=mention_json),
                 )
-                .group_by(SyncMessage.channel_id)
             )
             mention_res = await session.execute(mention_stmt)
-            for row in mention_res.all():
-                cid = row.channel_id
-                mcnt = int(row.mcnt)
-                prev = base[cid]
-                base[cid] = ChannelLaneSummary(
+            for message in mention_res.scalars().all():
+                prev = base[message.channel_id]
+                base[message.channel_id] = ChannelLaneSummary(
                     unread_count=prev.unread_count,
                     last_message_preview=prev.last_message_preview,
                     last_message_at=prev.last_message_at,
-                    mention_unread_count=mcnt,
+                    mention_unread_count=prev.mention_unread_count + 1,
                 )
 
             msg_rn = func.row_number().over(
@@ -505,60 +532,34 @@ class MessageRepository(BaseSyncRepository[SyncMessage]):
                 .where(msg_ranked.c.msg_rn == 1)
             ).subquery("last_msgs")
 
-            content_rn = func.row_number().over(
-                partition_by=SyncMessageContent.message_id,
-                order_by=(SyncMessageContent.order.asc(), SyncMessageContent.id.asc()),
-            ).label("content_rn")
-
-            content_ranked = (
-                select(
-                    SyncMessageContent.message_id,
-                    SyncMessageContent.type,
-                    SyncMessageContent.data,
-                    content_rn,
-                )
-                .select_from(SyncMessageContent)
-                .join(last_msgs, last_msgs.c.message_id == SyncMessageContent.message_id)
-            ).subquery("content_ranked")
-
-            first_blocks = (
-                select(
-                    content_ranked.c.message_id,
-                    content_ranked.c.type,
-                    content_ranked.c.data,
-                )
-                .where(content_ranked.c.content_rn == 1)
-            ).subquery("first_blocks")
-
-            last_stmt = (
-                select(
-                    last_msgs.c.channel_id,
-                    last_msgs.c.sent_at,
-                    first_blocks.c.type,
-                    first_blocks.c.data,
-                )
-                .select_from(
-                    last_msgs.outerjoin(first_blocks, first_blocks.c.message_id == last_msgs.c.message_id)
-                )
+            last_stmt = select(SyncMessage).join(
+                last_msgs,
+                last_msgs.c.message_id == SyncMessage.message_id,
             )
             last_res = await session.execute(last_stmt)
-            for row in last_res.all():
-                cid = row.channel_id
-                prev = base[cid]
+            for message in last_res.scalars().all():
+                prev = base[message.channel_id]
                 preview: str | None = None
-                if row.type is not None:
-                    if row.data is None:
-                        logger.error(
-                            "Сводка ленты: тип %s без data (channel_id=%s), превью пропущено.",
-                            row.type,
-                            cid,
+                content_stmt = (
+                    select(SyncMessageContent)
+                    .where(SyncMessageContent.message_id == message.message_id)
+                    .order_by(SyncMessageContent.order.asc(), SyncMessageContent.id.asc())
+                    .limit(1)
+                )
+                content_res = await session.execute(content_stmt)
+                first_content_row = content_res.scalar_one_or_none()
+                if first_content_row is not None:
+                    preview = lane_preview_from_content(
+                        _message_content_from_storage(
+                            content_type=first_content_row.type,
+                            data=first_content_row.data,
+                            order=first_content_row.order,
                         )
-                    else:
-                        preview = lane_preview_from_content_row(row.type, row.data)
-                base[cid] = ChannelLaneSummary(
+                    )
+                base[message.channel_id] = ChannelLaneSummary(
                     unread_count=prev.unread_count,
                     last_message_preview=preview,
-                    last_message_at=row.sent_at,
+                    last_message_at=message.sent_at,
                     mention_unread_count=prev.mention_unread_count,
                 )
 

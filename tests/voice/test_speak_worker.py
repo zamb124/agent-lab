@@ -15,7 +15,8 @@ speak_worker — универсальный воркер, не знающий п
 from __future__ import annotations
 
 import asyncio
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from typing import override
 
 import pytest
 
@@ -34,25 +35,30 @@ class FakeTTSStreamer(BaseTTSStreamer):
     """Тестовый streamer: возвращает байты фиксированной длины на каждый кусок."""
 
     def __init__(self, *, bytes_per_call: int = 32) -> None:
-        self._bytes_per_call = bytes_per_call
+        self._bytes_per_call: int = bytes_per_call
         self.calls: list[str] = []
 
     @property
+    @override
     def provider(self) -> str:
         return "fake"
 
     @property
-    def mime_type(self) -> str:
+    @override
+    def content_type(self) -> str:
         return "audio/L16"
 
     @property
+    @override
     def sample_rate(self) -> int:
         return 16000
 
+    @override
     async def synthesize_chunk(self, text: str) -> bytes:
         self.calls.append(text)
         return bytes([0x11] * self._bytes_per_call)
 
+    @override
     async def astream(self, text_stream: AsyncIterator[str]) -> AsyncIterator[bytes]:
         async for piece in text_stream:
             if piece:
@@ -160,7 +166,7 @@ async def test_speak_worker_end_of_utterance_without_text_just_stops(
 
 
 @pytest.mark.asyncio
-async def test_speak_worker_ignores_empty_and_non_str_payload(
+async def test_speak_worker_ignores_empty_payload(
     unique_id: str,
 ) -> None:
     session = VoiceSession(session_id=f"sess-{unique_id}")
@@ -170,7 +176,6 @@ async def test_speak_worker_ignores_empty_and_non_str_payload(
     worker = await _spawn_worker(session, streamer, channel)
 
     await session.synthesis_queue.put("")
-    await session.synthesis_queue.put(123)  # type: ignore[arg-type]
     await asyncio.sleep(0.05)
 
     assert streamer.calls == []

@@ -16,7 +16,12 @@ API возвращает A2A Task формат.
 
 import uuid
 from typing import Any, Dict
+
 import pytest
+
+from apps.flows.src.tasks.flow_tasks import process_flow_task
+from apps.flows.src.tasks.tool_tasks import execute_tool
+from core.state import ExecutionState
 
 pytestmark = pytest.mark.real_taskiq
 
@@ -27,11 +32,6 @@ def require_taskiq_worker(taskiq_worker, container):
     container.use_worker = True
     yield
     container.use_worker = False
-
-
-from apps.flows.src.tasks.flow_tasks import process_flow_task
-from apps.flows.src.tasks.tool_tasks import execute_tool
-from core.state import ExecutionState
 
 
 def get_task_state(data: Dict[str, Any]) -> str:
@@ -67,6 +67,7 @@ class TestTaskIQToolExecution:
     ):
         """Tool выполняется через TaskIQ .kiq() + wait_result()."""
         import asyncio
+
         from taskiq.exceptions import TaskiqResultTimeoutError
 
         await asyncio.sleep(0.15)

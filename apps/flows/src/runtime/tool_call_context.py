@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -19,6 +19,7 @@ class ActiveToolCallContext:
 
     tool_name: str
     tool_call_id: str
+    node_id: str
     state: "ExecutionState"
     emitter: "BaseEmitter | None" = None
 
@@ -38,12 +39,14 @@ def active_tool_call_context(
     *,
     tool_name: str,
     tool_call_id: str,
+    node_id: str,
     state: "ExecutionState",
     emitter: "BaseEmitter | None" = None,
-) -> Iterator[ActiveToolCallContext]:
+) -> Generator[ActiveToolCallContext, None, None]:
     ctx = ActiveToolCallContext(
         tool_name=tool_name,
         tool_call_id=tool_call_id,
+        node_id=node_id,
         state=state,
         emitter=emitter,
     )

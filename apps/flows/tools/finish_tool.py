@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class FinishArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     answer: str = Field(..., min_length=1, description="Финальный текст, который увидит пользователь.")
 
@@ -27,6 +27,7 @@ class FinishArgs(BaseModel):
     parameters_model=FinishArgs,
 )
 async def finish(answer: str, *, state: "ExecutionState") -> str:
+    _ = state
     return answer
 
 

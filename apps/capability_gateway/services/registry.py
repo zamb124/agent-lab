@@ -15,11 +15,9 @@ from urllib.parse import urlparse
 import httpx
 from a2a.types import Message, Part, Role, TextPart
 
-from apps.capability_gateway.config import get_capability_gateway_settings
 from apps.capability_gateway.services.context_service import CapabilityContextService
 from apps.capability_gateway.services.contracts import CapabilityGatewayContainerProtocol
 from apps.voice.services.voice_usage import record_stt_usage, record_tts_usage
-from core.cache.ttl_model_cache import TtlModelCache
 from core.capabilities import (
     CAPABILITY_LANGUAGES,
     CapabilityCallRequest,
@@ -463,8 +461,8 @@ def _append_ui_event(
     correlation_id: str | None = None,
 ) -> JsonObject:
     event: JsonObject = {
-        "id": event_id or str(uuid.uuid4()),
-        "type": event_type,
+        "event_id": event_id or str(uuid.uuid4()),
+        "event_type": event_type,
         "payload": payload,
         "version": version,
         "timestamp": datetime.now(UTC).isoformat(),
@@ -492,11 +490,6 @@ class CapabilityRegistry:
         self._container: CapabilityGatewayContainerProtocol = container
         self._context_service: CapabilityContextService = context_service
         self._text_transform_service: TextTransformService = text_transform_service
-        self._manifest_cache: TtlModelCache[CapabilityManifest] = TtlModelCache(
-            name="capability_gateway.manifest_cache",
-            model_type=CapabilityManifest,
-            redis_client_factory=lambda: self._container.redis_client,
-        )
         self._static_definitions: dict[str, CapabilityDefinition] = self._build_static_definitions()
         self._handlers: dict[str, CapabilityHandler] = {
             "files.create": self._files_create,
@@ -545,13 +538,7 @@ class CapabilityRegistry:
             raise ValueError(message)
 
     async def manifest(self) -> CapabilityManifest:
-        settings = get_capability_gateway_settings()
-        return await self._manifest_cache.get_or_build(
-            enabled=settings.capability_manifest_cache_enabled,
-            key=settings.capability_manifest_cache_key,
-            ttl_seconds=settings.capability_manifest_cache_ttl_seconds,
-            builder=self._build_manifest,
-        )
+        return await self._build_manifest()
 
     async def _build_manifest(self) -> CapabilityManifest:
         definitions = dict(self._static_definitions)
@@ -1868,9 +1855,9 @@ class CapabilityRegistry:
             forwarded = request.model_copy(
                 update={
                     "kwargs": {
-                        "event_type": raw_event.get("type"),
+                        "event_type": raw_event.get("event_type"),
                         "payload": raw_event.get("payload"),
-                        "event_id": raw_event.get("id"),
+                        "event_id": raw_event.get("event_id"),
                         "version": raw_event.get("version"),
                         "source": raw_event.get("source"),
                         "correlation_id": raw_event.get("correlation_id"),

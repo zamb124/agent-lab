@@ -15,7 +15,7 @@ from apps.office.db.models import OfficeCatalogMember, OfficeDocumentBinding, Of
 
 class CatalogRepository:
     def __init__(self, db: OfficeDatabase) -> None:
-        self._db = db
+        self._db: OfficeDatabase = db
 
     async def get_or_create_default(
         self,
@@ -117,17 +117,8 @@ class CatalogRepository:
             )
         )
         async with self._db.session() as session:
-            cnt = (
-                select(
-                    OfficeDocumentBinding.catalog_id,
-                    func.count(OfficeDocumentBinding.binding_id).label("file_count"),
-                )
-                .group_by(OfficeDocumentBinding.catalog_id)
-                .subquery()
-            )
             result = await session.execute(
-                select(OfficeDocumentCatalog, func.coalesce(cnt.c.file_count, 0))
-                .outerjoin(cnt, OfficeDocumentCatalog.catalog_id == cnt.c.catalog_id)
+                select(OfficeDocumentCatalog)
                 .where(
                     OfficeDocumentCatalog.company_id == company_id,
                     OfficeDocumentCatalog.namespace == namespace,
@@ -139,7 +130,8 @@ class CatalogRepository:
                 )
                 .order_by(OfficeDocumentCatalog.created_at.asc())
             )
-            return [(row[0], int(row[1])) for row in result.all()]
+            catalogs = list(result.scalars().all())
+        return [(catalog, await self.count_bindings(catalog.catalog_id)) for catalog in catalogs]
 
     async def create(
         self,

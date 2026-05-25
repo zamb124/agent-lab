@@ -24,7 +24,7 @@
 
 | Метод | Путь |
 |-------|------|
-| GET | `/rag/api/v1/namespaces` — опционально `?provider=` |
+| GET | `/rag/api/v1/namespaces` |
 | POST | `/rag/api/v1/namespaces` — тело: `name`, `description`; опционально `?provider=` |
 | DELETE | `/rag/api/v1/namespaces/{namespace_id}` — опционально `?provider=` |
 

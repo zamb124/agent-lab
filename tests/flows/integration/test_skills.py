@@ -4,9 +4,10 @@
 """
 
 import pytest
+
 from apps.flows.src.models import BranchConfig, Edge, FlowConfig, MergeMode
 from apps.flows.src.runtime.flow import Flow
-from core.state import ExecutionState
+from tests.flows.durable_runtime_harness import run_flow, workflow_state
 
 
 class TestBranchConfig:
@@ -272,7 +273,7 @@ class TestFlowWithSkills:
     """Интеграционные тесты Agent со skills."""
 
     @pytest.mark.asyncio
-    async def test_flow_execution_with_skill_entry(self):
+    async def test_flow_execution_with_skill_entry(self, container, unique_id):
         """Выполнение flow с skill entry."""
         config = FlowConfig(
             flow_id="skill_flow",
@@ -296,7 +297,7 @@ class TestFlowWithSkills:
         )
         flow_default = await Flow.from_config(
             config={
-                "id": config.flow_id,
+                "flow_id": config.flow_id,
                 "name": config.name,
                 "entry": config.entry,
                 "nodes": config.nodes,
@@ -306,18 +307,17 @@ class TestFlowWithSkills:
                 ],
             },
             variables={},
+            container=container,
         )
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_default.flow_id,
+            unique_id=f"{unique_id}-default",
         )
-        result = await flow_default.run(state)
+        result = await run_flow(container=container, flow=flow_default, state=state)
         assert result["path"] == "default"
         flow_skill = await Flow.from_config(
             config={
-                "id": config.flow_id,
+                "flow_id": config.flow_id,
                 "name": config.name,
                 "entry": "skill_start",
                 "nodes": config.nodes,
@@ -327,22 +327,21 @@ class TestFlowWithSkills:
                 ],
             },
             variables={},
+            container=container,
         )
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_skill.flow_id,
+            unique_id=f"{unique_id}-skill",
         )
-        result = await flow_skill.run(state)
+        result = await run_flow(container=container, flow=flow_skill, state=state)
         assert result["path"] == "skill"
 
     @pytest.mark.asyncio
-    async def test_flow_execution_with_skill_variables(self):
+    async def test_flow_execution_with_skill_variables(self, container, unique_id):
         """Выполнение flow с skill variables."""
         flow = await Flow.from_config(
             config={
-                "id": "var_flow",
+                "flow_id": "var_flow",
                 "name": "Var Agent",
                 "entry": "main",
                 "nodes": {
@@ -354,13 +353,9 @@ class TestFlowWithSkills:
                 "edges": [{"from_node": "main", "to_node": None}],
             },
             variables={"mode": "refund", "extra": "skill_var"},
+            container=container,
         )
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-        )
-        result = await flow.run(state)
+        state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
+        result = await run_flow(container=container, flow=flow, state=state)
         assert result["mode"] == "refund"
         assert result.variables["extra"] == "skill_var"

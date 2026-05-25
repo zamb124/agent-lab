@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,7 +23,7 @@ class PronunciationRule(BaseModel):
       провайдеров из ``STRESS_CAPABLE_PROVIDERS``.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     id: str = Field(description="UUID правила.")
     kind: PronunciationRuleKind = Field(description="Тип правила.")
@@ -53,7 +53,7 @@ class PronunciationRule(BaseModel):
 class NormalizationConfig(BaseModel):
     """Настройки текстовой нормализации (числа, даты, валюты, аббревиатуры)."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     numbers: bool = True
     dates: bool = True
@@ -65,7 +65,7 @@ class NormalizationConfig(BaseModel):
 class PronunciationRuleSet(BaseModel):
     """Полный набор правил + настройки нормализации для одного контекста."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     rules: list[PronunciationRule] = Field(default_factory=list)
     normalization: NormalizationConfig = Field(default_factory=NormalizationConfig)

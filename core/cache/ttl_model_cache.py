@@ -33,10 +33,10 @@ class TtlModelCache(Generic[TModel]):
         model_type: type[TModel],
         redis_client_factory: Callable[[], RedisTextCache],
     ) -> None:
-        self._name = name
-        self._model_type = model_type
-        self._redis_client_factory = redis_client_factory
-        self._lock = asyncio.Lock()
+        self._name: str = name
+        self._model_type: type[TModel] = model_type
+        self._redis_client_factory: Callable[[], RedisTextCache] = redis_client_factory
+        self._lock: asyncio.Lock = asyncio.Lock()
         self._memory_cache: tuple[str, float, TModel] | None = None
 
     async def get_or_build(

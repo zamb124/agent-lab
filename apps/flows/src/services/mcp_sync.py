@@ -12,22 +12,13 @@ from datetime import datetime, timezone
 from apps.flows.src.clients.mcp_client import MCPClient
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.enums import CodeMode
-from apps.flows.src.models.mcp import MCPServerConfig, MCPToolInfo
+from apps.flows.src.models.mcp import MCPDiscoveredTool, MCPServerConfig
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
+from core.integrations.mcp import mcp_tool_reference_id
 from core.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-def _mcp_tool_id(server_id: str, tool_name: str) -> str:
-    sid = str(server_id).strip()
-    tname = str(tool_name).strip()
-    if not sid:
-        raise ValueError("server_id обязателен")
-    if not tname:
-        raise ValueError("tool_name обязателен")
-    return f"mcp:{sid}:{tname}"
 
 
 def _mcp_headers_need_variables(server_config: MCPServerConfig) -> bool:
@@ -46,7 +37,7 @@ async def sync_mcp_server_tools(
     *,
     container: FlowContainer,
     server_config: MCPServerConfig,
-) -> tuple[list[str], list[MCPToolInfo]]:
+) -> tuple[list[str], list[MCPDiscoveredTool]]:
     """
     Запрашивает tools/list у MCP сервера и upsert'ит их как ToolReference (code_mode=mcp_tool).
 
@@ -65,18 +56,23 @@ async def sync_mcp_server_tools(
     tool_ids: list[str] = []
 
     for t in tools:
-        tool_id = _mcp_tool_id(server_id, t.name)
+        tool_id = mcp_tool_reference_id(server_id, t.tool_name)
         tool_ids.append(tool_id)
-        description = t.description if (t.description and str(t.description).strip()) else f"MCP tool: {t.name}"
+        description = t.description if t.description is not None else f"MCP tool: {t.tool_name}"
         _ = await container.tool_repository.set(
             ToolReference(
                 tool_id=tool_id,
-                title=t.name,
+                title=t.title if t.title is not None else t.tool_name,
                 description=description,
-                parameters_schema=t.input_schema,
+                parameters_schema=t.parameters_schema,
                 code_mode=CodeMode.MCP_TOOL,
                 mcp_server_id=server_id,
-                mcp_tool_name=t.name,
+                mcp_tool_name=t.tool_name,
+                mcp_schema_hash=t.schema_hash,
+                mcp_schema_version=t.schema_version,
+                mcp_output_schema=t.output_schema,
+                mcp_annotations=t.annotations,
+                mcp_execution=t.execution,
                 tags=["mcp", f"mcp:{server_id}"],
             )
         )

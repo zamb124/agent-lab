@@ -54,7 +54,6 @@
       "tools": [
         {
           "tool_id": "graph_extract_topic_python",
-          "type": "code",
           "language": "python",
           "description": "Python tool: извлекает короткую тему из сообщения и сохраняет её в state.graph_topic",
           "parameters_schema": {
@@ -71,7 +70,6 @@
         },
         {
           "tool_id": "graph_route_note_js",
-          "type": "code",
           "language": "javascript",
           "description": "JavaScript tool: формирует заметку по текущему маршруту графа",
           "parameters_schema": {
@@ -88,7 +86,6 @@
         },
         {
           "tool_id": "graph_escalation_hint_ts",
-          "type": "code",
           "language": "typescript",
           "description": "TypeScript tool: оценивает нужен ли оператор по severity",
           "parameters_schema": {
@@ -105,7 +102,6 @@
         },
         {
           "tool_id": "graph_order_reference_go",
-          "type": "code",
           "language": "go",
           "description": "Go tool: нормализует номер заказа для графового сценария",
           "parameters_schema": {
@@ -122,7 +118,6 @@
         },
         {
           "tool_id": "graph_reply_footer_csharp",
-          "type": "code",
           "language": "csharp",
           "description": "C# tool: добавляет короткий footer к ответу графового flow",
           "parameters_schema": {

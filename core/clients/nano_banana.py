@@ -1,7 +1,6 @@
 """Image generation клиент через platform LLM capability."""
 
 import base64
-import json
 import re
 import uuid
 from typing import TYPE_CHECKING, Protocol
@@ -12,6 +11,7 @@ from a2a.utils.message import get_message_text
 from core.clients.llm.factory import get_llm
 from core.company_ai import AICapability, resolve_llm_for_capability
 from core.config import get_settings
+from core.files.models import FileRecord
 from core.files.s3_client import S3ClientFactory
 from core.logging import get_logger
 
@@ -34,15 +34,12 @@ class NanoBananaClient:
     def __init__(
         self,
         storage: "Storage",
-        timeout: int = 60,
-    ):
+    ) -> None:
         """
         Args:
             storage: Storage для работы с БД
-            timeout: Таймаут запросов
         """
-        self._storage = storage
-        self._timeout = timeout
+        self._storage: Storage = storage
         self._llm: _ChatLLM | None = None
 
     def _get_llm(self) -> _ChatLLM:
@@ -114,20 +111,11 @@ class NanoBananaClient:
                     logger.warning(f"Файл {file_id} не найден")
                     continue
 
-                file_data = json.loads(file_data_json)
-                if not isinstance(file_data, dict):
-                    raise ValueError(f"Файл {file_id}: metadata must be JSON object")
-                s3_bucket = file_data.get("s3_bucket")
-                s3_key = file_data.get("s3_key")
-                content_type = file_data.get("content_type")
-                if not isinstance(s3_bucket, str) or not isinstance(s3_key, str):
-                    raise ValueError(f"Файл {file_id}: некорректные S3 metadata")
-                if not isinstance(content_type, str) or not content_type:
-                    content_type = "image/png"
+                file_record = FileRecord.model_validate_json(file_data_json)
 
-                s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
+                s3_client = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
                 try:
-                    file_bytes = await s3_client.download_bytes(s3_key)
+                    file_bytes = await s3_client.download_bytes(file_record.s3_key)
                 finally:
                     await s3_client.close()
 
@@ -141,7 +129,7 @@ class NanoBananaClient:
 
                     parts.append(Part(root=FilePart(file=FileWithBytes(
                         bytes=base64_data,
-                        mime_type=content_type,
+                        mime_type=file_record.content_type,
                         name=file_id,
                     ))))
 
@@ -159,9 +147,10 @@ class NanoBananaClient:
             )
         ])
 
-        file_pattern = r'file_([a-f0-9]{12})'
-        file_ids = re.findall(file_pattern, get_message_text(response))
-        file_ids = [f"file_{fid}" for fid in file_ids]
+        file_pattern: re.Pattern[str] = re.compile(r"file_([a-f0-9]{12})")
+        file_ids: list[str] = []
+        for file_match in file_pattern.finditer(get_message_text(response)):
+            file_ids.append(f"file_{file_match.group(1)}")
 
         if file_ids:
             logger.info(f"Сгенерировано {len(file_ids)} изображений: {file_ids}")
@@ -183,5 +172,4 @@ class NanoBananaClientFactory:
 
         return NanoBananaClient(
             storage=storage,
-            timeout=settings.nano_banana.timeout,
         )

@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from apps.sync.api import get_api_router
 from apps.sync.config import SyncSettings
-from apps.sync.container import get_sync_container
+from apps.sync.container import SyncContainer, get_sync_container
 from apps.sync.dependencies import ContainerDep
 from apps.sync.realtime.command_router import register_sync_ws_commands
 from apps.sync.realtime.operations import ws_command_error_status
@@ -24,16 +24,20 @@ from core.logging import get_logger
 from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
-async def on_startup(app: FastAPI, container, settings):
+
+
+async def on_startup(app: FastAPI, container: SyncContainer, settings: SyncSettings) -> None:
     """Регистрация WS command-handler'ов и presence hook'ов в core.websocket.
 
     Сам WS-сокет /sync/api/ws/notifications поднимает `core.websocket.router`
     через `create_service_app`. Push-события идут через `platform:ui_events`
     (см. `architecture.mdc`, раздел «REST-зеркало команд»).
     """
+    _ = app, container, settings
     register_sync_ws_commands()
     register_presence_hooks()
     logger.info("Sync Service: WS command-router и presence hooks готовы")
+
 
 app = create_service_app(
     service_name="sync",
@@ -51,7 +55,7 @@ app = create_service_app(
 )
 
 @app.exception_handler(WsCommandError)
-async def _ws_command_error_handler(request: Request, exc: WsCommandError) -> JSONResponse:
+async def ws_command_error_handler(request: Request, exc: WsCommandError) -> JSONResponse:
     """REST-зеркало команд: WsCommandError превращается в HTTPException-style ответ.
 
     Та же ошибка по WS уходит в `*_failed` фрейм; по REST — в JSON с тем же
@@ -73,19 +77,21 @@ if sync_ui_path.exists():
     app.mount("/sync/ui/static", StaticFiles(directory=sync_ui_path, html=True), name="sync_ui")
     logger.info(f"Sync UI смонтирован: {sync_ui_path}")
 
+
 @app.get("/sync/join/{token}")
-async def serve_call_join(container: ContainerDep, token: str):
+async def serve_call_join(container: ContainerDep, token: str) -> FileResponse:
     """Публичная страница входа в звонок по ссылке (без auth). SPA: sync-app, маршрут call_join."""
-    _ = container
+    _ = container, token
     ui_index = Path(__file__).parent / "ui" / "index.html"
     if not ui_index.exists():
         raise HTTPException(status_code=404, detail="Sync UI not found")
     return FileResponse(ui_index)
 
+
 @app.get("/sync")
 @app.get("/sync/")
 @app.get("/sync/{path:path}")
-async def serve_sync_ui(container: ContainerDep, path: str = ""):
+async def serve_sync_ui(container: ContainerDep, path: str = "") -> FileResponse:
     """SPA fallback для Sync UI."""
     _ = container
     if (
@@ -101,6 +107,7 @@ async def serve_sync_ui(container: ContainerDep, path: str = ""):
     if not ui_file.exists():
         raise HTTPException(status_code=404, detail="Sync UI not found")
     return FileResponse(ui_file)
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -6,7 +6,6 @@ Redis: предпочтение egress proxy по origin (нормализова
 
 from __future__ import annotations
 
-from typing import Any
 from urllib.parse import urlparse
 
 from core.clients.redis_client import RedisClient
@@ -18,10 +17,10 @@ logger = get_logger(__name__)
 REDIS_KEY_PREFIX = "platform:http_egress:prefer_proxy:"
 _PREFER_MARKER = "1"
 
-_redis: Any = None
+_redis: RedisClient | None = None
 
 
-def _redis_client() -> Any:
+def _redis_client() -> RedisClient:
     global _redis
     if _redis is None:
         _redis = RedisClient(get_settings().database.redis_url)

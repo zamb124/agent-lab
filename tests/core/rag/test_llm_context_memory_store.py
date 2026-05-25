@@ -176,12 +176,13 @@ async def test_rag_memory_store_without_namespace_repository_and_result_coercion
                 {
                     "content": "remembered",
                     "score": 2.0,
-                    "document_id": "fallback-id",
+                    "document_id": "document-id",
                     "document_name": "doc",
                     "metadata": {
+                        "memory_id": "memory-from-metadata",
                         "memory_scope": "company",
                         "session_id": "",
-                        "created_at": "not-a-date",
+                        "created_at": "2026-05-25T00:00:00+00:00",
                         LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY: "compact remembered",
                     },
                     "namespace": "memory-test",
@@ -207,11 +208,12 @@ async def test_rag_memory_store_without_namespace_repository_and_result_coercion
     records = await store.recall(LLMContextMemoryRecallRequest(query="q", scope="company"))
 
     assert repo.uploads[0]["metadata"]["memory_id"] == "m-no-namespace-repo"
-    assert records[0].memory_id == "fallback-id"
+    assert records[0].memory_id == "memory-from-metadata"
     assert records[0].content == "compact remembered"
     assert records[0].score == 1.0
     assert records[0].session_id is None
-    assert records[0].created_at is None
+    assert records[0].created_at is not None
+    assert records[0].created_at.isoformat() == "2026-05-25T00:00:00+00:00"
     assert repo.searches[0]["bind"].namespace == llm_context_memory_namespace_id("system")
     assert _clamp_score("bad-score") is None
     assert _parse_datetime(None) is None
@@ -226,6 +228,58 @@ async def test_rag_memory_store_strict_error_paths() -> None:
     )
     with pytest.raises(ValueError, match="response.results"):
         await store.recall(LLMContextMemoryRecallRequest(query="q", scope="company"))
+
+    strict_store = RAGLLMContextMemoryStore(
+        repository=FakeRAGRepository(
+            {
+                "results": [
+                    {
+                        "content": "remembered",
+                        "score": 1.0,
+                        "document_id": "document-id",
+                        "document_name": "doc",
+                        "metadata": {"memory_scope": "company"},
+                        "namespace": "memory-test",
+                        "chunk_id": "chunk",
+                        "provenance": {},
+                    }
+                ]
+            }
+        ),
+        namespace_repository=None,
+        namespace_id="memory-test",
+    )
+    with pytest.raises(ValueError, match="metadata.memory_id"):
+        await strict_store.recall(LLMContextMemoryRecallRequest(query="q", scope="company"))
+
+    invalid_created_at_store = RAGLLMContextMemoryStore(
+        repository=FakeRAGRepository(
+            {
+                "results": [
+                    {
+                        "content": "remembered",
+                        "score": 1.0,
+                        "document_id": "document-id",
+                        "document_name": "doc",
+                        "metadata": {
+                            "memory_id": "memory-id",
+                            "memory_scope": "company",
+                            "created_at": "not-a-date",
+                        },
+                        "namespace": "memory-test",
+                        "chunk_id": "chunk",
+                        "provenance": {},
+                    }
+                ]
+            }
+        ),
+        namespace_repository=None,
+        namespace_id="memory-test",
+    )
+    with pytest.raises(ValueError, match="metadata.created_at"):
+        await invalid_created_at_store.recall(
+            LLMContextMemoryRecallRequest(query="q", scope="company")
+        )
 
     context = get_context()
     clear_context()

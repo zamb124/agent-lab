@@ -3,6 +3,7 @@
 """
 
 from datetime import datetime, timezone
+from typing import ClassVar, override
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
@@ -10,6 +11,8 @@ from core.logging import get_logger
 from core.models.embed_models import EmbedConfig
 
 logger = get_logger(__name__)
+
+
 class EmbedConfigRepository(BaseRepository[EmbedConfig]):
     """
     Репозиторий для работы с конфигурациями встраиваемых виджетов.
@@ -18,20 +21,24 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
     Ключи: company:{company_id}:embed_config:{embed_id}
     """
 
-    is_global = False
+    is_global: ClassVar[bool] = False
 
     def __init__(self, storage: Storage):
         super().__init__(storage=storage, model_class=EmbedConfig)
 
+    @override
     def _get_key(self, embed_id: str) -> str:
         return f"embed_config:{embed_id}"
 
+    @override
     def _get_prefix(self) -> str:
         return "embed_config:"
 
+    @override
     def _get_table_name(self) -> str:
         return "storage"
 
+    @override
     def _extract_entity_id(self, entity: EmbedConfig) -> str:
         return entity.embed_id
 
@@ -77,6 +84,5 @@ class EmbedConfigRepository(BaseRepository[EmbedConfig]):
         if config:
             config.usage_count += 1
             config.last_used_at = datetime.now(timezone.utc)
-            await self.set(config)
+            _ = await self.set(config)
             logger.debug(f"Увеличен счетчик использований виджета {embed_id}: {config.usage_count}")
-

@@ -23,6 +23,7 @@ from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.durable_execution import (
     BreakpointHitPayload,
     EdgeActivatedPayload,
+    HandoffRequestedPayload,
     InterruptRaisedPayload,
     NodeCompletedPayload,
     NodeFailedPayload,
@@ -52,7 +53,6 @@ from apps.flows.src.runtime.exceptions import (
 from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
-from apps.flows.src.streaming.memory import InMemoryEmitter
 from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from core.errors import (
     FlowInfiniteLoopError,
@@ -106,7 +106,8 @@ class Flow:
         tags: list[str] | None = None,
         variables: JsonObject | None = None,
         config: JsonObject | None = None,
-        container: FlowRuntimeContainer | None = None,
+        *,
+        container: FlowRuntimeContainer,
     ):
         self.flow_id: str = flow_id
         self.name: str = name
@@ -116,11 +117,9 @@ class Flow:
         self.tags: list[str] = tags or []
         self.variables: JsonObject = variables or {}
         self.config: JsonObject = config or {}  # Полный inline FlowConfig
-        self.container: FlowRuntimeContainer | None = container
-        if self.container is not None:
-            for node in nodes.values():
-                if node.container is None:
-                    node.container = self.container
+        self.container: FlowRuntimeContainer = container
+        for node in nodes.values():
+            node.container = self.container
 
         self.edges: list[Edge] = [Edge.model_validate(edge) for edge in edges]
 
@@ -131,7 +130,7 @@ class Flow:
 
         self._join_required: dict[str, frozenset[str]] = self._build_join_required_predecessors()
 
-    async def _emit_pending_ui_events(self, emitter: Emitter | InMemoryEmitter, state: ExecutionState) -> None:
+    async def _emit_pending_ui_events(self, emitter: Emitter, state: ExecutionState) -> None:
         await emit_pending_ui_events(emitter=emitter, state=state)
 
     async def _checkpoint_state(
@@ -140,11 +139,12 @@ class Flow:
         *,
         event_type: WorkflowEventType = WorkflowEventType.state_projection_committed,
         payload: WorkflowEventPayload | None = None,
-    ) -> WorkflowAppendResult | None:
-        if self.container is None:
-            return None
+    ) -> WorkflowAppendResult:
         if state.session_flow_id != self.flow_id:
-            return None
+            raise RuntimeError(
+                f"Flow {self.flow_id!r} cannot checkpoint session for flow "
+                + f"{state.session_flow_id!r}"
+            )
         return await self.container.workflow_runtime.record_state_event(
             state.session_id,
             state,
@@ -168,6 +168,62 @@ class Flow:
         if event is None:
             return None
         return event.execution_branch_id
+
+    @staticmethod
+    def _interrupt_event(
+        *,
+        node_id: str,
+        current_nodes: list[str],
+        interrupt: FlowInterrupt,
+        preserved_node_writes: list[NodeWriteRecordedPayload] | None = None,
+    ) -> tuple[WorkflowEventType, WorkflowEventPayload]:
+        body = interrupt.body
+        preserved = preserved_node_writes or []
+        if not isinstance(body, OperatorTaskInterrupt):
+            return (
+                WorkflowEventType.interrupt_raised,
+                InterruptRaisedPayload(
+                    node_id=node_id,
+                    current_nodes=current_nodes,
+                    preserved_node_writes=preserved,
+                ),
+            )
+        if interrupt.correlation_id is None:
+            raise RuntimeError("Operator handoff interrupt requires correlation_id")
+        if body.operator_task_id is None:
+            raise RuntimeError("Operator handoff interrupt requires operator_task_id")
+        return (
+            WorkflowEventType.handoff_requested,
+            HandoffRequestedPayload(
+                node_id=node_id,
+                current_nodes=current_nodes,
+                handoff_command_id=body.handoff_command_id,
+                correlation_id=str(interrupt.correlation_id),
+                operator_task_id=body.operator_task_id,
+                task_title=body.task_title,
+                assignee_queue=body.assignee_queue,
+                handoff_mode=body.handoff_mode,
+                execution_branch_id=body.execution_branch_id,
+                node_schedule_sequence=body.node_schedule_sequence,
+                tool_call_id=body.tool_call_id,
+                preserved_node_writes=preserved,
+            ),
+        )
+
+    async def _require_workflow_instance(self, state: ExecutionState) -> None:
+        if state.session_flow_id != self.flow_id:
+            raise RuntimeError(
+                f"Flow {self.flow_id!r} requires session_id with the same flow id, "
+                + f"got {state.session_id!r}"
+            )
+        position = await self.container.workflow_runtime.get_active_execution_position(
+            state.session_id
+        )
+        if position is None:
+            raise RuntimeError(
+                f"Flow {self.flow_id!r} requires durable workflow instance "
+                + f"before run: {state.session_id!r}"
+            )
 
     @staticmethod
     def _attach_durable_node_context(
@@ -196,7 +252,7 @@ class Flow:
         )
 
     async def _emit_edge_condition_error_artifact(
-        self, emitter: Emitter | InMemoryEmitter, ece: EdgeConditionError
+        self, emitter: Emitter, ece: EdgeConditionError
     ) -> None:
         await emitter.emit_edge_error(
             ece.edge_index,
@@ -323,6 +379,8 @@ class Flow:
         Returns:
             Финальный ExecutionState
         """
+        await self._require_workflow_instance(state)
+
         if state.interrupt and state.content:
             # Resume: есть interrupt и новый контент (ответ пользователя)
             logger.info(f"Flow {self.flow_id}: resume with answer='{state.content[:50]}...'")
@@ -347,11 +405,7 @@ class Flow:
         iterations = 0
         max_graph_iterations = get_graph_max_iterations()
 
-        emitter: Emitter | InMemoryEmitter
-        if self.container is None:
-            emitter = InMemoryEmitter(state)
-        else:
-            emitter = Emitter(self.container.redis_client, state)
+        emitter = Emitter(self.container.redis_client, state)
 
         trace_ctx = None
         if is_tracing_enabled():
@@ -466,13 +520,13 @@ class Flow:
                     async def _run_captured(
                         node_id: str,
                         run_state: ExecutionState,
-                    ) -> tuple[str, ExecutionState | None, Exception | None]:
+                    ) -> tuple[str, ExecutionState | None, Exception | None, ExecutionState]:
                         try:
-                            return node_id, await _run(node_id, run_state), None
+                            return node_id, await _run(node_id, run_state), None, run_state
                         except FlowCancelled:
                             raise
                         except Exception as exc:
-                            return node_id, None, exc
+                            return node_id, None, exc, run_state
 
                     tasks = [
                         _run_captured(node_id, run_states[node_id])
@@ -481,7 +535,7 @@ class Flow:
                     outcomes = await asyncio.gather(*tasks)
                     successful_results = [
                         (node_id, result)
-                        for node_id, result, exc in outcomes
+                        for node_id, result, exc, _run_state in outcomes
                         if exc is None and result is not None
                     ]
                     successful_node_writes: list[NodeWriteRecordedPayload] = []
@@ -519,19 +573,19 @@ class Flow:
                     result_states = [result for _, result in successful_results]
 
                     interrupts = [
-                        (node_id, exc)
-                        for node_id, _, exc in outcomes
+                        (node_id, exc, run_state)
+                        for node_id, _, exc, run_state in outcomes
                         if isinstance(exc, FlowInterrupt)
                     ]
                     if interrupts:
-                        node_id, interrupt = interrupts[0]
+                        node_id, interrupt, interrupted_state = interrupts[0]
                         logger.info(
                             f"Flow {self.flow_id}: interrupt at '{node_id}': {interrupt.question}"
                         )
-                        if result_states:
-                            state = self._merge_results(superstep_base_state, result_states)
-                        else:
-                            state = self._clone_state(superstep_base_state)
+                        state = self._merge_results(
+                            superstep_base_state,
+                            [*result_states, interrupted_state],
+                        )
                         InterruptManager.apply_interrupt(
                             state,
                             interrupt.body,
@@ -539,21 +593,25 @@ class Flow:
                             interrupt.correlation_id,
                         )
                         state.current_nodes = current_nodes
+                        event_type, event_payload = self._interrupt_event(
+                            node_id=node_id,
+                            current_nodes=current_nodes,
+                            interrupt=interrupt,
+                            preserved_node_writes=successful_node_writes,
+                        )
                         _ = await self._checkpoint_state(
                             state,
-                            event_type=WorkflowEventType.interrupt_raised,
-                            payload=InterruptRaisedPayload(
-                                node_id=node_id,
-                                current_nodes=current_nodes,
-                                preserved_node_writes=successful_node_writes,
-                            ),
+                            event_type=event_type,
+                            payload=event_payload,
                         )
                         return state
 
-                    errors = [exc for _, _, exc in outcomes if exc is not None]
+                    errors = [exc for _, _, exc, _run_state in outcomes if exc is not None]
                     if errors:
                         failed_nodes = [
-                            node_id for node_id, _, exc in outcomes if exc is not None
+                            node_id
+                            for node_id, _, exc, _run_state in outcomes
+                            if exc is not None
                         ]
                         _ = await self._checkpoint_state(
                             superstep_base_state,
@@ -582,13 +640,15 @@ class Flow:
                         e.correlation_id,
                     )
                     state.current_nodes = current_nodes
+                    event_type, event_payload = self._interrupt_event(
+                        node_id=node_id,
+                        current_nodes=current_nodes,
+                        interrupt=e,
+                    )
                     _ = await self._checkpoint_state(
                         state,
-                        event_type=WorkflowEventType.interrupt_raised,
-                        payload=InterruptRaisedPayload(
-                            node_id=node_id,
-                            current_nodes=current_nodes,
-                        ),
+                        event_type=event_type,
+                        payload=event_payload,
                     )
                     return state
 
@@ -844,7 +904,7 @@ class Flow:
         state: ExecutionState,
         node_id: str,
         node_type: str,
-        emitter: Emitter | InMemoryEmitter,
+        emitter: Emitter,
     ) -> bool:
         """
         Проверяет breakpoint и останавливает выполнение если активен.
@@ -1051,8 +1111,6 @@ class Flow:
         Если entrypoint не задан, runner вызывает первую функцию в source.
         Condition исполняется на копии state, поэтому переходы не мутируют runtime state.
         """
-        if self.container is None:
-            raise RuntimeError("Code edge condition requires FlowContainer")
         code = condition.code
         language = condition.language
         entrypoint = condition.entrypoint
@@ -1166,7 +1224,7 @@ class Flow:
         config: Mapping[str, object],
         variables: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
     ) -> "Flow":
         """
         Создаёт flow из FlowConfig.

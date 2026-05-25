@@ -1,6 +1,7 @@
 """Одноразовый preview embed: минт flows, редирект /l на frontend, consume handoff в Redis."""
 
 from __future__ import annotations
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 

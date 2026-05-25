@@ -346,7 +346,7 @@ help:
 	@echo "============================================================================"
 	@echo "Тесты:"
 	@echo "============================================================================"
-	@echo "  make test            - Полный прогон (frontend-core + unit + retry, mk/test.mk)"
+	@echo "  make test            - Ruff + basedpyright, затем frontend-core + unit + retry"
 	@echo "  make test-unit       - Только unit/API"
 	@echo "  make test-rag        - RAG тесты"
 	@echo "  make test-frontend   - Frontend API тесты"

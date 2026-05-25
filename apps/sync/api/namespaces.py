@@ -7,6 +7,7 @@ CRM (`apps/crm/api/namespaces.py`); Sync только читает список 
 """
 
 import asyncio
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -51,8 +52,8 @@ class SyncNamespaceUpdateRequest(BaseModel):
 @router.get("", response_model=OffsetPage[SyncNamespaceResponse])
 async def list_namespaces(
     container: ContainerDep,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[SyncNamespaceResponse]:
     """Список namespace текущей компании (источник — shared `NamespaceRepository`)."""
     namespace_repo = container.namespace_repository
@@ -94,7 +95,7 @@ async def update_namespace_sync_settings(
     if existing is None:
         raise HTTPException(status_code=404, detail=f"Namespace '{namespace_name}' не найден")
     existing.sync_settings = body.sync_settings
-    await namespace_repo.set(existing)
+    _ = await namespace_repo.set(existing)
     return SyncNamespaceResponse(
         name=existing.name,
         company_id=existing.company_id,

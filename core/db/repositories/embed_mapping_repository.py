@@ -2,6 +2,7 @@
 Репозиторий для глобального маппинга embed_id -> company_id.
 """
 
+from typing import ClassVar, override
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
@@ -9,6 +10,8 @@ from core.logging import get_logger
 from core.models.embed_models import EmbedMapping
 
 logger = get_logger(__name__)
+
+
 class EmbedMappingRepository(BaseRepository[EmbedMapping]):
     """
     Глобальный маппинг для поиска компании по embed_id.
@@ -17,20 +20,24 @@ class EmbedMappingRepository(BaseRepository[EmbedMapping]):
     Ключи: embed_mapping:{embed_id}
     """
 
-    is_global = True
+    is_global: ClassVar[bool] = True
 
     def __init__(self, storage: Storage):
         super().__init__(storage=storage, model_class=EmbedMapping)
 
+    @override
     def _get_key(self, embed_id: str) -> str:
         return f"embed_mapping:{embed_id}"
 
+    @override
     def _get_prefix(self) -> str:
         return "embed_mapping:"
 
+    @override
     def _get_table_name(self) -> str:
         return "storage"
 
+    @override
     def _extract_entity_id(self, entity: EmbedMapping) -> str:
         return entity.embed_id
 
@@ -64,8 +71,7 @@ class EmbedMappingRepository(BaseRepository[EmbedMapping]):
         """
         mapping = await self.get(embed_id)
         if mapping:
-            await self.delete(embed_id)
+            _ = await self.delete(embed_id)
             logger.info(f"Удален маппинг для {embed_id}")
             return True
         return False
-

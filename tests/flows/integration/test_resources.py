@@ -5,7 +5,9 @@ MockLLM — где нужен LLM.
 """
 
 import uuid
+
 import pytest
+
 from apps.flows.src.models import ResourceDefinition, ResourceReference
 from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
 from apps.flows.src.runtime.nodes import CodeNode, LlmNode

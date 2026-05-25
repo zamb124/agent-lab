@@ -15,7 +15,7 @@ from core.db.utils import get_rowcount
 
 class ApiKeyRepository:
     def __init__(self, db_url: str) -> None:
-        self._db_url = db_url
+        self._db_url: str = db_url
 
     async def list_by_company(
         self,
@@ -69,7 +69,7 @@ class ApiKeyRepository:
     async def touch_last_used(self, key_id: str, company_id: str) -> None:
         session_factory = await get_session_factory(self._db_url)
         async with session_factory() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(ApiKeyRecord)
                 .where(
                     ApiKeyRecord.key_id == key_id,

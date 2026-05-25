@@ -2,7 +2,7 @@
  * Ресурсы leads — заявки с лендинга и системный список заявок.
  *
  * API (apps/frontend/api/leads.py):
- *   POST /api/leads             ← LeadCreateBody (name, email|phone обязательны)
+ *   POST /api/leads             ← LeadCreateBody (contact_name, email|phone обязательны)
  *   GET  /api/lead-requests     → { items, next_cursor, has_more } (только system)
  *
  * Состав:
@@ -20,11 +20,16 @@ export const leadSubmitOp = createAsyncOp({
     successToastKey: 'frontend:leads_page.toast_submitted',
     errorToastKey: 'frontend:leads_page.toast_submit_failed',
     restMirror: { method: 'POST', path: '/frontend/api/leads' },
-    request: async ({ payload }) => await httpRequest({
-        method: 'POST',
-        url: `${BASE}/leads`,
-        body: payload && typeof payload === 'object' ? payload : {},
-    }),
+    request: async ({ payload }) => {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('frontend/lead_submit payload object required');
+        }
+        return await httpRequest({
+            method: 'POST',
+            url: `${BASE}/leads`,
+            body: payload,
+        });
+    },
 });
 
 export const leadRequestsList = createCursorList({

@@ -124,7 +124,7 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
                 ),
             }
         },
-        edges=[{"from": "main", "to": None}],
+        edges=[{"from_node": "main", "to_node": None}],
     )
     await flows_container.flow_repository.set(agent)
     embed_id = f"embed_landing_cap_{uuid.uuid4().hex[:12]}"

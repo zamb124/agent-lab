@@ -28,7 +28,6 @@ app = create_service_app(
     settings_class=BrowserSettings,
     get_container=get_browser_container,
     routers=[browser_control_router, browser_mcp_router],
-    repository_names=[],
     on_shutdown=on_shutdown,
     cors_origins=["*"],
     title="Platform Browser Runtime",

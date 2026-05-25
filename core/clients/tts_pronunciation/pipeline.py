@@ -57,10 +57,10 @@ def _apply_ssml_extract(text: str) -> str:
     parts: list[str] = []
 
     def _walk(node: ET.Element) -> None:
-        tag = node.tag.lower() if isinstance(node.tag, str) else ""
+        tag = node.tag.lower()
         if tag == "sub":
-            alias = node.get("alias") or node.get("alias", "")
-            parts.append(alias or (node.text or ""))
+            alias = node.get("alias")
+            parts.append(alias if alias is not None else (node.text or ""))
         elif tag == "phoneme":
             parts.append(node.text or "")
         else:
@@ -83,7 +83,7 @@ def _build_automaton(
     language: str | None,
     capabilities_stress: bool,
     case_sensitive_subset: bool | None = None,
-) -> ahocorasick.Automaton | None:
+    ) -> ahocorasick.Automaton[_CompiledAliasRule] | None:
     """Строит Aho-Corasick automaton из применимых alias-правил.
 
     case_sensitive_subset:
@@ -91,7 +91,7 @@ def _build_automaton(
         True — только ``case_sensitive``;
         False — только регистронезависимые.
     """
-    automaton: ahocorasick.Automaton = ahocorasick.Automaton()
+    automaton: ahocorasick.Automaton[_CompiledAliasRule] = ahocorasick.Automaton()
     added = 0
 
     for rule in rules:
@@ -108,7 +108,7 @@ def _build_automaton(
                 continue
 
         key = rule.pattern if rule.case_sensitive else rule.pattern.lower()
-        automaton.add_word(key, rule)
+        _ = automaton.add_word(key, rule)
         added += 1
 
     if added == 0:
@@ -120,7 +120,7 @@ def _build_automaton(
 
 def _apply_alias_rules_ac(
     text: str,
-    automaton: ahocorasick.Automaton,
+    automaton: ahocorasick.Automaton[_CompiledAliasRule],
     *,
     lower_fold: bool,
 ) -> str:

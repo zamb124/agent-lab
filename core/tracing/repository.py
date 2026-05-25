@@ -19,6 +19,7 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.elements import ColumnElement
 
 import core.tracing.attributes as trace_attr
+from core.db.jsonb import jsonb_text
 from core.db.models import Spans
 from core.logging import get_logger
 from core.tracing.models import (
@@ -37,7 +38,7 @@ logger = get_logger(__name__)
 
 
 def _span_attribute_text(key: str) -> ColumnElement[str | None]:
-    return type_cast(ColumnElement[str | None], Spans.attributes.op("->>")(key))
+    return jsonb_text(Spans.attributes, key)
 
 
 def _json_text_eq(key: str, value: str) -> ColumnElement[bool]:
@@ -78,8 +79,8 @@ def _escape_like_fragment(fragment: str) -> str:
     return fragment.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _admin_ilike(
-    column: InstrumentedAttribute[str] | InstrumentedAttribute[str | None],
+def admin_ilike(
+    column: InstrumentedAttribute[str] | InstrumentedAttribute[str | None] | ColumnElement[str | None],
     fragment: str,
 ) -> ColumnElement[bool]:
     return type_cast(ColumnElement[bool], column.ilike(f"%{_escape_like_fragment(fragment)}%", escape="\\"))
@@ -497,7 +498,7 @@ class SpanRepository:
             if service_name is not None:
                 stmt = stmt.where(Spans.service_name == service_name)
             elif service_name_frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.service_name, service_name_frag))
+                stmt = stmt.where(admin_ilike(Spans.service_name, service_name_frag))
             if company_id is not None:
                 stmt = stmt.where(Spans.company_id == company_id)
             if user_id is not None:
@@ -505,19 +506,19 @@ class SpanRepository:
             if namespace is not None:
                 stmt = stmt.where(Spans.namespace == namespace)
             elif namespace_frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.namespace, namespace_frag))
+                stmt = stmt.where(admin_ilike(Spans.namespace, namespace_frag))
             if from_time is not None:
                 stmt = stmt.where(Spans.start_time >= from_time)
             if to_time is not None:
                 stmt = stmt.where(Spans.start_time <= to_time)
             if company_frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.company_id, company_frag))
+                stmt = stmt.where(admin_ilike(Spans.company_id, company_frag))
             if user_frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.user_id, user_frag))
+                stmt = stmt.where(admin_ilike(Spans.user_id, user_frag))
             if op_frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.operation_name, op_frag))
+                stmt = stmt.where(admin_ilike(Spans.operation_name, op_frag))
             if event_frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.event_type, event_frag))
+                stmt = stmt.where(admin_ilike(Spans.event_type, event_frag))
             if cursor is not None:
                 try:
                     cursor_time, cursor_span_id = _decode_service_list_cursor(cursor)
@@ -590,7 +591,7 @@ class SpanRepository:
         async with self._storage.get_session() as session:
             stmt = select(Spans.company_id).where(Spans.company_id.isnot(None))
             if frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.company_id, frag))
+                stmt = stmt.where(admin_ilike(Spans.company_id, frag))
             stmt = stmt.distinct().order_by(Spans.company_id.asc()).limit(limit)
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0] is not None]
@@ -633,7 +634,7 @@ class SpanRepository:
             if scope_ns is not None:
                 stmt = stmt.where(Spans.namespace == scope_ns)
             if frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.user_id, frag))
+                stmt = stmt.where(admin_ilike(Spans.user_id, frag))
             stmt = stmt.distinct().order_by(Spans.user_id.asc()).limit(limit)
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0] is not None]
@@ -683,7 +684,7 @@ class SpanRepository:
             if scope_ns is not None:
                 stmt = stmt.where(Spans.namespace == scope_ns)
             if frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.service_name, frag))
+                stmt = stmt.where(admin_ilike(Spans.service_name, frag))
             stmt = stmt.distinct().order_by(Spans.service_name.asc()).limit(limit)
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0] is not None]
@@ -708,7 +709,7 @@ class SpanRepository:
             if scope_ns is not None:
                 stmt = stmt.where(Spans.namespace == scope_ns)
             if frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.event_type, frag))
+                stmt = stmt.where(admin_ilike(Spans.event_type, frag))
             stmt = stmt.distinct().order_by(Spans.event_type.asc()).limit(limit)
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0] is not None]
@@ -729,7 +730,7 @@ class SpanRepository:
             if scope_co is not None:
                 stmt = stmt.where(Spans.company_id == scope_co)
             if frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.namespace, frag))
+                stmt = stmt.where(admin_ilike(Spans.namespace, frag))
             stmt = stmt.distinct().order_by(Spans.namespace.asc()).limit(limit)
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0] is not None]
@@ -754,7 +755,7 @@ class SpanRepository:
             if scope_ns is not None:
                 stmt = stmt.where(Spans.namespace == scope_ns)
             if frag is not None:
-                stmt = stmt.where(_admin_ilike(Spans.operation_name, frag))
+                stmt = stmt.where(admin_ilike(Spans.operation_name, frag))
             stmt = stmt.distinct().order_by(Spans.operation_name.asc()).limit(limit)
             result = await session.execute(stmt)
             return [row[0] for row in result.all() if row[0] is not None]

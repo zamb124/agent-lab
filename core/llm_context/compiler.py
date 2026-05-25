@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from typing import TypedDict
 
 from core.llm_context.models import (
     CompiledLLMContext,
     LLMContextBlock,
+    LLMContextCacheMode,
     LLMContextCompileRequest,
     LLMContextProfile,
     LLMContextUsage,
@@ -21,12 +22,6 @@ class LLMContextBudgetError(ValueError):
     """Raised when mandatory context cannot fit into the resolved token budget."""
 
 
-_BLOCK_SCOPE_TOKEN_FIELD = {
-    "memory": "memory_tokens",
-    "rag": "rag_tokens",
-    "tool_result": "tool_result_tokens",
-}
-
 _BLOCK_OUTPUT_ORDER = {
     "system": 0,
     "profile": 10,
@@ -37,16 +32,23 @@ _BLOCK_OUTPUT_ORDER = {
 }
 
 
+class _ToolCompactionStats(TypedDict):
+    original_tokens: int
+    compacted_tokens: int
+    saved_tokens: int
+    compacted_messages: int
+
+
 class LLMContextCompiler:
     """Compile messages + candidate blocks into a bounded, provider-neutral prompt."""
 
     def __init__(self, token_counter: TokenCounter | None = None) -> None:
-        self._token_counter = token_counter or TiktokenTokenCounter()
+        self._token_counter: TokenCounter = token_counter or TiktokenTokenCounter()
 
     def compile(self, request: LLMContextCompileRequest) -> CompiledLLMContext:
         policy = request.policy
         messages = [dict(message) for message in request.messages]
-        tool_compaction = {
+        tool_compaction: _ToolCompactionStats = {
             "original_tokens": 0,
             "compacted_tokens": 0,
             "saved_tokens": 0,
@@ -142,7 +144,7 @@ class LLMContextCompiler:
         self,
         messages: list[JsonObject],
         policy: LLMContextProfile,
-    ) -> tuple[list[JsonObject], dict[str, int]]:
+    ) -> tuple[list[JsonObject], _ToolCompactionStats]:
         tool_indexes: list[tuple[int, int]] = []
         original_tokens = 0
         for index, message in enumerate(messages):
@@ -155,7 +157,7 @@ class LLMContextCompiler:
             tool_indexes.append((index, token_count))
             original_tokens += token_count
 
-        stats = {
+        stats: _ToolCompactionStats = {
             "original_tokens": original_tokens,
             "compacted_tokens": original_tokens,
             "saved_tokens": 0,
@@ -202,13 +204,15 @@ class LLMContextCompiler:
     ) -> str:
         content = self._message_content_to_text(message.get("content"))
         digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
-        tool_call_id = str(message.get("tool_call_id") or "").strip()
-        prefix = (
-            "[tool result compacted]\n"
-            f"tool_call_id={tool_call_id or 'unknown'}\n"
-            f"original_tokens={original_tokens}\n"
-            f"sha256={digest}"
-        )
+        tool_call_id_value = message.get("tool_call_id")
+        if tool_call_id_value is not None and not isinstance(tool_call_id_value, str):
+            raise ValueError("LLM tool message.tool_call_id must be a string")
+        tool_call_id = tool_call_id_value.strip() if isinstance(tool_call_id_value, str) else ""
+        prefix_lines = ["[tool result compacted]"]
+        if tool_call_id:
+            prefix_lines.append(f"tool_call_id={tool_call_id}")
+        prefix_lines.extend((f"original_tokens={original_tokens}", f"sha256={digest}"))
+        prefix = "\n".join(prefix_lines)
         compacted = prefix
         if self._token_counter.count_text(compacted) <= target_tokens:
             return compacted
@@ -229,7 +233,7 @@ class LLMContextCompiler:
                     if isinstance(text, str):
                         text_parts.append(text)
             return "\n".join(text_parts)
-        return json.dumps(content, ensure_ascii=False, sort_keys=True, default=str)
+        return json.dumps(content, ensure_ascii=False, sort_keys=True)
 
     @staticmethod
     def _split_system_prefix(
@@ -344,10 +348,13 @@ class LLMContextCompiler:
         return True
 
     def _scope_budget(self, block: LLMContextBlock, request: LLMContextCompileRequest) -> int | None:
-        field_name = _BLOCK_SCOPE_TOKEN_FIELD.get(block.budget_scope)
-        if field_name is None:
-            return None
-        return int(getattr(request.policy.budget, field_name))
+        if block.budget_scope == "memory":
+            return request.policy.budget.memory_tokens
+        if block.budget_scope == "rag":
+            return request.policy.budget.rag_tokens
+        if block.budget_scope == "tool_result":
+            return request.policy.budget.tool_result_tokens
+        return None
 
     def _block_token_count(self, block: LLMContextBlock) -> int:
         if block.token_count is not None:
@@ -359,7 +366,7 @@ class LLMContextCompiler:
 
     @staticmethod
     def _provider_hints(
-        cache_mode: str,
+        cache_mode: LLMContextCacheMode,
         system_prefix: list[JsonObject],
         blocks: list[LLMContextBlock],
     ) -> JsonObject:
@@ -395,23 +402,26 @@ class LLMContextCompiler:
         }
 
 
-def _block_output_sort_key(block: LLMContextBlock) -> tuple[Any, ...]:
+def _block_output_sort_key(block: LLMContextBlock) -> tuple[int, str, int, float, str]:
     kind_order = _BLOCK_OUTPUT_ORDER.get(block.kind, 100)
     if block.kind == "memory":
         return (
             kind_order,
             _memory_created_at_key(block),
+            0,
+            0.0,
             block.stable_key,
         )
     return (
         kind_order,
+        "",
         -block.priority,
         -(block.score if block.score is not None else -1.0),
         block.stable_key,
     )
 
 
-def _block_selection_sort_key(block: LLMContextBlock) -> tuple[Any, ...]:
+def _block_selection_sort_key(block: LLMContextBlock) -> tuple[bool, int, int, str, float, str]:
     kind_order = _BLOCK_OUTPUT_ORDER.get(block.kind, 100)
     if block.kind == "memory":
         return (

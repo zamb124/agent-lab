@@ -1,13 +1,15 @@
 """
 Модели данных для Frontend сервиса
 """
+import re
 from datetime import datetime, timezone
-from typing import override
+from typing import ClassVar, Literal, Self, override
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.clients.llm.config import LLMCallConfig
 from core.company_ai import CapabilityLiteral
+from core.config.models import LegalConfig, PublicSiteConfig
 from core.models.payment_models import TransactionResponse
 from core.tracing.models import TraceSpanRecord
 from core.types import JsonObject
@@ -108,6 +110,144 @@ class CompanySettingsUpdateResponse(BaseModel):
     company: CompanySettingsUpdatedCompany
 
 
+# === Landing lead requests ===
+
+
+class LeadCreateBody(BaseModel):
+    """Публичная заявка с лендинга."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    contact_name: str = Field(min_length=1, max_length=200)
+    email: str | None = Field(default=None, max_length=320)
+    phone: str | None = Field(default=None, max_length=64)
+    organization_name: str | None = Field(default=None, max_length=200)
+    comment: str | None = Field(default=None, max_length=4000)
+    job_title: str | None = Field(default=None, max_length=200)
+    headcount_range: Literal["1_49", "50_199", "200_499", "500_plus"]
+    interested_products: list[Literal["agents", "rag", "crm", "sync", "documents"]] = Field(min_length=1)
+
+    @field_validator("email", "phone", "organization_name", "comment", "job_title")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if normalized == "":
+            return None
+        return normalized
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_optional(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+        if not re.match(email_regex, value):
+            raise ValueError("Invalid email format")
+        return value
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone_optional(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        phone_digits = "".join(ch for ch in value if ch.isdigit())
+        if len(phone_digits) < 10:
+            raise ValueError("Invalid phone format")
+        return value
+
+    @model_validator(mode="after")
+    def require_email_or_phone(self) -> Self:
+        if self.email is None and self.phone is None:
+            raise ValueError("Укажите email или телефон")
+        return self
+
+
+class LeadRequestRecord(LeadCreateBody):
+    """Каноническая запись заявки в shared storage и ответе system UI."""
+
+    lead_request_id: str
+    created_at: datetime
+
+
+class LeadCreateResponse(BaseModel):
+    """Результат приема публичной заявки."""
+
+    success: bool = True
+    message: str
+    lead_request_id: str
+
+
+# === Public site ===
+
+
+class PublicSiteBundle(BaseModel):
+    """Публичная конфигурация лендинга."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    legal: LegalConfig
+    marketing: PublicSiteConfig
+
+
+class PublicBlogCard(BaseModel):
+    """Карточка публичной статьи блога."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    slug: str = Field(min_length=1)
+    title_ru: str = Field(min_length=1)
+    title_en: str = Field(min_length=1)
+    summary_ru: str = Field(min_length=1)
+    summary_en: str = Field(min_length=1)
+
+
+class PublicBlogPost(PublicBlogCard):
+    """Полная публичная статья блога."""
+
+    body_ru: str = Field(min_length=1)
+    body_en: str = Field(min_length=1)
+
+
+class PublicBlogListResponse(BaseModel):
+    """Список публичных статей блога."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    items: tuple[PublicBlogCard, ...]
+
+
+class PublicStartupCard(BaseModel):
+    """Карточка продукта для внешних каталогов."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: Literal["Humanitec"]
+    tagline_ru: str = Field(min_length=1)
+    tagline_en: str = Field(min_length=1)
+    website_url: str = Field(min_length=1)
+    products: tuple[Literal["AI Studio", "Knowledge Base", "NetWorkle", "Sync", "Documents"], ...]
+    deployment_modes: tuple[Literal["cloud", "hybrid", "on-premise"], ...]
+    logo_url: str = Field(min_length=1)
+
+
+class LandingDemoSpec(BaseModel):
+    """Seed-контракт публичного демо-агента лендинга."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    embed_id: str = Field(min_length=1)
+    flow_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    assistant_title: str = Field(min_length=1)
+    greeting_message: str = Field(min_length=1)
+    sort: int
+    image: str = Field(min_length=1)
+    show_tool_calls: bool = False
+    guest_max_user_messages: int = Field(default=5, ge=1)
+
+
 # === AI providers (capabilities + custom OpenAI-compatible) ===
 
 
@@ -160,10 +300,20 @@ class CustomProviderUpdate(BaseModel):
     model_by_capability: dict[str, str] | None = None
 
 
+class ServiceHealthTarget(BaseModel):
+    """Цель health-check для сервисного статуса frontend."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str
+    health_url: str
+
+
 class ServiceStatus(BaseModel):
     """Статус микросервиса"""
+
     name: str
-    status: str  # healthy, unhealthy, unknown
+    status: Literal["healthy", "unhealthy", "unknown"]
     url: str
     response_time: float | None = None
 

@@ -19,17 +19,22 @@ def _minimal_state() -> ExecutionState:
 
 class TestResourceNode:
     @pytest.mark.asyncio
-    async def test_create_node_registry(self) -> None:
+    async def test_create_node_registry(self, container) -> None:
         node = await create_node(
             "res_a",
             {"type": NodeType.RESOURCE.value, "resources": {}},
+            container=container,
         )
         assert isinstance(node, ResourceNode)
         assert node.node_id == "res_a"
 
     @pytest.mark.asyncio
-    async def test_run_leaves_state_unchanged(self) -> None:
-        node = ResourceNode(node_id="res_b", config={"resources": {}})
+    async def test_run_leaves_state_unchanged(self, container) -> None:
+        node = ResourceNode(
+            node_id="res_b",
+            config={"type": NodeType.RESOURCE.value, "resources": {}},
+            container=container,
+        )
         state = _minimal_state()
         state.content = "keep"
         out = await node.run(state)

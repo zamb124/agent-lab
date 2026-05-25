@@ -18,6 +18,7 @@ from apps.flows.src.container import FlowContainer
 from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import (
     BranchConfig,
+    BranchPayload,
     DataflowInspectResult,
     Edge,
     EdgeCondition,
@@ -26,11 +27,11 @@ from apps.flows.src.models import (
     FlowType,
     FlowVariableConfig,
     GraphNodeConfig,
-    MergeMode,
     NodeConfig,
     ResourceReference,
     TestCaseConfig,
     TriggerConfig,
+    branch_payload_to_config,
 )
 from apps.flows.src.models.flow_speech_settings import FlowSpeechSettings
 from apps.flows.src.services.flow_dataflow_inspector import (
@@ -470,20 +471,8 @@ class EdgeRequest(BaseModel):
     condition: EdgeCondition | None = None
 
 
-class BranchRequest(BaseModel):
+class BranchRequest(BranchPayload):
     """Ветка (branch) в запросе"""
-
-    name: str
-    description: str = ""
-    tags: list[str] = Field(default_factory=list)
-    entry: str | None = None
-    nodes: dict[str, GraphNodeConfig] | None = None
-    nodes_mode: str | None = None
-    edges: list[Edge] | None = None
-    edges_mode: str | None = None
-    variables: JsonObject = Field(default_factory=dict)
-    variables_mode: str | None = None
-    speech: FlowSpeechSettings | None = None
 
 
 class BranchResponse(BaseModel):
@@ -492,6 +481,7 @@ class BranchResponse(BaseModel):
     name: str
     description: str = ""
     tags: list[str] = Field(default_factory=list)
+    permission: list[str] = Field(default_factory=list)
     entry: str | None = None
     nodes: dict[str, JsonObject] | None = None
     edges: list[Edge] | None = None
@@ -499,6 +489,8 @@ class BranchResponse(BaseModel):
     nodes_mode: str | None = None
     edges_mode: str | None = None
     variables_mode: str | None = None
+    resources: dict[str, ResourceReference] = Field(default_factory=dict)
+    resources_mode: str | None = None
     speech: JsonObject | None = None
 
 
@@ -508,6 +500,7 @@ def _branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
         name=branch_cfg.name,
         description=branch_cfg.description,
         tags=branch_cfg.tags,
+        permission=branch_cfg.permission,
         entry=branch_cfg.entry,
         nodes=branch_cfg.nodes,
         edges=branch_cfg.edges if branch_cfg.edges else None,
@@ -515,52 +508,15 @@ def _branch_config_to_response(branch_cfg: BranchConfig) -> BranchResponse:
         nodes_mode=branch_cfg.nodes_mode.value,
         edges_mode=branch_cfg.edges_mode.value,
         variables_mode=branch_cfg.variables_mode.value,
+        resources=branch_cfg.resources,
+        resources_mode=branch_cfg.resources_mode.value,
         speech=_speech_to_json(branch_cfg.speech),
     )
 
 
-def _branch_request_to_config(
-    branch_id: str,
-    branch_req: BranchRequest,
-    existing: BranchConfig | None = None,
-) -> BranchConfig:
+def _branch_request_to_config(branch_req: BranchRequest) -> BranchConfig:
     """Конвертирует BranchRequest в BranchConfig."""
-
-    def _mode(
-        raw: str | None,
-        ex: MergeMode | None,
-        default: MergeMode,
-    ) -> MergeMode:
-        if raw is not None and raw != "":
-            return MergeMode(raw)
-        if ex is not None:
-            return ex
-        return default
-
-    ex_n = existing.nodes_mode if existing is not None else None
-    ex_e = existing.edges_mode if existing is not None else None
-    ex_v = existing.variables_mode if existing is not None else None
-    speech_val: FlowSpeechSettings | None = None
-    if branch_req.speech is not None:
-        speech_val = branch_req.speech
-    elif existing is not None:
-        speech_val = existing.speech
-
-    branch_nodes = _graph_nodes_payload(branch_req.nodes) if branch_req.nodes is not None else None
-
-    return BranchConfig(
-        name=branch_req.name,
-        description=branch_req.description,
-        tags=branch_req.tags,
-        entry=branch_req.entry,
-        nodes=branch_nodes,
-        edges=branch_req.edges,
-        variables=_flow_variable_models(branch_req.variables, f"branches.{branch_id}.variables"),
-        nodes_mode=_mode(branch_req.nodes_mode, ex_n, MergeMode.REPLACE),
-        edges_mode=_mode(branch_req.edges_mode, ex_e, MergeMode.REPLACE),
-        variables_mode=_mode(branch_req.variables_mode, ex_v, MergeMode.MERGE),
-        speech=speech_val,
-    )
+    return branch_payload_to_config(branch_req)
 
 
 class FlowCreateRequest(BaseModel):
@@ -1093,7 +1049,7 @@ async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> Fl
         raise HTTPException(status_code=400, detail="; ".join(errors))
 
     branches_payload = {
-        branch_id: _branch_request_to_config(branch_id, branch_req, None)
+        branch_id: _branch_request_to_config(branch_req)
         for branch_id, branch_req in request.branches.items()
     }
 
@@ -1433,8 +1389,7 @@ async def update_flow(
     top_nodes = _graph_nodes_payload(request.nodes)
     branches: dict[str, BranchConfig] = {}
     for branch_id, branch_req in request.branches.items():
-        ex_cfg = (existing.branches or {}).get(branch_id)
-        branches[branch_id] = _branch_request_to_config(branch_id, branch_req, ex_cfg)
+        branches[branch_id] = _branch_request_to_config(branch_req)
 
     # Инлайним tools - заменяем tool_id на полные конфиги с кодом
     nodes = await _inline_tools_in_nodes(top_nodes, container)

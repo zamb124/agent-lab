@@ -3,6 +3,7 @@
 Использует shared БД, is_global=True (не изолирован по компаниям).
 """
 
+from typing import ClassVar, override
 
 from pydantic import BaseModel
 
@@ -11,10 +12,14 @@ from core.db.storage import Storage
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
 class SubdomainMapping(BaseModel):
     """Модель для маппинга subdomain → company_id"""
+
     subdomain: str
     company_id: str
+
 
 class SubdomainRepository(BaseRepository[SubdomainMapping]):
     """
@@ -22,20 +27,24 @@ class SubdomainRepository(BaseRepository[SubdomainMapping]):
     is_global=True - маппинги не изолированы по компаниям.
     """
 
-    is_global = True
+    is_global: ClassVar[bool] = True
 
     def __init__(self, storage: Storage):
         super().__init__(storage=storage, model_class=SubdomainMapping)
 
+    @override
     def _get_key(self, subdomain: str) -> str:
         return f"subdomain:{subdomain}"
 
+    @override
     def _get_prefix(self) -> str:
         return "subdomain:"
 
+    @override
     def _get_table_name(self) -> str:
         return "storage"
 
+    @override
     def _extract_entity_id(self, entity: SubdomainMapping) -> str:
         return entity.subdomain
 
@@ -65,4 +74,3 @@ class SubdomainRepository(BaseRepository[SubdomainMapping]):
         """
         mapping = SubdomainMapping(subdomain=subdomain, company_id=company_id)
         return await self.set(mapping)
-

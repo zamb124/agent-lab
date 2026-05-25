@@ -11,7 +11,6 @@ app = create_service_app(
     settings_class=CodeRunnerNodeSettings,
     get_container=get_code_runner_node_container,
     routers=[execute_router, validate_router],
-    repository_names=[],
     cors_origins=["*"],
     title="Platform Node Code Runner",
     description="Untrusted JavaScript/TypeScript sandbox runner",

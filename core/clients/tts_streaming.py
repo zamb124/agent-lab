@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from typing import override
 
 from core.clients.tts_client import BaseTTSClient
 from core.clients.voice_chunker import VoiceChunker
@@ -83,7 +84,6 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
         self,
         *,
         tts_client: BaseTTSClient,
-        response_format: str,
         sample_rate: int,
         provider_name: str,
         content_type: str,
@@ -96,37 +96,40 @@ class BatchBackedTTSStreamer(BaseTTSStreamer):
             raise ValueError("BatchBackedTTSStreamer: provider_name обязателен.")
         if content_type == "":
             raise ValueError("BatchBackedTTSStreamer: content_type обязателен.")
-        self._tts_client = tts_client
-        self._response_format = response_format
-        self._sample_rate = sample_rate
-        self._provider = provider_name
-        self._content_type = content_type
-        self._chunk_max_chars = chunk_max_chars
-        self._min_words = min_words
+        self._tts_client: BaseTTSClient = tts_client
+        self._sample_rate: int = sample_rate
+        self._provider: str = provider_name
+        self._content_type: str = content_type
+        self._chunk_max_chars: int = chunk_max_chars
+        self._min_words: int = min_words
 
     @property
+    @override
     def provider(self) -> str:
         return self._provider
 
     @property
+    @override
     def content_type(self) -> str:
         return self._content_type
 
     @property
+    @override
     def sample_rate(self) -> int:
         return self._sample_rate
 
+    @override
     async def synthesize_chunk(self, text: str) -> bytes:
         if not sanitize_text_for_speech_backend(text).strip():
             return b""
         result = await self._tts_client.synthesize(text=text)
         if len(result.audio_bytes) == 0:
             raise ValueError(
-                "BatchBackedTTSStreamer.synthesize_chunk: провайдер вернул пустой audio_bytes "
-                f"после успешного HTTP (provider={self._provider!r})."
+                f"BatchBackedTTSStreamer.synthesize_chunk: провайдер вернул пустой audio_bytes после успешного HTTP (provider={self._provider!r})."
             )
         return result.audio_bytes
 
+    @override
     async def astream(
         self,
         text_stream: AsyncIterator[str],

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from typing import override
 
 from core.clients.stt_client import BaseSTTClient, STTTranscriptionResult
 from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
@@ -92,16 +93,18 @@ class BufferedSTTStreamer(BaseSTTStreamer):
     ) -> None:
         if sample_rate <= 0:
             raise ValueError("BufferedSTTStreamer: sample_rate должен быть > 0.")
-        self._stt_client = stt_client
-        self._sample_rate = sample_rate
-        self._language = language
+        self._stt_client: BaseSTTClient = stt_client
+        self._sample_rate: int = sample_rate
+        self._language: str | None = language
         self._buffer: bytearray = bytearray()
 
+    @override
     async def push_audio(self, chunk: bytes) -> None:
         if not chunk:
             return
         self._buffer.extend(chunk)
 
+    @override
     async def flush(self) -> STTTranscriptionResult | None:
         if not self._buffer:
             return None
@@ -115,6 +118,7 @@ class BufferedSTTStreamer(BaseSTTStreamer):
             language=self._language,
         )
 
+    @override
     def reset(self) -> None:
         self._buffer = bytearray()
 

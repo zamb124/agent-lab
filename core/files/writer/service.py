@@ -9,7 +9,7 @@ import re
 from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import markdown
 from docx import Document
@@ -21,8 +21,8 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.platypus import Image as RLImage
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from core.context import require_active_company, require_context
 from core.files.checksum import compute_content_checksum_sha256
@@ -73,19 +73,19 @@ class FileWriter:
         file_processor: FileProcessor | None = None,
         download_url_prefix: str | None = None,
     ) -> None:
-        self._default_options = options or WriteOptions()
+        self._default_options: WriteOptions = options or WriteOptions()
         if file_processor is None and download_url_prefix is None:
             fp = FileWriter._process_file_processor
             prefix_raw = FileWriter._process_download_url_prefix
         elif file_processor is None or download_url_prefix is None:
             raise ValueError(
                 "file_processor и download_url_prefix задавайте вместе в конструкторе, "
-                "или оба опустите для значений из configure_process_upload"
+                + "или оба опустите для значений из configure_process_upload"
             )
         else:
             fp = file_processor
             prefix_raw = download_url_prefix
-        self._file_processor = fp
+        self._file_processor: FileProcessor | None = fp
         self._download_url_prefix: str | None = (
             prefix_raw.rstrip("/") if prefix_raw else None
         )
@@ -151,12 +151,12 @@ class FileWriter:
             resolved = mode
 
         if resolved == "base64":
-            return self._build_base64(content, name, ext, opts)
+            return self._build_base64(content, ext)
         if resolved == "raw":
-            return self._build_raw(content, name, ext, opts)
+            return self._build_raw(content, ext, opts)
         if resolved == "markdown":
             text, _ = normalize_str_content(content, opts.text_encoding)
-            return self._build_markdown_pipeline(text, name, ext, opts)
+            return self._build_markdown_pipeline(text, ext, opts)
         raise FileWriteError(f"Неизвестный content_mode: {content_mode!r}")
 
     async def _persist_upload(
@@ -169,7 +169,7 @@ class FileWriter:
         if self._file_processor is None or self._download_url_prefix is None:
             raise FileWriteError(
                 "write: нет привязки к хранилищу — вызовите FileWriter.configure_process_upload(...) "
-                "при старте процесса или FileWriter.bind_for_upload(...) для экземпляра"
+                + "при старте процесса или FileWriter.bind_for_upload(...) для экземпляра"
             )
         ctx = require_context()
         active_company = require_active_company()
@@ -238,9 +238,7 @@ class FileWriter:
     def _build_base64(
         self,
         content: SourceContent,
-        original_name: str,
         ext: str,
-        opts: WriteOptions,
     ) -> FileWriteResult:
         if isinstance(content, bytes):
             raw_b = content
@@ -261,7 +259,6 @@ class FileWriter:
     def _build_raw(
         self,
         content: SourceContent,
-        original_name: str,
         ext: str,
         opts: WriteOptions,
     ) -> FileWriteResult:
@@ -280,7 +277,6 @@ class FileWriter:
     def _build_markdown_pipeline(
         self,
         md_text: str,
-        original_name: str,
         ext: str,
         opts: WriteOptions,
     ) -> FileWriteResult:
@@ -327,7 +323,7 @@ class FileWriter:
             )
         raise FileWriteError(
             f"Конвертация markdown в формат {ext!r} не поддерживается. "
-            "Доступно: .html, .pdf, .docx, .xlsx, .md, .txt"
+            + "Доступно: .html, .pdf, .docx, .xlsx, .md, .txt"
         )
 
     def _md_to_html_bytes(self, md_text: str, opts: WriteOptions) -> bytes:
@@ -348,13 +344,12 @@ class FileWriter:
         doc = Document()
         w_in = opts.docx_image_width_inches
         for seg in flatten_markdown_segments(md_text):
-            kind = seg["kind"]
-            if kind == "text":
+            if seg["kind"] == "text":
                 for block in seg["raw"].split("\n\n"):
                     line = block.strip()
                     if line:
-                        doc.add_paragraph(line)
-            elif kind == "table":
+                        _ = doc.add_paragraph(line)
+            elif seg["kind"] == "table":
                 grid = parse_gfm_table(seg["raw"])
                 ncols = max(len(r) for r in grid)
                 table = doc.add_table(rows=len(grid), cols=ncols)
@@ -363,9 +358,9 @@ class FileWriter:
                     for ci in range(ncols):
                         val = row[ci] if ci < len(row) else ""
                         table.rows[ri].cells[ci].text = val
-            elif kind == "image":
+            elif seg["kind"] == "image":
                 data, _mime = fetch(seg["url"])
-                doc.add_picture(BytesIO(data), width=Inches(w_in))
+                _ = doc.add_picture(BytesIO(data), width=Inches(w_in))
         bio = BytesIO()
         doc.save(bio)
         return bio.getvalue()
@@ -377,24 +372,23 @@ class FileWriter:
         assert ws is not None
         row_idx = 1
         for seg in flatten_markdown_segments(md_text):
-            kind = seg["kind"]
-            if kind == "text":
+            if seg["kind"] == "text":
                 for block in seg["raw"].split("\n\n"):
                     line = block.strip()
                     if line:
-                        ws.cell(row=row_idx, column=1, value=line)
+                        _ = ws.cell(row=row_idx, column=1, value=line)
                         row_idx += 1
-            elif kind == "table":
+            elif seg["kind"] == "table":
                 grid = parse_gfm_table(seg["raw"])
                 for row in grid:
                     for c_idx, val in enumerate(row, start=1):
-                        ws.cell(row=row_idx, column=c_idx, value=val)
+                        _ = ws.cell(row=row_idx, column=c_idx, value=val)
                     row_idx += 1
                 row_idx += 1
-            elif kind == "image":
+            elif seg["kind"] == "image":
                 data, _mime = fetch(seg["url"])
                 img = XLImage(BytesIO(data))
-                ws.add_image(img, f"A{row_idx}")
+                _ = ws.add_image(img, f"A{row_idx}")
                 row_idx += 20
         bio = BytesIO()
         wb.save(bio)
@@ -411,7 +405,7 @@ class FileWriter:
             fontSize=10,
             leading=12,
         )
-        story: list[Any] = []
+        story: list[Flowable] = []
         max_w = opts.pdf_max_image_width_pt
 
         segments = flatten_markdown_segments(md_text)
@@ -419,14 +413,13 @@ class FileWriter:
             story.append(Paragraph(" ", normal))
 
         for seg in segments:
-            kind = seg["kind"]
-            if kind == "text":
+            if seg["kind"] == "text":
                 for block in seg["raw"].split("\n\n"):
                     line = block.strip()
                     if line:
                         story.append(Paragraph(_escape_reportlab_text(line), normal))
                         story.append(Spacer(1, 0.15 * inch))
-            elif kind == "table":
+            elif seg["kind"] == "table":
                 raw_grid = _pad_table_rows(parse_gfm_table(seg["raw"]))
                 grid = [
                     [Paragraph(_escape_reportlab_text(c), normal) for c in row]
@@ -443,7 +436,7 @@ class FileWriter:
                 )
                 story.append(t)
                 story.append(Spacer(1, 0.2 * inch))
-            elif kind == "image":
+            elif seg["kind"] == "image":
                 data, _mime = fetch(seg["url"])
                 pil_im = PILImage.open(BytesIO(data))
                 iw, ih = pil_im.size

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar, override
+
 from pydantic import BaseModel
 
 from core.db.base_repository import BaseRepository
@@ -40,23 +42,28 @@ class VariableRepository(BaseRepository[Variable]):
     Хранит только данные (VariableData), ключ в storage key.
     """
 
-    is_global = False
+    is_global: ClassVar[bool] = False
 
     def __init__(self, storage: Storage):
         super().__init__(storage=storage, model_class=Variable)
 
+    @override
     def _get_key(self, entity_id: str) -> str:
         return f"var:{entity_id}"
 
+    @override
     def _get_prefix(self) -> str:
         return "var:"
 
+    @override
     def _get_table_name(self) -> str:
         return "variables"
 
+    @override
     def _extract_entity_id(self, entity: Variable) -> str:
         return entity.key
 
+    @override
     async def get(self, entity_id: str) -> Variable | None:
         """Получает переменную с ключом"""
         base_key = self._get_key(entity_id)
@@ -76,6 +83,7 @@ class VariableRepository(BaseRepository[Variable]):
             description=var_data.description,
         )
 
+    @override
     async def set(self, entity: Variable) -> bool:
         """Сохраняет переменную (только данные, без ключа)"""
         var_data = VariableData(
@@ -92,6 +100,7 @@ class VariableRepository(BaseRepository[Variable]):
         data = var_data.model_dump_json()
         return await self._storage.set_with_table(final_key, data, table_name)
 
+    @override
     async def delete(self, entity_id: str) -> bool:
         """Удаляет переменную по ключу"""
         base_key = self._get_key(entity_id)
@@ -100,6 +109,7 @@ class VariableRepository(BaseRepository[Variable]):
 
         return await self._storage.delete_with_table(final_key, table_name)
 
+    @override
     async def list(self, *, limit: int, offset: int = 0) -> list[Variable]:
         """Возвращает страницу переменных с ключами."""
         base_prefix = self._get_prefix()
@@ -134,6 +144,7 @@ class VariableRepository(BaseRepository[Variable]):
         variables = await self.list(limit=limit, offset=offset)
         return {var.key: var for var in variables}
 
+    @override
     async def get_many(self, entity_ids: list[str]) -> dict[str, Variable]:
         """Получает несколько переменных по списку ключей."""
         result: dict[str, Variable] = {}

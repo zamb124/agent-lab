@@ -171,51 +171,66 @@ def _coerce_results(response: JsonObject) -> list[RAGSearchResult]:
 def _result_to_record(result: RAGSearchResult) -> LLMContextMemoryRecord:
     metadata = dict(result.metadata)
     return LLMContextMemoryRecord(
-        memory_id=str(metadata.get("memory_id") or result.document_id),
+        memory_id=_required_metadata_str(metadata, "memory_id"),
         content=_record_content(metadata, result.content),
         scope=_memory_scope(metadata.get("memory_scope")),
         score=_clamp_score(result.score),
-        session_id=_optional_str(metadata.get("session_id")),
-        flow_id=_optional_str(metadata.get("flow_id")),
-        branch_id=_optional_str(metadata.get("branch_id")),
-        node_id=_optional_str(metadata.get("node_id")),
-        user_id=_optional_str(metadata.get("user_id")),
-        title=_optional_str(metadata.get("title")),
-        source=_optional_str(metadata.get("source")),
+        session_id=_optional_metadata_str(metadata, "session_id"),
+        flow_id=_optional_metadata_str(metadata, "flow_id"),
+        branch_id=_optional_metadata_str(metadata, "branch_id"),
+        node_id=_optional_metadata_str(metadata, "node_id"),
+        user_id=_optional_metadata_str(metadata, "user_id"),
+        title=_optional_metadata_str(metadata, "title"),
+        source=_optional_metadata_str(metadata, "source"),
         metadata=metadata,
         created_at=_parse_datetime(metadata.get("created_at")),
     )
 
 
-def _record_content(metadata: JsonObject, fallback: str) -> str:
+def _record_content(metadata: JsonObject, document_content: str) -> str:
     recall_content = metadata.get(LLM_CONTEXT_MEMORY_RECALL_CONTENT_METADATA_KEY)
     if isinstance(recall_content, str) and recall_content.strip():
         return recall_content.strip()
-    return fallback
+    content = document_content.strip()
+    if not content:
+        raise ValueError("LLM context memory result content is empty")
+    return content
 
 
 def _memory_scope(value: JsonValue | None) -> LLMContextMemoryScope:
-    if value is None:
-        return "session"
     if isinstance(value, str) and value in _MEMORY_SCOPES:
         return type_cast(LLMContextMemoryScope, value)
     raise ValueError("LLM context memory metadata.memory_scope должен быть допустимым scope")
 
 
-def _optional_str(value: JsonValue | None) -> str | None:
+def _required_metadata_str(metadata: JsonObject, key: str) -> str:
+    value = metadata.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"LLM context memory metadata.{key} must be a non-empty string")
+    return value.strip()
+
+
+def _optional_metadata_str(metadata: JsonObject, key: str) -> str | None:
+    value = metadata.get(key)
     if value is None:
         return None
-    text = str(value).strip()
+    if not isinstance(value, str):
+        raise ValueError(f"LLM context memory metadata.{key} must be a string")
+    text = value.strip()
     return text or None
 
 
 def _parse_datetime(value: JsonValue | None) -> datetime | None:
-    if not isinstance(value, str) or not value.strip():
+    if value is None:
         return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("LLM context memory metadata.created_at must be an ISO datetime string")
     try:
         return datetime.fromisoformat(value)
-    except ValueError:
-        return None
+    except ValueError as exc:
+        raise ValueError(
+            "LLM context memory metadata.created_at must be an ISO datetime string"
+        ) from exc
 
 
 def _clamp_score(value: JsonValue) -> float | None:

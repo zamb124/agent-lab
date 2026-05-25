@@ -61,6 +61,8 @@ async def sync_llm_models_task(
     system_task: str | None = None,
 ) -> LLMModelsSyncTaskResult:
     """Синхронизирует модели от всех настроенных LLM провайдеров."""
+    _ = company_id
+    _ = system_task
     container = get_container()
 
     # Создаём системный контекст для доступа к сервису

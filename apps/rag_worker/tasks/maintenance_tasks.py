@@ -3,7 +3,6 @@ Tasks для обслуживания и очистки vector_documents.
 """
 
 from datetime import datetime, timezone
-from typing import Any
 
 from apps.rag.container import get_rag_container
 from apps.rag_worker.broker import broker
@@ -11,15 +10,25 @@ from core.config import get_settings
 from core.context import Context, clear_context, set_context
 from core.files.processors import FileProcessor
 from core.logging import get_logger
+from core.rag.models import (
+    RAGCleanupExpiredDocumentsTickResult,
+    RAGCleanupNamespaceTaskResult,
+    RAGCleanupOrphanCompanyChunksTickResult,
+    RAGListedDocumentTaskItem,
+    RAGMetadata,
+    RAGReembedTickResult,
+    RAGReindexDocumentTaskResult,
+)
 from core.rag.reembed_stale_documents import execute_reembed_tick
 from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
+from core.types import JsonObject
 
 logger = get_logger(__name__)
 
 
 @broker.task(queue_name="rag")
-async def cleanup_namespace_task(namespace_id: str) -> dict[str, Any]:
+async def cleanup_namespace_task(namespace_id: str) -> RAGCleanupNamespaceTaskResult:
     """
     Очистка namespace -- удаление всех документов.
 
@@ -44,7 +53,7 @@ async def cleanup_namespace_task(namespace_id: str) -> dict[str, Any]:
 
 
 @broker.task(queue_name="rag")
-async def list_documents_task(namespace_id: str) -> list[dict[str, Any]]:
+async def list_documents_task(namespace_id: str) -> list[RAGListedDocumentTaskItem]:
     """
     Получить список всех документов в namespace.
 
@@ -72,13 +81,13 @@ async def list_documents_task(namespace_id: str) -> list[dict[str, Any]]:
 
 @broker.task(queue_name="rag", retry_on_error=True, max_retries=3)
 async def reindex_document_task(
-    context_data: dict[str, Any],
+    context_data: JsonObject,
     namespace_id: str,
     document_id: str,
     s3_key: str,
     document_name: str,
-    metadata: dict[str, Any],
-) -> dict[str, Any]:
+    metadata: RAGMetadata,
+) -> RAGReindexDocumentTaskResult:
     """
     Переиндексация документа (удаление + загрузка заново).
 
@@ -109,19 +118,19 @@ async def reindex_document_task(
 
         provider = get_rag_container().rag_provider
 
-        await provider.delete_document(namespace_id, document_id)
+        _ = await provider.delete_document(namespace_id, document_id)
 
         settings = get_settings()
         binding = UploadProfileBinding(config=settings.rag.document_indexing)
         base_meta = ensure_ttl_seconds_in_metadata(
-            dict(metadata),
+            metadata,
             default_ttl_seconds=settings.rag.ttl.default_ttl_seconds,
         )
         last_document = await provider.upload_document_from_s3(
             namespace_id=namespace_id,
             s3_key=s3_key,
             document_name=document_name,
-            metadata=dict(base_meta),
+            metadata=base_meta,
             upload_profile=binding,
         )
         logger.info(
@@ -148,7 +157,7 @@ async def reindex_document_task(
 async def rag_cleanup_expired_documents_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
-) -> dict[str, Any]:
+) -> RAGCleanupExpiredDocumentsTickResult:
     """
     Удаляет просроченные по ``rag.ttl`` документы: shared FileRecord (если есть),
     строка ``document_processing_status``, вектора/внешний индекс через провайдер.
@@ -184,9 +193,9 @@ async def rag_cleanup_expired_documents_tick(
         try:
             file_record = await container.file_repository.get(document_id)
             if file_record is not None:
-                await processor.delete_file(document_id)
-            await status_repo.delete_by_document_id(document_id)
-            await provider.delete_document(namespace_id, document_id)
+                _ = await processor.delete_file(document_id)
+            _ = await status_repo.delete_by_document_id(document_id)
+            _ = await provider.delete_document(namespace_id, document_id)
             deleted += 1
         except Exception:
             logger.exception(
@@ -222,7 +231,7 @@ async def rag_cleanup_expired_documents_tick(
 async def rag_reembed_stale_documents_tick(
     schedule_task_id: str,
     company_id: str | None = None,
-) -> dict[str, Any]:
+) -> RAGReembedTickResult:
     _ = company_id
     return await execute_reembed_tick(
         container=get_rag_container(),
@@ -240,7 +249,7 @@ async def rag_reembed_stale_documents_tick(
 async def rag_cleanup_orphan_company_chunks_tick(
     schedule_task_id: str,
     company_id: str | None = None,
-) -> dict[str, Any]:
+) -> RAGCleanupOrphanCompanyChunksTickResult:
     """
     Батчево удаляет ``vector_documents`` без ``company_id`` (NULL/'').
 

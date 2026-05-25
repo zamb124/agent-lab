@@ -3,19 +3,23 @@
 Использует contextvars для передачи контекста через все async вызовы.
 """
 
+from __future__ import annotations
+
 import contextvars
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING
+
+from core.types import RuntimeChannel
 
 if TYPE_CHECKING:
     from core.models.context_models import Context
     from core.models.identity_models import Company
 
 
-_context: contextvars.ContextVar[Optional["Context"]] = contextvars.ContextVar(
+_context: contextvars.ContextVar["Context | None"] = contextvars.ContextVar(
     "context", default=None
 )
 
-_current_channel: contextvars.ContextVar[Any | None] = contextvars.ContextVar(
+_current_channel: contextvars.ContextVar[RuntimeChannel | None] = contextvars.ContextVar(
     "current_channel", default=None
 )
 
@@ -27,10 +31,10 @@ def set_context(context: "Context") -> None:
     Args:
         context: Контекст для установки
     """
-    _context.set(context)
+    _ = _context.set(context)
 
 
-def get_context() -> Optional["Context"]:
+def get_context() -> Context | None:
     """
     Получает текущий контекст.
 
@@ -90,20 +94,20 @@ def resolve_namespace_or_raise(override: str | None = None) -> str:
 
 def clear_context() -> None:
     """Очищает контекст"""
-    _context.set(None)
+    _ = _context.set(None)
 
 
-def set_current_channel(channel: Any) -> None:
+def set_current_channel(channel: RuntimeChannel) -> None:
     """
     Устанавливает текущий канал коммуникации.
 
     Args:
         channel: Канал для установки (BaseChannel)
     """
-    _current_channel.set(channel)
+    _ = _current_channel.set(channel)
 
 
-def get_current_channel() -> Any | None:
+def get_current_channel() -> RuntimeChannel | None:
     """
     Получает текущий канал коммуникации.
 

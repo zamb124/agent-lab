@@ -14,11 +14,16 @@ import httpx
 
 from apps.flows.config import get_settings
 from apps.idle_worker.broker import broker as idle_broker
-from apps.idle_worker.container import get_container
-from core.calendar.service import CalendarReauthRequiredError, _credential_to_calendar_integration
+from apps.idle_worker.container import IdleWorkerContainer, get_container
+from core.calendar.service import (
+    SYNC_LINK_TOKEN_META,
+    CalendarReauthRequiredError,
+    CalendarService,
+    calendar_integration_from_credential,
+)
 from core.integrations.models import IntegrationProvider
 from core.logging import get_logger
-from core.models import CalendarEventSource, CalendarProvider
+from core.models import CalendarEventSource, CalendarIntegration, CalendarProvider
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
@@ -62,7 +67,7 @@ def _classify_failure(error: BaseException) -> str:
 
 async def _load_existing_event_ids(
     *,
-    calendar_service,
+    calendar_service: CalendarService,
     company_id: str,
     user_id: str,
     source: CalendarEventSource,
@@ -82,7 +87,7 @@ async def _load_existing_event_ids(
 
 async def _send_new_event_notifications(
     *,
-    container,
+    container: IdleWorkerContainer,
     company_id: str,
     user_id: str,
     provider: CalendarProvider,
@@ -110,7 +115,7 @@ async def _send_new_event_notifications(
                 action_url="/",
             ),
         )
-        await container.shared_storage.set(
+        _ = await container.shared_storage.set(
             key=dedup_key,
             value=json.dumps({"sent_at": datetime.now(timezone.utc).isoformat()}),
             ttl=dedup_ttl_seconds,
@@ -122,9 +127,9 @@ async def _send_new_event_notifications(
 
 async def _sync_single_integration(
     *,
-    container,
+    container: IdleWorkerContainer,
     semaphore: asyncio.Semaphore,
-    integration,
+    integration: CalendarIntegration,
     start_at: datetime,
     end_at: datetime,
     dedup_ttl_seconds: int,
@@ -147,7 +152,7 @@ async def _sync_single_integration(
             start_at=start_at,
             end_at=end_at,
         )
-        await calendar_service.run_sync(
+        _ = await calendar_service.run_sync(
             user_id=integration.user_id,
             company_id=integration.company_id,
             start_at=start_at,
@@ -220,7 +225,7 @@ async def calendar_sync_tick(
     integrations = [
         integration
         for c in all_creds
-        if (integration := _credential_to_calendar_integration(c)).settings.sync_enabled
+        if (integration := calendar_integration_from_credential(c)).settings.sync_enabled
     ]
     if len(integrations) > config.batch_size:
         integrations = integrations[: config.batch_size]
@@ -343,9 +348,11 @@ async def calendar_sync_meeting_reminder_tick(
     for event in events:
         action_url = event.deep_link
         if action_url is None or action_url == "":
-            token = event.metadata.get("sync_link_token")
-            if not token:
-                raise ValueError(f"У события {event.event_id} нет sync_link_token в metadata.")
+            if SYNC_LINK_TOKEN_META not in event.metadata:
+                raise ValueError(f"У события {event.event_id} нет {SYNC_LINK_TOKEN_META} в metadata.")
+            token = event.metadata[SYNC_LINK_TOKEN_META]
+            if token == "":
+                raise ValueError(f"У события {event.event_id} нет {SYNC_LINK_TOKEN_META} в metadata.")
             action_url = await container.short_link_service.mint_sync_call_join(
                 token, event.end_at, event.company_id
             )

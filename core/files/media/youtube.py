@@ -4,7 +4,6 @@ import asyncio
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, cast
 
 import yt_dlp
 
@@ -14,18 +13,20 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 _YOUTUBE_URL_PATTERN = re.compile(
     r"(https?://)?(www\.)?"
-    r"(youtube\.com/(watch\?v=|shorts/|embed/|v/)|youtu\.be/|"
-    r"music\.youtube\.com/watch\?v=)"
+    + r"(youtube\.com/(watch\?v=|shorts/|embed/|v/)|youtu\.be/|"
+    + r"music\.youtube\.com/watch\?v=)"
 )
+
 
 def is_youtube_url(url: str) -> bool:
     """Проверяет, является ли URL ссылкой на YouTube."""
     return bool(_YOUTUBE_URL_PATTERN.search(url))
 
+
 def _download_audio_sync(url: str, output_dir: str) -> tuple[bytes, str, str]:
     """Синхронно скачивает аудио через yt-dlp в указанную директорию."""
     output_template = str(Path(output_dir) / "%(title).100B.%(ext)s")
-    ydl_opts: dict[str, Any] = {
+    ydl_opts: yt_dlp.YoutubeDLOptions = {
         "format": "bestaudio/best",
         "outtmpl": output_template,
         "postprocessors": [
@@ -41,12 +42,9 @@ def _download_audio_sync(url: str, output_dir: str) -> tuple[bytes, str, str]:
         "socket_timeout": 30,
     }
 
-    with yt_dlp.YoutubeDL(cast(Any, ydl_opts)) as ydl:
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        if info is None:
-            raise RuntimeError(f"yt-dlp не вернул информацию о видео: {url}")
-        title_raw = info.get("title")
-        title = title_raw if isinstance(title_raw, str) and title_raw else "audio"
+        title = info["title"]
 
     mp3_files = list(Path(output_dir).glob("*.mp3"))
     if len(mp3_files) == 0:
@@ -64,6 +62,7 @@ def _download_audio_sync(url: str, output_dir: str) -> tuple[bytes, str, str]:
     safe_title = re.sub(r'[^\w\s\-.]', '_', title)[:80]
     file_name = f"{safe_title}.mp3"
     return audio_bytes, file_name, "audio/mpeg"
+
 
 async def download_audio_from_url(*, url: str) -> tuple[bytes, str, str]:
     """Скачивает аудиодорожку по URL (YouTube и другие платформы, поддерживаемые yt-dlp).
@@ -88,6 +87,7 @@ async def download_audio_from_url(*, url: str) -> tuple[bytes, str, str]:
         )
     return audio_bytes, file_name, mime_type
 
+
 def _looks_like_video_platform_url(url: str) -> bool:
     """Эвристика: URL с видеоплатформы (vimeo, dailymotion, rutube и т.п.)."""
     platforms = (
@@ -102,15 +102,20 @@ def _looks_like_video_platform_url(url: str) -> bool:
     lowered = url.lower()
     return any(p in lowered for p in platforms)
 
+
 async def _download_direct_media(url: str) -> tuple[bytes, str, str]:
     """Скачивает медиафайл по прямой ссылке через httpx."""
     async with get_httpx_client(timeout=120.0) as client:
         response = await client.get(url)
-    response.raise_for_status()
+    _ = response.raise_for_status()
     data = response.content
     if len(data) == 0:
         raise ValueError(f"Скачанный файл пуст: {url}")
-    content_type = response.headers.get("content-type", "application/octet-stream")
+    content_type = (
+        response.headers["content-type"]
+        if "content-type" in response.headers
+        else "application/octet-stream"
+    )
     mime = content_type.split(";")[0].strip()
     tail = url.rsplit("/", 1)[-1].split("?")[0]
     file_name = tail if tail else "media-file"

@@ -21,7 +21,7 @@ from core.config.openai_v1_base_url import normalize_openai_v1_base_url
 from core.llm_model_routing import HUMANITEC_LLM_AUTO_MODEL, HUMANITEC_LLM_PROVIDER
 from core.models.billing_models import DEFAULT_TARIFF_PRICES
 from core.rag_indexing_schema import IndexProfileConfig
-from core.types import JsonObject, JsonValue
+from core.types import JsonObject, JsonValue, SpeechProvider, VadProvider
 from core.utils.tts_input_steps import TTS_INPUT_STEP_IDS
 
 __all__ = [
@@ -548,7 +548,7 @@ class STTProvidersConfig(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    provider: Literal["litserve", "cloud_ru", "yandex", "sber", "mock"] = "litserve"
+    provider: SpeechProvider = "litserve"
     default_model: str | None = Field(
         default=None,
         description=(
@@ -601,7 +601,7 @@ class TTSProvidersConfig(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    provider: Literal["litserve", "cloud_ru", "yandex", "sber", "mock"] = "litserve"
+    provider: SpeechProvider = "litserve"
     default_model: str | None = Field(
         default=None,
         description="OpenAI-совместимый id модели по умолчанию (например `silero-tts-v5-5-ru`).",
@@ -630,7 +630,7 @@ class VADProvidersConfig(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    provider: Literal["litserve", "silero_local", "mock"] = "silero_local"
+    provider: VadProvider = "silero_local"
     default_model: str | None = None
     default_sample_rate: int = Field(default=16000, gt=0)
     default_threshold: float = Field(default=0.5, ge=0.0, le=1.0)

@@ -10,13 +10,15 @@ YooMoney отправляет POST application/x-www-form-urlencoded,
 ожидает HTTP 200 OK в ответ.
 """
 
+from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Response
 
 from apps.frontend.dependencies import ContainerDep
 from core.clients.payment import PaymentProviderFactory
+from core.clients.payment.yoomoney_provider import YooMoneyProvider
 from core.logging import get_logger
-from core.types import JsonObject
+from core.models.payment_models import YooMoneyWebhookPayload
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/payments", tags=["payments-webhook"])
@@ -25,17 +27,17 @@ router = APIRouter(prefix="/api/v1/payments", tags=["payments-webhook"])
 async def payment_webhook(
     provider_name: str,
     container: ContainerDep,
-    notification_type: str = Form(""),
-    operation_id: str = Form(""),
-    amount: str = Form(""),
-    currency: str = Form(""),
-    datetime: str = Form(""),
-    sender: str = Form(""),
-    codepro: str = Form(""),
-    sha1_hash: str = Form(""),
-    label: str = Form(""),
-    test_notification: str | None = Form(None),
-):
+    notification_type: Annotated[str, Form()],
+    operation_id: Annotated[str, Form()],
+    amount: Annotated[str, Form()],
+    currency: Annotated[str, Form()],
+    datetime: Annotated[str, Form()],
+    sender: Annotated[str, Form()],
+    codepro: Annotated[str, Form()],
+    sha1_hash: Annotated[str, Form()],
+    label: Annotated[str, Form()],
+    test_notification: Annotated[str | None, Form()] = None,
+) -> Response:
     logger.info(
         "Webhook %s: label=%s, amount=%s, operation_id=%s",
         provider_name, label, amount, operation_id,
@@ -45,23 +47,26 @@ async def payment_webhook(
     if not provider:
         logger.error("Провайдер %s не найден", provider_name)
         raise HTTPException(status_code=404, detail=f"Провайдер {provider_name} не найден")
+    if not isinstance(provider, YooMoneyProvider):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Провайдер {provider_name} не поддерживает YooMoney webhook",
+        )
 
-    webhook_data: JsonObject = {
-        "notification_type": notification_type,
-        "operation_id": operation_id,
-        "amount": amount,
-        "currency": currency,
-        "datetime": datetime,
-        "sender": sender,
-        "codepro": codepro,
-        "sha1_hash": sha1_hash,
-        "label": label,
-    }
+    webhook_payload = YooMoneyWebhookPayload(
+        notification_type=notification_type,
+        operation_id=operation_id,
+        amount=amount,
+        currency=currency,
+        datetime=datetime,
+        sender=sender,
+        codepro=codepro,
+        sha1_hash=sha1_hash,
+        label=label,
+        test_notification=test_notification,
+    )
 
-    if test_notification:
-        webhook_data["test_notification"] = test_notification
-
-    verification = await provider.verify_webhook(webhook_data)
+    verification = await provider.verify_webhook(webhook_payload)
 
     if not verification.is_valid:
         logger.warning(
@@ -72,7 +77,7 @@ async def payment_webhook(
     await container.payment_service.process_webhook(
         verification_result=verification,
         provider_name=provider_name,
-        raw_data=webhook_data,
+        raw_data=webhook_payload,
     )
 
     return Response(status_code=200)

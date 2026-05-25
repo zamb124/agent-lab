@@ -10,7 +10,11 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.dependencies import (
+    ContainerDep,
+    require_frontend_active_company,
+    require_frontend_user,
+)
 from core.clients.payment.factory import PaymentProviderFactory
 from core.clients.payment.yoomoney_provider import (
     YOOMONEY_OAUTH_AUTHORIZE_URL,
@@ -21,6 +25,7 @@ from core.clients.payment.yoomoney_provider import (
 from core.config import get_settings
 from core.http import request_public_oauth
 from core.logging import get_logger
+from core.types import parse_json_object
 from core.utils.domain import PRIMARY_DOMAIN
 
 logger = get_logger(__name__)
@@ -28,7 +33,7 @@ router = APIRouter(prefix="/api/billing/yoomoney", tags=["yoomoney-oauth"])
 
 def _get_yoomoney_provider() -> YooMoneyProvider:
     """Возвращает активный YooMoney провайдер."""
-    for name, provider in PaymentProviderFactory.get_available_providers().items():
+    for provider in PaymentProviderFactory.get_available_providers().values():
         if isinstance(provider, YooMoneyProvider):
             return provider
     raise HTTPException(status_code=503, detail="YooMoney провайдер не настроен")
@@ -44,18 +49,13 @@ def _build_callback_url(request: Request) -> str:
     return f"https://{PRIMARY_DOMAIN}/frontend/api/billing/yoomoney/callback"
 
 @router.get("/authorize")
-async def yoomoney_authorize(request: Request, container: ContainerDep):
+async def yoomoney_authorize(request: Request) -> JSONResponse:
     """
     Формирует URL авторизации YooMoney и возвращает его.
     Только owner/admin.
     """
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    if not hasattr(request.state, "company") or not request.state.company:
-        raise HTTPException(status_code=400, detail="Компания не выбрана")
-
-    user = request.state.user
-    company = request.state.company
+    user = require_frontend_user()
+    company = require_frontend_active_company()
 
     user_roles = company.members.get(user.user_id, [])
     if "owner" not in user_roles and "admin" not in user_roles:
@@ -84,7 +84,9 @@ async def yoomoney_authorize(request: Request, container: ContainerDep):
     return JSONResponse(content={"authorize_url": authorize_url})
 
 @router.get("/callback")
-async def yoomoney_callback(request: Request, container: ContainerDep, code: str = ""):
+async def yoomoney_callback(
+    request: Request, container: ContainerDep, code: str = ""
+) -> RedirectResponse:
     """
     Принимает code от YooMoney, обменивает на access_token.
     Endpoint без JWT-авторизации (YooMoney делает redirect).
@@ -110,19 +112,26 @@ async def yoomoney_callback(request: Request, container: ContainerDep, code: str
             "client_secret": provider.config.client_secret,
         },
     )
-    response.raise_for_status()
+    _ = response.raise_for_status()
 
-    token_response = response.json()
+    token_response = parse_json_object(
+        response.content,
+        "yoomoney.oauth.token_response",
+    )
     access_token = token_response.get("access_token")
-    if not access_token:
-        error = token_response.get("error", "unknown")
+    if not isinstance(access_token, str) or access_token == "":
+        error = token_response.get("error")
+        detail = (
+            f"YooMoney вернул ошибку: {error}"
+            if isinstance(error, str) and error != ""
+            else "YooMoney не вернул access_token"
+        )
         logger.error("YooMoney OAuth: не удалось получить access_token: %s", token_response)
-        raise HTTPException(status_code=502, detail=f"YooMoney вернул ошибку: {error}")
+        raise HTTPException(status_code=502, detail=detail)
 
-    storage = container.company_repository._storage
-    await save_access_token(storage, access_token)
+    _ = await save_access_token(container.shared_storage, access_token)
 
-    provider._access_token = access_token
+    provider.set_access_token(access_token)
 
     logger.info("YooMoney OAuth: access_token успешно получен и сохранён")
 

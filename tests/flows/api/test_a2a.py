@@ -10,6 +10,7 @@
 import json
 import uuid
 from typing import Any, Dict, List
+
 import pytest
 
 
@@ -839,41 +840,41 @@ class TestA2APushNotificationConfig:
         assert data["result"] is None
 
 
-class TestA2ASkills:
-    """Тесты skills endpoints."""
+class TestA2ABranches:
+    """Тесты branches endpoints."""
 
     @pytest.fixture
     async def flow_id(self, client):
         return "example_react"
 
     @pytest.mark.asyncio
-    async def test_list_skills_valid_response(self, client, flow_id):
-        """GET /flows/{id}/skills возвращает список skills."""
+    async def test_list_branches_valid_response(self, client, flow_id):
+        """GET /flows/{id}/branches возвращает список branches."""
         resp = await client.get(f"/flows/api/v1/{flow_id}/branches")
         assert resp.status_code == 200
-        skills = resp.json()
-        assert isinstance(skills, list)
-        assert len(skills) > 0, "Agent MUST have at least one skill"
-        for skill in skills:
-            assert "id" in skill, "Skill MUST have 'id'"
-            assert "name" in skill, "Skill MUST have 'name'"
+        branches = resp.json()
+        assert isinstance(branches, list)
+        assert len(branches) > 0, "Flow MUST have at least one branch"
+        for branch in branches:
+            assert "id" in branch, "Branch MUST have 'id'"
+            assert "name" in branch, "Branch MUST have 'name'"
 
     @pytest.mark.asyncio
-    async def test_get_skill_valid_response(self, client, flow_id):
-        """GET /flows/{id}/branches/{branch_id} возвращает skill."""
+    async def test_get_branch_valid_response(self, client, flow_id):
+        """GET /flows/{id}/branches/{branch_id} возвращает branch."""
         list_resp = await client.get(f"/flows/api/v1/{flow_id}/branches")
-        skills = list_resp.json()
-        assert len(skills) > 0, "Agent MUST have at least one skill"
-        branch_id = skills[0]["id"]
+        branches = list_resp.json()
+        assert len(branches) > 0, "Flow MUST have at least one branch"
+        branch_id = branches[0]["id"]
         resp = await client.get(f"/flows/api/v1/{flow_id}/branches/{branch_id}")
         assert resp.status_code == 200
-        skill = resp.json()
-        assert "id" in skill, "Skill MUST have 'id'"
-        assert "name" in skill, "Skill MUST have 'name'"
-        assert skill["id"] == branch_id
+        branch = resp.json()
+        assert "id" in branch, "Branch MUST have 'id'"
+        assert "name" in branch, "Branch MUST have 'name'"
+        assert branch["id"] == branch_id
 
     @pytest.mark.asyncio
-    async def test_get_skill_tools_react_flow(self, client):
+    async def test_get_branch_tools_react_flow(self, client):
         """GET /flows/{id}/branches/{branch_id}/tools для react flow возвращает tools."""
         flow_id = "example_react"
         branch_id = "concise"
@@ -890,7 +891,7 @@ class TestA2ASkills:
             assert tool["type"] == "function", "React flow tools MUST be 'function' type"
 
     @pytest.mark.asyncio
-    async def test_get_skill_tools_graph_flow(self, client):
+    async def test_get_branch_tools_graph_flow(self, client):
         """GET /flows/{id}/branches/{branch_id}/tools для графового flow возвращает tools, nodes и edges."""
         flow_id = "example_graph"
         branch_id = "fast_track"
@@ -919,7 +920,7 @@ class TestA2ASkills:
             assert "->" in edge["name"], "Edge name MUST contain '->'"
 
     @pytest.mark.asyncio
-    async def test_get_skill_tools_includes_all_llm_node_nodes(self, client):
+    async def test_get_branch_tools_includes_all_llm_node_nodes(self, client):
         """Проверяет, что tools собираются из всех llm_node нод."""
         flow_id = "example_graph"
         branch_id = "fast_track"
@@ -933,20 +934,20 @@ class TestA2ASkills:
         assert len(edges) > 0, "MUST have edges"
 
     @pytest.mark.asyncio
-    async def test_get_skill_tools_404_for_nonexistent_flow(self, client):
+    async def test_get_branch_tools_404_for_nonexistent_flow(self, client):
         """GET /flows/{id}/branches/{branch_id}/tools возвращает 404 для несуществующего flow."""
         resp = await client.get("/flows/api/v1/nonexistent_flow/branches/default/tools")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_get_skill_tools_404_for_nonexistent_skill(self, client):
-        """GET /flows/{id}/branches/{branch_id}/tools возвращает 404 для несуществующего skill."""
+    async def test_get_branch_tools_404_for_nonexistent_branch(self, client):
+        """GET /flows/{id}/branches/{branch_id}/tools возвращает 404 для несуществующей ветки."""
         flow_id = "example_react"
-        resp = await client.get(f"/flows/api/v1/{flow_id}/branches/nonexistent_skill/tools")
+        resp = await client.get(f"/flows/api/v1/{flow_id}/branches/nonexistent_branch/tools")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_get_skill_schema_valid_response(self, client):
+    async def test_get_branch_schema_valid_response(self, client):
         """GET /flows/{id}/schema возвращает JSON Schema в формате ISchema."""
         flow_id = "example_react"
         resp = await client.get(f"/flows/api/v1/{flow_id}/schema")
@@ -968,23 +969,24 @@ class TestA2ASkills:
         )
 
     @pytest.mark.asyncio
-    async def test_get_skill_schema_404_for_nonexistent_flow(self, client):
+    async def test_get_branch_schema_404_for_nonexistent_flow(self, client):
         """GET /flows/{id}/schema возвращает 404 для несуществующего flow."""
         resp = await client.get("/flows/api/v1/nonexistent_flow/schema")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_create_skill_valid(self, client, mutable_flow_id, unique_id):
-        """POST /flows/{id}/skills создаёт новый skill."""
-        branch_id = f"test_skill_{unique_id}"
+    async def test_create_branch_valid(self, client, mutable_flow_id, unique_id):
+        """POST /flows/{id}/branches создаёт новую ветку."""
+        branch_id = f"test_branch_{unique_id}"
         resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
             json={
                 "branch_id": branch_id,
-                "name": "Test Skill",
+                "name": "Test Branch",
                 "description": "Test description",
                 "tags": ["test"],
-                "skill_body": {"entry": "main", "variables": {"test_var": "test_value"}},
+                "entry": "main",
+                "variables": {"test_var": "test_value"},
             },
         )
         assert resp.status_code == 201
@@ -993,46 +995,46 @@ class TestA2ASkills:
         assert data["branch_id"] == branch_id
         get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
         assert get_resp.status_code == 200
-        skill = get_resp.json()
-        assert skill["id"] == branch_id
-        assert skill["name"] == "Test Skill"
+        branch = get_resp.json()
+        assert branch["id"] == branch_id
+        assert branch["name"] == "Test Branch"
         await client.delete(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
 
     @pytest.mark.asyncio
-    async def test_create_skill_duplicate(self, client, mutable_flow_id, unique_id):
-        """POST /flows/{id}/skills возвращает 409 для существующего skill."""
-        branch_id = f"test_skill_dup_{unique_id}"
+    async def test_create_branch_duplicate(self, client, mutable_flow_id, unique_id):
+        """POST /flows/{id}/branches возвращает 409 для существующей ветки."""
+        branch_id = f"test_branch_dup_{unique_id}"
         resp1 = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
-            json={"branch_id": branch_id, "name": "Test Skill"},
+            json={"branch_id": branch_id, "name": "Test Branch"},
         )
         assert resp1.status_code == 201
         resp2 = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
-            json={"branch_id": branch_id, "name": "Test Skill"},
+            json={"branch_id": branch_id, "name": "Test Branch"},
         )
         assert resp2.status_code == 409
         await client.delete(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
 
     @pytest.mark.asyncio
-    async def test_create_skill_missing_skill_id(self, client, flow_id):
-        """POST /flows/{id}/skills возвращает 400 без branch_id."""
-        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json={"name": "Test Skill"})
-        assert resp.status_code == 400
+    async def test_create_branch_missing_branch_id(self, client, flow_id):
+        """POST /flows/{id}/branches отклоняет payload без branch_id."""
+        resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json={"name": "Test Branch"})
+        assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_create_skill_404_for_nonexistent_flow(self, client, unique_id):
-        """POST /flows/{id}/skills возвращает 404 для несуществующего flow."""
+    async def test_create_branch_404_for_nonexistent_flow(self, client, unique_id):
+        """POST /flows/{id}/branches возвращает 404 для несуществующего flow."""
         resp = await client.post(
             "/flows/api/v1/nonexistent_flow/branches",
-            json={"branch_id": f"test_skill_{unique_id}", "name": "Test Skill"},
+            json={"branch_id": f"test_branch_{unique_id}", "name": "Test Branch"},
         )
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_update_skill_valid(self, client, mutable_flow_id, unique_id):
-        """PUT /flows/{id}/branches/{branch_id} обновляет существующий skill."""
-        branch_id = f"test_skill_update_{unique_id}"
+    async def test_update_branch_valid(self, client, mutable_flow_id, unique_id):
+        """PUT /flows/{id}/branches/{branch_id} обновляет существующую ветку."""
+        branch_id = f"test_branch_update_{unique_id}"
         create_resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
             json={
@@ -1045,11 +1047,10 @@ class TestA2ASkills:
         update_resp = await client.put(
             f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}",
             json={
-                "branch_id": branch_id,
                 "name": "Updated Name",
                 "description": "Updated description",
                 "tags": ["updated"],
-                "skill_body": {"variables": {"updated_var": "updated_value"}},
+                "variables": {"updated_var": "updated_value"},
             },
         )
         assert update_resp.status_code == 200
@@ -1058,34 +1059,34 @@ class TestA2ASkills:
         assert data["branch_id"] == branch_id
         get_resp = await client.get(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
         assert get_resp.status_code == 200
-        skill = get_resp.json()
-        assert skill["name"] == "Updated Name"
-        assert skill["description"] == "Updated description"
-        assert "updated" in skill["tags"]
+        branch = get_resp.json()
+        assert branch["name"] == "Updated Name"
+        assert branch["description"] == "Updated description"
+        assert "updated" in branch["tags"]
         await client.delete(f"/flows/api/v1/{mutable_flow_id}/branches/{branch_id}")
 
     @pytest.mark.asyncio
-    async def test_update_skill_404_for_nonexistent_skill(self, client, flow_id, unique_id):
-        """PUT /flows/{id}/branches/{branch_id} возвращает 404 для несуществующего skill."""
+    async def test_update_branch_404_for_nonexistent_branch(self, client, flow_id, unique_id):
+        """PUT /flows/{id}/branches/{branch_id} возвращает 404 для несуществующей ветки."""
         resp = await client.put(
-            f"/flows/api/v1/{flow_id}/branches/nonexistent_skill_{unique_id}",
-            json={"branch_id": f"nonexistent_skill_{unique_id}", "name": "Test Skill"},
+            f"/flows/api/v1/{flow_id}/branches/nonexistent_branch_{unique_id}",
+            json={"name": "Test Branch"},
         )
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_update_skill_404_for_nonexistent_flow(self, client, unique_id):
+    async def test_update_branch_404_for_nonexistent_flow(self, client, unique_id):
         """PUT /flows/{id}/branches/{branch_id} возвращает 404 для несуществующего flow."""
         resp = await client.put(
-            f"/flows/api/v1/nonexistent_flow/branches/test_skill_{unique_id}",
-            json={"branch_id": f"test_skill_{unique_id}", "name": "Test Skill"},
+            f"/flows/api/v1/nonexistent_flow/branches/test_branch_{unique_id}",
+            json={"name": "Test Branch"},
         )
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_delete_skill_valid(self, client, mutable_flow_id, unique_id):
-        """DELETE /flows/{id}/branches/{branch_id} удаляет skill."""
-        branch_id = f"test_skill_delete_{unique_id}"
+    async def test_delete_branch_valid(self, client, mutable_flow_id, unique_id):
+        """DELETE /flows/{id}/branches/{branch_id} удаляет ветку."""
+        branch_id = f"test_branch_delete_{unique_id}"
         create_resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
             json={"branch_id": branch_id, "name": "To Delete"},
@@ -1100,30 +1101,30 @@ class TestA2ASkills:
         assert get_resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_delete_skill_404_for_nonexistent_skill(self, client, flow_id, unique_id):
-        """DELETE /flows/{id}/branches/{branch_id} возвращает 404 для несуществующего skill."""
+    async def test_delete_branch_404_for_nonexistent_branch(self, client, flow_id, unique_id):
+        """DELETE /flows/{id}/branches/{branch_id} возвращает 404 для несуществующей ветки."""
         resp = await client.delete(
-            f"/flows/api/v1/{flow_id}/branches/nonexistent_skill_{unique_id}"
+            f"/flows/api/v1/{flow_id}/branches/nonexistent_branch_{unique_id}"
         )
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_delete_skill_404_for_nonexistent_flow(self, client, unique_id):
+    async def test_delete_branch_404_for_nonexistent_flow(self, client, unique_id):
         """DELETE /flows/{id}/branches/{branch_id} возвращает 404 для несуществующего flow."""
         resp = await client.delete(
-            f"/flows/api/v1/nonexistent_flow/branches/test_skill_{unique_id}"
+            f"/flows/api/v1/nonexistent_flow/branches/test_branch_{unique_id}"
         )
         assert resp.status_code == 404
 
     @pytest.fixture
     async def mutable_flow_id(self, container, unique_id):
-        """Уникальный flow для тестов, мутирующих skills (изоляция от xdist)."""
+        """Уникальный flow для тестов, мутирующих branches (изоляция от xdist)."""
         from apps.flows.src.models import FlowConfig
 
-        fid = f"skill_test_{unique_id}"
+        fid = f"branch_test_{unique_id}"
         fc = FlowConfig(
             flow_id=fid,
-            name="Skill mutation test",
+            name="Branch mutation test",
             entry="main",
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             edges=[{"from_node": "main", "to_node": None}],
@@ -1133,28 +1134,26 @@ class TestA2ASkills:
         await container.flow_repository.delete(fid)
 
     @pytest.mark.asyncio
-    async def test_create_skill_with_edges(self, client, mutable_flow_id, unique_id):
-        """POST /flows/{id}/skills создаёт skill с edges."""
-        branch_id = f"test_skill_edges_{unique_id}"
+    async def test_create_branch_with_edges(self, client, mutable_flow_id, unique_id):
+        """POST /flows/{id}/branches создаёт branch с edges."""
+        branch_id = f"test_branch_edges_{unique_id}"
         resp = await client.post(
             f"/flows/api/v1/{mutable_flow_id}/branches",
             json={
                 "branch_id": branch_id,
-                "name": "Test Skill with Edges",
-                "skill_body": {
-                    "entry": "node1",
-                    "nodes": {
-                        "node1": {"type": "llm_node", "prompt": "Test prompt"},
-                        "node2": {
-                            "type": "code",
-                            "code": "async def run(args, state):\n    state['result'] = 'ok'\n    return state",
-                        },
+                "name": "Test Branch with Edges",
+                "entry": "node1",
+                "nodes": {
+                    "node1": {"type": "llm_node", "prompt": "Test prompt"},
+                    "node2": {
+                        "type": "code",
+                        "code": "async def run(args, state):\n    state['result'] = 'ok'\n    return state",
                     },
-                    "edges": [
-                        {"from_node": "node1", "to_node": "node2"},
-                        {"from_node": "node2", "to_node": None},
-                    ],
                 },
+                "edges": [
+                    {"from_node": "node1", "to_node": "node2"},
+                    {"from_node": "node2", "to_node": None},
+                ],
             },
         )
         assert resp.status_code == 201

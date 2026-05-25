@@ -11,6 +11,7 @@
 - RemoteFlowNode - внешний flow по A2A протоколу
 - ExternalAPINode - вызов внешнего HTTP API
 - MCPNode - вызов MCP tool
+- ReflectionNode - typed critic / test-time compute gate
 - ResourceNode - нода-ресурс на графе (identity / pass-through)
 """
 
@@ -26,14 +27,17 @@ from typing import ClassVar, Literal, TypeAlias, cast, overload, override
 from a2a.types import Message, Part, Role, TextPart
 
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
-from apps.flows.src.clients.mcp_client import MCPHttpClient
+from apps.flows.src.clients.mcp_client import MCPClient
 from apps.flows.src.container_contracts import FlowRuntimeContainer, RuntimeFlowProtocol
 from apps.flows.src.durable_execution import (
     ChildWorkflowLifecyclePayload,
     ExecutionStateDelta,
+    HandoffResumedPayload,
     RunStartedPayload,
     SideEffectPolicy,
+    SuperstepCommittedPayload,
     WorkflowEventType,
+    WorkflowExecutionPosition,
     apply_state_delta,
     build_state_delta,
     hash_state_json,
@@ -49,7 +53,7 @@ from apps.flows.src.models import (
 from apps.flows.src.models.enums import ChannelType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
-from apps.flows.src.models.operator_schemas import OperatorTaskStatus
+from apps.flows.src.models.operator_schemas import OperatorInterruptSnapshot, OperatorTaskStatus
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
@@ -62,13 +66,18 @@ from apps.flows.src.runtime.llm_resource_config import (
     resolve_llm_config_with_resource_key,
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
+from apps.flows.src.services.operator_handoff_service import (
+    HANDOFF_PREVIEW_MAX_LEN,
+    build_operator_handoff_command,
+)
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.base import BaseTool
-from apps.flows.src.tools.registry import ToolMaterializeInput, ToolRegistry
+from apps.flows.src.tools.registry import ToolMaterializeInput
 from apps.flows.src.variables import VariableResolver, VarResolver
 from core.clients.llm import get_llm
 from core.context import get_context as get_request_context
 from core.errors import NodeWallClockTimeoutError
+from core.integrations.mcp import mcp_tool_reference_id
 from core.llm_context import (
     LLMContextPatch,
     LLMContextProfile,
@@ -76,8 +85,17 @@ from core.llm_context import (
     LLMContextSourceRegistry,
 )
 from core.logging import get_logger
+from core.reflection import (
+    CriticPolicy,
+    ReflectionCritiqueResult,
+    ReflectionGateResult,
+    ReflectionRecord,
+    ReflectionTargetSnapshot,
+    evaluate_reflection_gate,
+)
 from core.state import (
     ChildWorkflowLink,
+    ChildWorkflowStatus,
     ExecutionExceptionRecord,
     ExecutionState,
     InterruptPathItem,
@@ -94,6 +112,31 @@ from core.types import JsonObject, JsonValue, require_json_object, require_json_
 logger = get_logger(__name__)
 NodeInputs: TypeAlias = JsonObject
 NodeRunResult: TypeAlias = ExecutionState | JsonValue
+
+
+def _mcp_side_effect_policy(annotations: JsonObject | None) -> SideEffectPolicy:
+    if annotations is None:
+        return SideEffectPolicy.non_idempotent
+    read_only = annotations.get("readOnlyHint")
+    idempotent = annotations.get("idempotentHint")
+    if read_only is True or idempotent is True:
+        return SideEffectPolicy.idempotent
+    return SideEffectPolicy.non_idempotent
+
+
+DURABLE_CONTEXT_NODE_TYPES: frozenset[NodeType] = frozenset(
+    {
+        NodeType.LLM_NODE,
+        NodeType.CODE,
+        NodeType.FLOW,
+        NodeType.REMOTE_FLOW,
+        NodeType.EXTERNAL_API,
+        NodeType.MCP,
+        NodeType.CHANNEL,
+        NodeType.HITL_NODE,
+        NodeType.REFLECTION,
+    }
+)
 
 
 def _config_mapping(config: JsonObject, field_name: str) -> JsonObject | None:
@@ -311,7 +354,7 @@ class BaseNode(ABC):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
     ):
         self.node_id: str = node_id
         self.config: JsonObject = dict(config) if config is not None else {}
@@ -323,7 +366,7 @@ class BaseNode(ABC):
                 f"Node '{self.node_id}': config.type must be {self.node_type.value!r}, "
                 + f"got {raw_node_type!r}"
             )
-        self.container: FlowRuntimeContainer | None = container
+        self.container: FlowRuntimeContainer = container
         self.input_mapping: JsonObject | None = _config_mapping(self.config, "input_mapping")
         self.output_mapping: dict[str, str] | None = _config_string_map(self.config, "output_mapping")
         self.save_to_messages: bool = _config_bool(self.config, "save_to_messages", False)
@@ -339,10 +382,34 @@ class BaseNode(ABC):
         node_id: str,
         config: JsonObject,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
     ) -> "BaseNode":
         """Создает ноду из конфига."""
         return cls(node_id=node_id, config=config, container=container)
+
+    def _requires_durable_context(self) -> bool:
+        return self.node_type in DURABLE_CONTEXT_NODE_TYPES
+
+    async def _require_durable_context(self, state: ExecutionState) -> None:
+        if not self._requires_durable_context():
+            return
+        container = self.container
+        position = await container.workflow_runtime.get_active_execution_position(
+            state.session_id
+        )
+        if position is None:
+            raise RuntimeError(
+                f"Node '{self.node_id}' requires durable workflow instance "
+                + f"before execution: {state.session_id!r}"
+            )
+        if state.durable_execution_branch_id is None:
+            raise RuntimeError(
+                f"Node '{self.node_id}' requires durable execution_branch_id"
+            )
+        if state.durable_node_schedule_sequence is None:
+            raise RuntimeError(
+                f"Node '{self.node_id}' requires NodeScheduled.sequence"
+            )
 
     async def _run_durable_activity(
         self,
@@ -352,12 +419,10 @@ class BaseNode(ABC):
         input_payload: JsonObject,
         side_effect_policy: SideEffectPolicy,
         invoke: Callable[[], Awaitable[NodeRunResult]],
+        activity_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> NodeRunResult:
         container = self.container
-        if container is None:
-            raise RuntimeError(
-                f"Node '{self.node_id}' requires FlowContainer for durable activity execution"
-            )
 
         runtime = container.workflow_runtime
         execution_position = await runtime.get_active_execution_position(state.session_id)
@@ -374,14 +439,23 @@ class BaseNode(ABC):
                 "Durable activity branch mismatch: "
                 + f"state={state_branch!r}, active={position_branch!r}"
             )
-        activity_id = self._durable_activity_id(state, activity_type, input_payload)
+        resolved_activity_id = (
+            activity_id
+            if activity_id is not None
+            else self._durable_activity_id(state, activity_type, input_payload)
+        )
+        resolved_idempotency_key = (
+            idempotency_key
+            if idempotency_key is not None
+            else resolved_activity_id
+        )
         completed = await runtime.record_activity_scheduled(
             session_id=state.session_id,
-            activity_id=activity_id,
+            activity_id=resolved_activity_id,
             activity_type=activity_type,
             input_payload=input_payload,
             node_id=self.node_id,
-            idempotency_key=activity_id,
+            idempotency_key=resolved_idempotency_key,
             side_effect_policy=side_effect_policy,
         )
         if completed is not None:
@@ -397,9 +471,9 @@ class BaseNode(ABC):
                 f"activity.{activity_type}.result",
             )
 
-        started = await runtime.record_activity_started(activity_id=activity_id)
+        started = await runtime.record_activity_started(activity_id=resolved_activity_id)
         if not started:
-            raise RuntimeError(f"Failed to mark activity as started: {activity_id!r}")
+            raise RuntimeError(f"Failed to mark activity as started: {resolved_activity_id!r}")
         before_state = ExecutionState.model_validate(
             state.model_dump(mode="python", exclude_none=False)
         )
@@ -407,11 +481,11 @@ class BaseNode(ABC):
             result = await invoke()
         except Exception as exc:
             completed_failed = await runtime.record_activity_completed(
-                activity_id=activity_id,
+                activity_id=resolved_activity_id,
                 error=str(exc),
             )
             if not completed_failed:
-                raise RuntimeError(f"Failed to mark activity as failed: {activity_id!r}") from exc
+                raise RuntimeError(f"Failed to mark activity as failed: {resolved_activity_id!r}") from exc
             raise
 
         state_delta = build_state_delta(before_state, state)
@@ -427,11 +501,11 @@ class BaseNode(ABC):
             f"activity.{activity_type}.result_json",
         )
         completed_ok = await runtime.record_activity_completed(
-            activity_id=activity_id,
+            activity_id=resolved_activity_id,
             result_json=result_json,
         )
         if not completed_ok:
-            raise RuntimeError(f"Failed to mark activity as completed: {activity_id!r}")
+            raise RuntimeError(f"Failed to mark activity as completed: {resolved_activity_id!r}")
         return result
 
     def _durable_activity_id(
@@ -542,6 +616,8 @@ class BaseNode(ABC):
            - dict: записываем поля в state через output_mapping
         5. Добавление в messages если save_to_messages=True
         """
+        await self._require_durable_context(state)
+
         state_before: JsonObject | None = None
         if self.save_to_messages and not self.message_field:
             state_before = require_json_object(
@@ -729,7 +805,7 @@ class BaseNode(ABC):
         Применяет inputs и фильтрует messages.
         Сбрасывает current_nodes чтобы вложенный flow начал со своего entry.
         """
-        new_state = ExecutionState.model_validate(state.model_dump(exclude_none=False))
+        new_state = state.runtime_copy()
 
         for key, value in inputs.items():
             new_state[key] = value
@@ -779,7 +855,7 @@ class LlmNode(BaseNode):
         config: JsonObject | None = None,
         node_config: NodeConfig | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
     ):
         super().__init__(node_id or self.name, config, container=container)
         cfg = self.config
@@ -805,7 +881,7 @@ class LlmNode(BaseNode):
         """
         Копия state для раннера LLM: общий список messages с родителем (полный лог), без подмены фильтром.
         """
-        new_state = ExecutionState.model_validate(state.model_dump(exclude_none=False))
+        new_state = state.runtime_copy()
         for key, value in inputs.items():
             new_state[key] = value
         new_state.messages = state.messages
@@ -912,6 +988,7 @@ class LlmNode(BaseNode):
             state,
             llm_context_policy,
         )
+        container = self.container
 
         self._runner = LlmNodeRunner(
             node_config=config,
@@ -919,7 +996,7 @@ class LlmNode(BaseNode):
             llm=None,
             prompt=prompt,
             llm_node=self,
-            container=self.container,
+            container=container,
             llm_context_policy=llm_context_policy,
             llm_context_source_registry=llm_context_source_registry,
         )
@@ -975,10 +1052,6 @@ class LlmNode(BaseNode):
                 raise ValueError("ExecutionState обязателен при заданном llm_resource_key")
             return base
         container = self.container
-        if container is None:
-            if explicit or _config_resource_refs(self.config):
-                raise RuntimeError(f"LLM node '{self.node_id}' requires FlowContainer to resolve LLM resources")
-            return base
         flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
             state.session_flow_id,
             state.branch_id,
@@ -1048,19 +1121,6 @@ class LlmNode(BaseNode):
                 repository=None,
                 node=base.llm_context,
             )
-        if container is None:
-            if explicit or has_node_resources:
-                raise RuntimeError(
-                    f"LLM node '{self.node_id}' requires FlowContainer to resolve LLM context resources"
-                )
-            return await resolve_llm_context_policy_for_runtime(
-                llm_context_resource_key=None,
-                flow_resources={},
-                skill_resources=None,
-                node_resources_raw={},
-                repository=None,
-                node=base.llm_context,
-            )
 
         flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
             state.session_flow_id,
@@ -1095,12 +1155,6 @@ class LlmNode(BaseNode):
             return None
 
         container = self.container
-        if container is None:
-            if has_node_resources:
-                raise RuntimeError(
-                    f"LLM node '{self.node_id}' requires FlowContainer to resolve RAG context resources"
-                )
-            return None
 
         flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
             state.session_flow_id,
@@ -1197,10 +1251,6 @@ class LlmNode(BaseNode):
         """
         _ = state
         container = self.container
-        if container is None:
-            registry = ToolRegistry()
-            return await registry.create_tools(self.tool_refs)
-
         return await container.tool_registry.create_tools(self.tool_refs)
 
     async def before_prompt_render(
@@ -1254,7 +1304,7 @@ class CodeNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
     ):
         super().__init__(node_id, config, container=container)
         cfg = self.config
@@ -1270,10 +1320,7 @@ class CodeNode(BaseNode):
 
     def _get_runner(self):
         """Возвращает isolated runner для текущего языка."""
-        container = self.container
-        if container is None:
-            raise RuntimeError(f"Code node '{self.node_id}' requires FlowContainer to create remote code runner")
-        return container.get_code_runner(self.language)
+        return self.container.get_code_runner(self.language)
 
     @override
     async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
@@ -1349,7 +1396,7 @@ class FlowNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
     ):
         super().__init__(node_id, config, container=container)
         cfg = self.config
@@ -1378,32 +1425,49 @@ class FlowNode(BaseNode):
             raise ValueError(f"Node '{self.node_id}': flow_id required")
 
         container = self.container
-        if container is None:
-            raise RuntimeError(f"Flow node '{self.node_id}' requires FlowContainer to load nested flow")
-
         nested_flow = await self._load_nested_flow(container)
         existing_link = self._resume_link_from_parent_state(state)
         if existing_link is None:
-            nested_state, link, child_started = await self._create_child_workflow_state(
+            nested_state, link, _child_started = await self._create_child_workflow_state(
                 container,
                 state,
                 inputs,
                 nested_flow,
             )
         else:
-            nested_state, link, child_started = await self._load_child_workflow_state(
+            nested_state, link, _child_started = await self._load_child_workflow_state(
                 container,
                 state,
                 existing_link,
             )
 
-        if child_started:
+        await self._record_child_workflow_event(
+            container,
+            state.session_id,
+            WorkflowEventType.child_workflow_started,
+            link,
+        )
+
+        if link.status == "completed":
+            self._copy_child_result_to_parent(nested_state, state, link)
             await self._record_child_workflow_event(
                 container,
                 state.session_id,
-                WorkflowEventType.child_workflow_started,
+                WorkflowEventType.child_workflow_completed,
                 link,
             )
+            return state.response
+
+        if link.status == "suspended" and not state.content:
+            self._copy_child_result_to_parent(nested_state, state, link)
+            self._attach_child_resume_path(state, link)
+            await self._record_child_workflow_event(
+                container,
+                state.session_id,
+                WorkflowEventType.child_workflow_suspended,
+                link,
+            )
+            return state.response
 
         try:
             result = await nested_flow.run(nested_state)
@@ -1421,10 +1485,7 @@ class FlowNode(BaseNode):
 
         next_status = "suspended" if result.interrupt or result.breakpoint_hit else "completed"
         next_link = link.model_copy(update={"status": next_status})
-        preserved_links = dict(state.child_workflows)
-        preserved_links[self.node_id] = next_link
-        self._copy_state_back(result, state, full_trust=False)
-        state.child_workflows = preserved_links
+        self._copy_child_result_to_parent(result, state, next_link)
 
         if result.interrupt or result.breakpoint_hit:
             self._attach_child_resume_path(state, next_link)
@@ -1506,6 +1567,62 @@ class FlowNode(BaseNode):
         raw_version = nested_flow.config.get("version")
         return str(raw_version) if raw_version is not None else None
 
+    async def _require_child_execution_position(
+        self,
+        container: FlowRuntimeContainer,
+        child_session_id: str,
+    ) -> WorkflowExecutionPosition:
+        position = await container.workflow_runtime.get_active_execution_position(
+            child_session_id
+        )
+        if position is None:
+            raise RuntimeError(
+                "Child workflow durable position not found: "
+                + f"{child_session_id!r}"
+            )
+        return position
+
+    async def _child_status_from_durable_state(
+        self,
+        container: FlowRuntimeContainer,
+        child_state: ExecutionState,
+    ) -> ChildWorkflowStatus:
+        if child_state.interrupt is not None or child_state.breakpoint_hit is not None:
+            return "suspended"
+        if child_state.current_nodes:
+            return "running"
+
+        offset = 0
+        limit = 200
+        while True:
+            history, total = await container.workflow_runtime.get_state_history(
+                child_state.session_id,
+                limit=limit,
+                offset=offset,
+            )
+            for event in history:
+                payload = event.payload
+                if (
+                    event.event_type is WorkflowEventType.superstep_committed
+                    and isinstance(payload, SuperstepCommittedPayload)
+                    and not payload.next_nodes
+                ):
+                    return "completed"
+            if not history or offset + len(history) >= total:
+                return "running"
+            offset += len(history)
+
+    def _copy_child_result_to_parent(
+        self,
+        child_state: ExecutionState,
+        parent_state: ExecutionState,
+        link: ChildWorkflowLink,
+    ) -> None:
+        preserved_links = dict(parent_state.child_workflows)
+        preserved_links[self.node_id] = link
+        self._copy_state_back(child_state, parent_state, full_trust=False)
+        parent_state.child_workflows = preserved_links
+
     async def _create_child_workflow_state(
         self,
         container: FlowRuntimeContainer,
@@ -1526,15 +1643,23 @@ class FlowNode(BaseNode):
         child_session_id = f"{flow_id}:{child_context_id}"
         existing_child = await container.workflow_runtime.get_state(child_session_id)
         if existing_child is not None:
+            child_position = await self._require_child_execution_position(
+                container,
+                child_session_id,
+            )
             link = ChildWorkflowLink(
                 node_id=self.node_id,
                 child_session_id=child_session_id,
                 child_flow_id=flow_id,
                 child_flow_branch_id=self.branch_id,
+                child_execution_branch_id=child_position.execution_branch_id,
                 parent_session_id=parent_state.session_id,
                 parent_execution_branch_id=parent_execution_branch_id,
                 parent_node_schedule_sequence=parent_node_schedule_sequence,
-                status="running",
+                status=await self._child_status_from_durable_state(
+                    container,
+                    existing_child,
+                ),
             )
             return existing_child, link, False
 
@@ -1580,6 +1705,7 @@ class FlowNode(BaseNode):
             child_session_id=child_session_id,
             child_flow_id=flow_id,
             child_flow_branch_id=self.branch_id,
+            child_execution_branch_id=child_execution_branch_id,
             parent_session_id=parent_state.session_id,
             parent_execution_branch_id=parent_execution_branch_id,
             parent_node_schedule_sequence=parent_node_schedule_sequence,
@@ -1599,6 +1725,17 @@ class FlowNode(BaseNode):
                 "Child workflow link points to missing durable session: "
                 + f"{link.child_session_id!r}"
             )
+        child_position = await self._require_child_execution_position(
+            container,
+            link.child_session_id,
+        )
+        if child_position.execution_branch_id != link.child_execution_branch_id:
+            raise RuntimeError(
+                "Child workflow active execution branch does not match parent link: "
+                + f"child_session_id={link.child_session_id!r}"
+            )
+        if link.status == "completed":
+            return child_state, link, False
         if parent_state.content:
             child_state.content = parent_state.content
         if parent_state.interrupt_path:
@@ -1614,6 +1751,7 @@ class FlowNode(BaseNode):
                 and first.child_session_id is not None
                 and first.child_flow_id is not None
                 and first.child_flow_branch_id is not None
+                and first.child_execution_branch_id is not None
             ):
                 existing = state.child_workflows.get(self.node_id)
                 if existing is not None and existing.child_session_id == first.child_session_id:
@@ -1626,6 +1764,7 @@ class FlowNode(BaseNode):
                     child_session_id=first.child_session_id,
                     child_flow_id=first.child_flow_id,
                     child_flow_branch_id=first.child_flow_branch_id,
+                    child_execution_branch_id=first.child_execution_branch_id,
                     parent_session_id=state.session_id,
                     parent_execution_branch_id=parent_execution_branch_id,
                     parent_node_schedule_sequence=parent_node_schedule_sequence,
@@ -1634,7 +1773,7 @@ class FlowNode(BaseNode):
         existing_link = state.child_workflows.get(self.node_id)
         if existing_link is None:
             return None
-        if existing_link.status in {"running", "suspended"}:
+        if existing_link.status in {"running", "suspended", "completed"}:
             return existing_link
         return None
 
@@ -1649,6 +1788,7 @@ class FlowNode(BaseNode):
             child_session_id=link.child_session_id,
             child_flow_id=link.child_flow_id,
             child_flow_branch_id=link.child_flow_branch_id,
+            child_execution_branch_id=link.child_execution_branch_id,
         )
         state.interrupt_path = [child_item, *state.interrupt_path]
         if state.interrupt is not None:
@@ -1670,14 +1810,36 @@ class FlowNode(BaseNode):
         *,
         error: str | None = None,
     ) -> None:
-        child_position = await container.workflow_runtime.get_active_execution_position(
-            link.child_session_id
+        if await self._child_workflow_event_exists(
+            container,
+            parent_session_id=parent_session_id,
+            event_type=event_type,
+            link=link,
+        ):
+            logger.info(
+                "child_workflow.lifecycle_event_replayed",
+                parent_session_id=parent_session_id,
+                child_session_id=link.child_session_id,
+                child_execution_branch_id=link.child_execution_branch_id,
+                event_type=event_type.value,
+                node_id=self.node_id,
+            )
+            return
+        child_position = await self._require_child_execution_position(
+            container,
+            link.child_session_id,
         )
+        if child_position.execution_branch_id != link.child_execution_branch_id:
+            raise RuntimeError(
+                "Child workflow lifecycle event branch mismatch: "
+                + f"child_session_id={link.child_session_id!r}"
+            )
         payload = ChildWorkflowLifecyclePayload(
             node_id=self.node_id,
             child_session_id=link.child_session_id,
             child_flow_id=link.child_flow_id,
             child_flow_branch_id=link.child_flow_branch_id,
+            child_execution_branch_id=link.child_execution_branch_id,
             parent_execution_branch_id=link.parent_execution_branch_id,
             parent_node_schedule_sequence=link.parent_node_schedule_sequence,
             child_execution_position=child_position,
@@ -1690,6 +1852,39 @@ class FlowNode(BaseNode):
             payload=payload,
         )
 
+    async def _child_workflow_event_exists(
+        self,
+        container: FlowRuntimeContainer,
+        *,
+        parent_session_id: str,
+        event_type: WorkflowEventType,
+        link: ChildWorkflowLink,
+    ) -> bool:
+        offset = 0
+        limit = 200
+        while True:
+            history, total = await container.workflow_runtime.get_state_history(
+                parent_session_id,
+                limit=limit,
+                offset=offset,
+            )
+            for event in history:
+                payload = event.payload
+                if (
+                    event.event_type is event_type
+                    and isinstance(payload, ChildWorkflowLifecyclePayload)
+                    and payload.node_id == self.node_id
+                    and payload.child_session_id == link.child_session_id
+                    and payload.child_execution_branch_id == link.child_execution_branch_id
+                    and payload.parent_execution_branch_id == link.parent_execution_branch_id
+                    and payload.parent_node_schedule_sequence
+                    == link.parent_node_schedule_sequence
+                ):
+                    return True
+            if not history or offset + len(history) >= total:
+                return False
+            offset += len(history)
+
 
 class RemoteFlowNode(BaseNode):
     """Внешний flow по A2A протоколу."""
@@ -1701,7 +1896,7 @@ class RemoteFlowNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
     ):
         super().__init__(node_id, config, container=container)
         cfg = self.config
@@ -1718,9 +1913,6 @@ class RemoteFlowNode(BaseNode):
             raise ValueError("RemoteFlowNode requires 'url' or 'flow_id'")
 
         container = self.container
-        if container is None:
-            raise RuntimeError(f"Remote flow node '{self.node_id}' requires FlowContainer to resolve A2A client")
-
         url, req_headers = await self._resolve_connection(container, state)
 
         content = inputs.get("content", state.content or "")
@@ -1813,7 +2005,7 @@ class ExternalAPINode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
     ):
         super().__init__(node_id, config, container=container)
         self.api_config: JsonObject = self.config
@@ -1913,7 +2105,7 @@ class MCPNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
     ):
         super().__init__(node_id, config, container=container)
         cfg = self.config
@@ -1934,9 +2126,6 @@ class MCPNode(BaseNode):
         tool_name = self.tool_name
 
         container = self.container
-        if container is None:
-            raise RuntimeError(f"MCP node '{self.node_id}' requires FlowContainer to load MCP server")
-
         server = await container.mcp_server_repository.get(server_id)
         if not server:
             raise ValueError(f"MCP server not found: {server_id}")
@@ -1944,42 +2133,66 @@ class MCPNode(BaseNode):
         request_headers = {**server.headers, **self.extra_headers}
         request_server = server.model_copy(update={"headers": request_headers})
 
-        variables = state.variables
+        tool_id = mcp_tool_reference_id(server_id, tool_name)
+        tool_ref = await container.tool_repository.get(tool_id)
+        if tool_ref is None:
+            raise ValueError(
+                f"MCPNode '{self.node_id}' requires synced ToolReference '{tool_id}'"
+            )
+        mcp_contract = tool_ref.require_mcp_contract()
+
+        variables = require_json_object(state.variables, "state.variables")
+        headers_hash = hash_state_json(
+            require_json_object(request_headers, "mcp.request_headers")
+        )
+        variables_hash = hash_state_json(variables)
 
         input_payload = require_json_object(
             {
                 "node_id": self.node_id,
                 "server_id": server_id,
                 "tool_name": tool_name,
+                "tool_id": tool_id,
+                "schema_hash": mcp_contract.schema_hash,
+                "schema_version": mcp_contract.schema_version,
                 "inputs": inputs,
-                "headers": request_server.headers,
-                "variables": variables,
+                "headers_hash": headers_hash,
+                "variables_hash": variables_hash,
                 "state_hash": self._state_hash_for_activity(state),
             },
             "mcp.activity_input",
         )
 
         async def invoke() -> NodeRunResult:
-            client = MCPHttpClient(request_server, variables)
+            client = MCPClient(request_server, variables)
+            _ = await client.require_tool_contract(
+                tool_name,
+                expected_schema_hash=mcp_contract.schema_hash,
+                expected_schema_version=mcp_contract.schema_version,
+            )
             result = await client.call_tool(tool_name, inputs)
 
             if result.is_error:
                 raise ValueError(f"MCP tool error: {result.get_text()}")
 
-            text_result = result.get_text()
+            node_result: JsonValue = (
+                result.structured_content
+                if result.structured_content is not None
+                else result.get_text()
+            )
 
             for _field, state_field in self.state_mapping.items():
-                state[state_field] = text_result
+                state[state_field] = node_result
 
-            state["mcp_result"] = text_result
+            state["mcp_result"] = node_result
 
-            return text_result
+            return node_result
 
         return await self._run_durable_activity(
             state,
             activity_type="mcp",
             input_payload=input_payload,
-            side_effect_policy=SideEffectPolicy.non_idempotent,
+            side_effect_policy=_mcp_side_effect_policy(mcp_contract.annotations),
             invoke=invoke,
         )
 
@@ -2020,7 +2233,7 @@ class ChannelNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
     ):
         super().__init__(node_id, config, container=container)
         cfg = self.config
@@ -2039,8 +2252,6 @@ class ChannelNode(BaseNode):
     async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
         """Отправляет сообщение через channel handler."""
         container = self.container
-        if container is None:
-            raise RuntimeError(f"Channel node '{self.node_id}' requires FlowContainer to load channel registry")
         handler = container.channel_registry.get(self.channel)
 
         # Собираем все переменные (flow, компании, системные)
@@ -2124,8 +2335,6 @@ class HitlNode(BaseNode):
         cid_resume = state.hitl_handoff_correlation_id
         if isinstance(cid_resume, str) and cid_resume.strip() and state.content:
             container = self.container
-            if container is None:
-                raise RuntimeError(f"HITL node '{self.node_id}' requires FlowContainer to load operator repository")
             repo = container.operator_repository
             existing_resume = await repo.get_task_by_correlation(
                 company_id, cid_resume.strip()
@@ -2140,9 +2349,36 @@ class HitlNode(BaseNode):
                     f"hitl_node {self.node_id}: задача оператора ещё не завершена "
                     + f"(status={existing_resume.status!r})"
                 )
+            if existing_resume.interrupt_snapshot is None:
+                raise ValueError(
+                    f"hitl_node {self.node_id}: задача оператора без interrupt_snapshot"
+                )
+            snapshot = OperatorInterruptSnapshot.model_validate(
+                existing_resume.interrupt_snapshot
+            )
             state.hitl_handoff_correlation_id = None
             answer = str(state.content).strip()
             state.response = answer
+            _ = await container.workflow_runtime.record_lifecycle_event(
+                state.session_id,
+                event_type=WorkflowEventType.handoff_resumed,
+                payload=HandoffResumedPayload(
+                    current_nodes=[self.node_id],
+                    node_id=self.node_id,
+                    handoff_command_id=snapshot.handoff_command_id,
+                    correlation_id=cid_resume.strip(),
+                    operator_task_id=existing_resume.id,
+                    response_preview=answer[:HANDOFF_PREVIEW_MAX_LEN],
+                ),
+            )
+            logger.info(
+                "operator_handoff.resumed",
+                operator_task_id=existing_resume.id,
+                correlation_id=cid_resume.strip(),
+                handoff_command_id=snapshot.handoff_command_id,
+                session_id=state.session_id,
+                node_id=self.node_id,
+            )
             return None
 
         slug_in = inputs.get("assignee_queue")
@@ -2156,8 +2392,6 @@ class HitlNode(BaseNode):
             slug_effective = slug_cfg.strip()
         elif isinstance(qid_cfg, str) and qid_cfg.strip():
             container = self.container
-            if container is None:
-                raise RuntimeError(f"HITL node '{self.node_id}' requires FlowContainer to load operator queue")
             row = await container.operator_repository.get_queue_by_id(
                 company_id, qid_cfg.strip()
             )
@@ -2200,15 +2434,21 @@ class HitlNode(BaseNode):
         mode = HandoffMode(str(raw_mode).strip())
 
         container = self.container
-        if container is None:
-            raise RuntimeError(f"HITL node '{self.node_id}' requires FlowContainer to register handoff")
         svc = container.operator_handoff_service
         question = str(message).strip()
         task_title = str(title).strip()
+        handoff_command = build_operator_handoff_command(
+            state=state,
+            node_id=self.node_id,
+        )
         input_payload = require_json_object(
             {
                 "node_id": self.node_id,
                 "company_id": company_id,
+                "handoff_command_id": handoff_command.idempotency_key,
+                "correlation_id": str(handoff_command.correlation_id),
+                "execution_branch_id": handoff_command.execution_branch_id,
+                "node_schedule_sequence": handoff_command.node_schedule_sequence,
                 "question": question,
                 "task_title": task_title,
                 "assignee_queue_slug": slug_effective,
@@ -2225,10 +2465,14 @@ class HitlNode(BaseNode):
                 task_title=task_title,
                 assignee_queue_slug=slug_effective,
                 handoff_mode=mode,
+                command=handoff_command,
             )
             return {
                 "correlation_id": str(cid),
                 "operator_task_id": op_task_id,
+                "handoff_command_id": handoff_command.idempotency_key,
+                "execution_branch_id": handoff_command.execution_branch_id,
+                "node_schedule_sequence": handoff_command.node_schedule_sequence,
             }
 
         handoff = require_json_object(
@@ -2236,7 +2480,9 @@ class HitlNode(BaseNode):
                 state,
                 activity_type="hitl_handoff",
                 input_payload=input_payload,
-                side_effect_policy=SideEffectPolicy.non_idempotent,
+                side_effect_policy=SideEffectPolicy.idempotent,
+                activity_id=handoff_command.idempotency_key,
+                idempotency_key=handoff_command.idempotency_key,
                 invoke=invoke,
             ),
             "hitl_handoff.result",
@@ -2253,8 +2499,253 @@ class HitlNode(BaseNode):
                 assignee_queue=slug_effective,
                 handoff_mode=mode,
                 operator_task_id=operator_task_id,
+                handoff_command_id=handoff_command.idempotency_key,
+                execution_branch_id=handoff_command.execution_branch_id,
+                node_schedule_sequence=handoff_command.node_schedule_sequence,
+                node_id=self.node_id,
+                tool_call_id=None,
             ),
             correlation_id=uuid.UUID(correlation_id),
+        )
+
+
+class ReflectionNode(BaseNode):
+    """Typed critic / test-time compute gate with no state writes inside the activity."""
+
+    name: ClassVar[str] = "reflection"
+    node_type: ClassVar[NodeType | None] = NodeType.REFLECTION
+
+    def __init__(
+        self,
+        node_id: str,
+        config: JsonObject | None = None,
+        *,
+        container: FlowRuntimeContainer,
+    ) -> None:
+        super().__init__(node_id=node_id, config=config, container=container)
+        policy_payload = _config_mapping(self.config, "critic_policy")
+        if policy_payload is None:
+            raise ValueError(f"reflection node {self.node_id}: critic_policy is required")
+        self.critic_policy = CriticPolicy.model_validate(policy_payload)
+
+        llm_payload = _config_mapping(self.config, "llm")
+        if llm_payload is None:
+            raise ValueError(f"reflection node {self.node_id}: llm is required")
+        self.llm_config = NodeLLMConfig.model_validate(llm_payload)
+        if self.llm_config.model is None:
+            raise ValueError(f"reflection node {self.node_id}: llm.model is required")
+        if self.llm_config.fallback_models:
+            raise ValueError(f"reflection node {self.node_id}: fallback_models are not allowed")
+
+    @override
+    async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
+        _ = inputs
+        target_snapshot = self._resolve_target_snapshot(state)
+        result = await self._run_reflection_activity(
+            state=state,
+            target_snapshot=target_snapshot,
+        )
+        execution_branch_id = state.durable_execution_branch_id
+        if execution_branch_id is None:
+            raise RuntimeError("reflection result requires durable execution_branch_id")
+        node_schedule_sequence = state.durable_node_schedule_sequence
+        if node_schedule_sequence is None:
+            raise RuntimeError("reflection result requires NodeScheduled.sequence")
+
+        record = ReflectionRecord(
+            node_id=self.node_id,
+            execution_branch_id=execution_branch_id,
+            node_schedule_sequence=node_schedule_sequence,
+            result=result,
+        )
+        state.reflection_history.append(record)
+        state.validation = require_json_object(
+            result.model_dump(mode="json"),
+            "reflection.validation",
+        )
+        logger.info(
+            "reflection.gate_completed",
+            node_id=self.node_id,
+            policy_id=result.policy_id,
+            gate=result.gate,
+            approved=result.approved,
+            session_id=state.session_id,
+            execution_branch_id=execution_branch_id,
+        )
+        return None
+
+    def _resolve_target_snapshot(self, state: ExecutionState) -> ReflectionTargetSnapshot:
+        target = self.critic_policy.target
+        if target.kind == "response":
+            value: object = state.response
+        elif target.kind == "result":
+            value = state.result
+        elif target.kind == "validation":
+            value = state.validation
+        else:
+            path = target.state_path
+            if path is None:
+                raise ValueError("reflection target state_path is required")
+            value = MappingResolver.get_nested_value(state, path)
+
+        if value is None:
+            raise ValueError(f"reflection target {target.kind!r} is empty")
+        if isinstance(value, str) and not value.strip():
+            raise ValueError(f"reflection target {target.kind!r} is empty")
+        return ReflectionTargetSnapshot(
+            target=target,
+            value=require_json_value(value, f"reflection.target.{target.kind}"),
+        )
+
+    async def _run_reflection_activity(
+        self,
+        *,
+        state: ExecutionState,
+        target_snapshot: ReflectionTargetSnapshot,
+    ) -> ReflectionGateResult:
+        input_payload = require_json_object(
+            {
+                "node_id": self.node_id,
+                "policy": self.critic_policy.model_dump(mode="json"),
+                "target_snapshot": target_snapshot.model_dump(mode="json"),
+            },
+            "reflection.activity_input",
+        )
+        activity_id = self._durable_activity_id(state, "reflection", input_payload)
+        runtime = self.container.workflow_runtime
+        completed = await runtime.record_activity_scheduled(
+            session_id=state.session_id,
+            activity_id=activity_id,
+            activity_type="reflection",
+            input_payload=input_payload,
+            node_id=self.node_id,
+            idempotency_key=activity_id,
+            side_effect_policy=SideEffectPolicy.idempotent,
+        )
+        if completed is not None:
+            return self._reflection_result_from_completed(completed)
+
+        started = await runtime.record_activity_started(activity_id=activity_id)
+        if not started:
+            raise RuntimeError(f"Failed to mark reflection activity as started: {activity_id!r}")
+
+        try:
+            async with traced_operation(
+                "flows.reflection.critique",
+                event_type="reflection.critique",
+                operation_category="reflection",
+                extra_attributes={
+                    "platform.node.id": self.node_id,
+                    "platform.reflection.policy_id": self.critic_policy.policy_id,
+                    "platform.reflection.gate": self.critic_policy.gate,
+                    "platform.reflection.target": self.critic_policy.target.kind,
+                },
+            ):
+                critique = await self._invoke_critic_llm(
+                    input_payload=input_payload,
+                    target_snapshot=target_snapshot,
+                    state=state,
+                )
+                result = evaluate_reflection_gate(
+                    policy=self.critic_policy,
+                    critique=critique,
+                )
+        except Exception as exc:
+            completed_failed = await runtime.record_activity_completed(
+                activity_id=activity_id,
+                error=str(exc),
+            )
+            if not completed_failed:
+                raise RuntimeError(f"Failed to mark reflection activity as failed: {activity_id!r}") from exc
+            raise
+
+        completed_ok = await runtime.record_activity_completed(
+            activity_id=activity_id,
+            result_json={
+                "result": result.model_dump(mode="json"),
+            },
+        )
+        if not completed_ok:
+            raise RuntimeError(f"Failed to mark reflection activity as completed: {activity_id!r}")
+        return result
+
+    @staticmethod
+    def _reflection_result_from_completed(completed: JsonObject) -> ReflectionGateResult:
+        if "result" not in completed:
+            raise ValueError("reflection activity result missing result")
+        result_raw = completed["result"]
+        if not isinstance(result_raw, dict):
+            raise ValueError("reflection activity result must be an object")
+        return ReflectionGateResult.model_validate(result_raw)
+
+    async def _invoke_critic_llm(
+        self,
+        *,
+        input_payload: JsonObject,
+        target_snapshot: ReflectionTargetSnapshot,
+        state: ExecutionState,
+    ) -> ReflectionCritiqueResult:
+        llm_cfg = self.llm_config
+        llm = get_llm(
+            model_name=llm_cfg.model,
+            provider=llm_cfg.provider,
+            temperature=llm_cfg.temperature,
+            api_key=llm_cfg.api_key,
+            base_url=llm_cfg.base_url,
+            folder_id=llm_cfg.folder_id,
+            max_tokens=llm_cfg.max_tokens,
+            state=state,
+            allow_platform_paid_fallback=False,
+            top_p=llm_cfg.top_p,
+            top_k=llm_cfg.top_k,
+            frequency_penalty=llm_cfg.frequency_penalty,
+            presence_penalty=llm_cfg.presence_penalty,
+            seed=llm_cfg.seed,
+            reasoning_effort=llm_cfg.reasoning_effort,
+            extra_request_body=llm_cfg.extra_request_body,
+            extra_request_headers=llm_cfg.extra_request_headers,
+        )
+        message_id = "reflection-" + hash_state_json(input_payload)
+        prompt = self._critic_prompt(target_snapshot)
+        message = Message(
+            message_id=message_id,
+            role=Role.user,
+            parts=[Part(root=TextPart(text=prompt))],
+            metadata={"node_id": self.node_id, "reflection_policy_id": self.critic_policy.policy_id},
+            task_id=state.task_id,
+            context_id=state.context_id,
+        )
+        result = await llm.chat(
+            [message],
+            response_model=ReflectionCritiqueResult,
+            llm_context={"profile": "off"},
+        )
+        return result
+
+    def _critic_prompt(self, target_snapshot: ReflectionTargetSnapshot) -> str:
+        policy_json = json.dumps(
+            self.critic_policy.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        target_json = json.dumps(
+            target_snapshot.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        return "\n".join(
+            (
+                "You are a strict critic gate for an agent workflow.",
+                "Evaluate only the provided target against the policy.",
+                "Do not propose or execute side effects.",
+                "Return only structured JSON matching the response schema.",
+                "",
+                "[Critic policy]",
+                policy_json,
+                "",
+                "[Target snapshot]",
+                target_json,
+            )
         )
 
 
@@ -2284,6 +2775,7 @@ RUNTIME_NODE_CLASSES: Mapping[NodeType, type[BaseNode]] = {
     NodeType.MCP: MCPNode,
     NodeType.CHANNEL: ChannelNode,
     NodeType.HITL_NODE: HitlNode,
+    NodeType.REFLECTION: ReflectionNode,
     NodeType.RESOURCE: ResourceNode,
 }
 
@@ -2292,7 +2784,7 @@ async def create_node(
     node_id: str,
     node_config: JsonObject,
     *,
-    container: FlowRuntimeContainer | None = None,
+    container: FlowRuntimeContainer,
 ) -> BaseNode:
     """
     Создаёт ноду через NodeRegistry.

@@ -35,7 +35,7 @@ from .trigger_config import TriggerConfig
 Permission = str | list[str] | None
 
 
-def _normalize_flow_variables(data: object) -> object:
+def normalize_flow_variables_payload(data: object) -> object:
     """Нормализует scalar JSON variables в строгий FlowVariableConfig payload."""
     if not isinstance(data, dict):
         return data
@@ -393,7 +393,7 @@ class BranchConfig(StrictBaseModel):
     @classmethod
     def _normalize_variables(cls, data: object) -> object:
         """Нормализует variables: простые значения -> FlowVariableConfig."""
-        return _normalize_flow_variables(data)
+        return normalize_flow_variables_payload(data)
 
 
 class FlowConfig(StrictBaseModel):
@@ -509,7 +509,7 @@ class FlowConfig(StrictBaseModel):
     @classmethod
     def _normalize_variables(cls, data: object) -> object:
         """Нормализует variables: простые значения -> FlowVariableConfig."""
-        return _normalize_flow_variables(data)
+        return normalize_flow_variables_payload(data)
 
     branches: dict[str, BranchConfig] = Field(
         default_factory=dict,

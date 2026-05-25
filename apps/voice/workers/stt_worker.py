@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from typing import Literal
 
 from apps.voice.providers.base import BaseSTTProvider, BaseVADProvider
 from apps.voice.services.voice_barge_in import BargeInController
@@ -36,7 +37,8 @@ logger = get_logger(__name__)
 
 OnFinalTranscription = Callable[[VoiceSession, str, str | None], Awaitable[None]] | None
 OnPartialTranscription = Callable[[VoiceSession, str, str | None], Awaitable[None]] | None
-OnVadState = Callable[[VoiceSession, str], Awaitable[None]] | None
+VadCallbackState = Literal["started", "ended"]
+OnVadState = Callable[[VoiceSession, VadCallbackState], Awaitable[None]] | None
 
 _FRAME_DURATION_S = 0.02
 
@@ -176,10 +178,6 @@ async def run_stt_worker(
             continue
 
         audio_frame = raw_in
-        if not isinstance(audio_frame, bytes):
-            raise TypeError(
-                "stt_worker: элемент audio_in_queue должен быть bytes или MicFinalizeRequest."
-            )
 
         try:
             is_speech = await vad_provider.detect_speech(audio_frame, sample_rate=16000)
@@ -297,4 +295,5 @@ __all__ = [
     "OnFinalTranscription",
     "OnPartialTranscription",
     "OnVadState",
+    "VadCallbackState",
 ]

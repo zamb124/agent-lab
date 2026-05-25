@@ -18,6 +18,7 @@ from core.capabilities import (
     CodeValidationResponse,
     code_execution_failed_response,
     code_validation_failed_response,
+    verify_execution_context,
 )
 from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
@@ -30,6 +31,22 @@ CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 RESPONSE_PREFIX = "__CODE_RUNNER_RESPONSE__"
 SERVICE_NAME = "code_runner_go"
 GO_BIN_ENV = "CODE_RUNNER_GO_BIN"
+FORBIDDEN_GO_IMPORTS: frozenset[str] = frozenset(
+    {
+        "C",
+        "net",
+        "net/http",
+        "net/url",
+        "os",
+        "os/exec",
+        "path/filepath",
+        "plugin",
+        "reflect",
+        "runtime",
+        "syscall",
+        "unsafe",
+    }
+)
 
 
 class GoSandboxExecutor:
@@ -41,6 +58,9 @@ class GoSandboxExecutor:
         self._build_locks_guard: asyncio.Lock = asyncio.Lock()
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
+        security_error = self._verify_execution_request(request)
+        if security_error is not None:
+            return security_error
         if request.language != "go":
             return self._failed_response(
                 request=request,
@@ -84,12 +104,16 @@ class GoSandboxExecutor:
                 "platform.code_runner.kind": request.kind,
                 "platform.code_runner.entrypoint": entrypoint,
                 "platform.code_runner.runtime": "build_artifact_cache",
+                "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
             },
         ):
             artifact_key = self._artifact_key(request, entrypoint)
             artifact_path = self._artifact_root / artifact_key
             binary_path = artifact_path / "sandbox"
             try:
+                self._validate_user_source(request.code)
                 await self._ensure_artifact(
                     request=request,
                     go_bin=go_bin,
@@ -119,6 +143,9 @@ class GoSandboxExecutor:
         return completed
 
     async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
+        security_error = self._verify_validation_request(request)
+        if security_error is not None:
+            return security_error
         if request.language != "go":
             return self._failed_validation_response(
                 request=request,
@@ -161,12 +188,16 @@ class GoSandboxExecutor:
                 "platform.code_runner.kind": request.kind,
                 "platform.code_runner.entrypoint": entrypoint,
                 "platform.code_runner.runtime": "build_artifact_cache",
+                "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
             },
         ):
             artifact_key = self._artifact_key(request, entrypoint)
             artifact_path = self._artifact_root / artifact_key
             binary_path = artifact_path / "sandbox"
             try:
+                self._validate_user_source(request.code)
                 await self._ensure_artifact(
                     request=request,
                     go_bin=go_bin,
@@ -193,6 +224,53 @@ class GoSandboxExecutor:
         }
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+    def _validate_user_source(self, code: str) -> None:
+        for package in self._go_imports(code):
+            if package in FORBIDDEN_GO_IMPORTS or package.split("/", 1)[0] in FORBIDDEN_GO_IMPORTS:
+                raise PermissionError(f"go import is not allowed in code runner: {package}")
+
+    def _go_imports(self, code: str) -> list[str]:
+        imports: list[str] = []
+        for match in re.finditer(r'import\s+"([^"]+)"', code):
+            imports.append(match.group(1))
+        for block_match in re.finditer(r"import\s*\((.*?)\)", code, flags=re.S):
+            block = block_match.group(1)
+            for item_match in re.finditer(r'"([^"]+)"', block):
+                imports.append(item_match.group(1))
+        return imports
+
+    def _verify_execution_request(
+        self,
+        request: CodeExecutionRequest,
+    ) -> CodeExecutionResponse | None:
+        try:
+            verify_execution_context(request.context)
+        except Exception as exc:
+            return self._failed_response(
+                request=request,
+                stage="security",
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                traceback_text="".join(traceback.format_exception(exc)),
+            )
+        return None
+
+    def _verify_validation_request(
+        self,
+        request: CodeValidationRequest,
+    ) -> CodeValidationResponse | None:
+        try:
+            verify_execution_context(request.context)
+        except Exception as exc:
+            return self._failed_validation_response(
+                request=request,
+                stage="security",
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                traceback_text="".join(traceback.format_exception(exc)),
+            )
+        return None
 
     async def _build_lock(self, artifact_key: str) -> asyncio.Lock:
         async with self._build_locks_guard:
@@ -421,7 +499,16 @@ class GoSandboxExecutor:
             chunks.append(
                 f"func ({type_name}) Call(method string, kwargs map[string]any) (any, error) {{"
             )
-            chunks.append(f'    return Capability("{namespace}." + method, kwargs)')
+            if namespace == "tools":
+                chunks.append('    return Capability("tools." + method, kwargs)')
+            else:
+                chunks.append("    switch method {")
+                for method, capability_name in sorted(grouped[namespace].items()):
+                    chunks.append(f'    case "{method}":')
+                    chunks.append(f'        return Capability("{capability_name}", kwargs)')
+                chunks.append("    default:")
+                chunks.append(f'        return nil, undeclaredCapabilityMethod("{namespace}", method)')
+                chunks.append("    }")
             chunks.append("}")
             chunks.append("")
             for method, capability_name in sorted(grouped[namespace].items()):
@@ -487,6 +574,33 @@ class GoSandboxExecutor:
                 return value
             }}
 
+            func manifestCapabilityNames() map[string]bool {{
+                names := map[string]bool{{}}
+                rawCapabilities, ok := currentRequest.CapabilityManifest["capabilities"]
+                if !ok {{
+                    return names
+                }}
+                capabilities, ok := rawCapabilities.([]any)
+                if !ok {{
+                    return names
+                }}
+                for _, rawCapability := range capabilities {{
+                    capability, ok := rawCapability.(map[string]any)
+                    if !ok {{
+                        continue
+                    }}
+                    name, ok := capability["name"].(string)
+                    if ok && name != "" {{
+                        names[name] = true
+                    }}
+                }}
+                return names
+            }}
+
+            func undeclaredCapabilityMethod(namespace string, method string) error {{
+                return fmt.Errorf("capability method is not declared in manifest: %s.%s", namespace, method)
+            }}
+
             func emitFailure(stage string, err any) {{
                 message := fmt.Sprint(err)
                 traceback := fmt.Sprintf("%s\\n%s", message, string(debug.Stack()))
@@ -531,6 +645,9 @@ class GoSandboxExecutor:
             }}
 
             func Capability(name string, kwargs map[string]any) (any, error) {{
+                if !manifestCapabilityNames()[name] {{
+                    return nil, fmt.Errorf("capability is not declared in manifest: %s", name)
+                }}
                 payload := map[string]any{{
                     "context": currentRequest.Context,
                     "name": name,

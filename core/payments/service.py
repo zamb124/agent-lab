@@ -26,6 +26,7 @@ from core.models.payment_models import (
     PaymentProviderType,
     PaymentStatus,
     Transaction,
+    YooMoneyWebhookPayload,
 )
 from core.types import JsonObject
 from core.utils.domain import PRIMARY_DOMAIN
@@ -217,7 +218,7 @@ class PaymentService:
         self,
         verification_result: WebhookVerificationResult,
         provider_name: str,
-        raw_data: JsonObject,
+        raw_data: YooMoneyWebhookPayload,
     ) -> None:
         """
         Обрабатывает webhook от платежного провайдера.

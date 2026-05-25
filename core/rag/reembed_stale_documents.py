@@ -22,8 +22,8 @@ from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
+from core.rag.models import RAGReembedTickResult
 from core.rag.providers.pgvector_provider import PgVectorProvider
-from core.types import JsonObject
 
 logger = get_logger(__name__)
 
@@ -33,7 +33,7 @@ async def execute_reembed_tick(
     container: BaseContainer,
     channel: str,
     schedule_task_id: str,
-) -> JsonObject:
+) -> RAGReembedTickResult:
     """
     Запускает один тик перевекторизации для воркера.
 

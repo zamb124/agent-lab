@@ -4,8 +4,8 @@
  * API: GET /frontend/api/lead-requests (доступно только для company=system).
  * 403 → terminal `forbidden`, прочие ошибки → error state.
  *
- * Каждая заявка содержит: storage_key, id, name, email, phone, company,
- * comment, created_at.
+ * Каждая заявка содержит: lead_request_id, contact_name, email, phone,
+ * organization_name, comment, created_at.
  */
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
@@ -117,8 +117,8 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                 <tbody>
                     ${list.map((l) => html`
                         <tr>
-                            <td class="created">${l.created_at ? new Date(l.created_at).toLocaleString() : '—'}</td>
-                            <td>${l.name || '—'}</td>
+                            <td class="created">${new Date(l.created_at).toLocaleString()}</td>
+                            <td>${l.contact_name}</td>
                             <td>
                                 ${l.email
                                     ? html`<a href="mailto:${l.email}">${l.email}</a>`
@@ -129,8 +129,8 @@ export class FrontendLeadsRequestsPage extends PlatformPage {
                                     ? html`<a href="tel:${l.phone}">${l.phone}</a>`
                                     : '—'}
                             </td>
-                            <td>${l.company || '—'}</td>
-                            <td class="message">${l.comment || l.message || '—'}</td>
+                            <td>${l.organization_name || '—'}</td>
+                            <td class="message">${l.comment || '—'}</td>
                         </tr>
                     `)}
                 </tbody>

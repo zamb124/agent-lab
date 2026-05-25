@@ -16,7 +16,7 @@ import pytest
 
 
 class _MCPJsonRpcHandler(BaseHTTPRequestHandler):
-    mcp_protocol_version = "2024-11-05"
+    mcp_protocol_version = "2025-11-25"
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
@@ -31,7 +31,19 @@ class _MCPJsonRpcHandler(BaseHTTPRequestHandler):
                 "capabilities": {},
                 "serverInfo": {"name": "stub-mcp", "version": "0.0.1"},
             }
+        elif method == "notifications/initialized":
+            protocol_header = self.headers.get("MCP-Protocol-Version")
+            if protocol_header != self.mcp_protocol_version:
+                self.send_error(400, "missing MCP-Protocol-Version")
+                return
+            self.send_response(202)
+            self.end_headers()
+            return
         elif method == "tools/list":
+            protocol_header = self.headers.get("MCP-Protocol-Version")
+            if protocol_header != self.mcp_protocol_version:
+                self.send_error(400, "missing MCP-Protocol-Version")
+                return
             result = {
                 "tools": [
                     {
@@ -41,10 +53,19 @@ class _MCPJsonRpcHandler(BaseHTTPRequestHandler):
                             "type": "object",
                             "properties": {"libraryName": {"type": "string"}},
                         },
+                        "outputSchema": {
+                            "type": "object",
+                            "properties": {"ok": {"type": "boolean"}},
+                        },
+                        "annotations": {"readOnlyHint": True, "idempotentHint": True},
                     }
                 ]
             }
         elif method == "tools/call":
+            protocol_header = self.headers.get("MCP-Protocol-Version")
+            if protocol_header != self.mcp_protocol_version:
+                self.send_error(400, "missing MCP-Protocol-Version")
+                return
             params = req.get("params") or {}
             tool_name = params.get("name", "")
             if tool_name != "stub_resolve_library":

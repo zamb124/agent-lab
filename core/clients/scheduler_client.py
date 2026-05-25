@@ -16,7 +16,9 @@ class SchedulerClient:
     """Типизированный клиент scheduler control-plane."""
 
     def __init__(self, service_client: ServiceClient | None = None) -> None:
-        self._service_client = service_client or ServiceClient()
+        self._service_client: ServiceClient = (
+            service_client if service_client is not None else ServiceClient()
+        )
 
     async def create_schedule(self, request: PlatformScheduleCreateRequest) -> PlatformScheduledTask:
         response = await self._service_client.post(

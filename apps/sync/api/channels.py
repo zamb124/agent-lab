@@ -1,5 +1,7 @@
 """REST-зеркала команд channels. Тонкие обвязки над `op_channels_*`."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
@@ -44,8 +46,8 @@ class _TypingBody(BaseModel):
 async def list_channels(
     container: ContainerDep,
     namespace: str | None = None,
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[ChannelRead]:
     user = require_current_user()
     result = await op_channels_list(

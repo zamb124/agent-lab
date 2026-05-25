@@ -28,16 +28,15 @@ def _derive_fernet_key() -> bytes:
     """
     settings = get_settings()
     candidates = (
-        getattr(settings.auth, "jwt_secret_key", None),
-        getattr(settings.auth, "secret_key", None),
+        settings.auth.jwt_secret_key,
+        settings.auth.secret_key,
     )
     for raw in candidates:
-        if raw is not None and str(raw).strip():
-            digest = hashlib.sha256(str(raw).strip().encode("utf-8")).digest()
+        if raw is not None and raw.strip():
+            digest = hashlib.sha256(raw.strip().encode("utf-8")).digest()
             return base64.urlsafe_b64encode(digest)
     raise ValueError(
-        "core.company_ai.crypto: ни auth.jwt_secret_key, ни auth.secret_key не заданы; "
-        "без секрета нельзя шифровать секреты company AI providers"
+        "core.company_ai.crypto: ни auth.jwt_secret_key, ни auth.secret_key не заданы; без секрета нельзя шифровать секреты company AI providers"
     )
 
 
@@ -47,8 +46,6 @@ def _fernet() -> Fernet:
 
 def encrypt_secret(plaintext: str) -> str:
     """Шифрует секрет в base64-токен Fernet. Пустую строку считаем ошибкой."""
-    if not isinstance(plaintext, str):
-        raise TypeError("encrypt_secret: plaintext должен быть str")
     if not plaintext.strip():
         raise ValueError("encrypt_secret: plaintext пуст")
     token = _fernet().encrypt(plaintext.encode("utf-8"))
@@ -57,7 +54,7 @@ def encrypt_secret(plaintext: str) -> str:
 
 def decrypt_secret(token: str) -> str:
     """Расшифровывает Fernet-токен; невалидный/чужой ключ → ValueError."""
-    if not isinstance(token, str) or not token.strip():
+    if not token.strip():
         raise ValueError("decrypt_secret: token пуст")
     try:
         plain = _fernet().decrypt(token.encode("ascii"))
@@ -70,16 +67,19 @@ def decrypt_secret(token: str) -> str:
 
 def mask_secret_plaintext(plaintext: str | None) -> str:
     """Возвращает '**** abcd' (последние 4 символа). Для None/пусто — '****'."""
-    if plaintext is None or not str(plaintext).strip():
+    if plaintext is None or not plaintext.strip():
         return "****"
-    s = str(plaintext)
-    tail = s[-_SECRET_MASK_VISIBLE_TAIL:] if len(s) >= _SECRET_MASK_VISIBLE_TAIL else s
+    tail = (
+        plaintext[-_SECRET_MASK_VISIBLE_TAIL:]
+        if len(plaintext) >= _SECRET_MASK_VISIBLE_TAIL
+        else plaintext
+    )
     return f"**** {tail}"
 
 
 def mask_encrypted_secret(token: str | None) -> str:
     """Расшифровывает и маскирует — для GET ответов API. Token=None → '****'."""
-    if token is None or not str(token).strip():
+    if token is None or not token.strip():
         return "****"
     return mask_secret_plaintext(decrypt_secret(token))
 

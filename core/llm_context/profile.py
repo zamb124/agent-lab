@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
 
 from core.context import get_context
 from core.llm_context.models import LLMContextBlock
 from core.llm_context.sources import LLMContextSourceRequest
 from core.models.context_models import Context
+from core.types import JsonObject
 
 LLM_CONTEXT_PROFILE_METADATA_KEY = "llm_context_profile"
 
@@ -16,7 +16,7 @@ LLM_CONTEXT_PROFILE_METADATA_KEY = "llm_context_profile"
 class IdentityLLMContextProfileSource:
     """Collect explicit user/company/runtime profile facts from the active Context."""
 
-    name = "profile.identity"
+    name: str = "profile.identity"
 
     async def collect(self, request: LLMContextSourceRequest) -> list[LLMContextBlock]:
         _ = request
@@ -31,12 +31,11 @@ def build_identity_llm_context_profile_block(context: Context | None) -> LLMCont
 
     sections: list[tuple[str, str]] = []
     user = context.user
-    if user is not None:
-        if user.bio and user.bio.strip():
-            sections.append(("User bio", user.bio.strip()))
-        user_profile = _metadata_profile(user.attributes)
-        if user_profile:
-            sections.append(("User profile", user_profile))
+    if user.bio and user.bio.strip():
+        sections.append(("User bio", user.bio.strip()))
+    user_profile = _metadata_profile(user.attributes)
+    if user_profile:
+        sections.append(("User profile", user_profile))
 
     company = context.active_company
     if company is not None:
@@ -54,11 +53,18 @@ def build_identity_llm_context_profile_block(context: Context | None) -> LLMCont
     content = "[Profile]\n" + "\n\n".join(
         f"{title}:\n{text}" for title, text in sections
     )
+    company_id = company.company_id if company is not None else None
     stable_key = _stable_profile_key(
-        user_id=getattr(user, "user_id", None),
-        company_id=getattr(company, "company_id", None),
+        user_id=user.user_id,
+        company_id=company_id,
         content=content,
     )
+    provenance: JsonObject = {
+        "source": IdentityLLMContextProfileSource.name,
+        "user_id": user.user_id,
+    }
+    if company_id is not None and company_id.strip():
+        provenance["company_id"] = company_id.strip()
     return LLMContextBlock(
         kind="profile",
         budget_scope="profile",
@@ -66,46 +72,38 @@ def build_identity_llm_context_profile_block(context: Context | None) -> LLMCont
         content=content,
         stable_key=stable_key,
         priority=100,
-        provenance={
-            key: value
-            for key, value in {
-                "source": IdentityLLMContextProfileSource.name,
-                "user_id": getattr(user, "user_id", None),
-                "company_id": getattr(company, "company_id", None),
-            }.items()
-            if isinstance(value, str) and value.strip()
-        },
+        provenance=provenance,
     )
 
 
-def _metadata_profile(metadata: Any) -> str | None:
-    if not isinstance(metadata, dict):
-        return None
+def _metadata_profile(metadata: JsonObject) -> str | None:
     value = metadata.get(LLM_CONTEXT_PROFILE_METADATA_KEY)
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    if isinstance(value, dict):
-        text = value.get("content") or value.get("text") or value.get("summary")
-        if isinstance(text, str) and text.strip():
-            return text.strip()
-    return None
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{LLM_CONTEXT_PROFILE_METADATA_KEY} must be a string")
+    profile = value.strip()
+    return profile or None
 
 
 def _stable_profile_key(
     *,
-    user_id: str | None,
+    user_id: str,
     company_id: str | None,
     content: str,
 ) -> str:
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
-    user_part = _safe_key_part(user_id or "user")
-    company_part = _safe_key_part(company_id or "company")
+    user_part = _safe_key_part(user_id, "user_id")
+    company_part = _safe_key_part(company_id, "company_id") if company_id is not None else "no-company"
     return f"profile:identity:{company_part}:{user_part}:{digest}"
 
 
-def _safe_key_part(value: str) -> str:
+def _safe_key_part(value: str, field_name: str) -> str:
     safe = "".join(ch if ch.isalnum() or ch in ("_", "-") else "-" for ch in value)
-    return safe.strip("-_")[:48] or "unknown"
+    normalized = safe.strip("-_")[:48]
+    if not normalized:
+        raise ValueError(f"{field_name} must contain key-safe characters")
+    return normalized
 
 
 __all__ = [

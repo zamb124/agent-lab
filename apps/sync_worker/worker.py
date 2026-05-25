@@ -52,7 +52,7 @@ async def sync_worker_startup(state: TaskiqState) -> None:
         logger.info("worker.tracing_initialized", service="sync_worker")
     await notification_manager.start_redis_listener(settings.database.redis_url)
     if settings.push.enabled:
-        init_web_push_service(
+        _ = init_web_push_service(
             vapid_private_key=settings.push.vapid_private_key or "",
             vapid_public_key=settings.push.vapid_public_key or "",
             vapid_email=settings.push.vapid_email,
@@ -60,7 +60,7 @@ async def sync_worker_startup(state: TaskiqState) -> None:
         logger.info("worker.web_push_initialized", service="sync_worker")
     apns = resolve_apns_credentials(settings)
     if apns:
-        init_apns_push_service(
+        _ = init_apns_push_service(
             team_id=apns.team_id,
             key_id=apns.key_id,
             private_key_pem=apns.private_key_pem,
@@ -70,7 +70,7 @@ async def sync_worker_startup(state: TaskiqState) -> None:
         logger.info("worker.apns_initialized", service="sync_worker")
     fcm = resolve_fcm_credentials(settings.push)
     if fcm:
-        init_fcm_push_service(
+        _ = init_fcm_push_service(
             project_id=fcm.project_id,
             client_email=fcm.client_email,
             private_key_pem=fcm.private_key_pem,
@@ -85,6 +85,7 @@ async def sync_worker_startup(state: TaskiqState) -> None:
 
 
 async def sync_worker_shutdown(state: TaskiqState) -> None:
+    _ = state
     await notification_manager.stop_redis_listener()
     logger.info("worker.stopping", service="sync_worker")
 

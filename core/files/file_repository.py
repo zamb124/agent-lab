@@ -4,12 +4,16 @@
 """
 
 
+from typing import ClassVar, override
+
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
 from core.files.models import FileRecord
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
 class FileRepository(BaseRepository[FileRecord]):
     """
     Репозиторий для работы с файлами.
@@ -19,20 +23,24 @@ class FileRepository(BaseRepository[FileRecord]):
     а не на уровне ключей хранилища.
     """
 
-    is_global = True
+    is_global: ClassVar[bool] = True
 
     def __init__(self, storage: Storage):
         super().__init__(storage=storage, model_class=FileRecord)
 
+    @override
     def _get_key(self, file_id: str) -> str:
         return f"file:{file_id}"
 
+    @override
     def _get_prefix(self) -> str:
         return "file:"
 
+    @override
     def _get_table_name(self) -> str:
         return "storage"
 
+    @override
     def _extract_entity_id(self, entity: FileRecord) -> str:
         return entity.file_id
 
@@ -74,4 +82,3 @@ class FileRepository(BaseRepository[FileRecord]):
 
         data = file_record.model_dump_json()
         return await self._storage.set_with_table(final_key, data, table_name)
-

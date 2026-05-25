@@ -77,7 +77,7 @@ async def pick_company_billing_user(
     candidates = sorted(
         uid
         for uid, roles in company.members.items()
-        if isinstance(roles, list) and "owner" in roles
+        if "owner" in roles
     )
     for uid in candidates:
         loaded = await user_repository.get(uid)

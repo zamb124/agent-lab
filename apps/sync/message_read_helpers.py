@@ -15,17 +15,12 @@ from apps.sync.models.messages import (
     ReactionEntry,
     TextPlainContent,
 )
+from core.types import JsonObject
 
 
-def _normalize_reactions(raw: object) -> list[ReactionEntry]:
-    if raw is None:
-        return []
-    if not isinstance(raw, list):
-        raise ValueError("reactions должен быть массивом.")
+def _normalize_reactions(raw: list[JsonObject]) -> list[ReactionEntry]:
     out: list[ReactionEntry] = []
     for item in raw:
-        if not isinstance(item, dict):
-            raise ValueError("Элемент reactions должен быть объектом.")
         uid = item.get("user_id")
         em = item.get("emoji")
         cat = item.get("created_at")

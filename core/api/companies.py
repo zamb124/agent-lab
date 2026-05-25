@@ -9,6 +9,7 @@ from typing import ClassVar
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 
+from core.app_state import get_request_token_data, require_platform_app_state
 from core.db.repositories.company_repository import CompanyRepository
 from core.models.identity_models import User
 from core.pagination import ListResponse
@@ -55,10 +56,10 @@ async def build_my_companies_response(
 @router.get("/me", response_model=ListResponse[CompanyMembershipResponse])
 async def get_my_companies(request: Request) -> ListResponse[CompanyMembershipResponse]:
     """Возвращает компании текущего пользователя с subdomain и ролями."""
-    token_data = getattr(request.state, "token_data", None)
+    token_data = get_request_token_data(request)
     if token_data is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    container = request.app.state.container
+    container = require_platform_app_state(request).container
     user = await container.user_repository.get(token_data.user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")

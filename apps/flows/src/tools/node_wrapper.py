@@ -158,6 +158,11 @@ class NodeAsToolWrapper(BaseTool):
         if self._bound_node is not None:
             return self._bound_node
         if self._node is None:
+            container = cast(FlowRuntimeContainer | None, self.container)
+            if container is None:
+                raise RuntimeError(
+                    f"Node tool '{self.name}' requires FlowRuntimeContainer"
+                )
             node_dict = cast(
                 JsonObject,
                 self.node_config.model_dump(mode="json", exclude_none=True),
@@ -167,7 +172,7 @@ class NodeAsToolWrapper(BaseTool):
             self._node = await create_node(
                 self.node_config.node_id,
                 node_dict,
-                container=cast(FlowRuntimeContainer | None, self.container),
+                container=container,
             )
 
         return self._node

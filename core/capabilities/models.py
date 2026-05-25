@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal, TypeAlias
+from typing import ClassVar, Literal, Self, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.types import JsonObject as JsonObject
 from core.types import JsonScalar as JsonScalar
@@ -29,6 +29,105 @@ CapabilityExecutionMode: TypeAlias = Literal["sync", "async"]
 CapabilityCallStatus: TypeAlias = Literal["ok", "interrupt"]
 CodeExecutionStatus: TypeAlias = Literal["completed", "interrupted", "failed"]
 CodeExecutionKind: TypeAlias = Literal["node", "tool"]
+CodeSandboxProfile: TypeAlias = Literal["locked_down_v1"]
+CodeSandboxNetworkMode: TypeAlias = Literal["capability_gateway_only"]
+CodeSandboxFilesystemMode: TypeAlias = Literal["ephemeral_workspace"]
+
+
+class CodeSandboxResourceLimits(BaseModel):
+    """Resource limits declared for one sandbox execution."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    wall_time_limit_seconds: int = Field(..., gt=0)
+    cpu_time_limit_seconds: int = Field(..., gt=0)
+    memory_limit_mb: int = Field(..., gt=0)
+    filesystem_limit_mb: int = Field(..., ge=0)
+    stdout_stderr_limit_bytes: int = Field(..., gt=0)
+
+
+class CodeSandboxNetworkPolicy(BaseModel):
+    """Network egress contract for sandbox code."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    mode: CodeSandboxNetworkMode
+    allowed_services: list[str] = Field(..., min_length=1)
+
+
+class CodeSandboxFilesystemPolicy(BaseModel):
+    """Filesystem contract for sandbox code."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    mode: CodeSandboxFilesystemMode
+    read_only_root: bool
+    writable_tmp: bool
+
+
+class CodeSandboxPolicy(BaseModel):
+    """Single explicit sandbox contract attached to every code-runner request."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    profile: CodeSandboxProfile
+    limits: CodeSandboxResourceLimits
+    network: CodeSandboxNetworkPolicy
+    filesystem: CodeSandboxFilesystemPolicy
+    allow_dynamic_code: bool
+    allow_reflection: bool
+
+    @model_validator(mode="after")
+    def validate_locked_down(self) -> Self:
+        if self.profile != "locked_down_v1":
+            raise ValueError("sandbox.profile must be locked_down_v1")
+        if self.network.mode != "capability_gateway_only":
+            raise ValueError("sandbox.network.mode must be capability_gateway_only")
+        if self.network.allowed_services != ["capability_gateway"]:
+            raise ValueError("sandbox.network.allowed_services must be ['capability_gateway']")
+        if self.filesystem.mode != "ephemeral_workspace":
+            raise ValueError("sandbox.filesystem.mode must be ephemeral_workspace")
+        if not self.filesystem.read_only_root:
+            raise ValueError("sandbox.filesystem.read_only_root must be true")
+        if not self.filesystem.writable_tmp:
+            raise ValueError("sandbox.filesystem.writable_tmp must be true")
+        if self.allow_dynamic_code:
+            raise ValueError("sandbox.allow_dynamic_code must be false")
+        if self.allow_reflection:
+            raise ValueError("sandbox.allow_reflection must be false")
+        return self
+
+
+def locked_down_code_sandbox_policy(
+    *,
+    wall_time_limit_seconds: int,
+    cpu_time_limit_seconds: int,
+    memory_limit_mb: int,
+    filesystem_limit_mb: int,
+    stdout_stderr_limit_bytes: int,
+) -> CodeSandboxPolicy:
+    """Build the explicit locked-down policy flows sends to code runners."""
+    return CodeSandboxPolicy(
+        profile="locked_down_v1",
+        limits=CodeSandboxResourceLimits(
+            wall_time_limit_seconds=wall_time_limit_seconds,
+            cpu_time_limit_seconds=cpu_time_limit_seconds,
+            memory_limit_mb=memory_limit_mb,
+            filesystem_limit_mb=filesystem_limit_mb,
+            stdout_stderr_limit_bytes=stdout_stderr_limit_bytes,
+        ),
+        network=CodeSandboxNetworkPolicy(
+            mode="capability_gateway_only",
+            allowed_services=["capability_gateway"],
+        ),
+        filesystem=CodeSandboxFilesystemPolicy(
+            mode="ephemeral_workspace",
+            read_only_root=True,
+            writable_tmp=True,
+        ),
+        allow_dynamic_code=False,
+        allow_reflection=False,
+    )
 
 
 class CapabilityDefinition(BaseModel):
@@ -129,8 +228,14 @@ class CapabilityExecutionContext(BaseModel):
     session_id: str = Field(..., min_length=1)
     task_id: str = Field(..., min_length=1)
     context_id: str = Field(..., min_length=1)
+    channel: str = Field(..., min_length=1)
     request_id: str | None = None
     trace_id: str | None = None
+    durable_execution_branch_id: str | None = Field(default=None, min_length=1)
+    durable_node_schedule_sequence: int | None = Field(default=None, ge=0)
+    durable_superstep_sequence: int | None = Field(default=None, ge=0)
+    source_node_id: str | None = Field(default=None, min_length=1)
+    source_tool_call_id: str | None = Field(default=None, min_length=1)
 
 
 class CapabilityCallRequest(BaseModel):
@@ -152,6 +257,7 @@ class CapabilityInterruptEnvelope(BaseModel):
 
     kind: str = Field(..., min_length=1)
     body: JsonObject = Field(default_factory=dict)
+    correlation_id: str | None = Field(default=None, min_length=1)
 
 
 class CapabilityCallResponse(BaseModel):
@@ -175,10 +281,19 @@ class CodeExecutionRequest(BaseModel):
     code: str = Field(..., min_length=1)
     entrypoint: str | None = Field(default=None, min_length=1)
     wall_time_limit_seconds: int = Field(..., gt=0)
+    sandbox: CodeSandboxPolicy
     args: JsonObject = Field(default_factory=dict)
     state: JsonObject = Field(default_factory=dict)
     context: CapabilityExecutionContext
     capability_manifest: CapabilityManifest
+
+    @model_validator(mode="after")
+    def validate_sandbox_wall_time(self) -> Self:
+        if self.sandbox.limits.wall_time_limit_seconds != self.wall_time_limit_seconds:
+            raise ValueError(
+                "wall_time_limit_seconds must match sandbox.limits.wall_time_limit_seconds"
+            )
+        return self
 
 
 class CodeValidationRequest(BaseModel):
@@ -191,8 +306,17 @@ class CodeValidationRequest(BaseModel):
     code: str = Field(..., min_length=1)
     entrypoint: str | None = Field(default=None, min_length=1)
     wall_time_limit_seconds: int = Field(..., gt=0)
+    sandbox: CodeSandboxPolicy
     context: CapabilityExecutionContext
     capability_manifest: CapabilityManifest
+
+    @model_validator(mode="after")
+    def validate_sandbox_wall_time(self) -> Self:
+        if self.sandbox.limits.wall_time_limit_seconds != self.wall_time_limit_seconds:
+            raise ValueError(
+                "wall_time_limit_seconds must match sandbox.limits.wall_time_limit_seconds"
+            )
+        return self
 
 
 class CodeExecutionLogRecord(BaseModel):

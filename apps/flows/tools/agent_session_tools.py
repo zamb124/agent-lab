@@ -1,19 +1,22 @@
 """
-Тулы жизненного цикла ответа агента: рассуждение, ввод пользователя, самопроверка, финальный ответ, завершение.
+Тулы жизненного цикла ответа агента: рассуждение, ввод пользователя, финальный ответ, завершение.
 
-Группа для ReAct: reason, ask_user, self_check, final_answer, finish.
+Группа для ReAct: reason, ask_user, final_answer, finish.
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
+from apps.flows.src.services.operator_handoff_service import build_operator_handoff_command
 from apps.flows.src.services.platform_facades import get_operator_handoff_service
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
+from core.types import JsonObject
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -22,7 +25,7 @@ if TYPE_CHECKING:
 class ReasonArgs(BaseModel):
     """Аргументы тула reason: структурированные рассуждения перед действием."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     observation: str = Field(..., min_length=1, description="Что видишь в данных, сообщениях и контексте задачи.")
     analysis: str = Field(..., min_length=1, description="Разбор ситуации, связи фактов, риски и допущения.")
@@ -35,7 +38,7 @@ class ReasonArgs(BaseModel):
 
 
 class AskUserArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     question: str = Field(
         ...,
@@ -45,7 +48,7 @@ class AskUserArgs(BaseModel):
 
 
 class HitlOperatorTaskArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     question: str = Field(
         ...,
@@ -64,28 +67,8 @@ class HitlOperatorTaskArgs(BaseModel):
     )
 
 
-class SelfCheckArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    hypothesis: str = Field(..., min_length=1, description="Проверяемая гипотеза или утверждение.")
-    supporting_facts: list[str] = Field(
-        ...,
-        min_length=1,
-        description="Список фактов из контекста, которые поддерживают гипотезу.",
-    )
-    verification_result: str = Field(
-        ...,
-        description='Итог проверки: например "confirmed" если гипотеза подтверждена, иначе другое значение.',
-    )
-    contradicting_facts: list[str] | None = Field(
-        None,
-        description="Факты, которые противоречат гипотезе; можно не передавать.",
-    )
-    notes: str | None = Field(None, description="Дополнительные заметки по проверке.")
-
-
 class FinalAnswerArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     answer: str = Field(..., min_length=1, description="Итоговый ответ пользователю.")
     justification: str = Field(..., min_length=1, description="Почему этот ответ следует из фактов и шагов.")
@@ -116,7 +99,7 @@ async def reason(
     *,
     state: "ExecutionState",
 ) -> str:
-    reasoning_entry: dict[str, Any] = {
+    reasoning_entry: JsonObject = {
         "observation": observation,
         "analysis": analysis,
         "plan": plan,
@@ -136,6 +119,7 @@ async def reason(
     permission=list(STANDARD_USER_TOOL_GROUPS),
 )
 async def ask_user(question: str, *, state: "ExecutionState") -> str:
+    _ = state
     raise FlowInterrupt(question=question)
 
 
@@ -154,6 +138,14 @@ async def hitl_operator_task(
     state: "ExecutionState",
 ) -> str:
     mode = HandoffMode(handoff_mode)
+    tool_context = get_active_tool_call_context()
+    if tool_context is None:
+        raise RuntimeError("hitl_operator_task requires active durable tool call context")
+    command = build_operator_handoff_command(
+        state=state,
+        node_id=tool_context.node_id,
+        tool_call_id=tool_context.tool_call_id,
+    )
     handoff = get_operator_handoff_service()
     cid, op_task_id = await handoff.register_handoff(
         state,
@@ -161,6 +153,7 @@ async def hitl_operator_task(
         task_title=task_title.strip(),
         assignee_queue_slug=assignee_queue.strip(),
         handoff_mode=mode,
+        command=command,
     )
     raise FlowInterrupt(
         body=OperatorTaskInterrupt(
@@ -169,34 +162,14 @@ async def hitl_operator_task(
             assignee_queue=assignee_queue.strip(),
             handoff_mode=mode,
             operator_task_id=op_task_id,
+            handoff_command_id=command.idempotency_key,
+            execution_branch_id=command.execution_branch_id,
+            node_schedule_sequence=command.node_schedule_sequence,
+            node_id=tool_context.node_id,
+            tool_call_id=tool_context.tool_call_id,
         ),
         correlation_id=cid,
     )
-
-
-@tool(
-    name="self_check",
-    description="Самопроверка гипотезы. Требует указать гипотезу, подтверждающие и противоречащие факты, результат.",
-    tags=["validation"],
-    parameters_model=SelfCheckArgs,
-)
-async def self_check(
-    hypothesis: str,
-    supporting_facts: list[str],
-    verification_result: str,
-    contradicting_facts: list[str] | None = None,
-    notes: str | None = None,
-    *,
-    state: "ExecutionState",
-) -> dict[str, Any]:
-    return {
-        "hypothesis": hypothesis,
-        "supporting_facts": supporting_facts,
-        "contradicting_facts": contradicting_facts or [],
-        "verification_result": verification_result,
-        "notes": notes,
-        "is_confirmed": verification_result == "confirmed",
-    }
 
 
 @tool(
@@ -213,7 +186,8 @@ async def final_answer(
     sources: list[str] | None = None,
     *,
     state: "ExecutionState",
-) -> dict[str, Any]:
+) -> JsonObject:
+    _ = state
     return {
         "answer": answer,
         "justification": justification,

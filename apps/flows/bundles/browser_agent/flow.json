@@ -27,32 +27,28 @@
           "code_mode": "mcp_tool",
           "mcp_server_id": "browser",
           "mcp_tool_name": "browser_create_session",
-          "description": "Создать control-сессию browser runtime (выделить страницу под session_id).",
-          "type": "mcp"
+          "description": "Создать control-сессию browser runtime (выделить страницу под session_id)."
         },
         {
           "tool_id": "mcp:browser:browser_navigate",
           "code_mode": "mcp_tool",
           "mcp_server_id": "browser",
           "mcp_tool_name": "browser_navigate",
-          "description": "Навигация в рамках сессии (url + wait_policy + optional artifacts).",
-          "type": "mcp"
+          "description": "Навигация в рамках сессии (url + wait_policy + optional artifacts)."
         },
         {
           "tool_id": "mcp:browser:browser_observe",
           "code_mode": "mcp_tool",
           "mcp_server_id": "browser",
           "mcp_tool_name": "browser_observe",
-          "description": "Получить LLM-friendly snapshot страницы и refs для click/fill.",
-          "type": "mcp"
+          "description": "Получить LLM-friendly snapshot страницы и refs для click/fill."
         },
         {
           "tool_id": "mcp:browser:browser_close_session",
           "code_mode": "mcp_tool",
           "mcp_server_id": "browser",
           "mcp_tool_name": "browser_close_session",
-          "description": "Закрыть сессию и освободить ресурсы.",
-          "type": "mcp"
+          "description": "Закрыть сессию и освободить ресурсы."
         }
       ],
       "llm": {

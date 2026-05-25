@@ -3,7 +3,8 @@
 Работает полностью автономно в InMemory режиме.
 """
 
-from typing import Any
+from collections.abc import Sequence
+from typing import Protocol, override
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
@@ -16,34 +17,29 @@ from a2a.types import (
     TaskStatusUpdateEvent,
     TextPart,
 )
-from a2a.utils.message import get_message_text
+
+from core.types import JsonObject
+
+
+class A2ATestTool(Protocol):
+    async def execute(self, args: JsonObject, state: JsonObject | None) -> str: ...
 
 
 class SimpleTestAgent(AgentExecutor):
     """Простой тестовый агент без зависимостей."""
 
-    def __init__(self, tools: list[Any] | None = None, prompt: str = ""):
-        self.tools = tools if tools is not None else []
-        self.prompt = prompt
+    def __init__(self, *, tools: Sequence[A2ATestTool]) -> None:
+        self.tools: tuple[A2ATestTool, ...] = tuple(tools)
 
-    async def execute(self, context: RequestContext, event_queue: EventQueue):
+    @override
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         """Выполняет агента и возвращает простой ответ."""
-        # Получаем входное сообщение
-        user_input = context.get_user_input()
-        if isinstance(user_input, str):
-            content = user_input
-        else:
-            content = get_message_text(user_input)
+        content = context.get_user_input()
 
         # Простая логика: вызываем первый tool если есть
-        response = ""
         if self.tools:
-            tool = self.tools[0]
-            try:
-                result = await tool.execute({}, state=None)
-                response = f"Tool result: {result}"
-            except Exception as e:
-                response = f"Tool error: {e}"
+            tool_args: JsonObject = {}
+            response = f"Tool result: {await self.tools[0].execute(tool_args, state=None)}"
         else:
             response = f"Echo: {content}"
 
@@ -66,7 +62,7 @@ class SimpleTestAgent(AgentExecutor):
                 task_id=task_id,
                 context_id=context_id,
                 artifact=artifact,
-                append=False
+                append=False,
             )
         )
 
@@ -76,10 +72,22 @@ class SimpleTestAgent(AgentExecutor):
                 task_id=task_id,
                 context_id=context_id,
                 status=TaskStatus(state=TaskState.completed),
-                final=True
+                final=True,
             )
         )
 
-    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+    @override
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         """Отменяет выполнение."""
-        pass
+        task_id = context.task_id
+        context_id = context.context_id
+        if task_id is None or context_id is None:
+            raise ValueError("A2A RequestContext must contain task_id and context_id")
+        await event_queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id=task_id,
+                context_id=context_id,
+                status=TaskStatus(state=TaskState.canceled),
+                final=True,
+            )
+        )

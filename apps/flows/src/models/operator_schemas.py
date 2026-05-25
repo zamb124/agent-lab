@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from typing import ClassVar, Literal
+from uuid import UUID
 
 from pydantic import ConfigDict, Field
 
@@ -103,6 +104,11 @@ class OperatorInterruptSnapshot(StrictBaseModel):
     assignee_queue: str = Field(..., min_length=1)
     queue_id: str = Field(..., min_length=1)
     handoff_mode: HandoffMode = HandoffMode.SINGLE_REPLY
+    handoff_command_id: str = Field(..., min_length=1)
+    execution_branch_id: str = Field(..., min_length=1)
+    node_schedule_sequence: int = Field(..., ge=1)
+    node_id: str = Field(..., min_length=1)
+    tool_call_id: str | None = Field(default=None, min_length=1)
 
 
 class OperatorDialogLogEntry(StrictBaseModel):
@@ -116,6 +122,15 @@ class OperatorDialogLogEntry(StrictBaseModel):
 class OperatorResolutionPayload(StrictBaseModel):
     text: str = Field(..., min_length=1)
     file_ids: list[str] = Field(default_factory=list)
+
+
+class OperatorHandoffCommand(StrictBaseModel):
+    correlation_id: UUID
+    idempotency_key: str = Field(..., min_length=1)
+    execution_branch_id: str = Field(..., min_length=1)
+    node_schedule_sequence: int = Field(..., ge=1)
+    node_id: str = Field(..., min_length=1)
+    tool_call_id: str | None = Field(default=None, min_length=1)
 
 
 class OperatorTaskDetailOut(StrictBaseModel):

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.flows.src.services.web_snapshot import BrowserSnapshotDescribe, DuckDuckGoBrowserSearch
 from apps.flows.src.tools.decorator import tool
+from core.types import JsonObject, JsonValue
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -76,7 +77,7 @@ _BROWSER_PAGE_SNAPSHOT_DESCRIPTION = """
 
 
 class BrowserDuckduckgoLinksArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     query: str = Field(..., min_length=1, description="Поисковая фраза.")
     server_id: str = Field("browser", min_length=1, description="Id MCP-сервера браузера.")
@@ -84,7 +85,7 @@ class BrowserDuckduckgoLinksArgs(BaseModel):
 
 
 class BrowserDuckduckgoLinksBatchArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     queries: list[str] = Field(
         ...,
@@ -96,12 +97,14 @@ class BrowserDuckduckgoLinksBatchArgs(BaseModel):
 
     @field_validator("queries", mode="before")
     @classmethod
-    def _normalize_queries(cls, value: object) -> list[str]:
+    def _normalize_queries(cls, value: JsonValue) -> list[str]:
         if not isinstance(value, list):
             raise TypeError("queries должен быть массивом строк")
         out: list[str] = []
-        for item in value:
-            s = str(item).strip()
+        for index, item in enumerate(value):
+            if not isinstance(item, str):
+                raise TypeError(f"queries[{index}] должен быть строкой")
+            s = item.strip()
             if s != "":
                 out.append(s)
         if len(out) == 0:
@@ -110,7 +113,7 @@ class BrowserDuckduckgoLinksBatchArgs(BaseModel):
 
 
 class BrowserPageMarkdownArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     url: str = Field(..., min_length=1, description="HTTP(S) URL страницы.")
     server_id: str = Field("browser", min_length=1)
@@ -119,7 +122,7 @@ class BrowserPageMarkdownArgs(BaseModel):
 
 
 class BrowserPageSnapshotArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     url: str = Field(..., min_length=1)
     server_id: str = Field("browser", min_length=1)
@@ -139,7 +142,7 @@ async def browser_duckduckgo_links(
     per_query_limit: int = 5,
     *,
     state: "ExecutionState",
-) -> dict[str, Any]:
+) -> JsonObject:
     try:
         search = DuckDuckGoBrowserSearch(server_id=server_id, per_query_limit=per_query_limit)
         urls = await search.links(state, query)
@@ -160,7 +163,7 @@ async def browser_duckduckgo_links_batch(
     per_query_limit: int = 5,
     *,
     state: "ExecutionState",
-) -> dict[str, Any]:
+) -> JsonObject:
     try:
         search = DuckDuckGoBrowserSearch(server_id=server_id, per_query_limit=per_query_limit)
         urls = await search.links_many(state, queries)
@@ -182,7 +185,7 @@ async def browser_page_markdown(
     ingest_source: str = "simple_crawler",
     *,
     state: "ExecutionState",
-) -> dict[str, Any]:
+) -> JsonObject:
     try:
         describe = BrowserSnapshotDescribe(
             server_id=server_id,
@@ -208,7 +211,7 @@ async def browser_page_snapshot(
     ingest_source: str = "simple_crawler",
     *,
     state: "ExecutionState",
-) -> dict[str, Any]:
+) -> JsonObject:
     try:
         describe = BrowserSnapshotDescribe(
             server_id=server_id,

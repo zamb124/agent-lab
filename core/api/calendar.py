@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from core.app_state import require_platform_app_state
 from core.calendar.service import CalendarService
 from core.context import get_context
 from core.models import (
@@ -78,7 +79,7 @@ def _to_public_integration(integration: CalendarIntegration) -> CalendarIntegrat
 
 
 def _get_calendar_service(request: Request) -> CalendarService:
-    return request.app.state.container.calendar_service
+    return require_platform_app_state(request).container.calendar_service
 
 
 CalendarServiceDep = Annotated[CalendarService, Depends(_get_calendar_service)]

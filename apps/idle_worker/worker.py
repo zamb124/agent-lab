@@ -22,7 +22,7 @@ from taskiq import TaskiqState  # noqa: E402
 
 from apps.flows.config import get_settings  # noqa: E402
 from apps.idle_worker.broker import broker as worker_app, recovery_handler  # noqa: E402
-from apps.idle_worker.container import get_container  # noqa: E402
+from apps.idle_worker.container import IdleWorkerContainer, get_container  # noqa: E402
 from core.clients.llm.factory import get_llm  # noqa: E402
 from core.clients.llm.mock import configure_mock_llm_redis  # noqa: E402
 from core.config.testing import is_testing  # noqa: E402
@@ -32,19 +32,23 @@ from core.tracing import setup_tracing  # noqa: E402
 from core.tracing.tracer import set_span_repository, set_tracing_service_name  # noqa: E402
 
 logger = get_logger(__name__)
+_idle_worker_container: IdleWorkerContainer | None = None
 
 
 async def idle_worker_startup(state: TaskiqState) -> None:
     """Инициализация контейнера при старте idle worker."""
+    global _idle_worker_container
     settings = get_settings()
 
     container = get_container()
+    _idle_worker_container = container
     state.container = container
 
     await recovery_handler()
 
     logger.info("worker.redis_connecting", service="idle_worker")
-    max_retries = 5
+    retry_delays: tuple[int, ...] = (1, 2, 4, 8)
+    max_retries = len(retry_delays) + 1
     for attempt in range(max_retries):
         try:
             await container.redis_client.connect()
@@ -52,7 +56,7 @@ async def idle_worker_startup(state: TaskiqState) -> None:
             break
         except Exception:
             if attempt < max_retries - 1:
-                wait_seconds = 2**attempt
+                wait_seconds = retry_delays[attempt]
                 logger.warning(
                     "worker.redis_connect_retry",
                     service="idle_worker",
@@ -76,8 +80,8 @@ async def idle_worker_startup(state: TaskiqState) -> None:
         logger.info("worker.tracing_initialized", service="idle_worker")
 
     if is_testing():
-        get_llm("mock-gpt-4")
-        configure_mock_llm_redis(container.redis_client)
+        _ = get_llm("mock-gpt-4")
+        _ = configure_mock_llm_redis(container.redis_client)
         logger.info("worker.mock_llm_configured", service="idle_worker")
 
     logger.info("worker.container_initialized", service="idle_worker")
@@ -85,9 +89,11 @@ async def idle_worker_startup(state: TaskiqState) -> None:
 
 async def idle_worker_shutdown(state: TaskiqState) -> None:
     """Закрытие контейнера при остановке idle worker."""
-    if hasattr(state, "container"):
+    _ = state
+    container = _idle_worker_container
+    if container is not None:
         try:
-            await state.container.redis_client.close()
+            await container.redis_client.close()
             logger.info("worker.redis_disconnected", service="idle_worker")
         except Exception as exc:
             logger.exception(

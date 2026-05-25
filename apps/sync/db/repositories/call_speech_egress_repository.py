@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import override
+
 from sqlalchemy import delete, select
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncCallSpeechEgressTrack
@@ -20,13 +23,21 @@ class CallSpeechEgressTrackRepository(BaseSyncRepository[SyncCallSpeechEgressTra
         super().__init__(db)
 
     @property
+    @override
     def model_class(self) -> type[SyncCallSpeechEgressTrack]:
         return SyncCallSpeechEgressTrack
 
     @property
-    def id_field(self) -> str:
-        return "row_id"
+    @override
+    def id_column(self) -> InstrumentedAttribute[str]:
+        return SyncCallSpeechEgressTrack.row_id
 
+    @property
+    @override
+    def company_id_column(self) -> InstrumentedAttribute[str]:
+        return SyncCallSpeechEgressTrack.company_id
+
+    @override
     async def create(self, entity: SyncCallSpeechEgressTrack) -> SyncCallSpeechEgressTrack:
         async with self._db.session() as session:
             session.add(entity)
@@ -82,7 +93,7 @@ class CallSpeechEgressTrackRepository(BaseSyncRepository[SyncCallSpeechEgressTra
 
     async def delete_for_call(self, call_id: str, company_id: str) -> None:
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 delete(SyncCallSpeechEgressTrack).where(
                     SyncCallSpeechEgressTrack.call_id == call_id,
                     SyncCallSpeechEgressTrack.company_id == company_id,

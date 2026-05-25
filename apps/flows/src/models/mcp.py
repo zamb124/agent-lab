@@ -10,13 +10,15 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from core.integrations.mcp import MCPToolInfo
+from core.integrations.mcp import MCPDiscoveredTool, MCPInitializeResult, MCPToolDefinition
 from core.types import JsonObject
 
 __all__ = [
     "MCPCallResult",
+    "MCPDiscoveredTool",
+    "MCPInitializeResult",
     "MCPServerConfig",
-    "MCPToolInfo",
+    "MCPToolDefinition",
     "MCPTransportType",
 ]
 
@@ -79,6 +81,16 @@ class MCPCallResult(BaseModel):
     content: list[JsonObject] = Field(
         default_factory=list,
         description="Контент ответа (text, image, etc)"
+    )
+    structured_content: JsonObject | None = Field(
+        default=None,
+        alias="structuredContent",
+        description="Structured tool result from MCP 2025-11-25",
+    )
+    meta: JsonObject | None = Field(
+        default=None,
+        alias="_meta",
+        description="MCP result metadata",
     )
 
     def get_text(self) -> str:

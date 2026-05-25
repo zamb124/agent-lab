@@ -56,7 +56,12 @@ from apps.flows.src.runtime.llm_config_params import (
     split_llm_config_for_client,
 )
 from apps.flows.src.runtime.llm_context_memory import (
-    schedule_state_messages_to_memory_for_runtime,
+    RuntimeMemoryWriteCommand,
+    RuntimeMemoryWriteResult,
+    apply_runtime_memory_cursor_advance,
+    apply_runtime_memory_write_result,
+    build_state_messages_memory_close_decision,
+    write_runtime_memory_episode,
 )
 from apps.flows.src.runtime.tool_call_context import active_tool_call_context
 from apps.flows.src.state.cancellation import (
@@ -65,7 +70,7 @@ from apps.flows.src.state.cancellation import (
     get_cancellation_token,
 )
 from apps.flows.src.state.interrupt_manager import InterruptManager
-from apps.flows.src.streaming import BaseEmitter, Emitter, InMemoryEmitter
+from apps.flows.src.streaming import BaseEmitter, Emitter
 from apps.flows.src.streaming.ui_events import emit_pending_ui_events
 from apps.flows.src.tools.base import BaseTool, OpenAIToolSchema, ToolArguments, sanitize_tool_name
 from apps.flows.src.variables import VariableResolver
@@ -164,7 +169,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         prompt: str,
         llm_node: LlmNodeRunnerHost | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        container: FlowRuntimeContainer,
         llm_context_policy: LLMContextProfile | None = None,
         llm_context_source_registry: LLMContextSourceRegistry | None = None,
     ):
@@ -175,13 +180,11 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             prompt=prompt,
             llm_node=llm_node,
         )
-        self.container: FlowRuntimeContainer | None = container
+        self.container: FlowRuntimeContainer = container
         self.llm_context_policy: LLMContextProfile | None = llm_context_policy
         self.llm_context_source_registry: LLMContextSourceRegistry | None = llm_context_source_registry
-        if container is not None:
-            for tool in self.tools:
-                if tool.container is None:
-                    tool.container = container
+        for tool in self.tools:
+            tool.container = container
 
     async def _checkpoint_state(
         self,
@@ -195,18 +198,172 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         _ = payload
         return
 
-    def _schedule_context_memory_window_close(self, state: ExecutionState) -> None:
-        if self.container is None or not self._context_memory_writes_enabled():
+    async def _close_context_memory_window(self, state: ExecutionState) -> None:
+        if not self._context_memory_writes_enabled():
             return
 
-        _ = schedule_state_messages_to_memory_for_runtime(
-            store=self.container.llm_context_memory_store,
+        decision = build_state_messages_memory_close_decision(
             state=state,
             node_id=self._source_node_id(),
             policy=self.llm_context_policy,
             messages=self._messages_for_llm_context(state),
-            summarize_episode=self._summarize_context_memory_episode,
         )
+        if decision is None:
+            return
+        if decision.episode is None:
+            apply_runtime_memory_cursor_advance(state, decision)
+            return
+
+        execution_branch_id = state.durable_execution_branch_id
+        if execution_branch_id is None:
+            raise RuntimeError("Memory write requires durable execution_branch_id")
+        node_schedule_sequence = state.durable_node_schedule_sequence
+        if node_schedule_sequence is None:
+            raise RuntimeError("Memory write requires NodeScheduled.sequence")
+
+        command = RuntimeMemoryWriteCommand(
+            session_id=state.session_id,
+            execution_branch_id=execution_branch_id,
+            node_schedule_sequence=node_schedule_sequence,
+            node_id=self._source_node_id(),
+            cursor_key=decision.cursor_key,
+            cursor=decision.cursor,
+            next_cursor=decision.next_cursor,
+            episode=decision.episode,
+            compaction=decision.compaction,
+        )
+        _ = await self._run_context_memory_write_activity(state, command)
+
+    async def _run_context_memory_write_activity(
+        self,
+        state: ExecutionState,
+        command: RuntimeMemoryWriteCommand,
+    ) -> RuntimeMemoryWriteResult:
+        input_payload = require_json_object(
+            command.model_dump(mode="json"),
+            "memory_write.activity_input",
+        )
+        activity_id = (
+            f"{command.session_id}:{command.execution_branch_id}:node:{command.node_id}:"
+            + f"memory_write:schedule:{command.node_schedule_sequence}:"
+            + f"input:{hash_state_json(input_payload)}"
+        )
+        runtime = self.container.workflow_runtime
+        scheduled_result = await runtime.record_activity_scheduled(
+            session_id=state.session_id,
+            activity_id=activity_id,
+            activity_type="memory_write",
+            input_payload=input_payload,
+            node_id=command.node_id,
+            idempotency_key=activity_id,
+            side_effect_policy=SideEffectPolicy.idempotent,
+        )
+        if scheduled_result is not None:
+            result = self._apply_replayed_memory_activity_result(
+                state,
+                scheduled_result,
+            )
+            logger.info(
+                "llm_context.memory_write_replayed",
+                memory_id=result.memory_id,
+                cursor_key=result.cursor_key,
+                node_id=command.node_id,
+                session_id=command.session_id,
+                execution_branch_id=command.execution_branch_id,
+            )
+            return result
+
+        started = await runtime.record_activity_started(activity_id=activity_id)
+        if not started:
+            raise RuntimeError(f"Failed to mark memory write activity as started: {activity_id!r}")
+
+        trace_ctx = _get_trace_ctx_from_state()
+        tracer = get_tracer()
+        before_state = ExecutionState.model_validate(
+            state.model_dump(mode="python", exclude_none=False)
+        )
+        try:
+            async with tracer.platform_operation_span(
+                "flows.memory.write",
+                event_type="llm_context.memory_write",
+                resource_type="llm_context_memory",
+                resource_id=command.episode.memory_id,
+                trace_ctx=trace_ctx,
+                extra_attributes={
+                    "platform.workflow.session_id": command.session_id,
+                    "platform.workflow.execution_branch_id": command.execution_branch_id,
+                    "platform.workflow.node_schedule_sequence": command.node_schedule_sequence,
+                    "platform.node.id": command.node_id,
+                    "platform.memory.cursor_key": command.cursor_key,
+                    "platform.memory.cursor_start": command.cursor,
+                    "platform.memory.cursor_end": command.next_cursor,
+                    "platform.memory.scope": command.episode.scope,
+                    "platform.memory.compaction": command.compaction,
+                },
+            ):
+                result = await write_runtime_memory_episode(
+                    store=self.container.llm_context_memory_store,
+                    command=command,
+                    summarize_episode=self._summarize_context_memory_episode,
+                )
+                apply_runtime_memory_write_result(state, result)
+        except Exception as exc:
+            completed_failed = await runtime.record_activity_completed(
+                activity_id=activity_id,
+                error=str(exc),
+            )
+            if not completed_failed:
+                raise RuntimeError(f"Failed to mark memory write activity as failed: {activity_id!r}") from exc
+            raise
+
+        state_delta = build_state_delta(before_state, state)
+        result_json = require_json_object(
+            {
+                "result": result.model_dump(mode="json"),
+                "state_delta": state_delta.model_dump(mode="json", exclude_none=False),
+            },
+            "memory_write.activity_result",
+        )
+        completed_ok = await runtime.record_activity_completed(
+            activity_id=activity_id,
+            result_json=result_json,
+        )
+        if not completed_ok:
+            raise RuntimeError(f"Failed to mark memory write activity as completed: {activity_id!r}")
+        logger.info(
+            "llm_context.memory_write_completed",
+            memory_id=result.memory_id,
+            cursor_key=result.cursor_key,
+            node_id=command.node_id,
+            session_id=command.session_id,
+            execution_branch_id=command.execution_branch_id,
+        )
+        return result
+
+    @staticmethod
+    def _apply_replayed_memory_activity_result(
+        state: ExecutionState,
+        completed: JsonObject,
+    ) -> RuntimeMemoryWriteResult:
+        if "state_delta" not in completed:
+            raise ValueError("memory_write activity result missing state_delta")
+        delta_raw = completed["state_delta"]
+        if not isinstance(delta_raw, dict):
+            raise ValueError("memory_write activity state_delta must be an object")
+        replayed_state = apply_state_delta(
+            state,
+            ExecutionStateDelta.model_validate(delta_raw),
+        )
+        _copy_state_projection(state, replayed_state)
+
+        if "result" not in completed:
+            raise ValueError("memory_write activity result missing result")
+        result_raw = completed["result"]
+        if not isinstance(result_raw, dict):
+            raise ValueError("memory_write activity result must be an object")
+        result = RuntimeMemoryWriteResult.model_validate(result_raw)
+        apply_runtime_memory_write_result(state, result)
+        return result
 
     def _context_memory_writes_enabled(self) -> bool:
         policy = self.llm_context_policy
@@ -223,8 +380,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         return self.llm_node.messages_filter == "all"
 
     async def _summarize_context_memory_episode(self, text: str) -> str:
-        if self.container is None:
-            raise RuntimeError("LLM context memory summarization requires FlowContainer")
         effective = resolve_effective_llm_config_for_node(self.node_config)
         llm_config = effective.config
         return await self.container.text_transform_service.summarize(
@@ -307,11 +462,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         context_id = state.context_id
 
         if emitter is None:
-            container = self.container
-            if container is not None:
-                emitter = Emitter(container.redis_client, state)
-            else:
-                emitter = InMemoryEmitter(state)
+            emitter = Emitter(self.container.redis_client, state)
 
         raw_user_content = input_data.get("content", "")
         if not isinstance(raw_user_content, str):
@@ -351,8 +502,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         return result
 
     async def _active_execution_branch_id(self, state: ExecutionState) -> str:
-        if self.container is None:
-            raise RuntimeError("Durable activity branch requires FlowContainer")
         position = await self.container.workflow_runtime.get_active_execution_position(
             state.session_id
         )
@@ -536,8 +685,6 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         if not str(actx.user.user_id).strip():
             raise ValueError("Контекст с user обязателен для LLM-ноды (биллинг и уведомления)")
         container = self.container
-        if container is None:
-            raise RuntimeError("LlmNodeRunner requires FlowContainer for billing")
         allow_platform_paid_fallback = True
         byok_override = effective_llm.cost_origin == COST_ORIGIN_COMPANY
         (
@@ -1036,7 +1183,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 if final_response:
                     state.response = final_response
                     tracer.record_state_snapshot(llm_node_span, state)
-                    self._schedule_context_memory_window_close(state)
+                    await self._close_context_memory_window(state)
                     await self._checkpoint_state(state)
 
     def _resolve_llm_client(
@@ -1083,47 +1230,43 @@ class LlmNodeRunner(BaseLlmNodeRunner):
 
 
         for attempt in range(1, self.MAX_STREAM_IDLE_RETRIES + 2):  # +2: 1 original + N retries
-            activity_id = (
-                f"{state.session_id}:node:{self._source_node_id()}:"
-                + f"llm:iteration:{iteration}:attempt:{attempt}"
+            input_payload = require_json_object(
+                {
+                    "node_id": self._source_node_id(),
+                    "iteration": iteration,
+                    "attempt": attempt,
+                    "messages": self._messages_to_dict(messages),
+                    "tools": [
+                        require_json_object(tool, "llm.tool_schema")
+                        for tool in tools or []
+                    ],
+                    "response_format": response_format,
+                    "max_tokens": max_tok,
+                },
+                "llm.activity_input",
             )
-            if self.container is not None:
-                input_payload = require_json_object(
-                    {
-                        "node_id": self._source_node_id(),
-                        "iteration": iteration,
-                        "attempt": attempt,
-                        "messages": self._messages_to_dict(messages),
-                        "tools": [
-                            require_json_object(tool, "llm.tool_schema")
-                            for tool in tools or []
-                        ],
-                        "response_format": response_format,
-                        "max_tokens": max_tok,
-                    },
-                    "llm.activity_input",
-                )
-                branch_id = await self._active_execution_branch_id(state)
-                activity_id = (
-                    f"{state.session_id}:{branch_id}:node:{self._source_node_id()}:"
-                    + f"llm:iteration:{iteration}:attempt:{attempt}:"
-                    + f"input:{hash_state_json(input_payload)}"
-                )
-                scheduled_result = await self.container.workflow_runtime.record_activity_scheduled(
-                    session_id=state.session_id,
+            branch_id = await self._active_execution_branch_id(state)
+            activity_id = (
+                f"{state.session_id}:{branch_id}:node:{self._source_node_id()}:"
+                + f"llm:iteration:{iteration}:attempt:{attempt}:"
+                + f"input:{hash_state_json(input_payload)}"
+            )
+            runtime = self.container.workflow_runtime
+            scheduled_result = await runtime.record_activity_scheduled(
+                session_id=state.session_id,
+                activity_id=activity_id,
+                activity_type="llm",
+                input_payload=input_payload,
+                node_id=self._source_node_id(),
+                idempotency_key=activity_id,
+                side_effect_policy=SideEffectPolicy.idempotent,
+            )
+            if scheduled_result is None:
+                started = await runtime.record_activity_started(
                     activity_id=activity_id,
-                    activity_type="llm",
-                    input_payload=input_payload,
-                    node_id=self._source_node_id(),
-                    idempotency_key=activity_id,
-                    side_effect_policy=SideEffectPolicy.idempotent,
                 )
-                if scheduled_result is None:
-                    started = await self.container.workflow_runtime.record_activity_started(
-                        activity_id=activity_id,
-                    )
-                    if not started:
-                        raise RuntimeError(f"Failed to mark LLM activity as started: {activity_id!r}")
+                if not started:
+                    raise RuntimeError(f"Failed to mark LLM activity as started: {activity_id!r}")
             try:
                 async for event in llm.stream(
                     messages=messages,
@@ -1138,32 +1281,29 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 ):
                     await check_cancellation(state)
                     yield event
-                if self.container is not None:
-                    completed = await self.container.workflow_runtime.record_activity_completed(
-                        activity_id=activity_id,
-                        result_json={"completed": True},
-                    )
-                    if not completed:
-                        raise RuntimeError(f"Failed to mark LLM activity as completed: {activity_id!r}")
+                completed = await runtime.record_activity_completed(
+                    activity_id=activity_id,
+                    result_json={"completed": True},
+                )
+                if not completed:
+                    raise RuntimeError(f"Failed to mark LLM activity as completed: {activity_id!r}")
                 return  # Стрим завершился нормально
             except LLMStreamUserCancelledError:
-                if self.container is not None:
-                    completed = await self.container.workflow_runtime.record_activity_completed(
-                        activity_id=activity_id,
-                        error="LLMStreamUserCancelledError",
-                    )
-                    if not completed:
-                        raise RuntimeError(f"Failed to mark LLM activity as failed: {activity_id!r}")
+                completed = await runtime.record_activity_completed(
+                    activity_id=activity_id,
+                    error="LLMStreamUserCancelledError",
+                )
+                if not completed:
+                    raise RuntimeError(f"Failed to mark LLM activity as failed: {activity_id!r}")
                 tok = get_cancellation_token()
                 raise FlowCancelled(tok.task_id if tok is not None else task_id)
             except LLMStreamIdleTimeoutError as e:
-                if self.container is not None:
-                    completed = await self.container.workflow_runtime.record_activity_completed(
-                        activity_id=activity_id,
-                        error=str(e),
-                    )
-                    if not completed:
-                        raise RuntimeError(f"Failed to mark LLM activity as failed: {activity_id!r}")
+                completed = await runtime.record_activity_completed(
+                    activity_id=activity_id,
+                    error=str(e),
+                )
+                if not completed:
+                    raise RuntimeError(f"Failed to mark LLM activity as failed: {activity_id!r}")
                 if attempt <= self.MAX_STREAM_IDLE_RETRIES:
                     logger.warning(
                         "LLM stream idle timeout (attempt %d/%d), retrying: "
@@ -1203,10 +1343,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         original_msg_count = len(state.messages)
 
         # Создаем копии state для каждого tool
-        state_copies = [
-            ExecutionState.model_validate(state.model_dump(exclude_none=False))
-            for _ in tool_calls
-        ]
+        state_copies = [state.runtime_copy() for _ in tool_calls]
 
         # Запускаем все tools параллельно
         tasks = [
@@ -1359,70 +1496,67 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             },
             "activity.input_payload",
         )
-        activity_id = f"{state.session_id}:tool:{tool_call_id}"
-        if self.container is not None:
-            branch_id = await self._active_execution_branch_id(state)
-            activity_id = (
-                f"{state.session_id}:{branch_id}:node:{self._source_node_id()}:"
-                + f"tool:{tool_call_id}:input:{hash_state_json(input_payload)}"
-            )
+        branch_id = await self._active_execution_branch_id(state)
+        activity_id = (
+            f"{state.session_id}:{branch_id}:node:{self._source_node_id()}:"
+            + f"tool:{tool_call_id}:input:{hash_state_json(input_payload)}"
+        )
         idempotency_key = activity_id
-        if self.container is not None:
-            runtime = self.container.workflow_runtime
-            completed = await runtime.get_completed_activity_result(
-                session_id=state.session_id,
-                activity_id=activity_id,
-                idempotency_key=idempotency_key,
-                input_payload=input_payload,
-            )
-            if completed is not None:
-                delta_raw = completed.get("state_delta")
-                if isinstance(delta_raw, dict):
-                    replayed_state = apply_state_delta(
-                        state,
-                        ExecutionStateDelta.model_validate(delta_raw),
-                    )
-                    _copy_state_projection(state, replayed_state)
-                result_text = str(completed.get("result", ""))
-                logger.info(
-                    "tool.activity_replayed",
-                    tool_name=tool_name,
-                    tool_call_id=tool_call_id,
+        runtime = self.container.workflow_runtime
+        completed = await runtime.get_completed_activity_result(
+            session_id=state.session_id,
+            activity_id=activity_id,
+            idempotency_key=idempotency_key,
+            input_payload=input_payload,
+        )
+        if completed is not None:
+            delta_raw = completed.get("state_delta")
+            if isinstance(delta_raw, dict):
+                replayed_state = apply_state_delta(
+                    state,
+                    ExecutionStateDelta.model_validate(delta_raw),
                 )
-                return [
-                    {
-                        "tool_call_id": tool_call_id,
-                        "content": result_text,
-                    }
-                ]
-
-            scheduled_result = await runtime.record_activity_scheduled(
-                session_id=state.session_id,
-                activity_id=activity_id,
-                activity_type="tool",
-                input_payload=input_payload,
-                node_id=self._source_node_id(),
+                _copy_state_projection(state, replayed_state)
+            result_text = str(completed.get("result", ""))
+            logger.info(
+                "tool.activity_replayed",
+                tool_name=tool_name,
                 tool_call_id=tool_call_id,
-                idempotency_key=idempotency_key,
-                side_effect_policy=SideEffectPolicy.non_idempotent,
             )
-            if scheduled_result is not None:
-                delta_raw = scheduled_result.get("state_delta")
-                if isinstance(delta_raw, dict):
-                    replayed_state = apply_state_delta(
-                        state,
-                        ExecutionStateDelta.model_validate(delta_raw),
-                    )
-                    _copy_state_projection(state, replayed_state)
-                return [
-                    {
-                        "tool_call_id": tool_call_id,
-                        "content": str(scheduled_result.get("result", "")),
-                    }
-                ]
-            started = await runtime.record_activity_started(activity_id=activity_id)
-            if not started:
-                raise RuntimeError(f"Failed to mark tool activity as started: {activity_id!r}")
+            return [
+                {
+                    "tool_call_id": tool_call_id,
+                    "content": result_text,
+                }
+            ]
+
+        scheduled_result = await runtime.record_activity_scheduled(
+            session_id=state.session_id,
+            activity_id=activity_id,
+            activity_type="tool",
+            input_payload=input_payload,
+            node_id=self._source_node_id(),
+            tool_call_id=tool_call_id,
+            idempotency_key=idempotency_key,
+            side_effect_policy=SideEffectPolicy.non_idempotent,
+        )
+        if scheduled_result is not None:
+            delta_raw = scheduled_result.get("state_delta")
+            if isinstance(delta_raw, dict):
+                replayed_state = apply_state_delta(
+                    state,
+                    ExecutionStateDelta.model_validate(delta_raw),
+                )
+                _copy_state_projection(state, replayed_state)
+            return [
+                {
+                    "tool_call_id": tool_call_id,
+                    "content": str(scheduled_result.get("result", "")),
+                }
+            ]
+        started = await runtime.record_activity_started(activity_id=activity_id)
+        if not started:
+            raise RuntimeError(f"Failed to mark tool activity as started: {activity_id!r}")
 
         async with tracer.tool_call_span(
             tool_name, tool_call_id, tool_args, nested_flow_tool, trace_ctx=trace_ctx
@@ -1437,6 +1571,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 with active_tool_call_context(
                     tool_name=tool_name,
                     tool_call_id=tool_call_id,
+                    node_id=self._source_node_id(),
                     state=state,
                     emitter=emitter,
                 ):
@@ -1446,20 +1581,19 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 tool_duration = (time.time() - tool_start) * 1000
                 tracer.record_tool_result(tool_span, result, tool_duration)
                 tracer.record_state_snapshot(tool_span, state)
-                if self.container is not None:
-                    state_delta = build_state_delta(before_tool_state, state)
-                    completed = await self.container.workflow_runtime.record_activity_completed(
-                        activity_id=activity_id,
-                        result_json={
-                            "result": str(result),
-                            "state_delta": state_delta.model_dump(
-                                mode="json",
-                                exclude_none=False,
-                            ),
-                        },
-                    )
-                    if not completed:
-                        raise RuntimeError(f"Failed to mark tool activity as completed: {activity_id!r}")
+                state_delta = build_state_delta(before_tool_state, state)
+                completed = await runtime.record_activity_completed(
+                    activity_id=activity_id,
+                    result_json={
+                        "result": str(result),
+                        "state_delta": state_delta.model_dump(
+                            mode="json",
+                            exclude_none=False,
+                        ),
+                    },
+                )
+                if not completed:
+                    raise RuntimeError(f"Failed to mark tool activity as completed: {activity_id!r}")
 
                 return [
                     {
@@ -1468,25 +1602,23 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                     }
                 ]
             except FlowInterrupt:
-                if self.container is not None:
-                    completed = await self.container.workflow_runtime.record_activity_completed(
-                        activity_id=activity_id,
-                        error="FlowInterrupt",
-                    )
-                    if not completed:
-                        raise RuntimeError(f"Failed to mark tool activity as failed: {activity_id!r}")
+                completed = await runtime.record_activity_completed(
+                    activity_id=activity_id,
+                    error="FlowInterrupt",
+                )
+                if not completed:
+                    raise RuntimeError(f"Failed to mark tool activity as failed: {activity_id!r}")
                 raise
             except Exception as e:
                 tool_duration = (time.time() - tool_start) * 1000
                 tracer.record_tool_result(tool_span, None, tool_duration, error=str(e))
                 logger.error(f"Tool {tool_name} failed: {e}")
-                if self.container is not None:
-                    completed = await self.container.workflow_runtime.record_activity_completed(
-                        activity_id=activity_id,
-                        error=str(e),
-                    )
-                    if not completed:
-                        raise RuntimeError(f"Failed to mark tool activity as failed: {activity_id!r}")
+                completed = await runtime.record_activity_completed(
+                    activity_id=activity_id,
+                    error=str(e),
+                )
+                if not completed:
+                    raise RuntimeError(f"Failed to mark tool activity as failed: {activity_id!r}")
                 enabled, allow_types = self._exception_policy_from_node_config()
                 if should_absorb_exception(e, enabled=enabled, allow_types=allow_types):
                     self._record_tool_exception(

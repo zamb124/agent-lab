@@ -10,16 +10,17 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Literal, Protocol, cast
 from urllib.parse import urlparse
 from uuid import uuid4
 
 import aiohttp
-import redis.asyncio as redis_async
 from livekit.api import LiveKitAPI
 from livekit.api.twirp_client import TwirpError, TwirpErrorCode
+from livekit.protocol.egress import EgressInfo
 from livekit.protocol.models import TrackSource, TrackType
 from livekit.protocol.room import ListParticipantsRequest
+from redis.asyncio.client import Redis
 
 from apps.sync.container import get_sync_container
 from apps.sync.db.models import SyncCallSpeechEgressTrack
@@ -64,6 +65,36 @@ end
 """
 
 
+class _SpeechToChatPollRedis(Protocol):
+    def set(
+        self,
+        name: str,
+        value: str,
+        *,
+        nx: bool = False,
+        ex: int | None = None,
+    ) -> Awaitable[bool | None]: ...
+
+    def eval(self, script: str, numkeys: int, *keys_and_args: str) -> Awaitable[int | str | bytes | None]: ...
+
+    def aclose(self) -> Awaitable[None]: ...
+
+
+def _speech_to_chat_poll_redis(redis_url: str) -> _SpeechToChatPollRedis:
+    from_url = cast(Callable[[str], _SpeechToChatPollRedis], Redis.from_url)
+    return from_url(redis_url)
+
+
+def _redis_eval_int(value: int | str | bytes | None, label: str) -> int:
+    if isinstance(value, bytes):
+        value = value.decode("utf-8")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return int(value)
+    raise ValueError(f"{label}: Redis eval вернул пустой результат")
+
+
 @dataclass(frozen=True, slots=True)
 class SpeechToChatPollOutcome:
     """Результат тика poll: нужно ли ставить следующий TaskIQ и с какой задержкой."""
@@ -73,7 +104,7 @@ class SpeechToChatPollOutcome:
 
 
 async def _stc_poll_lock_renew_loop(
-    r: redis_async.Redis,
+    r: _SpeechToChatPollRedis,
     lock_key: str,
     token: str,
     ttl_sec: int,
@@ -82,15 +113,14 @@ async def _stc_poll_lock_renew_loop(
     try:
         while True:
             await asyncio.sleep(interval_sec)
-            redis_eval = cast(Callable[..., Awaitable[Any]], r.eval)
-            extended = await redis_eval(
+            extended = await r.eval(
                 _SPEECH_TO_CHAT_POLL_LOCK_EXTEND_LUA,
                 1,
                 lock_key,
                 token,
                 str(ttl_sec),
             )
-            if int(extended) != 1:
+            if _redis_eval_int(extended, "speech_to_chat lock extend") != 1:
                 logger.warning(
                     "speech_to_chat poll: не удалось продлить lock key=%s (возможно истёк TTL)",
                     lock_key,
@@ -163,26 +193,18 @@ def _speech_egress_s3_prefix(row: SyncCallSpeechEgressTrack) -> str:
     )
 
 
-def _file_entries_from_egress_info(egress_info: Any) -> list[tuple[str, str, int]]:
+def _file_entries_from_egress_info(egress_info: EgressInfo) -> list[tuple[str, str, int]]:
     entries: list[tuple[str, str, int]] = []
     for fr in egress_info.file_results:
-        loc_raw = getattr(fr, "location", None)
-        if loc_raw is None or loc_raw == "":
+        loc_raw = fr.location
+        if loc_raw == "":
             continue
-        if not isinstance(loc_raw, str):
-            raise ValueError("LiveKit file_result.location должен быть строкой, если задан.")
-        fn_raw = getattr(fr, "filename", None)
-        if fn_raw is None:
+        fn_raw = fr.filename
+        if fn_raw == "":
             fn = "segment.bin"
-        elif isinstance(fn_raw, str):
-            fn = fn_raw if fn_raw != "" else "segment.bin"
         else:
-            raise ValueError("LiveKit file_result.filename должен быть строкой или отсутствовать.")
-        size_attr = getattr(fr, "size", 0)
-        try:
-            sz = int(size_attr or 0)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"LiveKit file_result.size должен быть числом: {size_attr!r}") from exc
+            fn = fn_raw
+        sz = int(fr.size)
         entries.append((loc_raw, fn, sz))
     entries.sort(key=lambda x: x[1])
     return entries
@@ -229,11 +251,10 @@ async def _find_egress_info(
     room_name: str,
     egress_id: str,
     api: LiveKitAPI | None = None,
-) -> Any | None:
+) -> EgressInfo | None:
     items = await livekit_client.list_egress(room_name=room_name, active=None, api=api)
     for it in items:
-        eid = getattr(it, "egress_id", None)
-        if isinstance(eid, str) and eid == egress_id:
+        if it.egress_id == egress_id:
             return it
     return None
 
@@ -242,7 +263,7 @@ async def _http_get_segment_bytes(url: str) -> bytes:
     timeout = get_settings().calls.speech_to_chat.segment_http_download_timeout_seconds
     async with get_httpx_client(timeout=timeout) as client:
         response = await client.get(url)
-        response.raise_for_status()
+        _ = response.raise_for_status()
         body = response.content
     if not body:
         raise ValueError("Пустой ответ при загрузке сегмента speech-to-chat.")
@@ -417,7 +438,7 @@ async def _post_segment_file_as_message(
         name=row.participant_identity,
         active_company_id=row.company_id,
     )
-    await send_message_with_side_effects(
+    _ = await send_message_with_side_effects(
         channel_id=row.channel_id,
         body=body,
         user=user,
@@ -428,7 +449,7 @@ async def _post_segment_file_as_message(
 async def process_new_files_for_egress_row(
     *,
     row: SyncCallSpeechEgressTrack,
-    egress_info: Any,
+    egress_info: EgressInfo,
     call_id: str,
 ) -> None:
     container = get_sync_container()
@@ -579,10 +600,10 @@ async def run_speech_to_chat_poll_cycle(
     settings = get_settings()
     stc = settings.calls.speech_to_chat
     redis_url = settings.database.redis_url
-    if redis_url is None or redis_url.strip() == "":
+    if redis_url.strip() == "":
         raise ValueError("database.redis_url обязателен для speech-to-chat poll (single-flight).")
 
-    r = redis_async.from_url(redis_url)
+    r = _speech_to_chat_poll_redis(redis_url)
     lock_key = f"sync:stc_poll:{company_id}:{call_id}"
     token = uuid4().hex
     renew_task: asyncio.Task[None] | None = None
@@ -621,11 +642,10 @@ async def run_speech_to_chat_poll_cycle(
         )
     finally:
         if renew_task is not None:
-            renew_task.cancel()
+            _ = renew_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await renew_task
-        redis_eval = cast(Callable[..., Awaitable[Any]], r.eval)
-        await redis_eval(_SPEECH_TO_CHAT_POLL_LOCK_RELEASE_LUA, 1, lock_key, token)
+        _ = await r.eval(_SPEECH_TO_CHAT_POLL_LOCK_RELEASE_LUA, 1, lock_key, token)
         await r.aclose()
 
 
@@ -716,8 +736,8 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                                 str(exc),
                             )
                             continue
-                        egress_id = getattr(egress_info, "egress_id", None)
-                        if not isinstance(egress_id, str) or egress_id == "":
+                        egress_id = egress_info.egress_id
+                        if egress_id == "":
                             raise RuntimeError("LiveKit не вернул egress_id для speech-to-chat.")
                         row = SyncCallSpeechEgressTrack(
                             row_id=uuid4().hex,
@@ -729,7 +749,7 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                             egress_id=egress_id,
                             segments_posted=0,
                         )
-                        await speech_repo.create(row)
+                        _ = await speech_repo.create(row)
                         logger.info(
                             "speech_to_chat egress started: call_id=%s identity=%s track=%s egress_id=%s",
                             call_id,
@@ -787,7 +807,7 @@ async def stop_speech_egresses_for_call_room(
             session=http_session,
         ) as api:
             for row in rows:
-                info: Any | None = None
+                info: EgressInfo | None = None
                 try:
                     info = await lk.stop_egress(
                         egress_id=row.egress_id,

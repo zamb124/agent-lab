@@ -11,6 +11,15 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import date, datetime, timezone
 
 from apps.flows.src.db import EvaluationRepository, FlowRepository, NodeRepository
+from apps.flows.src.durable_execution import (
+    NodeCompletedPayload,
+    NodeScheduledPayload,
+    NodeWriteRecordedPayload,
+    RunStartedPayload,
+    SuperstepStartedPayload,
+    WorkflowEventType,
+    build_state_delta,
+)
 from apps.flows.src.models import TestCaseConfig
 from apps.flows.src.models.enums import NodeType, TestTargetType
 from apps.flows.src.models.evaluation_result import (
@@ -538,7 +547,16 @@ class EvaluationService:
         if not runtime_flow:
             raise ValueError(f"Flow not found: {flow_id}")
 
-        return runtime_flow.run
+        async def run_in_evaluation_workflow(state: ExecutionState) -> ExecutionState:
+            state.branch_id = branch_id
+            await self._start_evaluation_workflow(
+                state,
+                flow_id=flow_id,
+                branch_id=branch_id,
+            )
+            return await runtime_flow.run(state)
+
+        return run_in_evaluation_workflow
 
     def _create_node_callable(
         self, target: TestTarget
@@ -556,6 +574,94 @@ class EvaluationService:
         node_class = self._node_registry.get(node_type_enum)
         raw_node_id = target.node_config.get("node_id")
         node_id = raw_node_id if isinstance(raw_node_id, str) and raw_node_id else "test_node"
-        node = node_class.from_config(node_id, target.node_config)
+        node = node_class.from_config(
+            node_id,
+            target.node_config,
+            container=self._flow_factory.container,
+        )
 
-        return node.run
+        async def run_node_in_evaluation_workflow(state: ExecutionState) -> ExecutionState:
+            await self._start_evaluation_workflow(
+                state,
+                flow_id=state.session_flow_id,
+                branch_id=state.branch_id,
+            )
+            state.current_nodes = [node_id]
+            runtime = self._flow_factory.container.workflow_runtime
+            superstep_event = await runtime.record_state_event(
+                state.session_id,
+                state,
+                event_type=WorkflowEventType.superstep_started,
+                payload=SuperstepStartedPayload(current_nodes=[node_id]),
+            )
+            scheduled_event = await runtime.record_state_event(
+                state.session_id,
+                state,
+                event_type=WorkflowEventType.node_scheduled,
+                payload=NodeScheduledPayload(
+                    node_id=node_id,
+                    node_type=node_type_enum.value,
+                    current_nodes=[node_id],
+                ),
+            )
+            state.attach_durable_node_context(
+                execution_branch_id=scheduled_event.execution_branch_id,
+                node_schedule_sequence=scheduled_event.sequence,
+                superstep_sequence=superstep_event.sequence,
+            )
+            before_state = ExecutionState.model_validate(
+                state.model_dump(mode="python", exclude_none=False)
+            )
+            result_state = await node.run(state)
+            _ = await runtime.record_state_event(
+                result_state.session_id,
+                result_state,
+                event_type=WorkflowEventType.node_write_recorded,
+                payload=NodeWriteRecordedPayload(
+                    node_id=node_id,
+                    node_type=node_type_enum.value,
+                    state_delta=build_state_delta(before_state, result_state),
+                ),
+            )
+            _ = await runtime.record_state_event(
+                result_state.session_id,
+                result_state,
+                event_type=WorkflowEventType.node_completed,
+                payload=NodeCompletedPayload(
+                    node_id=node_id,
+                    node_type=node_type_enum.value,
+                ),
+            )
+            return result_state
+
+        return run_node_in_evaluation_workflow
+
+    async def _start_evaluation_workflow(
+        self,
+        state: ExecutionState,
+        *,
+        flow_id: str,
+        branch_id: str,
+    ) -> None:
+        if state.session_flow_id != flow_id:
+            raise RuntimeError(
+                "Evaluation workflow session_id must target the evaluated flow: "
+                + f"flow_id={flow_id!r}, session_id={state.session_id!r}"
+            )
+        runtime = self._flow_factory.container.workflow_runtime
+        position = await runtime.get_active_execution_position(state.session_id)
+        if position is not None:
+            return
+        state.branch_id = branch_id
+        _ = await runtime.record_state_event(
+            state.session_id,
+            state,
+            event_type=WorkflowEventType.run_started,
+            payload=RunStartedPayload(
+                flow_id=flow_id,
+                branch_id=branch_id,
+                task_id=state.task_id,
+                flow_config_version=state.flow_config_version,
+            ),
+            snapshot=True,
+        )

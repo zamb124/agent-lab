@@ -60,24 +60,22 @@ async def ensure_postgres_service_databases_async(
     Args:
         reference_shared_url: если задан (например в pytest), подставляется вместо get_settings().database.shared_url.
     """
-    manifest = load_migration_manifest()
-    postgres_cfg = manifest.get("postgres")
-    if not postgres_cfg:
-        return
+    postgres_config = load_migration_manifest().postgres
+    databases = list(postgres_config.databases)
+    vector_dbs = list(postgres_config.vector_extensions)
 
-    databases: list[str] = list(postgres_cfg["databases"])
-    vector_dbs: list[str] = list(postgres_cfg.get("vector_extensions", []))
-
-    if reference_shared_url is not None and str(reference_shared_url).strip():
-        shared_str = str(reference_shared_url).strip()
+    if reference_shared_url is not None:
+        shared_str = reference_shared_url.strip()
+        if not shared_str:
+            raise ValueError("ensure_postgres_service_databases: reference_shared_url пуст")
     else:
         settings = get_settings()
         shared_url = settings.database.shared_url
-        if not shared_url or not str(shared_url).strip():
+        if not shared_url or not shared_url.strip():
             raise ValueError(
                 "ensure_postgres_service_databases: задайте database.shared_url (DATABASE__SHARED_URL)"
             )
-        shared_str = str(shared_url)
+        shared_str = shared_url.strip()
 
     base = make_url(shared_str)
     shared_db_name = base.database
@@ -112,18 +110,20 @@ async def ensure_postgres_service_databases_async(
                     {"name": db_name},
                 )
                 if chk.first() is None:
-                    await conn.execute(text(f"CREATE DATABASE {db_name}"))
+                    _ = await conn.execute(text(f"CREATE DATABASE {db_name}"))
                     logger.info("Создана отсутствующая БД PostgreSQL: %s", db_name)
 
             for db_name in databases:
-                await conn.execute(text(f"GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {role}"))
+                _ = await conn.execute(
+                    text(f"GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {role}")
+                )
 
             if shared_db_name in vector_dbs:
-                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                _ = await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     except InvalidPasswordError as e:
         raise RuntimeError(f"{_PG_AUTH_HINT}\n{_pg_target_debug(shared_str)}") from e
     except OperationalError as e:
-        if isinstance(getattr(e, "orig", None), InvalidPasswordError):
+        if isinstance(e.orig, InvalidPasswordError):
             raise RuntimeError(f"{_PG_AUTH_HINT}\n{_pg_target_debug(shared_str)}") from e
         raise
     finally:
@@ -136,13 +136,13 @@ async def ensure_postgres_service_databases_async(
         v_engine = create_async_engine(db_url, poolclass=pool.NullPool)
         try:
             async with v_engine.begin() as v_conn:
-                await v_conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                _ = await v_conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         except InvalidPasswordError as e:
             raise RuntimeError(
                 f"{_PG_AUTH_HINT}\nБаза для vector: {ext_db}. {_pg_target_debug(db_url)}"
             ) from e
         except OperationalError as e:
-            if isinstance(getattr(e, "orig", None), InvalidPasswordError):
+            if isinstance(e.orig, InvalidPasswordError):
                 raise RuntimeError(
                     f"{_PG_AUTH_HINT}\nБаза для vector: {ext_db}. {_pg_target_debug(db_url)}"
                 ) from e

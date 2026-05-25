@@ -16,7 +16,7 @@ from core.clients.payment.base_provider import (
 )
 from core.db.storage import Storage
 from core.logging import get_logger
-from core.types import JsonObject
+from core.models.payment_models import YooMoneyWebhookPayload
 
 logger = get_logger(__name__)
 YUKASSA_API_URL = "https://api.yookassa.ru/v3"
@@ -55,7 +55,7 @@ class YuKassaProvider(BasePaymentProvider[YuKassaConfig]):
         raise NotImplementedError("ЮKassa провайдер еще не реализован")
 
     @override
-    async def verify_webhook(self, webhook_data: JsonObject) -> WebhookVerificationResult:
+    async def verify_webhook(self, webhook_data: YooMoneyWebhookPayload) -> WebhookVerificationResult:
         """Заглушка: проверка webhook не реализована"""
         _ = webhook_data
         logger.error("ЮKassa провайдер не реализован")

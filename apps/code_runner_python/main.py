@@ -14,7 +14,6 @@ app = create_service_app(
     settings_class=CodeRunnerPythonSettings,
     get_container=get_code_runner_python_container,
     routers=[execute_router, validate_router],
-    repository_names=[],
     cors_origins=["*"],
     title="Platform Python Code Runner",
     description="Untrusted Python sandbox runner",

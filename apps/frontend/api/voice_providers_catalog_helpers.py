@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from pydantic import BaseModel, ConfigDict
 
 from core.clients.speech_provider_catalog import (
@@ -55,7 +57,7 @@ def needs_model_dropdown(kind: str, provider: str) -> bool:
 class CompanySecretsMetaDTO(BaseModel):
     """Не выдаёт сырое значение api_key/client_secret."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     api_key_set: bool | None = None
     client_secret_set: bool | None = None
@@ -66,25 +68,25 @@ class CompanySecretsMetaDTO(BaseModel):
 
 def secrets_dict_to_meta(
     *,
-    secrets: dict[str, object] | None,
+    secrets: dict[str, str] | None,
     provider: str,
 ) -> CompanySecretsMetaDTO | None:
     if secrets is None or len(secrets) == 0:
         return CompanySecretsMetaDTO()
     ak = secrets.get("api_key")
-    api_key_set: bool | None = isinstance(ak, str) and ak != ""
+    api_key_set = ak is not None and ak != ""
 
     cs = secrets.get("client_secret")
-    client_secret_set = isinstance(cs, str) and cs != ""
+    client_secret_set = cs is not None and cs != ""
 
     folder_id_val = secrets.get("folder_id")
-    folder_id: str | None = folder_id_val if isinstance(folder_id_val, str) and folder_id_val != "" else None
+    folder_id = folder_id_val if folder_id_val is not None and folder_id_val != "" else None
 
     client_id_val = secrets.get("client_id")
-    client_id: str | None = client_id_val if isinstance(client_id_val, str) and client_id_val != "" else None
+    client_id = client_id_val if client_id_val is not None and client_id_val != "" else None
 
     scope_val = secrets.get("scope")
-    scope: str | None = scope_val if isinstance(scope_val, str) and scope_val != "" else None
+    scope = scope_val if scope_val is not None and scope_val != "" else None
 
     if provider == "cloud_ru":
         return CompanySecretsMetaDTO(api_key_set=api_key_set)

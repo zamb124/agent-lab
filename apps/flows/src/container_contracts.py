@@ -100,6 +100,8 @@ class RuntimeNodeClassProtocol(Protocol):
         self,
         node_id: str,
         config: Mapping[str, JsonValue],
+        *,
+        container: "FlowRuntimeContainer",
     ) -> RuntimeNodeProtocol: ...
 
 

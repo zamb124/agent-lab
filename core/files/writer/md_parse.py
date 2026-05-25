@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Literal, TypeAlias, TypedDict
 
 from core.files.writer.exceptions import FileWriteError
 
@@ -12,10 +12,30 @@ _MD_IMG = re.compile(
 )
 
 
-def split_text_and_tables(text: str) -> list[dict[str, Any]]:
+class MarkdownTextSegment(TypedDict):
+    kind: Literal["text"]
+    raw: str
+
+
+class MarkdownTableSegment(TypedDict):
+    kind: Literal["table"]
+    raw: str
+
+
+class MarkdownImageSegment(TypedDict):
+    kind: Literal["image"]
+    url: str
+
+
+MarkdownSegment: TypeAlias = (
+    MarkdownTextSegment | MarkdownTableSegment | MarkdownImageSegment
+)
+
+
+def split_text_and_tables(text: str) -> list[MarkdownTextSegment | MarkdownTableSegment]:
     """Делит фрагмент markdown на блоки text и table (GFM-строки с |)."""
     lines = text.split("\n")
-    out: list[dict[str, Any]] = []
+    out: list[MarkdownTextSegment | MarkdownTableSegment] = []
     i = 0
     n = len(lines)
     while i < n:
@@ -36,11 +56,11 @@ def split_text_and_tables(text: str) -> list[dict[str, Any]]:
     return out
 
 
-def flatten_markdown_segments(md: str) -> list[dict[str, Any]]:
+def flatten_markdown_segments(md: str) -> list[MarkdownSegment]:
     """
     Порядок как в исходном markdown: чередование текста (с таблицами) и картинок ![]().
     """
-    segments: list[dict[str, Any]] = []
+    segments: list[MarkdownSegment] = []
     pos = 0
     for m in _MD_IMG.finditer(md):
         before = md[pos : m.start()]

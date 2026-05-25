@@ -21,10 +21,10 @@
     )
 """
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -74,6 +74,7 @@ from core.push.router import router as push_router
 from core.push.service import init_web_push_service
 from core.tracing import setup_tracing
 from core.tracing.tracer import set_span_repository, set_tracing_service_name
+from core.types import JsonObject, JsonValue
 from core.utils.background import run_with_log_context
 from core.websocket.manager import notification_manager
 from core.websocket.router import router as ws_router
@@ -113,14 +114,12 @@ def create_service_app(
     get_container: Callable[[], ContainerT],
     routers: list[APIRouter] | None = None,
     pages_routers: list[APIRouter] | None = None,
-    repository_names: list[str] | None = None,
     on_startup: ServiceStartupHook[ContainerT, SettingsT] | None = None,
     on_shutdown: ServiceShutdownHook[ContainerT] | None = None,
     cors_origins: list[str] | None = None,
     cors_allow_origin_regex: str | None = None,
-    extra_middlewares: list[tuple[type[Any], dict[str, Any]]] | None = None,
+    extra_middlewares: Sequence[tuple[type, Mapping[str, JsonValue]]] | None = None,
     static_mounts: list[tuple[str, str, str]] | None = None,
-    extra_state: dict[str, object] | None = None,
     title: str | None = None,
     description: str | None = None,
     version: str = "1.0.0",
@@ -147,7 +146,6 @@ def create_service_app(
         get_container: Функция получения контейнера
         routers: Список API роутеров (prefix зависит от api_version)
         pages_routers: Список page роутеров (без prefix - они имеют свой)
-        repository_names: Имена репозиториев для CRUD роутеров
         on_startup: Функция вызываемая при старте (async)
         on_shutdown: Функция вызываемая при остановке (async)
         cors_origins: Разрешенные origins для CORS (конкретные URL; с credentials нельзя звёздочку как единственный origin)
@@ -231,7 +229,7 @@ def create_service_app(
                 )
             else:
                 await _cbr_refresh_once(fallback=_cbr_fallback)
-                run_with_log_context(
+                _ = run_with_log_context(
                     _cbr_loop_coro(fallback=_cbr_fallback),
                     name="billing.cbr_rate_refresh",
                     background_kind="startup",
@@ -250,7 +248,7 @@ def create_service_app(
                     raise ValueError(
                         "push.enabled=true требует push.vapid_private_key и push.vapid_public_key"
                     )
-                init_web_push_service(
+                _ = init_web_push_service(
                     vapid_private_key=settings.push.vapid_private_key,
                     vapid_public_key=settings.push.vapid_public_key,
                     vapid_email=settings.push.vapid_email,
@@ -259,7 +257,7 @@ def create_service_app(
 
             apns = resolve_apns_credentials(settings)
             if apns:
-                init_apns_push_service(
+                _ = init_apns_push_service(
                     team_id=apns.team_id,
                     key_id=apns.key_id,
                     private_key_pem=apns.private_key_pem,
@@ -270,7 +268,7 @@ def create_service_app(
 
             fcm = resolve_fcm_credentials(settings.push)
             if fcm:
-                init_fcm_push_service(
+                _ = init_fcm_push_service(
                     project_id=fcm.project_id,
                     client_email=fcm.client_email,
                     private_key_pem=fcm.private_key_pem,
@@ -318,6 +316,7 @@ def create_service_app(
             status_code=403,
             content={"detail": str(exc), "code": "billing_balance_blocked"},
         )
+    _ = _billing_balance_blocked_handler
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -337,7 +336,7 @@ def create_service_app(
                 "http.method": request.method,
             },
         )
-        payload: dict[str, Any] = {
+        payload: JsonObject = {
             "detail": "Internal Server Error",
             "code": "internal_error",
             "exception_type": exc_cls,
@@ -345,22 +344,16 @@ def create_service_app(
         if settings.server.debug:
             payload["exception_detail"] = str(exc)[:4096]
         return JSONResponse(status_code=500, content=payload)
-
-    # Дополнительные атрибуты state
-    if extra_state:
-        for key, value in extra_state.items():
-            setattr(app.state, key, value)
+    _ = _unhandled_exception_handler
 
     # CORS собираем здесь, подключаем в конце create_service_app (внешний слой стека).
     # Иначе preflight OPTIONS обрабатывает AuthMiddleware раньше и отдаёт 404 без ACAO.
-    _cors_kw: dict[str, Any] = {
-        "allow_origins": list(cors_origins) if cors_origins else [],
-        "allow_credentials": True,
-        "allow_methods": ["*"],
-        "allow_headers": ["*"],
-    }
-    if cors_allow_origin_regex and str(cors_allow_origin_regex).strip():
-        _cors_kw["allow_origin_regex"] = str(cors_allow_origin_regex).strip()
+    cors_allow_origins = list(cors_origins) if cors_origins else []
+    cors_allow_methods = ["*"]
+    cors_allow_headers = ["*"]
+    resolved_cors_allow_origin_regex = (
+        cors_allow_origin_regex.strip() if cors_allow_origin_regex and cors_allow_origin_regex.strip() else None
+    )
 
     # Proxy headers
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
@@ -376,7 +369,7 @@ def create_service_app(
     # Дополнительные middleware
     if extra_middlewares:
         for middleware_class, kwargs in extra_middlewares:
-            app.add_middleware(middleware_class, **kwargs)
+            app.add_middleware(middleware_class, **dict(kwargs))
 
     app.add_middleware(DeploymentHeadersMiddleware)
 
@@ -400,11 +393,6 @@ def create_service_app(
     else:
         api_prefix = f"/{url_route_segment}"
     logger.info("service.api_prefix", api_prefix=api_prefix)
-
-    # Инициализация репозиториев для CRUD роутеров
-    if repository_names:
-        for repo_name in repository_names:
-            _ = getattr(container, repo_name)
 
     # CRUD роутеры
     if include_crud_routers:
@@ -510,8 +498,9 @@ def create_service_app(
 
         @app.get(f"/{public_segment}/services", response_class=HTMLResponse)
         @app.get(f"/{public_segment}/services/", response_class=HTMLResponse)
-        async def platform_services_spa():
+        async def platform_services_spa() -> HTMLResponse:
             return HTMLResponse(content=_services_spa_html)
+        _ = platform_services_spa
 
         logger.info(
             "Platform services SPA: GET /%s/services, /%s/services/ -> %s",
@@ -523,18 +512,20 @@ def create_service_app(
     # Health-endpoints
     @app.get("/health")
     @app.get(f"/{service_name}/health")
-    async def health():
+    async def health() -> dict[str, str]:
         return build_health_payload(settings)
+    _ = health
 
     @app.get("/")
-    async def root():
+    async def root() -> JsonObject:
         return {"service": service_name, "version": version, "status": "running"}
+    _ = root
 
     # Тестовый endpoint (ТОЛЬКО в TESTING режиме)
     if is_testing():
 
         @app.get(f"/{service_name}/test", response_class=HTMLResponse)
-        async def test_page():
+        async def test_page() -> str:
             """
             Универсальная пустая страница для E2E UI тестов.
 
@@ -585,6 +576,7 @@ def create_service_app(
     <div id="test-root"></div>
 </body>
 </html>"""
+        _ = test_page
 
         logger.info(
             "service.test_endpoint_enabled",
@@ -592,7 +584,23 @@ def create_service_app(
             path=f"/{service_name}/test",
         )
 
-    app.add_middleware(CORSMiddleware, **_cors_kw)
+    if resolved_cors_allow_origin_regex is None:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_allow_origins,
+            allow_credentials=True,
+            allow_methods=cors_allow_methods,
+            allow_headers=cors_allow_headers,
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_allow_origins,
+            allow_credentials=True,
+            allow_methods=cors_allow_methods,
+            allow_headers=cors_allow_headers,
+            allow_origin_regex=resolved_cors_allow_origin_regex,
+        )
 
     logger.info("service.created", service=service_name)
 

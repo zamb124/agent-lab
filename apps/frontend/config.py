@@ -41,7 +41,15 @@ def get_frontend_settings() -> FrontendSettings:
     return _frontend_settings
 
 
-def reset_frontend_settings():
+def get_frontend_public_base_url() -> str:
+    """Публичный origin frontend для SEO и каталогов."""
+    base_url = get_frontend_settings().server.platform_public_base_url
+    if base_url is None or base_url.strip() == "":
+        raise ValueError("server.platform_public_base_url must be configured for public frontend URLs")
+    return base_url.rstrip("/")
+
+
+def reset_frontend_settings() -> None:
     """Сбрасывает настройки (для тестов)"""
     global _frontend_settings
     _frontend_settings = None

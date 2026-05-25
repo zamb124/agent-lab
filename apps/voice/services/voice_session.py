@@ -5,14 +5,13 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Any, Union
+from typing import TypeVar
 
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-
-MicAudioInItem = Union[bytes, "MicFinalizeRequest"]
+QueueItemT = TypeVar("QueueItemT")
 
 
 @dataclass(slots=True)
@@ -25,6 +24,9 @@ class MicFinalizeRequest:
     """
 
     complete: asyncio.Future[None]
+
+
+MicAudioInItem = bytes | MicFinalizeRequest
 
 
 class VoiceSession:
@@ -43,8 +45,8 @@ class VoiceSession:
         text_size: int = 256,
         synthesis_size: int = 64,
     ) -> None:
-        self.session_id = session_id
-        self.created_at = time.monotonic()
+        self.session_id: str = session_id
+        self.created_at: float = time.monotonic()
 
         self.audio_in_queue: asyncio.Queue[MicAudioInItem] = asyncio.Queue(
             maxsize=audio_in_size
@@ -53,8 +55,8 @@ class VoiceSession:
         self.text_in_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=text_size)
         self.synthesis_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=synthesis_size)
 
-        self._active = True
-        self._tasks: list[asyncio.Task[Any]] = []
+        self._active: bool = True
+        self._tasks: list[asyncio.Task[None]] = []
         self._bytes_sent: int = 0
         self._bytes_received: int = 0
         self._pcm_chunk_count: int = 0
@@ -101,7 +103,7 @@ class VoiceSession:
     def bytes_received(self) -> int:
         return self._bytes_received
 
-    def add_task(self, task: asyncio.Task[Any]) -> None:
+    def add_task(self, task: asyncio.Task[None]) -> None:
         self._tasks.append(task)
 
     async def enqueue_mic_finalize(self, req: MicFinalizeRequest) -> None:
@@ -120,21 +122,18 @@ class VoiceSession:
         self._active = False
         for task in self._tasks:
             if not task.done():
-                task.cancel()
+                _ = task.cancel()
         if self._tasks:
-            await asyncio.gather(*self._tasks, return_exceptions=True)
+            _ = await asyncio.gather(*self._tasks, return_exceptions=True)
             self._tasks.clear()
         self._clear_queues()
         logger.info("voice session cancelled: session_id=%s", self.session_id)
 
     def _clear_queues(self) -> None:
-        self._drain_audio_in_queue(self.audio_in_queue)
-        for q in (
-            self.audio_out_queue,
-            self.text_in_queue,
-            self.synthesis_queue,
-        ):
-            self._drain_simple_queue(q)
+        _ = self._drain_audio_in_queue(self.audio_in_queue)
+        _ = self._drain_simple_queue(self.audio_out_queue)
+        _ = self._drain_simple_queue(self.text_in_queue)
+        _ = self._drain_simple_queue(self.synthesis_queue)
 
     def clear_synthesis_and_audio_out(self) -> int:
         """Сбросить очереди синтеза и исходящего аудио (для barge-in).
@@ -156,15 +155,15 @@ class VoiceSession:
             removed += 1
             if isinstance(item, MicFinalizeRequest):
                 if not item.complete.done():
-                    item.complete.cancel()
+                    _ = item.complete.cancel()
         return removed
 
     @staticmethod
-    def _drain_simple_queue(q: asyncio.Queue[Any]) -> int:
+    def _drain_simple_queue(q: asyncio.Queue[QueueItemT]) -> int:
         removed = 0
         while not q.empty():
             try:
-                q.get_nowait()
+                _ = q.get_nowait()
             except asyncio.QueueEmpty:
                 break
             removed += 1

@@ -4,8 +4,6 @@ SQL-репозиторий per-user OAuth credentials (shared БД, таблиц
 
 from __future__ import annotations
 
-from typing import Any
-
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
@@ -13,10 +11,6 @@ from core.db.database import get_session_factory
 from core.db.models.platform import IntegrationCredentialRecord
 from core.db.utils import get_rowcount
 from core.integrations.models import IntegrationCredential, IntegrationProvider
-
-
-def _enum_value(value: Any) -> str:
-    return value.value if hasattr(value, "value") else str(value)
 
 
 def _credential_from_record(record: IntegrationCredentialRecord) -> IntegrationCredential:
@@ -39,7 +33,7 @@ def _credential_from_record(record: IntegrationCredentialRecord) -> IntegrationC
 
 class IntegrationCredentialRepository:
     def __init__(self, db_url: str) -> None:
-        self._db_url = db_url
+        self._db_url: str = db_url
 
     async def get_by_user_provider_service(
         self,
@@ -54,7 +48,7 @@ class IntegrationCredentialRepository:
                 select(IntegrationCredentialRecord).where(
                     IntegrationCredentialRecord.company_id == company_id,
                     IntegrationCredentialRecord.user_id == user_id,
-                    IntegrationCredentialRecord.provider == _enum_value(provider),
+                    IntegrationCredentialRecord.provider == provider,
                     IntegrationCredentialRecord.service == service,
                 )
             )
@@ -94,7 +88,7 @@ class IntegrationCredentialRepository:
             result = await session.execute(
                 select(IntegrationCredentialRecord)
                 .where(
-                    IntegrationCredentialRecord.provider == _enum_value(provider),
+                    IntegrationCredentialRecord.provider == provider,
                     IntegrationCredentialRecord.service == service,
                 )
                 .order_by(IntegrationCredentialRecord.updated_at.asc())
@@ -109,7 +103,7 @@ class IntegrationCredentialRepository:
             "credential_id": credential.credential_id,
             "company_id": credential.company_id,
             "user_id": credential.user_id,
-            "provider": _enum_value(credential.provider),
+            "provider": credential.provider,
             "service": credential.service,
             "access_token": credential.access_token,
             "refresh_token": credential.refresh_token,
@@ -134,7 +128,7 @@ class IntegrationCredentialRepository:
             },
         )
         async with session_factory() as session:
-            await session.execute(stmt)
+            _ = await session.execute(stmt)
             await session.commit()
 
     async def delete(
@@ -168,7 +162,7 @@ class IntegrationCredentialRepository:
                 delete(IntegrationCredentialRecord).where(
                     IntegrationCredentialRecord.company_id == company_id,
                     IntegrationCredentialRecord.user_id == user_id,
-                    IntegrationCredentialRecord.provider == _enum_value(provider),
+                    IntegrationCredentialRecord.provider == provider,
                     IntegrationCredentialRecord.service == service,
                 )
             )

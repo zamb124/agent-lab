@@ -410,7 +410,6 @@ app = create_service_app(
     settings_class=SchedulerSettings,
     get_container=get_scheduler_container,
     routers=[api_v1_router],
-    repository_names=[],
     on_startup=on_startup,
     on_shutdown=on_shutdown,
     cors_origins=["*"],

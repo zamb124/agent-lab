@@ -2,9 +2,12 @@
 Подключение к БД office (Alembic: migrations/office).
 """
 
-from typing import Optional
-
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from core.config import get_settings
 
@@ -12,16 +15,16 @@ from core.config import get_settings
 class OfficeDatabase:
     """Engine и фабрика сессий для platform_office."""
 
-    _instance: Optional["OfficeDatabase"] = None
+    _instance: "OfficeDatabase | None" = None
 
     def __init__(self, db_url: str) -> None:
-        self._engine = create_async_engine(
+        self._engine: AsyncEngine = create_async_engine(
             db_url,
             echo=False,
             pool_size=5,
             max_overflow=10,
         )
-        self._session_factory = async_sessionmaker(
+        self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
             bind=self._engine,
             class_=AsyncSession,
             expire_on_commit=False,

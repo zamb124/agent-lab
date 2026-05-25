@@ -18,10 +18,10 @@ export class FrontendLeadFormModal extends PlatformFormModal {
 
     static properties = {
         ...PlatformFormModal.properties,
-        _name: { state: true },
+        _contactName: { state: true },
         _email: { state: true },
         _phone: { state: true },
-        _company: { state: true },
+        _organizationName: { state: true },
         _jobTitle: { state: true },
         _headcountRange: { state: true },
         _interestAgents: { state: true },
@@ -59,10 +59,10 @@ export class FrontendLeadFormModal extends PlatformFormModal {
 
     constructor() {
         super();
-        this._name = '';
+        this._contactName = '';
         this._email = '';
         this._phone = '';
-        this._company = '';
+        this._organizationName = '';
         this._jobTitle = '';
         this._headcountRange = '';
         this._interestAgents = false;
@@ -82,7 +82,7 @@ export class FrontendLeadFormModal extends PlatformFormModal {
 
     validateForm() {
         const errors = {};
-        if (!this._name.trim()) errors.name = this.t('cta.toast_required');
+        if (!this._contactName.trim()) errors.contact_name = this.t('cta.toast_required');
 
         const email = this._email.trim();
         if (email !== '' && !isValidEmail(email)) {
@@ -122,10 +122,10 @@ export class FrontendLeadFormModal extends PlatformFormModal {
         if (this._interestDocuments) interested_products.push('documents');
 
         await this._submit.run({
-            name: this._name.trim(),
+            contact_name: this._contactName.trim(),
             email: this._email.trim() === '' ? null : this._email.trim(),
             phone: this._phone.trim() === '' ? null : this._phone.trim(),
-            company: this._company.trim() === '' ? null : this._company.trim(),
+            organization_name: this._organizationName.trim() === '' ? null : this._organizationName.trim(),
             job_title: this._jobTitle.trim() === '' ? null : this._jobTitle.trim(),
             headcount_range: this._headcountRange,
             interested_products,
@@ -156,15 +156,15 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                             mode="edit"
                             label=""
                             placeholder=${this.t('cta.placeholder_name')}
-                            .value=${this._name}
+                            .value=${this._contactName}
                             @change=${(e) => {
                                 if (!e.detail || typeof e.detail.value !== 'string') {
-                                    throw new Error('lead-form name field expects detail.value string');
+                                    throw new Error('lead-form contact_name field expects detail.value string');
                                 }
-                                this._name = e.detail.value;
+                                this._contactName = e.detail.value;
                             }}
                         ></platform-field>
-                        ${this.renderFieldError('name')}
+                        ${this.renderFieldError('contact_name')}
                         <platform-field
                             type="string"
                             mode="edit"
@@ -201,12 +201,12 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                             mode="edit"
                             label=""
                             placeholder=${this.t('cta.placeholder_company')}
-                            .value=${this._company}
+                            .value=${this._organizationName}
                             @change=${(e) => {
                                 if (!e.detail || typeof e.detail.value !== 'string') {
-                                    throw new Error('lead-form company field expects detail.value string');
+                                    throw new Error('lead-form organization_name field expects detail.value string');
                                 }
-                                this._company = e.detail.value;
+                                this._organizationName = e.detail.value;
                             }}
                         ></platform-field>
                     </div>

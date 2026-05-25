@@ -27,6 +27,7 @@ from core.errors import FrozenStateFieldError, ToolExecutionError
 from core.state import ExecutionState
 from core.state.mutation_policy import FROZEN_STATE_FIELDS
 from core.types import JsonObject
+from tests.flows.durable_runtime_harness import run_flow
 
 MockLLMQueue = Callable[[list[JsonObject]], None]
 
@@ -55,9 +56,7 @@ def assert_frozen_identical(before: dict[str, object], after: ExecutionState) ->
     for field_name, old_val in before.items():
         new_val = after[field_name]
         if new_val != old_val:
-            raise AssertionError(
-                f"frozen field {field_name!r} changed: {old_val!r} -> {new_val!r}"
-            )
+            raise AssertionError(f"frozen field {field_name!r} changed: {old_val!r} -> {new_val!r}")
 
 
 def assert_identity_frozen_unchanged(
@@ -68,9 +67,7 @@ def assert_identity_frozen_unchanged(
         old_val = before[name]
         new_val = after[name]
         if new_val != old_val:
-            raise AssertionError(
-                f"field {name!r} changed: {old_val!r} -> {new_val!r}"
-            )
+            raise AssertionError(f"field {name!r} changed: {old_val!r} -> {new_val!r}")
 
 
 def make_state(unique_id: str, **extra: object) -> ExecutionState:
@@ -94,15 +91,16 @@ async def _run_single_node_flow(
     state: ExecutionState,
     node: CodeNode | LlmNode,
 ) -> None:
+    container = _runtime_container(app)
     flow = Flow(
         flow_id=state.session_flow_id,
         name=f"frozen invariant {state.session_flow_id}",
         entry=node.node_id,
         nodes={node.node_id: node},
         edges=[],
-        container=_runtime_container(app),
+        container=container,
     )
-    _ = await flow.run(state)
+    _ = await run_flow(container=container, flow=flow, state=state)
 
 
 async def _persist_runner_state(app: FastAPI, state: ExecutionState) -> FlowRuntimeContainer:
@@ -139,7 +137,11 @@ class TestCodeNodeFrozenFields:
 async def run(args, state):
     return {"task_id": "forged", "safe_marker": 1}
 """
-        node = CodeNode(node_id=f"code_{unique_id}", config={"type": "code", "code": code})
+        node = CodeNode(
+            node_id=f"code_{unique_id}",
+            config={"type": "code", "code": code},
+            container=_runtime_container(app),
+        )
         snap.current_nodes = [node.node_id]
         frozen_before = frozen_snapshot(snap)
 
@@ -164,6 +166,7 @@ async def run(args, state):
         node = CodeNode(
             node_id=f"code_{unique_id}",
             config={"type": "code", "code": code, "output_mapping": {"x": "session_id"}},
+            container=_runtime_container(app),
         )
         snap.current_nodes = [node.node_id]
         frozen_before = frozen_snapshot(snap)
@@ -199,7 +202,7 @@ class TestLlmNodeStructuredOutputFrozenFields:
         node = LlmNode(
             node_id=f"llm_{unique_id}",
             config={
-                "type": "llm_node",
+                "type": NodeType.LLM_NODE.value,
                 "prompt": "Extract",
                 "structured_output": True,
                 "output_schema": {
@@ -213,6 +216,7 @@ class TestLlmNodeStructuredOutputFrozenFields:
                     "additionalProperties": True,
                 },
             },
+            container=_runtime_container(app),
         )
 
         snap = make_state(unique_id, user_groups=["g_keep"])
@@ -230,14 +234,12 @@ class TestLlmNodeStructuredOutputFrozenFields:
         mock_llm_with_queue: MockLLMQueue,
         unique_id: str,
     ) -> None:
-        mock_llm_with_queue(
-            [{"type": "structured_output", "data": {"task_id": "only_evil"}}]
-        )
+        mock_llm_with_queue([{"type": "structured_output", "data": {"task_id": "only_evil"}}])
 
         node = LlmNode(
             node_id=f"llm_{unique_id}",
             config={
-                "type": "llm_node",
+                "type": NodeType.LLM_NODE.value,
                 "prompt": "Out",
                 "structured_output": True,
                 "output_schema": {
@@ -246,6 +248,7 @@ class TestLlmNodeStructuredOutputFrozenFields:
                     "additionalProperties": False,
                 },
             },
+            container=_runtime_container(app),
         )
 
         snap = make_state(unique_id)

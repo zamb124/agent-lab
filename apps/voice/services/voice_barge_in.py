@@ -13,6 +13,7 @@ from apps.voice.services.voice_transport_interrupt import (
 
 if TYPE_CHECKING:
     from apps.voice.services.voice_client_channel import VoiceClientChannel
+    from apps.voice.services.voice_session import VoiceSession
 
 
 class BargeInController:
@@ -27,11 +28,14 @@ class BargeInController:
         flush_timeout_ms: int = 200,
         cooldown_ms: int = 300,
     ) -> None:
-        self._enabled = enabled
-        self._smart_turn_buffer_ms = smart_turn_buffer_ms
-        self._command_words = command_words or ["стоп", "хватит", "подожди", "стоп"]
-        self._flush_timeout_ms = flush_timeout_ms
-        self._cooldown_ms = cooldown_ms
+        self._enabled: bool = enabled
+        self._smart_turn_buffer_ms: int = smart_turn_buffer_ms
+        if command_words is None:
+            self._command_words: list[str] = ["стоп", "хватит", "подожди", "стоп"]
+        else:
+            self._command_words = command_words
+        self._flush_timeout_ms: int = flush_timeout_ms
+        self._cooldown_ms: int = cooldown_ms
         self._last_barge_in_ts: float = 0
         self._pending_audio_buffer: list[bytes] = []
         self._speech_start_ts: float | None = None
@@ -76,7 +80,7 @@ class BargeInController:
 
     async def execute_barge_in(
         self,
-        session,
+        session: VoiceSession,
         clear_tts_queue: bool = True,
         *,
         stt_provider: BaseSTTProvider | None = None,
@@ -106,4 +110,3 @@ class BargeInController:
             peek_min_buffer_bytes=peek_min_buffer_bytes,
             on_barge_in_timestamp=self.mark_barge_in_executed,
         )
-

@@ -11,6 +11,7 @@
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
@@ -148,7 +149,7 @@ class TestExternalAPINode:
     """Тесты ExternalAPINode."""
 
     @pytest.mark.asyncio
-    async def test_create_external_api_node(self):
+    async def test_create_external_api_node(self, container):
         """Создание ExternalAPINode."""
         node_config = {
             "type": "external_api",
@@ -157,7 +158,7 @@ class TestExternalAPINode:
             "method": "POST",
             "body_template": '{"message": "@state:message"}',
         }
-        node = await create_node("echo_node", node_config)
+        node = await create_node("echo_node", node_config, container=container)
         assert isinstance(node, ExternalAPINode)
         assert node.node_id == "echo_node"
 
@@ -360,6 +361,7 @@ class TestFlowWithExternalAPI:
     async def test_flow_with_external_api_node(self, app, monkeypatch):
         """Agent с ExternalAPINode."""
         import httpx
+
         from apps.flows.src.container import get_container
 
         async def mock_request(self, *args, **kwargs):

@@ -143,6 +143,7 @@ class FlowContainer(BaseContainer):
             repository=self.operator_repository,
             file_repository=self.file_repository,
             redis_client=self.redis_client,
+            workflow_runtime=self.workflow_runtime,
         )
 
     # rag_repository наследуется из BaseContainer (core/container/base.py)
@@ -238,6 +239,7 @@ class FlowContainer(BaseContainer):
             flow_repository=self.flow_repository,
             node_repository=self.node_repository,
             tool_repository=self.tool_repository,
+            container=self._runtime_contract(),
         )
 
     @lazy

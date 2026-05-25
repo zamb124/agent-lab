@@ -29,11 +29,12 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Literal
+from typing import Literal, Protocol
 
 from fastapi import WebSocket
 from starlette.websockets import WebSocketState
 
+from apps.voice.models import VoiceClientJsonFrame, VoiceTranscriptFrame
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -41,6 +42,16 @@ logger = get_logger(__name__)
 
 VadState = Literal["started", "ended"]
 TtsState = Literal["playing", "stopped"]
+
+
+class VoiceSynthesisChannel(Protocol):
+    """Минимальный контракт канала, который нужен speak-worker."""
+
+    async def send_pcm(self, audio_bytes: bytes) -> None: ...
+
+    async def send_tts_state(self, state: TtsState) -> None: ...
+
+    async def send_error(self, *, code: str, detail: str) -> None: ...
 
 
 class VoiceClientChannel:
@@ -54,10 +65,10 @@ class VoiceClientChannel:
     def __init__(self, websocket: WebSocket, *, session_id: str) -> None:
         if session_id == "":
             raise ValueError("VoiceClientChannel: session_id не может быть пустым.")
-        self._websocket = websocket
-        self._session_id = session_id
-        self._lock = asyncio.Lock()
-        self._closed = False
+        self._websocket: WebSocket = websocket
+        self._session_id: str = session_id
+        self._lock: asyncio.Lock = asyncio.Lock()
+        self._closed: bool = False
 
     @property
     def session_id(self) -> str:
@@ -95,19 +106,17 @@ class VoiceClientChannel:
             raise ValueError("VoiceClientChannel.send_media_config: sample_rate > 0.")
         if channels <= 0:
             raise ValueError("VoiceClientChannel.send_media_config: channels > 0.")
-        await self._send_json(
-            {
-                "type": "media_config",
-                "mime": mime_type,
-                "sample_rate": sample_rate,
-                "channels": channels,
-                "uplink": {
-                    "encoding": "pcm_s16le",
-                    "sample_rate": 16_000,
-                    "channels": 1,
-                },
-            }
-        )
+        await self._send_json({
+            "type": "media_config",
+            "mime": mime_type,
+            "sample_rate": sample_rate,
+            "channels": channels,
+            "uplink": {
+                "encoding": "pcm_s16le",
+                "sample_rate": 16_000,
+                "channels": 1,
+            },
+        })
 
     async def send_pcm(self, audio_bytes: bytes) -> None:
         """Отправить PCM-чанк синтезированной речи клиенту."""
@@ -129,7 +138,7 @@ class VoiceClientChannel:
         interrupted: bool = False,
     ) -> None:
         """Передать клиенту результат STT (partial или final)."""
-        payload: dict[str, object] = {
+        payload: VoiceTranscriptFrame = {
             "type": "transcript",
             "text": text,
             "final": final,
@@ -142,16 +151,10 @@ class VoiceClientChannel:
 
     async def send_vad(self, state: VadState) -> None:
         """Сообщить клиенту о смене VAD-состояния."""
-        if state not in ("started", "ended"):
-            raise ValueError(f"VoiceClientChannel.send_vad: unknown state={state!r}.")
         await self._send_json({"type": "vad", "state": state})
 
     async def send_tts_state(self, state: TtsState) -> None:
         """Сообщить клиенту, что TTS начал/закончил воспроизведение."""
-        if state not in ("playing", "stopped"):
-            raise ValueError(
-                f"VoiceClientChannel.send_tts_state: unknown state={state!r}."
-            )
         await self._send_json({"type": "tts_state", "state": state})
 
     async def send_error(self, *, code: str, detail: str) -> None:
@@ -172,7 +175,7 @@ class VoiceClientChannel:
         """
         await self._send_json({"type": "finalize_done"})
 
-    async def _send_json(self, payload: dict[str, object]) -> None:
+    async def _send_json(self, payload: VoiceClientJsonFrame) -> None:
         if not self.is_open:
             return
         async with self._lock:

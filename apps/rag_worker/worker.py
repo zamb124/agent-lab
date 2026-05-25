@@ -64,6 +64,7 @@ async def rag_worker_startup(state: TaskiqState) -> None:
 
 async def rag_worker_shutdown(state: TaskiqState) -> None:
     """Остановка RAG Worker."""
+    _ = state
     logger.info("worker.stopping", service="rag_worker")
 
 

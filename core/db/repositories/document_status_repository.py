@@ -2,10 +2,22 @@
 Репозиторий для работы со статусами обработки документов в RAG.
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 
-from sqlalchemy import bindparam, delete, func, literal_column, select, text, update
+from sqlalchemy import (
+    Integer,
+    String,
+    bindparam,
+    delete,
+    func,
+    literal_column,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from core.db.database import get_session_factory
 from core.db.models import DocumentProcessingStatus as DBDocumentStatus
@@ -25,11 +37,11 @@ class DocumentStatusRepository:
     Одна строка на document_id; повторная загрузка того же файла обновляет её (UPSERT).
     """
 
-    def __init__(self, db_url: str):
-        self._db_url = db_url
-        self._session_factory = None
+    def __init__(self, db_url: str) -> None:
+        self._db_url: str = db_url
+        self._session_factory: async_sessionmaker[AsyncSession] | None = None
 
-    async def _get_session_factory(self):
+    async def _get_session_factory(self) -> async_sessionmaker[AsyncSession]:
         if self._session_factory is None:
             self._session_factory = await get_session_factory(self._db_url)
         return self._session_factory
@@ -87,7 +99,7 @@ class DocumentStatusRepository:
                     "chunks_count": None,
                 },
             )
-            await session.execute(stmt)
+            _ = await session.execute(stmt)
             await session.commit()
             result = await session.execute(
                 select(DBDocumentStatus).where(DBDocumentStatus.document_id == document_id)
@@ -129,7 +141,7 @@ class DocumentStatusRepository:
         session_factory = await self._get_session_factory()
         async with session_factory() as session:
             now = datetime.now(timezone.utc)
-            await session.execute(
+            _ = await session.execute(
                 update(DBDocumentStatus)
                 .where(
                     DBDocumentStatus.document_id == document_id,
@@ -188,7 +200,7 @@ class DocumentStatusRepository:
             msg = str(error)
             if len(msg) > 5000:
                 msg = msg[:4997] + "..."
-            await session.execute(
+            _ = await session.execute(
                 update(DBDocumentStatus)
                 .where(DBDocumentStatus.document_id == document_id)
                 .values(
@@ -261,7 +273,7 @@ class DocumentStatusRepository:
             if status == "completed":
                 values["completed_at"] = now
 
-            await session.execute(
+            _ = await session.execute(
                 update(DBDocumentStatus)
                 .where(DBDocumentStatus.document_id == document_id)
                 .values(**values)
@@ -309,10 +321,7 @@ class DocumentStatusRepository:
         только в vector_documents без строки статуса (считаются completed).
         """
         multi = await self.count_effective_document_status_for_namespaces([namespace_id])
-        return multi.get(
-            namespace_id,
-            {"pending": 0, "processing": 0, "completed": 0, "failed": 0},
-        )
+        return multi[namespace_id]
 
     async def count_effective_document_status_for_namespaces(
         self, namespace_ids: list[str]
@@ -353,7 +362,7 @@ class DocumentStatusRepository:
                 FROM merged m
                 GROUP BY m.namespace_id, m.status
                 """
-            ).bindparams(
+            ).columns(namespace_id=String, status=String, cnt=Integer).bindparams(
                 bindparam("ns_a", expanding=True),
                 bindparam("ns_b", expanding=True),
             )
@@ -361,13 +370,10 @@ class DocumentStatusRepository:
                 stmt,
                 {"ns_a": namespace_ids, "ns_b": namespace_ids},
             )
-            rows = result.mappings().all()
+            rows: Sequence[tuple[str, str, int]] = result.tuples().all()
 
         out: dict[str, dict[str, int]] = {ns: dict(empty) for ns in namespace_ids}
-        for row in rows:
-            ns = str(row["namespace_id"])
-            status = str(row["status"])
-            cnt = int(row["cnt"])
+        for ns, status, cnt in rows:
             if ns not in out:
                 continue
             if status not in out[ns]:
@@ -412,8 +418,8 @@ class DocumentStatusRepository:
                 .group_by(VectorDocument.document_id)
             )
             result = await session.execute(stmt)
-            rows = result.all()
-        return {str(r.document_id): int(r.cnt) for r in rows}
+            rows: Sequence[tuple[str, int]] = result.tuples().all()
+        return {document_id: count for document_id, count in rows}
 
     async def delete_by_document_id(self, document_id: str) -> int:
         session_factory = await self._get_session_factory()
@@ -464,7 +470,7 @@ class DocumentStatusRepository:
                 .limit(limit)
             )
             r1 = await session.execute(q_status)
-            from_status_rows = [(str(ns), str(d)) for ns, d in r1.all()]
+            from_status_rows: Sequence[tuple[str, str]] = r1.tuples().all()
 
         remain = limit - len(from_status_rows)
         from_vector_rows: list[tuple[str, str]] = []
@@ -491,13 +497,13 @@ class DocumentStatusRepository:
                 ORDER BY anchor_at ASC
                 LIMIT :lim
                 """
-            )
+            ).columns(namespace_id=String, document_id=String)
             async with session_factory() as session:
                 r2 = await session.execute(
                     orphan_sql,
                     {"boundary": utc_now, "lim": remain},
                 )
-                from_vector_rows = [(str(row[0]), str(row[1])) for row in r2.all()]
+                from_vector_rows = list(r2.tuples().all())
 
         merged: list[tuple[str, str]] = []
 

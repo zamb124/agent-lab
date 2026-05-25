@@ -292,7 +292,6 @@ app = create_service_app(
         websocket_router,
         a2a_router,
     ],
-    repository_names=["flow_repository", "node_repository", "tool_repository"],
     on_startup=on_startup,
     on_shutdown=on_shutdown,
     extra_middlewares=[

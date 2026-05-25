@@ -5,7 +5,7 @@
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -19,20 +19,21 @@ from .api import (
     search_router,
 )
 from .config import RAGSettings, get_rag_settings
-from .container import get_rag_container
-from .dependencies import ContainerDep
+from .container import RAGContainer, get_rag_container
 
 logger = get_logger(__name__)
 
 
-async def on_startup(app: FastAPI, container, settings: RAGSettings):
+async def on_startup(app: FastAPI, container: RAGContainer, settings: RAGSettings) -> None:
     """Кастомная логика при запуске сервиса RAG"""
+    _ = app
     logger.info("RAG Service запускается...")
 
     if not settings.rag.enabled:
         logger.warning("RAG отключен в конфигурации")
         return
 
+    _ = container.rag_provider
     logger.info(f"RAG провайдер по умолчанию: {settings.rag.default_provider}")
 
     enabled_providers = [
@@ -42,8 +43,9 @@ async def on_startup(app: FastAPI, container, settings: RAGSettings):
     logger.info(f"Включенные провайдеры: {', '.join(enabled_providers)}")
 
 
-async def on_shutdown(app: FastAPI, container):
+async def on_shutdown(app: FastAPI, container: RAGContainer) -> None:
     """Кастомная логика при остановке сервиса RAG"""
+    _ = app, container
     logger.info("RAG Service останавливается...")
 
 
@@ -84,13 +86,13 @@ if core_frontend_path.exists():
 @app.get("/rag/")
 @app.get("/rag/ui")
 @app.get("/rag/ui/{path:path}")
-async def serve_ui(container: ContainerDep, path: str = ""):
+async def serve_ui(path: str = "") -> FileResponse:
     """Отдает SPA для RAG UI"""
-    _ = container
+    _ = path
     index_path = ui_path / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
-    return {"message": "RAG UI not built yet"}
+    raise HTTPException(status_code=404, detail="RAG UI not built yet")
 
 
 if __name__ == "__main__":
@@ -101,5 +103,4 @@ if __name__ == "__main__":
         port=settings.server.port,
         reload=settings.server.debug,
     )
-
 

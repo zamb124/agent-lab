@@ -1,9 +1,9 @@
 import base64
-import json
+import binascii
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import ClassVar, Generic, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 T = TypeVar("T")
 
@@ -40,9 +40,18 @@ class ListResponse(BaseModel, Generic[T]):
     items: list[T]
 
 
+class CursorToken(BaseModel):
+    """Внутреннее содержимое opaque cursor."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", populate_by_name=True)
+
+    ts: datetime
+    entity_id: str = Field(alias="id")
+
+
 def encode_cursor(created_at: datetime, entity_id: str) -> str:
     """Кодирует keyset-позицию (created_at, id) в opaque cursor."""
-    payload = json.dumps({"ts": created_at.isoformat(), "id": entity_id}, separators=(",", ":"))
+    payload = CursorToken(ts=created_at, id=entity_id).model_dump_json(by_alias=True)
     return base64.urlsafe_b64encode(payload.encode()).decode()
 
 
@@ -53,7 +62,8 @@ def decode_cursor(cursor: str) -> tuple[datetime, str]:
         ValueError: если cursor повреждён или имеет неверный формат.
     """
     try:
-        payload = json.loads(base64.urlsafe_b64decode(cursor.encode()))
-        return datetime.fromisoformat(payload["ts"]), payload["id"]
-    except Exception as exc:
+        payload = base64.urlsafe_b64decode(cursor.encode())
+        decoded = CursorToken.model_validate_json(payload)
+        return decoded.ts, decoded.entity_id
+    except (binascii.Error, ValueError, ValidationError) as exc:
         raise ValueError(f"Невалидный cursor: {cursor!r}") from exc

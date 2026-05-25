@@ -53,7 +53,7 @@ async def refresh_rate_once(fallback: float) -> None:
     try:
         async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
             response = await client.get(_CBR_URL)
-            response.raise_for_status()
+            _ = response.raise_for_status()
             rate, effective_date = _parse_usd_rate(response.text)
 
         _cached_rate = rate

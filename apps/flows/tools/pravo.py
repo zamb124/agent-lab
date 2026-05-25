@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,8 +18,8 @@ from core.clients.pravo import (
 )
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
-
-JsonDict = dict[str, Any]
+from core.rag.models import RAGMetadataFilter
+from core.types import JsonObject, require_json_array
 
 _PRAVO_CATALOG_SEARCH_DESCRIPTION = """
 Поиск нормативных актов на ips.pravo.gov.ru через HTTP API POST /api/ips/legislation/search.json
@@ -54,14 +54,14 @@ _PRAVO_DOCUMENT_RAG_SEARCH_DESCRIPTION = """
 
 
 class PravoCatalogSearchArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     keyword: str = Field(..., min_length=1, description="Ключевые слова для расширенного поиска IPS.")
     page: int = Field(1, ge=1, description="Страница выдачи IPS.")
 
 
 class PravoDocumentRagSearchArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     namespace_id: str = Field(..., min_length=1, description="Имя RAG namespace.")
     collection_id: str = Field(
@@ -82,7 +82,7 @@ class PravoDocumentRagSearchArgs(BaseModel):
     )
 
 
-def _doc_filters(collection_id: str, rag_document_id: str) -> dict[str, Any]:
+def _doc_filters(collection_id: str, rag_document_id: str) -> RAGMetadataFilter:
     return {
         "$and": [
             {"collection_id": collection_id},
@@ -99,8 +99,8 @@ def _ips_document_row(
     title: str | None,
     indexed_into_rag_this_call: bool,
     text_character_count: int | None = None,
-) -> dict[str, Any]:
-    row: dict[str, Any] = {
+) -> JsonObject:
+    row: JsonObject = {
         "document_hash": doc_hash,
         "source_url": source_url,
         "rag_document_id": rag_document_id,
@@ -117,8 +117,8 @@ async def _run_rag_search(
     namespace_id: str,
     query: str,
     limit: int,
-    filters: dict[str, Any],
-) -> dict[str, Any]:
+    filters: RAGMetadataFilter,
+) -> JsonObject:
     client = RagClient()
     return await client.search(
         namespace_id,
@@ -134,7 +134,7 @@ async def _run_rag_search(
     tags=["law", "rag", "knowledge", "external"],
     parameters_model=PravoCatalogSearchArgs,
 )
-async def pravo_catalog_search(keyword: str, page: int = 1) -> JsonDict:
+async def pravo_catalog_search(keyword: str, page: int = 1) -> JsonObject:
     try:
         hits = await PravoClient().search_catalog(keyword=keyword, page=page)
     except PravoClientError as exc:
@@ -143,11 +143,8 @@ async def pravo_catalog_search(keyword: str, page: int = 1) -> JsonDict:
     except (ValueError, ServiceClientError) as exc:
         msg = str(exc).strip() or type(exc).__name__
         return {"success": False, "error": msg}
-    except Exception as exc:
-        msg = str(exc).strip() or type(exc).__name__
-        return {"success": False, "error": msg}
 
-    items: list[dict[str, Any]] = [
+    items: list[JsonObject] = [
         {"title": h.title, "url": h.url, "document_hash": h.document_hash} for h in hits
     ]
     return {
@@ -172,7 +169,7 @@ async def pravo_document_rag_search(
     query: str,
     limit: int = 5,
     force_refresh: bool = False,
-) -> JsonDict:
+) -> JsonObject:
     pravo_client = PravoClient()
     try:
         doc_hash = PravoClient.extract_legislation_document_hash(document_ref)
@@ -194,7 +191,7 @@ async def pravo_document_rag_search(
             )
         except ServiceClientError as exc:
             return {"success": False, "error": str(exc)}
-        results_first: list[Any] = list(raw_first.get("results", []))
+        results_first = require_json_array(raw_first["results"], "rag.search.results")
         if results_first:
             return {
                 "success": True,
@@ -219,11 +216,8 @@ async def pravo_document_rag_search(
     except PravoClientError as exc:
         msg = str(exc).strip() or type(exc).__name__
         return {"success": False, "error": msg}
-    except Exception as exc:
-        msg = str(exc).strip() or type(exc).__name__
-        return {"success": False, "error": msg}
 
-    merged_meta: dict[str, Any] = {
+    merged_meta: JsonObject = {
         "collection_id": collection_id,
         "pravo_ips": True,
         "pravo_document_hash": doc_hash,
@@ -236,7 +230,7 @@ async def pravo_document_rag_search(
 
     rag = RagClient()
     try:
-        await rag.ingest_text(
+        _ = await rag.ingest_text(
             namespace_id,
             doc.text,
             document_name=document_name,

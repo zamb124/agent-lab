@@ -3,11 +3,25 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+
+from core.models import StrictBaseModel
+
+
+class FfprobeDurationNode(StrictBaseModel):
+    """Duration fragment emitted by ffprobe format/stream sections."""
+
+    duration: str | None = None
+
+
+class FfprobeDurationPayload(StrictBaseModel):
+    """Typed ffprobe payload for duration probing."""
+
+    format: FfprobeDurationNode | None = None
+    streams: list[FfprobeDurationNode]
 
 
 async def probe_audio_duration_seconds_from_upload(*, data: bytes, file_name: str) -> float:
@@ -21,6 +35,15 @@ async def probe_audio_duration_seconds_from_upload(*, data: bytes, file_name: st
     return ms / 1000.0
 
 
+def _duration_text_to_seconds(duration: str | None) -> float | None:
+    if duration is None:
+        return None
+    duration_text = duration.strip()
+    if duration_text == "" or duration_text.upper() == "N/A":
+        return None
+    return float(duration_text)
+
+
 def _parse_duration_from_json(raw: str) -> float:
     """Извлекает duration из JSON-вывода ffprobe (format и stream уровни).
 
@@ -28,21 +51,19 @@ def _parse_duration_from_json(raw: str) -> float:
     Для стриминговых (ogg-сегменты из LiveKit egress) format.duration = N/A,
     но stream-уровень содержит корректное значение.
     """
-    probe = json.loads(raw)
-    for source in ("format", "streams"):
-        node = probe.get(source)
-        if node is None:
-            continue
-        if isinstance(node, list):
-            for entry in node:
-                val = entry.get("duration")
-                if isinstance(val, str) and val.upper() != "N/A" and val.strip() != "":
-                    return float(val)
-        elif isinstance(node, dict):
-            val = node.get("duration")
-            if isinstance(val, str) and val.upper() != "N/A" and val.strip() != "":
-                return float(val)
-    raise ValueError(f"ffprobe не вернул длительность ни на уровне format, ни stream. probe={probe!r}")
+    payload = FfprobeDurationPayload.model_validate_json(raw)
+    if payload.format is not None:
+        format_seconds = _duration_text_to_seconds(payload.format.duration)
+        if format_seconds is not None:
+            return format_seconds
+    for stream in payload.streams:
+        stream_seconds = _duration_text_to_seconds(stream.duration)
+        if stream_seconds is not None:
+            return stream_seconds
+    raise ValueError(
+        "ffprobe не вернул длительность ни на уровне format, ни stream. "
+        + f"probe={payload.model_dump(mode='json')!r}"
+    )
 
 
 async def probe_audio_duration_ms_from_bytes(data: bytes, source_suffix: str) -> int:
@@ -58,7 +79,7 @@ async def probe_audio_duration_ms_from_bytes(data: bytes, source_suffix: str) ->
     def _run() -> float:
         with tempfile.TemporaryDirectory(prefix="platform-audio-probe-") as td:
             src = Path(td) / f"in{suf}"
-            src.write_bytes(data)
+            _ = src.write_bytes(data)
             result = subprocess.run(
                 [
                     ffprobe,

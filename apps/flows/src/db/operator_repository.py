@@ -14,6 +14,7 @@ from apps.flows.src.db.models import OperatorQueueMembers, OperatorQueues, Opera
 from apps.flows.src.models.operator_schemas import (
     OperatorDialogLogEntry,
     OperatorResolutionPayload,
+    OperatorTaskStatus,
 )
 from core.db.storage import Storage
 from core.types import JsonArray, JsonObject, parse_json_object
@@ -273,6 +274,34 @@ class OperatorRepository:
                 .values(**values)
             )
             await session.commit()
+
+    async def complete_task_once(
+        self,
+        company_id: str,
+        task_id: str,
+        *,
+        resolution_payload: OperatorResolutionPayload,
+    ) -> bool:
+        async with self._storage.get_session() as session:
+            result = await session.execute(
+                update(OperatorTasks)
+                .where(
+                    OperatorTasks.id == task_id,
+                    OperatorTasks.company_id == company_id,
+                    OperatorTasks.status != OperatorTaskStatus.COMPLETED.value,
+                )
+                .values(
+                    status=OperatorTaskStatus.COMPLETED.value,
+                    resolution_payload=parse_json_object(
+                        resolution_payload.model_dump_json(),
+                        "OperatorResolutionPayload",
+                    ),
+                    updated_at=datetime.now(timezone.utc),
+                )
+                .returning(OperatorTasks.id)
+            )
+            await session.commit()
+            return result.scalar_one_or_none() is not None
 
     async def append_dialog_log(
         self,

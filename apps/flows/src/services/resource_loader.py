@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
 from apps.flows.src.models import FlowConfig, NodeConfig
 from core.errors import ResourceNotFoundError
@@ -41,6 +42,7 @@ class ResourceLoader:
     flow_repository: FlowRepository
     node_repository: NodeRepository
     tool_repository: ToolRepository
+    container: FlowRuntimeContainer
 
     def __init__(
         self,
@@ -49,12 +51,14 @@ class ResourceLoader:
         flow_repository: FlowRepository,
         node_repository: NodeRepository,
         tool_repository: ToolRepository,
+        container: FlowRuntimeContainer,
     ):
         self.node_registry = node_registry
         self.tool_registry = tool_registry
         self.flow_repository = flow_repository
         self.node_repository = node_repository
         self.tool_repository = tool_repository
+        self.container = container
 
     async def load_flow(self, flow_id: str) -> FlowConfig:
         """
@@ -141,7 +145,11 @@ class ResourceLoader:
             BaseNode экземпляр
         """
         node_config = parse_json_object(config.model_dump_json(), "NodeConfig")
-        return node_class.from_config(config.node_id, node_config)
+        return node_class.from_config(
+            config.node_id,
+            node_config,
+            container=self.container,
+        )
 
 
 __all__ = ["ResourceLoader"]

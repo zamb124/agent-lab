@@ -12,6 +12,7 @@ E2E тесты для FlowInterrupt с реальным TaskIQ worker.
 
 import pytest
 import pytest_asyncio
+
 from apps.flows.src.container import get_container
 from core.state import ExecutionState
 

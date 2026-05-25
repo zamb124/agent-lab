@@ -26,7 +26,7 @@ class PlatformPronunciationRuleRepository:
     def __init__(self, db_url: str) -> None:
         if db_url == "":
             raise ValueError("PlatformPronunciationRuleRepository: db_url не может быть пустым.")
-        self._db_url = db_url
+        self._db_url: str = db_url
 
     async def list_enabled(self) -> list[PlatformPronunciationRule]:
         session_factory = await get_session_factory(self._db_url)
@@ -163,7 +163,7 @@ class CompanyPronunciationRuleRepository:
     def __init__(self, db_url: str) -> None:
         if db_url == "":
             raise ValueError("CompanyPronunciationRuleRepository: db_url не может быть пустым.")
-        self._db_url = db_url
+        self._db_url: str = db_url
 
     async def count_by_company(self, *, company_id: str) -> int:
         if company_id == "":
@@ -240,7 +240,7 @@ class CompanyPronunciationRuleRepository:
         current_count = await self.count_by_company(company_id=company_id)
         if current_count >= max_rules:
             raise ValueError(
-                f"Достигнут лимит правил для компании {company_id!r}: "
+                f"Достигнут лимит правил для компании {company_id!r}: " +
                 f"{current_count}/{max_rules}. Удалите часть правил перед добавлением."
             )
         now = datetime.now(timezone.utc)

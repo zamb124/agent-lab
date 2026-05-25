@@ -3,22 +3,21 @@ API для управления RAG провайдерами.
 """
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 
 from apps.rag.config import get_rag_settings
 from core.logging import get_logger
+from core.models import StrictBaseModel
 from core.pagination import ListResponse
 from core.rag.factory import get_rag_provider
-
-from ..dependencies import ContainerDep
 
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["providers"])
 
 
-class ProviderInfo(BaseModel):
+class ProviderInfo(StrictBaseModel):
     """Информация о RAG провайдере"""
+
     name: str
     enabled: bool
     is_default: bool
@@ -37,15 +36,22 @@ class ProvidersView(ListResponse[ProviderInfo]):
     current_provider: str
 
 
-class ProviderSwitchRequest(BaseModel):
+class ProviderSwitchRequest(StrictBaseModel):
     """Запрос на переключение провайдера"""
+
     provider_name: str
 
 
+class ProviderSwitchResponse(StrictBaseModel):
+    """Ответ переключения RAG провайдера."""
+
+    success: bool
+    provider: str
+    message: str
+
+
 @router.get("/providers", response_model=ProvidersView)
-async def list_providers(
-    container: ContainerDep,
-) -> ProvidersView:
+async def list_providers() -> ProvidersView:
     """
     Возвращает список доступных RAG провайдеров.
 
@@ -57,15 +63,17 @@ async def list_providers(
     if not settings.rag.enabled:
         raise HTTPException(status_code=503, detail="RAG is disabled")
 
-    providers = []
+    providers: list[ProviderInfo] = []
     for name, config in settings.rag.providers.items():
         if config.enabled:
-            providers.append(ProviderInfo(
-                name=name,
-                enabled=True,
-                is_default=(name == settings.rag.default_provider),
-                type=name
-            ))
+            providers.append(
+                ProviderInfo(
+                    name=name,
+                    enabled=True,
+                    is_default=(name == settings.rag.default_provider),
+                    type=name,
+                )
+            )
 
     logger.info(f"Список провайдеров запрошен: {[p.name for p in providers]}")
 
@@ -75,11 +83,10 @@ async def list_providers(
     )
 
 
-@router.post("/providers/switch")
+@router.post("/providers/switch", response_model=ProviderSwitchResponse)
 async def switch_provider(
     request: ProviderSwitchRequest,
-    container: ContainerDep,
-):
+) -> ProviderSwitchResponse:
     """
     Переключает активный RAG провайдер.
 
@@ -88,15 +95,14 @@ async def switch_provider(
     """
     try:
         settings = get_rag_settings()
-        get_rag_provider(request.provider_name, settings=settings)
+        _ = get_rag_provider(request.provider_name, settings=settings)
         logger.info(f"Провайдер переключен на: {request.provider_name}")
-        return {
-            "success": True,
-            "provider": request.provider_name,
-            "message": f"Switched to {request.provider_name}"
-        }
+        return ProviderSwitchResponse(
+            success=True,
+            provider=request.provider_name,
+            message=f"Switched to {request.provider_name}",
+        )
     except ValueError as e:
         logger.error(f"Ошибка переключения провайдера: {e}")
         raise HTTPException(status_code=400, detail=str(e))
-
 

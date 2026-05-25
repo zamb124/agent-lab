@@ -1,26 +1,38 @@
 """Репозиторий для работы с тредами (SQLAlchemy)."""
 
 
+from typing import override
+
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncThread
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
 class ThreadRepository(BaseSyncRepository[SyncThread]):
     """Репозиторий для тредов с изоляцией по company_id."""
 
-    def __init__(self, db: SyncDatabase):
+    def __init__(self, db: SyncDatabase) -> None:
         super().__init__(db=db)
 
     @property
+    @override
     def model_class(self) -> type[SyncThread]:
         return SyncThread
 
     @property
-    def id_field(self) -> str:
-        return "thread_id"
+    @override
+    def id_column(self) -> InstrumentedAttribute[str]:
+        return SyncThread.thread_id
+
+    @property
+    @override
+    def company_id_column(self) -> InstrumentedAttribute[str]:
+        return SyncThread.company_id
 
     async def list_by_channel(
         self,

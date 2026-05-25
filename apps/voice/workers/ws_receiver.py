@@ -22,13 +22,18 @@ JSON → ``voice/ws/bad_json``.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import time
-from typing import Any
 
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from apps.voice.models import (
+    VoiceEndOfUtteranceCommand,
+    VoiceEndRecordingCommand,
+    VoiceSpeakCommand,
+    VoiceStopPlaybackCommand,
+    parse_voice_inbound_command,
+)
 from apps.voice.services.speak_worker import (
     enqueue_end_of_utterance,
     enqueue_speak,
@@ -42,6 +47,7 @@ from apps.voice.services.voice_transport_interrupt import (
 from core.config import get_settings
 from core.files.media.pcm_to_wav import pcm_s16le_mono_to_wav
 from core.logging import get_logger
+from core.types import parse_json_value, require_asgi_receive_message, require_json_object
 
 logger = get_logger(__name__)
 
@@ -51,7 +57,7 @@ _UPLINK_DUMP_SAMPLE_RATE = 16000
 
 def _safe_session_id_for_filename(session_id: str) -> str:
     """Оставить только safe-символы (`a-zA-Z0-9_.-`); остальное — на ``_``."""
-    out = []
+    out: list[str] = []
     for ch in session_id:
         if ch.isalnum() or ch in ("_", ".", "-"):
             out.append(ch)
@@ -73,11 +79,11 @@ class _UplinkDump:
             raise ValueError("_UplinkDump: dump_dir не может быть пустым.")
         if max_bytes <= 0:
             raise ValueError("_UplinkDump: max_bytes должен быть > 0.")
-        self._dump_dir = dump_dir
-        self._max_bytes = max_bytes
-        self._session_id = session_id
-        self._buffer = bytearray()
-        self._truncated = False
+        self._dump_dir: str = dump_dir
+        self._max_bytes: int = max_bytes
+        self._session_id: str = session_id
+        self._buffer: bytearray = bytearray()
+        self._truncated: bool = False
 
     def append(self, pcm_chunk: bytes) -> None:
         if not pcm_chunk or self._truncated:
@@ -106,7 +112,7 @@ class _UplinkDump:
             bytes(self._buffer), sample_rate=_UPLINK_DUMP_SAMPLE_RATE
         )
         with open(path, "wb") as fp:
-            fp.write(wav)
+            _ = fp.write(wav)
         logger.info(
             "voice.ws_receiver.uplink_dump_saved",
             session_id=self._session_id,
@@ -143,7 +149,10 @@ async def run_ws_receiver(
     dump = _build_uplink_dump(session.session_id)
     try:
         while session.active:
-            message = await websocket.receive()
+            message = require_asgi_receive_message(
+                await websocket.receive(),
+                "voice.ws.receive",
+            )
             msg_type = message.get("type")
             if msg_type == "websocket.disconnect":
                 channel.mark_closed()
@@ -202,7 +211,7 @@ async def run_ws_receiver(
     finally:
         if dump is not None:
             try:
-                dump.finalize()
+                _ = dump.finalize()
             except Exception:
                 logger.exception(
                     "voice.ws_receiver.uplink_dump_failed",
@@ -217,60 +226,56 @@ async def _handle_text_frame(
     raw_text: str,
 ) -> None:
     try:
-        payload = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
+        frame_value = parse_json_value(raw_text, "voice.ws.text_frame")
+    except ValueError as exc:
         await channel.send_error(code="voice/ws/bad_json", detail=str(exc))
         return
 
-    if not isinstance(payload, dict):
+    try:
+        payload = require_json_object(frame_value, "voice.ws.command")
+    except ValueError:
         await channel.send_error(
             code="voice/ws/bad_command",
             detail="Text frame must be a JSON object.",
         )
         return
 
-    command = payload.get("type")
-    if not isinstance(command, str) or command == "":
+    try:
+        command = parse_voice_inbound_command(payload)
+    except ValueError as exc:
         await channel.send_error(
             code="voice/ws/bad_command",
-            detail="Field 'type' is required.",
+            detail=str(exc),
         )
         return
 
-    if command == "speak":
-        await _handle_speak(session=session, channel=channel, payload=payload)
+    if isinstance(command, VoiceSpeakCommand):
+        await _handle_speak(session=session, command=command)
         return
 
-    if command == "end_of_utterance":
+    if isinstance(command, VoiceEndOfUtteranceCommand):
         await enqueue_end_of_utterance(session)
         return
 
-    if command == "stop_playback":
+    if isinstance(command, VoiceStopPlaybackCommand):
         await _handle_stop_playback(session=session, channel=channel)
         return
 
-    if command == "end_recording":
-        await _handle_end_recording(session=session, channel=channel)
+    if isinstance(command, VoiceEndRecordingCommand):
+        await _handle_end_recording(session=session)
         return
 
-    if command == "config":
-        logger.info(
-            "voice.ws_receiver.config_received",
-            session_id=session.session_id,
-            keys=list(payload.keys()),
-        )
-        return
-
-    await channel.send_error(
-        code="voice/ws/bad_command",
-        detail=f"Unknown command type={command!r}.",
+    session_config = command.session
+    logger.info(
+        "voice.ws_receiver.config_received",
+        session_id=session.session_id,
+        keys=list(session_config.keys()) if session_config is not None else [],
     )
 
 
 async def _handle_end_recording(
     *,
     session: VoiceSession,
-    channel: VoiceClientChannel,
 ) -> None:
     loop = asyncio.get_running_loop()
     fut: asyncio.Future[None] = loop.create_future()
@@ -296,22 +301,11 @@ async def _handle_end_recording(
 async def _handle_speak(
     *,
     session: VoiceSession,
-    channel: VoiceClientChannel,
-    payload: dict[str, Any],
+    command: VoiceSpeakCommand,
 ) -> None:
-    text = payload.get("text")
-    if not isinstance(text, str):
-        await channel.send_error(
-            code="voice/ws/bad_command",
-            detail="speak: field 'text' must be string.",
-        )
-        return
-    if text == "":
-        return
-    await enqueue_speak(session, text)
+    await enqueue_speak(session, command.text)
 
-    final = payload.get("final")
-    if final is True:
+    if command.final:
         await enqueue_end_of_utterance(session)
 
 

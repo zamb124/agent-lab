@@ -35,8 +35,7 @@ def get_rag_settings() -> RAGSettings:
     return _rag_settings
 
 
-def reset_rag_settings():
+def reset_rag_settings() -> None:
     """Сбрасывает настройки (для тестов)"""
     global _rag_settings
     _rag_settings = None
-

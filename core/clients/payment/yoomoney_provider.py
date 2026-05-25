@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal, override
 from urllib.parse import urlencode
 
-from pydantic import Field, ValidationError
+from pydantic import Field
 
 from core.clients.payment.base_provider import (
     BasePaymentProvider,
@@ -28,9 +28,13 @@ from core.clients.payment.base_provider import (
 from core.db.storage import Storage
 from core.http import get_httpx_client
 from core.logging import get_logger
-from core.models import StrictBaseModel
-from core.models.payment_models import PaymentStatus, PaymentSyncCandidate, PaymentSyncOperation
-from core.types import JsonObject, parse_json_object, require_json_object
+from core.models.payment_models import (
+    PaymentStatus,
+    PaymentSyncCandidate,
+    PaymentSyncOperation,
+    YooMoneyWebhookPayload,
+)
+from core.types import parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 YOOMONEY_TOKEN_LIFETIME_YEARS = 3
@@ -96,18 +100,6 @@ class YooMoneyTokenData:
             obtained_at=datetime.fromisoformat(obtained_at),
             expires_at=datetime.fromisoformat(expires_at),
         )
-
-
-class YooMoneyWebhookPayload(StrictBaseModel):
-    notification_type: str
-    operation_id: str
-    amount: str
-    currency: str
-    datetime: str
-    sender: str
-    codepro: str
-    sha1_hash: str
-    label: str
 
 
 async def save_access_token(storage: Storage, token: str) -> YooMoneyTokenData:
@@ -199,7 +191,7 @@ class YooMoneyProvider(BasePaymentProvider[YooMoneyConfig]):
         )
 
     @override
-    async def verify_webhook(self, webhook_data: JsonObject) -> WebhookVerificationResult:
+    async def verify_webhook(self, webhook_data: YooMoneyWebhookPayload) -> WebhookVerificationResult:
         """
         Проверяет подпись YooMoney HTTP-уведомления.
 
@@ -207,47 +199,38 @@ class YooMoneyProvider(BasePaymentProvider[YooMoneyConfig]):
         sha1(notification_type&operation_id&amount&currency&datetime&sender&codepro&notification_secret&label)
         """
 
-        logger.info("Проверка webhook YooMoney: %s", webhook_data.get("label"))
-
-        try:
-            payload = YooMoneyWebhookPayload.model_validate(webhook_data)
-        except ValidationError:
-            logger.error("YooMoney webhook payload has invalid schema")
-            return WebhookVerificationResult(
-                is_valid=False,
-                error_message="Missing required webhook field or invalid payload",
-            )
+        logger.info("Проверка webhook YooMoney: %s", webhook_data.label)
 
         signature_string = (
-            f"{payload.notification_type}&"
-            f"{payload.operation_id}&"
-            f"{payload.amount}&"
-            f"{payload.currency}&"
-            f"{payload.datetime}&"
-            f"{payload.sender}&"
-            f"{payload.codepro}&"
+            f"{webhook_data.notification_type}&"
+            f"{webhook_data.operation_id}&"
+            f"{webhook_data.amount}&"
+            f"{webhook_data.currency}&"
+            f"{webhook_data.datetime}&"
+            f"{webhook_data.sender}&"
+            f"{webhook_data.codepro}&"
             f"{self.config.notification_secret}&"
-            f"{payload.label}"
+            f"{webhook_data.label}"
         )
 
         expected_hash = hashlib.sha1(signature_string.encode()).hexdigest()
 
-        is_valid = expected_hash == payload.sha1_hash
+        is_valid = expected_hash == webhook_data.sha1_hash
 
         if is_valid:
-            logger.info("Webhook валиден: транзакция=%s, сумма=%s", payload.label, payload.amount)
+            logger.info("Webhook валиден: транзакция=%s, сумма=%s", webhook_data.label, webhook_data.amount)
         else:
             logger.error(
                 "Невалидная подпись webhook: expected=%s, received=%s",
                 expected_hash,
-                payload.sha1_hash,
+                webhook_data.sha1_hash,
             )
 
         return WebhookVerificationResult(
             is_valid=is_valid,
-            transaction_id=payload.label if is_valid else None,
-            amount=float(payload.amount) if is_valid else None,
-            external_payment_id=payload.operation_id if is_valid else None,
+            transaction_id=webhook_data.label if is_valid else None,
+            amount=float(webhook_data.amount) if is_valid else None,
+            external_payment_id=webhook_data.operation_id if is_valid else None,
             status="success" if is_valid else "unknown",
             error_message=None if is_valid else "Invalid signature"
         )

@@ -47,7 +47,7 @@ async def close_llm_context_memory_window(
     )
     if episode is None:
         return next_cursor
-    await store.write_episode(episode)
+    _ = await store.write_episode(episode)
     return next_cursor
 
 

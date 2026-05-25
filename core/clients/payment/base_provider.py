@@ -8,7 +8,11 @@ from typing import Generic, TypeVar
 from pydantic import BaseModel, Field
 
 from core.db.storage import Storage
-from core.models.payment_models import PaymentSyncCandidate, PaymentSyncOperation
+from core.models.payment_models import (
+    PaymentSyncCandidate,
+    PaymentSyncOperation,
+    YooMoneyWebhookPayload,
+)
 from core.types import JsonObject
 
 ProviderTypeT = TypeVar("ProviderTypeT", bound=str, covariant=True)
@@ -72,7 +76,7 @@ class BasePaymentProvider(ABC, Generic[ProviderConfigT]):
         pass
 
     @abstractmethod
-    async def verify_webhook(self, webhook_data: JsonObject) -> WebhookVerificationResult:
+    async def verify_webhook(self, webhook_data: YooMoneyWebhookPayload) -> WebhookVerificationResult:
         """Проверяет подпись webhook и извлекает данные"""
         pass
 

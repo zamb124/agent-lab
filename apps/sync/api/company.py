@@ -1,5 +1,7 @@
 """REST-зеркала команд company. Тонкие обвязки над `op_company_*`."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Query
 
 from apps.sync.dependencies import ContainerDep
@@ -20,8 +22,8 @@ router = APIRouter()
 @router.get("/members", response_model=OffsetPage[CompanyMemberRead])
 async def list_company_members(
     container: ContainerDep,
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[CompanyMemberRead]:
     user = require_current_user()
     result = await op_company_members_list(
@@ -40,8 +42,8 @@ async def list_company_members(
 async def list_shared_channels_with_member(
     peer_user_id: str,
     container: ContainerDep,
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[ChannelRead]:
     user = require_current_user()
     result = await op_company_shared_channels_list(

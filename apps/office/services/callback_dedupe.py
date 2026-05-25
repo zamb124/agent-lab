@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import hashlib
 
-import redis.asyncio as redis_async
+from core.clients.redis_client import RedisClient
 
 KEY_PREFIX = "office:oo_cb:"
 TTL_SECONDS = 300
@@ -32,9 +32,9 @@ async def try_claim_onlyoffice_callback(
     if not redis_url or not redis_url.strip():
         raise ValueError("database.redis_url обязателен для OnlyOffice callback")
     key = callback_dedupe_redis_key(binding_id, status, url)
-    client = redis_async.from_url(redis_url)
+    client = RedisClient(redis_url)
     try:
-        inserted = await client.set(key, "1", nx=True, ex=TTL_SECONDS)
-        return inserted is True
+        await client.connect()
+        return await client.set_nx(key, "1", TTL_SECONDS)
     finally:
-        await client.aclose()
+        await client.close()

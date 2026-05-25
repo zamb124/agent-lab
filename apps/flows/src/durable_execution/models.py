@@ -9,7 +9,8 @@ from typing import ClassVar, TypeAlias, cast
 from pydantic import ConfigDict, Field
 
 from core.models import StrictBaseModel
-from core.state import ExecutionTaskState
+from core.state import ChildWorkflowStatus, ExecutionTaskState
+from core.state.interrupt import HandoffMode
 from core.types import JsonArray, JsonObject, JsonValue, require_json_object
 
 
@@ -20,7 +21,7 @@ class DurableStrictBaseModel(StrictBaseModel):
         extra="forbid",
         validate_assignment=True,
         use_enum_values=False,
-        str_strip_whitespace=True,
+        str_strip_whitespace=False,
         validate_default=True,
     )
 
@@ -61,6 +62,10 @@ class WorkflowEventType(StrEnum):
     superstep_committed = "SuperstepCommitted"
     edge_activated = "EdgeActivated"
     interrupt_raised = "InterruptRaised"
+    handoff_requested = "HandoffRequested"
+    handoff_completed = "HandoffCompleted"
+    handoff_rejected = "HandoffRejected"
+    handoff_resumed = "HandoffResumed"
     breakpoint_hit = "BreakpointHit"
     run_terminal = "RunTerminal"
     fork_created = "ForkCreated"
@@ -172,6 +177,48 @@ class InterruptRaisedPayload(DurableStrictBaseModel):
     preserved_node_writes: list[NodeWriteRecordedPayload] = Field(default_factory=list)
 
 
+class HandoffRequestedPayload(DurableStrictBaseModel):
+    current_nodes: list[str] = Field(..., min_length=1)
+    node_id: str = Field(..., min_length=1)
+    handoff_command_id: str = Field(..., min_length=1)
+    correlation_id: str = Field(..., min_length=1)
+    operator_task_id: str = Field(..., min_length=1)
+    task_title: str = Field(..., min_length=1)
+    assignee_queue: str = Field(..., min_length=1)
+    handoff_mode: HandoffMode
+    execution_branch_id: str = Field(..., min_length=1)
+    node_schedule_sequence: int = Field(..., ge=1)
+    tool_call_id: str | None = Field(default=None, min_length=1)
+    preserved_node_writes: list[NodeWriteRecordedPayload] = Field(default_factory=list)
+
+
+class HandoffCompletedPayload(DurableStrictBaseModel):
+    handoff_command_id: str = Field(..., min_length=1)
+    correlation_id: str = Field(..., min_length=1)
+    operator_task_id: str = Field(..., min_length=1)
+    operator_user_id: str = Field(..., min_length=1)
+    handoff_mode: HandoffMode
+    resolution_preview: str = Field(..., min_length=1)
+    file_count: int = Field(..., ge=0)
+
+
+class HandoffRejectedPayload(DurableStrictBaseModel):
+    handoff_command_id: str = Field(..., min_length=1)
+    correlation_id: str = Field(..., min_length=1)
+    operator_task_id: str = Field(..., min_length=1)
+    operator_user_id: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+
+
+class HandoffResumedPayload(DurableStrictBaseModel):
+    current_nodes: list[str] = Field(..., min_length=1)
+    node_id: str = Field(..., min_length=1)
+    handoff_command_id: str = Field(..., min_length=1)
+    correlation_id: str = Field(..., min_length=1)
+    operator_task_id: str = Field(..., min_length=1)
+    response_preview: str = Field(..., min_length=1)
+
+
 class NodeFailedPayload(DurableStrictBaseModel):
     failed_nodes: list[str] = Field(..., min_length=1)
     current_nodes: list[str] = Field(..., min_length=1)
@@ -234,10 +281,11 @@ class ChildWorkflowLifecyclePayload(DurableStrictBaseModel):
     child_session_id: str = Field(..., min_length=3)
     child_flow_id: str = Field(..., min_length=1)
     child_flow_branch_id: str = Field(..., min_length=1)
+    child_execution_branch_id: str = Field(..., min_length=1)
     parent_execution_branch_id: str = Field(..., min_length=1)
     parent_node_schedule_sequence: int = Field(..., ge=1)
-    child_execution_position: WorkflowExecutionPosition | None = None
-    status: str = Field(..., min_length=1)
+    child_execution_position: WorkflowExecutionPosition
+    status: ChildWorkflowStatus
     error: str | None = None
 
 
@@ -250,6 +298,10 @@ WorkflowEventPayload: TypeAlias = (
     | NodeWriteRecordedPayload
     | NodeCompletedPayload
     | InterruptRaisedPayload
+    | HandoffRequestedPayload
+    | HandoffCompletedPayload
+    | HandoffRejectedPayload
+    | HandoffResumedPayload
     | NodeFailedPayload
     | EdgeActivatedPayload
     | SuperstepCommittedPayload
@@ -281,6 +333,10 @@ _PAYLOAD_BY_EVENT_TYPE: dict[WorkflowEventType, type[DurableStrictBaseModel]] = 
     WorkflowEventType.superstep_committed: SuperstepCommittedPayload,
     WorkflowEventType.edge_activated: EdgeActivatedPayload,
     WorkflowEventType.interrupt_raised: InterruptRaisedPayload,
+    WorkflowEventType.handoff_requested: HandoffRequestedPayload,
+    WorkflowEventType.handoff_completed: HandoffCompletedPayload,
+    WorkflowEventType.handoff_rejected: HandoffRejectedPayload,
+    WorkflowEventType.handoff_resumed: HandoffResumedPayload,
     WorkflowEventType.breakpoint_hit: BreakpointHitPayload,
     WorkflowEventType.run_terminal: RunTerminalPayload,
     WorkflowEventType.fork_created: BranchTransitionPayload,

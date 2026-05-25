@@ -5,9 +5,17 @@
 readonly: True — поле выставляет рантайм/граф; во inline-коде обычно только читают.
 """
 
-from typing import Any
+from typing import TypedDict
 
-STATE_FIELDS: list[dict[str, Any]] = [
+
+class StateFieldDoc(TypedDict):
+    name: str
+    type: str
+    description: str
+    readonly: bool
+
+
+STATE_FIELDS: list[StateFieldDoc] = [
     {
         "name": "task_id",
         "type": "str",
@@ -76,13 +84,13 @@ STATE_FIELDS: list[dict[str, Any]] = [
     },
     {
         "name": "result",
-        "type": "Any",
-        "description": "Результат ноды или inline tool (произвольный сериализуемый объект).",
+        "type": "JsonValue",
+        "description": "Результат ноды или inline tool (строгий JSON-сериализуемый объект).",
         "readonly": False,
     },
     {
         "name": "validation",
-        "type": "Optional[Dict[str, Any]]",
+        "type": "Optional[JsonObject]",
         "description": "Данные для условий рёбер (например `validation.valid`).",
         "readonly": False,
     },
@@ -100,13 +108,13 @@ STATE_FIELDS: list[dict[str, Any]] = [
     },
     {
         "name": "variables",
-        "type": "Dict[str, Any]",
+        "type": "JsonObject",
         "description": "Резолвнутые переменные flow; в глобалах дублируется снимок `variables` (только чтение).",
         "readonly": True,
     },
     {
         "name": "triggers",
-        "type": "Dict[str, Any]",
+        "type": "JsonObject",
         "description": "Данные триггеров `{trigger_id: payload}`.",
         "readonly": False,
     },
@@ -136,7 +144,7 @@ STATE_FIELDS: list[dict[str, Any]] = [
     },
     {
         "name": "node_history",
-        "type": "Dict[str, Dict[str, Any]]",
+        "type": "Dict[str, JsonObject]",
         "description": (
             "История вызовов нод за последний проход Flow.run: `{node_id: {type, calls: [...]}}`; "
             "сбрасывается в начале каждого Flow.run."
@@ -145,7 +153,7 @@ STATE_FIELDS: list[dict[str, Any]] = [
     },
     {
         "name": "tool_results",
-        "type": "Dict[str, Any]",
+        "type": "Dict[str, JsonValue]",
         "description": "Результаты tools `{tool_id: result}`.",
         "readonly": True,
     },
@@ -157,19 +165,19 @@ STATE_FIELDS: list[dict[str, Any]] = [
     },
     {
         "name": "mock",
-        "type": "Optional[Dict[str, Any]]",
+        "type": "Optional[JsonObject]",
         "description": "Mock-конфигурация для тестов.",
         "readonly": True,
     },
     {
         "name": "reasoning_history",
-        "type": "List[Dict[str, Any]]",
+        "type": "List[JsonObject]",
         "description": "История рассуждений (tool reason и аналоги).",
         "readonly": False,
     },
     {
         "name": "pending_reasoning",
-        "type": "Optional[Dict[str, Any]]",
+        "type": "Optional[JsonObject]",
         "description": "Текущее незавершённое рассуждение.",
         "readonly": False,
     },
@@ -187,13 +195,13 @@ STATE_FIELDS: list[dict[str, Any]] = [
     },
     {
         "name": "breakpoint_state",
-        "type": "Optional[Dict[str, Any]]",
+        "type": "Optional[JsonObject]",
         "description": "Снимок state при breakpoint.",
         "readonly": True,
     },
     {
         "name": "scheduled_tasks",
-        "type": "List[Dict[str, Any]]",
+        "type": "List[JsonObject]",
         "description": "Запланированные задачи текущей сессии.",
         "readonly": True,
     },

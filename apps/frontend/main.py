@@ -46,7 +46,11 @@ from apps.frontend.api.settings import router as settings_router
 from apps.frontend.api.team import router as team_router
 from apps.frontend.api.voice_providers_catalog import router as voice_providers_catalog_router
 from apps.frontend.api.yoomoney_oauth import router as yoomoney_oauth_router
-from apps.frontend.config import FrontendSettings, get_frontend_settings
+from apps.frontend.config import (
+    FrontendSettings,
+    get_frontend_public_base_url,
+    get_frontend_settings,
+)
 from apps.frontend.container import FrontendContainer, get_frontend_container
 from apps.frontend.dependencies import ContainerDep
 from apps.frontend.services.docs_assistant_bootstrap import schedule_docs_assistant_bootstrap
@@ -127,12 +131,6 @@ def _short_link_redirect_location(target: str) -> str:
     if p.query:
         loc = f"{loc}?{p.query}"
     return loc
-
-def _get_platform_public_base_url() -> str:
-    base_url = get_frontend_settings().server.platform_public_base_url
-    if not base_url:
-        raise ValueError("server.platform_public_base_url must be configured for SEO files")
-    return base_url.rstrip("/")
 
 def _build_sitemap_xml(base_url: str) -> str:
     lastmod = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -231,7 +229,7 @@ async def _seed_platform_pronunciation_rules(container: FrontendContainer) -> No
     ]
     for kind, pattern, replacement, lang in seed_rules:
         if (kind, pattern, lang) not in existing_patterns:
-            await repo.create(
+            _ = await repo.create(
                 kind=kind,
                 pattern=pattern,
                 replacement=replacement,
@@ -488,7 +486,7 @@ async def get_public_legal(container: ContainerDep) -> JSONResponse:
 @app.get("/frontend/robots.txt")
 async def get_robots_txt(container: ContainerDep) -> PlainTextResponse:
     _ = container
-    base_url = _get_platform_public_base_url()
+    base_url = get_frontend_public_base_url()
     robots_txt = (
         "User-agent: *\n"
         "Allow: /\n"
@@ -511,7 +509,7 @@ async def get_robots_txt(container: ContainerDep) -> PlainTextResponse:
 @app.get("/frontend/sitemap.xml")
 async def get_sitemap_xml(container: ContainerDep) -> Response:
     _ = container
-    base_url = _get_platform_public_base_url()
+    base_url = get_frontend_public_base_url()
     sitemap_xml = _build_sitemap_xml(base_url=base_url)
     return Response(content=sitemap_xml, media_type="application/xml")
 
@@ -519,7 +517,7 @@ async def get_sitemap_xml(container: ContainerDep) -> Response:
 @app.get("/frontend/llms.txt")
 async def get_llms_txt(container: ContainerDep) -> PlainTextResponse:
     _ = container
-    base_url = _get_platform_public_base_url()
+    base_url = get_frontend_public_base_url()
     return PlainTextResponse(content=_build_llms_txt(base_url=base_url))
 
 

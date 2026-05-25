@@ -22,6 +22,7 @@ from core.capabilities import (
     CodeValidationResponse,
     code_execution_failed_response,
     code_validation_failed_response,
+    verify_execution_context,
 )
 from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
@@ -192,6 +193,9 @@ class NodeSandboxExecutor:
         _ = self._worker_path.write_text(self._worker_source(), encoding="utf-8")
 
     async def execute(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
+        security_error = self._verify_execution_request(request)
+        if security_error is not None:
+            return security_error
         if request.language not in ("javascript", "typescript"):
             return self._failed_response(
                 request=request,
@@ -209,6 +213,9 @@ class NodeSandboxExecutor:
                 "platform.code_runner.kind": request.kind,
                 "platform.code_runner.entrypoint": request.entrypoint or "<first_function>",
                 "platform.code_runner.runtime": "warm_worker_pool",
+                "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
             },
         ):
             try:
@@ -224,6 +231,9 @@ class NodeSandboxExecutor:
                 )
 
     async def validate(self, request: CodeValidationRequest) -> CodeValidationResponse:
+        security_error = self._verify_validation_request(request)
+        if security_error is not None:
+            return security_error
         if request.language not in ("javascript", "typescript"):
             return self._failed_validation_response(
                 request=request,
@@ -241,6 +251,9 @@ class NodeSandboxExecutor:
                 "platform.code_runner.kind": request.kind,
                 "platform.code_runner.entrypoint": request.entrypoint or "<first_function>",
                 "platform.code_runner.runtime": "warm_worker_pool",
+                "platform.code_runner.sandbox_profile": request.sandbox.profile,
+                "platform.code_runner.sandbox_memory_limit_mb": request.sandbox.limits.memory_limit_mb,
+                "platform.code_runner.sandbox_network": request.sandbox.network.mode,
             },
         ):
             try:
@@ -326,6 +339,38 @@ class NodeSandboxExecutor:
             stderr=stderr,
         )
 
+    def _verify_execution_request(
+        self,
+        request: CodeExecutionRequest,
+    ) -> CodeExecutionResponse | None:
+        try:
+            verify_execution_context(request.context)
+        except Exception as exc:
+            return self._failed_response(
+                request=request,
+                stage="security",
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                traceback_text="".join(traceback.format_exception(exc)),
+            )
+        return None
+
+    def _verify_validation_request(
+        self,
+        request: CodeValidationRequest,
+    ) -> CodeValidationResponse | None:
+        try:
+            verify_execution_context(request.context)
+        except Exception as exc:
+            return self._failed_validation_response(
+                request=request,
+                stage="security",
+                message=str(exc),
+                exception_type=type(exc).__name__,
+                traceback_text="".join(traceback.format_exception(exc)),
+            )
+        return None
+
     def _worker_source(self) -> str:
         return textwrap.dedent(
             f"""
@@ -337,6 +382,17 @@ class NodeSandboxExecutor:
             const gatewayUrl = process.argv[2];
             const capabilityCallPath = {json.dumps(CAPABILITY_CALL_PATH)};
             const scriptCache = new Map();
+            const forbiddenSourcePatterns = [
+              /\\bimport\\s*\\(/,
+              /\\brequire\\s*\\(/,
+              /\\beval\\s*\\(/,
+              /\\bFunction\\s*\\(/,
+              /\\bfetch\\s*\\(/,
+              /\\bXMLHttpRequest\\b/,
+              /\\bWebSocket\\b/,
+              /\\bprocess\\b/,
+              /\\bchild_process\\b/,
+            ];
 
             class CapabilityInterrupt extends Error {{
               constructor(payload) {{
@@ -374,6 +430,7 @@ class NodeSandboxExecutor:
 
             function normalizeSource(request, entrypointName) {{
               let source = String(request.code ?? '');
+              validateSandboxSource(source);
               if (request.language === 'typescript') {{
                 source = stripTypeScriptTypes(source, {{ mode: 'strip' }});
               }}
@@ -393,6 +450,25 @@ class NodeSandboxExecutor:
                   manifestVersion,
                 }}))
                 .digest('hex');
+            }}
+
+            function validateSandboxSource(source) {{
+              for (const pattern of forbiddenSourcePatterns) {{
+                if (pattern.test(source)) {{
+                  throw new Error(`sandbox policy violation: forbidden source pattern ${{pattern.source}}`);
+                }}
+              }}
+            }}
+
+            function manifestCapabilityNames(request) {{
+              const capabilities = Array.isArray(request.capability_manifest?.capabilities)
+                ? request.capability_manifest.capabilities
+                : [];
+              return new Set(
+                capabilities
+                  .filter((item) => item && typeof item === 'object' && typeof item.name === 'string')
+                  .map((item) => item.name)
+              );
             }}
 
             function validationFailure(request, stage, error) {{
@@ -471,20 +547,27 @@ class NodeSandboxExecutor:
                 namespaceMaps.get(namespace).set(method, item.name);
               }}
               for (const [namespace, mapping] of namespaceMaps.entries()) {{
-                sandbox[namespace] = new Proxy({{}}, {{
-                  get(_target, prop) {{
-                    if (typeof prop !== 'string') return undefined;
-                    if (prop === 'then') return undefined;
-                    if (prop === 'call') {{
-                      return async (method, kwargs = {{}}) => capability(`${{namespace}}.${{method}}`, kwargs);
+                const namespaceObject = {{}};
+                namespaceObject.call = async (method, kwargs = {{}}) => {{
+                  if (namespace === 'tools') {{
+                    if (typeof method !== 'string' || method.length === 0) {{
+                      throw new Error('Tool capability method must be a non-empty string');
                     }}
-                    const capabilityName = mapping.get(prop);
-                    if (!capabilityName) {{
-                      throw new Error(`Unknown capability method: ${{namespace}}.${{prop}}`);
-                    }}
-                    return async (kwargs = {{}}) => capability(capabilityName, kwargs);
-                  }},
-                }});
+                    return capability(`tools.${{method}}`, kwargs);
+                  }}
+                  const capabilityName = mapping.get(method);
+                  if (!capabilityName) {{
+                    throw new Error(`Unknown capability method: ${{namespace}}.${{method}}`);
+                  }}
+                  return capability(capabilityName, kwargs);
+                }};
+                for (const [method, capabilityName] of mapping.entries()) {{
+                  if (method === 'call') {{
+                    throw new Error(`Capability SDK method name is reserved: ${{namespace}}.${{method}}`);
+                  }}
+                  namespaceObject[method] = async (kwargs = {{}}) => capability(capabilityName, kwargs);
+                }}
+                sandbox[namespace] = Object.freeze(namespaceObject);
               }}
             }}
 
@@ -511,6 +594,9 @@ class NodeSandboxExecutor:
                 }}
 
                 const capability = async (name, kwargs = {{}}) => {{
+                  if (!manifestCapabilityNames(request).has(name)) {{
+                    throw new Error(`Capability is not declared in manifest: ${{name}}`);
+                  }}
                   const headers = {{ 'Content-Type': 'application/json' }};
                   if (request.context?.request_id) headers['X-Request-Id'] = request.context.request_id;
                   if (request.context?.trace_id) headers['X-Trace-Id'] = request.context.trace_id;

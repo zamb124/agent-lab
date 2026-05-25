@@ -34,8 +34,8 @@ def fetch_url_bytes(
     normalized = _normalize_image_url(url)
     try:
         with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
-            response = client.get(normalized)
-            response.raise_for_status()
+            response: httpx.Response = client.get(normalized)
+            _ = response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         raise FileWriteError(
             f"Не удалось загрузить изображение {normalized!r}: HTTP {exc.response.status_code}"
@@ -51,9 +51,9 @@ def fetch_url_bytes(
     if len(data) == 0:
         raise FileWriteError(f"Пустой ответ при загрузке изображения {normalized!r}")
 
-    ct_header = response.headers.get("content-type")
     mime: str | None = None
-    if isinstance(ct_header, str) and ct_header.strip():
+    if "content-type" in response.headers:
+        ct_header = response.headers["content-type"]
         mime = ct_header.split(";")[0].strip()
     if mime is None or mime == "application/octet-stream":
         guessed, _ = mimetypes.guess_type(normalized)

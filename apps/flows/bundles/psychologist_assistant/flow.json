@@ -44,7 +44,6 @@
         "ask_user",
         {
           "tool_id": "search_knowledge_base",
-          "type": "code",
           "title": "Поиск в базе знаний",
           "description": "Поиск информации по психологии, техникам самопомощи и справочных материалов",
           "code": "async def run(args, state):\n    query = args.get('query')\n    if not isinstance(query, str) or query.strip() == '':\n        return 'Пожалуйста, укажите поисковый запрос.'\n    raw = await tools.rag_search(\n        namespace_id='psychology',\n        collection_id='default',\n        query=query.strip(),\n        limit=3,\n    )\n    if raw.get('success') is not True:\n        return str(raw.get('error', 'Ошибка поиска'))\n    results = raw.get('results') or []\n    if not results:\n        return 'В психологической базе знаний ничего не найдено по данному запросу.'\n    output = []\n    for res in results:\n        name = res.get('document_name') or res.get('document_id', '')\n        output.append(f\"--- {name} ---\\n{res.get('content', '')}\")\n    return '\\n\\n'.join(output)",

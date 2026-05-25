@@ -13,6 +13,7 @@
 import hashlib
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 import pytest
 from httpx import AsyncClient
@@ -37,6 +38,7 @@ from core.models.payment_models import (
     PaymentStatus,
     PaymentSyncCandidate,
     Transaction,
+    YooMoneyWebhookPayload,
 )
 from core.utils.tokens import get_token_service
 
@@ -74,22 +76,26 @@ def _build_webhook_data(
     sender: str = "41001234567890",
     codepro: str = "false",
     override_hash: str | None = None,
-) -> dict:
+) -> YooMoneyWebhookPayload:
     """Собирает словарь webhook-уведомления с корректной SHA-1 подписью."""
     sha1_hash = override_hash or _compute_yoomoney_sha1(
         notification_type, operation_id, amount, currency, dt, sender, codepro, secret, label,
     )
-    return {
-        "notification_type": notification_type,
-        "operation_id": operation_id,
-        "amount": amount,
-        "currency": currency,
-        "datetime": dt,
-        "sender": sender,
-        "codepro": codepro,
-        "sha1_hash": sha1_hash,
-        "label": label,
-    }
+    return YooMoneyWebhookPayload(
+        notification_type=notification_type,
+        operation_id=operation_id,
+        amount=amount,
+        currency=currency,
+        datetime=dt,
+        sender=sender,
+        codepro=codepro,
+        sha1_hash=sha1_hash,
+        label=label,
+    )
+
+
+def _webhook_form_content(webhook_data: YooMoneyWebhookPayload) -> str:
+    return urlencode(webhook_data.model_dump(mode="json", exclude_none=True))
 
 
 def _make_yoomoney_provider() -> YooMoneyProvider:
@@ -162,7 +168,7 @@ class TestYooMoneySHA1Verification:
         """Изменение суммы после подписи делает подпись невалидной."""
         provider = _make_yoomoney_provider()
         data = _build_webhook_data(label="c:txn_1", amount="100.00")
-        data["amount"] = "999.00"
+        data = data.model_copy(update={"amount": "999.00"})
 
         result = await provider.verify_webhook(data)
 
@@ -172,7 +178,7 @@ class TestYooMoneySHA1Verification:
         """Подмена label (transaction_id) ломает подпись."""
         provider = _make_yoomoney_provider()
         data = _build_webhook_data(label="legit:txn_1")
-        data["label"] = "attacker:txn_evil"
+        data = data.model_copy(update={"label": "attacker:txn_evil"})
 
         result = await provider.verify_webhook(data)
 
@@ -192,14 +198,12 @@ class TestYooMoneySHA1Verification:
 
     async def test_missing_required_field_rejected(self):
         """Отсутствие обязательного поля -- невалидный webhook."""
-        provider = _make_yoomoney_provider()
         data = _build_webhook_data(label="c:txn_1")
-        del data["operation_id"]
+        payload = data.model_dump(mode="json")
+        del payload["operation_id"]
 
-        result = await provider.verify_webhook(data)
-
-        assert result.is_valid is False
-        assert "Missing" in result.error_message
+        with pytest.raises(ValidationError):
+            YooMoneyWebhookPayload.model_validate(payload)
 
     async def test_empty_label_valid(self):
         """Пустой label -- валидная подпись (YooMoney отправляет пустой label если не задан)."""
@@ -821,7 +825,7 @@ class TestWebhookEndpoint:
 
         response = await frontend_client.post(
             "/frontend/api/v1/payments/webhook/yoomoney_main",
-            content="&".join(f"{k}={v}" for k, v in form_data.items()),
+            content=_webhook_form_content(form_data),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
@@ -852,7 +856,7 @@ class TestWebhookEndpoint:
 
         response = await frontend_client.post(
             "/frontend/api/v1/payments/webhook/yoomoney_main",
-            content="&".join(f"{k}={v}" for k, v in form_data.items()),
+            content=_webhook_form_content(form_data),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
@@ -863,10 +867,11 @@ class TestWebhookEndpoint:
     ):
         """Несуществующий провайдер -> 404."""
         monkeypatch.setattr(PaymentProviderFactory, "_providers", {})
+        form_data = _build_webhook_data(label="missing_provider:txn_1")
 
         response = await frontend_client.post(
             "/frontend/api/v1/payments/webhook/nonexistent_provider",
-            content="notification_type=p2p-incoming",
+            content=_webhook_form_content(form_data),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
@@ -915,7 +920,7 @@ class TestWebhookEndpoint:
 
         response = await frontend_client.post(
             "/frontend/api/v1/payments/webhook/yoomoney_main",
-            content="&".join(f"{k}={v}" for k, v in form_data.items()),
+            content=_webhook_form_content(form_data),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 

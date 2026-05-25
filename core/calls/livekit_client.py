@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from livekit.api import (
     AccessToken,
     LiveKitAPI,
@@ -33,14 +31,15 @@ from core.billing.service import (
     BALANCE_BLOCK_OPERATION_LIVEKIT_ROOM,
 )
 from core.tracing.operation_span import traced_operation
+from core.types import OtelAttributeValue
 
 
 def _livekit_traced_attrs(
     *,
     company_id: str,
     user_id: str,
-    base: dict[str, Any],
-) -> dict[str, Any]:
+    base: dict[str, OtelAttributeValue],
+) -> dict[str, OtelAttributeValue]:
     cid = company_id.strip()
     uid = user_id.strip()
     if cid == "":
@@ -62,9 +61,9 @@ class LiveKitClient:
             raise ValueError("livekit_api_key не задан в конфигурации")
         if not api_secret:
             raise ValueError("livekit_api_secret не задан в конфигурации")
-        self._url = url
-        self._api_key = api_key
-        self._api_secret = api_secret
+        self._url: str = url
+        self._api_key: str = api_key
+        self._api_secret: str = api_secret
 
     def _api_url(self) -> str:
         """Преобразует ws(s):// → http(s):// для server-side Twirp API."""
@@ -97,7 +96,7 @@ class LiveKitClient:
             ),
         ):
             async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as api:
-                await api.room.create_room(CreateRoomRequest(name=room_name))
+                _ = await api.room.create_room(CreateRoomRequest(name=room_name))
 
     async def delete_room(self, room_name: str, *, company_id: str, user_id: str) -> None:
         """Удаляет LiveKit комнату."""
@@ -115,7 +114,7 @@ class LiveKitClient:
             ),
         ):
             async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as api:
-                await api.room.delete_room(DeleteRoomRequest(room=room_name))
+                _ = await api.room.delete_room(DeleteRoomRequest(room=room_name))
 
     async def list_egress(
         self,
@@ -209,7 +208,7 @@ class LiveKitClient:
         ) as span:
             async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as api:
                 info = await api.egress.start_room_composite_egress(request)
-            eid = getattr(info, "egress_id", None) or ""
+            eid = info.egress_id
             if eid:
                 span.set_attribute(trace_attributes.ATTR_LIVEKIT_EGRESS_ID, eid)
             return info
@@ -298,7 +297,7 @@ class LiveKitClient:
             else:
                 async with LiveKitAPI(self._api_url(), self._api_key, self._api_secret) as inner:
                     info = await inner.egress.start_track_composite_egress(request)
-            eid = getattr(info, "egress_id", None) or ""
+            eid = info.egress_id
             if eid:
                 span.set_attribute(trace_attributes.ATTR_LIVEKIT_EGRESS_ID, eid)
             return info

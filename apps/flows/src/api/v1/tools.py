@@ -53,6 +53,9 @@ class ToolResponse(StrictBaseModel):
     code_mode: str | None = None  # inline_code или mcp_tool
     mcp_server_id: str | None = None  # ID MCP сервера
     mcp_tool_name: str | None = None  # имя tool на MCP (если id не mcp:…)
+    mcp_schema_hash: str | None = None
+    mcp_schema_version: str | None = None
+    mcp_output_schema: JsonObject | None = None
 
 
 _TOOLS_MAX_LIMIT = 2000
@@ -74,6 +77,9 @@ def _tool_response_from_reference(t: ToolReference) -> ToolResponse:
         code_mode=t.code_mode.value,
         mcp_server_id=t.mcp_server_id,
         mcp_tool_name=t.mcp_tool_name,
+        mcp_schema_hash=t.mcp_schema_hash,
+        mcp_schema_version=t.mcp_schema_version,
+        mcp_output_schema=t.mcp_output_schema,
     )
 
 
@@ -192,6 +198,9 @@ async def get_tool(tool_id: str, container: ContainerDep) -> ToolResponse:
             code_mode=tool.code_mode.value,
             mcp_server_id=tool.mcp_server_id,
             mcp_tool_name=tool.mcp_tool_name,
+            mcp_schema_hash=tool.mcp_schema_hash,
+            mcp_schema_version=tool.mcp_schema_version,
+            mcp_output_schema=tool.mcp_output_schema,
         )
     flow_cfg = await container.flow_repository.get(tool_id)
     if flow_cfg is None:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from core.files.models import FileReadPreviewResponse
 from core.files.reader.models import FileReadKind
-from core.files.reader.service import FileReader, _read_stored_file_by_id
+from core.files.reader.service import FileReader, read_stored_file_by_id
 
 _PREVIEW_MAX_CHARS = 12_000
 
@@ -17,7 +17,7 @@ _IMAGE_PREVIEW_NOTE = (
 
 
 async def build_stored_file_text_preview(*, file_id: str, original_name: str) -> FileReadPreviewResponse:
-    raw, resolved_name = await _read_stored_file_by_id(file_id)
+    raw, resolved_name = await read_stored_file_by_id(file_id)
     name = (original_name or "").strip() or resolved_name
 
     reader = FileReader()

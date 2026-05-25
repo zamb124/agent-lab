@@ -305,11 +305,7 @@ async def _load_message_read(container: SyncContainer, *, message_id: str, compa
     message_entity = await container.message_repository.get_by_id_for_company(message_id, company_id)
     if message_entity is None:
         raise ValueError(f"Сообщение {message_id} не найдено.")
-    rows = await container.message_repository.list_contents(message_id)
-    contents = [
-        MessageContentModel.model_validate({"type": row.type, "data": row.data, "order": row.order})
-        for row in rows
-    ]
+    contents = await container.message_repository.list_contents(message_id)
     sender = await sender_brief_for_message(container.user_repository, message_entity.sender_user_id)
     return message_read_from_entity(m=message_entity, contents=contents, sender=sender)
 
@@ -678,11 +674,7 @@ async def transcribe_audio_message_core(
     if source_message.deleted_at is not None:
         raise ValueError("Нельзя расшифровать удалённое сообщение.")
 
-    rows = await container.message_repository.list_contents(message_id)
-    source_contents = [
-        MessageContentModel.model_validate({"type": row.type, "data": row.data, "order": row.order})
-        for row in rows
-    ]
+    source_contents = await container.message_repository.list_contents(message_id)
     audio_info = _extract_audio_info(source_contents)
     if audio_info.file_id == "":
         raise ValueError("file/audio.file_id обязателен.")
@@ -858,11 +850,7 @@ async def transcribe_video_message_core(
     if source_message.deleted_at is not None:
         raise ValueError("Нельзя расшифровать удалённое сообщение.")
 
-    rows = await container.message_repository.list_contents(message_id)
-    source_contents = [
-        MessageContentModel.model_validate({"type": row.type, "data": row.data, "order": row.order})
-        for row in rows
-    ]
+    source_contents = await container.message_repository.list_contents(message_id)
     video_info = _extract_video_info(source_contents)
     if video_info.file_id == "":
         raise ValueError("file/video.file_id обязателен.")
@@ -1036,11 +1024,7 @@ async def sync_aggregate_call_transcript_task(
         )
         aggregate_span.set_attribute("platform.sync.call_aggregate_lane_count", len(rows))
         for m in rows:
-            content_rows = await container.message_repository.list_contents(m.message_id)
-            contents = [
-                MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
-                for r in content_rows
-            ]
+            contents = await container.message_repository.list_contents(m.message_id)
             has_audio = any(c.type == MessageContentType.FILE_AUDIO for c in contents)
             has_video = any(c.type == MessageContentType.FILE_VIDEO for c in contents)
             if has_audio:
@@ -1054,10 +1038,7 @@ async def sync_aggregate_call_transcript_task(
                     )
             if has_video:
                 video = _extract_video_info(
-                    [
-                        MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
-                        for r in await container.message_repository.list_contents(m.message_id)
-                    ]
+                    await container.message_repository.list_contents(m.message_id)
                 )
                 if video.transcription_status != AudioTranscriptionStatus.DONE:
                     await transcribe_video_message_core(
@@ -1074,11 +1055,7 @@ async def sync_aggregate_call_transcript_task(
             company_id=company_id,
         )
         for m in fresh_rows:
-            content_rows = await container.message_repository.list_contents(m.message_id)
-            contents = [
-                MessageContentModel.model_validate({"type": r.type, "data": r.data, "order": r.order})
-                for r in content_rows
-            ]
+            contents = await container.message_repository.list_contents(m.message_id)
             only_boundary = (
                 len(contents) == 1
                 and contents[0].type == MessageContentType.CALL_BOUNDARY

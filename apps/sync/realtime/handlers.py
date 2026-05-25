@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 
-from apps.sync.channel_lane_preview import lane_preview_from_content_row
+from apps.sync.channel_lane_preview import lane_preview_from_content
 from apps.sync.channel_read_helpers import channel_read_entity_minimal, channel_read_from_entity
 from apps.sync.db.models import (
     SyncCall,
@@ -265,10 +265,10 @@ def _notification_preview_from_message(message: MessageRead) -> str:
     ordered = sorted(message.contents, key=lambda c: c.order)
     for c in ordered:
         if c.type == MessageContentType.TEXT_PLAIN:
-            return lane_preview_from_content_row(c.type.value, c.data.model_dump())
+            return lane_preview_from_content(c)
     if message.contents:
         c0 = sorted(message.contents, key=lambda c: c.order)[0]
-        return lane_preview_from_content_row(c0.type.value, c0.data.model_dump())
+        return lane_preview_from_content(c0)
     return "Новое сообщение"
 
 
@@ -567,14 +567,7 @@ async def message_read_from_db(
     messages: MessageRepository,
     user_repository: UserRepository | None,
 ) -> MessageRead:
-    content_rows = await messages.list_contents(m.message_id)
-    contents: list[MessageContentModel] = []
-    for row in content_rows:
-        contents.append(
-            MessageContentModel.model_validate(
-                {"type": row.type, "data": row.data, "order": row.order}
-            )
-        )
+    contents = await messages.list_contents(m.message_id)
     sender = await sender_brief_for_message(user_repository, m.sender_user_id)
     return message_read_from_entity(m=m, contents=contents, sender=sender)
 

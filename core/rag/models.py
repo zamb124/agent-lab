@@ -1,7 +1,7 @@
 """Pydantic модели и публичные контракты RAG системы."""
 
 from datetime import datetime
-from typing import ClassVar, Literal, TypeAlias
+from typing import ClassVar, Literal, NotRequired, TypeAlias, TypedDict
 
 from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
@@ -12,6 +12,62 @@ from core.types import JsonObject
 
 RAGMetadata: TypeAlias = JsonObject
 RAGMetadataFilter: TypeAlias = JsonObject
+
+
+class RAGCleanupNamespaceTaskResult(TypedDict):
+    """Результат фоновой очистки namespace."""
+
+    namespace: str
+    status: Literal["cleaned", "empty"]
+
+
+class RAGListedDocumentTaskItem(TypedDict):
+    """Документ из фонового списка RAG worker."""
+
+    document_id: str
+    document_name: str
+    namespace: str
+    metadata: RAGMetadata
+
+
+class RAGReindexDocumentTaskResult(TypedDict):
+    """Результат фоновой переиндексации документа."""
+
+    old_document_id: str
+    new_document_id: str
+    document_name: str
+    namespace: str
+    status: Literal["reindexed"]
+
+
+class RAGCleanupExpiredDocumentsTickResult(TypedDict):
+    """Результат cron-тика удаления просроченных RAG документов."""
+
+    skipped: bool
+    schedule_task_id: str | None
+    candidates_total: int
+    deleted_documents: int
+    failed_documents: int
+
+
+class RAGReembedTickResult(TypedDict):
+    """Результат cron-тика перевекторизации stale chunks."""
+
+    skipped: bool
+    schedule_task_id: str
+    reembedded: int
+    by_company_written: dict[str, int]
+    target_embedding_model: NotRequired[str]
+    batch_size: NotRequired[int]
+
+
+class RAGCleanupOrphanCompanyChunksTickResult(TypedDict):
+    """Результат cron-тика удаления chunks без company_id."""
+
+    skipped: bool
+    schedule_task_id: str
+    deleted: int
+    batch_size: NotRequired[int]
 
 
 class RAGSearchOptions(StrictBaseModel):

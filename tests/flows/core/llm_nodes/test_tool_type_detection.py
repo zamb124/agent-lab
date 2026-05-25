@@ -13,6 +13,7 @@ from typing import Any, cast
 import pytest
 
 from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.durable_execution import WorkflowExecutionPosition
 from apps.flows.src.models import NodeConfig, ReactConfig, ReactLoopMode
 from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMConfig
@@ -22,6 +23,7 @@ from apps.flows.src.tools.base import BaseTool
 from apps.flows.tools.agent_session_tools import final_answer, reason
 from apps.flows.tools.finish_tool import finish
 from apps.flows.tools.math_tools import calculator
+from core.clients.llm import LLMClient, MockLLM
 from core.state import ExecutionState
 
 
@@ -42,12 +44,28 @@ class _BillingService:
 
 
 class _NoopWorkflowRuntime:
+    execution_branch_id = "test-execution-branch"
+
     async def save_state(self, session_id: str, state: ExecutionState, **kwargs: object) -> bool:
         _ = session_id, state, kwargs
         return True
 
+    async def get_active_execution_position(
+        self,
+        session_id: str,
+    ) -> WorkflowExecutionPosition:
+        _ = session_id
+        return WorkflowExecutionPosition(
+            execution_branch_id=self.execution_branch_id,
+            head_sequence=0,
+        )
+
     async def record_activity_scheduled(self, **kwargs: object) -> None:
         _ = kwargs
+
+    async def record_activity_started(self, **kwargs: object) -> bool:
+        _ = kwargs
+        return True
 
     async def record_activity_completed(self, **kwargs: object) -> bool:
         _ = kwargs
@@ -63,8 +81,23 @@ def _runtime_container() -> FlowRuntimeContainer:
     return cast(FlowRuntimeContainer, _RuntimeContainer())
 
 
+def _llm_runner(
+    *,
+    node_config: NodeConfig,
+    tools: list[BaseTool],
+    llm: LLMClient | MockLLM | None,
+    prompt: str,
+) -> LlmNodeRunner:
+    return LlmNodeRunner(
+        node_config=node_config,
+        tools=tools,
+        llm=llm,
+        prompt=prompt,
+        container=_runtime_container(),
+    )
+
+
 async def _run_reminder_agent(runner: LlmNodeRunner, state: ExecutionState) -> None:
-    runner.container = _runtime_container()
     async for _ in runner.run({"content": "test"}, state, InMemoryEmitter(state)):
         pass
 
@@ -122,7 +155,7 @@ class TestGetReasonToolName:
 
     def test_returns_reason_name_for_standard_tool(self, base_config):
         """Возвращает 'reason' для стандартного reason tool."""
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[reason, calculator],
             llm=None,
@@ -136,7 +169,7 @@ class TestGetReasonToolName:
     def test_returns_custom_name_for_custom_reason_tool(self, base_config):
         """Возвращает кастомное имя для кастомного reason tool."""
         custom_reason = CustomReasonTool()
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[custom_reason, calculator],
             llm=None,
@@ -149,7 +182,7 @@ class TestGetReasonToolName:
 
     def test_returns_none_when_no_reason_tool(self, base_config):
         """Возвращает None если reason tool отсутствует."""
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[calculator],
             llm=None,
@@ -163,7 +196,7 @@ class TestGetReasonToolName:
     def test_ignores_tools_without_reason_type(self, base_config):
         """Игнорирует tools с типом TOOL."""
         regular = RegularTool()
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[regular, calculator],
             llm=None,
@@ -190,7 +223,7 @@ class TestGetExitToolName:
 
     def test_returns_finish_name_for_standard_tool(self, base_config):
         """Возвращает 'finish' для стандартного finish tool."""
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[finish, calculator],
             llm=None,
@@ -203,7 +236,7 @@ class TestGetExitToolName:
 
     def test_returns_final_answer_name_for_final_answer_tool(self, base_config):
         """Возвращает 'final_answer' для final_answer tool."""
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[final_answer, calculator],
             llm=None,
@@ -217,7 +250,7 @@ class TestGetExitToolName:
     def test_returns_custom_name_for_custom_exit_tool(self, base_config):
         """Возвращает кастомное имя для кастомного exit tool."""
         custom_exit = CustomExitTool()
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[custom_exit, calculator],
             llm=None,
@@ -230,7 +263,7 @@ class TestGetExitToolName:
 
     def test_returns_none_when_no_exit_tool(self, base_config):
         """Возвращает None если exit tool отсутствует."""
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[calculator],
             llm=None,
@@ -244,7 +277,7 @@ class TestGetExitToolName:
     def test_ignores_regular_tools(self, base_config):
         """Игнорирует обычные tools."""
         regular = RegularTool()
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[regular, reason, calculator],
             llm=None,
@@ -271,7 +304,7 @@ class TestReactRoleCombinations:
 
     def test_both_standard_tools(self, base_config):
         """Оба стандартных tool корректно определяются."""
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[reason, finish, calculator],
             llm=None,
@@ -285,7 +318,7 @@ class TestReactRoleCombinations:
         """Оба кастомных tool корректно определяются."""
         custom_reason = CustomReasonTool()
         custom_exit = CustomExitTool()
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[custom_reason, custom_exit, calculator],
             llm=None,
@@ -298,7 +331,7 @@ class TestReactRoleCombinations:
     def test_mixed_standard_and_custom(self, base_config):
         """Стандартный reason + кастомный exit."""
         custom_exit = CustomExitTool()
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[reason, custom_exit, calculator],
             llm=None,
@@ -311,7 +344,7 @@ class TestReactRoleCombinations:
     def test_only_regular_tools(self, base_config):
         """Только обычные tools - оба метода возвращают None."""
         regular = RegularTool()
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=base_config,
             tools=[regular, calculator],
             llm=None,
@@ -362,7 +395,7 @@ class TestExitToolInjection:
 
     def test_finish_injected_when_missing(self, explicit_config):
         """finish инъектируется если отсутствует в EXPLICIT режиме."""
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=explicit_config,
             tools=[calculator],
             llm=None,
@@ -375,7 +408,7 @@ class TestExitToolInjection:
 
     def test_no_injection_when_exit_tool_exists_by_type(self, explicit_config):
         """Не инъектируется если exit tool уже есть (по типу)."""
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=explicit_config,
             tools=[finish, calculator],
             llm=None,
@@ -389,7 +422,7 @@ class TestExitToolInjection:
     def test_no_injection_when_custom_exit_exists(self, explicit_config):
         """Не инъектируется если кастомный exit tool уже есть."""
         custom_exit = CustomExitTool()
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=explicit_config,
             tools=[custom_exit, calculator],
             llm=None,
@@ -423,7 +456,7 @@ class TestReminderWithToolNames:
         self, explicit_strict_config, mock_llm_with_queue
     ):
         """Reminder содержит имя exit tool."""
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=explicit_strict_config,
             tools=[finish, calculator],
             llm=None,
@@ -467,7 +500,7 @@ class TestReminderWithToolNames:
         self, explicit_strict_config, mock_llm_with_queue
     ):
         """Reminder включает имя reason tool если он есть."""
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=explicit_strict_config,
             tools=[reason, finish, calculator],
             llm=None,
@@ -519,7 +552,7 @@ class TestReminderWithToolNames:
             ),
         )
 
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=config,
             tools=[custom_exit, calculator],
             llm=None,
@@ -571,7 +604,7 @@ class TestReminderWithToolNames:
             ),
         )
 
-        runner = LlmNodeRunner(
+        runner = _llm_runner(
             node_config=config,
             tools=[custom_reason, finish, calculator],
             llm=None,

@@ -13,6 +13,7 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 DOCUMENTATION_DIST = "documentation-dist"
 
+
 def mount_documentation_static(
     app: FastAPI,
     repo_root: Path,
@@ -32,10 +33,15 @@ def mount_documentation_static(
         )
         return
 
-    @app.get("/documentation", include_in_schema=False)
     async def redirect_documentation_trailing_slash() -> RedirectResponse:
         return RedirectResponse(url="/documentation/", status_code=307)
 
+    app.add_api_route(
+        "/documentation",
+        endpoint=redirect_documentation_trailing_slash,
+        methods=["GET"],
+        include_in_schema=False,
+    )
     app.mount(
         "/documentation/",
         StaticFiles(directory=str(dist), html=True),
@@ -50,10 +56,15 @@ def mount_documentation_static(
 
         gw_base = f"/{prefix}/documentation"
 
-        @app.get(gw_base, include_in_schema=False)
         async def redirect_gateway_documentation_slash() -> RedirectResponse:
             return RedirectResponse(url=f"{gw_base}/", status_code=307)
 
+        app.add_api_route(
+            gw_base,
+            endpoint=redirect_gateway_documentation_slash,
+            methods=["GET"],
+            include_in_schema=False,
+        )
         app.mount(
             f"{gw_base}/",
             StaticFiles(directory=str(dist), html=True),

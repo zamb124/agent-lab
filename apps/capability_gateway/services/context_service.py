@@ -36,7 +36,7 @@ class CapabilityContextService:
             active_company=company,
             user_companies=[company],
             session_id=execution_context.session_id,
-            channel="capability_gateway",
+            channel=execution_context.channel,
             flow_id=execution_context.flow_id,
             trace_id=execution_context.trace_id,
         )

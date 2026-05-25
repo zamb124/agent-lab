@@ -1,28 +1,39 @@
 """Репозиторий для работы с каналами (SQLAlchemy)."""
 
 from datetime import datetime
+from typing import override
 
 from sqlalchemy import exists, nullslast, select, update
 from sqlalchemy.orm import aliased
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from apps.sync.db.base import BaseSyncRepository, SyncDatabase
 from apps.sync.db.models import SyncChannel, SyncChannelMember
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
 class ChannelRepository(BaseSyncRepository[SyncChannel]):
     """Репозиторий для каналов с изоляцией по company_id."""
 
-    def __init__(self, db: SyncDatabase):
+    def __init__(self, db: SyncDatabase) -> None:
         super().__init__(db=db)
 
     @property
+    @override
     def model_class(self) -> type[SyncChannel]:
         return SyncChannel
 
     @property
-    def id_field(self) -> str:
-        return "channel_id"
+    @override
+    def id_column(self) -> InstrumentedAttribute[str]:
+        return SyncChannel.channel_id
+
+    @property
+    @override
+    def company_id_column(self) -> InstrumentedAttribute[str]:
+        return SyncChannel.company_id
 
     async def list_by_namespace(
         self,
@@ -299,7 +310,7 @@ class ChannelRepository(BaseSyncRepository[SyncChannel]):
     ) -> None:
         cid = company_id or self._get_company_id()
         async with self._db.session() as session:
-            await session.execute(
+            _ = await session.execute(
                 update(SyncChannel)
                 .where(
                     SyncChannel.channel_id == channel_id,

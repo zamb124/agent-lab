@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 import json
+
 import pytest
 import pytest_asyncio
+
 from apps.flows.tools.lara_crm import flows_patch_flow, flows_patch_node, flows_read_context
 from core.state import ExecutionState
 

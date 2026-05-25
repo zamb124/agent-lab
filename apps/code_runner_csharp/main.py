@@ -14,7 +14,6 @@ app = create_service_app(
     settings_class=CodeRunnerCsharpSettings,
     get_container=get_code_runner_csharp_container,
     routers=[execute_router, validate_router],
-    repository_names=[],
     cors_origins=["*"],
     title="Platform C# Code Runner",
     description="Untrusted C# sandbox runner",

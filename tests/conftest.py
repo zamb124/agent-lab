@@ -187,22 +187,25 @@ async def _all_migrations_up_to_date() -> tuple[bool, list[str]]:
     Сравнивает head в коде с current в БД для каждого сервиса из migration_manifest.
     Возвращает (all_ok, list_of_stale_service_names).
     """
-    from core.db.migration_manifest import load_migration_manifest, migration_entry_is_active
+    from core.db.migration_manifest import (
+        database_url_for_migration_key,
+        load_migration_manifest,
+        migration_entry_is_active,
+    )
 
     manifest = load_migration_manifest()
     stale: list[str] = []
-    for entry in manifest["services"]:
+    for entry in manifest.services:
         if not migration_entry_is_active(entry):
             continue
-        name = entry["name"]
+        name = entry.name
         script_loc = f"migrations/{name}"
         head = _alembic_head_revision(script_loc)
         if head is None:
             continue
         from core.config import get_settings
 
-        url_key = entry["database_url_key"]
-        db_url = getattr(get_settings().database, url_key)
+        db_url = database_url_for_migration_key(get_settings().database, entry.database_url_key)
         if not db_url or not str(db_url).strip():
             continue
         current = await _alembic_current_revision(str(db_url))
@@ -953,7 +956,7 @@ def sync_tools(request, monkeypatch):
             self.is_err = error is not None
             self.return_value = result
             self.error = error
-            self.task_id = "sync-task-id"
+            self.task_id = f"sync-task-{uuid.uuid4().hex}"
 
         async def wait_result(self):
             return self

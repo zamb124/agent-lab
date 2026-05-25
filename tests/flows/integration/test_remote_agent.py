@@ -61,27 +61,27 @@ class TestRemoteFlowNode:
         await runner.cleanup()
 
     @pytest.mark.asyncio
-    async def test_create_remote_flow_node(self):
+    async def test_create_remote_flow_node(self, container):
         """Создание RemoteFlowNode через create_node."""
         node_config = {
             "type": "remote_flow",
             "url": "http://example.com:8080",
             "branch_id": "custom",
         }
-        node = await create_node("remote_test", node_config)
+        node = await create_node("remote_test", node_config, container=container)
 
         assert isinstance(node, RemoteFlowNode)
         assert node.url == "http://example.com:8080"
         assert node.branch_id == "custom"
 
     @pytest.mark.asyncio
-    async def test_create_remote_flow_node_default_skill(self):
+    async def test_create_remote_flow_node_default_skill(self, container):
         """branch_id по умолчанию = 'default'."""
         node_config = {
             "type": "remote_flow",
             "url": "http://example.com:8080",
         }
-        node = await create_node("remote_test", node_config)
+        node = await create_node("remote_test", node_config, container=container)
 
         assert node.branch_id == "default"
 

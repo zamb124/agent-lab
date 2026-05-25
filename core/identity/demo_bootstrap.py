@@ -86,7 +86,7 @@ async def ensure_demo_company_and_user(
     if len(matched) > 1:
         raise ValueError(
             f"Несколько пользователей с email {demo.email}: "
-            f"{', '.join(u.user_id for u in matched)}"
+            + f"{', '.join(u.user_id for u in matched)}"
         )
 
     pw_hash = hash_password(password)

@@ -3,6 +3,7 @@
 Использует shared БД, is_global=True (не изолирован по компаниям).
 """
 
+from typing import ClassVar, override
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage
@@ -10,29 +11,36 @@ from core.logging import get_logger
 from core.models.identity_models import Company
 
 logger = get_logger(__name__)
+
+
 class CompanyRepository(BaseRepository[Company]):
     """
     Репозиторий для работы с компаниями.
     is_global=True - компании не изолированы (это метаданные самих компаний).
     """
 
-    is_global = True
+    is_global: ClassVar[bool] = True
 
     def __init__(self, storage: Storage):
         super().__init__(storage=storage, model_class=Company)
 
+    @override
     def _get_key(self, company_id: str) -> str:
         return f"company:{company_id}"
 
+    @override
     def _get_prefix(self) -> str:
         return "company:"
 
+    @override
     def _get_table_name(self) -> str:
         return "storage"
 
+    @override
     def _extract_entity_id(self, entity: Company) -> str:
         return entity.company_id
 
+    @override
     async def list(self, *, limit: int, offset: int = 0) -> list[Company]:
         """
         Возвращает только сущности Company из shared storage.

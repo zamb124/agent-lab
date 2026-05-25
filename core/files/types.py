@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TypedDict
 
 
 class FileCategory(StrEnum):
@@ -29,6 +30,17 @@ class FileTypeEntry:
     extension: str
     mime_types: tuple[str, ...]
     category: FileCategory
+
+
+class FileTypeRegistryEntryPayload(TypedDict):
+    extension: str
+    mime_types: list[str]
+    category: str
+
+
+class FileTypesPayload(TypedDict):
+    categories: list[str]
+    registry: list[FileTypeRegistryEntryPayload]
 
 
 FILE_TYPE_REGISTRY: tuple[FileTypeEntry, ...] = (
@@ -242,3 +254,18 @@ def accept_string_for(*categories: FileCategory) -> str:
 
 
 ALL_CATEGORIES: tuple[FileCategory, ...] = tuple(FileCategory)
+
+
+def build_file_types_payload() -> FileTypesPayload:
+    """JSON payload для GET /api/platform/file-types."""
+    return {
+        "categories": [category.value for category in ALL_CATEGORIES],
+        "registry": [
+            {
+                "extension": entry.extension,
+                "mime_types": list(entry.mime_types),
+                "category": entry.category.value,
+            }
+            for entry in FILE_TYPE_REGISTRY
+        ],
+    }

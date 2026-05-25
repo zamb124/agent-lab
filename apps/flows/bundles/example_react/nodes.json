@@ -12,7 +12,6 @@
       "example_subflow",
       {
         "tool_id": "format_greeting",
-        "type": "code",
         "description": "Форматирует приветствие с именем пользователя",
         "language": "python",
         "code": "async def run(args, state):\n    name = args.get('name', 'Гость')\n    style = args.get('style', 'casual')\n    if style == 'formal':\n        return f'Уважаемый {name}, добро пожаловать!'\n    return f'Привет, {name}!'",
@@ -36,7 +35,6 @@
       },
       {
         "tool_id": "react_profile_card_js",
-        "type": "code",
         "language": "javascript",
         "description": "JavaScript tool: собирает короткую карточку пользователя и сохраняет её в state.react_profile_card",
         "parameters_schema": {
@@ -57,7 +55,6 @@
       },
       {
         "tool_id": "react_priority_summary_ts",
-        "type": "code",
         "language": "typescript",
         "description": "TypeScript tool: нормализует тему и числовой приоритет обращения",
         "parameters_schema": {
@@ -78,7 +75,6 @@
       },
       {
         "tool_id": "react_order_score_go",
-        "type": "code",
         "language": "go",
         "description": "Go tool: рассчитывает tier заказа по сумме",
         "parameters_schema": {
@@ -95,7 +91,6 @@
       },
       {
         "tool_id": "react_status_card_csharp",
-        "type": "code",
         "language": "csharp",
         "description": "C# tool: формирует статусную карточку обращения",
         "parameters_schema": {
@@ -169,6 +164,18 @@
     "name": "Subflow-помощник",
     "description": "Вложенный llm_node для сбора информации от пользователя. Задаёт уточняющие вопросы и возвращает собранные данные.",
     "prompt": "prompts/subflow.md",
+    "parameters_schema": {
+      "type": "object",
+      "properties": {
+        "request": {
+          "type": "string",
+          "description": "Запрос к вложенному агенту"
+        }
+      },
+      "required": [
+        "request"
+      ]
+    },
     "tools": [
       "ask_user",
       "reason"

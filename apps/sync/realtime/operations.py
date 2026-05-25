@@ -854,13 +854,7 @@ async def op_messages_list(
     chronological = list(reversed(rows))
     items: list[MessageRead] = []
     for m in chronological:
-        content_rows = await container.message_repository.list_contents(m.message_id)
-        contents = [
-            MessageContentModel.model_validate(
-                {"type": row.type, "data": row.data, "order": row.order}
-            )
-            for row in content_rows
-        ]
+        contents = await container.message_repository.list_contents(m.message_id)
         u = users_by_id.get(m.sender_user_id)
         if u is None:
             sender = UserBrief(
@@ -1048,13 +1042,7 @@ async def op_messages_forward(
         raise WsCommandError("forbidden", "Несовпадение канала.")
     if m.deleted_at is not None:
         raise WsCommandError("forbidden", "Нельзя переслать удалённое сообщение.")
-    content_rows = await container.message_repository.list_contents(m.message_id)
-    contents = [
-        MessageContentModel.model_validate(
-            {"type": row.type, "data": row.data, "order": row.order}
-        )
-        for row in content_rows
-    ]
+    contents = await container.message_repository.list_contents(m.message_id)
     body = MessageCreate(
         thread_id=payload.thread_id,
         parent_message_id=None,
@@ -1226,13 +1214,7 @@ async def op_messages_transcribe_audio(
         raise WsCommandError("forbidden", "Несовпадение канала.")
     if source.deleted_at is not None:
         raise WsCommandError("forbidden", "Сообщение удалено.")
-    source_rows = await container.message_repository.list_contents(payload.message_id)
-    source_contents = [
-        MessageContentModel.model_validate(
-            {"type": row.type, "data": row.data, "order": row.order}
-        )
-        for row in source_rows
-    ]
+    source_contents = await container.message_repository.list_contents(payload.message_id)
     processing_contents = set_audio_transcription_state(
         source_contents,
         status=AudioTranscriptionStatus.PROCESSING,
@@ -1293,13 +1275,7 @@ async def op_messages_transcribe_video(
         raise WsCommandError("forbidden", "Несовпадение канала.")
     if source.deleted_at is not None:
         raise WsCommandError("forbidden", "Сообщение удалено.")
-    source_rows = await container.message_repository.list_contents(payload.message_id)
-    source_contents = [
-        MessageContentModel.model_validate(
-            {"type": row.type, "data": row.data, "order": row.order}
-        )
-        for row in source_rows
-    ]
+    source_contents = await container.message_repository.list_contents(payload.message_id)
     processing_contents = set_video_transcription_state(
         source_contents,
         status=AudioTranscriptionStatus.PROCESSING,

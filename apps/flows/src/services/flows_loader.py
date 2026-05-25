@@ -25,7 +25,7 @@ import yaml
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX
 from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
-from apps.flows.src.models import FlowConfig, NodeConfig, ToolReference, TriggerConfig
+from apps.flows.src.models import CodeMode, FlowConfig, NodeConfig, ToolReference, TriggerConfig
 from apps.flows.src.models.bundle_registry import FlowBundleRegistry
 from apps.flows.src.models.node_config import NodeLLMConfig
 from apps.flows.src.tools.decorator import FunctionTool
@@ -76,7 +76,6 @@ _INLINE_SOURCE_BUILTIN_TOOLS = {
     "final_answer",
     "finish",
     "reason",
-    "self_check",
 }
 
 
@@ -455,7 +454,9 @@ class FlowsLoader:
                     "llm": llm_config,
                     "llm_context": llm_context,
                     "llm_context_resource_key": raw_node.get("llm_context_resource_key"),
+                    "react": raw_node.get("react"),
                     "code": raw_node.get("code"),
+                    "parameters_schema": raw_node.get("parameters_schema"),
                     "files": raw_node.get("files", []),
                     "local_variables": raw_node.get("variables", {}),
                     "source": "file",
@@ -892,6 +893,7 @@ class FlowsLoader:
             tool_payload = tool
             tool_id = tool_payload.get("tool_id")
             exec_kind = tool_payload.get("type")
+            code_mode = tool_payload.get("code_mode")
 
             # Если это llm_node (агент как инструмент) - рекурсивно инлайним его tools
             if exec_kind == "llm_node" or tool_payload.get("prompt"):
@@ -910,6 +912,9 @@ class FlowsLoader:
             }
             if exec_kind in inline_node_types:
                 logger.debug(f"{context}: inline tool '{tool_id}' с type='{exec_kind}'")
+                return tool_payload
+            if code_mode == CodeMode.MCP_TOOL.value:
+                logger.debug(f"{context}: inline MCP tool '{tool_id}'")
                 return tool_payload
 
             if isinstance(tool_id, str) and tool_id and not tool_payload.get("code"):
@@ -991,6 +996,14 @@ class FlowsLoader:
 
         if node_config.code:
             result["code"] = node_config.code
+        if node_config.parameters_schema is None:
+            raise ValueError(
+                f"Node '{node_config.node_id}' used as tool requires parameters_schema"
+            )
+        result["parameters_schema"] = require_json_object(
+            node_config.parameters_schema,
+            f"nodes.{node_config.node_id}.parameters_schema",
+        )
 
         # Собираем tools для инлайнинга
         tools_list: JsonArray = []

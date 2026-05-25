@@ -13,7 +13,6 @@ app = create_service_app(
     settings_class=CapabilityGatewaySettings,
     get_container=get_capability_gateway_container,
     routers=[capabilities_router],
-    repository_names=[],
     cors_origins=["*"],
     title="Platform Capability Gateway",
     description="Trusted gateway for sandbox platform capabilities",

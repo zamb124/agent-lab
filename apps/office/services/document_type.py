@@ -65,7 +65,7 @@ def onlyoffice_document_type_and_file_type(filename: str) -> tuple[str, str]:
         return "slide", ext
     raise ValueError(
         f"Неподдерживаемое расширение для OnlyOffice: .{ext} "
-        "(ожидаются doc/docx/pdf/xls/xlsx/ppt/pptx и odt/ods/odp/rtf/txt/csv)"
+        + "(ожидаются doc/docx/pdf/xls/xlsx/ppt/pptx и odt/ods/odp/rtf/txt/csv)"
     )
 
 
@@ -84,7 +84,7 @@ def onlyoffice_document_type_for_upload(filename: str, content_type: str | None)
         return mapped
     raise ValueError(
         f"Неподдерживаемый тип файла: не удалось определить по имени «{raw}» "
-        f"и MIME «{ct or 'нет'}»"
+        + f"и MIME «{ct or 'нет'}»"
     )
 
 

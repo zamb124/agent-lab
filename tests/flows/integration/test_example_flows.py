@@ -52,6 +52,7 @@ def filter_messages_by_role(messages: List[Message], role: str) -> List[Message]
 from apps.flows.src.container import get_container  # noqa: E402
 from apps.flows.src.models import FlowConfig  # noqa: E402
 from core.state import ExecutionState  # noqa: E402
+from tests.flows.durable_runtime_harness import run_node, workflow_state  # noqa: E402
 
 
 class TestExampleReactAgent:
@@ -455,59 +456,65 @@ class TestExampleGraphAgent:
         assert flow.entry == "classifier"
 
     @pytest.mark.asyncio
-    async def test_classifier_routes_to_order(self, flow_config):
+    async def test_classifier_routes_to_order(self, flow_config, container, unique_id):
         """Classifier роутит на order при соответствующем content."""
         from apps.flows.src.runtime.nodes import create_node
 
         classifier_config = flow_config.nodes["classifier"]
-        classifier_node = await create_node("classifier", classifier_config)
+        classifier_node = await create_node(
+            "classifier",
+            classifier_config,
+            container=container,
+        )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_config.flow_id,
+            unique_id=unique_id,
             content="Хочу узнать про мой заказ",
         )
-        result = await classifier_node.run(state)
+        result = await run_node(container=container, node=classifier_node, state=state)
 
         assert result["route"] == "order"
 
     @pytest.mark.asyncio
-    async def test_classifier_routes_to_complaint(self, flow_config):
+    async def test_classifier_routes_to_complaint(self, flow_config, container, unique_id):
         """Classifier роутит на complaint при соответствующем content."""
         from apps.flows.src.runtime.nodes import create_node
 
         classifier_config = flow_config.nodes["classifier"]
-        classifier_node = await create_node("classifier", classifier_config)
+        classifier_node = await create_node(
+            "classifier",
+            classifier_config,
+            container=container,
+        )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_config.flow_id,
+            unique_id=unique_id,
             content="У меня жалоба на сервис",
         )
-        result = await classifier_node.run(state)
+        result = await run_node(container=container, node=classifier_node, state=state)
 
         assert result["route"] == "complaint"
 
     @pytest.mark.asyncio
-    async def test_classifier_routes_to_general(self, flow_config):
+    async def test_classifier_routes_to_general(self, flow_config, container, unique_id):
         """Classifier роутит на general для обычных вопросов."""
         from apps.flows.src.runtime.nodes import create_node
 
         classifier_config = flow_config.nodes["classifier"]
-        classifier_node = await create_node("classifier", classifier_config)
+        classifier_node = await create_node(
+            "classifier",
+            classifier_config,
+            container=container,
+        )
 
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
+        state = workflow_state(
+            flow_id=flow_config.flow_id,
+            unique_id=unique_id,
             content="Какой у вас график работы?",
         )
-        result = await classifier_node.run(state)
+        result = await run_node(container=container, node=classifier_node, state=state)
 
         assert result["route"] == "general"
 

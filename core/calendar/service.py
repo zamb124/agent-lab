@@ -387,7 +387,7 @@ class YandexCalDavClient:
             _ = response.raise_for_status()
 
 
-def _credential_to_calendar_integration(cred: IntegrationCredential) -> CalendarIntegration:
+def calendar_integration_from_credential(cred: IntegrationCredential) -> CalendarIntegration:
     """IntegrationCredential → CalendarIntegration (view model)."""
     metadata = CalendarIntegrationCredentialMetadata.model_validate(cred.metadata)
     return CalendarIntegration(
@@ -462,7 +462,7 @@ class CalendarService:
             refreshed = await self._oauth_service.refresh_token(credential)
         except OAuthTokenRefreshError as exc:
             raise CalendarReauthRequiredError(str(exc)) from exc
-        return _credential_to_calendar_integration(refreshed)
+        return calendar_integration_from_credential(refreshed)
 
     @staticmethod
     def _is_google_access_token_expired(credentials: CalendarIntegrationCredentials) -> bool:
@@ -891,7 +891,7 @@ class CalendarService:
             user_id=user_id,
         )
         return [
-            _credential_to_calendar_integration(c)
+            calendar_integration_from_credential(c)
             for c in credentials
             if c.service == "calendar"
         ]
@@ -969,7 +969,7 @@ class CalendarService:
         )
         if credential is None:
             raise ValueError(f"Calendar integration {provider} not found")
-        integration = _credential_to_calendar_integration(credential)
+        integration = calendar_integration_from_credential(credential)
         if not integration.settings.sync_enabled:
             raise ValueError(f"Calendar integration {provider} is disabled")
         calendar_id = integration.settings.default_calendar_id
@@ -1342,7 +1342,7 @@ class CalendarService:
             )
             if credential is None:
                 continue
-            integration = _credential_to_calendar_integration(credential)
+            integration = calendar_integration_from_credential(credential)
             if ref.provider == CalendarProvider.GOOGLE:
                 await self._google_client.delete_event(
                     access_token=integration.credentials.access_token,

@@ -3,15 +3,15 @@ API для управления namespaces.
 """
 
 import asyncio
-import traceback
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
 
 from apps.rag.config import get_rag_settings
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.context import require_active_company
 from core.logging import get_logger
+from core.models import StrictBaseModel
 from core.models.identity_models import Namespace
 from core.pagination import OffsetPage
 from core.rag.factory import get_rag_provider
@@ -23,18 +23,25 @@ logger = get_logger(__name__)
 router = APIRouter(tags=["namespaces"])
 
 
-class NamespaceCreateRequest(BaseModel):
+class NamespaceCreateRequest(StrictBaseModel):
     """Запрос на создание namespace"""
+
     name: str
     description: str | None = None
+
+
+class NamespaceDeleteResponse(StrictBaseModel):
+    """Ответ удаления namespace."""
+
+    success: bool
+    name: str
 
 
 @router.get("/namespaces", response_model=OffsetPage[Namespace])
 async def list_namespaces(
     container: ContainerDep,
-    provider: str | None = Query(None, description="RAG provider (pgvector, agentset)"),
-    limit: int = Query(200, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[Namespace]:
     try:
         company_id = require_active_company().company_id
@@ -61,7 +68,7 @@ async def list_namespaces(
 async def create_namespace(
     request: NamespaceCreateRequest,
     container: ContainerDep,
-    provider: str | None = Query(None, description="RAG provider"),
+    provider: Annotated[str | None, Query(description="RAG provider")] = None,
 ) -> Namespace:
     """
     Создает новый namespace для текущей компании.
@@ -80,7 +87,7 @@ async def create_namespace(
         rag_provider = get_rag_provider(provider, settings=settings) if provider else get_rag_provider(settings=settings)
 
         # Провайдер сам добавит company_id через контекст
-        await rag_provider.create_namespace(
+        _ = await rag_provider.create_namespace(
             name=request.name,
             description=request.description
         )
@@ -91,7 +98,7 @@ async def create_namespace(
             company_id=company_id,
             description=request.description
         )
-        await namespace_repo.set(namespace)
+        _ = await namespace_repo.set(namespace)
 
         logger.info(f"Создан namespace: {request.name} для компании {company_id}")
 
@@ -101,16 +108,16 @@ async def create_namespace(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Ошибка создания namespace: {e}\n{traceback.format_exc()}")
+        logger.exception("Ошибка создания namespace")
         raise HTTPException(status_code=500, detail=f"Failed to create namespace: {str(e)}")
 
 
-@router.delete("/namespaces/{namespace_id}")
+@router.delete("/namespaces/{namespace_id}", response_model=NamespaceDeleteResponse)
 async def delete_namespace(
     namespace_id: str,
     container: ContainerDep,
-    provider: str | None = Query(None, description="RAG provider"),
-):
+    provider: Annotated[str | None, Query(description="RAG provider")] = None,
+) -> NamespaceDeleteResponse:
     """
     Удаляет namespace и все его документы.
 
@@ -137,11 +144,11 @@ async def delete_namespace(
         if not provider_deleted and not ns_from_repo:
             raise HTTPException(status_code=404, detail="Namespace not found")
 
-        await namespace_repo.delete(namespace_id)
+        _ = await namespace_repo.delete(namespace_id)
 
         logger.info(f"Удален namespace: {namespace_id} для компании {company_id}")
 
-        return {"success": True, "name": namespace_id}
+        return NamespaceDeleteResponse(success=True, name=namespace_id)
     except BillingBalanceBlockedError:
         raise
     except ValueError as e:
@@ -151,4 +158,3 @@ async def delete_namespace(
     except Exception as e:
         logger.error(f"Ошибка удаления namespace: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete namespace: {str(e)}")
-

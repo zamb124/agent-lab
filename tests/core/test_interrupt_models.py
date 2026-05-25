@@ -16,6 +16,16 @@ from core.state.interrupt import (
 )
 
 
+def operator_interrupt_payload() -> dict[str, object]:
+    return {
+        "handoff_command_id": "hitl:session:s:branch:b:schedule:1:node:n",
+        "execution_branch_id": "branch-1",
+        "node_schedule_sequence": 1,
+        "node_id": "hitl",
+        "tool_call_id": None,
+    }
+
+
 def test_user_message_interrupt_question() -> None:
     b = UserMessageInterrupt(question="  hi  ")
     assert b.question == "hi"
@@ -56,6 +66,7 @@ def test_parse_external_operator_task() -> None:
             "question": "Ждём специалиста",
             "task_title": "Проверка",
             "assignee_queue": "l1",
+            **operator_interrupt_payload(),
         }
     )
     assert isinstance(b, OperatorTaskInterrupt)
@@ -75,6 +86,7 @@ def test_flow_interrupt_question_or_body() -> None:
             question="u",
             task_title="t",
             assignee_queue="q",
+            **operator_interrupt_payload(),
         )
     )
     assert e2.body.kind == InterruptKind.OPERATOR_TASK
@@ -103,6 +115,7 @@ def test_interrupt_body_public_question_match() -> None:
                 question="status",
                 task_title="t",
                 assignee_queue="q",
+                **operator_interrupt_payload(),
             )
         )
         == "status"

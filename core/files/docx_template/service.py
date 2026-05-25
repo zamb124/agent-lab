@@ -8,14 +8,13 @@ DocxTemplater — одна ссылка на файл (FileRef): dict из state
 from __future__ import annotations
 
 import base64
-from collections.abc import Mapping
-from typing import Any
 
 from core.files.docx_template.engine import render_docx_template_bytes
 from core.files.docx_template.files_ref import read_template_bytes_from_file_ref
 from core.files.file_ref import FileRef
 from core.files.models import FileRecord
 from core.files.writer import FileWriteError, FileWriter
+from core.types import DocxTemplateContext
 
 
 class DocxTemplater:
@@ -28,7 +27,7 @@ class DocxTemplater:
     async def fill(
         self,
         file_ref: FileRef,
-        context: Mapping[str, Any],
+        context: DocxTemplateContext,
         *,
         strict: bool = False,
         date_iso: bool = True,
@@ -45,7 +44,7 @@ class DocxTemplater:
         self,
         *,
         file_ref: FileRef,
-        context: Mapping[str, Any],
+        context: DocxTemplateContext,
         output_original_name: str,
         strict: bool = False,
         date_iso: bool = True,

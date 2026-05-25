@@ -18,7 +18,7 @@ def resolve_company_id(user: User) -> str:
     context = get_context()
     if context is not None and context.active_company is not None:
         return context.active_company.company_id
-    if isinstance(user.active_company_id, str) and user.active_company_id:
+    if user.active_company_id:
         return user.active_company_id
     raise WsCommandError("ws_no_company", "Нет active_company_id для команды Sync.")
 

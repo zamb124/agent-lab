@@ -47,8 +47,17 @@ from apps.flows.src.durable_execution import (
     create_initial_state,
 )
 from apps.flows.src.mapping import MappingResolver
-from apps.flows.src.models.enums import ChannelType, MergeMode, NodeType
-from apps.flows.src.models.flow_config import BranchConfig, Edge, FlowConfig
+from apps.flows.src.models.branch_contracts import (
+    BranchCreateRequest,
+    BranchMutationResponse,
+    BranchUpdateRequest,
+    branch_detail_response,
+    branch_model_dump,
+    branch_payload_to_config,
+    branch_summary_response,
+)
+from apps.flows.src.models.enums import ChannelType, NodeType
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.operator_schemas import OperatorTaskStatus
 from apps.flows.src.services.flow_speech_resolve import attach_flow_speech_layers_to_context
 from apps.flows.src.services.flow_validator import FlowValidator, ValidationSeverity
@@ -85,24 +94,6 @@ from core.types import JsonObject, JsonValue, require_json_array, require_json_o
 from core.utils.background import run_with_log_context
 
 logger = get_logger(__name__)
-
-_BRANCH_BODY_FIELDS = {
-    "entry",
-    "nodes",
-    "nodes_mode",
-    "edges",
-    "edges_mode",
-    "variables",
-    "variables_mode",
-}
-
-
-def _branch_body_from_request(data: JsonObject) -> JsonObject:
-    """Extract strict branch payload from request body."""
-    raw_body = data.get("branch_body")
-    if not isinstance(raw_body, dict):
-        raise ValueError("branch_body is required")
-    return require_json_object(raw_body, "branch_body")
 
 
 def effective_stream_task_id_for_session(
@@ -1124,12 +1115,7 @@ class BaseChannel(ABC):
         container = self.container
         branches_map = await container.flow_factory.get_branches(self.flow_id)
         return [
-            {
-                "id": branch_id,
-                "name": branch_cfg.name,
-                "description": branch_cfg.description,
-                "tags": branch_cfg.tags or [],
-            }
+            branch_model_dump(branch_summary_response(branch_id, branch_cfg))
             for branch_id, branch_cfg in branches_map.items()
         ]
 
@@ -1145,93 +1131,24 @@ class BaseChannel(ABC):
         if branch_cfg is None:
             return None
 
-        # Формируем branch_body из BranchConfig
-        branch_body: JsonObject = {}
-        if branch_cfg.entry is not None:
-            branch_body["entry"] = branch_cfg.entry
-        if branch_cfg.nodes is not None:
-            branch_body["nodes"] = branch_cfg.nodes
-        if branch_cfg.edges is not None:
-            branch_body["edges"] = [
-                require_json_object(edge.model_dump(mode="json", by_alias=True), "branch.edges[]")
-                for edge in branch_cfg.edges
-            ]
-        if branch_cfg.variables:
-            branch_body["variables"] = require_json_object(
-                {
-                    key: variable.model_dump(mode="json")
-                    for key, variable in branch_cfg.variables.items()
-                },
-                "branch.variables",
-            )
+        return branch_model_dump(branch_detail_response(branch_id, branch_cfg))
 
-        branch_body["nodes_mode"] = branch_cfg.nodes_mode
-        branch_body["edges_mode"] = branch_cfg.edges_mode
-        branch_body["variables_mode"] = branch_cfg.variables_mode
-
-        return {
-            "id": branch_id,
-            "name": branch_cfg.name,
-            "description": branch_cfg.description,
-            "tags": branch_cfg.tags or [],
-            "permission": branch_cfg.permission,
-            "branch_body": branch_body,
-        }
-
-    async def create_branch(self, branch_id: str, data: JsonObject) -> JsonObject:
+    async def create_branch(self, request: BranchCreateRequest) -> JsonObject:
         """Создать новую ветку (branch)."""
         container = self.container
         config = await container.flow_repository.get(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
 
+        branch_id = request.branch_id
         if config.branches and branch_id in config.branches:
             raise ValueError(f"Ветка '{branch_id}' уже существует")
 
-        branch_body = _branch_body_from_request(data)
-
-        # Zero-Guess: валидация неизвестных полей в branch_body
-        allowed_branch_body_fields = _BRANCH_BODY_FIELDS
-        unknown_fields = set(branch_body.keys()) - allowed_branch_body_fields
-        if unknown_fields:
-            raise ValueError(
-                f"Unknown fields in branch_body: {sorted(unknown_fields)}. Allowed fields: {sorted(allowed_branch_body_fields)}"
-            )
-
-        edges: list[Edge] | None = None
-        raw_edges = branch_body.get("edges")
-        if raw_edges:
-            edges = [
-                Edge.model_validate(edge)
-                for edge in require_json_array(raw_edges, "branch_body.edges")
-            ]
-
-        branch_payload: JsonObject = {
-            "name": data.get("name", branch_id),
-            "description": data.get("description", ""),
-            "tags": data.get("tags", []),
-            "entry": branch_body.get("entry"),
-            "nodes": branch_body.get("nodes"),
-            "variables": branch_body.get("variables", {}),
-        }
-        if edges is not None:
-            branch_payload["edges"] = [
-                require_json_object(edge.model_dump(mode="json", by_alias=True), "branch.edges[]")
-                for edge in edges
-            ]
-        if "nodes_mode" in branch_body:
-            branch_payload["nodes_mode"] = branch_body["nodes_mode"]
-        if "edges_mode" in branch_body:
-            branch_payload["edges_mode"] = branch_body["edges_mode"]
-        if "variables_mode" in branch_body:
-            branch_payload["variables_mode"] = branch_body["variables_mode"]
-
-        new_branch_cfg = BranchConfig.model_validate(branch_payload)
-
-        config.branches[branch_id] = new_branch_cfg
+        candidate_config = config.model_copy(deep=True)
+        candidate_config.branches[branch_id] = branch_payload_to_config(request)
 
         # Применяем ветку к текущему конфигу и валидируем
-        effective = container.flow_factory.apply_branch(config, branch_id)
+        effective = container.flow_factory.apply_branch(candidate_config, branch_id)
 
         validator = FlowValidator(
             flow_repository=container.flow_repository,
@@ -1246,7 +1163,7 @@ class BaseChannel(ABC):
             nodes=effective["nodes"],
             edges=[
                 require_json_object(
-                    e.model_dump(mode="json", by_alias=True, exclude_none=True),
+                    e.model_dump(mode="json", by_alias=True),
                     "effective.edges[]",
                 )
                 for e in effective["edges"]
@@ -1264,17 +1181,19 @@ class BaseChannel(ABC):
             ]
             raise ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}")
 
-        _ = await container.flow_repository.set(config)
+        _ = await container.flow_repository.set(candidate_config)
 
         logger.info(f"Создана ветка: {branch_id}")
 
-        return {
-            "status": "success",
-            "message": f"Ветка '{branch_id}' создана",
-            "branch_id": branch_id,
-        }
+        return branch_model_dump(
+            BranchMutationResponse(
+                status="success",
+                message=f"Ветка '{branch_id}' создана",
+                branch_id=branch_id,
+            )
+        )
 
-    async def update_branch(self, branch_id: str, data: JsonObject) -> JsonObject:
+    async def update_branch(self, branch_id: str, request: BranchUpdateRequest) -> JsonObject:
         """Обновить существующую ветку (branch)."""
         container = self.container
         config = await container.flow_repository.get(self.flow_id)
@@ -1284,71 +1203,11 @@ class BaseChannel(ABC):
         if not config.branches or branch_id not in config.branches:
             raise ValueError(f"Ветка '{branch_id}' не найдена")
 
-        branch_body = _branch_body_from_request(data)
-
-        # Zero-Guess: валидация неизвестных полей в branch_body
-        allowed_branch_body_fields = _BRANCH_BODY_FIELDS
-        unknown_fields = set(branch_body.keys()) - allowed_branch_body_fields
-        if unknown_fields:
-            raise ValueError(
-                f"Unknown fields in branch_body: {sorted(unknown_fields)}. Allowed fields: {sorted(allowed_branch_body_fields)}"
-            )
-
-        edges: list[Edge] | None = None
-        raw_edges = branch_body.get("edges")
-        if raw_edges:
-            edges = [
-                Edge.model_validate(edge)
-                for edge in require_json_array(raw_edges, "branch_body.edges")
-            ]
-
-        existing_branch = config.branches.get(branch_id) if config.branches else None
-        nodes_mode = MergeMode(
-            branch_body["nodes_mode"]
-            if "nodes_mode" in branch_body
-            else (existing_branch.nodes_mode if existing_branch else "merge")
-        )
-        edges_mode = MergeMode(
-            branch_body["edges_mode"]
-            if "edges_mode" in branch_body
-            else (existing_branch.edges_mode if existing_branch else "merge")
-        )
-        variables_mode = MergeMode(
-            branch_body["variables_mode"]
-            if "variables_mode" in branch_body
-            else (existing_branch.variables_mode if existing_branch else "merge")
-        )
-
-        raw_branch_nodes = branch_body.get("nodes")
-        branch_nodes = (
-            require_json_object(raw_branch_nodes, "branch_body.nodes")
-            if raw_branch_nodes is not None
-            else None
-        )
-
-        branch_payload: JsonObject = {
-            "name": data.get("name", branch_id),
-            "description": data.get("description", ""),
-            "tags": data.get("tags", []),
-            "entry": branch_body.get("entry"),
-            "nodes": branch_nodes,
-            "nodes_mode": nodes_mode.value,
-            "edges_mode": edges_mode.value,
-            "variables": branch_body.get("variables", {}),
-            "variables_mode": variables_mode.value,
-        }
-        if edges is not None:
-            branch_payload["edges"] = [
-                require_json_object(edge.model_dump(mode="json", by_alias=True), "branch.edges[]")
-                for edge in edges
-            ]
-
-        updated_branch_cfg = BranchConfig.model_validate(branch_payload)
-
-        config.branches[branch_id] = updated_branch_cfg
+        candidate_config = config.model_copy(deep=True)
+        candidate_config.branches[branch_id] = branch_payload_to_config(request)
 
         # Применяем ветку к текущему конфигу и валидируем
-        effective = container.flow_factory.apply_branch(config, branch_id)
+        effective = container.flow_factory.apply_branch(candidate_config, branch_id)
 
         validator = FlowValidator(
             flow_repository=container.flow_repository,
@@ -1363,7 +1222,7 @@ class BaseChannel(ABC):
             nodes=effective["nodes"],
             edges=[
                 require_json_object(
-                    e.model_dump(mode="json", by_alias=True, exclude_none=True),
+                    e.model_dump(mode="json", by_alias=True),
                     "effective.edges[]",
                 )
                 for e in effective["edges"]
@@ -1381,15 +1240,17 @@ class BaseChannel(ABC):
             ]
             raise ValueError(f"Ошибка валидации ветки: {'; '.join(errors)}")
 
-        _ = await container.flow_repository.set(config)
+        _ = await container.flow_repository.set(candidate_config)
 
         logger.info(f"Обновлена ветка: {branch_id}")
 
-        return {
-            "status": "success",
-            "message": f"Ветка '{branch_id}' обновлена",
-            "branch_id": branch_id,
-        }
+        return branch_model_dump(
+            BranchMutationResponse(
+                status="success",
+                message=f"Ветка '{branch_id}' обновлена",
+                branch_id=branch_id,
+            )
+        )
 
     async def delete_branch(self, branch_id: str) -> JsonObject:
         """Удалить ветку (branch)."""
@@ -1631,14 +1492,10 @@ class BaseChannel(ABC):
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
 
-        return {
-            "$schema": "http://json-schema.org/draft-07/schema#",
-            "type": "object",
-            "title": f"Branch body — {config.name}",
-            "properties": {},
-            "required": [],
-            "additionalProperties": True,
-        }
+        schema = BranchCreateRequest.model_json_schema()
+        schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+        schema["title"] = f"Branch create — {config.name}"
+        return require_json_object(schema, "branch.create.schema")
 
     # === A2A AgentCard (спека) ===
 

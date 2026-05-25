@@ -27,11 +27,12 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Awaitable
-from typing import Any
+from typing import TypeVar
 
 from core.config import get_settings
 from core.logging import (
     LogContextScope,
+    bind_log_context,
     enter_request_scope,
     exit_request_scope,
     get_log_context,
@@ -41,17 +42,19 @@ from core.logging.attributes import (
     EVENT_BACKGROUND_TASK_FAILED,
     EVENT_BACKGROUND_TASK_STARTED,
 )
+from core.types import JsonObject, JsonValue, require_json_object
 
 _logger = get_logger("platform.background")
+BackgroundResultT = TypeVar("BackgroundResultT")
 
 
 def run_with_log_context(
-    coro: Awaitable[Any],
+    coro: Awaitable[BackgroundResultT],
     *,
     name: str,
     background_kind: str | None = None,
-    extra: dict[str, Any] | None = None,
-) -> asyncio.Task[Any]:
+    extra: JsonObject | None = None,
+) -> asyncio.Task[BackgroundResultT]:
     """
     Запустить фоновую задачу, наследовав текущий лог-контекст.
 
@@ -71,10 +74,10 @@ def run_with_log_context(
     Raises:
         ValueError: если name пустой или нет background_kind вне request scope.
     """
-    if not isinstance(name, str) or not name.strip():
+    if not name.strip():
         raise ValueError("background-task name обязателен и должен быть непустой строкой")
 
-    snapshot = dict(get_log_context())
+    snapshot = require_json_object(get_log_context(), "log.context")
     inherited_request_id = snapshot.get("request_id")
     inherited_trace_id = snapshot.get("trace_id")
     settings = get_settings()
@@ -82,10 +85,12 @@ def run_with_log_context(
 
     if not isinstance(inherited_request_id, str) or not inherited_request_id.strip():
         if not background_kind or not background_kind.strip():
-            raise ValueError(
-                f"run_with_log_context({name!r}): фоновая задача стартует вне request scope, "
-                "обязателен параметр background_kind (например 'startup', 'recovery', 'polling')."
+            message = (
+                f"run_with_log_context({name!r}): фоновая задача стартует вне "
+                + "request scope, обязателен параметр background_kind "
+                + "(например 'startup', 'recovery', 'polling')."
             )
+            raise ValueError(message)
         prefix = background_kind.strip()
         inherited_request_id = f"{prefix}:{uuid.uuid4().hex}"
 
@@ -93,7 +98,7 @@ def run_with_log_context(
         prefix = (background_kind or "background").strip()
         inherited_trace_id = f"{prefix}:{uuid.uuid4().hex}"
 
-    extra_bindings: dict[str, Any] = {
+    extra_bindings: JsonObject = {
         "background_task_name": name,
         "background_task_id": uuid.uuid4().hex,
     }
@@ -103,15 +108,15 @@ def run_with_log_context(
     user_id = _str_or_none(snapshot.get("user_id"))
     company_id = _str_or_none(snapshot.get("company_id"))
 
-    async def runner() -> Any:
+    async def runner() -> BackgroundResultT:
         token = enter_request_scope(
             request_id=inherited_request_id,
             trace_id=inherited_trace_id,
             service_name=service_name,
             user_id=user_id,
             company_id=company_id,
-            **extra_bindings,
         )
+        bind_log_context(**extra_bindings)
         _logger.info(EVENT_BACKGROUND_TASK_STARTED, background_task_name=name)
         try:
             return await coro
@@ -128,7 +133,7 @@ def run_with_log_context(
     return asyncio.create_task(runner(), name=name)
 
 
-def _str_or_none(value: Any) -> str | None:
+def _str_or_none(value: JsonValue | None) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None

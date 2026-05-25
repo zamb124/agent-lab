@@ -21,6 +21,7 @@ from core.clients.llm.config import LLMCallConfig, validate_fallback_model_confi
 from core.files.file_ref import FileRef
 from core.llm_context import LLMContextPatch
 from core.models import StrictBaseModel
+from core.reflection import CriticPolicy
 from core.types import JsonObject, JsonValue
 from core.urn import extract_resource_id
 
@@ -148,6 +149,7 @@ class NodeConfig(StrictBaseModel):
     - NodeType.EXTERNAL_API: вызов HTTP API
     - NodeType.MCP: MCP tool
     - NodeType.HITL_NODE: пауза до оператора очереди
+    - NodeType.REFLECTION: typed critic / test-time compute gate
     - NodeType.RESOURCE: нода-ресурс на графе (привязка resources; рантайм pass-through)
     """
 
@@ -391,6 +393,10 @@ class NodeConfig(StrictBaseModel):
         default=None,
         description="Текст для пользователя; можно переопределить input_mapping.user_facing_message",
     )
+    critic_policy: CriticPolicy | None = Field(
+        default=None,
+        description="Typed ReflectionNode policy: target, criteria and gate decision contract.",
+    )
 
     # Общее
     local_variables: dict[str, JsonValue] = Field(
@@ -467,6 +473,25 @@ class NodeConfig(StrictBaseModel):
 
     @model_validator(mode="after")
     def validate_resource_node_excludes_agent_surface(self) -> "NodeConfig":
+        if self.type == NodeType.REFLECTION:
+            if self.critic_policy is None:
+                raise ValueError("reflection node: critic_policy is required")
+            if self.llm is None:
+                raise ValueError("reflection node: llm is required")
+            if self.llm.model is None:
+                raise ValueError("reflection node: llm.model is required")
+            if self.llm.fallback_models:
+                raise ValueError("reflection node: fallback_models are not allowed")
+            if self.tools:
+                raise ValueError("reflection node: tools must be empty")
+            if self.prompt is not None and str(self.prompt).strip():
+                raise ValueError("reflection node: prompt must be empty")
+            if self.react is not None:
+                raise ValueError("reflection node: react is not allowed")
+            if self.structured_output:
+                raise ValueError("reflection node: structured_output must be False")
+            return self
+
         if self.type != NodeType.RESOURCE:
             return self
         if self.prompt is not None and str(self.prompt).strip():

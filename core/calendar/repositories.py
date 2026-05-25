@@ -10,6 +10,7 @@ from sqlalchemy import and_, delete, select
 from sqlalchemy.dialects.postgresql import insert
 
 from core.db.database import get_session_factory
+from core.db.jsonb import jsonb_text
 from core.db.models import CalendarEventRecord
 from core.db.utils import get_rowcount
 from core.models import (
@@ -19,10 +20,6 @@ from core.models import (
     CalendarEventStatus,
     CalendarExternalRef,
 )
-
-
-def _enum_value(value) -> str:
-    return value.value if hasattr(value, "value") else str(value)
 
 
 def _event_from_record(record: CalendarEventRecord) -> CalendarEvent:
@@ -57,7 +54,7 @@ def _event_from_record(record: CalendarEventRecord) -> CalendarEvent:
 
 class CalendarEventSqlRepository:
     def __init__(self, db_url: str) -> None:
-        self._db_url = db_url
+        self._db_url: str = db_url
 
     async def get(self, event_id: str, company_id: str) -> CalendarEvent | None:
         session_factory = await get_session_factory(self._db_url)
@@ -78,14 +75,14 @@ class CalendarEventSqlRepository:
         values = {
             "event_id": event.event_id,
             "company_id": event.company_id,
-            "source": _enum_value(event.source),
+            "source": event.source,
             "source_id": event.source_id,
             "namespace": event.namespace,
             "kind": event.kind,
             "title": event.title,
             "description": event.description,
             "location": event.location,
-            "status": _enum_value(event.status),
+            "status": event.status,
             "timezone": event.timezone,
             "all_day": event.all_day,
             "start_at": event.start_at,
@@ -134,7 +131,7 @@ class CalendarEventSqlRepository:
             },
         )
         async with session_factory() as session:
-            await session.execute(stmt)
+            _ = await session.execute(stmt)
             await session.commit()
 
     async def delete(self, event_id: str, company_id: str) -> bool:
@@ -181,7 +178,6 @@ class CalendarEventSqlRepository:
         Окно в UTC: типично [now+14m, now+16m) для напоминания за 15 минут.
         """
         session_factory = await get_session_factory(self._db_url)
-        meta = CalendarEventRecord.metadata_json
         async with session_factory() as session:
             result = await session.execute(
                 select(CalendarEventRecord)
@@ -189,9 +185,9 @@ class CalendarEventSqlRepository:
                     CalendarEventRecord.source == CalendarEventSource.PLATFORM.value,
                     CalendarEventRecord.start_at >= window_start,
                     CalendarEventRecord.start_at < window_end,
-                    meta["sync_link_token"].astext.isnot(None),
-                    meta["sync_meeting"].astext == "1",
-                    meta["sync_join_reminder_sent_at"].astext.is_(None),
+                    jsonb_text(CalendarEventRecord.metadata_json, "sync_link_token").isnot(None),
+                    jsonb_text(CalendarEventRecord.metadata_json, "sync_meeting") == "1",
+                    jsonb_text(CalendarEventRecord.metadata_json, "sync_join_reminder_sent_at").is_(None),
                 )
                 .order_by(CalendarEventRecord.start_at.asc())
                 .limit(limit)

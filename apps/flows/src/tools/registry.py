@@ -285,29 +285,24 @@ class ToolRegistry:
             MCPTool
         """
         tool_id = config.tool_id
-        mcp_server_id = config.mcp_server_id
-        mcp_tool_name = config.mcp_tool_name
+        mcp_contract = config.require_mcp_contract()
 
-        if not mcp_server_id:
-            raise ValueError(f"MCP tool '{tool_id}' requires 'mcp_server_id'")
-        if not mcp_tool_name:
-            raise ValueError(f"MCP tool '{tool_id}' requires 'mcp_tool_name'")
         if self.container is None:
             raise RuntimeError("ToolRegistry requires FlowContainer for MCP tools")
 
-        server_config = await self.container.mcp_server_repository.get(mcp_server_id)
+        server_config = await self.container.mcp_server_repository.get(mcp_contract.server_id)
 
         if not server_config:
-            raise ValueError(f"MCP server '{mcp_server_id}' not found")
-
-        parameters_schema = config.effective_parameters_schema()
+            raise ValueError(f"MCP server '{mcp_contract.server_id}' not found")
 
         tool = MCPTool(
             tool_id=tool_id,
             mcp_server_config=server_config,
-            mcp_tool_name=mcp_tool_name,
+            mcp_tool_name=mcp_contract.tool_name,
             description=config.description,
-            parameters_schema=parameters_schema,
+            parameters_schema=mcp_contract.parameters_schema,
+            mcp_schema_hash=mcp_contract.schema_hash,
+            mcp_schema_version=mcp_contract.schema_version,
             tags=config.tags,
         )
 

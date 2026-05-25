@@ -24,7 +24,7 @@ from apps.flows.src.channels.a2a import A2AChannel
 from apps.flows.src.container import FlowContainer
 from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.models import FlowConfig
+from apps.flows.src.models import BranchCreateRequest, BranchUpdateRequest, FlowConfig
 from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
 from core.context import get_context
 from core.identity.embed_guest_turns import (
@@ -816,7 +816,11 @@ async def get_branch_schema(flow_id: str, container: ContainerDep) -> JsonObject
 
 
 @router.post("/{flow_id}/branches")
-async def create_branch(flow_id: str, request: Request, container: ContainerDep) -> JSONResponse:
+async def create_branch(
+    flow_id: str,
+    body: BranchCreateRequest,
+    container: ContainerDep,
+) -> JSONResponse:
     """Создать новую ветку."""
     context = get_context()
     channel = A2AChannel(flow_id, context=context, container=as_flow_runtime_container(container))
@@ -824,18 +828,10 @@ async def create_branch(flow_id: str, request: Request, container: ContainerDep)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
-    try:
-        data = parse_json_object(await request.body(), "branch.create")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
-
-    branch_id_raw = data.get("branch_id")
-    if not isinstance(branch_id_raw, str) or not branch_id_raw.strip():
-        raise HTTPException(status_code=400, detail="Field 'branch_id' is required")
-    branch_id = branch_id_raw.strip()
+    branch_id = body.branch_id
 
     try:
-        result = await channel.create_branch(branch_id, data)
+        result = await channel.create_branch(body)
     except ValueError as e:
         msg = str(e).lower()
         if "already exists" in msg or "уже существует" in msg:
@@ -856,7 +852,7 @@ async def create_branch(flow_id: str, request: Request, container: ContainerDep)
 async def update_branch(
     flow_id: str,
     branch_id: str,
-    request: Request,
+    body: BranchUpdateRequest,
     container: ContainerDep,
 ) -> JsonObject:
     """Обновить существующую ветку."""
@@ -867,12 +863,7 @@ async def update_branch(
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
     try:
-        data = parse_json_object(await request.body(), "branch.update")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
-
-    try:
-        result = await channel.update_branch(branch_id, data)
+        result = await channel.update_branch(branch_id, body)
     except ValueError as e:
         msg = str(e)
         if msg == f"Ветка '{branch_id}' не найдена":

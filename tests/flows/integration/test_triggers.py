@@ -12,8 +12,14 @@
 Только LLM и Telegram API мокаются.
 """
 
+import asyncio
+
 import pytest
 import pytest_asyncio
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
 from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig, TriggerConfig, TriggerStatus, TriggerType
 
@@ -1397,18 +1403,20 @@ class TestOutputActionExecutor:
 class TestChannelNode:
     """Тесты ChannelNode."""
 
-    def test_channel_node_creation(self):
+    def test_channel_node_creation(self, container):
         """ChannelNode создается корректно."""
-        from apps.flows.src.models.enums import ChannelType
+        from apps.flows.src.models.enums import ChannelType, NodeType
         from apps.flows.src.runtime.nodes import ChannelNode
 
         node = ChannelNode(
             node_id="send_reply",
             config={
+                "type": NodeType.CHANNEL.value,
                 "channel": "telegram",
                 "action": "send_message",
                 "channel_config": {"bot_token": "test_token"},
             },
+            container=container,
         )
         assert node.channel == ChannelType.TELEGRAM
         assert node.action == "send_message"
@@ -1474,7 +1482,7 @@ class TestAgentWithChannelNode:
         assert agent.nodes["send_reply"]["type"] == "channel"
 
     @pytest.mark.asyncio
-    async def test_create_channel_node_from_config(self):
+    async def test_create_channel_node_from_config(self, container):
         """create_node создает ChannelNode."""
         from apps.flows.src.runtime.nodes import ChannelNode, create_node
 
@@ -1484,7 +1492,7 @@ class TestAgentWithChannelNode:
             "action": "send_payload",
             "channel_config": {"url": "https://example.com/callback"},
         }
-        node = await create_node("test_channel", config)
+        node = await create_node("test_channel", config, container=container)
         assert isinstance(node, ChannelNode)
         assert node.action == "send_payload"
 
@@ -1535,12 +1543,6 @@ class TestTriggerWithOutputActionsE2E:
         assert loaded_action.channel == ChannelType.TELEGRAM
         assert loaded_action.action == "send_message"
         await container.flow_repository.delete(flow_id)
-
-
-import asyncio
-import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 
 
 class NotificationServer:

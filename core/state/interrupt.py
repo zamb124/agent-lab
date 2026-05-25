@@ -52,6 +52,11 @@ class OperatorTaskInterrupt(StrictBaseModel):
         default=None,
         description="ID строки OperatorTasks (для user-reply в takeover)",
     )
+    handoff_command_id: str = Field(..., min_length=1)
+    execution_branch_id: str = Field(..., min_length=1)
+    node_schedule_sequence: int = Field(..., ge=1)
+    node_id: str = Field(..., min_length=1)
+    tool_call_id: str | None = Field(default=None, min_length=1)
 
 
 class OAuthInterrupt(StrictBaseModel):

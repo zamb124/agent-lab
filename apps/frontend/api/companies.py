@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.dependencies import ContainerDep, require_frontend_user
 from apps.idle_worker.broker import broker as idle_broker
 from apps.idle_worker.tasks.task_names import TASK_INIT_NEW_COMPANY
 from core.api.companies import CompanyMembershipResponse, build_my_companies_response
@@ -60,12 +60,6 @@ class SystemAccessGrantedResponse(BaseModel):
 _SYSTEM_ASSIGNABLE_ROLES: tuple[str, ...] = ("admin", "developer", "viewer")
 
 
-def _require_authenticated_user(request: Request) -> User:
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-    return request.state.user
-
-
 def _ensure_user_is_system_member(user: User) -> None:
     if SYSTEM_COMPANY_ID not in user.companies:
         raise HTTPException(
@@ -74,7 +68,9 @@ def _ensure_user_is_system_member(user: User) -> None:
 
 
 @router.post("/check-slug", response_model=CheckSlugResponse)
-async def check_slug(request: CheckSlugRequest, container: ContainerDep):
+async def check_slug(
+    request: CheckSlugRequest, container: ContainerDep
+) -> CheckSlugResponse:
     """
     Проверка доступности slug для субдомена
 
@@ -87,7 +83,7 @@ async def check_slug(request: CheckSlugRequest, container: ContainerDep):
     """
     slug = request.slug.lower().strip()
 
-    is_valid, error = validate_slug(slug)
+    is_valid, _ = validate_slug(slug)
     if not is_valid:
         return CheckSlugResponse(available=False, slug=slug)
 
@@ -100,7 +96,7 @@ async def check_slug(request: CheckSlugRequest, container: ContainerDep):
 @router.post("", response_model=CreateCompanyResponse)
 async def create_company(
     request_data: CreateCompanyRequest, request: Request, container: ContainerDep
-):
+) -> JSONResponse:
     """
     Создание новой компании
 
@@ -114,10 +110,7 @@ async def create_company(
     """
     settings = get_settings()
 
-    if not hasattr(request.state, "user") or not request.state.user:
-        raise HTTPException(status_code=401, detail="Необходима авторизация")
-
-    user = request.state.user
+    user = require_frontend_user()
     name = request_data.name.strip()
     slug = request_data.slug.lower().strip()
 
@@ -155,14 +148,14 @@ async def create_company(
         metadata={"initialization_status": "pending"},
     )
 
-    await company_repo.set(company)
+    _ = await company_repo.set(company)
     logger.info(
         "frontend.company_created",
         company_id=company.company_id,
         company_subdomain=slug,
     )
 
-    await subdomain_repo.set_mapping(slug, company.company_id)
+    _ = await subdomain_repo.set_mapping(slug, company.company_id)
     logger.info(
         "frontend.subdomain_registered",
         company_subdomain=slug,
@@ -180,7 +173,7 @@ async def create_company(
     if company.company_id not in user.companies:
         user.companies[company.company_id] = ["owner"]  # Список ролей, а не строка!
         user.active_company_id = company.company_id
-        await user_repo.set(user)
+        _ = await user_repo.set(user)
         logger.info(
             "frontend.company_owner_added",
             user_id=user.user_id,
@@ -237,17 +230,10 @@ async def create_company(
 
 @router.get("/me", response_model=ListResponse[CompanyMembershipResponse])
 async def get_my_companies(
-    request: Request,
     container: ContainerDep,
 ) -> ListResponse[CompanyMembershipResponse]:
     """Возвращает компании текущего пользователя с subdomain и ролями."""
-    token_data = getattr(request.state, "token_data", None)
-    if token_data is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    user = await container.user_repository.get(token_data.user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = require_frontend_user()
 
     return await build_my_companies_response(
         user=user,
@@ -259,10 +245,9 @@ async def get_my_companies(
 async def enter_company_as_system_member(
     company_id: str,
     payload: SystemAccessRequest,
-    request: Request,
     container: ContainerDep,
 ) -> SystemAccessGrantedResponse:
-    user = _require_authenticated_user(request)
+    user = require_frontend_user()
     _ensure_user_is_system_member(user)
 
     target_company_id = company_id.strip()
@@ -289,14 +274,14 @@ async def enter_company_as_system_member(
     existing_roles = target_company.members.get(user.user_id, [])
     if role not in existing_roles:
         target_company.members[user.user_id] = [*existing_roles, role]
-        await company_repo.set(target_company)
+        _ = await company_repo.set(target_company)
     else:
         target_company.members[user.user_id] = existing_roles
 
     user_roles = user.companies.get(target_company_id, [])
     if role not in user_roles:
         user.companies[target_company_id] = [*user_roles, role]
-        await user_repo.set(user)
+        _ = await user_repo.set(user)
     else:
         user.companies[target_company_id] = user_roles
 
@@ -313,7 +298,7 @@ async def leave_company_as_system_member(
     request: Request,
     container: ContainerDep,
 ) -> JSONResponse:
-    user = _require_authenticated_user(request)
+    user = require_frontend_user()
     _ensure_user_is_system_member(user)
 
     target_company_id = company_id.strip()
@@ -340,8 +325,8 @@ async def leave_company_as_system_member(
         user.active_company_id = SYSTEM_COMPANY_ID
         switched_to_system = True
 
-    await company_repo.set(target_company)
-    await user_repo.set(user)
+    _ = await company_repo.set(target_company)
+    _ = await user_repo.set(user)
 
     response = JSONResponse(
         content={

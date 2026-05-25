@@ -30,7 +30,7 @@ def _volumedetect_sync(data: bytes, source_suffix: str, ffmpeg: str) -> float:
     suf = _suffix_for_ffmpeg(source_suffix)
     with tempfile.TemporaryDirectory(prefix="platform-volumedetect-") as td:
         src = Path(td) / f"in{suf}"
-        src.write_bytes(data)
+        _ = src.write_bytes(data)
         result = subprocess.run(
             [
                 ffmpeg,
@@ -86,7 +86,7 @@ def _trim_edges_sync(
     with tempfile.TemporaryDirectory(prefix="platform-trim-silence-") as td:
         work = Path(td)
         src = work / f"in{suf}"
-        src.write_bytes(data)
+        _ = src.write_bytes(data)
         if ext == ".wav":
             dst = work / "out.wav"
             enc_args = ["-c:a", "pcm_s16le"]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Query
 
 from apps.frontend.dependencies import ContainerDep
@@ -25,11 +27,11 @@ async def create_schedule(request: PlatformScheduleCreateRequest, container: Con
 @router.get("/schedules", response_model=OffsetPage[PlatformScheduledTask])
 async def list_schedules(
     container: ContainerDep,
-    status: ScheduledTaskStatus | None = Query(default=None),
-    target_service: str | None = Query(default=None),
-    task_name: str | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
+    status: Annotated[ScheduledTaskStatus | None, Query()] = None,
+    target_service: Annotated[str | None, Query()] = None,
+    task_name: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[PlatformScheduledTask]:
     return await container.scheduler_client.list_schedules(
         PlatformScheduleFilter(

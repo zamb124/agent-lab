@@ -14,8 +14,11 @@
 """
 
 from __future__ import annotations
+
 import time
+
 import pytest
+
 from apps.flows.config import get_settings
 from apps.flows.src.constants.execution_limits import (
     get_flow_execution_wall_time_cap_seconds,
@@ -34,6 +37,7 @@ from apps.flows.src.state.cancellation import (
 )
 from apps.flows.src.state.flow_deadline import apply_flow_wall_clock_deadline
 from core.errors import FlowWallClockTimeoutError, NodeWallClockTimeoutError
+from tests.flows.durable_runtime_harness import run_flow, run_node
 
 
 @pytest.mark.asyncio
@@ -133,11 +137,13 @@ async def test_check_cancellation_redis_cancel_when_deadline_not_set(
 
 @pytest.mark.asyncio
 async def test_code_node_node_timeout_stops_overlong_await(
-    app, make_test_state, unique_id: str
+    app, container, make_test_state, unique_id: str
 ) -> None:
     code = "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(30)\n    return state\n"
     node = CodeNode(
-        f"sleep_node_{unique_id}", config={"type": "code", "code": code, "node_timeout_seconds": 1}
+        f"sleep_node_{unique_id}",
+        config={"type": "code", "code": code, "node_timeout_seconds": 1},
+        container=container,
     )
     state = make_test_state(
         task_id=f"task-{unique_id}",
@@ -145,7 +151,7 @@ async def test_code_node_node_timeout_stops_overlong_await(
         session_id=f"flow_n_{unique_id}:ctx-{unique_id}",
     )
     with pytest.raises(NodeWallClockTimeoutError) as exc_info:
-        await node.run(state)
+        await run_node(container=container, node=node, state=state)
     assert exc_info.value.code == "NODE_WALL_CLOCK_TIMEOUT"
     assert exc_info.value.payload["node_id"] == f"sleep_node_{unique_id}"
     assert exc_info.value.payload["timeout_seconds"] == 1
@@ -153,28 +159,30 @@ async def test_code_node_node_timeout_stops_overlong_await(
 
 @pytest.mark.asyncio
 async def test_flow_run_aborts_on_expired_deadline_before_node(
-    app, make_test_state, unique_id: str
+    app, container, make_test_state, unique_id: str
 ) -> None:
     code = '\nasync def run(args, state):\n    state.proof = "must_not_run"\n    return state\n'
     n_id = f"step1_{unique_id}"
-    node = CodeNode(n_id, config={"type": "code", "code": code})
+    flow_id = f"linear_{unique_id}"
+    node = CodeNode(n_id, config={"type": "code", "code": code}, container=container)
     flow = Flow(
-        flow_id=f"linear_{unique_id}",
+        flow_id=flow_id,
         name="linear",
         entry=n_id,
         nodes={n_id: node},
         edges=[{"from_node": n_id, "to_node": None}],
+        container=container,
     )
     state = make_test_state(
         task_id=f"task-{unique_id}",
         context_id=f"ctx-{unique_id}",
         user_id=f"user-{unique_id}",
-        session_id=f"flow_f_{unique_id}:ctx-{unique_id}",
+        session_id=f"{flow_id}:ctx-{unique_id}",
     )
     state.flow_deadline_monotonic = time.monotonic() - 0.01
     state.flow_timeout_effective_seconds = 5
     with pytest.raises(FlowWallClockTimeoutError):
-        await flow.run(state)
+        await run_flow(container=container, flow=flow, state=state)
     assert getattr(state, "proof", None) is None
 
 

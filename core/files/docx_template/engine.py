@@ -5,9 +5,7 @@
 from __future__ import annotations
 
 import zipfile
-from collections.abc import Mapping
 from io import BytesIO
-from typing import Any
 
 from docxtpl import DocxTemplate
 from jinja2 import Environment, StrictUndefined
@@ -19,6 +17,7 @@ from core.files.docx_template.exceptions import (
     DocxTemplateSyntaxError,
 )
 from core.files.docx_template.normalize import normalize_template_context
+from core.types import DocxTemplateContext
 
 
 def _validate_docx_zip(template_bytes: bytes) -> None:
@@ -42,7 +41,7 @@ def _validate_docx_zip(template_bytes: bytes) -> None:
 
 def render_docx_template_bytes(
     template_bytes: bytes,
-    context: Mapping[str, Any],
+    context: DocxTemplateContext,
     *,
     strict: bool = False,
     date_iso: bool = True,

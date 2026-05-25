@@ -8,7 +8,6 @@ LLM + hitl_operator_task, API, resume после complete, Redis stream (неф�
 from __future__ import annotations
 
 import asyncio
-import uuid
 
 import pytest
 from a2a.types import TaskState, TaskStatusUpdateEvent
@@ -16,7 +15,10 @@ from a2a.utils.message import get_message_text
 from httpx import ASGITransport, AsyncClient
 
 from apps.flows.main import app as flows_app
+from apps.flows.src.durable_execution import WorkflowEventType
 from apps.flows.src.models.flow_config import Edge, FlowConfig
+from apps.flows.src.models.operator_schemas import OperatorResolutionPayload
+from apps.flows.src.services.operator_handoff_service import build_operator_handoff_command
 from apps.flows.src.streaming.subscriber import EventSubscriber
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from core.context import Context, clear_context, set_context
@@ -90,6 +92,21 @@ async def test_hitl_node_creates_operator_task_and_operator_interrupt(
     assert row.flow_id == flow_id
     assert row.interrupt_snapshot is not None
     assert row.interrupt_snapshot.get("assignee_queue") == slug
+    assert row.interrupt_snapshot.get("handoff_command_id") == out["interrupt"]["body"][
+        "handoff_command_id"
+    ]
+
+    set_context(ctx)
+    try:
+        history, _ = await container.workflow_runtime.get_state_history(session_id)
+    finally:
+        clear_context()
+    requested = [ev for ev in history if ev.event_type is WorkflowEventType.handoff_requested]
+    assert len(requested) == 1
+    assert requested[0].payload.operator_task_id == row.id
+    assert requested[0].payload.handoff_command_id == row.interrupt_snapshot.get(
+        "handoff_command_id"
+    )
 
 
 @pytest.mark.asyncio
@@ -144,12 +161,20 @@ async def test_register_handoff_same_correlation_inserts_single_row(
     qid = await repo.create_queue(company_id="system", name="N", slug=slug)
     await repo.add_member(qid, mock_context.user.user_id)
     svc = container.operator_handoff_service
-    cid = uuid.uuid4()
     state = ExecutionState(
         task_id=f"t-{unique_id}",
         context_id=f"ctx-{unique_id}",
         user_id=mock_context.user.user_id,
         session_id=f"fid_{unique_id}:ctx-{unique_id}",
+    )
+    state.attach_durable_node_context(
+        execution_branch_id=f"branch-{unique_id}",
+        node_schedule_sequence=1,
+        superstep_sequence=1,
+    )
+    command = build_operator_handoff_command(
+        state=state,
+        node_id="hitl",
     )
     ctx = _context_a2a(mock_context)
     set_context(ctx)
@@ -159,21 +184,21 @@ async def test_register_handoff_same_correlation_inserts_single_row(
             question="q",
             task_title="ttl",
             assignee_queue_slug=slug,
-            correlation_id=cid,
+            command=command,
         )
         await svc.register_handoff(
             state,
             question="q2",
             task_title="ttl2",
             assignee_queue_slug=slug,
-            correlation_id=cid,
+            command=command,
         )
     finally:
         clear_context()
 
     rows, total = await repo.list_tasks("system", queue_id=qid)
     assert total == 1
-    assert rows[0].correlation_id == str(cid)
+    assert rows[0].correlation_id == str(command.correlation_id)
 
 
 @pytest.mark.asyncio
@@ -335,7 +360,7 @@ async def test_llm_hitl_operator_task_then_complete_resumes_and_finishes(
     assert op_task is not None, "задача оператора должна быть видна участнику очереди"
 
     done = await client.post(
-        f"/flows/api/v1/operator/tasks/{op_task['id']}/complete",
+        f"/flows/api/v1/operator/tasks/{op_task['operator_task_id']}/complete",
         json={"resolution": "operator answer text"},
     )
     assert done.status_code == 200, done.text
@@ -406,7 +431,7 @@ async def test_operator_non_member_forbidden_get_task_by_id(
 
     mine = await client.get("/flows/api/v1/operator/tasks")
     assert mine.status_code == 200
-    tid = mine.json()["items"][0]["id"]
+    tid = mine.json()["items"][0]["operator_task_id"]
 
     transport = ASGITransport(app=flows_app)
     async with AsyncClient(
@@ -463,7 +488,7 @@ async def test_operator_claim_and_patch_status(
         clear_context()
 
     lst = await client.get("/flows/api/v1/operator/tasks")
-    tid = lst.json()["items"][0]["id"]
+    tid = lst.json()["items"][0]["operator_task_id"]
 
     cl = await client.post(f"/flows/api/v1/operator/tasks/{tid}/claim")
     assert cl.status_code == 200
@@ -562,7 +587,7 @@ async def test_full_hitl_dialogue_single_reply_then_takeover_then_followup(
     op_task_sr = next(
         t for t in tasks_resp.json()["items"] if t["session_id"] == session_id
     )
-    tid_sr = op_task_sr["id"]
+    tid_sr = op_task_sr["operator_task_id"]
 
     done_sr = await client.post(
         f"/flows/api/v1/operator/tasks/{tid_sr}/complete",
@@ -628,9 +653,9 @@ async def test_full_hitl_dialogue_single_reply_then_takeover_then_followup(
     op_task_tk = next(
         t
         for t in tasks_resp2.json()["items"]
-        if t["session_id"] == session_id and t["id"] != tid_sr
+        if t["session_id"] == session_id and t["operator_task_id"] != tid_sr
     )
-    tid_tk = op_task_tk["id"]
+    tid_tk = op_task_tk["operator_task_id"]
     assert op_task_tk["handoff_mode"] == "takeover"
 
     await client.post(f"/flows/api/v1/operator/tasks/{tid_tk}/claim")
@@ -822,7 +847,7 @@ async def test_operator_post_message_member_sends_and_non_member_forbidden(
         clear_context()
 
     lst = await client.get("/flows/api/v1/operator/tasks")
-    tid = lst.json()["items"][0]["id"]
+    tid = lst.json()["items"][0]["operator_task_id"]
 
     transport = ASGITransport(app=flows_app)
     async with AsyncClient(
@@ -926,7 +951,7 @@ async def test_hitl_node_single_reply_graph(
     assert op_task["handoff_mode"] == "single_reply"
 
     done = await client.post(
-        f"/flows/api/v1/operator/tasks/{op_task['id']}/complete",
+        f"/flows/api/v1/operator/tasks/{op_task['operator_task_id']}/complete",
         json={"resolution": "Арктика"},
     )
     assert done.status_code == 200
@@ -941,6 +966,113 @@ async def test_hitl_node_single_reply_graph(
     assert saved.response is not None
     assert "[FMT]" in saved.response, "formatter нода должна была отработать после hitl"
     assert "Арктика" in saved.response
+
+    set_context(ctx)
+    try:
+        history, _ = await container.workflow_runtime.get_state_history(session_id)
+    finally:
+        clear_context()
+    event_types = [ev.event_type for ev in history]
+    assert WorkflowEventType.handoff_requested in event_types
+    assert WorkflowEventType.handoff_completed in event_types
+    assert WorkflowEventType.handoff_resumed in event_types
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(25)
+async def test_completed_operator_task_replay_records_history_and_resumes(
+    app, container, client, unique_id, mock_context
+):
+    slug = f"crashsr_{unique_id}"
+    await client.post(
+        "/flows/api/v1/operator/queues", json={"name": "Crash SR", "slug": slug}
+    )
+
+    flow_id = f"crash_sr_{unique_id}"
+    cfg = FlowConfig(
+        flow_id=flow_id,
+        name="crash window single_reply",
+        entry="hitl",
+        nodes={
+            "hitl": {
+                "type": "hitl_node",
+                "operator_queue_slug": slug,
+                "operator_task_title": "SR",
+                "operator_user_message": "Wait",
+                "operator_handoff_mode": "single_reply",
+            },
+            "fmt": {
+                "type": "code",
+                "code": (
+                    "async def run(args, state):\n"
+                    "    state['response'] = f\"[FMT] {state.get('response', '')}\"\n"
+                    "    return state"
+                ),
+            },
+        },
+        edges=[
+            Edge(from_node="hitl", to_node="fmt"),
+            Edge(from_node="fmt", to_node=None),
+        ],
+    )
+    await container.flow_repository.set(cfg)
+
+    ctx_part = f"ctx-{unique_id}"
+    session_id = f"{flow_id}:{ctx_part}"
+    mock_context.session_id = session_id
+    ctx = _context_a2a(mock_context)
+
+    set_context(ctx)
+    try:
+        first = await process_flow_task(
+            flow_id=flow_id,
+            session_id=session_id,
+            user_id=ctx.user.user_id,
+            content="handoff",
+            task_id=f"t-crash-{unique_id}",
+            context_id=ctx_part,
+            context_data=ctx.model_dump(),
+            channel="a2a",
+        )
+    finally:
+        clear_context()
+    assert first["task_state"] == "input-required"
+
+    tasks_resp = await client.get("/flows/api/v1/operator/tasks")
+    op_task = next(
+        t for t in tasks_resp.json()["items"] if t["session_id"] == session_id
+    )
+    task_id = op_task["operator_task_id"]
+
+    completed_now = await container.operator_repository.complete_task_once(
+        "system",
+        task_id,
+        resolution_payload=OperatorResolutionPayload(text="operator replay answer"),
+    )
+    assert completed_now is True
+
+    done = await client.post(
+        f"/flows/api/v1/operator/tasks/{task_id}/complete",
+        json={"resolution": "operator replay answer"},
+    )
+    assert done.status_code == 200, done.text
+
+    set_context(ctx)
+    try:
+        saved = await container.workflow_runtime.get_state(session_id)
+        history, _ = await container.workflow_runtime.get_state_history(session_id)
+    finally:
+        clear_context()
+
+    assert saved is not None
+    assert saved.interrupt is None
+    assert saved.response is not None
+    assert "[FMT] operator replay answer" in saved.response
+
+    completed = [ev for ev in history if ev.event_type is WorkflowEventType.handoff_completed]
+    resumed = [ev for ev in history if ev.event_type is WorkflowEventType.handoff_resumed]
+    assert len(completed) == 1
+    assert len(resumed) == 1
 
 
 @pytest.mark.asyncio
@@ -1012,7 +1144,7 @@ async def test_hitl_node_takeover_graph(
     op_task = next(
         t for t in tasks_resp.json()["items"] if t["session_id"] == session_id
     )
-    tid = op_task["id"]
+    tid = op_task["operator_task_id"]
     assert op_task["handoff_mode"] == "takeover"
 
     await client.post(f"/flows/api/v1/operator/tasks/{tid}/claim")
@@ -1141,7 +1273,7 @@ async def test_operator_message_with_files_takeover(
         clear_context()
 
     lst = await client.get("/flows/api/v1/operator/tasks")
-    tid = lst.json()["items"][0]["id"]
+    tid = lst.json()["items"][0]["operator_task_id"]
 
     await client.post(f"/flows/api/v1/operator/tasks/{tid}/claim")
 
@@ -1228,7 +1360,7 @@ async def test_operator_complete_with_files_single_reply(
     )
 
     done = await client.post(
-        f"/flows/api/v1/operator/tasks/{op_task['id']}/complete",
+        f"/flows/api/v1/operator/tasks/{op_task['operator_task_id']}/complete",
         json={"resolution": "answer with attachment", "file_ids": [file_id]},
     )
     assert done.status_code == 200
@@ -1305,7 +1437,7 @@ async def test_operator_complete_with_files_takeover_dialog_log(
         clear_context()
 
     lst = await client.get("/flows/api/v1/operator/tasks")
-    tid = lst.json()["items"][0]["id"]
+    tid = lst.json()["items"][0]["operator_task_id"]
     await client.post(f"/flows/api/v1/operator/tasks/{tid}/claim")
 
     await client.post(
@@ -1382,7 +1514,7 @@ async def test_operator_message_invalid_file_id_raises(
         clear_context()
 
     lst = await client.get("/flows/api/v1/operator/tasks")
-    tid = lst.json()["items"][0]["id"]
+    tid = lst.json()["items"][0]["operator_task_id"]
     await client.post(f"/flows/api/v1/operator/tasks/{tid}/claim")
 
     resp = await client.post(

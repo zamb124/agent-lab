@@ -1,0 +1,3 @@
+from reportlab.pdfbase.ttfonts import TTFont
+
+def registerFont(font: TTFont) -> None: ...

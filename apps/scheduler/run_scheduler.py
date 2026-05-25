@@ -28,6 +28,7 @@ if __name__ == "__main__":
 
     try:
         import runpy
-        runpy.run_module("taskiq", run_name="__main__", alter_sys=True)
+
+        _ = runpy.run_module("taskiq", run_name="__main__", alter_sys=True)
     finally:
         sys.argv = original_argv

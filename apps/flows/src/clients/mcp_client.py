@@ -1,26 +1,25 @@
-"""
-MCP клиент - поддержка HTTP и SSE транспортов.
+"""Strict MCP 2025-11-25 JSON-RPC client."""
 
-MCP (Model Context Protocol) использует JSON-RPC 2.0.
-Поддерживаемые транспорты:
-- HTTP (Streamable HTTP) - POST запросы с JSON ответами
-- SSE (Server-Sent Events) - POST запросы с event stream ответами
-"""
+from __future__ import annotations
 
 import hashlib
 import json
 from collections.abc import Mapping
+from types import MappingProxyType
 from typing import cast
 
 import httpx
 
 from apps.flows.src.models.mcp import (
     MCPCallResult,
+    MCPDiscoveredTool,
+    MCPInitializeResult,
     MCPServerConfig,
-    MCPToolInfo,
+    MCPToolDefinition,
 )
 from apps.flows.src.services.browser_preview import emit_browser_preview_mcp_event
 from core.http import ProxyStrategy, get_httpx_client
+from core.integrations.mcp import MCP_PROTOCOL_VERSION
 from core.logging import get_logger
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object
@@ -28,80 +27,69 @@ from core.variables import VarResolver
 
 logger = get_logger(__name__)
 
-MCP_PROTOCOL_VERSION = "2024-11-05"
 _TRACE_TEXT_LIMIT = 2000
 
 
 class MCPClientError(Exception):
-    """Ошибка MCP клиента."""
-    pass
+    """MCP client error."""
 
 
 class MCPClient:
-    """
-    Универсальный MCP клиент с поддержкой HTTP и SSE транспортов.
-
-    Поддерживает:
-    - HTTP транспорт (JSON-RPC over HTTP POST)
-    - SSE транспорт (JSON-RPC over Server-Sent Events)
-    - Session management через Mcp-Session-Id header
-    - Резолвинг @var: в headers
-    """
+    """MCP Streamable HTTP client with strict 2025-11-25 contracts."""
 
     def __init__(
         self,
         config: MCPServerConfig,
         variables: Mapping[str, JsonValue] | None = None,
         timeout: float = 60.0,
-    ):
+    ) -> None:
+        variables_copy: dict[str, JsonValue] = dict(variables) if variables is not None else {}
         self.config: MCPServerConfig = config
-        self.variables: JsonObject = dict(variables or {})
+        self._variables: Mapping[str, JsonValue] = MappingProxyType(variables_copy)
         self.timeout: float = timeout
-        self.session_id: str | None = None  # Получаем от сервера
+        self.session_id: str | None = None
+        self.protocol_version: str | None = None
         self._request_id: int = 0
         self._initialized: bool = False
+        self._initialize_result: MCPInitializeResult | None = None
 
     def _next_request_id(self) -> int:
-        """Генерирует следующий ID запроса."""
         self._request_id += 1
         return self._request_id
 
-    def _resolve_headers(self, include_session: bool = True) -> dict[str, str]:
-        """Резолвит headers с @var: ссылками."""
-        headers = {
+    def _active_protocol_version(self) -> str:
+        if self.protocol_version is None:
+            raise RuntimeError("MCP client is not initialized")
+        return self.protocol_version
+
+    def _resolve_headers(
+        self,
+        *,
+        include_session: bool,
+        include_protocol_version: bool,
+    ) -> dict[str, str]:
+        headers: dict[str, str] = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
         }
-
-        # Session ID добавляется только после инициализации
-        if include_session and self.session_id:
+        if include_protocol_version:
+            headers["MCP-Protocol-Version"] = self._active_protocol_version()
+        if include_session and self.session_id is not None:
             headers["Mcp-Session-Id"] = self.session_id
 
         for key, value in self.config.headers.items():
-            if "@var:" in value:
-                headers[key] = VarResolver.resolve_text(value, self.variables)
-            else:
-                headers[key] = value
-
+            headers[key] = VarResolver.resolve_text(value, self._variables)
         return headers
 
     @staticmethod
     def _jsonrpc_envelope_from_body(text: str) -> JsonObject | None:
-        """
-        Извлекает один JSON-RPC 2.0 envelope из тела ответа.
-
-        Поддерживает:
-        - целиком application/json;
-        - SSE: строки `data: {...}` (Streamable HTTP / совместимые прокси);
-        - несколько `data:` — берётся первое валидное с result/error/jsonrpc.
-        """
-        if not text or not str(text).strip():
+        if not text or not text.strip():
             return None
-        s = str(text).strip()
-        if s.startswith("{"):
+        source = text.strip()
+        if source.startswith("{"):
             try:
                 envelope = require_json_object(
-                    cast(JsonValue, json.loads(s)),
+                    cast(JsonValue, json.loads(source)),
                     "MCP JSON-RPC envelope",
                 )
             except (json.JSONDecodeError, ValueError):
@@ -113,14 +101,13 @@ class MCPClient:
                     or "error" in envelope
                 ):
                     return envelope
-        for line in str(text).splitlines():
-            line = line.strip()
-            if not line:
+        for line in source.splitlines():
+            item = line.strip()
+            if not item:
                 continue
-            low = line.lower()
-            if not low.startswith("data:"):
+            if not item.lower().startswith("data:"):
                 continue
-            payload = line[5:].lstrip()
+            payload = item[5:].lstrip()
             if not payload or payload == "[DONE]":
                 continue
             try:
@@ -140,14 +127,13 @@ class MCPClient:
 
     @staticmethod
     def _trace_text(value: JsonValue, *, limit: int = _TRACE_TEXT_LIMIT) -> str:
-        """
-        Trace attributes должны быть компактными и безопасными по кодировке.
-        Возвращаем ASCII-строку: unicode будет экранирован как \\uXXXX.
-        """
         if value is None:
             return ""
         if isinstance(value, str):
-            raw = value.encode("unicode_escape", errors="backslashreplace").decode("ascii", errors="replace")
+            raw = value.encode("unicode_escape", errors="backslashreplace").decode(
+                "ascii",
+                errors="replace",
+            )
         else:
             raw = json.dumps(value, ensure_ascii=True, separators=(",", ":"))
         if len(raw) <= limit:
@@ -158,30 +144,95 @@ class MCPClient:
     def _sha256_hex(text: str) -> str:
         return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
 
-    async def _read_response_text(self, response: httpx.Response) -> str:
+    @staticmethod
+    async def _read_response_text(response: httpx.Response) -> str:
         _ = await response.aread()
         return response.text
+
+    async def _post_jsonrpc(
+        self,
+        *,
+        method: str,
+        payload: JsonObject,
+        include_session: bool,
+        include_protocol_version: bool,
+        notification: bool,
+    ) -> tuple[JsonObject | None, httpx.Headers, int, str]:
+        headers = self._resolve_headers(
+            include_session=include_session,
+            include_protocol_version=include_protocol_version,
+        )
+        operation_name = "flows.mcp.tool_call" if method == "tools/call" else "flows.mcp.rpc_call"
+        event_type = "mcp.tool_call" if method == "tools/call" else "mcp.rpc_call"
+
+        async with traced_operation(
+            operation_name,
+            event_type=event_type,
+            operation_category="mcp",
+            extra_attributes={
+                "platform.mcp.server_id": self.config.server_id,
+                "platform.mcp.method": method,
+                "platform.mcp.protocol_version": (
+                    self.protocol_version if self.protocol_version is not None else ""
+                ),
+                "platform.mcp.has_session": bool(self.session_id) if include_session else False,
+                "platform.mcp.notification": notification,
+                "platform.mcp.request_preview": MCPClient._trace_text(payload),
+            },
+        ) as span:
+            params_raw = payload.get("params")
+            if method == "tools/call" and isinstance(params_raw, dict):
+                raw_name = params_raw.get("name")
+                raw_args = params_raw.get("arguments")
+                if isinstance(raw_name, str) and raw_name.strip():
+                    span.set_attribute("platform.mcp.tool_name", raw_name.strip())
+                if isinstance(raw_args, dict):
+                    keys = sorted(str(key) for key in raw_args.keys())
+                    span.set_attribute("platform.mcp.tool_args_keys", ",".join(keys[:50]))
+
+            async with get_httpx_client(
+                timeout=self.timeout,
+                strategy=ProxyStrategy.DIRECT_ONLY,
+            ) as client:
+                response = await client.post(
+                    self.config.url,
+                    json=payload,
+                    headers=headers,
+                )
+                response_headers = response.headers
+                text = await self._read_response_text(response)
+                content_type = cast(str, response.headers.get("content-type", ""))
+
+                span.set_attribute("http.status_code", int(response.status_code))
+                span.set_attribute("platform.mcp.response_content_type", content_type.strip())
+                span.set_attribute(
+                    "platform.mcp.response_bytes",
+                    len(text.encode("utf-8", errors="replace")),
+                )
+                span.set_attribute("platform.mcp.response_sha256", MCPClient._sha256_hex(text))
+                span.set_attribute("platform.mcp.response_preview", MCPClient._trace_text(text))
+                sid = cast(
+                    str | None,
+                    response_headers.get("mcp-session-id"),
+                )
+                if sid is not None and sid.strip():
+                    span.set_attribute("platform.mcp.response_session_id", sid.strip())
+
+                return (
+                    self._jsonrpc_envelope_from_body(text),
+                    response_headers,
+                    int(response.status_code),
+                    text,
+                )
 
     async def _rpc_call(
         self,
         method: str,
         params: JsonObject | None = None,
+        *,
         include_session: bool = True,
+        include_protocol_version: bool = True,
     ) -> tuple[JsonValue, httpx.Headers]:
-        """
-        Выполняет JSON-RPC 2.0 вызов через HTTP или SSE.
-
-        Args:
-            method: Имя метода (initialize, tools/list, tools/call)
-            params: Параметры метода
-            include_session: Включать ли session_id в headers
-
-        Returns:
-            Кортеж (результат, response headers)
-
-        Raises:
-            MCPClientError: При ошибке вызова
-        """
         request_id = self._next_request_id()
         payload: JsonObject = {
             "jsonrpc": "2.0",
@@ -191,183 +242,159 @@ class MCPClient:
         if params is not None:
             payload["params"] = params
 
-        headers = self._resolve_headers(include_session=include_session)
+        envelope, headers, status_code, text = await self._post_jsonrpc(
+            method=method,
+            payload=payload,
+            include_session=include_session,
+            include_protocol_version=include_protocol_version,
+            notification=False,
+        )
+        if status_code >= 400:
+            raise MCPClientError(f"MCP HTTP error: {status_code} {text}")
+        if envelope is None:
+            raise MCPClientError(
+                f"MCP: empty response for {method} (status={status_code}, body={text[:500]!r})"
+            )
 
-        logger.debug(f"MCP RPC call: {method} to {self.config.url}")
-
-        if method == "tools/call":
-            operation_name = "flows.mcp.tool_call"
-            event_type = "mcp.tool_call"
-        else:
-            operation_name = "flows.mcp.rpc_call"
-            event_type = "mcp.rpc_call"
-
-        async with traced_operation(
-            operation_name,
-            event_type=event_type,
-            operation_category="mcp",
-            extra_attributes={
-                "platform.mcp.server_id": self.config.server_id,
-                "platform.mcp.method": method,
-                "platform.mcp.request_id": request_id,
-                "platform.mcp.has_session": bool(self.session_id) if include_session else False,
-                "platform.mcp.request_preview": MCPClient._trace_text(payload),
-            },
-        ) as span:
-            # Удобные поля для tools/call: отдельно tool_name и ключи аргументов.
-            if method == "tools/call" and params:
-                raw_name = params.get("name")
-                raw_args = params.get("arguments")
-                if isinstance(raw_name, str) and raw_name.strip():
-                    span.set_attribute("platform.mcp.tool_name", raw_name.strip())
-                if isinstance(raw_args, dict):
-                    keys = list(raw_args.keys())
-                    keys.sort()
-                    span.set_attribute("platform.mcp.tool_args_keys", ",".join(keys[:50]))
-
-            async with get_httpx_client(timeout=self.timeout, strategy=ProxyStrategy.DIRECT_ONLY) as client:
-                response = await client.post(
-                    self.config.url,
-                    json=payload,
-                    headers=headers,
-                )
-
-                response_headers = response.headers
-                text = await self._read_response_text(response)
-                response_content_type = cast(
-                    str,
-                    response.headers.get("content-type", ""),
-                )
-
-                span.set_attribute("http.status_code", int(response.status_code))
-                span.set_attribute(
-                    "platform.mcp.response_content_type",
-                    response_content_type.strip(),
-                )
-                span.set_attribute("platform.mcp.response_bytes", len(text.encode("utf-8", errors="replace")))
-                span.set_attribute("platform.mcp.response_sha256", MCPClient._sha256_hex(text))
-                span.set_attribute("platform.mcp.response_preview", MCPClient._trace_text(text))
-                sid = cast(
-                    str | None,
-                    response_headers.get("mcp-session-id")
-                    or response_headers.get("Mcp-Session-Id"),
-                )
-                if sid is not None and sid.strip():
-                    span.set_attribute("platform.mcp.response_session_id", sid.strip())
-
-                if response.status_code >= 400:
-                    raise MCPClientError(
-                        f"MCP HTTP error: {response.status_code} {text}"
-                    )
-
-                result = self._jsonrpc_envelope_from_body(text)
-                if result is None:
-                    snippet = text[:500] if text else ""
-                    ct = response_content_type
-                    raise MCPClientError(
-                        f"MCP: empty response for {method} (content-type={ct!r}, body={snippet!r})"
-                    )
-
-        error_raw = result.get("error")
+        error_raw = envelope.get("error")
         if error_raw is not None:
             error = require_json_object(error_raw, "MCP RPC error")
             raise MCPClientError(
                 f"MCP RPC error: {error.get('code')} - {error.get('message')}"
             )
 
-        return result.get("result"), response_headers
+        return envelope.get("result"), headers
 
-    async def initialize(self) -> JsonObject:
-        """
-        Инициализирует MCP сессию.
-
-        После initialize сервер возвращает Mcp-Session-Id в headers,
-        который нужно использовать для последующих запросов.
-
-        Returns:
-            Информация о сервере (capabilities, serverInfo)
-        """
-        if self._initialized:
-            return {}
-
-        initialize_params: JsonObject = {
-            "protocolVersion": MCP_PROTOCOL_VERSION,
-            "capabilities": {},
-            "clientInfo": {
-                "name": "agent-lab",
-                "version": "1.0.0",
-            },
+    async def _rpc_notification(
+        self,
+        method: str,
+        params: JsonObject | None = None,
+    ) -> None:
+        payload: JsonObject = {
+            "jsonrpc": "2.0",
+            "method": method,
         }
-        result, headers = await self._rpc_call(
-            "initialize",
-            initialize_params,
-            include_session=False,  # Первый запрос без session
+        if params is not None:
+            payload["params"] = params
+
+        envelope, _headers, status_code, text = await self._post_jsonrpc(
+            method=method,
+            payload=payload,
+            include_session=True,
+            include_protocol_version=True,
+            notification=True,
         )
+        if status_code >= 400:
+            raise MCPClientError(f"MCP notification HTTP error: {status_code} {text}")
+        if envelope is None:
+            return
+        error_raw = envelope.get("error")
+        if error_raw is not None:
+            error = require_json_object(error_raw, "MCP notification error")
+            raise MCPClientError(
+                f"MCP notification error: {error.get('code')} - {error.get('message')}"
+            )
 
-        # Получаем session_id из response headers
-        self.session_id = headers.get("mcp-session-id") or headers.get("Mcp-Session-Id")
+    async def initialize(self) -> MCPInitializeResult:
+        if self._initialized:
+            if self._initialize_result is None:
+                raise RuntimeError("MCP client initialized without initialize result")
+            return self._initialize_result
 
+        raw_result, headers = await self._rpc_call(
+            "initialize",
+            {
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "agent-lab",
+                    "version": "1.0.0",
+                },
+            },
+            include_session=False,
+            include_protocol_version=False,
+        )
+        result = MCPInitializeResult.model_validate(
+            require_json_object(raw_result, "MCP initialize result")
+        )
+        self.protocol_version = result.protocol_version
+        session_id = cast(
+            str | None,
+            headers.get("mcp-session-id"),
+        )
+        self.session_id = session_id.strip() if session_id is not None and session_id.strip() else None
+        self._initialize_result = result
         self._initialized = True
-        logger.info(f"MCP session initialized: {self.session_id}")
+        await self._rpc_notification("notifications/initialized")
+        logger.info("MCP session initialized: server_id=%s session=%s", self.config.server_id, self.session_id)
+        return result
 
-        return require_json_object(result, "MCP initialize result")
-
-    async def list_tools(self) -> list[MCPToolInfo]:
-        """
-        Получает список доступных tools с MCP сервера.
-
-        Returns:
-            Список MCPToolInfo
-        """
+    async def list_tools(self) -> list[MCPDiscoveredTool]:
         if not self._initialized:
             _ = await self.initialize()
 
-        raw_result, _ = await self._rpc_call("tools/list")
+        raw_result, _headers = await self._rpc_call("tools/list")
         result = require_json_object(raw_result, "MCP tools/list result")
-
         raw_tools = result.get("tools")
         if not isinstance(raw_tools, list):
             raise MCPClientError("MCP tools/list result.tools must be an array")
-        tools: list[MCPToolInfo] = []
+
+        schema_version = self._active_protocol_version()
+        tools: list[MCPDiscoveredTool] = []
         for index, tool_data in enumerate(raw_tools):
+            definition = MCPToolDefinition.from_wire(
+                require_json_object(tool_data, f"MCP tools[{index}]")
+            )
             tools.append(
-                MCPToolInfo.model_validate(
-                    require_json_object(tool_data, f"MCP tools[{index}]")
+                definition.to_discovered(
+                    server_id=self.config.server_id,
+                    schema_version=schema_version,
                 )
             )
 
-        logger.info(f"MCP server {self.config.server_id}: {len(tools)} tools available")
+        logger.info("MCP server %s: %s tools available", self.config.server_id, len(tools))
         return tools
 
-    async def call_tool(
+    async def require_tool_contract(
         self,
         tool_name: str,
-        arguments: JsonObject | None = None,
-    ) -> MCPCallResult:
-        """
-        Вызывает tool на MCP сервере.
+        *,
+        expected_schema_hash: str,
+        expected_schema_version: str,
+    ) -> MCPDiscoveredTool:
+        for discovered in await self.list_tools():
+            if discovered.tool_name != tool_name:
+                continue
+            if discovered.schema_version != expected_schema_version:
+                raise MCPClientError(
+                    "MCP tool schema_version mismatch for "
+                    + f"{self.config.server_id}/{tool_name}: expected "
+                    + f"{expected_schema_version!r}, got {discovered.schema_version!r}"
+                )
+            if discovered.schema_hash != expected_schema_hash:
+                raise MCPClientError(
+                    "MCP tool schema_hash mismatch for "
+                    + f"{self.config.server_id}/{tool_name}: expected "
+                    + f"{expected_schema_hash!r}, got {discovered.schema_hash!r}"
+                )
+            return discovered
+        raise MCPClientError(f"MCP tool not found: {self.config.server_id}/{tool_name}")
 
-        Args:
-            tool_name: Имя tool
-            arguments: Аргументы вызова
-
-        Returns:
-            MCPCallResult с результатом
-        """
+    async def call_tool(self, tool_name: str, arguments: JsonObject) -> MCPCallResult:
+        if not tool_name.strip():
+            raise MCPClientError("MCP tool_name is required")
         if not self._initialized:
             _ = await self.initialize()
+        args = require_json_object(arguments, "MCP tool arguments")
 
-        logger.debug(f"MCP tool call: {tool_name}")
-        args: JsonObject = arguments or {}
         await emit_browser_preview_mcp_event(
             config=self.config,
             tool_name=tool_name,
             arguments=args,
             phase="started",
         )
-
         try:
-            raw_result, _ = await self._rpc_call(
+            raw_result, _headers = await self._rpc_call(
                 "tools/call",
                 {
                     "name": tool_name,
@@ -384,24 +411,17 @@ class MCPClient:
             )
             raise
 
-        result = require_json_object(raw_result, "MCP tools/call result")
-        call_result = MCPCallResult.model_validate(result)
+        result = MCPCallResult.model_validate(
+            require_json_object(raw_result, "MCP tools/call result")
+        )
         await emit_browser_preview_mcp_event(
             config=self.config,
             tool_name=tool_name,
             arguments=args,
-            phase="failed" if call_result.is_error else "finished",
-            result=call_result,
+            phase="failed" if result.is_error else "finished",
+            result=result,
         )
-        return call_result
-
-
-# Алиас для обратной совместимости
-MCPHttpClient = MCPClient
-
-
-# Кэш клиентов по server_id
-_client_cache: dict[str, MCPClient] = {}
+        return result
 
 
 async def get_mcp_client(
@@ -409,39 +429,6 @@ async def get_mcp_client(
     variables: Mapping[str, JsonValue] | None = None,
     timeout: float = 60.0,
 ) -> MCPClient:
-    """
-    Получает или создает MCP клиент для сервера.
-
-    Args:
-        config: Конфигурация MCP сервера
-        variables: Переменные для резолвинга @var:
-        timeout: Таймаут запросов
-
-    Returns:
-        Инициализированный MCPClient
-    """
-    cache_key = f"{config.server_id}"
-
-    if cache_key in _client_cache:
-        client = _client_cache[cache_key]
-        client.variables = dict(variables or {})
-        return client
-
     client = MCPClient(config, variables, timeout)
     _ = await client.initialize()
-
-    _client_cache[cache_key] = client
     return client
-
-
-def clear_mcp_client_cache(server_id: str | None = None) -> None:
-    """
-    Очищает кэш MCP клиентов.
-
-    Args:
-        server_id: ID сервера для очистки. None = очистить всё.
-    """
-    if server_id:
-        _ = _client_cache.pop(server_id, None)
-    else:
-        _client_cache.clear()

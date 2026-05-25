@@ -45,7 +45,7 @@ def parse_amocrm_subdomain_from_referer(referer: str | None) -> str | None:
     """
     Параметр referer в callback amo (домен аккаунта), например foo.amocrm.ru или https://bar.kommo.com
     """
-    if referer is None or not isinstance(referer, str) or not referer.strip():
+    if referer is None or not referer.strip():
         return None
     r = referer.strip()
     for prefix in ("https://", "http://"):

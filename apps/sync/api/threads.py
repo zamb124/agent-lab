@@ -1,5 +1,7 @@
 """REST-зеркала команд threads. Тонкие обвязки над `op_threads_*`."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Query
 
 from apps.sync.dependencies import ContainerDep
@@ -22,8 +24,8 @@ router = APIRouter()
 async def list_threads(
     channel_id: str,
     container: ContainerDep,
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[ThreadRow]:
     user = require_current_user()
     result = await op_threads_list(

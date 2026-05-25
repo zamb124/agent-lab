@@ -1,11 +1,13 @@
 """E2E coverage for flow document tools over real flows, Office BFF and files storage."""
 
 from __future__ import annotations
+
 import asyncio
 import base64
 import uuid
 from io import BytesIO
 from typing import Any, cast
+
 import pytest
 from docx import Document
 from openpyxl import Workbook, load_workbook

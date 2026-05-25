@@ -22,6 +22,7 @@ from pydantic import (
 from core.clients.llm.messages import LLMToolCall
 from core.files.file_ref import FileRef
 from core.models import FlexibleBaseModel, StrictBaseModel
+from core.reflection import ReflectionRecord
 from core.state.interrupt import InterruptData
 from core.state.mutation_policy import guard_setattr_if_user_code
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
@@ -71,6 +72,7 @@ class ExecutionStateCreateKwargs(TypedDict, total=False):
     nested_states: dict[str, NestedStateData]
     child_workflows: dict[str, ChildWorkflowLink]
     reasoning_history: list[JsonObject]
+    reflection_history: list[ReflectionRecord]
     pending_reasoning: JsonObject | None
     breakpoints: dict[str, bool]
     breakpoint_hit: str | None
@@ -96,6 +98,10 @@ class InterruptPathItem(FlexibleBaseModel):
     )
     child_flow_id: str | None = Field(default=None, description="ID child flow")
     child_flow_branch_id: str | None = Field(default=None, description="Branch child flow")
+    child_execution_branch_id: str | None = Field(
+        default=None,
+        description="Durable execution branch id child workflow для resume FlowNode",
+    )
 
 
 class NodeCallInfo(FlexibleBaseModel):
@@ -139,6 +145,7 @@ class ChildWorkflowLink(StrictBaseModel):
     child_session_id: str = Field(..., min_length=3)
     child_flow_id: str = Field(..., min_length=1)
     child_flow_branch_id: str = Field(..., min_length=1)
+    child_execution_branch_id: str = Field(..., min_length=1)
     parent_session_id: str = Field(..., min_length=3)
     parent_execution_branch_id: str = Field(..., min_length=1)
     parent_node_schedule_sequence: int = Field(..., ge=1)
@@ -303,6 +310,20 @@ class ExecutionState(FlexibleBaseModel):
 
     def clear_structured_output_result(self) -> None:
         self._structured_output_result = None
+
+    def runtime_copy(self) -> ExecutionState:
+        copied = ExecutionState.model_validate(self.model_dump(exclude_none=False))
+        copied.attach_durable_node_context(
+            execution_branch_id=self.durable_execution_branch_id,
+            node_schedule_sequence=self.durable_node_schedule_sequence,
+            superstep_sequence=self.durable_superstep_sequence,
+        )
+        copied.attach_durable_edge_context(
+            execution_branch_id=self.durable_edge_execution_branch_id,
+            edge_evaluation_sequence=self.durable_edge_evaluation_sequence,
+        )
+        copied.set_structured_output_result(self.structured_output_result)
+        return copied
 
     def attach_durable_node_context(
         self,
@@ -610,6 +631,10 @@ class ExecutionState(FlexibleBaseModel):
         default_factory=list,
         description="История рассуждений агента"
     )
+    reflection_history: list[ReflectionRecord] = Field(
+        default_factory=list,
+        description="Typed reflection/test-time compute gate history",
+    )
     pending_reasoning: JsonObject | None = Field(
         default=None,
         description="Текущее pending рассуждение"
@@ -810,4 +835,5 @@ __all__ = [
     "ChildWorkflowStatus",
     "PromptHistoryItem",
     "ExecutionExceptionRecord",
+    "ReflectionRecord",
 ]

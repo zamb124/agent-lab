@@ -4,12 +4,11 @@ import asyncio
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any
 
 import httpx
 
 from core.clients.speech_override import SpeechOverride
-from core.clients.stt_client import BaseSTTClient
+from core.clients.stt_client import BaseSTTClient, STTTranscriptionResult
 from core.clients.voice_resolver import get_stt_client
 from core.config import get_settings
 from core.files.models import AudioTranscriptionStatus
@@ -72,7 +71,7 @@ def normalize_audio_to_mp3_for_stt(
 
     with tempfile.TemporaryDirectory(prefix="media-stt-norm-") as work_dir:
         source_path = Path(work_dir) / f"source.{input_extension}"
-        source_path.write_bytes(audio_bytes)
+        _ = source_path.write_bytes(audio_bytes)
         out_path = Path(work_dir) / "normalized.mp3"
         ffmpeg_cmd = [
             "ffmpeg",
@@ -99,10 +98,11 @@ def normalize_audio_to_mp3_for_stt(
         )
         if ffmpeg_result.returncode != 0:
             stderr = ffmpeg_result.stderr.strip()
-            raise RuntimeError(
+            message = (
                 "Не удалось нормализовать аудио в MP3 для STT. "
-                f"return_code={ffmpeg_result.returncode}; stderr={stderr}"
+                + f"return_code={ffmpeg_result.returncode}; stderr={stderr}"
             )
+            raise RuntimeError(message)
         mp3_bytes = out_path.read_bytes()
         if len(mp3_bytes) == 0:
             raise ValueError("Нормализация STT дала пустой MP3.")
@@ -132,16 +132,17 @@ def _audio_input_extension(file_name: str, content_type: str) -> str:
 
 def validate_stt_result_text(
     *,
-    transcript_result: Any,
+    transcript_result: STTTranscriptionResult,
     job_id: str,
     context: str,
 ) -> str:
     """Проверяет, что STT вернул успешный непустой результат."""
     if transcript_result.status != AudioTranscriptionStatus.DONE:
-        raise ValueError(
+        message = (
             "STT вернул неуспешный статус транскрипции "
-            f"для job_id={job_id}: {transcript_result.status.value}. context={context}"
+            + f"для job_id={job_id}: {transcript_result.status.value}. context={context}"
         )
+        raise ValueError(message)
     transcript_text = transcript_result.text
     if transcript_text.strip() == "":
         raise ValueError(f"STT вернул пустую транскрипцию для job_id={job_id}. context={context}")
@@ -195,7 +196,7 @@ def split_audio_for_stt_chunks(
     chunks: list[tuple[str, bytes, str]] = []
     with tempfile.TemporaryDirectory(prefix="media-stt-chunks-") as work_dir:
         source_path = Path(work_dir) / f"source.{input_extension}"
-        source_path.write_bytes(audio_bytes)
+        _ = source_path.write_bytes(audio_bytes)
         segment_pattern = Path(work_dir) / "segment-%04d.mp3"
         ffmpeg_cmd = [
             "ffmpeg",
@@ -228,10 +229,11 @@ def split_audio_for_stt_chunks(
         )
         if ffmpeg_result.returncode != 0:
             stderr = ffmpeg_result.stderr.strip()
-            raise RuntimeError(
+            message = (
                 "Не удалось подготовить аудио чанки для STT через ffmpeg. "
-                f"return_code={ffmpeg_result.returncode}; stderr={stderr}"
+                + f"return_code={ffmpeg_result.returncode}; stderr={stderr}"
             )
+            raise RuntimeError(message)
         segment_files = sorted(Path(work_dir).glob("segment-*.mp3"))
         if len(segment_files) == 0:
             raise RuntimeError("ffmpeg не сформировал ни одного STT чанка.")
@@ -240,11 +242,12 @@ def split_audio_for_stt_chunks(
             if len(chunk_bytes) == 0:
                 raise ValueError(f"STT chunk #{chunk_index} получился пустым.")
             if len(chunk_bytes) > max_upload_bytes:
-                raise ValueError(
+                message = (
                     "STT chunk превышает допустимый размер upload. "
-                    f"chunk_index={chunk_index} size={len(chunk_bytes)} max={max_upload_bytes}. "
-                    "Уменьшите media_transcriber.chunk_duration_seconds или chunk_bitrate_kbps."
+                    + f"chunk_index={chunk_index} size={len(chunk_bytes)} max={max_upload_bytes}. "
+                    + "Уменьшите media_transcriber.chunk_duration_seconds или chunk_bitrate_kbps."
                 )
+                raise ValueError(message)
             chunk_file_name = f"{file_stem}-part-{chunk_index:04d}.mp3"
             chunks.append((chunk_file_name, chunk_bytes, "audio/mpeg"))
     if len(chunks) == 0:
@@ -347,7 +350,7 @@ async def transcribe_audio_with_chunking(
                         raise
                     logger.warning(
                         "STT normalized single request returned 413; switching to chunked mode: "
-                        "job_id=%s file=%s bytes=%s",
+                        + "job_id=%s file=%s bytes=%s",
                         job_id,
                         file_name,
                         len(audio_bytes),
@@ -357,7 +360,7 @@ async def transcribe_audio_with_chunking(
                         raise
                     logger.warning(
                         "STT normalized single request returned format error; switching to chunked mode: "
-                        "job_id=%s file=%s error=%s",
+                        + "job_id=%s file=%s error=%s",
                         job_id,
                         file_name,
                         str(exc),
@@ -385,7 +388,7 @@ async def transcribe_audio_with_chunking(
                     raise
                 logger.warning(
                     "STT single request returned format error; switching to chunked mode: "
-                    "job_id=%s file=%s content_type=%s error=%s",
+                    + "job_id=%s file=%s content_type=%s error=%s",
                     job_id,
                     file_name,
                     content_type,

@@ -92,6 +92,10 @@ def patch_service_clients_asgi(
 
                 importlib.reload(voice_main_mod)
                 _apps_cache[service] = voice_main_mod.app
+            elif service == "capability_gateway":
+                from apps.capability_gateway.main import app
+
+                _apps_cache[service] = app
             else:
                 return None
         except ImportError:
@@ -118,9 +122,10 @@ def patch_service_clients_asgi(
         transport = ASGITransport(app=app)
         # В тестах все роутеры примонтированы с префиксом /{service}/api/v1.
         # ServiceClient обычно вызывается с путем /api/v1/..., поэтому добавляем префикс если его нет.
+        service_prefix = "capability-gateway" if service == "capability_gateway" else service
         request_path = path
-        if not path.startswith(f"/{service}/"):
-            request_path = f"/{service}{path}"
+        if not path.startswith(f"/{service_prefix}/"):
+            request_path = f"/{service_prefix}{path}"
 
         async with AsyncClient(transport=transport, base_url="http://testserver", timeout=timeout) as client:
             response = await client.request(method, request_path, headers=headers, **req_kwargs)

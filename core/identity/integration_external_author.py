@@ -7,20 +7,25 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from core.models import StrictBaseModel
 from core.models.identity_models import User
 
 if TYPE_CHECKING:
     from core.db.repositories.company_repository import CompanyRepository
     from core.db.repositories.user_repository import UserRepository
     from core.db.storage import Storage
+    from core.models.identity_models import Company
 
 MAP_PREFIX = "integration_ext_author"
 PREPROVISION_ROLE = "viewer"
+
+
+class IntegrationExternalAuthorMapping(StrictBaseModel):
+    user_id: str
 
 
 def integration_external_author_storage_key(
@@ -44,9 +49,9 @@ class IntegrationExternalAuthorService:
         user_repository: UserRepository,
         company_repository: CompanyRepository,
     ) -> None:
-        self._storage = storage
-        self._user_repository = user_repository
-        self._company_repository = company_repository
+        self._storage: Storage = storage
+        self._user_repository: UserRepository = user_repository
+        self._company_repository: CompanyRepository = company_repository
 
     async def resolve_platform_user_id(
         self,
@@ -74,21 +79,20 @@ class IntegrationExternalAuthorService:
         key = integration_external_author_storage_key(company_id, prov, acc, ext)
         cached = await self._storage.get(key, force_global=True)
         if cached:
-            data = json.loads(cached)
-            uid_raw = data.get("user_id")
-            if not isinstance(uid_raw, str) or not uid_raw.strip():
+            mapping = IntegrationExternalAuthorMapping.model_validate_json(cached)
+            uid = mapping.user_id.strip()
+            if uid == "":
                 raise ValueError(f"Повреждённая запись маппинга: {key}")
-            uid = uid_raw.strip()
             existing = await self._user_repository.get(uid)
             if existing is not None:
                 return uid
-            await self._storage.delete(key, force_global=True)
+            _ = await self._storage.delete(key, force_global=True)
 
         matches = await self._user_repository.find_all_by_email_ci(email_norm)
         if len(matches) > 1:
             raise ValueError(
                 f"Несколько пользователей с email {email_norm}: "
-                f"{', '.join(u.user_id for u in matches)}"
+                + f"{', '.join(u.user_id for u in matches)}"
             )
 
         company = await self._company_repository.get(company_id)
@@ -101,8 +105,8 @@ class IntegrationExternalAuthorService:
                 user=user, company_id=company_id, company=company
             )
             user.updated_at = datetime.now(timezone.utc)
-            await self._user_repository.set(user)
-            await self._company_repository.set(company)
+            _ = await self._user_repository.set(user)
+            _ = await self._company_repository.set(company)
         else:
             user_id = f"user_{uuid.uuid4().hex[:12]}"
             nm = (display_name or "").strip() or email_norm
@@ -115,12 +119,13 @@ class IntegrationExternalAuthorService:
             )
             mr = company.members.get(user.user_id, [])
             company.members[user.user_id] = _merge_roles(mr, PREPROVISION_ROLE)
-            await self._user_repository.set(user)
-            await self._company_repository.set(company)
+            _ = await self._user_repository.set(user)
+            _ = await self._company_repository.set(company)
 
-        await self._storage.set(
+        mapping = IntegrationExternalAuthorMapping(user_id=user.user_id)
+        _ = await self._storage.set(
             key,
-            json.dumps({"user_id": user.user_id}),
+            mapping.model_dump_json(),
             force_global=True,
         )
         return user.user_id
@@ -130,7 +135,7 @@ class IntegrationExternalAuthorService:
         *,
         user: User,
         company_id: str,
-        company,
+        company: "Company",
     ) -> None:
         cr = user.companies.get(company_id, [])
         user.companies[company_id] = _merge_roles(cr, PREPROVISION_ROLE)

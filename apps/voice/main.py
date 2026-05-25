@@ -7,19 +7,22 @@ from apps.voice.api.session import router as voice_session_router
 from apps.voice.api.synthesize import synthesize_router
 from apps.voice.api.transcribe import transcribe_router
 from apps.voice.config import VoiceServiceSettings, get_voice_settings
-from apps.voice.container import get_voice_container
+from apps.voice.container import VoiceContainer, get_voice_container
 from core.app import create_service_app
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-async def on_startup(app: FastAPI, container, settings: VoiceServiceSettings) -> None:
+async def on_startup(
+    app: FastAPI, container: VoiceContainer, settings: VoiceServiceSettings
+) -> None:
     """Инициализация voice-сервиса при старте.
 
     Streaming-провайдеры создаются per-session через voice_resolver.
     Здесь — только инициализация контейнера и логирование.
     """
+    _ = app, container
     logger.info(
         "voice service startup: stt=%s tts=%s vad=%s",
         settings.voice.stt.provider,
@@ -38,7 +41,6 @@ app = create_service_app(
         transcribe_router,
         synthesize_router,
     ],
-    repository_names=[],
     on_startup=on_startup,
     cors_origins=["*"],
     title="Platform Voice Gateway",

@@ -45,8 +45,7 @@ def get_billing_service() -> BillingService:
     """
     if _billing_service is None:
         raise RuntimeError(
-            "BillingService не инициализирован. "
-            "Вызовите set_billing_service() при старте сервиса."
+            "BillingService не инициализирован. Вызовите set_billing_service() при старте сервиса."
         )
     return _billing_service
 

@@ -139,25 +139,6 @@ def _value_source(
     return "settings"
 
 
-def _coerce_company_voice_secrets(raw: object | None) -> dict[str, str] | None:
-    """Нормализует JSONB `secrets`: только строковые ключи и значения."""
-    if raw is None:
-        return None
-    if not isinstance(raw, dict):
-        raise ValueError(
-            "voice_resolver: поле secrets в company_voice_providers должно быть "
-            "JSON-объектом или null."
-        )
-    out: dict[str, str] = {}
-    for key, val in raw.items():
-        if not isinstance(key, str):
-            raise ValueError("voice_resolver: ключ secrets должен быть str.")
-        if not isinstance(val, str):
-            raise ValueError(f"voice_resolver: значение secrets[{key!r}] должно быть str.")
-        out[key] = val
-    return out if out else None
-
-
 def _get_repo() -> CompanyVoiceProviderRepository:
     """
     Singleton-репозиторий per-process.
@@ -172,8 +153,7 @@ def _get_repo() -> CompanyVoiceProviderRepository:
         db_url = settings.database.shared_url
         if not db_url:
             raise ValueError(
-                "voice_resolver: settings.database.shared_url не задан — "
-                "невозможно прочитать company_voice_providers."
+                "voice_resolver: settings.database.shared_url не задан — невозможно прочитать company_voice_providers."
             )
         _voice_provider_repo = CompanyVoiceProviderRepository(db_url=db_url)
     return _voice_provider_repo
@@ -203,7 +183,7 @@ async def _load_company_override(
             sample_rate=record.sample_rate,
             threshold=record.threshold,
             response_format=record.response_format,
-            secrets=_coerce_company_voice_secrets(record.secrets),
+            secrets=dict(record.secrets) if record.secrets is not None else None,
         )
     _company_cache[cache_key] = (now, row)
     return row
@@ -213,9 +193,10 @@ def invalidate_company_overrides_cache(company_id: str) -> None:
     """Снять in-memory-кэш для stt/tts одной компании (VAD — только deployment)."""
     if company_id == "":
         raise ValueError("company_id не может быть пустым.")
-    for kind in ("stt", "tts"):
-        _company_cache.pop((company_id, kind), None)  # type: ignore[arg-type]
-    _pronunciation_company_cache.pop(company_id, None)
+    cached_kinds: tuple[VoiceKind, VoiceKind] = ("stt", "tts")
+    for kind in cached_kinds:
+        _ = _company_cache.pop((company_id, kind), None)
+    _ = _pronunciation_company_cache.pop(company_id, None)
 
 
 def invalidate_platform_pronunciation_cache() -> None:
@@ -351,16 +332,6 @@ def _resolve_float(
     return default_value
 
 
-def _resolve_optional_float(
-    *,
-    override_value: float | None,
-    company_value: float | None,
-) -> float | None:
-    if override_value is not None:
-        return override_value
-    return company_value
-
-
 async def resolve_effective_tts_voice_for_ws(
     *,
     company_id: str | None,
@@ -494,8 +465,7 @@ def _get_pronunciation_repo() -> tuple[PlatformPronunciationRuleRepository, Comp
         db_url = settings.database.shared_url
         if not db_url:
             raise ValueError(
-                "voice_resolver: settings.database.shared_url не задан — "
-                "невозможно прочитать pronunciation_rules."
+                "voice_resolver: settings.database.shared_url не задан — невозможно прочитать pronunciation_rules."
             )
         _platform_pronunciation_repo = PlatformPronunciationRuleRepository(db_url=db_url)
         _company_pronunciation_repo = CompanyPronunciationRuleRepository(db_url=db_url)
@@ -826,15 +796,13 @@ async def get_tts_streamer(
     )
     if response_format not in _TTS_MIME_BY_FORMAT:
         raise ValueError(
-            f"voice_resolver.get_tts_streamer: неизвестный response_format={response_format!r} "
-            f"(допустимые: {sorted(_TTS_MIME_BY_FORMAT)})"
+            f"voice_resolver.get_tts_streamer: неизвестный response_format={response_format!r} (допустимые: {sorted(_TTS_MIME_BY_FORMAT)})"
         )
     content_type = _TTS_MIME_BY_FORMAT[response_format]
 
     tts_client = await get_tts_client(company_id=company_id, override=override)
     return BatchBackedTTSStreamer(
         tts_client=tts_client,
-        response_format=response_format,
         sample_rate=sample_rate,
         provider_name=provider_name,
         content_type=content_type,

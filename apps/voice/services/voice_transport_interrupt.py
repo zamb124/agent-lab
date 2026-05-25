@@ -65,7 +65,7 @@ async def execute_voice_transport_interrupt(
                     kind=kind.value,
                 )
                 peeked = None
-            if peeked is not None and (peeked.text or "").strip():
+            if peeked is not None and peeked.text.strip():
                 text = peeked.text.strip()
                 await channel.send_transcript(
                     text=text,

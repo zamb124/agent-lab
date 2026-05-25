@@ -37,7 +37,7 @@ async def channel_read_from_entity(
         last_message_at=None,
         mention_unread_count=0,
     )
-    pids = entity.pinned_message_ids if isinstance(entity.pinned_message_ids, list) else []
+    pids = entity.pinned_message_ids
     peer: UserBrief | None = None
     peer_last_read_at = None
     if entity.type == ChannelType.DIRECT.value:
@@ -82,7 +82,7 @@ async def channel_read_from_entity(
 
 def channel_read_entity_minimal(entity: SyncChannel) -> ChannelRead:
     """ChannelRead без peer (ответ команд создания до полной выборки)."""
-    pids = entity.pinned_message_ids if isinstance(entity.pinned_message_ids, list) else []
+    pids = entity.pinned_message_ids
     return ChannelRead(
         channel_id=entity.channel_id,
         namespace=entity.namespace,
